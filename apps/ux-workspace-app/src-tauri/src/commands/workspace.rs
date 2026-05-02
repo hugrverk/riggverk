@@ -1279,7 +1279,6 @@ mod tests {
             "skills/release-check/SKILL.md",
             "skills/screenshot-review/SKILL.md",
             "skills/security-review/SKILL.md",
-            "skills/sync-agent-rules/SKILL.md",
             "skills/tdd/SKILL.md",
             "skills/to-prd/SKILL.md",
             "skills/triage/SKILL.md",

@@ -44,7 +44,6 @@ All bundled skills are treated as core starter skills. There is no core vs add-o
 - caveman — compressed technical communication
 - context-budget — audit skills, rules, docs for token overhead
 - grill-me — bounded plan stress-test
-- sync-agent-rules — review, compress, or sync global agent rules
 - write-a-skill — edit or add skills with minimal structure
 
 ## Adding or removing skills
