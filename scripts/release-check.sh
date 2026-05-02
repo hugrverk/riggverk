@@ -75,6 +75,18 @@ if grep -q "Matt Poc""ock" LICENSE; then
   printf 'FAIL: LICENSE contains stale copyright holder\n' >&2
   exit 1
 fi
+if [ ! -f NOTICE.md ]; then
+  printf 'FAIL: NOTICE.md not found\n' >&2
+  exit 1
+fi
+if ! grep -q "NOTICE[.]md" README.md; then
+  printf 'FAIL: README.md must link NOTICE.md\n' >&2
+  exit 1
+fi
+if ! grep -q "Matt Poc""ock" NOTICE.md; then
+  printf 'FAIL: NOTICE.md must preserve Matt Pocock attribution\n' >&2
+  exit 1
+fi
 if grep -q "<title>UX Work""space</title>" apps/ux-workspace-app/index.html; then
   printf 'FAIL: app HTML title is stale\n' >&2
   exit 1

@@ -40,6 +40,10 @@ Run from the repository root:
 
 The check validates bundled default workspace scripts and metadata, scans app source for forbidden command patterns, runs the frontend build, and runs Rust formatting, check, clippy, and tests.
 
+## License and notices
+
+Agent Workspace is released under the [MIT License](LICENSE). Some bundled starter skills are adapted from third-party skill work; see [NOTICE.md](NOTICE.md).
+
 ## Transition Notes
 
 The app source currently remains under `apps/ux-workspace-app/`. Internal package, crate, marker, settings, and bundle identifiers may still use `ux-workspace` names during the transition. Those identifiers are intentionally not renamed in this staging slice.
