@@ -70,6 +70,20 @@ git diff --check
 step "release-check syntax"
 bash -n scripts/release-check.sh
 
+step "public app repo hygiene"
+if grep -q "Matt Poc""ock" LICENSE; then
+  printf 'FAIL: LICENSE contains stale copyright holder\n' >&2
+  exit 1
+fi
+if grep -q "<title>UX Work""space</title>" apps/ux-workspace-app/index.html; then
+  printf 'FAIL: app HTML title is stale\n' >&2
+  exit 1
+fi
+if grep -q "both the app source and private workspace d""ata" apps/ux-workspace-app/README.md; then
+  printf 'FAIL: app README contains stale private workspace transition copy\n' >&2
+  exit 1
+fi
+
 step "bundled default workspace scripts"
 bash -n apps/ux-workspace-app/resources/default-workspace/scripts/bootstrap.sh
 bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh

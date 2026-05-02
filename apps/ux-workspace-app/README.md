@@ -54,7 +54,9 @@ The app operates on a workspace folder — a user-owned data directory containin
 
 Workspace validation uses `.ux-workspace/workspace.json` and required workspace markers (scripts, templates, README, skills directory). The `apps/ux-workspace-app` directory is no longer required inside the selected workspace.
 
-This repository currently contains both the app source and private workspace data during transition. The target model is a public app repo with bundled default workspace resources and a separate private workspace repo for user-owned content.
+This repository is the public app source repo. User workspace content lives in separate user-owned workspace folders outside this checkout.
+
+Some internal package, crate, marker, settings, and bundle identifiers still use `ux-workspace` names during transition. Those identifiers are intentionally not renamed in this slice.
 
 See [docs/WORKSPACE_CONTRACT.md](../../docs/WORKSPACE_CONTRACT.md) for the full workspace contract.
 
