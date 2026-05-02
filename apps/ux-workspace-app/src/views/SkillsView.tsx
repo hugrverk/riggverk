@@ -68,7 +68,7 @@ export function SkillsView({
         <div className="skills-main">
           <div className="install-controls">
             <div className="install-control-group">
-              <span className="cell-label">AGENT</span>
+              <span className="cell-label">SKILL INSTALL TARGETS</span>
               {(["opencode", "codex", "auggie"] as const).map(a => (
                 <button
                   key={a}
@@ -96,6 +96,9 @@ export function SkillsView({
               <button className="btn btn-sm" onClick={onSelectAll}>all</button>
               <button className="btn btn-sm" onClick={onClearSelection}>clear</button>
             </div>
+          </div>
+          <div className="install-note">
+            Rule sync supports all agents (Codex, OpenCode, Claude, Gemini, Auggie). Skill install targets depend on each tool's supported skill directory.
           </div>
           <div className="table-wrap">
             {invalidWorkspace ? (

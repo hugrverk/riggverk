@@ -135,20 +135,21 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec!["opencode_rules".into(), "opencode_config".into()],
         },
         TargetProfileMeta {
-            id: "core".into(),
-            label: "Core".into(),
-            description: "Codex, OpenCode, Auggie rules + OpenCode config".into(),
+            id: "all_rules".into(),
+            label: "All rules".into(),
+            description: "Codex, OpenCode, Claude, Gemini, Auggie rule targets".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
                 "auggie_rules".into(),
-                "opencode_config".into(),
+                "claude_rules".into(),
+                "gemini_rules".into(),
             ],
         },
         TargetProfileMeta {
-            id: "extended".into(),
-            label: "Extended".into(),
-            description: "Core + Claude + Gemini rules".into(),
+            id: "all_supported".into(),
+            label: "All supported".into(),
+            description: "All supported rule targets + supported config targets".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
@@ -156,16 +157,6 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "claude_rules".into(),
                 "gemini_rules".into(),
                 "opencode_config".into(),
-            ],
-        },
-        TargetProfileMeta {
-            id: "rules_only".into(),
-            label: "Rules only".into(),
-            description: "Codex, OpenCode, Auggie rules only".into(),
-            target_ids: vec![
-                "codex_rules".into(),
-                "opencode_rules".into(),
-                "auggie_rules".into(),
             ],
         },
     ]
@@ -271,20 +262,15 @@ mod tests {
     }
 
     #[test]
-    fn core_profile_matches_default_enabled_ids() {
-        let core = target_profiles()
-            .into_iter()
-            .find(|p| p.id == "core")
-            .expect("core profile must exist");
-
-        let core_set: HashSet<&str> = core.target_ids.iter().map(|s| s.as_str()).collect();
-        let default_ids = default_enabled_ids();
-        let default_set: HashSet<&str> = default_ids.iter().map(|s| s.as_str()).collect();
-
-        assert_eq!(
-            core_set, default_set,
-            "core profile target_ids must equal default_enabled_ids"
-        );
+    fn default_enabled_ids_only_contain_known_targets() {
+        let known: HashSet<&str> = targets().iter().map(|t| t.id).collect();
+        for id in default_enabled_ids() {
+            assert!(
+                known.contains(id.as_str()),
+                "Default enabled target '{}' is not a known target",
+                id
+            );
+        }
     }
 
     #[test]

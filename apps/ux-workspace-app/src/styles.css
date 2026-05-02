@@ -786,6 +786,14 @@ html, body, #root {
   margin-left: auto;
 }
 
+.install-note {
+  padding: 6px 16px;
+  font-size: 11px;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
 .install-target-input {
   background: var(--bg-inset);
   border: 1px solid var(--border);

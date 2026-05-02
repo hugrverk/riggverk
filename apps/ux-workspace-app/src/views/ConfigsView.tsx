@@ -38,13 +38,14 @@ export function ConfigsView({
 }: ConfigsViewProps) {
   const configStatus = status?.opencode_config ?? "—";
   const configLabel = configTargets[0]?.label ?? "opencode config";
+  const configCount = configTargets.length;
 
   return (
     <section className="configs-frame">
       <header className="configs-frame-header">
         <div className="configs-frame-title">
           <span className="terminal-title">CONFIGS</span>
-          <span className="cell-value cell-value-muted">{configLabel}</span>
+          <span className="cell-value cell-value-muted">{configLabel}{configCount === 1 ? " (only supported config target)" : ""}</span>
         </div>
         <div className="configs-frame-actions">
           <span className={`configs-frame-status ${syncTextClass(configStatus)}`}>

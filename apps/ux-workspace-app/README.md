@@ -70,7 +70,7 @@ The workspace root is resolved in order of precedence:
 
 1. **Settings**: `workspace_path` in app settings (if set to a non-empty string).
 2. **Environment**: `UX_WORKSPACE_PATH` environment variable.
-3. **Default**: built-in repo path (`~/Projects/ux-workspace`).
+3. **Default**: built-in fallback path (`~/Projects/ux-workspace`).
 
 Set a custom workspace path in the Settings view (type manually or use **choose folder** to pick via a native directory picker), or override temporarily with the environment variable during dev. Settings shows workspace diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
 
@@ -86,7 +86,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.openworkspace.u
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `workspace_path` | `string` or `null` | `null` | Custom workspace root path. When `null` or missing, falls back to `UX_WORKSPACE_PATH` env or built-in default. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules) and config targets (opencode_config) are filtered by kind in the UI. Claude and Gemini are available but not enabled by default. Quick-select via target profiles/presets (OpenCode, Core, Extended, Rules only). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules) and config targets (opencode_config) are filtered by kind in the UI. Claude and Gemini rule targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (OpenCode, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.openworkspace.ux-workspace/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 
@@ -97,11 +97,10 @@ Settings includes compact target profile buttons for quick target selection:
 | Profile | Enabled targets |
 |---------|----------------|
 | OpenCode | opencode_rules, opencode_config |
-| Core | codex_rules, opencode_rules, auggie_rules, opencode_config |
-| Extended | codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules, opencode_config |
-| Rules only | codex_rules, opencode_rules, auggie_rules |
+| All rules | codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules |
+| All supported | codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules, opencode_config |
 
-Applying a profile updates the local settings draft target selection. The user must click Save to persist. Profiles are metadata only — they do not run sync or write target files. Manual checkboxes remain available and show a "custom" label when the current selection does not match any profile.
+Applying a profile updates the local settings draft target selection. The user must click Save to persist. Profiles are metadata only — they do not run sync or write target files. Manual checkboxes remain available and show a "custom" label when the current selection does not match any of the defined profiles.
 
 ### Settings security
 
