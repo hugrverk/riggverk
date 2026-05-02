@@ -8,7 +8,7 @@ Usage: ./scripts/install-skills.sh [options]
 Install workspace skills to agent tool skill folders.
 
 Options:
-  --agent <target>    Agent target: opencode, codex, auggie
+  --agent <target>    Agent target: codex, opencode, claude, gemini, auggie
   --global            Install globally (system-wide)
   --project           Install into a project folder
   --target <path>     Project target directory (required with --project)

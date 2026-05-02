@@ -1,7 +1,6 @@
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { SkillSummary } from "../types";
+import { INSTALL_AGENTS, type InstallAgent, type SkillSummary } from "../types";
 
-type InstallAgent = "opencode" | "codex" | "auggie";
 type InstallScope = "global" | "project";
 
 interface SkillsViewProps {
@@ -69,7 +68,7 @@ export function SkillsView({
           <div className="install-controls">
             <div className="install-control-group">
               <span className="cell-label">SKILL INSTALL TARGETS</span>
-              {(["opencode", "codex", "auggie"] as const).map(a => (
+              {INSTALL_AGENTS.map(a => (
                 <button
                   key={a}
                   className={`btn btn-sm ${installAgents.has(a) ? "btn-active" : ""}`}

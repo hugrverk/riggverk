@@ -11,7 +11,7 @@ import { DocsView } from "./views/DocsView";
 import { HealthView } from "./views/HealthView";
 import { SkillsView } from "./views/SkillsView";
 import { SettingsView } from "./views/SettingsView";
-import type { AgentTargetMeta, AppSettings, BackupRunDetails, BackupRunSummary, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentTargetMeta, AppSettings, BackupRunDetails, BackupRunSummary, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 const MIN_RUNNING_MS = 700;
@@ -268,7 +268,7 @@ function App() {
   const selectAll = useCallback(() => { skillsSelectionTouched.current = true; setSelectedSkills(new Set(skills.map(s => s.name))); }, [skills]);
   const clearSelection = useCallback(() => { skillsSelectionTouched.current = true; setSelectedSkills(new Set()); }, []);
 
-  const toggleInstallAgent = useCallback((agent: "opencode" | "codex" | "auggie") => {
+  const toggleInstallAgent = useCallback((agent: InstallAgent) => {
     setInstallAgents(prev => {
       const next = new Set(prev);
       if (next.has(agent)) next.delete(agent); else next.add(agent);

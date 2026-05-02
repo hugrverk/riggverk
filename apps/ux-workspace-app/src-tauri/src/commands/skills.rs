@@ -205,6 +205,16 @@ fn validate_project_install_target(raw: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
+const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "gemini", "auggie"];
+
+fn validate_agent(agent: &str) -> Result<(), String> {
+    if VALID_SKILL_AGENTS.contains(&agent) {
+        Ok(())
+    } else {
+        Err(format!("invalid agent: {}", agent))
+    }
+}
+
 #[derive(Deserialize)]
 pub struct InstallSkillsRequest {
     agents: Vec<String>,
@@ -220,10 +230,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
         return Err("no agents selected".into());
     }
     for a in &request.agents {
-        match a.as_str() {
-            "opencode" | "codex" | "auggie" => {}
-            a => return Err(format!("invalid agent: {}", a)),
-        }
+        validate_agent(a)?;
     }
 
     match request.scope.as_str() {
@@ -429,5 +436,34 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
 
         assert!(result.is_ok());
+    }
+
+    #[test]
+    fn agent_validation_accepts_all_five_valid_agents() {
+        for agent in super::VALID_SKILL_AGENTS {
+            assert!(
+                super::validate_agent(agent).is_ok(),
+                "valid agent '{}' should be accepted",
+                agent
+            );
+        }
+    }
+
+    #[test]
+    fn agent_validation_rejects_unknown_agents() {
+        for invalid in &["unknown", "codex_skill", "CODEX", "CLAUDE", ""] {
+            assert!(
+                super::validate_agent(invalid).is_err(),
+                "invalid agent '{}' should be rejected",
+                invalid
+            );
+        }
+    }
+
+    #[test]
+    fn agent_validation_rejects_typo_agents() {
+        assert!(super::validate_agent("opeencode").is_err());
+        assert!(super::validate_agent("Claude").is_err());
+        assert!(super::validate_agent("gemni").is_err());
     }
 }

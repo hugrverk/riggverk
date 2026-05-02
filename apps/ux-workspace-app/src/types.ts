@@ -20,6 +20,10 @@ export interface SkillSummary {
   id: string; name: string; description: string; path: string;
 }
 
+export const INSTALL_AGENTS = ["codex", "opencode", "claude", "gemini", "auggie"] as const;
+
+export type InstallAgent = (typeof INSTALL_AGENTS)[number];
+
 export interface InstallSkillsRequest {
   agents: string[]; scope: string; target?: string; skills: string[]; dry_run: boolean;
 }

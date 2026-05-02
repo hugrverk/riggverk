@@ -132,7 +132,7 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 
 ### Skills
 - Available repo skills list with selection controls.
-- Native agent multi-select: toggle opencode, codex, auggie independently. At least one agent must be selected.
+- Native agent multi-select: toggle codex, opencode, claude, gemini, auggie independently. At least one agent must be selected.
 - Scope selector: `global` or `project`.
 - Dry-run and install selected actions call the existing `install_skills` backend command.
 - Project target validation is enforced in the backend and script. Project installs require a non-empty target path that looks like a real project checkout.
@@ -144,11 +144,15 @@ Skills are installed directly into native agent skill folders using local filesy
 Global destinations:
 - Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)
 - OpenCode: `$HOME/.config/opencode/skills` (override with `OPENCODE_SKILLS_PATH`)
+- Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
+- Gemini: `$HOME/.gemini/skills` (override with `GEMINI_SKILLS_PATH`)
 - Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 
 Project destinations:
 - Codex: `<project>/.codex/skills`
 - OpenCode: `<project>/.opencode/skills`
+- Claude: `<project>/.claude/skills`
+- Gemini: `<project>/.gemini/skills`
 - Auggie: `<project>/.augment/skills`
 
 `.agents/skills` is not managed by this app. The app does not install to, scan, migrate, delete, or summarize `.agents/skills`. App-triggered bootstrap skips skills entirely — skills installation is owned by the Skills view. Manual `scripts/bootstrap.sh` may still run skills unless `--skip-skills` is passed.
