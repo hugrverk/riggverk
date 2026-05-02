@@ -80,9 +80,11 @@ export function HealthView({
         <aside className="health-info-pane">
           <div className="console-section-label">checks</div>
           <div className="health-check-list">
-            {!canRunHealthCheck && (
+            {!diag ? null : !diag.valid ? (
               <span className="workspace-invalid">No valid workspace selected. Create or choose a workspace in Settings.</span>
-            )}
+            ) : !canRunHealthCheck ? (
+              <span className="workspace-invalid">Release check is available only in an app development checkout.</span>
+            ) : null}
             <span>script syntax</span>
             <span>forbidden operational scans</span>
             <span>safe dry-runs</span>

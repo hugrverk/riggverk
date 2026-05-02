@@ -29,7 +29,8 @@ interface SkillsViewProps {
 }
 
 function areaFromId(id: string): string {
-  return id.split("/")[0] ?? "";
+  const area = id.split("/")[0] ?? "";
+  return area || "workspace";
 }
 
 export function SkillsView({

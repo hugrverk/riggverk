@@ -1,5 +1,5 @@
 export interface StatusData {
-  repo_path: string; branch: string; dirty: boolean; latest_commit: string;
+  repo_path: string; git_available: boolean; branch: string; dirty: boolean; latest_commit: string;
   rules_codex: string; rules_opencode: string; rules_auggie: string;
   rules_claude: string; rules_gemini: string;
   opencode_config: string; host_name: string;
@@ -84,6 +84,7 @@ export interface WorkspaceDiagnostics {
   total_config_targets: number;
   backup_root: string;
   backup_root_exists: boolean;
+  release_check_available: boolean;
 }
 
 export interface DefaultWorkspaceFile {

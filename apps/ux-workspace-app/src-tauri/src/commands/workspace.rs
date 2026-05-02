@@ -126,6 +126,10 @@ pub(super) fn path_arg(path: &Path) -> Result<String, String> {
         .ok_or_else(|| "path is not valid UTF-8".to_string())
 }
 
+fn release_check_available(root: &Path) -> bool {
+    root.join("scripts/release-check.sh").is_file()
+}
+
 #[derive(Serialize)]
 pub struct WorkspaceMarkerStatus {
     kind: String,
@@ -146,6 +150,7 @@ pub struct WorkspaceDiagnostics {
     total_config_targets: usize,
     backup_root: String,
     backup_root_exists: bool,
+    release_check_available: bool,
 }
 
 #[tauri::command]
@@ -242,6 +247,10 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         }
         Err(_) => (String::new(), false),
     };
+    let release_check_available = resolved_path
+        .as_ref()
+        .map(|p| release_check_available(Path::new(p)))
+        .unwrap_or(false);
 
     Ok(WorkspaceDiagnostics {
         candidate_path: candidate_str,
@@ -255,6 +264,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         total_config_targets: total_configs,
         backup_root,
         backup_root_exists,
+        release_check_available,
     })
 }
 
@@ -933,6 +943,18 @@ mod tests {
 
         assert_eq!(candidate, expected);
         assert_eq!(plan.target_path, candidate);
+    }
+
+    #[test]
+    fn release_check_script_availability_uses_workspace_script_path() {
+        let root = temp_root("release-check-available");
+        assert!(!super::release_check_available(&root));
+
+        write_file(&root, "scripts/release-check.sh", "#!/usr/bin/env bash\n");
+        let exists = super::release_check_available(&root);
+        cleanup(&root);
+
+        assert!(exists);
     }
 
     #[test]

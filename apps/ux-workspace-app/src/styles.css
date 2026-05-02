@@ -456,6 +456,7 @@ html, body, #root {
 .pill-synced { color: var(--accent); background: var(--accent-dim); border: 1px solid rgba(110, 168, 254, 0.2); }
 .pill-diverged { color: var(--warn); background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.18); }
 .pill-missing { color: var(--fail); background: rgba(248, 113, 113, 0.1); border: 1px solid rgba(248, 113, 113, 0.18); }
+.pill-muted { color: var(--text-muted); background: rgba(255, 255, 255, 0.04); border: 1px solid var(--border); }
 
 /* ---- error ---- */
 

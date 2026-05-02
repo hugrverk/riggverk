@@ -64,12 +64,27 @@ fn enabled_rule_targets() -> Vec<agent_targets::AgentSyncTarget> {
         .collect()
 }
 
+fn git_available(root: &std::path::Path) -> bool {
+    let (ok, out, _, _) = run_cmd("git", &["rev-parse", "--is-inside-work-tree"], root);
+    ok && out.trim() == "true"
+}
+
 #[tauri::command]
 pub fn run_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
 
     match action.as_str() {
         "git_pull" => {
+            if !git_available(&root) {
+                return Ok(ActionResult::new(
+                    false,
+                    "git_pull",
+                    String::new(),
+                    "Git pull is unavailable because this workspace is not a git checkout.\n"
+                        .into(),
+                    Some(1),
+                ));
+            }
             let (ok, out, err, code) = run_cmd("git", &["pull", "--ff-only"], &root);
             Ok(ActionResult::new(ok, "git_pull", out, err, code))
         }
@@ -262,6 +277,15 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "release_check" => {
             let script = root.join("scripts/release-check.sh");
+            if !script.is_file() {
+                return Ok(ActionResult::new(
+                    false,
+                    "release_check",
+                    String::new(),
+                    "Release check is only available in an app development checkout. This starter workspace does not include scripts/release-check.sh.\n".into(),
+                    Some(1),
+                ));
+            }
             let script_str = path_arg(&script)?;
             let all_args: Vec<&str> = vec![&script_str];
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);

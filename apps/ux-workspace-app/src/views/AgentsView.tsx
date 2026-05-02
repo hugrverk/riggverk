@@ -6,6 +6,7 @@ interface AgentsViewProps {
   log: ActionResult | null;
   running: string | null;
   rsc: { synced: number; total: number };
+  gitAvailable: boolean;
   agentTargets: AgentTargetMeta[];
   enabledSet: Set<string>;
   activityIndex: number;
@@ -33,6 +34,7 @@ export function AgentsView({
   log,
   running,
   rsc,
+  gitAvailable,
   agentTargets,
   enabledSet,
   activityIndex,
@@ -43,6 +45,8 @@ export function AgentsView({
   onOpenGlobalRules,
 }: AgentsViewProps) {
   const ruleTargets = agentTargets.filter(t => t.kind === "rules");
+  const stateLabel = status ? (gitAvailable ? (status.dirty ? "dirty" : "clean") : "not git") : "—";
+  const stateClass = status ? (gitAvailable ? (status.dirty ? "pill pill-dirty" : "pill pill-clean") : "pill pill-muted") : "pill pill-muted";
 
   return (
     <div className="console-layout">
@@ -77,7 +81,7 @@ export function AgentsView({
             </div>
             <div className="console-status-row">
               <span className="cell-label">STATE</span>
-              <span className={status?.dirty ? "pill pill-dirty" : "pill pill-clean"}>{status?.dirty ? "dirty" : "clean"}</span>
+              <span className={stateClass}>{stateLabel}</span>
             </div>
             <div className="console-status-row">
               <span className="cell-label">SYNC</span>
@@ -92,9 +96,12 @@ export function AgentsView({
             <div className="console-action-group">
               <span className="command-group-label">repo</span>
               <div className="console-button-row">
-                <button className="btn" disabled={running !== null} onClick={() => onRunAction("git_pull")}>pull</button>
+                <button className="btn" disabled={running !== null || !gitAvailable} onClick={() => onRunAction("git_pull")}>pull</button>
                 <button className="btn" disabled={running !== null} onClick={() => onRunAction("verify_state")}>verify</button>
               </div>
+              {!gitAvailable && (
+                <span className="console-note">pull unavailable: workspace is not a git checkout</span>
+              )}
             </div>
             <div className="console-action-group">
               <span className="command-group-label">rules</span>

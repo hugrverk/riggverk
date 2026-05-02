@@ -427,6 +427,7 @@ function App() {
   const opencodeConfigEnabled = (appSettings?.enabled_target_ids ?? status?.enabled_target_ids ?? DEFAULT_TARGET_IDS).includes("opencode_config");
   const configTargets = agentTargets.filter(t => t.kind === "config");
   const workspaceValid = workspaceDiagnostics?.valid === true;
+  const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -490,6 +491,7 @@ function App() {
             log={log}
             running={running}
             rsc={rsc}
+            gitAvailable={status?.git_available === true}
             agentTargets={agentTargets}
             enabledSet={enabledSet}
             activityIndex={activityIndex}
@@ -542,7 +544,7 @@ function App() {
             healthLog={healthLog}
             healthRunning={healthRunning}
             onRunHealthCheck={() => runHealthAction("release_check")}
-            canRunHealthCheck={workspaceValid}
+            canRunHealthCheck={canRunReleaseCheck}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
             backups={backups}

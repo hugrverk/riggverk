@@ -49,6 +49,7 @@ fn sync_label(path: &Path, source: &Path) -> String {
 #[derive(Serialize)]
 pub struct StatusData {
     repo_path: String,
+    git_available: bool,
     branch: String,
     dirty: bool,
     latest_commit: String,
@@ -64,24 +65,35 @@ pub struct StatusData {
     enabled_target_ids: Vec<String>,
 }
 
+fn git_available(root: &Path) -> bool {
+    let (ok, out, _, _) = run_cmd("git", &["rev-parse", "--is-inside-work-tree"], root);
+    ok && out.trim() == "true"
+}
+
+fn git_status(root: &Path) -> (bool, String, bool, String) {
+    if !git_available(root) {
+        return (false, "not git".into(), false, "not git".into());
+    }
+
+    let (_, out, _, _) = run_cmd("git", &["branch", "--show-current"], root);
+    let branch = out.trim().to_string();
+
+    let (_, dirty_out, _, _) = run_cmd("git", &["status", "--short"], root);
+    let dirty = !dirty_out.trim().is_empty();
+
+    let (_, commit_out, _, _) = run_cmd("git", &["log", "-1", "--pretty=%h %s"], root);
+    let latest_commit = commit_out.trim().to_string();
+
+    (true, branch, dirty, latest_commit)
+}
+
 #[tauri::command]
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;
     let targets = agent_targets::targets();
 
-    let (branch, dirty, latest_commit) = {
-        let (_s, out, _e, _c) = run_cmd("git", &["branch", "--show-current"], &root);
-        let branch = out.trim().to_string();
-
-        let (_, dirty_out, _, _) = run_cmd("git", &["status", "--short"], &root);
-        let dirty = !dirty_out.trim().is_empty();
-
-        let (_, commit_out, _, _) = run_cmd("git", &["log", "-1", "--pretty=%h %s"], &root);
-        let latest_commit = commit_out.trim().to_string();
-
-        (branch, dirty, latest_commit)
-    };
+    let (git_available, branch, dirty, latest_commit) = git_status(&root);
 
     let sync = |id: &str| -> String {
         let t = targets
@@ -108,6 +120,7 @@ pub fn get_status() -> Result<StatusData, String> {
 
     Ok(StatusData {
         repo_path: root.to_string_lossy().into_owned(),
+        git_available,
         branch,
         dirty,
         latest_commit,
@@ -122,4 +135,33 @@ pub fn get_status() -> Result<StatusData, String> {
         enabled_config_target_ids: config_ids,
         enabled_target_ids: enabled,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{git_available, git_status};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("ux-workspace-app-status-{name}-{nonce}"))
+    }
+
+    #[test]
+    fn non_git_workspace_is_reported_as_not_git() {
+        let root = temp_root("non-git");
+        fs::create_dir_all(&root).expect("create temp dir");
+
+        let available = git_available(&root);
+        let status = git_status(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(!available);
+        assert_eq!(status, (false, "not git".into(), false, "not git".into()));
+    }
 }

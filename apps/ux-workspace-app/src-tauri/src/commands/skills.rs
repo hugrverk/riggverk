@@ -14,11 +14,32 @@ pub struct SkillSummary {
     path: String,
 }
 
-#[tauri::command]
-pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
-    let root = workspace_root()?;
+fn skill_summary_from_path(
+    root: &Path,
+    skill_md: &Path,
+    id: String,
+    fallback_name: String,
+) -> SkillSummary {
+    let content = std::fs::read_to_string(skill_md).unwrap_or_default();
+    let name = extract_frontmatter(&content, "name");
+    let desc = extract_frontmatter(&content, "description");
+    let rel = skill_md
+        .strip_prefix(root)
+        .unwrap_or(skill_md)
+        .to_string_lossy()
+        .into_owned();
+
+    SkillSummary {
+        id,
+        name: if name.is_empty() { fallback_name } else { name },
+        description: desc,
+        path: rel,
+    }
+}
+
+fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> {
     let skills_dir = root.join("skills");
-    let mut skills: Vec<SkillSummary> = Vec::new();
+    let mut discovered: Vec<SkillSummary> = Vec::new();
 
     let entries =
         std::fs::read_dir(&skills_dir).map_err(|e| format!("cannot read skills dir: {}", e))?;
@@ -28,8 +49,22 @@ pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
         if !area_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;
         }
+
+        let area_path = area_entry.path();
+        let area = area_entry.file_name().to_string_lossy().into_owned();
+        let flat_skill_md = area_path.join("SKILL.md");
+        if flat_skill_md.is_file() {
+            discovered.push(skill_summary_from_path(
+                root,
+                &flat_skill_md,
+                format!("workspace/{}", area),
+                area,
+            ));
+            continue;
+        }
+
         let skill_entries =
-            std::fs::read_dir(area_entry.path()).map_err(|e| format!("read error: {}", e))?;
+            std::fs::read_dir(&area_path).map_err(|e| format!("read error: {}", e))?;
 
         for skill_entry in skill_entries {
             let skill_entry = skill_entry.map_err(|e| format!("read error: {}", e))?;
@@ -37,33 +72,37 @@ pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
                 continue;
             }
             let skill_md = skill_entry.path().join("SKILL.md");
-            if !skill_md.exists() {
+            if !skill_md.is_file() {
                 continue;
             }
 
-            let content = std::fs::read_to_string(&skill_md).unwrap_or_default();
-            let name = extract_frontmatter(&content, "name");
-            let desc = extract_frontmatter(&content, "description");
-            let rel = skill_md
-                .strip_prefix(&root)
-                .unwrap_or(&skill_md)
-                .to_string_lossy()
-                .into_owned();
-            let area = area_entry.file_name().to_string_lossy().into_owned();
             let skill_dir = skill_entry.file_name().to_string_lossy().into_owned();
-            let id = format!("{}/{}", area, skill_dir);
-
-            skills.push(SkillSummary {
-                id,
-                name: if name.is_empty() { skill_dir } else { name },
-                description: desc,
-                path: rel,
-            });
+            discovered.push(skill_summary_from_path(
+                root,
+                &skill_md,
+                format!("{}/{}", area, skill_dir),
+                skill_dir,
+            ));
         }
     }
 
-    skills.sort_by(|a, b| a.id.cmp(&b.id));
+    discovered.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let mut names = std::collections::HashSet::new();
+    let mut skills: Vec<SkillSummary> = Vec::new();
+    for skill in discovered {
+        if names.insert(skill.name.clone()) {
+            skills.push(skill);
+        }
+    }
+
     Ok(skills)
+}
+
+#[tauri::command]
+pub fn list_skills() -> Result<Vec<SkillSummary>, String> {
+    let root = workspace_root()?;
+    discover_skills(&root)
 }
 
 #[tauri::command]
@@ -270,7 +309,7 @@ pub fn open_install_skills_script() -> Result<ActionResult, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::validate_project_install_target;
+    use super::{discover_skills, validate_project_install_target};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -281,6 +320,90 @@ mod tests {
             .expect("system clock before unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("ux-workspace-app-{name}-{nonce}"))
+    }
+
+    fn write_skill(root: &PathBuf, rel: &str, name: &str) {
+        let path = root.join(rel).join("SKILL.md");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create skill parent");
+        }
+        fs::write(
+            path,
+            format!("---\nname: {}\ndescription: test skill\n---\n", name),
+        )
+        .expect("write skill");
+    }
+
+    #[test]
+    fn flat_skill_layout_is_listed() {
+        let root = temp_root("flat-skills");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "workspace/diagnose");
+        assert_eq!(skills[0].name, "diagnose");
+        assert_eq!(skills[0].path, "skills/diagnose/SKILL.md");
+    }
+
+    #[test]
+    fn nested_skill_layout_is_still_listed() {
+        let root = temp_root("nested-skills");
+        write_skill(&root, "skills/debug/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "debug/diagnose");
+    }
+
+    #[test]
+    fn flat_baseline_starter_skills_are_discoverable() {
+        let root = temp_root("baseline-skills");
+        write_skill(&root, "skills/diagnose", "diagnose");
+        write_skill(&root, "skills/security-review", "security-review");
+        write_skill(&root, "skills/context-budget", "context-budget");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
+
+        assert!(names.contains(&"diagnose"));
+        assert!(names.contains(&"security-review"));
+        assert!(names.contains(&"context-budget"));
+    }
+
+    #[test]
+    fn duplicate_skill_names_choose_deterministic_first_id() {
+        let root = temp_root("duplicate-skills");
+        write_skill(&root, "skills/diagnose", "diagnose");
+        write_skill(&root, "skills/debug/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "debug/diagnose");
+    }
+
+    #[test]
+    fn flat_skill_id_resolves_to_openable_path() {
+        let root = temp_root("flat-open-skill");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let found = skills
+            .iter()
+            .find(|s| s.id == "workspace/diagnose")
+            .expect("flat skill id exists");
+        let path = root.join(&found.path);
+        let exists = path.is_file();
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(exists, "flat skill id must resolve to SKILL.md");
     }
 
     #[test]
