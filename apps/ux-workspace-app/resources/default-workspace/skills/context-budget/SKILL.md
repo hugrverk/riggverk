@@ -1,0 +1,82 @@
+---
+name: context-budget
+description: Audit skills, rules, docs, agent prompts, and tooling config for token overhead, overlap, and safe simplification without removing essential safety guidance.
+---
+
+# Context Budget
+
+## Purpose
+
+- Reduce workspace instruction bloat without weakening safety or repo canon.
+- Identify overlapping skills, rules, docs, prompts, agents, MCP/tooling config, and repeated guidance.
+- Prioritize the highest-savings simplifications first.
+
+## When To Use
+
+- The workspace feels slow, bloated, repetitive, or hard for agents to load.
+- Reviewing skills, global rules, agent prompts, docs, MCP/tooling config, or app default workspace content.
+- Before adding new baseline skills or broad rules.
+- When deciding whether to keep, merge, shorten, make optional, or remove instructions.
+
+## Do Not Use When
+
+- The user asked for feature implementation, debugging, or release readiness.
+- The content is outside the workspace scope.
+- The proposed optimization would remove critical safety, security, repo-canon, or verification guidance.
+- Broad deletions are desired but not explicitly requested.
+
+## Process
+
+1. Define the inspectable scope:
+   - Skills.
+   - Global rules.
+   - Agent prompts.
+   - Docs.
+   - Tool/MCP config.
+   - App default workspace resources.
+2. Estimate rough overhead:
+   - Count files, lines, and approximate tokens where practical.
+   - Note always-loaded vs optional or on-demand content.
+   - Treat tool schemas and connector descriptions as overhead when visible.
+3. Identify duplication:
+   - Repeated safety rules.
+   - Overlapping skill triggers.
+   - Broad generic advice repeated across docs.
+   - Tool-specific instructions that should be agent-neutral.
+   - Long examples that could become references or be removed.
+4. Classify each component:
+   - Keep.
+   - Merge.
+   - Shorten.
+   - Make optional/on-demand.
+   - Remove.
+5. Protect essential content:
+   - Credentials and secret-handling rules.
+   - Git/destructive-action guardrails.
+   - Verification requirements.
+   - Repo-canon instructions.
+   - Safety and security review boundaries.
+6. Prioritize by savings and risk:
+   - Highest line/token savings.
+   - Lowest behavioral risk.
+   - Clearest ownership.
+   - Fewest sync surfaces.
+7. Recommend small slices rather than one broad purge.
+
+## Output
+
+- Scope audited.
+- Counts: files, lines, and rough token estimate when practical.
+- Biggest bloat sources.
+- Overlaps found.
+- Keep/merge/shorten/optional/remove recommendations.
+- Highest-savings next slice.
+- Safety rules preserved.
+- Not inspected.
+
+## Guardrails
+
+- Do not optimize away critical safety, security, verification, or repository instructions.
+- Do not make broad deletions automatically unless explicitly asked.
+- Do not focus only on one agent; Agent Workspace is agent-agnostic.
+- Do not claim token savings are exact unless measured with a tokenizer.

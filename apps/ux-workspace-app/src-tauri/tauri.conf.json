@@ -1,0 +1,45 @@
+{
+  "$schema": "https://raw.githubusercontent.com/nicedoc/schemas/main/json/tauri/config.schema.json",
+  "productName": "Agent Workspace",
+  "version": "0.1.0",
+  "identifier": "ai.openworkspace.ux-workspace",
+  "build": {
+    "frontendDist": "../dist",
+    "devUrl": "http://localhost:1420",
+    "beforeDevCommand": "npm run dev",
+    "beforeBuildCommand": "npm run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "title": "Agent Workspace",
+        "width": 1240,
+        "height": 760,
+        "resizable": true,
+        "minWidth": 980,
+        "minHeight": 620,
+        "center": true,
+        "titleBarStyle": "Overlay",
+        "hiddenTitle": true,
+        "trafficLightPosition": { "x": 18, "y": 18 }
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; style-src 'self' 'unsafe-inline'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "resources": {
+      "../resources/default-workspace/": "default-workspace/"
+    },
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.icns",
+      "icons/icon.ico"
+    ]
+  }
+}

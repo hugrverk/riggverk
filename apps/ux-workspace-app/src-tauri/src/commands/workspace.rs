@@ -1,0 +1,1566 @@
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use serde::Serialize;
+
+use crate::agent_targets;
+use crate::settings;
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub(crate) enum MarkerKind {
+    File,
+    Dir,
+}
+
+impl MarkerKind {
+    pub(crate) fn as_str(&self) -> &'static str {
+        match self {
+            MarkerKind::File => "file",
+            MarkerKind::Dir => "dir",
+        }
+    }
+
+    pub(crate) fn exists(&self, base: &Path, rel: &str) -> bool {
+        let p = base.join(rel);
+        match self {
+            MarkerKind::File => p.is_file(),
+            MarkerKind::Dir => p.is_dir(),
+        }
+    }
+}
+
+pub(crate) struct MarkerDef {
+    pub kind: MarkerKind,
+    pub rel_path: &'static str,
+}
+
+pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
+    &[
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: ".ux-workspace/workspace.json",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "scripts/bootstrap.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "scripts/install-agent-rules.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "scripts/install-opencode-config.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "scripts/install-skills.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/global-agent-rules.md",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/opencode.json",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "README.md",
+        },
+        MarkerDef {
+            kind: MarkerKind::Dir,
+            rel_path: "skills",
+        },
+    ]
+}
+
+pub(super) fn repo_path() -> PathBuf {
+    let settings = settings::load();
+    if let Some(ref custom) = settings.workspace_path {
+        if !custom.is_empty() {
+            return PathBuf::from(custom);
+        }
+    }
+    if let Ok(p) = std::env::var("UX_WORKSPACE_PATH") {
+        if !p.is_empty() {
+            return PathBuf::from(p);
+        }
+    }
+    agent_targets::home_dir()
+        .map(|h| h.join("Projects/ux-workspace"))
+        .unwrap_or_else(|_| PathBuf::from("Projects/ux-workspace"))
+}
+
+pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
+    let canonical = root
+        .canonicalize()
+        .map_err(|_| "invalid workspace path: not a valid workspace".to_string())?;
+
+    if !canonical.is_dir() {
+        return Err("invalid workspace path: not a valid workspace".into());
+    }
+
+    if workspace_marker_defs()
+        .iter()
+        .any(|def| !def.kind.exists(&canonical, def.rel_path))
+    {
+        return Err("invalid workspace path: not a valid workspace".into());
+    }
+
+    Ok(canonical)
+}
+
+pub(super) fn workspace_root() -> Result<PathBuf, String> {
+    validate_workspace_root(repo_path())
+}
+
+pub(super) fn path_arg(path: &Path) -> Result<String, String> {
+    path.to_str()
+        .map(|s| s.to_string())
+        .ok_or_else(|| "path is not valid UTF-8".to_string())
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceMarkerStatus {
+    kind: String,
+    path: String,
+    exists: bool,
+}
+
+#[derive(Serialize)]
+pub struct WorkspaceDiagnostics {
+    candidate_path: String,
+    resolved_path: Option<String>,
+    valid: bool,
+    error: Option<String>,
+    markers: Vec<WorkspaceMarkerStatus>,
+    enabled_rule_targets: usize,
+    total_rule_targets: usize,
+    enabled_config_targets: usize,
+    total_config_targets: usize,
+    backup_root: String,
+    backup_root_exists: bool,
+}
+
+#[tauri::command]
+pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
+    let settings = settings::load();
+    let candidate = repo_path();
+    let candidate_str = candidate.to_string_lossy().into_owned();
+
+    let (valid, resolved_path, error, markers) = match candidate.canonicalize() {
+        Ok(canonical) => {
+            if !canonical.is_dir() {
+                let markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
+                    .iter()
+                    .map(|def| WorkspaceMarkerStatus {
+                        kind: def.kind.as_str().to_string(),
+                        path: def.rel_path.to_string(),
+                        exists: false,
+                    })
+                    .collect();
+                (
+                    false,
+                    Some(canonical.to_string_lossy().into_owned()),
+                    Some("not a directory".to_string()),
+                    markers,
+                )
+            } else {
+                let markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
+                    .iter()
+                    .map(|def| WorkspaceMarkerStatus {
+                        kind: def.kind.as_str().to_string(),
+                        path: def.rel_path.to_string(),
+                        exists: def.kind.exists(&canonical, def.rel_path),
+                    })
+                    .collect();
+                let all_exist = markers.iter().all(|m| m.exists);
+                let error = if !all_exist {
+                    Some("missing required markers".to_string())
+                } else {
+                    None
+                };
+                (
+                    all_exist,
+                    Some(canonical.to_string_lossy().into_owned()),
+                    error,
+                    markers,
+                )
+            }
+        }
+        Err(_) => {
+            let markers: Vec<WorkspaceMarkerStatus> = if candidate.exists() {
+                workspace_marker_defs()
+                    .iter()
+                    .map(|def| WorkspaceMarkerStatus {
+                        kind: def.kind.as_str().to_string(),
+                        path: def.rel_path.to_string(),
+                        exists: def.kind.exists(&candidate, def.rel_path),
+                    })
+                    .collect()
+            } else {
+                workspace_marker_defs()
+                    .iter()
+                    .map(|def| WorkspaceMarkerStatus {
+                        kind: def.kind.as_str().to_string(),
+                        path: def.rel_path.to_string(),
+                        exists: false,
+                    })
+                    .collect()
+            };
+            (
+                false,
+                None,
+                Some("cannot resolve path".to_string()),
+                markers,
+            )
+        }
+    };
+
+    let enabled = &settings.enabled_target_ids;
+    let total_rules = agent_targets::rule_targets().len();
+    let total_configs = agent_targets::config_targets().len();
+    let enabled_rules = agent_targets::rule_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+    let enabled_configs = agent_targets::config_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+
+    let (backup_root, backup_root_exists) = match super::backups::backup_root() {
+        Ok(path) => {
+            let exists = path.exists();
+            (path.to_string_lossy().into_owned(), exists)
+        }
+        Err(_) => (String::new(), false),
+    };
+
+    Ok(WorkspaceDiagnostics {
+        candidate_path: candidate_str,
+        resolved_path,
+        valid,
+        error,
+        markers,
+        enabled_rule_targets: enabled_rules,
+        total_rule_targets: total_rules,
+        enabled_config_targets: enabled_configs,
+        total_config_targets: total_configs,
+        backup_root,
+        backup_root_exists,
+    })
+}
+
+#[derive(Serialize)]
+pub struct CreateWorkspacePlan {
+    pub ok: bool,
+    pub status: String,
+    pub target_path: String,
+    pub reason: String,
+    pub warnings: Vec<String>,
+    pub planned_files: Vec<String>,
+}
+
+fn evaluate_create_plan(target_path: Option<String>) -> CreateWorkspacePlan {
+    let raw = match target_path {
+        Some(ref s) if !s.trim().is_empty() => s.clone(),
+        _ => {
+            return CreateWorkspacePlan {
+                ok: false,
+                status: "missing_target".into(),
+                target_path: target_path.unwrap_or_default(),
+                reason: "No target path provided. Enter a workspace path in the field above."
+                    .into(),
+                warnings: vec![],
+                planned_files: vec![],
+            };
+        }
+    };
+
+    let path_str = normalize_target_path(&raw);
+    let target = Path::new(&path_str);
+
+    if is_unsafe_target(target) {
+        return CreateWorkspacePlan {
+            ok: false,
+            status: "unsafe_target".into(),
+            target_path: path_str,
+            reason: "This path is too broad or unsafe for workspace initialization. Choose a specific project directory instead.".into(),
+            warnings: vec!["Do not initialize a workspace at a system root, home directory, or broad parent folder.".into()],
+            planned_files: planned_workspace_files(),
+        };
+    }
+
+    if !target.exists() {
+        let parent_exists = target.parent().map(|p| p.exists()).unwrap_or(false);
+        let mut warnings = vec![];
+        if !parent_exists {
+            warnings.push("The parent directory does not exist either. Both directories would need to be created in a future apply step.".into());
+        }
+        return CreateWorkspacePlan {
+            ok: true,
+            status: "missing_directory".into(),
+            target_path: path_str,
+            reason: "This path does not exist. Future workspace creation can create the directory and populate it with bundled default resources.".into(),
+            warnings,
+            planned_files: planned_workspace_files(),
+        };
+    }
+
+    if target.is_file() {
+        return CreateWorkspacePlan {
+            ok: false,
+            status: "file_not_directory".into(),
+            target_path: path_str,
+            reason: "This path is a file, not a directory. Cannot initialize a workspace here."
+                .into(),
+            warnings: vec!["A workspace must be a directory.".into()],
+            planned_files: vec![],
+        };
+    }
+
+    if !target.is_dir() {
+        return CreateWorkspacePlan {
+            ok: false,
+            status: "invalid_path".into(),
+            target_path: path_str,
+            reason: "This path exists but is not a regular directory.".into(),
+            warnings: vec![],
+            planned_files: vec![],
+        };
+    }
+
+    let has_entries = fs::read_dir(target)
+        .map(|mut r| r.next().is_some())
+        .unwrap_or(true);
+
+    if !has_entries {
+        return CreateWorkspacePlan {
+            ok: true,
+            status: "empty_existing_directory".into(),
+            target_path: path_str,
+            reason: "This directory exists and is empty. It is a good candidate for workspace initialization with bundled default resources.".into(),
+            warnings: vec![],
+            planned_files: planned_workspace_files(),
+        };
+    }
+
+    let all_markers_present = workspace_marker_defs()
+        .iter()
+        .all(|def| def.kind.exists(target, def.rel_path));
+
+    if all_markers_present {
+        return CreateWorkspacePlan {
+            ok: true,
+            status: "valid_existing_workspace".into(),
+            target_path: path_str,
+            reason: "This path is already a valid workspace. No initialization needed.".into(),
+            warnings: vec![],
+            planned_files: vec![],
+        };
+    }
+
+    CreateWorkspacePlan {
+        ok: false,
+        status: "non_empty_non_workspace".into(),
+        target_path: path_str,
+        reason: "This directory contains files but is not a valid workspace (missing required markers). Future workspace creation here would add bundled default resources alongside existing files.".into(),
+        warnings: vec![
+            "This directory contains existing files. A future create workspace action would add default resources alongside them. Review the planned files list before proceeding.".into(),
+        ],
+        planned_files: planned_workspace_files(),
+    }
+}
+
+fn planned_workspace_files() -> Vec<String> {
+    super::defaults::default_workspace_files()
+        .into_iter()
+        .flat_map(|(_, paths)| paths.iter().map(|s| s.to_string()))
+        .collect()
+}
+
+fn normalize_target_path(raw: &str) -> String {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return trimmed.to_string();
+    }
+    if trimmed == "~" {
+        if let Ok(home) = std::env::var("HOME") {
+            return home;
+        }
+    }
+    if let Some(rest) = trimmed.strip_prefix("~/") {
+        if let Ok(home) = std::env::var("HOME") {
+            let home = home.trim_end_matches('/');
+            if rest.is_empty() {
+                return home.to_string();
+            }
+            return format!("{}/{}", home, rest);
+        }
+    }
+    trimmed.to_string()
+}
+
+fn derive_source_roots() -> Vec<PathBuf> {
+    let src_tauri = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+    let mut roots = vec![src_tauri.clone()];
+    if let Some(app_root) = src_tauri.parent() {
+        roots.push(app_root.to_path_buf());
+        if let Some(repo_root) = app_root.parent().and_then(|p| p.parent()) {
+            roots.push(repo_root.to_path_buf());
+        }
+    }
+    roots
+}
+
+fn is_unsafe_target(target: &Path) -> bool {
+    if target == Path::new("/") {
+        return true;
+    }
+    if target == Path::new("/Users") {
+        return true;
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        let home_path = Path::new(&home);
+        if target == home_path {
+            return true;
+        }
+        if target == home_path.join("Projects") {
+            return true;
+        }
+    }
+
+    if target == std::env::temp_dir() {
+        return true;
+    }
+
+    let source_roots = derive_source_roots();
+    for source_root in &source_roots {
+        if target == source_root {
+            return true;
+        }
+        if let Ok(canonical) = source_root.canonicalize() {
+            if target == canonical {
+                return true;
+            }
+        }
+    }
+
+    if target.exists() {
+        if let Ok(canonical) = target.canonicalize() {
+            for source_root in &source_roots {
+                if let Ok(source_canonical) = source_root.canonicalize() {
+                    if canonical == source_canonical {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    if let Ok(cwd) = std::env::current_dir() {
+        if cwd == target {
+            return true;
+        }
+        if let Ok(cwd_canonical) = cwd.canonicalize() {
+            if cwd_canonical == target {
+                return true;
+            }
+            if target.exists() {
+                if let Ok(canonical) = target.canonicalize() {
+                    if canonical == cwd_canonical {
+                        return true;
+                    }
+                }
+            }
+        }
+    }
+
+    false
+}
+
+#[tauri::command]
+pub fn plan_create_workspace(target_path: Option<String>) -> Result<CreateWorkspacePlan, String> {
+    Ok(evaluate_create_plan(target_path))
+}
+
+#[derive(Serialize)]
+pub struct CreateWorkspaceResult {
+    pub success: bool,
+    pub status: String,
+    pub target_path: String,
+    pub created_dirs: Vec<String>,
+    pub copied_files: Vec<String>,
+    pub skipped_files: Vec<String>,
+    pub warnings: Vec<String>,
+    pub message: String,
+}
+
+#[allow(clippy::result_large_err)]
+fn preflight_create(
+    source_root: &Path,
+    target: &Path,
+    target_path: &str,
+    plan_status: &str,
+) -> Result<(), CreateWorkspaceResult> {
+    if !source_root.exists() || !source_root.is_dir() {
+        return Err(CreateWorkspaceResult {
+            success: false,
+            status: "source_unavailable".into(),
+            target_path: target_path.into(),
+            created_dirs: vec![],
+            copied_files: vec![],
+            skipped_files: vec![],
+            warnings: vec![],
+            message: "Bundled default workspace source is unavailable.".into(),
+        });
+    }
+
+    if plan_status == "missing_directory" {
+        let parent = target.parent();
+        if parent.is_none() || !parent.unwrap().exists() {
+            return Err(CreateWorkspaceResult {
+                success: false,
+                status: "missing_parent".into(),
+                target_path: target_path.into(),
+                created_dirs: vec![],
+                copied_files: vec![],
+                skipped_files: vec![],
+                warnings: vec![],
+                message: "Parent directory does not exist. Create it first.".into(),
+            });
+        }
+    }
+
+    if plan_status == "empty_existing_directory" {
+        if !target.is_dir() {
+            return Err(CreateWorkspaceResult {
+                success: false,
+                status: "not_a_directory".into(),
+                target_path: target_path.into(),
+                created_dirs: vec![],
+                copied_files: vec![],
+                skipped_files: vec![],
+                warnings: vec![],
+                message: "Target is not a directory.".into(),
+            });
+        }
+        let has_entries = fs::read_dir(target)
+            .map(|mut r| r.next().is_some())
+            .unwrap_or(true);
+        if has_entries {
+            return Err(CreateWorkspaceResult {
+                success: false,
+                status: "not_empty".into(),
+                target_path: target_path.into(),
+                created_dirs: vec![],
+                copied_files: vec![],
+                skipped_files: vec![],
+                warnings: vec![],
+                message: "Target directory is not empty. Cannot create workspace.".into(),
+            });
+        }
+    }
+
+    let file_list = super::defaults::default_workspace_files();
+    for (_label, paths) in &file_list {
+        for &rel in *paths {
+            if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+                return Err(CreateWorkspaceResult {
+                    success: false,
+                    status: "unsafe_relative_path".into(),
+                    target_path: target_path.into(),
+                    created_dirs: vec![],
+                    copied_files: vec![],
+                    skipped_files: vec![],
+                    warnings: vec![],
+                    message: format!("Blocked unsafe relative path: {}", rel),
+                });
+            }
+
+            let src = source_root.join(rel);
+            if !src.is_file() {
+                return Err(CreateWorkspaceResult {
+                    success: false,
+                    status: "source_missing".into(),
+                    target_path: target_path.into(),
+                    created_dirs: vec![],
+                    copied_files: vec![],
+                    skipped_files: vec![],
+                    warnings: vec![],
+                    message: format!(
+                        "Required source file '{}' is missing. Cannot create workspace.",
+                        rel
+                    ),
+                });
+            }
+
+            let dst = target.join(rel);
+            if dst.exists() {
+                return Err(CreateWorkspaceResult {
+                    success: false,
+                    status: "destination_exists".into(),
+                    target_path: target_path.into(),
+                    created_dirs: vec![],
+                    copied_files: vec![],
+                    skipped_files: vec![],
+                    warnings: vec![],
+                    message: format!(
+                        "Destination file '{}' already exists. Cannot create workspace (would overwrite existing content).",
+                        rel
+                    ),
+                });
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn create_workspace_from_source(
+    source_root: &Path,
+    target_raw: Option<String>,
+) -> CreateWorkspaceResult {
+    let plan = evaluate_create_plan(target_raw);
+    let target_path = plan.target_path.clone();
+
+    if plan.status != "missing_directory" && plan.status != "empty_existing_directory" {
+        return CreateWorkspaceResult {
+            success: false,
+            status: plan.status,
+            target_path,
+            created_dirs: vec![],
+            copied_files: vec![],
+            skipped_files: vec![],
+            warnings: plan.warnings,
+            message: plan.reason,
+        };
+    }
+
+    let target = Path::new(&target_path);
+
+    match preflight_create(source_root, target, &target_path, &plan.status) {
+        Ok(()) => {}
+        Err(result) => return result,
+    }
+
+    let mut created_dirs: Vec<String> = vec![];
+    let mut copied_files: Vec<String> = vec![];
+    let warnings: Vec<String> = plan.warnings;
+
+    if plan.status == "missing_directory" {
+        match fs::create_dir(target) {
+            Ok(()) => {
+                created_dirs.push(target_path.clone());
+            }
+            Err(e) => {
+                return CreateWorkspaceResult {
+                    success: false,
+                    status: "create_dir_failed".into(),
+                    target_path,
+                    created_dirs,
+                    copied_files,
+                    skipped_files: vec![],
+                    warnings,
+                    message: format!("Failed to create target directory: {}", e),
+                };
+            }
+        }
+    }
+
+    let file_list = super::defaults::default_workspace_files();
+    for (_label, paths) in &file_list {
+        for &rel in *paths {
+            let dst = target.join(rel);
+
+            if dst.exists() {
+                return CreateWorkspaceResult {
+                    success: false,
+                    status: "destination_exists".into(),
+                    target_path,
+                    created_dirs,
+                    copied_files,
+                    skipped_files: vec![],
+                    warnings,
+                    message: format!(
+                        "Destination file '{}' appeared after preflight. Stopping to avoid overwrite.",
+                        rel
+                    ),
+                };
+            }
+
+            if let Some(parent) = dst.parent() {
+                if !parent.exists() {
+                    if let Err(e) = fs::create_dir_all(parent) {
+                        return CreateWorkspaceResult {
+                            success: false,
+                            status: "create_dir_failed".into(),
+                            target_path,
+                            created_dirs,
+                            copied_files,
+                            skipped_files: vec![],
+                            warnings,
+                            message: format!(
+                                "Failed to create parent directory for '{}': {}",
+                                rel, e
+                            ),
+                        };
+                    }
+                    let parent_str = parent.to_string_lossy().into_owned();
+                    if !created_dirs.contains(&parent_str) {
+                        created_dirs.push(parent_str);
+                    }
+                }
+            }
+
+            let src = source_root.join(rel);
+            match fs::copy(&src, &dst) {
+                Ok(_) => {
+                    copied_files.push(rel.to_string());
+                }
+                Err(e) => {
+                    return CreateWorkspaceResult {
+                        success: false,
+                        status: "copy_failed".into(),
+                        target_path,
+                        created_dirs,
+                        copied_files,
+                        skipped_files: vec![],
+                        warnings,
+                        message: format!("Failed to copy '{}': {}", rel, e),
+                    };
+                }
+            }
+        }
+    }
+
+    match validate_workspace_root(target.to_path_buf()) {
+        Ok(canonical) => {
+            let message = if copied_files.is_empty() {
+                "No files were copied. The target directory may be empty.".into()
+            } else {
+                format!(
+                    "Workspace created successfully. Copied {} file(s).",
+                    copied_files.len()
+                )
+            };
+            CreateWorkspaceResult {
+                success: true,
+                status: "created".into(),
+                target_path: canonical.to_string_lossy().into_owned(),
+                created_dirs,
+                copied_files,
+                skipped_files: vec![],
+                warnings,
+                message,
+            }
+        }
+        Err(e) => CreateWorkspaceResult {
+            success: false,
+            status: "validation_failed".into(),
+            target_path,
+            created_dirs,
+            copied_files,
+            skipped_files: vec![],
+            warnings,
+            message: format!(
+                "Workspace validation failed after copy: {}. Target may be incomplete.",
+                e
+            ),
+        },
+    }
+}
+
+#[tauri::command]
+pub fn create_workspace_from_defaults(
+    app: tauri::AppHandle,
+    target_path: Option<String>,
+) -> Result<CreateWorkspaceResult, String> {
+    let source_root = super::defaults::resolve_default_workspace_root(&app)?;
+    Ok(create_workspace_from_source(&source_root, target_path))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{create_workspace_from_source, plan_create_workspace, validate_workspace_root};
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("ux-workspace-app-{name}-{nonce}"))
+    }
+
+    fn mkdir(root: &PathBuf, rel: &str) {
+        fs::create_dir_all(root.join(rel)).expect("create dir");
+    }
+
+    fn write_file(root: &PathBuf, rel: &str, content: &str) {
+        if let Some(parent) = root.join(rel).parent() {
+            fs::create_dir_all(parent).expect("create parent dirs");
+        }
+        fs::write(root.join(rel), content).expect("write file");
+    }
+
+    fn cleanup(root: &PathBuf) {
+        let _ = fs::remove_dir_all(root);
+    }
+
+    fn setup_valid_workspace(name: &str) -> PathBuf {
+        let root = temp_root(name);
+        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+        root
+    }
+
+    #[test]
+    fn accepts_valid_workspace_data_folder() {
+        let root = setup_valid_workspace("valid-data-workspace");
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert!(result.is_ok(), "valid data workspace should be accepted");
+    }
+
+    #[test]
+    fn accepts_valid_workspace_without_app_source() {
+        let root = temp_root("no-app-source");
+        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+        // No apps/ux-workspace-app directory — this should still be valid
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert!(
+            result.is_ok(),
+            "workspace without app source should still be valid"
+        );
+    }
+
+    #[test]
+    fn rejects_workspace_missing_marker_file() {
+        let root = temp_root("missing-marker");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+        // Missing .ux-workspace/workspace.json
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert_eq!(
+            result.expect_err("missing marker should be rejected"),
+            "invalid workspace path: not a valid workspace"
+        );
+    }
+
+    #[test]
+    fn rejects_fake_script_tree() {
+        let root = temp_root("fake-script-tree");
+        let scripts = root.join("scripts");
+        fs::create_dir_all(&scripts).expect("create fake scripts dir");
+        fs::write(
+            scripts.join("install-agent-rules.sh"),
+            "#!/usr/bin/env bash\n",
+        )
+        .expect("write fake script");
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+
+        assert_eq!(
+            result.expect_err("fake workspace should be rejected"),
+            "invalid workspace path: not a valid workspace"
+        );
+    }
+
+    fn plan_target(root: &PathBuf) -> String {
+        root.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn plan_missing_target() {
+        let plan = plan_create_workspace(None).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_target");
+        assert!(!plan.ok);
+        assert!(plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_empty_target_string() {
+        let plan = plan_create_workspace(Some("   ".into())).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_target");
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_unsafe_target_root() {
+        let plan = plan_create_workspace(Some("/".into())).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+        assert!(!plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_unsafe_target_home() {
+        let home = std::env::var("HOME").unwrap();
+        let plan = plan_create_workspace(Some(home.clone())).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert_eq!(plan.target_path, home);
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_unsafe_target_users() {
+        let plan = plan_create_workspace(Some("/Users".into())).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_unsafe_target_temp_root() {
+        let temp = std::env::temp_dir().to_string_lossy().into_owned();
+        let plan = plan_create_workspace(Some(temp)).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_unsafe_target_home_projects() {
+        let home = std::env::var("HOME").unwrap();
+        let path = std::path::Path::new(&home).join("Projects");
+        let plan = plan_create_workspace(Some(path.to_string_lossy().into_owned()))
+            .expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_valid_existing_workspace() {
+        let root = setup_valid_workspace("plan-valid");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        assert_eq!(plan.status, "valid_existing_workspace");
+        assert!(plan.ok);
+        assert!(plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_empty_existing_directory() {
+        let root = temp_root("plan-empty");
+        fs::create_dir_all(&root).expect("create empty dir");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        assert_eq!(plan.status, "empty_existing_directory");
+        assert!(plan.ok);
+        assert!(!plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_non_empty_non_workspace() {
+        let root = temp_root("plan-nonempty");
+        fs::create_dir_all(&root).expect("create dir");
+        fs::write(root.join("somefile.txt"), "hello").expect("write file");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        assert_eq!(plan.status, "non_empty_non_workspace");
+        assert!(!plan.ok);
+        assert!(!plan.warnings.is_empty());
+        assert!(!plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_missing_directory() {
+        let root = temp_root("plan-missing");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_directory");
+        assert!(plan.ok);
+        assert!(!plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_missing_directory_parent_missing() {
+        let root = temp_root("plan-missing-parent");
+        let sub = root.join("nope").join("also-nope");
+        let path = sub.to_string_lossy().into_owned();
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_directory");
+        assert!(plan.ok);
+        assert!(!plan.warnings.is_empty());
+    }
+
+    #[test]
+    fn plan_file_not_directory() {
+        let root = temp_root("plan-file");
+        let path = plan_target(&root);
+        fs::write(&root, "content").expect("write file");
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        assert_eq!(plan.status, "file_not_directory");
+        assert!(!plan.ok);
+        assert!(plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn plan_planned_files_include_marker_and_scripts() {
+        let root = temp_root("plan-files");
+        fs::create_dir_all(&root).expect("create dir");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        let files: Vec<&str> = plan.planned_files.iter().map(|s| s.as_str()).collect();
+        assert!(
+            files.contains(&".ux-workspace/workspace.json"),
+            "planned files must include workspace marker"
+        );
+        assert!(
+            files.contains(&"scripts/bootstrap.sh"),
+            "planned files must include bootstrap.sh"
+        );
+        assert!(
+            files.contains(&"README.md"),
+            "planned files must include README"
+        );
+        assert!(
+            files.contains(&"skills/diagnose/SKILL.md"),
+            "planned files must include skills/diagnose/SKILL.md"
+        );
+        assert!(
+            files.contains(&"templates/global-agent-rules.md"),
+            "planned files must include agent rules template"
+        );
+        assert!(
+            files.contains(&"templates/opencode.json"),
+            "planned files must include opencode config"
+        );
+        assert!(
+            files.contains(&"docs/START_HERE.md"),
+            "planned files must include docs"
+        );
+        assert!(
+            plan.planned_files.len() >= 32,
+            "expected at least 32 planned files, got {}",
+            plan.planned_files.len()
+        );
+    }
+
+    #[test]
+    fn plan_is_read_only_no_create_no_write() {
+        let root = temp_root("plan-readonly");
+        let path = plan_target(&root);
+        let plan = plan_create_workspace(Some(path.clone())).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_directory");
+        assert!(!root.exists(), "plan must not create the missing directory");
+        assert!(plan.ok);
+    }
+
+    #[test]
+    fn plan_rejects_tilde_home() {
+        let home = std::env::var("HOME").unwrap();
+        let plan = plan_create_workspace(Some("~".into())).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+        assert_eq!(plan.target_path, home);
+    }
+
+    #[test]
+    fn plan_rejects_tilde_projects() {
+        let home = std::env::var("HOME").unwrap();
+        let plan = plan_create_workspace(Some("~/Projects".into())).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+        let expected = format!("{}/Projects", home);
+        assert_eq!(plan.target_path, expected);
+    }
+
+    #[test]
+    fn plan_unsafe_target_src_tauri_root() {
+        let path = env!("CARGO_MANIFEST_DIR").to_string();
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        assert_eq!(plan.status, "unsafe_target");
+        assert!(!plan.ok);
+    }
+
+    #[test]
+    fn plan_unsafe_target_app_root() {
+        let src_tauri = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Some(app_root) = src_tauri.parent() {
+            let path = app_root.to_string_lossy().into_owned();
+            let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+            assert_eq!(plan.status, "unsafe_target", "app root should be rejected");
+            assert!(!plan.ok);
+        }
+    }
+
+    #[test]
+    fn plan_unsafe_target_repo_root() {
+        let src_tauri = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+        if let Some(repo_root) = src_tauri
+            .parent()
+            .and_then(|p| p.parent())
+            .and_then(|p| p.parent())
+        {
+            let path = repo_root.to_string_lossy().into_owned();
+            let plan = plan_create_workspace(Some(path.clone())).expect("plan should succeed");
+            assert_eq!(
+                plan.status, "unsafe_target",
+                "repo root {} should be rejected",
+                path
+            );
+            assert!(!plan.ok);
+        }
+    }
+
+    #[test]
+    fn plan_normalized_path_still_missing_directory() {
+        let root = temp_root("plan-norm-missing");
+        let path = root.to_string_lossy().into_owned();
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        assert_eq!(plan.status, "missing_directory");
+        assert!(plan.ok);
+    }
+
+    #[test]
+    fn plan_normalized_path_still_empty_directory() {
+        let root = temp_root("plan-norm-empty");
+        fs::create_dir_all(&root).expect("create empty dir");
+        let path = root.to_string_lossy().into_owned();
+        let plan = plan_create_workspace(Some(path)).expect("plan should succeed");
+        cleanup(&root);
+        assert_eq!(plan.status, "empty_existing_directory");
+        assert!(plan.ok);
+    }
+
+    #[test]
+    fn plan_normalize_tilde_preserves_tilde_without_home() {
+        // Without HOME set, ~/foo stays literal
+        let plan =
+            plan_create_workspace(Some("~/some-temp-child".into())).expect("plan should succeed");
+        // May or may not expand depending on HOME availability
+        // If HOME is set, it expands; if not, stays literal
+        // Either way, the status should be sane
+        assert!(
+            plan.status == "missing_directory" || plan.status == "unsafe_target",
+            "tilde path should resolve to missing_directory or unsafe_target, got {}",
+            plan.status
+        );
+    }
+
+    // --- create workspace from source tests ---
+
+    fn setup_source_root(name: &str) -> PathBuf {
+        let root = temp_root(name);
+        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, "README.md", "# readme\n");
+        for &rel in &[
+            "docs/START_HERE.md",
+            "docs/CONCEPTS.md",
+            "docs/SKILLS.md",
+            "docs/AGENT_RULES.md",
+            "docs/OPENCODE_CONFIG.md",
+            "docs/TROUBLESHOOTING.md",
+        ] {
+            write_file(&root, rel, "doc content\n");
+        }
+        for &rel in &[
+            "templates/global-agent-rules.md",
+            "templates/opencode.json",
+            "templates/prompts/standard-prompt.md",
+            "templates/prompts/masterprompt.md",
+        ] {
+            write_file(&root, rel, "template content\n");
+        }
+        for &rel in &[
+            "scripts/bootstrap.sh",
+            "scripts/install-skills.sh",
+            "scripts/install-agent-rules.sh",
+            "scripts/install-opencode-config.sh",
+        ] {
+            write_file(&root, rel, "#!/usr/bin/env bash\necho script\n");
+        }
+        for &rel in &[
+            "skills/accessibility-review/SKILL.md",
+            "skills/agent-report-review/SKILL.md",
+            "skills/browser-qa/SKILL.md",
+            "skills/caveman/SKILL.md",
+            "skills/context-budget/SKILL.md",
+            "skills/current-docs/SKILL.md",
+            "skills/database-migrations/SKILL.md",
+            "skills/dependency-evaluation/SKILL.md",
+            "skills/diagnose/SKILL.md",
+            "skills/frontend-design/SKILL.md",
+            "skills/grill-me/SKILL.md",
+            "skills/implementation-plan/SKILL.md",
+            "skills/release-check/SKILL.md",
+            "skills/screenshot-review/SKILL.md",
+            "skills/security-review/SKILL.md",
+            "skills/tdd/SKILL.md",
+            "skills/triage/SKILL.md",
+            "skills/write-a-skill/SKILL.md",
+            "skills/zoom-out/SKILL.md",
+        ] {
+            write_file(&root, rel, "skill content\n");
+        }
+        root
+    }
+
+    fn create_target(parent: &PathBuf, name: &str) -> PathBuf {
+        parent.join(name)
+    }
+
+    #[test]
+    fn create_missing_directory_success() {
+        let source = setup_source_root("create-missing");
+        let parent = temp_root("create-missing-parent");
+        fs::create_dir_all(&parent).expect("create parent");
+        let target = create_target(&parent, "my-workspace");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        cleanup(&source);
+        cleanup(&parent);
+
+        assert!(
+            result.success,
+            "create should succeed, got: {}",
+            result.message
+        );
+        assert_eq!(result.status, "created");
+        assert!(!result.copied_files.is_empty(), "should have copied files");
+        assert!(result
+            .copied_files
+            .iter()
+            .any(|f| f == ".ux-workspace/workspace.json"));
+        assert!(result.copied_files.iter().any(|f| f == "README.md"));
+        assert!(result.copied_files.iter().any(|f| f.starts_with("docs/")));
+        assert!(result
+            .copied_files
+            .iter()
+            .any(|f| f.starts_with("templates/")));
+        assert!(result
+            .copied_files
+            .iter()
+            .any(|f| f.starts_with("scripts/")));
+        assert!(result
+            .copied_files
+            .iter()
+            .any(|f| f == "skills/diagnose/SKILL.md"));
+    }
+
+    #[test]
+    fn create_empty_directory_success() {
+        let source = setup_source_root("create-empty");
+        let target = temp_root("create-empty-target");
+        fs::create_dir_all(&target).expect("create empty dir");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(
+            result.success,
+            "create in empty dir should succeed, got: {}",
+            result.message
+        );
+        assert_eq!(result.status, "created");
+        assert!(!result.copied_files.is_empty());
+    }
+
+    #[test]
+    fn reject_missing_parent() {
+        let source = setup_source_root("reject-missing-parent");
+        let parent = temp_root("reject-missing-parent-root");
+        // parent does not exist
+        let target = create_target(&parent, "nope");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        cleanup(&source);
+        // parent was never created
+        assert!(!parent.exists());
+
+        assert!(!result.success);
+        assert_eq!(result.status, "missing_parent");
+    }
+
+    #[test]
+    fn reject_non_empty_non_workspace() {
+        let source = setup_source_root("reject-nonempty");
+        let target = temp_root("reject-nonempty-target");
+        fs::create_dir_all(&target).expect("create dir");
+        fs::write(target.join("unrelated.txt"), "hello").expect("write unrelated");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        let has_unrelated = target.join("unrelated.txt").exists();
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(!result.success);
+        assert_eq!(result.status, "non_empty_non_workspace");
+        assert!(has_unrelated, "unrelated file should remain");
+    }
+
+    #[test]
+    fn reject_valid_existing_workspace() {
+        let source = setup_source_root("reject-valid");
+        let target = setup_valid_workspace("reject-valid-target");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(!result.success);
+        assert_eq!(result.status, "valid_existing_workspace");
+        assert!(result.copied_files.is_empty());
+    }
+
+    #[test]
+    fn reject_unsafe_target() {
+        let source = setup_source_root("reject-unsafe");
+        // Test with HOME
+        let home = std::env::var("HOME").unwrap();
+        let result = create_workspace_from_source(&source, Some(home));
+        cleanup(&source);
+
+        assert!(!result.success);
+        assert_eq!(result.status, "unsafe_target");
+    }
+
+    #[test]
+    fn never_overwrite_existing_file() {
+        let source = setup_source_root("no-overwrite");
+        let target = temp_root("no-overwrite-target");
+        fs::create_dir_all(&target).expect("create target");
+        // Place a file at a planned destination path but leave the dir otherwise empty
+        let marker_dir = target.join(".ux-workspace");
+        fs::create_dir_all(&marker_dir).expect("create marker dir");
+        let existing_content = "preexisting-data";
+        fs::write(marker_dir.join("workspace.json"), existing_content).expect("write preexisting");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+
+        // Target has entries (the .ux-workspace dir) so planner says non_empty_non_workspace
+        // Verify it was rejected
+        let file_content =
+            fs::read_to_string(target.join(".ux-workspace/workspace.json")).unwrap_or_default();
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(!result.success);
+        assert_eq!(result.status, "non_empty_non_workspace");
+        assert_eq!(
+            file_content, existing_content,
+            "preexisting file must not be overwritten"
+        );
+    }
+
+    #[test]
+    fn scripts_are_not_executed() {
+        let source = setup_source_root("scripts-not-executed");
+        let target = temp_root("scripts-not-executed-target");
+        fs::create_dir_all(&target).expect("create target dir");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+
+        // Only check that the command succeeded and copied script files as regular files.
+        // The create command never executes anything — it only calls fs::copy.
+        let bootstrap_exists = target.join("scripts/bootstrap.sh").exists();
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(result.success, "create should succeed");
+        assert!(
+            result
+                .copied_files
+                .iter()
+                .any(|f| f == "scripts/bootstrap.sh"),
+            "bootstrap.sh should be among copied files"
+        );
+        assert!(bootstrap_exists, "script file should exist on disk");
+        // No execution means no side effects. copy alone is enough to prove this.
+    }
+
+    #[test]
+    fn preflight_missing_source_writes_nothing() {
+        let source = temp_root("preflight-missing-source");
+        // Set up a source root that is MISSING several required files
+        write_file(&source, ".ux-workspace/workspace.json", "{}");
+        write_file(&source, "README.md", "# readme\n");
+        // Missing: docs/, templates/, scripts/, skills/
+
+        let parent = temp_root("preflight-missing-source-parent");
+        fs::create_dir_all(&parent).expect("create parent dir");
+        let target = create_target(&parent, "should-not-exist");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        let target_was_created = target.exists();
+        cleanup(&source);
+        cleanup(&parent);
+
+        assert!(
+            !result.success,
+            "create should fail on missing source files"
+        );
+        assert_eq!(result.status, "source_missing");
+        assert!(
+            result.copied_files.is_empty(),
+            "no files should be copied when preflight fails"
+        );
+        assert!(
+            result.skipped_files.is_empty(),
+            "skipped_files should be empty"
+        );
+        assert!(
+            !target_was_created,
+            "target directory must not be created when preflight fails"
+        );
+    }
+
+    #[test]
+    fn preflight_destination_exists_writes_nothing() {
+        let source = setup_source_root("preflight-dest-exists");
+        // Create an empty target directory, then place a planned file inside it
+        let target = temp_root("preflight-dest-exists-target");
+        fs::create_dir_all(&target).expect("create target dir");
+        // Place a planned file directly; planner sees entries and rejects
+        let marker_dir = target.join(".ux-workspace");
+        fs::create_dir_all(&marker_dir).expect("create marker dir");
+        let existing_content = "should-not-be-touched";
+        fs::write(marker_dir.join("workspace.json"), existing_content)
+            .expect("write preexisting file");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        let file_content =
+            fs::read_to_string(target.join(".ux-workspace/workspace.json")).unwrap_or_default();
+        cleanup(&source);
+        cleanup(&target);
+
+        assert!(
+            !result.success,
+            "create should fail when destination exists"
+        );
+        assert!(
+            result.status == "non_empty_non_workspace" || result.status == "destination_exists",
+            "expected non_empty_non_workspace or destination_exists, got {}",
+            result.status
+        );
+        assert_eq!(
+            file_content, existing_content,
+            "existing file content must remain unchanged"
+        );
+        assert!(result.copied_files.is_empty(), "no files should be copied");
+    }
+
+    #[test]
+    fn create_success_still_validates_workspace() {
+        let source = setup_source_root("create-success-validate");
+        let parent = temp_root("create-success-validate-parent");
+        fs::create_dir_all(&parent).expect("create parent dir");
+        let target = create_target(&parent, "my-workspace");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+
+        let marker_exists = target.join(".ux-workspace/workspace.json").is_file();
+        let template_exists = target.join("templates/global-agent-rules.md").is_file();
+        let script_exists = target.join("scripts/bootstrap.sh").is_file();
+        cleanup(&source);
+        cleanup(&parent);
+
+        assert!(
+            result.success,
+            "create should succeed and pass validation, got: {}",
+            result.message
+        );
+        assert_eq!(result.status, "created");
+        assert!(!result.copied_files.is_empty(), "should have copied files");
+        assert!(marker_exists, "marker file should exist before cleanup");
+        assert!(template_exists, "template file should exist before cleanup");
+        assert!(script_exists, "script file should exist before cleanup");
+    }
+
+    #[test]
+    fn create_missing_directory_does_not_create_missing_parent() {
+        let source = setup_source_root("no-missing-parent-create");
+        let parent = temp_root("no-missing-parent-root");
+        // parent does NOT exist
+        let target = create_target(&parent, "should-not-exist");
+
+        let result =
+            create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
+        let parent_was_created = parent.exists();
+        let target_was_created = target.exists();
+        cleanup(&source);
+
+        assert!(
+            !result.success,
+            "create should reject when parent is missing"
+        );
+        assert_eq!(result.status, "missing_parent");
+        assert!(!parent_was_created, "parent directory must not be created");
+        assert!(!target_was_created, "target directory must not be created");
+        assert!(
+            result.copied_files.is_empty(),
+            "no files should be copied when parent is missing"
+        );
+    }
+}
