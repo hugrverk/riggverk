@@ -144,12 +144,19 @@ while IFS= read -r f; do
 done < <(printf '%s\n' "$skill_files")
 
 step "bundled default baseline skills exist"
-for baseline in diagnose security-review context-budget; do
+for baseline in diagnose security-review context-budget to-prd grill-with-docs improve-codebase-architecture sync-agent-rules; do
   if [ ! -f "apps/ux-workspace-app/resources/default-workspace/skills/${baseline}/SKILL.md" ]; then
     printf 'FAIL: baseline bundled skill missing: skills/%s/SKILL.md\n' "$baseline" >&2
     exit 1
   fi
 done
+
+step "bundled default public skill count"
+skill_count="$(find apps/ux-workspace-app/resources/default-workspace/skills -type f -name SKILL.md | wc -l | tr -d ' ')"
+if [ "$skill_count" -ne 23 ]; then
+  printf 'FAIL: expected 23 public starter skills, found %s\n' "$skill_count" >&2
+  exit 1
+fi
 
 step "bundled default no private workflow skills"
 if search_has_match "woocommerce-pdp-review|wordpress-woocommerce|nextjs-product-slice|supabase-rls-review" \
