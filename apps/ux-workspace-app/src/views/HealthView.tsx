@@ -5,6 +5,7 @@ interface HealthViewProps {
   healthLog: ActionResult | null;
   healthRunning: string | null;
   onRunHealthCheck: () => void;
+  canRunHealthCheck: boolean;
   activityIndex: number;
   activityCellClass: (index: number) => string;
   backups: BackupRunSummary[];
@@ -36,6 +37,7 @@ export function HealthView({
   healthLog,
   healthRunning,
   onRunHealthCheck,
+  canRunHealthCheck,
   activityIndex,
   activityCellClass,
   backups,
@@ -61,7 +63,7 @@ export function HealthView({
           <span className={`configs-frame-status ${healthRunning ? "sync-text" : healthLog ? (healthLog.success ? "sync-text sync-text-ok" : "sync-text sync-text-fail") : "sync-text"}`}>
             {healthRunning ? "running" : healthLog ? (healthLog.success ? "pass" : "fail") : "ready"}
           </span>
-          <button className="btn btn-sm btn-primary" disabled={healthRunning !== null} onClick={onRunHealthCheck}>run check</button>
+          <button className="btn btn-sm btn-primary" disabled={healthRunning !== null || !canRunHealthCheck} onClick={onRunHealthCheck}>run check</button>
         </div>
       </header>
       <div className="configs-frame-body health-frame-body">
@@ -78,6 +80,9 @@ export function HealthView({
         <aside className="health-info-pane">
           <div className="console-section-label">checks</div>
           <div className="health-check-list">
+            {!canRunHealthCheck && (
+              <span className="workspace-invalid">No valid workspace selected. Create or choose a workspace in Settings.</span>
+            )}
             <span>script syntax</span>
             <span>forbidden operational scans</span>
             <span>safe dry-runs</span>

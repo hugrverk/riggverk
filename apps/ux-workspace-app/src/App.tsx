@@ -15,6 +15,7 @@ import type { AgentTargetMeta, AppSettings, BackupRunDetails, BackupRunSummary, 
 
 const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 const MIN_RUNNING_MS = 700;
+const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
 type View = "agents" | "skills" | "configs" | "health" | "docs" | "settings" | "agent-rules";
 
@@ -91,6 +92,10 @@ function App() {
     } catch (e) { setError(`Default workspace: ${e}`); }
   }, []);
 
+  function isInvalidWorkspaceError(e: unknown): boolean {
+    return String(e).toLowerCase().includes(INVALID_WORKSPACE_TEXT);
+  }
+
   // install skills state
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [installAgents, setInstallAgents] = useState<Set<string>>(new Set(["opencode"]));
@@ -127,7 +132,14 @@ function App() {
   }, [appSettings]);
 
   const fetchStatus = useCallback(async () => {
-    try { const data = await invoke<StatusData>("get_status"); setStatus(data); setError(null); } catch (e) { setError(`Status error: ${e}`); }
+    try {
+      const data = await invoke<StatusData>("get_status");
+      setStatus(data);
+      setError(null);
+    } catch (e) {
+      setStatus(null);
+      if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
+    }
   }, []);
 
   const runCreate = useCallback(async () => {
@@ -181,7 +193,10 @@ function App() {
       if (!skillsSelectionTouched.current && loaded.length > 0) {
         setSelectedSkills(new Set(loaded.map(s => s.name)));
       }
-    } catch (e) { setError(`Skills: ${e}`); }
+    } catch (e) {
+      setSkills([]);
+      if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
+    }
   }, []);
 
   const loadDocs = useCallback(async () => {
@@ -189,7 +204,12 @@ function App() {
       const list = await invoke<DocSummary[]>("list_docs");
       setDocs(list);
       if (list.length > 0) setActiveDoc(await invoke<DocumentContent>("read_doc", { id: list[0].id }));
-    } catch (e) { setError(`Docs: ${e}`); }
+      else setActiveDoc(null);
+    } catch (e) {
+      setDocs([]);
+      setActiveDoc(null);
+      if (!isInvalidWorkspaceError(e)) setError(`Docs: ${e}`);
+    }
   }, []);
 
   const selectDoc = useCallback(async (id: string) => {
@@ -361,17 +381,39 @@ function App() {
     const startedAt = performance.now();
     setHealthRunning(action); setError(null);
     try {
+      if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
+        setHealthLog({
+          success: false,
+          action,
+          stdout: "",
+          stderr: "No valid workspace selected. Create or choose a workspace in Settings.",
+          exit_code: null,
+        });
+        return;
+      }
       const result = await invoke<ActionResult>("run_action", { action });
       setHealthLog(result);
       fetchStatus();
-    } catch (e) { setError(`Health: ${e}`); }
+    } catch (e) {
+      if (isInvalidWorkspaceError(e)) {
+        setHealthLog({
+          success: false,
+          action,
+          stdout: "",
+          stderr: "No valid workspace selected. Create or choose a workspace in Settings.",
+          exit_code: null,
+        });
+      } else {
+        setError(`Health: ${e}`);
+      }
+    }
     finally {
       loadBackups();
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
       if (remaining > 0) await wait(remaining);
       setHealthRunning(null);
     }
-  }, [fetchStatus, loadBackups]);
+  }, [fetchStatus, loadBackups, workspaceDiagnostics]);
 
   const handleLeftAction = useCallback(async (action: string) => {
     setView("agents");
@@ -384,6 +426,7 @@ function App() {
   const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
   const opencodeConfigEnabled = (appSettings?.enabled_target_ids ?? status?.enabled_target_ids ?? DEFAULT_TARGET_IDS).includes("opencode_config");
   const configTargets = agentTargets.filter(t => t.kind === "config");
+  const workspaceValid = workspaceDiagnostics?.valid === true;
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -461,6 +504,7 @@ function App() {
         {view === "skills" && (
           <SkillsView
             skills={skills}
+            workspaceValid={workspaceValid}
             selectedSkills={selectedSkills}
             installAgents={installAgents}
             installScope={installScope}
@@ -487,6 +531,7 @@ function App() {
           <DocsView
             docs={docs}
             activeDoc={activeDoc}
+            workspaceValid={workspaceValid}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}
           />
@@ -497,6 +542,7 @@ function App() {
             healthLog={healthLog}
             healthRunning={healthRunning}
             onRunHealthCheck={() => runHealthAction("release_check")}
+            canRunHealthCheck={workspaceValid}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
             backups={backups}

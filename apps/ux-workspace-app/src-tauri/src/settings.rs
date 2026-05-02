@@ -3,6 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::agent_targets;
+use crate::path_utils::normalize_user_workspace_path;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AppSettings {
@@ -29,12 +30,7 @@ fn normalize(settings: &mut AppSettings) {
     }
 
     if let Some(ref val) = settings.workspace_path {
-        let trimmed = val.trim();
-        settings.workspace_path = if trimmed.is_empty() {
-            None
-        } else {
-            Some(trimmed.to_string())
-        };
+        settings.workspace_path = normalize_user_workspace_path(val);
     }
 
     settings.enabled_target_ids =
@@ -73,4 +69,59 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
     let json = serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {}", e))?;
     fs::write(&path, json).map_err(|e| format!("write settings: {}", e))?;
     Ok(settings)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{normalize, AppSettings};
+
+    fn settings_with_path(path: Option<&str>) -> AppSettings {
+        AppSettings {
+            appearance: "dark".into(),
+            workspace_path: path.map(|s| s.to_string()),
+            enabled_target_ids: vec![],
+        }
+    }
+
+    #[test]
+    fn saved_workspace_path_expands_tilde_home() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let mut settings = settings_with_path(Some("~"));
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.workspace_path, Some(home));
+    }
+
+    #[test]
+    fn saved_workspace_path_expands_tilde_child() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let expected = std::path::PathBuf::from(home)
+            .join("Desktop/test")
+            .to_string_lossy()
+            .into_owned();
+        let mut settings = settings_with_path(Some("~/Desktop/test"));
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.workspace_path, Some(expected));
+    }
+
+    #[test]
+    fn saved_workspace_path_trims_whitespace() {
+        let mut settings = settings_with_path(Some("  /tmp/workspace  "));
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.workspace_path, Some("/tmp/workspace".into()));
+    }
+
+    #[test]
+    fn saved_empty_workspace_path_becomes_none() {
+        let mut settings = settings_with_path(Some(" \n\t "));
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.workspace_path, None);
+    }
 }

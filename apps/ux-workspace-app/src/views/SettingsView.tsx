@@ -77,6 +77,10 @@ export function SettingsView({
               value={appSettings.workspace_path ?? ""}
               onChange={e => onSetWorkspacePath(e.target.value || null)} />
             <button className="btn btn-sm settings-path-button" onClick={onChooseWorkspaceFolder}>choose folder</button>
+            <button className="btn btn-sm settings-path-button" onClick={() => onSetWorkspacePath(null)}>use default</button>
+          </div>
+          <div className="settings-path-hint">
+            Use the specific workspace folder. For a new workspace, enter the child folder to create, not only a broad parent folder.
           </div>
 
           <div className="workspace-diagnostics">
@@ -124,44 +128,21 @@ export function SettingsView({
             )}
           </div>
 
-          {defaultWorkspaceSummary && (
-            <div className="defaults-preview">
-              <div className="defaults-preview-header">
-                <span className="cell-label">BUNDLED STARTER</span>
-                <span className="defaults-preview-badge">read-only</span>
-              </div>
-              <div className="defaults-preview-desc">{defaultWorkspaceSummary.description}</div>
-              <div className="defaults-preview-categories">
-                {defaultWorkspaceSummary.categories.map((cat, ci) => (
-                  <div key={ci} className="defaults-category">
-                    <div className="defaults-category-header">
-                      <span className="cell-label-sm">{cat.label}</span>
-                      <span className="defaults-category-count">{cat.count}/{cat.files.length}</span>
-                    </div>
-                    <div className="defaults-category-files">
-                      {cat.files.map((f, fi) => (
-                        <div key={fi} className={`defaults-file ${f.exists ? "" : "defaults-file-missing"}`}>
-                          <span className={`workspace-marker-dot ${f.exists ? "workspace-valid" : "workspace-invalid"}`}>&#x25CF;</span>
-                          <span className="defaults-file-path">{f.path}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          <div className="create-plan-section">
+          <div className={`create-plan-section ${diag && !diag.valid ? "create-plan-section-attention" : ""}`}>
             <div className="create-plan-header">
               <button
                 className="btn btn-sm"
                 onClick={onPlanCreate}
                 disabled={!appSettings || createPlanRunning}
               >
-                {createPlanRunning ? "planning..." : "dry-run create"}
+                {createPlanRunning ? "planning..." : "dry-run create workspace"}
               </button>
               <span className="create-plan-badge">read-only</span>
+              <span className="create-plan-badge">no overwrite</span>
+              <span className="create-plan-badge">no scripts</span>
+            </div>
+            <div className="create-plan-row create-plan-muted">
+              Dry-run checks the current workspace path. Creation is only enabled for a missing folder with an existing parent, or an empty existing folder.
             </div>
             {!appSettings && (
               <div className="create-plan-row create-plan-muted">settings not loaded</div>
@@ -269,6 +250,41 @@ export function SettingsView({
               </div>
             )}
           </div>
+
+          {defaultWorkspaceSummary && (
+            <div className="defaults-preview">
+              <div className="defaults-preview-header">
+                <span className="cell-label">BUNDLED STARTER</span>
+                <span className="defaults-preview-badge">read-only</span>
+              </div>
+              <div className="defaults-preview-desc">{defaultWorkspaceSummary.description}</div>
+              <div className="defaults-summary-row">
+                {defaultWorkspaceSummary.categories.map((cat, ci) => (
+                  <span key={ci} className={`defaults-summary-chip ${cat.label === "Skills" && cat.count > 0 ? "defaults-summary-chip-good" : ""}`}>
+                    {cat.label} {cat.count}/{cat.files.length}
+                  </span>
+                ))}
+              </div>
+              <div className="defaults-preview-categories">
+                {defaultWorkspaceSummary.categories.map((cat, ci) => (
+                  <details key={ci} className="defaults-category" open={cat.label === "Skills" || cat.label === "Docs"}>
+                    <summary className="defaults-category-header">
+                      <span className="cell-label-sm">{cat.label}</span>
+                      <span className="defaults-category-count">{cat.count}/{cat.files.length}</span>
+                    </summary>
+                    <div className="defaults-category-files">
+                      {cat.files.map((f, fi) => (
+                        <div key={fi} className={`defaults-file ${f.exists ? "" : "defaults-file-missing"}`}>
+                          <span className={`workspace-marker-dot ${f.exists ? "workspace-valid" : "workspace-invalid"}`}>&#x25CF;</span>
+                          <span className="defaults-file-path">{f.path}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </details>
+                ))}
+              </div>
+            </div>
+          )}
 
           {targetProfiles.length > 0 && (
             <div className="settings-group settings-group-top">

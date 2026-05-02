@@ -22,11 +22,12 @@ function groupDocs(docs: DocSummary[]): DocGroup[] {
 interface DocsViewProps {
   docs: DocSummary[];
   activeDoc: DocumentContent | null;
+  workspaceValid: boolean;
   onSelectDoc: (id: string) => void;
   onOpenDoc: (id: string) => void;
 }
 
-export function DocsView({ docs, activeDoc, onSelectDoc, onOpenDoc }: DocsViewProps) {
+export function DocsView({ docs, activeDoc, workspaceValid, onSelectDoc, onOpenDoc }: DocsViewProps) {
   if (docs.length === 0) {
     return (
       <section className="terminal terminal-view">
@@ -35,7 +36,9 @@ export function DocsView({ docs, activeDoc, onSelectDoc, onOpenDoc }: DocsViewPr
           <span className="terminal-host">curated workspace docs</span>
         </div>
         <div className="doc-layout">
-          <div className="doc-list doc-list-empty">No workspace docs found</div>
+          <div className="doc-list doc-list-empty">
+            {workspaceValid ? "No workspace docs found" : "No valid workspace selected. Create or choose a workspace in Settings."}
+          </div>
         </div>
       </section>
     );

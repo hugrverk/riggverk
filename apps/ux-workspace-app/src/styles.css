@@ -585,6 +585,18 @@ html, body, #root {
   flex: 1;
 }
 
+.workspace-empty-state {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 180px;
+  padding: 24px;
+  color: var(--text-muted);
+  font-size: 13px;
+  text-align: center;
+  opacity: 0.72;
+}
+
 .table-row {
   display: grid;
   grid-template-columns: 260px 100px 1fr 64px;
@@ -849,6 +861,15 @@ html, body, #root {
   position: relative;
 }
 
+.install-disabled-note {
+  padding: 8px 16px;
+  border-bottom: 1px solid var(--border);
+  color: var(--fail);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.82;
+}
+
 .install-output .log-output,
 .install-output .log-status {
   font-size: 12px;
@@ -907,6 +928,14 @@ html, body, #root {
 .settings-input:focus { border-color: rgba(110, 168, 254, 0.4); }
 
 .settings-path-button { flex-shrink: 0; }
+
+.settings-path-hint {
+  margin: -8px 0 14px 152px;
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.4;
+  opacity: 0.62;
+}
 
 .settings-actions {
   display: flex;
@@ -1378,6 +1407,31 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.defaults-summary-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-bottom: 12px;
+}
+
+.defaults-summary-chip {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 6px;
+  color: var(--text-muted);
+  font-size: 10px;
+  line-height: 1.4;
+}
+
+.defaults-summary-chip-good {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.25);
+  background: var(--accent-dim);
 }
 
 .defaults-category-header {
@@ -1385,6 +1439,7 @@ html, body, #root {
   justify-content: space-between;
   align-items: center;
   padding: 2px 0;
+  cursor: pointer;
 }
 
 .defaults-category-count {
@@ -1426,6 +1481,13 @@ html, body, #root {
   margin-top: 24px;
   padding-top: 12px;
   border-top: 1px solid var(--border);
+}
+
+.create-plan-section-attention {
+  padding: 12px;
+  border: 1px solid rgba(251, 191, 36, 0.18);
+  background: rgba(251, 191, 36, 0.04);
+  border-radius: var(--radius);
 }
 
 .create-plan-header {

@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::agent_targets;
+use crate::path_utils::normalize_user_workspace_path;
 use crate::settings;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -77,9 +78,13 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
 
 pub(super) fn repo_path() -> PathBuf {
     let settings = settings::load();
+    repo_path_from_settings(&settings)
+}
+
+fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
     if let Some(ref custom) = settings.workspace_path {
-        if !custom.is_empty() {
-            return PathBuf::from(custom);
+        if let Some(normalized) = normalize_user_workspace_path(custom) {
+            return PathBuf::from(normalized);
         }
     }
     if let Ok(p) = std::env::var("UX_WORKSPACE_PATH") {
@@ -279,7 +284,7 @@ fn evaluate_create_plan(target_path: Option<String>) -> CreateWorkspacePlan {
         }
     };
 
-    let path_str = normalize_target_path(&raw);
+    let path_str = normalize_user_workspace_path(&raw).unwrap_or_default();
     let target = Path::new(&path_str);
 
     if is_unsafe_target(target) {
@@ -379,28 +384,6 @@ fn planned_workspace_files() -> Vec<String> {
         .into_iter()
         .flat_map(|(_, paths)| paths.iter().map(|s| s.to_string()))
         .collect()
-}
-
-fn normalize_target_path(raw: &str) -> String {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return trimmed.to_string();
-    }
-    if trimmed == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            return home;
-        }
-    }
-    if let Some(rest) = trimmed.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            let home = home.trim_end_matches('/');
-            if rest.is_empty() {
-                return home.to_string();
-            }
-            return format!("{}/{}", home, rest);
-        }
-    }
-    trimmed.to_string()
 }
 
 fn derive_source_roots() -> Vec<PathBuf> {
@@ -785,7 +768,11 @@ pub fn create_workspace_from_defaults(
 
 #[cfg(test)]
 mod tests {
-    use super::{create_workspace_from_source, plan_create_workspace, validate_workspace_root};
+    use super::{
+        create_workspace_from_source, plan_create_workspace, repo_path_from_settings,
+        validate_workspace_root,
+    };
+    use crate::settings::AppSettings;
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -924,6 +911,28 @@ mod tests {
 
     fn plan_target(root: &PathBuf) -> String {
         root.to_string_lossy().into_owned()
+    }
+
+    #[test]
+    fn diagnostics_candidate_and_create_plan_use_same_normalized_path() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some("~/Desktop/test".into()),
+            enabled_target_ids: vec![],
+        };
+        let candidate = repo_path_from_settings(&settings)
+            .to_string_lossy()
+            .into_owned();
+        let plan =
+            plan_create_workspace(settings.workspace_path.clone()).expect("plan should succeed");
+        let expected = std::path::PathBuf::from(home)
+            .join("Desktop/test")
+            .to_string_lossy()
+            .into_owned();
+
+        assert_eq!(candidate, expected);
+        assert_eq!(plan.target_path, candidate);
     }
 
     #[test]

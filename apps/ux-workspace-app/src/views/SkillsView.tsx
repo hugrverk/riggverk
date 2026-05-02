@@ -6,6 +6,7 @@ type InstallScope = "global" | "project";
 
 interface SkillsViewProps {
   skills: SkillSummary[];
+  workspaceValid: boolean;
   selectedSkills: Set<string>;
   installAgents: Set<string>;
   installScope: InstallScope;
@@ -33,6 +34,7 @@ function areaFromId(id: string): string {
 
 export function SkillsView({
   skills,
+  workspaceValid,
   selectedSkills,
   installAgents,
   installScope,
@@ -53,6 +55,8 @@ export function SkillsView({
   onOpenSkill,
   onOpenInstallScript,
 }: SkillsViewProps) {
+  const invalidWorkspace = !workspaceValid && skills.length === 0;
+
   return (
     <section className="terminal terminal-view">
       <div className="terminal-topline">
@@ -93,29 +97,38 @@ export function SkillsView({
             </div>
           </div>
           <div className="table-wrap">
-            {skills.map((s) => (
-              <div key={s.id} className={`table-row table-row-install ${selectedSkills.has(s.name) ? "table-row-selected" : ""}`} onClick={() => onToggleSkill(s.name)}>
-                <div className="table-cell table-cell-check">
-                  <span className={`install-checkbox ${selectedSkills.has(s.name) ? "install-checkbox-on" : ""}`}>
-                    {selectedSkills.has(s.name) ? "x" : ""}
-                  </span>
+            {invalidWorkspace ? (
+              <div className="workspace-empty-state">No valid workspace selected. Create or choose a workspace in Settings.</div>
+            ) : skills.length === 0 ? (
+              <div className="workspace-empty-state">No workspace skills found</div>
+            ) : (
+              skills.map((s) => (
+                <div key={s.id} className={`table-row table-row-install ${selectedSkills.has(s.name) ? "table-row-selected" : ""}`} onClick={() => onToggleSkill(s.name)}>
+                  <div className="table-cell table-cell-check">
+                    <span className={`install-checkbox ${selectedSkills.has(s.name) ? "install-checkbox-on" : ""}`}>
+                      {selectedSkills.has(s.name) ? "x" : ""}
+                    </span>
+                  </div>
+                  <div className="table-cell table-cell-name"><span className="cell-label">{s.name}</span></div>
+                  <div className="table-cell table-cell-area"><span className="cell-value cell-value-muted">{areaFromId(s.id)}</span></div>
+                  <div className="table-cell table-cell-desc"><span className="cell-value cell-value-muted">{s.description}</span></div>
+                  <div className="table-cell table-cell-action">
+                    <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onOpenSkill(s.id); }}>open</button>
+                  </div>
                 </div>
-                <div className="table-cell table-cell-name"><span className="cell-label">{s.name}</span></div>
-                <div className="table-cell table-cell-area"><span className="cell-value cell-value-muted">{areaFromId(s.id)}</span></div>
-                <div className="table-cell table-cell-desc"><span className="cell-value cell-value-muted">{s.description}</span></div>
-                <div className="table-cell table-cell-action">
-                  <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onOpenSkill(s.id); }}>open</button>
-                </div>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </div>
         <aside className="install-panel">
           <div className="install-actions">
-            <button className="btn" disabled={!canInstall} onClick={onDryRun}>dry run</button>
-            <button className="btn btn-primary" disabled={!canInstall} onClick={onInstallSelected}>install selected</button>
+            <button className="btn" disabled={!workspaceValid || !canInstall} onClick={onDryRun}>dry run</button>
+            <button className="btn btn-primary" disabled={!workspaceValid || !canInstall} onClick={onInstallSelected}>install selected</button>
             <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
           </div>
+          {!workspaceValid && (
+            <div className="install-disabled-note">No valid workspace selected. Create or choose a workspace in Settings.</div>
+          )}
           <div className="install-output">
             <TerminalState
               runningLabel={installRunning ? "installing" : null}
