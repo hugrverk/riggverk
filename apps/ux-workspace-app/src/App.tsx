@@ -110,6 +110,9 @@ function App() {
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const [skillFilter, setSkillFilter] = useState<string | null>(null);
+  const [skillSearch, setSkillSearch] = useState("");
+  const activeSkillIdRef = useRef<string | null>(null);
+  const activeSkillContentIdRef = useRef<string | null>(null);
 
   // settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -224,16 +227,34 @@ function App() {
         setSelectedSkills(new Set(loaded.map(s => s.name)));
       }
       if (loaded.length > 0) {
-        const first = loaded[0];
-        setActiveSkillId(first.id);
-        const content = await invoke<DocumentContent>("read_skill", { id: first.id });
-        setActiveSkillContent(content);
+        const persistedId = activeSkillIdRef.current;
+        const stillExists = persistedId && loaded.some(s => s.id === persistedId);
+        const alreadyLoaded = persistedId && activeSkillContentIdRef.current === persistedId;
+        if (stillExists && persistedId) {
+          setActiveSkillId(persistedId);
+          if (!alreadyLoaded) {
+            const content = await invoke<DocumentContent>("read_skill", { id: persistedId });
+            activeSkillContentIdRef.current = persistedId;
+            setActiveSkillContent(content);
+          }
+        } else {
+          const first = loaded[0];
+          activeSkillIdRef.current = first.id;
+          setActiveSkillId(first.id);
+          const content = await invoke<DocumentContent>("read_skill", { id: first.id });
+          activeSkillContentIdRef.current = first.id;
+          setActiveSkillContent(content);
+        }
       } else {
+        activeSkillIdRef.current = null;
+        activeSkillContentIdRef.current = null;
         setActiveSkillId(null);
         setActiveSkillContent(null);
       }
     } catch (e) {
       setSkills([]);
+      activeSkillIdRef.current = null;
+      activeSkillContentIdRef.current = null;
       setActiveSkillId(null);
       setActiveSkillContent(null);
       if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
@@ -329,9 +350,11 @@ function App() {
   }, []);
 
   const readSkill = useCallback(async (id: string) => {
+    activeSkillIdRef.current = id;
     setActiveSkillId(id);
     try {
       const content = await invoke<DocumentContent>("read_skill", { id });
+      activeSkillContentIdRef.current = id;
       setActiveSkillContent(content);
     } catch (e) { setError(`Read skill: ${e}`); }
   }, []);
@@ -600,7 +623,9 @@ function App() {
             activeSkillId={activeSkillId}
             activeSkillContent={activeSkillContent}
             skillFilter={skillFilter}
+            skillSearch={skillSearch}
             onSetSkillFilter={setSkillFilter}
+            onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
             onToggleSkill={toggleSkill}
             onSelectAll={selectAll}

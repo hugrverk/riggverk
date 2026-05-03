@@ -14,7 +14,7 @@ Top-level views are:
 
 - **Workspace** — app landing cockpit. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
 - **Rules** — global agent rules template preview, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Does not include tool configs or skills.
-- **Skills** — repo skill catalog with grouped/filterable skill browser (filter by area), in-app skill preview with Markdown rendering (read-only, registry-allowlisted), multi-agent select, dry-run/install controls, install plan summary, and install output.
+- **Skills** — repo skill catalog with filterable skill browser (text search and optional area chips), in-app skill preview with Markdown rendering (read-only, registry-allowlisted), multi-agent select, dry-run/install controls, install plan summary with disabled-state warnings, and install output.
 - **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
 - **Docs** — workspace documentation browser only. No templates or configs.
@@ -133,10 +133,10 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 - Script stdout/stderr is displayed exactly as returned by the backend; the frontend does not filter or parse terminal output.
 
 ### Skills
-- Available repo skills list with skill browser grouped/filterable by area (all + per-area chips).
+- Available repo skills list with text search filtering (name, id, area, description) and optional per-area chips when multiple areas exist.
 - In-app skill preview with Markdown rendering (read-only, registry-allowlisted lookup — no arbitrary file paths accepted).
-- Skill selection (checkbox) is independent from preview selection (row click).
-- Install plan summary showing selected skills count, agent count, scope, and project target.
+- Skill selection (toggle button) is independent from preview selection (row button).
+- Install plan summary showing selected skills count, agent count in preferred order, scope, and project target.
 - Native agent multi-select: toggle codex, opencode, claude, gemini, auggie independently. At least one agent must be selected.
 - Scope selector: `global` or `project`.
 - Dry-run and install selected actions call the existing `install_skills` backend command.

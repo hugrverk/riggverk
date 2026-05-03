@@ -577,6 +577,9 @@ html, body, #root {
 
 .skills-cmd-push {
   margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 
 .skills-filter-row {
@@ -677,7 +680,7 @@ html, body, #root {
   border-left: 2px solid var(--accent);
 }
 
-.skills-row-check {
+.skills-row-check-button {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -692,19 +695,23 @@ html, body, #root {
   cursor: pointer;
   margin: 0 10px 0 12px;
   user-select: none;
+  background: transparent;
+  font-family: var(--font);
+  padding: 0;
+  line-height: 1;
 }
 
-.skills-row-check:focus-visible {
+.skills-row-check-button:focus-visible {
   outline: 2px solid rgba(110, 168, 254, 0.5);
   outline-offset: 1px;
 }
 
-.skills-row-check-on {
+.skills-row-check-button-on {
   background: var(--accent-dim);
   border-color: rgba(110, 168, 254, 0.3);
 }
 
-.skills-row-main {
+.skills-row-preview-button {
   display: flex;
   align-items: center;
   gap: 10px;
@@ -715,12 +722,13 @@ html, body, #root {
   border: none;
   background: none;
   font-family: var(--font);
+  font-size: inherit;
   text-align: left;
   color: inherit;
   outline-offset: -1px;
 }
 
-.skills-row-main:focus-visible {
+.skills-row-preview-button:focus-visible {
   outline: 2px solid rgba(110, 168, 254, 0.5);
 }
 
@@ -893,6 +901,30 @@ html, body, #root {
   padding: 6px 14px;
   border-bottom: 1px solid var(--border);
   color: var(--fail);
+  font-size: 10px;
+  line-height: 1.3;
+  opacity: 0.82;
+}
+
+.skills-search {
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text);
+  width: 130px;
+  outline: none;
+}
+
+.skills-search::placeholder { color: var(--text-muted); opacity: 0.5; }
+.skills-search:focus { border-color: rgba(110, 168, 254, 0.4); }
+
+.skills-plan-warning {
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  color: var(--warn);
   font-size: 10px;
   line-height: 1.3;
   opacity: 0.82;

@@ -19,7 +19,9 @@ interface SkillsViewProps {
   activeSkillId: string | null;
   activeSkillContent: DocumentContent | null;
   skillFilter: string | null;
+  skillSearch: string;
   onSetSkillFilter: (area: string | null) => void;
+  onSetSkillSearch: (value: string) => void;
   onSelectSkillPreview: (id: string) => void;
   onToggleSkill: (name: string) => void;
   onSelectAll: () => void;
@@ -66,7 +68,9 @@ export function SkillsView({
   activeSkillId,
   activeSkillContent,
   skillFilter,
+  skillSearch,
   onSetSkillFilter,
+  onSetSkillSearch,
   onSelectSkillPreview,
   onToggleSkill,
   onSelectAll,
@@ -81,9 +85,27 @@ export function SkillsView({
 }: SkillsViewProps) {
   const invalidWorkspace = !workspaceValid && skills.length === 0;
   const areas = uniqueAreas(skills);
-  const filteredSkills = skillFilter
-    ? skills.filter((s) => areaFromId(s.id) === skillFilter)
-    : skills;
+
+  const filteredSkills = (() => {
+    let result = skillFilter
+      ? skills.filter((s) => areaFromId(s.id) === skillFilter)
+      : skills;
+
+    if (skillSearch.trim()) {
+      const q = skillSearch.toLowerCase().trim();
+      result = result.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.id.toLowerCase().includes(q) ||
+        s.description.toLowerCase().includes(q) ||
+        areaFromId(s.id).toLowerCase().includes(q)
+      );
+    }
+
+    return result;
+  })();
+
+  const orderedAgents = INSTALL_AGENTS.filter(a => installAgents.has(a));
+  const hasFilter = skillFilter !== null || skillSearch.trim() !== "";
 
   return (
     <section className="terminal terminal-view">
@@ -92,7 +114,9 @@ export function SkillsView({
         <span className="terminal-host">
           {activeSkillId
             ? `preview: ${skills.find((s) => s.id === activeSkillId)?.name ?? activeSkillId}`
-            : `${selectedSkills.size}/${skills.length} selected`}
+            : hasFilter
+              ? `${filteredSkills.length} of ${skills.length} skills`
+              : `${selectedSkills.size}/${skills.length} selected`}
         </span>
       </div>
 
@@ -123,6 +147,16 @@ export function SkillsView({
           )}
         </div>
         <div className="skills-cmd-push">
+          <input
+            className="skills-search"
+            type="text"
+            placeholder="search..."
+            value={skillSearch}
+            onChange={e => onSetSkillSearch(e.target.value)}
+          />
+          {skillSearch && (
+            <button className="btn btn-sm" onClick={() => onSetSkillSearch("")}>x</button>
+          )}
           <button className="btn btn-sm" onClick={onSelectAll}>all</button>
           <button className="btn btn-sm" onClick={onClearSelection}>clear</button>
         </div>
@@ -153,29 +187,27 @@ export function SkillsView({
             {invalidWorkspace ? (
               <div className="workspace-empty-state">No valid workspace selected. Create or choose a workspace in Workspace.</div>
             ) : filteredSkills.length === 0 ? (
-              <div className="workspace-empty-state">No skills found</div>
+              <div className="workspace-empty-state">
+                {hasFilter ? "No skills match the current filters" : "No skills found"}
+              </div>
             ) : (
               filteredSkills.map((s) => (
                 <div
                   key={s.id}
                   className={`skills-row ${activeSkillId === s.id ? "skills-row-active" : ""} ${selectedSkills.has(s.name) ? "skills-row-selected" : ""}`}
                 >
-                  <span
-                    className={`skills-row-check ${selectedSkills.has(s.name) ? "skills-row-check-on" : ""}`}
+                  <button
+                    className={`skills-row-check-button ${selectedSkills.has(s.name) ? "skills-row-check-button-on" : ""}`}
                     onClick={(e) => { e.stopPropagation(); onToggleSkill(s.name); }}
-                    role="checkbox"
-                    aria-checked={selectedSkills.has(s.name)}
-                    tabIndex={0}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggleSkill(s.name); } }}
+                    aria-pressed={selectedSkills.has(s.name)}
                   >
                     {selectedSkills.has(s.name) ? "x" : ""}
-                  </span>
-                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: handled on parent */}
-                  <span className="skills-row-main" role="button" tabIndex={0} onClick={() => onSelectSkillPreview(s.id)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelectSkillPreview(s.id); } }}>
+                  </button>
+                  <button className="skills-row-preview-button" onClick={() => onSelectSkillPreview(s.id)}>
                     <span className="skills-row-name">{s.name}</span>
                     <span className="skills-row-area">{areaFromId(s.id)}</span>
                     <span className="skills-row-desc">{s.description}</span>
-                  </span>
+                  </button>
                   <span className="skills-row-action">
                     <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onOpenSkill(s.id); }}>open</button>
                   </span>
@@ -211,7 +243,11 @@ export function SkillsView({
               </div>
               <div className="skills-plan-row">
                 <span className="skills-plan-key">agents</span>
-                <span className="skills-plan-value">{installAgents.size}: {Array.from(installAgents).sort().join(", ")}</span>
+                <span className="skills-plan-value">
+                  {orderedAgents.length > 0
+                    ? `${orderedAgents.length}: ${orderedAgents.join(", ")}`
+                    : "none"}
+                </span>
               </div>
               <div className="skills-plan-row">
                 <span className="skills-plan-key">scope</span>
@@ -223,6 +259,17 @@ export function SkillsView({
               <button className="btn btn-primary" disabled={!workspaceValid || !canInstall} onClick={onInstallSelected}>install selected</button>
               <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
             </div>
+            {workspaceValid && !canInstall && !installRunning && (
+              <div className="skills-plan-warning">
+                {selectedSkills.size === 0
+                  ? "No skills selected for install."
+                  : installAgents.size === 0
+                    ? "No agents selected for install."
+                    : installScope === "project" && !installTarget.trim()
+                      ? "Project scope requires a target path."
+                      : null}
+              </div>
+            )}
             {!workspaceValid && (
               <div className="install-disabled-note">No valid workspace selected. Create or choose a workspace in Workspace.</div>
             )}
