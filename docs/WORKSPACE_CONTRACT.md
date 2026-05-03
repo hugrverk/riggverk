@@ -38,6 +38,8 @@ The app supports editing curated workspace docs through an allowlisted doc regis
 
 The app supports editing config templates through the selected config target's source template path. Config template save validates JSON for known config targets and writes only the workspace source template file, not the installed target config path. Save is separate from sync — sync applies changes to the installed config target via allowlisted scripts.
 
+The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
+
 ## Transition state
 
 This repository currently contains both:

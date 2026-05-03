@@ -1268,6 +1268,139 @@ mod tests {
             Some(0),
         ))
     }
+
+    // ── agent template save tests ──
+
+    fn save_agent_template_at_root(root: &PathBuf, content: &str) -> Result<ActionResult, String> {
+        if content.len() > 512 * 1024 {
+            return Err("content exceeds 512 KB limit".to_string());
+        }
+
+        let target_path = root.join("templates/global-agent-rules.md");
+
+        safe_canonical_target(root, &target_path)?;
+
+        if !target_path.exists() {
+            return Err(format!(
+                "template does not exist: {}",
+                "templates/global-agent-rules.md"
+            ));
+        }
+
+        let existing =
+            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+        if existing == content {
+            return Ok(ActionResult::new(
+                true,
+                "save_agent_template",
+                "unchanged".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        let backup_path = doc_backup_path("agent-template", &target_path)?;
+        std::fs::write(&backup_path, &existing)
+            .map_err(|e| format!("backup write error: {}", e))?;
+
+        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+
+        Ok(ActionResult::new(
+            true,
+            "save_agent_template",
+            "saved with backup".to_string(),
+            String::new(),
+            Some(0),
+        ))
+    }
+
+    #[test]
+    fn agent_template_save_rejects_oversized_content() {
+        let root = temp_root("ag-save-oversized");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+
+        let big = "x".repeat(512 * 1024 + 1);
+        let result = save_agent_template_at_root(&root, &big);
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds 512 KB"));
+    }
+
+    #[test]
+    fn agent_template_save_unchanged_returns_unchanged() {
+        let root = temp_root("ag-save-unchanged");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+
+        let result = save_agent_template_at_root(&root, "# rules\n");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "unchanged");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn agent_template_save_creates_backup_when_changed() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("ag-save-backup");
+        let backup_root = temp_root("ag-save-backup-backup");
+        write_file(&root, "templates/global-agent-rules.md", "# old rules\n");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_agent_template_at_root(&root, "# new rules\n");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+
+        let saved = std::fs::read_to_string(root.join("templates/global-agent-rules.md")).unwrap();
+        assert_eq!(saved, "# new rules\n");
+
+        let docs_backup_dir = backup_root.join("docs");
+        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.starts_with("agent-template-")
+            })
+            .collect();
+
+        assert!(
+            !backup_entries.is_empty(),
+            "agent template backup should be created"
+        );
+        let backup_file = backup_entries[0].path().join("global-agent-rules.md");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+
+        assert_eq!(backup_content, "# old rules\n");
+    }
+
+    #[test]
+    fn agent_template_save_missing_template_rejected() {
+        let root = temp_root("ag-save-missing");
+        std::fs::create_dir_all(&root).expect("create root dir");
+
+        let result = save_agent_template_at_root(&root, "# content\n");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("template does not exist"));
+    }
+
+    #[test]
+    fn agent_template_save_target_remains_under_workspace() {
+        let root = temp_root("ag-save-under-root");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+
+        let result = save_agent_template_at_root(&root, "# updated\n");
+        assert!(result.is_ok());
+        cleanup(&root);
+    }
 }
 
 #[tauri::command]
@@ -1292,6 +1425,50 @@ pub fn open_agent_template() -> Result<ActionResult, String> {
     let path_str = path_arg(&path)?;
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
     Ok(ActionResult::new(ok, "open_agent_template", out, err, code))
+}
+
+const MAX_AGENT_TEMPLATE_SIZE: usize = 512 * 1024;
+
+#[tauri::command]
+pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
+    if content.len() > MAX_AGENT_TEMPLATE_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
+
+    let root = workspace_root()?;
+    let rel_path = "templates/global-agent-rules.md";
+    let target_path = root.join(rel_path);
+
+    safe_canonical_target(&root, &target_path)?;
+
+    if !target_path.exists() {
+        return Err(format!("template does not exist: {}", rel_path));
+    }
+
+    let existing =
+        std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+    if existing == content {
+        return Ok(ActionResult::new(
+            true,
+            "save_agent_template",
+            "unchanged".to_string(),
+            String::new(),
+            Some(0),
+        ));
+    }
+
+    let backup_path = doc_backup_path("agent-template", &target_path)?;
+    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+
+    std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(ActionResult::new(
+        true,
+        "save_agent_template",
+        "saved with backup".to_string(),
+        String::new(),
+        Some(0),
+    ))
 }
 
 #[tauri::command]

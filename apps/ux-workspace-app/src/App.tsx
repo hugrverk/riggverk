@@ -62,6 +62,27 @@ function App() {
   }, [activeDoc?.id]);
 
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
+
+  // agent template edit state
+  const [agentTemplateDraft, setAgentTemplateDraft] = useState("");
+  const [agentTemplateDirty, setAgentTemplateDirty] = useState(false);
+  const [agentTemplateSaving, setAgentTemplateSaving] = useState(false);
+  const [agentTemplateSaveResult, setAgentTemplateSaveResult] = useState<ActionResult | null>(null);
+  const [agentTemplateMode, setAgentTemplateMode] = useState<"preview" | "edit">("preview");
+
+  useEffect(() => {
+    if (agentTemplate) {
+      setAgentTemplateDraft(agentTemplate.content);
+      setAgentTemplateDirty(false);
+      setAgentTemplateSaveResult(null);
+    } else {
+      setAgentTemplateDraft("");
+      setAgentTemplateDirty(false);
+      setAgentTemplateSaveResult(null);
+      setAgentTemplateMode("preview");
+    }
+  }, [agentTemplate?.id]);
+
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
 
   // configs view state
@@ -447,6 +468,46 @@ function App() {
     try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
   }, []);
 
+  const onChangeAgentTemplateDraft = useCallback((value: string) => {
+    setAgentTemplateDraft(value);
+    setAgentTemplateDirty(value !== (agentTemplate?.content ?? ""));
+  }, [agentTemplate]);
+
+  const onSaveAgentTemplate = useCallback(async () => {
+    setAgentTemplateSaving(true);
+    setAgentTemplateSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_agent_template", { content: agentTemplateDraft });
+      setAgentTemplateSaveResult(result);
+      if (result.success) {
+        if (result.stdout !== "unchanged") {
+          const updated = await invoke<DocumentContent>("read_agent_template");
+          setAgentTemplate(updated);
+          setAgentTemplateDraft(updated.content);
+        }
+        setAgentTemplateDirty(false);
+      }
+    } catch (e) {
+      setAgentTemplateSaveResult({
+        success: false,
+        action: "save_agent_template",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+    } finally {
+      setAgentTemplateSaving(false);
+    }
+  }, [agentTemplateDraft]);
+
+  const onResetAgentTemplate = useCallback(() => {
+    if (agentTemplate) {
+      setAgentTemplateDraft(agentTemplate.content);
+      setAgentTemplateDirty(false);
+      setAgentTemplateSaveResult(null);
+    }
+  }, [agentTemplate]);
+
   // load config template when target or view changes to configs
   useEffect(() => {
     if (view === "configs" && activeConfigTargetId) {
@@ -775,6 +836,15 @@ function App() {
             onRunAction={handleLeftAction}
             agentTemplate={agentTemplate}
             onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
+            agentTemplateDraft={agentTemplateDraft}
+            agentTemplateDirty={agentTemplateDirty}
+            agentTemplateSaving={agentTemplateSaving}
+            agentTemplateSaveResult={agentTemplateSaveResult}
+            agentTemplateMode={agentTemplateMode}
+            onSetAgentTemplateMode={setAgentTemplateMode}
+            onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
+            onSaveAgentTemplate={onSaveAgentTemplate}
+            onResetAgentTemplate={onResetAgentTemplate}
           />
         )}
 

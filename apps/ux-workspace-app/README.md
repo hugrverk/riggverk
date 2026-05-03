@@ -13,16 +13,16 @@ App-triggered script actions use each script's `--quiet` option for compact term
 Top-level views are:
 
 - **Workspace** — app landing cockpit. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
-- **Rules** — global agent rules template preview, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Does not include tool configs or skills.
+- **Rules** — global agent rules template preview, edit, and save, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Save edits the workspace source template only. Sync applies the template to installed rule targets — these are separate actions. Does not include tool configs or skills.
 - **Skills** — repo skill catalog with filterable skill browser (text search and optional area chips), in-app skill preview with Markdown rendering (read-only, registry-allowlisted), multi-agent select, dry-run/install controls, install plan summary with disabled-state warnings, and install output.
 - **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview/edit with metadata rows (source template path, installed target path), mode tabs (preview/edit), and save/reset controls. Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config template save validates JSON and writes only the workspace source template — save is separate from sync. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
-- **Docs** — workspace documentation browser only. No templates or configs.
+- **Docs** — workspace documentation browser and editor. No templates or configs.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets. Includes a compact note that workspace path is managed in the Workspace tab.
 
 ### Agent Rules Template
 
-The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Rules view as a scrollable Markdown preview with an "open" button to open the template in the system editor. The template loads automatically when the Rules tab is active.
+The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Rules view with preview/edit mode toggle, a textarea editor with save/reset controls, a dirty state indicator, and an "open" button to open the template in the system editor. Save writes only the workspace source template via the allowlisted `save_agent_template` command; it does not sync installed rule targets. Sync is a separate action triggered by the diff/sync buttons in the rules sidebar. The template loads automatically when the Rules tab is active.
 
 ## Prerequisites
 
@@ -112,9 +112,10 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 ### Docs security
 
 - `save_doc` is allowlisted by curated doc id or custom doc slug. The backend resolves the file path exclusively through the internal curated doc registry or the validated custom doc slug.
-- The frontend never supplies file paths for doc writes.
+- `save_agent_template` resolves the template path internally as `templates/global-agent-rules.md` under the validated workspace root. No frontend-supplied paths are accepted.
+- The frontend never supplies file paths for doc or template writes.
 - Unknown doc ids and invalid custom slugs are rejected before any filesystem access.
-- Content is capped at 512 KB.
+- Content is capped at 512 KB for docs, configs, and agent template.
 - The resolved target path is verified to remain under the validated workspace root.
 - Existing content is backed up before overwrite only when the new content differs.
 - Custom docs are restricted to `docs/context/<slug>.md` with strict slug validation. No subdirectories, no recursion.
@@ -135,7 +136,9 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 - `get_status` — repo path, branch, dirty state, latest commit, sync status for five agent rule targets and all registered config targets (via `config_statuses` map keyed by target id), plus separated `enabled_rule_target_ids` and `enabled_config_target_ids`
 
 ### Rules
-- Global agent rules template rendered inline with scrollable Markdown preview and "open" button.
+- Global agent rules template with preview/edit/save/reset via the allowlisted `save_agent_template` command, plus an "open" button.
+- `save_agent_template` resolves the template path internally as `templates/global-agent-rules.md` under the validated workspace root and accepts no frontend-supplied paths.
+- Save writes only the workspace source template; it does not sync installed rule targets. Sync is a separate action.
 - Terminal/log output for the most recent rule action.
 - Right-side control panel with repo status (repo path, commit, branch, dirty state, rule sync count).
 - Action groups: repo (pull, verify) and rules (diff, sync).

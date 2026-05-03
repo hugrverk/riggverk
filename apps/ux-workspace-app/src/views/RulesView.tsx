@@ -17,6 +17,15 @@ interface RulesViewProps {
   onRunAction: (action: string) => void;
   agentTemplate: DocumentContent | null;
   onOpenTemplate: () => void;
+  agentTemplateDraft: string;
+  agentTemplateDirty: boolean;
+  agentTemplateSaving: boolean;
+  agentTemplateSaveResult: ActionResult | null;
+  agentTemplateMode: "preview" | "edit";
+  onSetAgentTemplateMode: (mode: "preview" | "edit") => void;
+  onChangeAgentTemplateDraft: (value: string) => void;
+  onSaveAgentTemplate: () => void;
+  onResetAgentTemplate: () => void;
 }
 
 function statusValue(status: StatusData, id: string): string {
@@ -46,6 +55,15 @@ export function RulesView({
   onRunAction,
   agentTemplate,
   onOpenTemplate,
+  agentTemplateDraft,
+  agentTemplateDirty,
+  agentTemplateSaving,
+  agentTemplateSaveResult,
+  agentTemplateMode,
+  onSetAgentTemplateMode,
+  onChangeAgentTemplateDraft,
+  onSaveAgentTemplate,
+  onResetAgentTemplate,
 }: RulesViewProps) {
   const ruleTargets = agentTargets.filter(t => t.kind === "rules");
   const stateLabel = status ? (gitAvailable ? (status.dirty ? "dirty" : "clean") : "not git") : "—";
@@ -58,15 +76,80 @@ export function RulesView({
           <span className="rules-template-path">{agentTemplate?.path ?? "templates/global-agent-rules.md"}</span>
           <button className="btn btn-sm" onClick={onOpenTemplate}>open</button>
         </div>
+
         {agentTemplate ? (
-          <div className="rules-template-body">
-            <Markdown content={agentTemplate.content} />
-          </div>
+          <>
+            <div className="rules-mode-tabs" role="tablist" aria-label="Rules view mode">
+              <button
+                className={`btn btn-sm ${agentTemplateMode === "preview" ? "btn-active" : ""}`}
+                onClick={() => onSetAgentTemplateMode("preview")}
+                role="tab"
+                aria-selected={agentTemplateMode === "preview"}
+              >
+                preview
+              </button>
+              <button
+                className={`btn btn-sm ${agentTemplateMode === "edit" ? "btn-active" : ""}`}
+                onClick={() => onSetAgentTemplateMode("edit")}
+                role="tab"
+                aria-selected={agentTemplateMode === "edit"}
+              >
+                edit
+              </button>
+              {agentTemplateDirty && (
+                <span className="rules-dirty-indicator" aria-label="Unsaved changes">modified</span>
+              )}
+            </div>
+
+            <div className="rules-template-content">
+              {agentTemplateMode === "preview" ? (
+                <div className="rules-template-body">
+                  <Markdown content={agentTemplate.content} />
+                </div>
+              ) : (
+                <textarea
+                  className="rules-textarea"
+                  value={agentTemplateDraft}
+                  onChange={e => onChangeAgentTemplateDraft(e.target.value)}
+                  spellCheck={false}
+                  aria-label="Edit agent rules template"
+                />
+              )}
+            </div>
+
+            {agentTemplateMode === "edit" && (
+              <div className="rules-save-row">
+                <button
+                  className="btn btn-primary btn-sm"
+                  onClick={onSaveAgentTemplate}
+                  disabled={agentTemplateSaving || !agentTemplateDirty}
+                >
+                  {agentTemplateSaving ? "saving..." : "save"}
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={onResetAgentTemplate}
+                  disabled={agentTemplateSaving || !agentTemplateDirty}
+                >
+                  reset
+                </button>
+                {agentTemplateSaveResult && (
+                  <span className={`rules-save-status ${agentTemplateSaveResult.success ? "rules-save-ok" : "rules-save-fail"}`}>
+                    {agentTemplateSaveResult.success
+                      ? agentTemplateSaveResult.stdout
+                      : agentTemplateSaveResult.stderr || "save failed"}
+                  </span>
+                )}
+                <span className="rules-save-note">template only</span>
+              </div>
+            )}
+          </>
         ) : (
           <div className="rules-template-empty">
             <span className="log-prompt">$</span> {status ? "no template loaded" : "no valid workspace"}
           </div>
         )}
+
         <section className="panel log-panel rules-terminal">
           <div className="terminal-grid" aria-hidden="true" />
           <TerminalState
