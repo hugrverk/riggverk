@@ -34,7 +34,9 @@ All markers must be present for a workspace to pass validation. A folder missing
 
 All workspace contents (docs, skills, templates, scripts) are user-owned and user-editable. The app reads and displays these files; it does not hide or encrypt them. Users can version their workspace with git like any normal directory.
 
-The app supports editing curated workspace docs through an allowlisted doc registry. Only known doc ids can be written, and only within the validated workspace root. Existing content is backed up before overwrite when changed.
+The app supports editing curated workspace docs through an allowlisted doc registry and editing custom context docs under `docs/context/`. Only known doc ids and valid custom slugs can be written, and only within the validated workspace root. Existing content is backed up before overwrite when changed. Custom docs are app-managed by strict slug format (`^[a-z0-9][a-z0-9-]*$`), stored at `docs/context/<slug>.md`. No subdirectories or recursion.
+
+The app supports editing config templates through the selected config target's source template path. Config template save validates JSON for known config targets and writes only the workspace source template file, not the installed target config path. Save is separate from sync — sync applies changes to the installed config target via allowlisted scripts.
 
 ## Transition state
 

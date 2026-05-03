@@ -15,7 +15,7 @@ Top-level views are:
 - **Workspace** — app landing cockpit. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
 - **Rules** — global agent rules template preview, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Does not include tool configs or skills.
 - **Skills** — repo skill catalog with filterable skill browser (text search and optional area chips), in-app skill preview with Markdown rendering (read-only, registry-allowlisted), multi-agent select, dry-run/install controls, install plan summary with disabled-state warnings, and install output.
-- **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
+- **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview/edit with metadata rows (source template path, installed target path), mode tabs (preview/edit), and save/reset controls. Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config template save validates JSON and writes only the workspace source template — save is separate from sync. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
 - **Docs** — workspace documentation browser only. No templates or configs.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets. Includes a compact note that workspace path is managed in the Workspace tab.
@@ -111,12 +111,14 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 
 ### Docs security
 
-- `save_doc` is allowlisted by curated doc id. The backend resolves the file path exclusively through the internal curated doc registry.
+- `save_doc` is allowlisted by curated doc id or custom doc slug. The backend resolves the file path exclusively through the internal curated doc registry or the validated custom doc slug.
 - The frontend never supplies file paths for doc writes.
-- Unknown doc ids are rejected before any filesystem access.
+- Unknown doc ids and invalid custom slugs are rejected before any filesystem access.
 - Content is capped at 512 KB.
 - The resolved target path is verified to remain under the validated workspace root.
 - Existing content is backed up before overwrite only when the new content differs.
+- Custom docs are restricted to `docs/context/<slug>.md` with strict slug validation. No subdirectories, no recursion.
+- `create_doc` rejects existing files and invalid slugs.
 - No arbitrary file browsing, creation, or restoration is supported.
 
 ## Security model
@@ -194,12 +196,17 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 ### Configs
 - Configs is registry-driven via `agent_targets::config_sync_targets()`.
 - Config target selector shows all registered config targets with label, sync status, and source path. The selector is visible even when only one config target exists.
-- Joined two-column frame: selected config template preview on the left, local config terminal on the right.
+- Joined two-column frame: selected config template editor on the left, local config terminal on the right.
 - Header shows config target name and live sync status (synced/diverged/missing).
+- Metadata rows show source template path and installed target path for the selected target.
 - Currently supported config target: OpenCode config (`opencode_config`).
 - Actions: diff (read-only) and sync (apply) via the allowlisted config target registry.
 - Config actions write output to the right-pane terminal and do not navigate away.
 - `open` button opens the selected config template in the system editor.
+- Preview/edit mode toggle: preview shows formatted JSON; edit shows a textarea editor with save and reset controls.
+- `save_config_template` validates JSON for the opencode_config target. Unknown targets and malformed JSON are rejected.
+- Config template save writes only the workspace source template (`templates/opencode.json`), not the installed target path.
+- Save is separate from sync: save edits the template; sync applies changes to the installed config target.
 - Config targets are defined in an internal allowlisted registry. Currently only OpenCode config is managed.
 - Future config targets should be added via registry entry + allowlisted script handling. No arbitrary config paths are accepted.
 
@@ -257,20 +264,23 @@ Quiet mode (`--quiet`) suppresses child step output on success for compact app d
 Apply actions for rules and OpenCode config print backup paths when an existing diverged target is overwritten. The app displays that script output directly.
 
 ### Docs
-- Curated workspace documentation browser and editor grouped by section (Start, Reference, Operating Model, Private / Operator, Development).
+- Curated workspace documentation browser and editor grouped by section (Start, Reference, Operating Model, Private / Operator, Development, Context).
 - Two-pane cockpit layout: left nav with sectioned doc buttons, right Markdown preview or edit pane.
 - Compact command strip with text search (filters by title, id, path, section) and doc count summary.
 - Active doc persists across view switches when the doc remains available.
 - Doc rows are real `<button>` elements with visible focus and active state indicators.
-- Only known doc ids from the curated registry are shown — not every `.md` file in `docs/`.
+- Only known doc ids from the curated registry and user context docs (`docs/context/`) are shown — not every `.md` file in `docs/`.
+- Users can create custom context docs under `docs/context/` via the "+ new" button. Custom doc filenames are strict slugs (`^[a-z0-9][a-z0-9-]*$`), stored at `docs/context/<slug>.md`. No subdirectories, no recursion.
 - Docs are read from the validated active workspace. Missing optional docs are skipped.
-- `list_docs` returns curated doc summaries with section metadata.
-- `read_doc` renders the selected Markdown file.
-- `save_doc` writes the selected allowlisted doc only. Unknown doc ids are rejected. No arbitrary file paths are accepted.
+- `list_docs` returns curated doc summaries plus custom context docs with section metadata.
+- `read_doc` renders the selected Markdown file for both curated and custom doc ids.
+- `save_doc` writes the selected allowlisted doc only. Unknown doc ids and invalid custom slugs are rejected. No arbitrary file paths are accepted.
+- `create_doc` creates a new custom doc under `docs/context/`. Rejects existing files and invalid slugs.
 - Existing content is backed up before overwrite when the content has changed. Unchanged content does not write.
-- `open_doc` opens the selected file in the system editor.
+- `open_doc` opens the selected file in the system editor for both curated and custom docs.
 - Preview/edit mode toggle: preview renders Markdown; edit shows a plain textarea with save and reset controls.
 - Dirty state indicator shows when the draft differs from the saved file.
+- Custom docs show a "context" badge in the nav list and "context" source tag in the preview header.
 - The Global Agent Rules template is rendered inline in the Rules view.
 - Templates and configs remain in their own views.
 

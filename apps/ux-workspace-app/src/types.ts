@@ -9,11 +9,11 @@ export interface StatusData {
 }
 
 export interface DocumentContent {
-  id: string; title: string; path: string; section: string; content: string;
+  id: string; title: string; path: string; section: string; source: string; content: string;
 }
 
 export interface DocSummary {
-  id: string; title: string; path: string; section: string;
+  id: string; title: string; path: string; section: string; source: string;
 }
 
 export interface SkillSummary {

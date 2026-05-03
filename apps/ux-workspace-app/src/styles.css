@@ -1018,7 +1018,8 @@ html, body, #root {
 }
 
 .docs-row-button {
-  display: block;
+  display: flex;
+  align-items: center;
   width: 100%;
   text-align: left;
   padding: 7px 12px;
@@ -1199,6 +1200,97 @@ html, body, #root {
 
 .docs-save-ok { color: var(--accent); }
 .docs-save-fail { color: var(--fail); }
+
+.docs-create-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+  flex-shrink: 0;
+}
+
+.docs-create-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.docs-create-label span {
+  font-size: 11px;
+  color: var(--text-muted);
+  width: 36px;
+  flex-shrink: 0;
+}
+
+.docs-create-input {
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 2px 8px;
+  font-family: var(--font);
+  font-size: 11px;
+  color: var(--text);
+  flex: 1;
+  outline: none;
+}
+
+.docs-create-input::placeholder { color: var(--text-muted); opacity: 0.5; }
+.docs-create-input:focus { border-color: rgba(110, 168, 254, 0.4); }
+
+.docs-create-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.docs-create-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  margin-left: auto;
+}
+
+.docs-create-error {
+  font-size: 11px;
+  color: var(--fail);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docs-row-title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.docs-row-source {
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--accent);
+  opacity: 0.7;
+  flex-shrink: 0;
+  margin-left: 6px;
+}
+
+.docs-source-tag {
+  display: inline-block;
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-radius: 2px;
+  background: var(--accent-dim);
+  color: var(--accent);
+  vertical-align: middle;
+}
 
 /* ---- rules cockpit ---- */
 
@@ -1628,7 +1720,8 @@ html, body, #root {
 .configs-template-pane {
   min-width: 0;
   min-height: 0;
-  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
   border-right: 1px solid var(--border);
   background: var(--bg-panel);
 }
@@ -1662,6 +1755,57 @@ html, body, #root {
   border: none;
   border-radius: 0;
   background: transparent;
+}
+
+.configs-template-meta {
+  display: flex;
+  gap: 14px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.configs-meta-item {
+  display: flex;
+  gap: 4px;
+  font-size: 10px;
+}
+
+.configs-meta-label {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.configs-meta-value {
+  color: var(--text);
+  opacity: 0.8;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.configs-mode-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.configs-template-content {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.configs-save-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-left: auto;
 }
 
 .configs-console-pane {

@@ -104,34 +104,152 @@ fn existing_curated_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> 
         .collect()
 }
 
+const CUSTOM_DOCS_DIR: &str = "docs/context";
+
+fn is_valid_slug(slug: &str) -> bool {
+    if slug.is_empty() {
+        return false;
+    }
+    let mut chars = slug.chars();
+    match chars.next().unwrap() {
+        'a'..='z' | '0'..='9' => {}
+        _ => return false,
+    }
+    for c in chars {
+        match c {
+            'a'..='z' | '0'..='9' | '-' => {}
+            _ => return false,
+        }
+    }
+    true
+}
+
+fn slug_to_title(slug: &str) -> String {
+    let mut result = String::with_capacity(slug.len());
+    let mut capitalize = true;
+    for c in slug.chars() {
+        if c == '-' {
+            result.push(' ');
+            capitalize = true;
+        } else if capitalize {
+            result.push(c.to_ascii_uppercase());
+            capitalize = false;
+        } else {
+            result.push(c);
+        }
+    }
+    result
+}
+
+fn custom_doc_rel_path(slug: &str) -> String {
+    format!("{}/{}.md", CUSTOM_DOCS_DIR, slug)
+}
+
+fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
+    let context_dir = root.join(CUSTOM_DOCS_DIR);
+    if !context_dir.is_dir() {
+        return vec![];
+    }
+    let mut docs: Vec<(String, String, String, PathBuf)> = Vec::new();
+    if let Ok(entries) = std::fs::read_dir(&context_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_file() {
+                continue;
+            }
+            if path.extension().is_none_or(|e| e != "md") {
+                continue;
+            }
+            let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
+            if !is_valid_slug(stem) {
+                continue;
+            }
+            let id = format!("custom:{}", stem);
+            let title = slug_to_title(stem);
+            docs.push((id, "Context".to_string(), title, path));
+        }
+    }
+    docs.sort_by(|a, b| a.2.cmp(&b.2));
+    docs
+}
+
+fn resolve_doc_path(root: &Path, id: &str) -> Result<(PathBuf, String), String> {
+    if let Some(slug) = id.strip_prefix("custom:") {
+        if !is_valid_slug(slug) {
+            return Err(format!("invalid custom doc slug: {}", slug));
+        }
+        let rel = custom_doc_rel_path(slug);
+        return Ok((root.join(&rel), id.to_string()));
+    }
+    let entry = curated_doc_registry()
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("unknown doc: {}", id))?;
+    if entry.rel_path.contains("..") || Path::new(entry.rel_path).is_absolute() {
+        return Err("invalid registry path".to_string());
+    }
+    Ok((root.join(entry.rel_path), id.to_string()))
+}
+
+fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
+    if !is_valid_slug(slug) {
+        return Err(format!("invalid custom doc slug: {}", slug));
+    }
+    let rel = custom_doc_rel_path(slug);
+    let path = root.join(&rel);
+    if !path.exists() {
+        return Err(format!("unknown doc: custom:{}", slug));
+    }
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    Ok(DocumentContent {
+        id: format!("custom:{}", slug),
+        title: slug_to_title(slug),
+        path: rel,
+        section: "Context".to_string(),
+        source: "custom".to_string(),
+        content,
+    })
+}
+
 #[derive(Serialize)]
 pub struct DocSummary {
     id: String,
     title: String,
     path: String,
     section: String,
+    source: String,
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct DocumentContent {
     pub id: String,
     pub title: String,
     pub path: String,
     pub section: String,
+    pub source: String,
     pub content: String,
 }
 
 #[tauri::command]
 pub fn list_docs() -> Result<Vec<DocSummary>, String> {
     let root = workspace_root()?;
-    let docs = existing_curated_docs(&root);
+    let mut docs = existing_curated_docs(&root);
+    docs.extend(list_custom_docs(&root));
     Ok(docs
         .into_iter()
-        .map(|(id, section, title, path)| DocSummary {
-            id,
-            title,
-            section,
-            path: path.to_string_lossy().into_owned(),
+        .map(|(id, section, title, path)| {
+            let source = if id.starts_with("custom:") {
+                "custom"
+            } else {
+                "curated"
+            };
+            DocSummary {
+                id,
+                title,
+                section,
+                path: path.to_string_lossy().into_owned(),
+                source: source.to_string(),
+            }
         })
         .collect())
 }
@@ -139,6 +257,9 @@ pub fn list_docs() -> Result<Vec<DocSummary>, String> {
 #[tauri::command]
 pub fn read_doc(id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
+    if let Some(slug) = id.strip_prefix("custom:") {
+        return read_custom_doc(&root, slug);
+    }
     let docs = existing_curated_docs(&root);
     let found = docs.iter().find(|(i, _, _, _)| i == &id);
     match found {
@@ -150,6 +271,7 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
                 title: title.clone(),
                 section: section.clone(),
                 path: path.to_string_lossy().into_owned(),
+                source: "curated".to_string(),
                 content,
             })
         }
@@ -160,6 +282,25 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
 #[tauri::command]
 pub fn open_doc(id: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
+    if let Some(slug) = id.strip_prefix("custom:") {
+        if !is_valid_slug(slug) {
+            return Err(format!("invalid custom doc slug: {}", slug));
+        }
+        let rel = custom_doc_rel_path(slug);
+        let path = root.join(&rel);
+        if !path.exists() {
+            return Err(format!("unknown doc: custom:{}", slug));
+        }
+        let path_str = path_arg(&path)?;
+        let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
+        return Ok(ActionResult::new(
+            ok,
+            format!("open_doc:custom:{}", slug),
+            out,
+            err,
+            code,
+        ));
+    }
     let docs = existing_curated_docs(&root);
     let found = docs.iter().find(|(i, _, _, _)| i == &id);
     match found {
@@ -186,7 +327,7 @@ fn doc_backup_path(doc_id: &str, target_path: &Path) -> Result<PathBuf, String> 
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "system clock error".to_string())?
         .as_nanos();
-    let safe_id = doc_id.replace(['/', '\\'], "_");
+    let safe_id = doc_id.replace(['/', '\\', ':'], "_");
     let file_name = target_path
         .file_name()
         .and_then(|n| n.to_str())
@@ -196,41 +337,59 @@ fn doc_backup_path(doc_id: &str, target_path: &Path) -> Result<PathBuf, String> 
     Ok(backup_dir.join(file_name))
 }
 
-fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult, String> {
-    if content.len() > MAX_DOC_SIZE {
-        return Err("content exceeds 512 KB limit".to_string());
-    }
-
-    let entry = curated_doc_registry()
-        .iter()
-        .find(|e| e.id == id)
-        .ok_or_else(|| format!("unknown doc: {}", id))?;
-
-    if entry.rel_path.contains("..") || Path::new(entry.rel_path).is_absolute() {
-        return Err("invalid registry path".to_string());
-    }
-
-    let target_path = root.join(entry.rel_path);
-
+fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<PathBuf, String> {
     let canonical_root = root
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize workspace: {}", e))?;
+
     let canonical_target = if target_path.exists() {
         target_path
             .canonicalize()
             .map_err(|e| format!("cannot canonicalize target: {}", e))?
     } else {
-        let parent = target_path.parent().ok_or("invalid target path")?;
-        let file_name = target_path.file_name().ok_or("invalid target path")?;
-        let canonical_parent = parent
-            .canonicalize()
-            .map_err(|e| format!("cannot canonicalize parent: {}", e))?;
-        canonical_parent.join(file_name)
+        let mut ancestor = target_path.to_path_buf();
+        let mut tail: Vec<std::ffi::OsString> = Vec::new();
+        loop {
+            if ancestor.exists() {
+                let canon = ancestor
+                    .canonicalize()
+                    .map_err(|e| format!("cannot canonicalize ancestor: {}", e))?;
+                let mut result = canon;
+                for comp in tail.iter().rev() {
+                    result = result.join(comp);
+                }
+                if !result.starts_with(&canonical_root) {
+                    return Err("target path is outside workspace".to_string());
+                }
+                return Ok(result);
+            }
+            tail.push(
+                ancestor
+                    .file_name()
+                    .ok_or("invalid target path")?
+                    .to_os_string(),
+            );
+            ancestor = ancestor
+                .parent()
+                .ok_or("invalid target path")?
+                .to_path_buf();
+        }
     };
 
     if !canonical_target.starts_with(&canonical_root) {
         return Err("target path is outside workspace".to_string());
     }
+    Ok(canonical_target)
+}
+
+fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult, String> {
+    if content.len() > MAX_DOC_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
+
+    let (target_path, resolved_id) = resolve_doc_path(root, id)?;
+
+    safe_canonical_target(root, &target_path)?;
 
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
@@ -249,7 +408,7 @@ fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult
             ));
         }
 
-        let backup_path = doc_backup_path(id, &target_path)?;
+        let backup_path = doc_backup_path(&resolved_id, &target_path)?;
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -279,6 +438,45 @@ fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult
 pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
     save_doc_at_root(&root, &id, &content)
+}
+
+#[tauri::command]
+pub fn create_doc(
+    title: String,
+    slug: String,
+    content: Option<String>,
+) -> Result<DocumentContent, String> {
+    if !is_valid_slug(&slug) {
+        return Err(format!(
+            "invalid slug: {}. Use lowercase letters, digits, and hyphens (e.g. my-context-notes).",
+            slug
+        ));
+    }
+    let root = workspace_root()?;
+    let rel = custom_doc_rel_path(&slug);
+    let target_path = root.join(&rel);
+
+    if target_path.exists() {
+        return Err(format!("doc already exists: custom:{}", slug));
+    }
+
+    safe_canonical_target(&root, &target_path)?;
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
+    }
+
+    let initial_content = content.unwrap_or_default();
+    std::fs::write(&target_path, &initial_content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(DocumentContent {
+        id: format!("custom:{}", slug),
+        title,
+        path: rel,
+        section: "Context".to_string(),
+        source: "custom".to_string(),
+        content: initial_content,
+    })
 }
 
 #[cfg(test)]
@@ -542,6 +740,401 @@ mod tests {
             );
         }
     }
+
+    // ── custom doc tests ──
+
+    #[test]
+    fn slug_validation_accepts_good_slugs() {
+        assert!(is_valid_slug("my-notes"));
+        assert!(is_valid_slug("context"));
+        assert!(is_valid_slug("a"));
+        assert!(is_valid_slug("my-context-2"));
+        assert!(is_valid_slug("123-data"));
+    }
+
+    #[test]
+    fn slug_validation_rejects_bad_slugs() {
+        assert!(!is_valid_slug(""));
+        assert!(!is_valid_slug("My-Notes"));
+        assert!(!is_valid_slug("UPPER"));
+        assert!(!is_valid_slug("my notes"));
+        assert!(!is_valid_slug("my/notes"));
+        assert!(!is_valid_slug("../../etc"));
+        assert!(!is_valid_slug("-starts-with-hyphen"));
+        assert!(!is_valid_slug("has.dot"));
+        assert!(!is_valid_slug("has space"));
+        assert!(!is_valid_slug("has_underscore"));
+        assert!(!is_valid_slug("has@special"));
+    }
+
+    #[test]
+    fn create_doc_creates_file() {
+        let root = temp_root("create-doc");
+        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/bin/bash\necho ok\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/bin/bash\necho ok\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/bin/bash\necho ok\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/bin/bash\necho ok\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "README.md", "# readme\n");
+        std::fs::create_dir_all(root.join("skills")).expect("create skills dir");
+
+        let rel = custom_doc_rel_path("my-notes");
+        let target_path = root.join(&rel);
+        assert!(!target_path.exists());
+
+        let result = save_doc_at_root(&root, "custom:my-notes", "# custom content\n");
+        assert!(result.is_ok(), "save should succeed: {:?}", result);
+        let ar = result.unwrap();
+        assert!(ar.success);
+        assert_eq!(ar.stdout, "saved");
+
+        let saved = std::fs::read_to_string(&target_path).unwrap();
+        cleanup(&root);
+        assert_eq!(saved, "# custom content\n");
+    }
+
+    #[test]
+    fn create_doc_rejects_existing_file() {
+        let root = temp_root("create-existing");
+        write_file(&root, "docs/context/existing.md", "# already here\n");
+
+        // resolve_doc_path should resolve, then save_doc_at_root checks exists
+        let result = save_doc_at_root(&root, "custom:existing", "# new\n");
+        cleanup(&root);
+        assert!(result.is_ok()); // should save with backup since file exists
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+    }
+
+    #[test]
+    fn list_docs_includes_custom_docs() {
+        let root = temp_root("list-custom");
+        write_file(&root, "README.md", "# readme\n");
+        write_file(&root, "docs/context/my-notes.md", "# my notes\n");
+        write_file(&root, "docs/context/ref-data.md", "# ref data\n");
+        // add a file with invalid slug — should be skipped
+        write_file(&root, "docs/context/Invalid.md", "# invalid\n");
+
+        let docs = existing_curated_docs(&root);
+        let custom = list_custom_docs(&root);
+        cleanup(&root);
+
+        let curated_ids: Vec<&str> = docs.iter().map(|(id, _, _, _)| id.as_str()).collect();
+        assert_eq!(curated_ids, &["README.md"]);
+
+        let custom_ids: Vec<&str> = custom.iter().map(|(id, _, _, _)| id.as_str()).collect();
+        assert_eq!(custom_ids.len(), 2);
+        assert!(custom_ids.contains(&"custom:my-notes"));
+        assert!(custom_ids.contains(&"custom:ref-data"));
+        assert!(!custom_ids.contains(&"custom:Invalid"));
+    }
+
+    #[test]
+    fn read_doc_rejects_unknown_custom_id() {
+        let root = temp_root("read-unknown-custom");
+        write_file(&root, "README.md", "# readme\n");
+
+        let result = read_custom_doc(&root, "nonexistent");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown doc"));
+    }
+
+    #[test]
+    fn read_doc_rejects_invalid_custom_slug() {
+        let root = temp_root("read-invalid-custom");
+        write_file(&root, "README.md", "# readme\n");
+
+        let result = read_custom_doc(&root, "../../etc");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid custom doc slug"));
+    }
+
+    #[test]
+    fn save_doc_custom_creates_backup_when_changed() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("save-custom-backup");
+        let backup_root = temp_root("save-custom-backup-backup");
+        write_file(&root, "docs/context/my-notes.md", "# original\n");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+
+        let docs_backup_dir = backup_root.join("docs");
+        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.starts_with("custom_my-notes-")
+            })
+            .collect();
+
+        assert!(
+            !backup_entries.is_empty(),
+            "custom backup should be created"
+        );
+        let backup_file = backup_entries[0].path().join("my-notes.md");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+
+        assert_eq!(backup_content, "# original\n");
+    }
+
+    #[test]
+    fn save_doc_custom_unchanged_does_not_write() {
+        let root = temp_root("save-custom-unchanged");
+        write_file(&root, "docs/context/my-notes.md", "# same\n");
+
+        let result = save_doc_at_root(&root, "custom:my-notes", "# same\n");
+
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "unchanged");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn save_doc_custom_target_remains_under_workspace() {
+        let root = temp_root("save-custom-under-root");
+        write_file(&root, "docs/context/my-notes.md", "# readme\n");
+
+        let result = save_doc_at_root(&root, "custom:my-notes", "# updated\n");
+
+        assert!(result.is_ok());
+        cleanup(&root);
+    }
+
+    #[test]
+    fn save_doc_custom_rejects_invalid_slug() {
+        let root = temp_root("save-custom-bad-slug");
+        write_file(&root, "README.md", "# readme\n");
+
+        let result = save_doc_at_root(&root, "custom:../../etc", "bad");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid custom doc slug"));
+    }
+
+    // ── config template save tests ──
+
+    #[test]
+    fn config_template_save_valid_json_accepted() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-valid");
+        write_file(&root, "templates/opencode.json", "{}");
+        let backup_root = temp_root("cfg-save-valid-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"key\":\"value\"}");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert!(ar.success);
+
+        let saved = std::fs::read_to_string(root.join("templates/opencode.json")).unwrap();
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+        assert_eq!(saved, "{\"key\":\"value\"}");
+    }
+
+    #[test]
+    fn config_template_save_invalid_json_rejected() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-invalid");
+        write_file(&root, "templates/opencode.json", "{}");
+        let backup_root = temp_root("cfg-save-invalid-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "opencode_config", "not json");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid JSON"));
+    }
+
+    #[test]
+    fn config_template_save_unknown_target_rejected() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-unknown");
+        write_file(&root, "templates/opencode.json", "{}");
+        let backup_root = temp_root("cfg-save-unknown-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "nonexistent_config", "{}");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown config target"));
+    }
+
+    #[test]
+    fn config_template_save_unchanged_does_not_write() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-unchanged");
+        write_file(&root, "templates/opencode.json", "{\"a\":1}");
+        let backup_root = temp_root("cfg-save-unchanged-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"a\":1}");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "unchanged");
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+    }
+
+    #[test]
+    fn config_template_save_target_remains_under_workspace() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-under-root");
+        write_file(&root, "templates/opencode.json", "{}");
+        let backup_root = temp_root("cfg-save-under-root-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"ok\":true}");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+    }
+
+    #[test]
+    fn config_template_save_creates_backup_when_changed() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("cfg-save-backup");
+        let backup_root = temp_root("cfg-save-backup-backup");
+        write_file(&root, "templates/opencode.json", "{\"original\":true}");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"modified\":true}");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+
+        let docs_backup_dir = backup_root.join("docs");
+        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.starts_with("opencode_config-")
+            })
+            .collect();
+
+        assert!(
+            !backup_entries.is_empty(),
+            "config backup should be created"
+        );
+        let backup_file = backup_entries[0].path().join("opencode.json");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+
+        assert_eq!(backup_content, "{\"original\":true}");
+    }
+
+    fn save_doc_at_root_for_config(
+        root: &PathBuf,
+        target_id: &str,
+        content: &str,
+    ) -> Result<ActionResult, String> {
+        if content.len() > 512 * 1024 {
+            return Err("content exceeds 512 KB limit".to_string());
+        }
+
+        let target = agent_targets::config_sync_targets()
+            .into_iter()
+            .find(|t| t.id == target_id)
+            .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+
+        if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
+            return Err("invalid registry path".to_string());
+        }
+
+        let target_path = root.join(target.source_rel);
+
+        safe_canonical_target(root, &target_path)?;
+
+        if let Some(parent) = target_path.parent() {
+            std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
+        }
+
+        if target_id == "opencode_config" {
+            serde_json::from_str::<serde_json::Value>(content)
+                .map_err(|e| format!("invalid JSON: {}", e))?;
+        }
+
+        if target_path.exists() {
+            let existing =
+                std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+            if existing == content {
+                return Ok(ActionResult::new(
+                    true,
+                    "save_config_template",
+                    "unchanged".to_string(),
+                    String::new(),
+                    Some(0),
+                ));
+            }
+
+            let backup_path = doc_backup_path(target_id, &target_path)?;
+            std::fs::write(&backup_path, &existing)
+                .map_err(|e| format!("backup write error: {}", e))?;
+
+            std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+
+            return Ok(ActionResult::new(
+                true,
+                "save_config_template",
+                "saved with backup".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+
+        Ok(ActionResult::new(
+            true,
+            "save_config_template",
+            "saved".to_string(),
+            String::new(),
+            Some(0),
+        ))
+    }
 }
 
 #[tauri::command]
@@ -554,6 +1147,7 @@ pub fn read_agent_template() -> Result<DocumentContent, String> {
         title: "Agent Rules".into(),
         section: String::new(),
         path: "templates/global-agent-rules.md".into(),
+        source: "curated".into(),
         content,
     })
 }
@@ -581,6 +1175,7 @@ pub fn read_config_template(target_id: String) -> Result<DocumentContent, String
         title: format!("{}.json", target_id),
         section: String::new(),
         path: target.source_rel.to_string(),
+        source: "curated".into(),
         content,
     })
 }
@@ -601,5 +1196,76 @@ pub fn open_config_template(target_id: String) -> Result<ActionResult, String> {
         out,
         err,
         code,
+    ))
+}
+
+const MAX_CONFIG_SIZE: usize = 512 * 1024;
+
+#[tauri::command]
+pub fn save_config_template(target_id: String, content: String) -> Result<ActionResult, String> {
+    if content.len() > MAX_CONFIG_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
+
+    let target = agent_targets::config_sync_targets()
+        .into_iter()
+        .find(|t| t.id == target_id)
+        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+
+    if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
+        return Err("invalid registry path".to_string());
+    }
+
+    let root = workspace_root()?;
+    let target_path = root.join(target.source_rel);
+
+    safe_canonical_target(&root, &target_path)?;
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
+    }
+
+    // Validate JSON for opencode_config
+    if target_id == "opencode_config" {
+        serde_json::from_str::<serde_json::Value>(&content)
+            .map_err(|e| format!("invalid JSON: {}", e))?;
+    }
+
+    if target_path.exists() {
+        let existing =
+            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+        if existing == content {
+            return Ok(ActionResult::new(
+                true,
+                "save_config_template",
+                "unchanged".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        let backup_path = doc_backup_path(&target_id, &target_path)?;
+        std::fs::write(&backup_path, &existing)
+            .map_err(|e| format!("backup write error: {}", e))?;
+
+        std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+
+        return Ok(ActionResult::new(
+            true,
+            "save_config_template",
+            "saved with backup".to_string(),
+            String::new(),
+            Some(0),
+        ));
+    }
+
+    std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(ActionResult::new(
+        true,
+        "save_config_template",
+        "saved".to_string(),
+        String::new(),
+        Some(0),
     ))
 }

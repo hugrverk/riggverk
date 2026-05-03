@@ -41,6 +41,13 @@ function App() {
   const [docSaveResult, setDocSaveResult] = useState<ActionResult | null>(null);
   const [docMode, setDocMode] = useState<"preview" | "edit">("preview");
 
+  // custom doc creation state
+  const [showCreateDoc, setShowCreateDoc] = useState(false);
+  const [createDocTitle, setCreateDocTitle] = useState("");
+  const [createDocSlug, setCreateDocSlug] = useState("");
+  const [createDocError, setCreateDocError] = useState<string | null>(null);
+  const [createDocCreating, setCreateDocCreating] = useState(false);
+
   useEffect(() => {
     if (activeDoc) {
       setDocDraft(activeDoc.content);
@@ -61,6 +68,13 @@ function App() {
   const [configLog, setConfigLog] = useState<ActionResult | null>(null);
   const [configRunning, setConfigRunning] = useState<string | null>(null);
   const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
+
+  // config template edit state
+  const [configDraft, setConfigDraft] = useState("");
+  const [configDirty, setConfigDirty] = useState(false);
+  const [configSaving, setConfigSaving] = useState(false);
+  const [configSaveResult, setConfigSaveResult] = useState<ActionResult | null>(null);
+  const [configMode, setConfigMode] = useState<"preview" | "edit">("preview");
 
   // health view state
   const [healthLog, setHealthLog] = useState<ActionResult | null>(null);
@@ -353,12 +367,75 @@ function App() {
     setDocDirty(value !== (activeDoc?.content ?? ""));
   }, [activeDoc]);
 
-  const loadAgentTemplate = useCallback(async () => {
-    try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
-  }, []);
+  const onChangeConfigDraft = useCallback((value: string) => {
+    setConfigDraft(value);
+    setConfigDirty(value !== (configTemplateContent?.content ?? ""));
+  }, [configTemplateContent]);
 
   const loadConfigTemplate = useCallback(async (targetId: string) => {
     try { setConfigTemplateContent(await invoke<DocumentContent>("read_config_template", { targetId })); } catch (e) { setError(`Config: ${e}`); }
+  }, []);
+
+  const onSaveConfig = useCallback(async () => {
+    if (!activeConfigTargetId) return;
+    setConfigSaving(true);
+    setConfigSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_config_template", {
+        targetId: activeConfigTargetId,
+        content: configDraft,
+      });
+      setConfigSaveResult(result);
+      if (result.success && result.stdout !== "unchanged") {
+        loadConfigTemplate(activeConfigTargetId);
+      }
+    } catch (e) {
+      setConfigSaveResult({
+        success: false,
+        action: "save_config_template",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+    } finally {
+      setConfigSaving(false);
+    }
+  }, [activeConfigTargetId, configDraft, loadConfigTemplate]);
+
+  const onResetConfig = useCallback(() => {
+    if (configTemplateContent) {
+      setConfigDraft(configTemplateContent.content);
+      setConfigDirty(false);
+      setConfigSaveResult(null);
+    }
+  }, [configTemplateContent]);
+
+  const onCreateDoc = useCallback(async () => {
+    const title = createDocTitle.trim();
+    const slug = createDocSlug.trim();
+    if (!title || !slug) {
+      setCreateDocError("Title and slug are required");
+      return;
+    }
+    setCreateDocCreating(true);
+    setCreateDocError(null);
+    try {
+      const doc = await invoke<DocumentContent>("create_doc", { title, slug, content: null });
+      setShowCreateDoc(false);
+      setCreateDocTitle("");
+      setCreateDocSlug("");
+      activeDocIdRef.current = doc.id;
+      setActiveDoc(doc);
+      await loadDocs();
+    } catch (e) {
+      setCreateDocError(String(e));
+    } finally {
+      setCreateDocCreating(false);
+    }
+  }, [createDocTitle, createDocSlug, loadDocs]);
+
+  const loadAgentTemplate = useCallback(async () => {
+    try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
   }, []);
 
   // load config template when target or view changes to configs
@@ -367,6 +444,20 @@ function App() {
       loadConfigTemplate(activeConfigTargetId);
     }
   }, [view, activeConfigTargetId, loadConfigTemplate]);
+
+  useEffect(() => {
+    if (configTemplateContent) {
+      setConfigDraft(configTemplateContent.content);
+      setConfigDirty(false);
+      setConfigSaveResult(null);
+      setConfigMode("preview");
+    } else {
+      setConfigDraft("");
+      setConfigDirty(false);
+      setConfigSaveResult(null);
+      setConfigMode("preview");
+    }
+  }, [configTemplateContent?.id]);
 
   const runInstall = useCallback(async (dry: boolean) => {
     if (installScope === "project" && installTarget.trim() === "") return;
@@ -727,6 +818,15 @@ function App() {
             onChangeDocDraft={onChangeDocDraft}
             onSaveDoc={onSaveDoc}
             onResetDoc={onResetDoc}
+            showCreateDoc={showCreateDoc}
+            createDocTitle={createDocTitle}
+            createDocSlug={createDocSlug}
+            createDocError={createDocError}
+            createDocCreating={createDocCreating}
+            onSetShowCreateDoc={setShowCreateDoc}
+            onSetCreateDocTitle={setCreateDocTitle}
+            onSetCreateDocSlug={setCreateDocSlug}
+            onCreateDoc={onCreateDoc}
           />
         )}
 
@@ -766,6 +866,15 @@ function App() {
             targetDotClass={targetDotClass}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
+            configDraft={configDraft}
+            configDirty={configDirty}
+            configSaving={configSaving}
+            configSaveResult={configSaveResult}
+            configMode={configMode}
+            onSetConfigMode={setConfigMode}
+            onChangeConfigDraft={onChangeConfigDraft}
+            onSaveConfig={onSaveConfig}
+            onResetConfig={onResetConfig}
           />
         )}
 

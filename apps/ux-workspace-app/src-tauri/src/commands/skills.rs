@@ -144,6 +144,7 @@ pub fn read_skill(id: String) -> Result<DocumentContent, String> {
                 title: s.name.clone(),
                 section: area,
                 path: s.path.clone(),
+                source: "curated".into(),
                 content,
             })
         }

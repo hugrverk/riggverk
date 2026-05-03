@@ -18,6 +18,15 @@ interface ConfigsViewProps {
   targetDotClass: (value: string) => string;
   activityIndex: number;
   activityCellClass: (index: number) => string;
+  configDraft: string;
+  configDirty: boolean;
+  configSaving: boolean;
+  configSaveResult: ActionResult | null;
+  configMode: "preview" | "edit";
+  onSetConfigMode: (mode: "preview" | "edit") => void;
+  onChangeConfigDraft: (value: string) => void;
+  onSaveConfig: () => void;
+  onResetConfig: () => void;
 }
 
 function formatJson(content: string): string {
@@ -41,11 +50,22 @@ export function ConfigsView({
   targetDotClass,
   activityIndex,
   activityCellClass,
+  configDraft,
+  configDirty,
+  configSaving,
+  configSaveResult,
+  configMode,
+  onSetConfigMode,
+  onChangeConfigDraft,
+  onSaveConfig,
+  onResetConfig,
 }: ConfigsViewProps) {
   const configStatus = status?.config_statuses?.[activeConfigTargetId] ?? "—";
   const selectedTarget = configTargets.find(t => t.id === activeConfigTargetId);
   const configLabel = selectedTarget?.label ?? "config template";
   const hasActiveTarget = activeConfigTargetId.length > 0;
+  const sourcePath = selectedTarget?.source_rel ?? "";
+  const targetPath = selectedTarget?.target_rel ?? "";
 
   return (
     <section className="configs-frame">
@@ -85,10 +105,89 @@ export function ConfigsView({
           <button className="btn btn-sm" disabled={!hasActiveTarget} onClick={onOpenConfig}>open</button>
         </div>
       </header>
+
       <div className="configs-frame-body">
         <main className="configs-template-pane">
           {activeConfigContent ? (
-            <pre className="configs-code">{formatJson(activeConfigContent.content)}</pre>
+            <>
+              <div className="configs-template-meta">
+                {sourcePath && (
+                  <span className="configs-meta-item">
+                    <span className="configs-meta-label">template</span>
+                    <span className="configs-meta-value">{sourcePath}</span>
+                  </span>
+                )}
+                {targetPath && (
+                  <span className="configs-meta-item">
+                    <span className="configs-meta-label">target</span>
+                    <span className="configs-meta-value">{targetPath}</span>
+                  </span>
+                )}
+              </div>
+
+              <div className="configs-mode-tabs" role="tablist" aria-label="Config view mode">
+                <button
+                  className={`btn btn-sm ${configMode === "preview" ? "btn-active" : ""}`}
+                  onClick={() => onSetConfigMode("preview")}
+                  role="tab"
+                  aria-selected={configMode === "preview"}
+                >
+                  preview
+                </button>
+                <button
+                  className={`btn btn-sm ${configMode === "edit" ? "btn-active" : ""}`}
+                  onClick={() => onSetConfigMode("edit")}
+                  role="tab"
+                  aria-selected={configMode === "edit"}
+                >
+                  edit
+                </button>
+                {configDirty && (
+                  <span className="docs-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                )}
+              </div>
+
+              <div className="configs-template-content">
+                {configMode === "preview" ? (
+                  <pre className="configs-code">{formatJson(activeConfigContent.content)}</pre>
+                ) : (
+                  <textarea
+                    className="docs-textarea"
+                    value={configDraft}
+                    onChange={e => onChangeConfigDraft(e.target.value)}
+                    spellCheck={false}
+                    aria-label="Edit config template"
+                  />
+                )}
+              </div>
+
+              {configMode === "edit" && (
+                <div className="docs-save-row">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={onSaveConfig}
+                    disabled={configSaving || !configDirty}
+                  >
+                    {configSaving ? "saving..." : "save"}
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={onResetConfig}
+                    disabled={configSaving || !configDirty}
+                  >
+                    reset
+                  </button>
+                  {configSaveResult && (
+                    <span className={`docs-save-status ${configSaveResult.success ? "docs-save-ok" : "docs-save-fail"}`}>
+                      {configSaveResult.success
+                        ? configSaveResult.stdout
+                        : configSaveResult.stderr || "save failed"}
+                    </span>
+                  )}
+                  <span className="configs-save-note">template only</span>
+                </div>
+              )}
+            </>
           ) : (
             <div className="log-empty"><span className="log-prompt">$</span> no config loaded</div>
           )}

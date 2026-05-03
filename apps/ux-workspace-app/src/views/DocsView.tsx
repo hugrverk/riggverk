@@ -36,6 +36,15 @@ interface DocsViewProps {
   onChangeDocDraft: (value: string) => void;
   onSaveDoc: () => void;
   onResetDoc: () => void;
+  showCreateDoc: boolean;
+  createDocTitle: string;
+  createDocSlug: string;
+  createDocError: string | null;
+  createDocCreating: boolean;
+  onSetShowCreateDoc: (show: boolean) => void;
+  onSetCreateDocTitle: (value: string) => void;
+  onSetCreateDocSlug: (value: string) => void;
+  onCreateDoc: () => void;
 }
 
 export function DocsView({
@@ -53,6 +62,15 @@ export function DocsView({
   onChangeDocDraft,
   onSaveDoc,
   onResetDoc,
+  showCreateDoc,
+  createDocTitle,
+  createDocSlug,
+  createDocError,
+  createDocCreating,
+  onSetShowCreateDoc,
+  onSetCreateDocTitle,
+  onSetCreateDocSlug,
+  onCreateDoc,
 }: DocsViewProps) {
   const [search, setSearch] = useState("");
 
@@ -61,7 +79,7 @@ export function DocsView({
       <section className="terminal terminal-view">
         <div className="terminal-topline">
           <span className="terminal-title">DOCS</span>
-          <span className="terminal-host">curated workspace docs</span>
+          <span className="terminal-host">curated + context workspace docs</span>
         </div>
         <div className="docs-cockpit">
           <div className="docs-command-strip">
@@ -90,12 +108,13 @@ export function DocsView({
 
   const groups = groupDocs(filtered);
   const activeSection = activeDoc ? activeDoc.section : null;
+  const customCount = docs.filter(d => d.source === "custom").length;
 
   return (
     <section className="terminal terminal-view">
       <div className="terminal-topline">
         <span className="terminal-title">DOCS</span>
-        <span className="terminal-host">curated workspace docs</span>
+        <span className="terminal-host">curated + context workspace docs</span>
       </div>
 
       <div className="docs-command-strip">
@@ -113,8 +132,58 @@ export function DocsView({
         <span className="docs-summary">
           {filtered.length}/{docs.length} docs
           {activeSection ? ` \u00b7 ${activeSection}` : " \u00b7 all sections"}
+          {customCount > 0 ? ` \u00b7 ${customCount} context` : ""}
         </span>
+        <button
+          className="btn btn-sm btn-primary"
+          onClick={() => onSetShowCreateDoc(!showCreateDoc)}
+          disabled={!workspaceValid}
+          aria-label="New context doc"
+        >
+          + new
+        </button>
       </div>
+
+      {showCreateDoc && (
+        <div className="docs-create-form">
+          <label className="docs-create-label">
+            <span>Title</span>
+            <input
+              className="docs-create-input"
+              type="text"
+              placeholder="My Context Notes"
+              value={createDocTitle}
+              onChange={e => onSetCreateDocTitle(e.target.value)}
+              aria-label="New doc title"
+            />
+          </label>
+          <label className="docs-create-label">
+            <span>Slug</span>
+            <input
+              className="docs-create-input"
+              type="text"
+              placeholder="my-context-notes"
+              value={createDocSlug}
+              onChange={e => onSetCreateDocSlug(e.target.value)}
+              aria-label="New doc slug"
+            />
+          </label>
+          <div className="docs-create-actions">
+            <button
+              className="btn btn-primary btn-sm"
+              onClick={onCreateDoc}
+              disabled={createDocCreating || !createDocTitle.trim() || !createDocSlug.trim()}
+            >
+              {createDocCreating ? "creating..." : "create"}
+            </button>
+            <button className="btn btn-sm" onClick={() => { onSetShowCreateDoc(false); }}>cancel</button>
+            <span className="docs-create-hint">docs/context/</span>
+          </div>
+          {createDocError && (
+            <div className="docs-create-error">{createDocError}</div>
+          )}
+        </div>
+      )}
 
       <div className="docs-cockpit">
         <div className="docs-nav">
@@ -131,7 +200,8 @@ export function DocsView({
                     onClick={() => onSelectDoc(d.id)}
                     aria-current={activeDoc?.id === d.id ? "true" : undefined}
                   >
-                    {d.title}
+                    <span className="docs-row-title">{d.title}</span>
+                    {d.source === "custom" && <span className="docs-row-source">context</span>}
                   </button>
                 ))}
               </div>
@@ -145,7 +215,12 @@ export function DocsView({
               <div className="docs-editor-header">
                 <div className="docs-editor-header-left">
                   <span className="docs-preview-title">{activeDoc.title}</span>
-                  <span className="docs-preview-meta">{activeDoc.section} &middot; {activeDoc.path}</span>
+                  <span className="docs-preview-meta">
+                    {activeDoc.section} &middot; {activeDoc.path}
+                    {activeDoc.source === "custom" && (
+                      <span className="docs-source-tag">context</span>
+                    )}
+                  </span>
                 </div>
                 <div className="docs-editor-header-right">
                   {docDirty && (
