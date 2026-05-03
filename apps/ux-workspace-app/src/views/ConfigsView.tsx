@@ -99,9 +99,10 @@ export function ConfigsView({
           <span className={`configs-frame-status ${syncTextClass(configStatus)}`}>
             <span className={targetDotClass(configStatus)} />{configStatus}
           </span>
-          {!activeConfigEnabled && <span className="configs-frame-note">config target disabled</span>}
-          <button className="btn btn-sm" disabled={configRunning !== null || !configEnabled} onClick={onDiffConfig}>diff</button>
-          <button className="btn btn-sm btn-primary" disabled={configRunning !== null || !configEnabled} onClick={onSyncConfig}>sync</button>
+          {!activeConfigEnabled && <span className="configs-frame-note">config target disabled &mdash; enable in Settings</span>}
+          {configDirty && <span className="configs-frame-note">save or reset source before diff/sync</span>}
+          <button className="btn btn-sm" disabled={configRunning !== null || !configEnabled || configDirty} onClick={onDiffConfig}>diff</button>
+          <button className="btn btn-sm btn-primary" disabled={configRunning !== null || !configEnabled || configDirty} onClick={onSyncConfig}>sync</button>
           <button className="btn btn-sm" disabled={!hasActiveTarget} onClick={onOpenConfig}>open</button>
         </div>
       </header>
@@ -202,7 +203,7 @@ export function ConfigsView({
               activityCellClass={activityCellClass}
             />
           ) : !configEnabled ? (
-            <div className="log-empty"><span className="log-prompt">$</span> no enabled config targets</div>
+            <div className="log-empty"><span className="log-prompt">$</span> no enabled config targets &mdash; enable in Settings</div>
           ) : (
             <TerminalState
               result={configLog}

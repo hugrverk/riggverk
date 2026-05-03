@@ -144,9 +144,9 @@ export function RulesView({
               </div>
             )}
           </>
-        ) : (
+          ) : (
           <div className="rules-template-empty">
-            <span className="log-prompt">$</span> {status ? "no template loaded" : "no valid workspace"}
+            <span className="log-prompt">$</span> {status ? "no template loaded" : "no valid workspace — select a workspace in Workspace"}
           </div>
         )}
 
@@ -205,10 +205,10 @@ export function RulesView({
             <div className="console-action-group">
               <span className="command-group-label">rules</span>
               <div className="console-button-row">
-                <button className="btn" disabled={running !== null} onClick={() => onRunAction("diff_agent_rules")}>diff</button>
-                <button className="btn" disabled={running !== null} onClick={() => onRunAction("sync_agent_rules")}>sync</button>
+                <button className="btn" disabled={running !== null || agentTemplateDirty} onClick={() => onRunAction("diff_agent_rules")}>diff</button>
+                <button className="btn" disabled={running !== null || agentTemplateDirty} onClick={() => onRunAction("sync_agent_rules")}>sync</button>
               </div>
-              <span className="console-note">verify and diff check rule targets only</span>
+              <span className="console-note">{agentTemplateDirty ? "save or reset source before diff/sync" : "verify and diff check rule targets only"}</span>
             </div>
           </div>
         </section>

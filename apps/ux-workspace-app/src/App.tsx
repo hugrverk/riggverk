@@ -17,6 +17,10 @@ const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "op
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
+function confirmDiscardDirtyEditor(): boolean {
+  return window.confirm("Discard unsaved changes?");
+}
+
 type View = "workspace" | "rules" | "skills" | "configs" | "health" | "docs" | "settings";
 
 /* ---- main app ---- */
@@ -343,9 +347,10 @@ function App() {
   }, []);
 
   const selectDoc = useCallback(async (id: string) => {
+    if (docDirty && id !== activeDoc?.id && !confirmDiscardDirtyEditor()) return;
     activeDocIdRef.current = id;
     try { setActiveDoc(await invoke<DocumentContent>("read_doc", { id })); } catch (e) { setError(`Read doc: ${e}`); }
-  }, []);
+  }, [docDirty, activeDoc?.id]);
 
   const openDocEditor = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
@@ -441,6 +446,7 @@ function App() {
   }, [configTemplateContent]);
 
   const onCreateDoc = useCallback(async () => {
+    if (docDirty && !confirmDiscardDirtyEditor()) return;
     const title = createDocTitle.trim();
     const slug = createDocSlug.trim();
     if (!title || !slug) {
@@ -462,7 +468,7 @@ function App() {
     } finally {
       setCreateDocCreating(false);
     }
-  }, [createDocTitle, createDocSlug, loadDocs]);
+  }, [docDirty, createDocTitle, createDocSlug, loadDocs]);
 
   const loadAgentTemplate = useCallback(async () => {
     try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
@@ -663,6 +669,12 @@ function App() {
   }, [setWorkspacePath]);
 
   const switchView = useCallback((v: View) => {
+    if (v !== view) {
+      const isDocsDirty = view === "docs" && docDirty;
+      const isRulesDirty = view === "rules" && agentTemplateDirty;
+      const isConfigsDirty = view === "configs" && configDirty;
+      if ((isDocsDirty || isRulesDirty || isConfigsDirty) && !confirmDiscardDirtyEditor()) return;
+    }
     setView(v);
     setSettingsMsg(null);
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
@@ -672,11 +684,12 @@ function App() {
     else if (v === "health") { loadBackups(); }
     else if (v === "settings") { loadSettings(); }
     else if (v === "rules") { fetchStatus(); loadAgentTemplate(); }
-  }, [loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, docDirty, agentTemplateDirty, configDirty, loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
+    if (configDirty && targetId !== activeConfigTargetId && !confirmDiscardDirtyEditor()) return;
     setActiveConfigTargetId(targetId);
-  }, []);
+  }, [configDirty, activeConfigTargetId]);
 
   const runConfigAction = useCallback(async (action: string) => {
     const startedAt = performance.now();
