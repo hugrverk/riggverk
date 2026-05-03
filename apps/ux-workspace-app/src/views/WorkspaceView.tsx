@@ -21,10 +21,10 @@ const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
 
 function mapNodeClass(condition: "valid" | "invalid" | "partial" | "dim"): string {
   switch (condition) {
-    case "valid": return "workspace-map-node workspace-map-node-valid";
-    case "invalid": return "workspace-map-node workspace-map-node-invalid";
-    case "partial": return "workspace-map-node workspace-map-node-partial";
-    case "dim": return "workspace-map-node workspace-map-node-dim";
+    case "valid": return "ws-node ws-node-valid";
+    case "invalid": return "ws-node ws-node-invalid";
+    case "partial": return "ws-node ws-node-partial";
+    case "dim": return "ws-node ws-node-dim";
   }
 }
 
@@ -100,8 +100,8 @@ export function WorkspaceView({
   const mapNodes: { id: string; label: string }[] = [
     { id: "workspace", label: "workspace" },
     { id: "rules", label: "rules" },
-    { id: "skills", label: "skills" },
     { id: "configs", label: "configs" },
+    { id: "skills", label: "skills" },
     { id: "docs", label: "docs" },
     { id: "scripts", label: "scripts" },
   ];
@@ -113,72 +113,84 @@ export function WorkspaceView({
 
   const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
 
+  const statusText = !diag
+    ? "loading"
+    : diag.valid
+      ? "valid"
+      : "setup needed";
+
+  const statusClass = !diag
+    ? "ws-status-dim"
+    : diag.valid
+      ? "ws-status-valid"
+      : "ws-status-invalid";
+
   const renderNodeDetails = (nodeId: string) => {
     switch (nodeId) {
       case "workspace":
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {diag ? (
               <>
-                <div className="workspace-node-detail-row">
-                  <span className="workspace-node-detail-label">path</span>
-                  <span className="workspace-node-detail-value">{resolvedPath}</span>
+                <div className="ws-detail-row">
+                  <span className="ws-detail-key">path</span>
+                  <span className="ws-detail-val">{resolvedPath}</span>
                 </div>
-                <div className="workspace-node-detail-row">
-                  <span className="workspace-node-detail-label">markers missing</span>
-                  <span className={`workspace-node-detail-value ${missingMarkers.length > 0 ? "workspace-invalid" : "workspace-valid"}`}>
+                <div className="ws-detail-row">
+                  <span className="ws-detail-key">markers missing</span>
+                  <span className={`ws-detail-val ${missingMarkers.length > 0 ? "ws-color-fail" : "ws-color-ok"}`}>
                     {missingMarkers.length}
                   </span>
                 </div>
               </>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
             )}
           </div>
         );
       case "rules":
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {diag ? (
-              <div className="workspace-node-detail-row">
-                <span className="workspace-node-detail-label">enabled</span>
-                <span className={`workspace-node-detail-value ${diag.enabled_rule_targets > 0 ? "workspace-valid" : ""}`}>
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">enabled</span>
+                <span className={`ws-detail-val ${diag.enabled_rule_targets > 0 ? "ws-color-ok" : ""}`}>
                   {diag.enabled_rule_targets}/{diag.total_rule_targets}
                 </span>
               </div>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
             )}
           </div>
         );
       case "configs":
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {diag ? (
-              <div className="workspace-node-detail-row">
-                <span className="workspace-node-detail-label">enabled</span>
-                <span className={`workspace-node-detail-value ${diag.enabled_config_targets > 0 ? "workspace-valid" : ""}`}>
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">enabled</span>
+                <span className={`ws-detail-val ${diag.enabled_config_targets > 0 ? "ws-color-ok" : ""}`}>
                   {diag.enabled_config_targets}/{diag.total_config_targets}
                 </span>
               </div>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
             )}
           </div>
         );
       case "skills": {
         const cat = findCat(summary, "Skills");
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {cat ? (
-              <div className="workspace-node-detail-row">
-                <span className="workspace-node-detail-label">bundled</span>
-                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">bundled</span>
+                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
                   {cat.count} skills
                 </span>
               </div>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
             )}
           </div>
         );
@@ -186,16 +198,16 @@ export function WorkspaceView({
       case "docs": {
         const cat = findCat(summary, "Docs");
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {cat ? (
-              <div className="workspace-node-detail-row">
-                <span className="workspace-node-detail-label">bundled</span>
-                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">bundled</span>
+                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
                   {cat.count} docs
                 </span>
               </div>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
             )}
           </div>
         );
@@ -203,16 +215,16 @@ export function WorkspaceView({
       case "scripts": {
         const cat = findCat(summary, "Scripts");
         return (
-          <div className="workspace-node-details-inner">
+          <div className="ws-detail-body">
             {cat ? (
-              <div className="workspace-node-detail-row">
-                <span className="workspace-node-detail-label">bundled</span>
-                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">bundled</span>
+                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
                   {cat.count} scripts
                 </span>
               </div>
             ) : (
-              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
             )}
           </div>
         );
@@ -222,274 +234,238 @@ export function WorkspaceView({
     }
   };
 
+  const statusRows: { key: string; value: string; ok: boolean; warn: boolean }[] = [];
+  if (diag) {
+    statusRows.push({
+      key: "markers",
+      value: missingMarkers.length === 0 ? "\u2713 0" : String(missingMarkers.length),
+      ok: missingMarkers.length === 0,
+      warn: missingMarkers.length > 0,
+    });
+    statusRows.push({
+      key: "rule targets",
+      value: `${diag.enabled_rule_targets}/${diag.total_rule_targets}`,
+      ok: diag.enabled_rule_targets > 0,
+      warn: false,
+    });
+    statusRows.push({
+      key: "config targets",
+      value: `${diag.enabled_config_targets}/${diag.total_config_targets}`,
+      ok: diag.enabled_config_targets > 0,
+      warn: false,
+    });
+  }
+  const resourceRows: { key: string; value: string; cat: typeof skillsCat }[] = [
+    { key: "skills", value: skillsCat ? String(skillsCat.count) : "\u2014", cat: skillsCat },
+    { key: "docs", value: docsCat ? String(docsCat.count) : "\u2014", cat: docsCat },
+    { key: "scripts", value: scriptsCat ? String(scriptsCat.count) : "\u2014", cat: scriptsCat },
+    { key: "templates", value: templatesCat ? String(templatesCat.count) : "\u2014", cat: templatesCat },
+  ];
+
   return (
     <section className="terminal terminal-view">
-      <div className="terminal-topline">
-        <span className="terminal-title">WORKSPACE</span>
+      {/* ── Command strip ── */}
+      <div className="ws-cmd-strip">
+        <div className="ws-cmd-title">WORKSPACE</div>
+        <div className="ws-cmd-status">
+          <span className="ws-cmd-status-key">workspace:</span>
+          <span className={`ws-cmd-status-val ${statusClass}`}>{statusText}</span>
+          <span className="ws-cmd-sep">|</span>
+          <span className="ws-cmd-status-key">path:</span>
+          <span className="ws-cmd-path">{resolvedPath}</span>
+        </div>
+        <div className="ws-cmd-actions">
+          <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
+            refresh
+          </button>
+          {diag && !diag.valid ? (
+            <button
+              className="btn btn-sm btn-primary"
+              onClick={onPlanCreate}
+              disabled={createPlanRunning}
+            >
+              {createPlanRunning ? "planning\u2026" : "dry-run create"}
+            </button>
+          ) : null}
+          <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
+            choose folder
+          </button>
+          <button className="btn btn-sm" onClick={() => onSetWorkspacePath(null)}>
+            use default
+          </button>
+        </div>
       </div>
+
+      {/* ── Main cockpit grid ── */}
       {appSettings && (
-        <div className="workspace-landing">
-          {/* ── Hero ── */}
-          <div className="workspace-hero">
-            <div className="workspace-hero-main">
-              <h1 className="workspace-hero-title">Agent Workspace</h1>
-              <p className="workspace-hero-subtitle">
-                Local control panel for agent rules, skills, configs, and workspace scripts.
-              </p>
-            </div>
-            <div className="workspace-hero-meta">
-              <span
-                className={`workspace-status-badge ${
-                  !diag
-                    ? "workspace-status-loading"
-                    : diag.valid
-                      ? "workspace-status-valid"
-                      : "workspace-status-invalid"
-                }`}
-              >
-                {!diag ? "loading\u2026" : diag.valid ? "valid workspace" : "setup needed"}
-              </span>
-              <code className="workspace-path-console">{resolvedPath}</code>
-              <div className="workspace-hero-actions">
-                {diag && !diag.valid ? (
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={onPlanCreate}
-                    disabled={createPlanRunning}
-                  >
-                    {createPlanRunning ? "planning\u2026" : "dry-run create"}
-                  </button>
-                ) : (
-                  <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
-                    refresh
-                  </button>
-                )}
-                <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
-                  choose folder
-                </button>
-                <button className="btn btn-sm" onClick={() => onSetWorkspacePath(null)}>
-                  use default
-                </button>
-              </div>
-            </div>
-          </div>
-
-          {/* ── Path input ── */}
-          <div className="workspace-path-panel">
-            <input
-              className="settings-input workspace-path-input"
-              type="text"
-              placeholder="default (env or repo default)"
-              value={appSettings.workspace_path ?? ""}
-              onChange={e => onSetWorkspacePath(e.target.value || null)}
-            />
-            <span className="workspace-path-hint">
-              Enter workspace folder path. For a new workspace, enter the child folder to create.
-            </span>
-          </div>
-
-          {/* ── Metrics ── */}
-          {diag && (
-            <div className="workspace-metrics">
-              <div className={`workspace-metric ${missingMarkers.length === 0 ? "workspace-metric-ok" : "workspace-metric-warn"}`}>
-                <span className="workspace-metric-value">
-                  {missingMarkers.length === 0 ? "\u2713" : missingMarkers.length}
-                </span>
-                <span className="workspace-metric-label">markers</span>
-              </div>
-              <div className={`workspace-metric ${diag.enabled_rule_targets > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                <span className="workspace-metric-value">
-                  {diag.enabled_rule_targets}/{diag.total_rule_targets}
-                </span>
-                <span className="workspace-metric-label">rule targets</span>
-              </div>
-              <div className={`workspace-metric ${diag.enabled_config_targets > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                <span className="workspace-metric-value">
-                  {diag.enabled_config_targets}/{diag.total_config_targets}
-                </span>
-                <span className="workspace-metric-label">config targets</span>
-              </div>
-              {skillsCat && (
-                <div className={`workspace-metric ${skillsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                  <span className="workspace-metric-value">{skillsCat.count}</span>
-                  <span className="workspace-metric-label">starter skills</span>
-                </div>
-              )}
-              {docsCat && (
-                <div className={`workspace-metric ${docsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                  <span className="workspace-metric-value">{docsCat.count}</span>
-                  <span className="workspace-metric-label">starter docs</span>
-                </div>
-              )}
-              {scriptsCat && (
-                <div className={`workspace-metric ${scriptsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                  <span className="workspace-metric-value">{scriptsCat.count}</span>
-                  <span className="workspace-metric-label">starter scripts</span>
-                </div>
-              )}
-              {templatesCat && (
-                <div className={`workspace-metric ${templatesCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
-                  <span className="workspace-metric-value">{templatesCat.count}</span>
-                  <span className="workspace-metric-label">starter templates</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* ── Interactive system map ── */}
-          <div className="workspace-map">
-            {!diag && <div className="workspace-map-scanning" />}
-            <div className="workspace-map-track">
-              {mapNodes.map((node, i) => {
-                const status = mapNodeStatus(diag, summary, node.id);
-                const isExpanded = expandedNode === node.id;
-                return (
-                  <span key={node.id} className="workspace-system-node-group">
-                    {i > 0 && <span className="workspace-map-line" />}
-                    <button
-                      className={`workspace-system-node ${isExpanded ? "workspace-system-node-expanded" : ""}`}
-                      onClick={() => setExpandedNode(isExpanded ? null : node.id)}
-                      aria-expanded={isExpanded}
-                      aria-label={`${node.label} system node`}
-                    >
-                      <span className={mapNodeClass(status)}>
-                        <span className="workspace-map-dot" />
-                        <span className="workspace-map-label">{node.label}</span>
+        <div className="ws-cockpit">
+          {/* ── Left pane: status console + create flow ── */}
+          <div className="ws-left">
+            {/* Status console */}
+            <div className="ws-pane">
+              <div className="ws-pane-label">STATUS</div>
+              <div className="ws-status-list">
+                {statusRows.length > 0 ? (
+                  statusRows.map(row => (
+                    <div key={row.key} className="ws-status-row">
+                      <span className="ws-status-key">{row.key}</span>
+                      <span className={`ws-status-val ${row.ok ? "ws-color-ok" : row.warn ? "ws-color-warn" : "ws-color-dim"}`}>
+                        {row.value}
                       </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="ws-status-row ws-color-dim">waiting for diagnostics</div>
+                )}
+                {summary && (
+                  resourceRows.map(row => (
+                    <div key={row.key} className="ws-status-row">
+                      <span className="ws-status-key">{row.key}</span>
+                      <span className={`ws-status-val ${row.cat && row.cat.count > 0 ? "ws-color-ok" : "ws-color-dim"}`}>
+                        {row.value}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Path input */}
+            <div className="ws-pane">
+              <div className="ws-pane-label">PATH</div>
+              <div className="ws-path-row">
+                <input
+                  className="settings-input ws-path-input"
+                  type="text"
+                  placeholder="default (env or repo default)"
+                  value={appSettings.workspace_path ?? ""}
+                  onChange={e => onSetWorkspacePath(e.target.value || null)}
+                />
+              </div>
+            </div>
+
+            {/* Diagnotic details */}
+            {diag && (
+              <div className="ws-pane">
+                <div className="ws-pane-label">DIAGNOSTICS</div>
+                <div className="ws-diag-list">
+                  {diag.resolved_path && diag.resolved_path !== diag.candidate_path && (
+                    <div className="ws-diag-row">
+                      <span className="ws-diag-key">candidate</span>
+                      <span className="ws-diag-val">{diag.candidate_path}</span>
+                    </div>
+                  )}
+                  {diag.error && (
+                    <div className="ws-diag-row ws-color-fail">{diag.error}</div>
+                  )}
+                  {missingMarkers.length > 0 && (
+                    <div className="ws-missing-list">
+                      {missingMarkers.map((m, i) => (
+                        <div key={i} className="ws-diag-row ws-color-fail">
+                          missing {m.kind}: {m.path}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  {diag.valid && missingMarkers.length === 0 && (
+                    <div className="ws-diag-row ws-color-ok">all markers present</div>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Create workspace command flow */}
+            <div className="ws-pane">
+              <div className="ws-pane-label">CREATE</div>
+
+              {/* No plan */}
+              {!createPlan && (
+                <div className="ws-create-body">
+                  <div className="ws-cmd-row">
+                    <span className="ws-cmd-prompt">$</span>
+                    <span>dry-run create</span>
+                  </div>
+                  <div className="ws-cmd-tags">
+                    <span className="ws-tag">read-only</span>
+                    <span className="ws-tag">no overwrite</span>
+                    <span className="ws-tag">no scripts</span>
+                  </div>
+                  <div className="ws-cmd-action">
+                    <button
+                      className="btn btn-sm btn-primary"
+                      onClick={onPlanCreate}
+                      disabled={createPlanRunning}
+                    >
+                      {createPlanRunning ? "planning\u2026" : "dry-run create"}
                     </button>
-                  </span>
-                );
-              })}
-            </div>
-            {expandedNode && (
-              <div className="workspace-node-details" role="region" aria-label={`${mapNodes.find(n => n.id === expandedNode)?.label} details`}>
-                {renderNodeDetails(expandedNode)}
-              </div>
-            )}
-          </div>
-
-          {/* ── Diagnostics details ── */}
-          {diag && (
-            <div className="workspace-diag-detail">
-              {diag.resolved_path && diag.resolved_path !== diag.candidate_path && (
-                <div className="workspace-diag-row">
-                  <span className="cell-label-sm">candidate</span>
-                  <span className="cell-value-trunc">{diag.candidate_path}</span>
+                  </div>
                 </div>
               )}
-              {diag.error && (
-                <div className="workspace-diag-row workspace-invalid">{diag.error}</div>
-              )}
-              {missingMarkers.length > 0 && (
-                <div className="workspace-marker-list">
-                  {missingMarkers.map((m, i) => (
-                    <div key={i} className="workspace-marker-missing">
-                      missing {m.kind}: {m.path}
+
+              {/* Plan warning */}
+              {createPlan && !createPlan.ok && (
+                <div className="ws-create-body">
+                  <div className="ws-cmd-result">
+                    <div className="ws-cmd-row ws-color-warn">
+                      <span className="ws-cmd-prompt">warn</span>
+                      <span>{createPlan.status}</span>
                     </div>
-                  ))}
-                </div>
-              )}
-              {diag.valid && missingMarkers.length === 0 && (
-                <div className="workspace-diag-row workspace-valid">all markers present</div>
-              )}
-            </div>
-          )}
-
-          {/* ── Create workspace next-step ── */}
-          <div className={`workspace-next-step ${diag && !diag.valid ? "workspace-next-step-attention" : ""} ${createPlanEligible ? "workspace-next-step-ready" : ""}`}>
-            <div className="console-section-label">create workspace</div>
-
-            {/* No plan state */}
-            {!createPlan && (
-              <div className="workspace-next-step-body">
-                <div className="workspace-next-step-guide">
-                  <span className="workspace-next-step-icon">\u25B8</span>
-                  <span>Run a dry-run first to evaluate whether the workspace path is safe for initialization.</span>
-                </div>
-                <div className="workspace-next-step-badges">
-                  <span className="create-plan-badge">read-only</span>
-                  <span className="create-plan-badge">no overwrite</span>
-                  <span className="create-plan-badge">no scripts</span>
-                </div>
-                <div className="workspace-next-step-actions">
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={onPlanCreate}
-                    disabled={createPlanRunning}
-                  >
-                    {createPlanRunning ? "planning\u2026" : "dry-run create"}
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {/* Plan warning state */}
-            {createPlan && !createPlan.ok && (
-              <div className="workspace-next-step-body">
-                <div className="create-plan-result">
-                  <div className="create-plan-row create-plan-warn">
-                    <span className="create-plan-status">warn</span>
-                    <span>{createPlan.status}</span>
-                  </div>
-                  <div className="create-plan-row create-plan-muted">
-                    target: {createPlan.target_path || "(empty)"}
-                  </div>
-                  <div className="create-plan-row">
-                    {createPlan.reason}
-                  </div>
-                  {createPlan.warnings.length > 0 && (
-                    <div className="create-plan-warnings">
-                      {createPlan.warnings.map((w, i) => (
-                        <div key={i} className="create-plan-row workspace-invalid">{w}</div>
-                      ))}
+                    <div className="ws-cmd-row ws-color-dim">
+                      target: {createPlan.target_path || "(empty)"}
                     </div>
-                  )}
-                </div>
-              </div>
-            )}
-
-            {/* Plan ok state */}
-            {createPlan && createPlan.ok && (
-              <div className="workspace-next-step-body">
-                <div className="create-plan-result">
-                  <div className="create-plan-row create-plan-ok">
-                    <span className="create-plan-status">ok</span>
-                    <span>{createPlan.status}</span>
-                  </div>
-                  <div className="create-plan-row create-plan-muted">
-                    target: {createPlan.target_path || "(empty)"}
-                  </div>
-                  <div className="create-plan-row">
-                    {createPlan.reason}
-                  </div>
-                  {createPlan.warnings.length > 0 && (
-                    <div className="create-plan-warnings">
-                      {createPlan.warnings.map((w, i) => (
-                        <div key={i} className="create-plan-row workspace-invalid">{w}</div>
-                      ))}
-                    </div>
-                  )}
-                  {createPlan.planned_files.length > 0 && (
-                    <div className="create-plan-files">
-                      <div className="create-plan-row cell-label-sm">planned files ({createPlan.planned_files.length})</div>
-                      <div className="create-plan-file-list">
-                        {createPlan.planned_files.map((f, i) => (
-                          <div key={i} className="create-plan-file-row">
-                            <span className="workspace-marker-dot workspace-valid">&#x25CF;</span>
-                            <span className="defaults-file-path">{f}</span>
-                          </div>
+                    <div className="ws-cmd-row">{createPlan.reason}</div>
+                    {createPlan.warnings.length > 0 && (
+                      <div className="ws-cmd-warnings">
+                        {createPlan.warnings.map((w, i) => (
+                          <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
                         ))}
                       </div>
-                    </div>
-                  )}
+                    )}
+                  </div>
                 </div>
-                {createPlanEligible && (
-                  <div className="workspace-next-step-create-section">
-                    <div className="workspace-next-step-guide">
-                      <span className="workspace-next-step-icon">\u25B8</span>
-                      <span>Path is safe. Copy bundled starter files into the target directory.</span>
+              )}
+
+              {/* Plan ok */}
+              {createPlan && createPlan.ok && (
+                <div className="ws-create-body">
+                  <div className="ws-cmd-result">
+                    <div className="ws-cmd-row ws-color-ok">
+                      <span className="ws-cmd-prompt">ok</span>
+                      <span>{createPlan.status}</span>
                     </div>
-                    <div className="workspace-next-step-actions">
+                    <div className="ws-cmd-row ws-color-dim">
+                      target: {createPlan.target_path || "(empty)"}
+                    </div>
+                    <div className="ws-cmd-row">{createPlan.reason}</div>
+                    {createPlan.warnings.length > 0 && (
+                      <div className="ws-cmd-warnings">
+                        {createPlan.warnings.map((w, i) => (
+                          <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
+                        ))}
+                      </div>
+                    )}
+                    {createPlan.planned_files.length > 0 && (
+                      <div className="ws-cmd-files">
+                        <div className="ws-cmd-row ws-color-dim">
+                          planned ({createPlan.planned_files.length})
+                        </div>
+                        <div className="ws-file-list">
+                          {createPlan.planned_files.map((f, i) => (
+                            <div key={i} className="ws-file-row">
+                              <span className="ws-dot ws-dot-ok">&#x25CF;</span>
+                              <span className="ws-file-path">{f}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {createPlanEligible && (
+                    <div className="ws-create-action">
+                      <div className="ws-cmd-row">
+                        <span className="ws-cmd-prompt ws-color-ok">$</span>
+                        <span>create workspace &mdash; path is safe</span>
+                      </div>
                       <button
                         className="btn btn-sm btn-primary"
                         onClick={onCreateWorkspace}
@@ -497,101 +473,186 @@ export function WorkspaceView({
                       >
                         {createRunning ? "creating\u2026" : "create workspace"}
                       </button>
+                      <div className="ws-cmd-tags">
+                        <span className="ws-tag">{createPlan.planned_files.length} files</span>
+                        <span className="ws-tag">no overwrite</span>
+                        <span className="ws-tag">no scripts</span>
+                      </div>
                     </div>
-                    <div className="workspace-next-step-badges">
-                      <span className="create-plan-badge">
-                        {createPlan.planned_files.length} files
-                      </span>
-                      <span className="create-plan-badge">no overwrite</span>
-                      <span className="create-plan-badge">no scripts</span>
-                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Create result */}
+              {createResult && (
+                <div className="ws-create-body">
+                  <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>
+                    <span className="ws-cmd-prompt">{createResult.success ? "ok" : "fail"}</span>
+                    <span>{createResult.message}</span>
                   </div>
-                )}
+                  <div className="ws-cmd-row ws-color-dim">
+                    status: {createResult.status} | target: {createResult.target_path}
+                  </div>
+                  {createResult.copied_files.length > 0 && (
+                    <div className="ws-cmd-files">
+                      <div className="ws-cmd-row ws-color-dim">
+                        copied ({createResult.copied_files.length})
+                      </div>
+                      <div className="ws-file-list">
+                        {createResult.copied_files.map((f, i) => (
+                          <div key={i} className="ws-file-row">
+                            <span className="ws-dot ws-dot-ok">&#x25CF;</span>
+                            <span className="ws-file-path">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {createResult.skipped_files.length > 0 && (
+                    <div className="ws-cmd-files">
+                      <div className="ws-cmd-row ws-color-dim">
+                        skipped ({createResult.skipped_files.length})
+                      </div>
+                      <div className="ws-file-list">
+                        {createResult.skipped_files.map((f, i) => (
+                          <div key={i} className="ws-file-row">
+                            <span className="ws-dot ws-dot-fail">&#x25CF;</span>
+                            <span className="ws-file-path">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {createResult.warnings.length > 0 && (
+                    <div className="ws-cmd-warnings">
+                      {createResult.warnings.map((w, i) => (
+                        <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Right pane: system map + resources + create eligibility ── */}
+          <div className="ws-right">
+            {/* System map */}
+            <div className="ws-pane">
+              <div className="ws-pane-label">SYSTEM MAP</div>
+              <div className="ws-map">
+                {!diag && <div className="ws-map-scan" />}
+                <div className="ws-map-grid">
+                  {/* Row 0: workspace spans full width */}
+                  <div className="ws-map-row ws-map-row-top">
+                    {mapNodes.filter(n => n.id === "workspace").map(node => {
+                      const status = mapNodeStatus(diag, summary, node.id);
+                      const isExpanded = expandedNode === node.id;
+                      return (
+                        <button
+                          key={node.id}
+                          className={`ws-map-btn ${isExpanded ? "ws-map-btn-expanded" : ""}`}
+                          onClick={() => setExpandedNode(isExpanded ? null : node.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={`${node.label} system node`}
+                        >
+                          <span className={mapNodeClass(status)}>
+                            <span className="ws-map-dot" />
+                            <span className="ws-map-label">{node.label}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Row 1: rules, scripts, docs */}
+                  <div className="ws-map-row ws-map-row-mid">
+                    {mapNodes.filter(n => n.id === "rules" || n.id === "scripts" || n.id === "docs").map(node => {
+                      const status = mapNodeStatus(diag, summary, node.id);
+                      const isExpanded = expandedNode === node.id;
+                      return (
+                        <button
+                          key={node.id}
+                          className={`ws-map-btn ${isExpanded ? "ws-map-btn-expanded" : ""}`}
+                          onClick={() => setExpandedNode(isExpanded ? null : node.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={`${node.label} system node`}
+                        >
+                          <span className={mapNodeClass(status)}>
+                            <span className="ws-map-dot" />
+                            <span className="ws-map-label">{node.label}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                  {/* Row 2: configs, skills */}
+                  <div className="ws-map-row ws-map-row-bot">
+                    {mapNodes.filter(n => n.id === "configs" || n.id === "skills").map(node => {
+                      const status = mapNodeStatus(diag, summary, node.id);
+                      const isExpanded = expandedNode === node.id;
+                      return (
+                        <button
+                          key={node.id}
+                          className={`ws-map-btn ${isExpanded ? "ws-map-btn-expanded" : ""}`}
+                          onClick={() => setExpandedNode(isExpanded ? null : node.id)}
+                          aria-expanded={isExpanded}
+                          aria-label={`${node.label} system node`}
+                        >
+                          <span className={mapNodeClass(status)}>
+                            <span className="ws-map-dot" />
+                            <span className="ws-map-label">{node.label}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Node detail pane */}
+            {expandedNode && (
+              <div className="ws-pane" role="region" aria-label={`${mapNodes.find(n => n.id === expandedNode)?.label} details`}>
+                <div className="ws-pane-label">
+                  {mapNodes.find(n => n.id === expandedNode)?.label ?? ""} DETAIL
+                </div>
+                {renderNodeDetails(expandedNode)}
               </div>
             )}
 
-            {/* Create result */}
-            {createResult && (
-              <div className="create-result">
-                <div className={`create-plan-row ${createResult.success ? "create-plan-ok" : "create-plan-warn"}`}>
-                  <span className="create-plan-status">{createResult.success ? "ok" : "fail"}</span>
-                  <span>{createResult.message}</span>
+            {/* Bundled starter resources */}
+            {summary && (
+              <div className="ws-pane">
+                <div className="ws-pane-label">RESOURCES</div>
+                <div className="ws-resource-strip">
+                  {summary.categories.map((cat) => (
+                    <span key={cat.label} className={`ws-resource-chip ${cat.label === "Skills" && cat.count > 0 ? "ws-resource-chip-ok" : ""}`}>
+                      {cat.label.toLowerCase()} {cat.count}/{cat.files.length}
+                    </span>
+                  ))}
                 </div>
-                <div className="create-plan-row create-plan-muted">
-                  status: {createResult.status} | target: {createResult.target_path}
+                <div className="ws-resource-details">
+                  <div className="ws-resource-desc">{summary.description}</div>
+                  {summary.categories.map((cat) => (
+                    <details key={cat.label} className="ws-resource-cat" open={cat.label === "Skills"}>
+                      <summary className="ws-resource-header">
+                        <span className="ws-resource-name">{cat.label}</span>
+                        <span className="ws-resource-count">{cat.count}/{cat.files.length}</span>
+                      </summary>
+                      <div className="ws-resource-files">
+                        {cat.files.map((f, fi) => (
+                          <div key={fi} className={`ws-file-row ${f.exists ? "" : "ws-file-missing"}`}>
+                            <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
+                            <span className="ws-file-path">{f.path}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  ))}
                 </div>
-                {createResult.copied_files.length > 0 && (
-                  <div className="create-plan-files">
-                    <div className="create-plan-row cell-label-sm">copied ({createResult.copied_files.length})</div>
-                    <div className="create-plan-file-list">
-                      {createResult.copied_files.map((f, i) => (
-                        <div key={i} className="create-plan-file-row">
-                          <span className="workspace-marker-dot workspace-valid">&#x25CF;</span>
-                          <span className="defaults-file-path">{f}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {createResult.skipped_files.length > 0 && (
-                  <div className="create-plan-files">
-                    <div className="create-plan-row cell-label-sm">skipped ({createResult.skipped_files.length})</div>
-                    <div className="create-plan-file-list">
-                      {createResult.skipped_files.map((f, i) => (
-                        <div key={i} className="create-plan-file-row">
-                          <span className="workspace-marker-dot workspace-invalid">&#x25CF;</span>
-                          <span className="defaults-file-path">{f}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                {createResult.warnings.length > 0 && (
-                  <div className="create-plan-warnings">
-                    {createResult.warnings.map((w, i) => (
-                      <div key={i} className="create-plan-row workspace-invalid">{w}</div>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
-
-          {/* ── Bundled starter preview ── */}
-          {summary && (
-            <div className="workspace-resource-panel">
-              <div className="defaults-preview-header">
-                <span className="cell-label">BUNDLED STARTER</span>
-                <span className="defaults-preview-badge">read-only</span>
-              </div>
-              <div className="defaults-preview-desc">{summary.description}</div>
-              <div className="defaults-summary-row">
-                {summary.categories.map((cat, ci) => (
-                  <span key={ci} className={`defaults-summary-chip ${cat.label === "Skills" && cat.count > 0 ? "defaults-summary-chip-good" : ""}`}>
-                    {cat.label} {cat.count}/{cat.files.length}
-                  </span>
-                ))}
-              </div>
-              <div className="defaults-preview-categories">
-                {summary.categories.map((cat, ci) => (
-                  <details key={ci} className="defaults-category" open={cat.label === "Skills" || cat.label === "Docs"}>
-                    <summary className="defaults-category-header">
-                      <span className="cell-label-sm">{cat.label}</span>
-                      <span className="defaults-category-count">{cat.count}/{cat.files.length}</span>
-                    </summary>
-                    <div className="defaults-category-files">
-                      {cat.files.map((f, fi) => (
-                        <div key={fi} className={`defaults-file ${f.exists ? "" : "defaults-file-missing"}`}>
-                          <span className={`workspace-marker-dot ${f.exists ? "workspace-valid" : "workspace-invalid"}`}>&#x25CF;</span>
-                          <span className="defaults-file-path">{f.path}</span>
-                        </div>
-                      ))}
-                    </div>
-                  </details>
-                ))}
-              </div>
-            </div>
-          )}
         </div>
       )}
     </section>
