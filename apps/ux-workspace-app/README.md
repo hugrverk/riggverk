@@ -270,7 +270,7 @@ Apply actions for rules and OpenCode config print backup paths when an existing 
 - Active doc persists across view switches when the doc remains available.
 - Doc rows are real `<button>` elements with visible focus and active state indicators.
 - Only known doc ids from the curated registry and user context docs (`docs/context/`) are shown — not every `.md` file in `docs/`.
-- Users can create custom context docs under `docs/context/` via the "+ new" button. Custom doc filenames are strict slugs (`^[a-z0-9][a-z0-9-]*$`), stored at `docs/context/<slug>.md`. No subdirectories, no recursion.
+- Users can create custom context docs under `docs/context/` via the "+ new" button. Custom doc filenames are strict slugs (`^[a-z0-9][a-z0-9-]*$`), stored at `docs/context/<slug>.md`. No subdirectories, no recursion. The title is persisted as a Markdown H1 (`# Title`) in the document content; when absent, the title falls back to the slug-derived name.
 - Docs are read from the validated active workspace. Missing optional docs are skipped.
 - `list_docs` returns curated doc summaries plus custom context docs with section metadata.
 - `read_doc` renders the selected Markdown file for both curated and custom doc ids.

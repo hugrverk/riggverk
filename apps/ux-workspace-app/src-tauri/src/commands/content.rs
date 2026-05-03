@@ -141,6 +141,20 @@ fn slug_to_title(slug: &str) -> String {
     result
 }
 
+fn extract_title_from_content(content: &str) -> Option<String> {
+    let first_line = content.lines().next()?;
+    let stripped = first_line.strip_prefix("# ")?.trim();
+    if stripped.is_empty() {
+        None
+    } else {
+        Some(stripped.to_string())
+    }
+}
+
+fn doc_title_from_content_or_slug(content: &str, slug: &str) -> String {
+    extract_title_from_content(content).unwrap_or_else(|| slug_to_title(slug))
+}
+
 fn custom_doc_rel_path(slug: &str) -> String {
     format!("{}/{}.md", CUSTOM_DOCS_DIR, slug)
 }
@@ -165,7 +179,8 @@ fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
                 continue;
             }
             let id = format!("custom:{}", stem);
-            let title = slug_to_title(stem);
+            let content = std::fs::read_to_string(&path).unwrap_or_default();
+            let title = doc_title_from_content_or_slug(&content, stem);
             docs.push((id, "Context".to_string(), title, path));
         }
     }
@@ -201,9 +216,10 @@ fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
         return Err(format!("unknown doc: custom:{}", slug));
     }
     let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let title = doc_title_from_content_or_slug(&content, slug);
     Ok(DocumentContent {
         id: format!("custom:{}", slug),
-        title: slug_to_title(slug),
+        title,
         path: rel,
         section: "Context".to_string(),
         source: "custom".to_string(),
@@ -391,44 +407,38 @@ fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult
 
     safe_canonical_target(root, &target_path)?;
 
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
+    if id.starts_with("custom:") && !target_path.exists() {
+        return Err(format!(
+            "custom doc does not exist: {}. Use create_doc to create new custom docs.",
+            id
+        ));
     }
 
-    if target_path.exists() {
-        let existing =
-            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-        if existing == content {
-            return Ok(ActionResult::new(
-                true,
-                "save_doc",
-                "unchanged".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
+    if !target_path.exists() {
+        return Err(format!("doc does not exist: {}", id));
+    }
 
-        let backup_path = doc_backup_path(&resolved_id, &target_path)?;
-        std::fs::write(&backup_path, &existing)
-            .map_err(|e| format!("backup write error: {}", e))?;
-
-        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-
+    let existing =
+        std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+    if existing == content {
         return Ok(ActionResult::new(
             true,
             "save_doc",
-            "saved with backup".to_string(),
+            "unchanged".to_string(),
             String::new(),
             Some(0),
         ));
     }
+
+    let backup_path = doc_backup_path(&resolved_id, &target_path)?;
+    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
     std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
 
     Ok(ActionResult::new(
         true,
         "save_doc",
-        "saved".to_string(),
+        "saved with backup".to_string(),
         String::new(),
         Some(0),
     ))
@@ -440,43 +450,59 @@ pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
     save_doc_at_root(&root, &id, &content)
 }
 
-#[tauri::command]
-pub fn create_doc(
-    title: String,
-    slug: String,
+fn create_doc_at_root(
+    root: &Path,
+    title: &str,
+    slug: &str,
     content: Option<String>,
 ) -> Result<DocumentContent, String> {
-    if !is_valid_slug(&slug) {
+    if !is_valid_slug(slug) {
         return Err(format!(
             "invalid slug: {}. Use lowercase letters, digits, and hyphens (e.g. my-context-notes).",
             slug
         ));
     }
-    let root = workspace_root()?;
-    let rel = custom_doc_rel_path(&slug);
+    let rel = custom_doc_rel_path(slug);
     let target_path = root.join(&rel);
 
     if target_path.exists() {
         return Err(format!("doc already exists: custom:{}", slug));
     }
 
-    safe_canonical_target(&root, &target_path)?;
+    safe_canonical_target(root, &target_path)?;
 
     if let Some(parent) = target_path.parent() {
         std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
     }
 
-    let initial_content = content.unwrap_or_default();
+    let trimmed_title = title.trim();
+    let initial_content = if let Some(c) = content {
+        c
+    } else if trimmed_title.is_empty() {
+        String::new()
+    } else {
+        format!("# {}\n", trimmed_title)
+    };
     std::fs::write(&target_path, &initial_content).map_err(|e| format!("write error: {}", e))?;
 
     Ok(DocumentContent {
         id: format!("custom:{}", slug),
-        title,
+        title: trimmed_title.to_string(),
         path: rel,
         section: "Context".to_string(),
         source: "custom".to_string(),
         content: initial_content,
     })
+}
+
+#[tauri::command]
+pub fn create_doc(
+    title: String,
+    slug: String,
+    content: Option<String>,
+) -> Result<DocumentContent, String> {
+    let root = workspace_root()?;
+    create_doc_at_root(&root, &title, &slug, content)
 }
 
 #[cfg(test)]
@@ -768,39 +794,40 @@ mod tests {
     }
 
     #[test]
-    fn create_doc_creates_file() {
+    fn create_doc_creates_file_with_h1_title() {
         let root = temp_root("create-doc");
-        write_file(&root, ".ux-workspace/workspace.json", "{}");
-        write_file(&root, "scripts/bootstrap.sh", "#!/bin/bash\necho ok\n");
-        write_file(
-            &root,
-            "scripts/install-agent-rules.sh",
-            "#!/bin/bash\necho ok\n",
-        );
-        write_file(
-            &root,
-            "scripts/install-opencode-config.sh",
-            "#!/bin/bash\necho ok\n",
-        );
-        write_file(&root, "scripts/install-skills.sh", "#!/bin/bash\necho ok\n");
-        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
-        write_file(&root, "templates/opencode.json", "{}");
-        write_file(&root, "README.md", "# readme\n");
-        std::fs::create_dir_all(root.join("skills")).expect("create skills dir");
+        std::fs::create_dir_all(&root).expect("create root dir");
 
         let rel = custom_doc_rel_path("my-notes");
         let target_path = root.join(&rel);
         assert!(!target_path.exists());
 
-        let result = save_doc_at_root(&root, "custom:my-notes", "# custom content\n");
-        assert!(result.is_ok(), "save should succeed: {:?}", result);
-        let ar = result.unwrap();
-        assert!(ar.success);
-        assert_eq!(ar.stdout, "saved");
+        let result = create_doc_at_root(&root, "My Context Notes", "my-notes", None);
+        assert!(result.is_ok(), "create should succeed: {:?}", result);
+        let doc = result.unwrap();
+        assert_eq!(doc.id, "custom:my-notes");
+        assert_eq!(doc.title, "My Context Notes");
+        assert_eq!(doc.content, "# My Context Notes\n");
 
         let saved = std::fs::read_to_string(&target_path).unwrap();
         cleanup(&root);
-        assert_eq!(saved, "# custom content\n");
+        assert_eq!(saved, "# My Context Notes\n");
+    }
+
+    #[test]
+    fn create_doc_writes_empty_when_no_title() {
+        let root = temp_root("create-doc-no-title");
+        std::fs::create_dir_all(&root).expect("create root dir");
+
+        let result = create_doc_at_root(&root, "", "my-notes", None);
+        assert!(result.is_ok());
+        let doc = result.unwrap();
+        assert_eq!(doc.title, "");
+        assert_eq!(doc.content, "");
+
+        let saved = std::fs::read_to_string(root.join(custom_doc_rel_path("my-notes"))).unwrap();
+        cleanup(&root);
+        assert_eq!(saved, "");
     }
 
     #[test]
@@ -808,12 +835,47 @@ mod tests {
         let root = temp_root("create-existing");
         write_file(&root, "docs/context/existing.md", "# already here\n");
 
-        // resolve_doc_path should resolve, then save_doc_at_root checks exists
-        let result = save_doc_at_root(&root, "custom:existing", "# new\n");
+        let result = create_doc_at_root(&root, "Test", "existing", None);
         cleanup(&root);
-        assert!(result.is_ok()); // should save with backup since file exists
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("doc already exists"));
+    }
+
+    #[test]
+    fn create_doc_rejects_invalid_slug() {
+        let root = temp_root("create-bad-slug");
+        std::fs::create_dir_all(&root).expect("create root dir");
+
+        let result = create_doc_at_root(&root, "Test", "../../etc", None);
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid slug"));
+    }
+
+    #[test]
+    fn save_doc_rejects_missing_custom_doc() {
+        let root = temp_root("save-missing-custom");
+        std::fs::create_dir_all(&root).expect("create root dir");
+
+        let result = save_doc_at_root(&root, "custom:nonexistent", "# content\n");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("custom doc does not exist"));
+    }
+
+    #[test]
+    fn save_doc_saves_existing_custom_doc() {
+        let root = temp_root("save-existing-custom");
+        write_file(&root, "docs/context/my-notes.md", "# original\n");
+
+        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n");
+        assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
+
+        let saved = std::fs::read_to_string(root.join("docs/context/my-notes.md")).unwrap();
+        cleanup(&root);
+        assert_eq!(saved, "# modified\n");
     }
 
     #[test]
@@ -935,6 +997,77 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("invalid custom doc slug"));
+    }
+
+    // ── H1 title extraction tests ──
+
+    #[test]
+    fn extract_title_from_h1_line() {
+        assert_eq!(
+            extract_title_from_content("# My Context Notes\n\nSome more text"),
+            Some("My Context Notes".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_title_from_h1_with_trailing_whitespace() {
+        assert_eq!(
+            extract_title_from_content("#   Padded Title  \n"),
+            Some("Padded Title".to_string())
+        );
+    }
+
+    #[test]
+    fn extract_title_returns_none_for_empty_h1() {
+        assert_eq!(extract_title_from_content("# "), None);
+        assert_eq!(extract_title_from_content("#  "), None);
+    }
+
+    #[test]
+    fn extract_title_returns_none_for_no_h1() {
+        assert_eq!(extract_title_from_content("Just some text"), None);
+        assert_eq!(extract_title_from_content("## H2 heading\n"), None);
+    }
+
+    #[test]
+    fn extract_title_returns_none_for_empty_content() {
+        assert_eq!(extract_title_from_content(""), None);
+    }
+
+    #[test]
+    fn list_custom_docs_uses_h1_title() {
+        let root = temp_root("list-h1-title");
+        write_file(
+            &root,
+            "docs/context/my-notes.md",
+            "# User Chosen Title\n\nSome content\n",
+        );
+        write_file(&root, "docs/context/ref-data.md", "# Reference Data\n");
+
+        let custom = list_custom_docs(&root);
+        cleanup(&root);
+
+        let by_id: HashMap<&str, &str> = custom
+            .iter()
+            .map(|(id, _, title, _)| (id.as_str(), title.as_str()))
+            .collect();
+        assert_eq!(by_id.get("custom:my-notes"), Some(&"User Chosen Title"));
+        assert_eq!(by_id.get("custom:ref-data"), Some(&"Reference Data"));
+    }
+
+    #[test]
+    fn list_custom_docs_falls_back_to_slug_title() {
+        let root = temp_root("list-fallback");
+        write_file(&root, "docs/context/no-h1.md", "Just text, no H1\n");
+
+        let custom = list_custom_docs(&root);
+        cleanup(&root);
+
+        let by_id: HashMap<&str, &str> = custom
+            .iter()
+            .map(|(id, _, title, _)| (id.as_str(), title.as_str()))
+            .collect();
+        assert_eq!(by_id.get("custom:no-h1"), Some(&"No H1"));
     }
 
     // ── config template save tests ──

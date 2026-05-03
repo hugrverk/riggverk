@@ -81,10 +81,58 @@ export function DocsView({
           <span className="terminal-title">DOCS</span>
           <span className="terminal-host">curated + context workspace docs</span>
         </div>
-        <div className="docs-cockpit">
-          <div className="docs-command-strip">
-            <span className="docs-summary">0 docs</span>
+        <div className="docs-command-strip">
+          <span className="docs-summary">0 docs</span>
+          <button
+            className="btn btn-sm btn-primary"
+            onClick={() => onSetShowCreateDoc(!showCreateDoc)}
+            disabled={!workspaceValid}
+            aria-label="New context doc"
+          >
+            + new
+          </button>
+        </div>
+        {showCreateDoc && (
+          <div className="docs-create-form">
+            <label className="docs-create-label">
+              <span>Title</span>
+              <input
+                className="docs-create-input"
+                type="text"
+                placeholder="My Context Notes"
+                value={createDocTitle}
+                onChange={e => onSetCreateDocTitle(e.target.value)}
+                aria-label="New doc title"
+              />
+            </label>
+            <label className="docs-create-label">
+              <span>Slug</span>
+              <input
+                className="docs-create-input"
+                type="text"
+                placeholder="my-context-notes"
+                value={createDocSlug}
+                onChange={e => onSetCreateDocSlug(e.target.value)}
+                aria-label="New doc slug"
+              />
+            </label>
+            <div className="docs-create-actions">
+              <button
+                className="btn btn-primary btn-sm"
+                onClick={onCreateDoc}
+                disabled={createDocCreating || !createDocTitle.trim() || !createDocSlug.trim()}
+              >
+                {createDocCreating ? "creating..." : "create"}
+              </button>
+              <button className="btn btn-sm" onClick={() => { onSetShowCreateDoc(false); }}>cancel</button>
+              <span className="docs-create-hint">docs/context/</span>
+            </div>
+            {createDocError && (
+              <div className="docs-create-error">{createDocError}</div>
+            )}
           </div>
+        )}
+        <div className="docs-cockpit">
           <div className="docs-nav">
             <div className="docs-nav-empty">
               {workspaceValid ? "No workspace docs found" : "No valid workspace selected. Create or choose a workspace in Workspace."}

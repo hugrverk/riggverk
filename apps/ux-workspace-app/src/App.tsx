@@ -337,9 +337,13 @@ function App() {
     try {
       const result = await invoke<ActionResult>("save_doc", { id: activeDoc.id, content: docDraft });
       setDocSaveResult(result);
-      if (result.success && result.stdout !== "unchanged") {
-        const updated = await invoke<DocumentContent>("read_doc", { id: activeDoc.id });
-        setActiveDoc(updated);
+      if (result.success) {
+        if (result.stdout !== "unchanged") {
+          const updated = await invoke<DocumentContent>("read_doc", { id: activeDoc.id });
+          setActiveDoc(updated);
+          setDocDraft(updated.content);
+        }
+        setDocDirty(false);
       }
     } catch (e) {
       setDocSaveResult({
@@ -386,8 +390,13 @@ function App() {
         content: configDraft,
       });
       setConfigSaveResult(result);
-      if (result.success && result.stdout !== "unchanged") {
-        loadConfigTemplate(activeConfigTargetId);
+      if (result.success) {
+        if (result.stdout !== "unchanged") {
+          const reloaded = await invoke<DocumentContent>("read_config_template", { targetId: activeConfigTargetId });
+          setConfigTemplateContent(reloaded);
+          setConfigDraft(reloaded.content);
+        }
+        setConfigDirty(false);
       }
     } catch (e) {
       setConfigSaveResult({
@@ -400,7 +409,7 @@ function App() {
     } finally {
       setConfigSaving(false);
     }
-  }, [activeConfigTargetId, configDraft, loadConfigTemplate]);
+  }, [activeConfigTargetId, configDraft]);
 
   const onResetConfig = useCallback(() => {
     if (configTemplateContent) {

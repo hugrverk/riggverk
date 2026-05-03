@@ -143,7 +143,7 @@ export function ConfigsView({
                   edit
                 </button>
                 {configDirty && (
-                  <span className="docs-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                  <span className="configs-dirty-indicator" aria-label="Unsaved changes">modified</span>
                 )}
               </div>
 
@@ -152,7 +152,7 @@ export function ConfigsView({
                   <pre className="configs-code">{formatJson(activeConfigContent.content)}</pre>
                 ) : (
                   <textarea
-                    className="docs-textarea"
+                    className="configs-textarea"
                     value={configDraft}
                     onChange={e => onChangeConfigDraft(e.target.value)}
                     spellCheck={false}
@@ -162,7 +162,7 @@ export function ConfigsView({
               </div>
 
               {configMode === "edit" && (
-                <div className="docs-save-row">
+                <div className="configs-save-row">
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={onSaveConfig}
@@ -178,7 +178,7 @@ export function ConfigsView({
                     reset
                   </button>
                   {configSaveResult && (
-                    <span className={`docs-save-status ${configSaveResult.success ? "docs-save-ok" : "docs-save-fail"}`}>
+                    <span className={`configs-save-status ${configSaveResult.success ? "configs-save-ok" : "configs-save-fail"}`}>
                       {configSaveResult.success
                         ? configSaveResult.stdout
                         : configSaveResult.stderr || "save failed"}
