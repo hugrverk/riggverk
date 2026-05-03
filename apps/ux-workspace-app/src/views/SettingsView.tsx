@@ -11,6 +11,7 @@ interface SettingsViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
+  settingsDirty: boolean;
   onSetAppearance: (appearance: AppSettings["appearance"]) => void;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
@@ -24,6 +25,7 @@ export function SettingsView({
   agentTargets,
   targetProfiles,
   activeProfileId,
+  settingsDirty,
   onSetAppearance,
   onToggleTarget,
   onApplyProfile,
@@ -34,6 +36,7 @@ export function SettingsView({
     <section className="terminal terminal-view">
       <div className="terminal-topline">
         <span className="terminal-title">SETTINGS</span>
+        {settingsDirty && <span className="editor-dirty">modified — save to persist</span>}
       </div>
       {appSettings && (
         <div className="settings-form">
@@ -42,6 +45,7 @@ export function SettingsView({
             <div className="settings-options">
               {(["dark", "light", "system"] as const).map(m => (
                 <button key={m} className={`btn btn-sm ${appSettings.appearance === m ? "btn-active" : ""}`}
+                  aria-pressed={appSettings.appearance === m}
                   onClick={() => onSetAppearance(m)}>{m}</button>
               ))}
             </div>
@@ -59,6 +63,7 @@ export function SettingsView({
                   <div key={p.id} className="settings-profile-row">
                     <button
                       className={`btn btn-sm settings-profile-button ${activeProfileId === p.id ? "settings-profile-active" : ""}`}
+                      aria-pressed={activeProfileId === p.id}
                       onClick={() => onApplyProfile(p.id)}
                     >
                       {p.label}
@@ -78,31 +83,43 @@ export function SettingsView({
           )}
 
           <div className="settings-group settings-group-top">
-            <span className="cell-label">AGENT RULE TARGETS</span>
+            <span className="cell-label">RULE TARGETS</span>
             <div className="settings-target-list">
-              {agentTargets.filter(t => t.kind === "rules").map(t => (
-                <label key={t.id} className="settings-target-row" onClick={() => onToggleTarget(t.id)}>
-                  <span className={`install-checkbox ${appSettings.enabled_target_ids.includes(t.id) ? "install-checkbox-on" : ""}`}>
-                    {appSettings.enabled_target_ids.includes(t.id) ? "x" : ""}
-                  </span>
-                  <span className="cell-value">{t.label}</span>
-                  <span className="settings-target-path">{t.target_rel}</span>
-                </label>
-              ))}
+              {agentTargets.filter(t => t.kind === "rules").map(t => {
+                const enabled = appSettings.enabled_target_ids.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
+                    onClick={() => onToggleTarget(t.id)}
+                    aria-pressed={enabled}
+                  >
+                    <span className={`settings-target-dot ${enabled ? "settings-target-dot-on" : ""}`} />
+                    <span className="cell-value">{t.label}</span>
+                    <span className="settings-target-path">{t.target_rel}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="settings-group settings-group-top">
             <span className="cell-label">CONFIG TARGETS</span>
             <div className="settings-target-list">
-              {agentTargets.filter(t => t.kind === "config").map(t => (
-                <label key={t.id} className="settings-target-row" onClick={() => onToggleTarget(t.id)}>
-                  <span className={`install-checkbox ${appSettings.enabled_target_ids.includes(t.id) ? "install-checkbox-on" : ""}`}>
-                    {appSettings.enabled_target_ids.includes(t.id) ? "x" : ""}
-                  </span>
-                  <span className="cell-value">{t.label}</span>
-                  <span className="settings-target-path">{t.target_rel}</span>
-                </label>
-              ))}
+              {agentTargets.filter(t => t.kind === "config").map(t => {
+                const enabled = appSettings.enabled_target_ids.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
+                    onClick={() => onToggleTarget(t.id)}
+                    aria-pressed={enabled}
+                  >
+                    <span className={`settings-target-dot ${enabled ? "settings-target-dot-on" : ""}`} />
+                    <span className="cell-value">{t.label}</span>
+                    <span className="settings-target-path">{t.target_rel}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
           <div className="settings-actions">

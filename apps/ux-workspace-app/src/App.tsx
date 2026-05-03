@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
@@ -180,6 +180,12 @@ function App() {
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
   const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
+  const savedSettingsRef = useRef<string | null>(null);
+
+  const settingsDirty = useMemo(() => {
+    if (!appSettings || savedSettingsRef.current === null) return false;
+    return JSON.stringify(appSettings) !== savedSettingsRef.current;
+  }, [appSettings]);
 
   // create workspace plan state
   const [createPlan, setCreatePlan] = useState<CreateWorkspacePlan | null>(null);
@@ -609,6 +615,7 @@ function App() {
         invoke<TargetProfileMeta[]>("get_target_profiles"),
       ]);
       setAppSettings(s);
+      savedSettingsRef.current = JSON.stringify(s);
       setAgentTargets(targets);
       setTargetProfiles(profiles);
       document.documentElement.setAttribute("data-theme", s.appearance);
@@ -623,6 +630,7 @@ function App() {
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
       setAppSettings(s);
+      savedSettingsRef.current = JSON.stringify(s);
       document.documentElement.setAttribute("data-theme", s.appearance);
       setSettingsMsg({ ok: true, text: "settings saved" });
       fetchStatus();
@@ -637,6 +645,7 @@ function App() {
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: defaults });
       setAppSettings(s);
+      savedSettingsRef.current = JSON.stringify(s);
       document.documentElement.setAttribute("data-theme", s.appearance);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
       fetchStatus();
@@ -673,7 +682,8 @@ function App() {
       const isDocsDirty = view === "docs" && docDirty;
       const isRulesDirty = view === "rules" && agentTemplateDirty;
       const isConfigsDirty = view === "configs" && configDirty;
-      if ((isDocsDirty || isRulesDirty || isConfigsDirty) && !confirmLeaveDirtyEditor()) return;
+      const isSettingsDirty = view === "settings" && settingsDirty;
+      if ((isDocsDirty || isRulesDirty || isConfigsDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
@@ -682,9 +692,9 @@ function App() {
     else if (v === "docs") loadDocs();
     else if (v === "configs") { fetchStatus(); }
     else if (v === "health") { loadBackups(); }
-    else if (v === "settings") { loadSettings(); }
+    else if (v === "settings") { if (!settingsDirty) loadSettings(); }
     else if (v === "rules") { fetchStatus(); loadAgentTemplate(); }
-  }, [view, docDirty, agentTemplateDirty, configDirty, loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, docDirty, agentTemplateDirty, configDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -813,7 +823,7 @@ function App() {
           <button className={`tab ${view === "configs" ? "tab-active" : ""}${configDirty ? " tab-dirty" : ""}`} onClick={() => switchView("configs")} aria-label={configDirty ? "Configs, unsaved changes" : "Configs"}>configs{configDirty && " *"}</button>
           <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
           <button className={`tab ${view === "docs" ? "tab-active" : ""}${docDirty ? " tab-dirty" : ""}`} onClick={() => switchView("docs")} aria-label={docDirty ? "Docs, unsaved changes" : "Docs"}>docs{docDirty && " *"}</button>
-          <button className={`tab ${view === "settings" ? "tab-active" : ""}`} onClick={() => switchView("settings")}>settings</button>
+          <button className={`tab ${view === "settings" ? "tab-active" : ""}${settingsDirty ? " tab-dirty" : ""}`} onClick={() => switchView("settings")} aria-label={settingsDirty ? "Settings, unsaved changes" : "Settings"}>settings{settingsDirty && " *"}</button>
         </nav>
       </header>
 
@@ -979,6 +989,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
             onSetAppearance={setAppearance}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}

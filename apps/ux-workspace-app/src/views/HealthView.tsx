@@ -49,20 +49,20 @@ export function HealthView({
 }: HealthViewProps) {
   const diag = workspaceDiagnostics;
   return (
-    <section className="configs-frame">
-      <header className="configs-frame-header">
-        <div className="configs-frame-title">
+    <section className="health-frame">
+      <header className="health-frame-header">
+        <div className="health-frame-title">
           <span className="terminal-title">HEALTH</span>
           <span className="cell-value cell-value-muted">release-check</span>
         </div>
-        <div className="configs-frame-actions">
-          <span className={`configs-frame-status ${healthRunning ? "sync-text" : healthLog ? (healthLog.success ? "sync-text sync-text-ok" : "sync-text sync-text-fail") : "sync-text"}`}>
+        <div className="health-frame-actions">
+          <span className={`health-frame-status ${healthRunning ? "sync-text" : healthLog ? (healthLog.success ? "sync-text sync-text-ok" : "sync-text sync-text-fail") : "sync-text"}`}>
             {healthRunning ? "running" : healthLog ? (healthLog.success ? "pass" : "fail") : "ready"}
           </span>
           <button className="btn btn-sm btn-primary" disabled={healthRunning !== null || !canRunHealthCheck} onClick={onRunHealthCheck}>run check</button>
         </div>
       </header>
-      <div className="configs-frame-body health-frame-body">
+      <div className="health-frame-body">
         <main className="health-output-pane">
           <div className="terminal-grid" aria-hidden="true" />
           <TerminalState
@@ -77,7 +77,7 @@ export function HealthView({
           <div className="console-section-label">checks</div>
           <div className="health-check-list">
             {!diag ? null : !diag.valid ? (
-              <span className="workspace-invalid">No valid workspace selected. Use the Workspace tab.</span>
+              <span className="workspace-invalid">No valid workspace selected. Use Workspace.</span>
             ) : !canRunHealthCheck ? (
               <span className="workspace-invalid">Release check is available only in an app development checkout.</span>
             ) : null}
@@ -90,7 +90,8 @@ export function HealthView({
           </div>
 
           <div className="backup-history">
-            <div className="console-section-label">backups</div>
+            <div className="console-section-label">backups — metadata only</div>
+            <div className="backup-note">no restore action</div>
             <div className="backup-history-actions">
               <button className="btn btn-sm" onClick={onOpenBackupsFolder}>open backups</button>
               <button className="btn btn-sm" onClick={onRefreshBackups}>refresh</button>
@@ -99,17 +100,18 @@ export function HealthView({
               <div className="backup-empty">no backups found</div>
             ) : (
               backups.map((run) => (
-                <div
+                <button
                   key={run.id}
                   className={`backup-run${selectedBackupId === run.id ? " backup-run-selected" : ""}`}
                   onClick={() => onSelectBackup(run.id)}
+                  aria-pressed={selectedBackupId === run.id}
                 >
                   <div className="backup-run-meta">
                     <span>{run.timestamp}</span>
                     <span>{run.file_count} {run.file_count === 1 ? "file" : "files"}</span>
                   </div>
                   <div className="backup-run-targets">{run.targets.join(", ")}</div>
-                </div>
+                </button>
               ))
             )}
 

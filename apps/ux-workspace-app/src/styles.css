@@ -1527,7 +1527,7 @@ html, body, #root {
 .settings-target-list {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 2px;
   flex: 1;
 }
 
@@ -1535,9 +1535,57 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 4px 0;
+  padding: 4px 6px;
   cursor: pointer;
   font-size: 13px;
+  font-family: var(--font);
+  color: var(--text);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  text-align: left;
+  width: 100%;
+}
+
+.settings-target-row:hover {
+  background: var(--bg-inset);
+}
+
+.settings-target-row:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.5);
+  outline-offset: -1px;
+}
+
+.settings-target-on {
+  background: var(--accent-dim);
+  border-color: rgba(110, 168, 254, 0.15);
+}
+
+.settings-target-dot {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  border: 1px solid var(--border-strong);
+  border-radius: 2px;
+  flex-shrink: 0;
+  position: relative;
+}
+
+.settings-target-dot-on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.settings-target-dot-on::after {
+  content: "";
+  position: absolute;
+  top: 1px;
+  left: 3px;
+  width: 2px;
+  height: 5px;
+  border: solid var(--bg);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 /* ---- target profiles ---- */
@@ -1713,8 +1761,60 @@ html, body, #root {
   min-height: 0;
 }
 
+/* ---- health frame ---- */
+
+.health-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.health-frame-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.health-frame-title {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.health-frame-title .terminal-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.health-frame-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.health-frame-status {
+  font-size: 11px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-right: 8px;
+}
+
 .health-frame-body {
+  display: grid;
   grid-template-columns: minmax(0, 1fr) 280px;
+  flex: 1;
+  min-height: 0;
 }
 
 .health-output-pane {
@@ -1863,17 +1963,37 @@ html, body, #root {
   margin-bottom: 12px;
 }
 
+.backup-note {
+  color: var(--text-muted);
+  font-size: 10px;
+  opacity: 0.5;
+  margin-top: 4px;
+}
+
 .backup-run {
   display: flex;
   flex-direction: column;
   gap: 2px;
-  padding: 6px 0;
+  padding: 6px 4px;
+  border: none;
   border-bottom: 1px solid var(--border);
+  border-radius: 0;
   cursor: pointer;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: inherit;
+  text-align: left;
+  width: 100%;
 }
 
 .backup-run:hover {
   background: var(--accent-dim);
+}
+
+.backup-run:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.5);
+  outline-offset: -1px;
 }
 
 .backup-run:last-child {
