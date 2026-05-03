@@ -33,6 +33,27 @@ function App() {
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const activeDocIdRef = useRef<string | null>(null);
+
+  // doc edit state
+  const [docDraft, setDocDraft] = useState("");
+  const [docDirty, setDocDirty] = useState(false);
+  const [docSaving, setDocSaving] = useState(false);
+  const [docSaveResult, setDocSaveResult] = useState<ActionResult | null>(null);
+  const [docMode, setDocMode] = useState<"preview" | "edit">("preview");
+
+  useEffect(() => {
+    if (activeDoc) {
+      setDocDraft(activeDoc.content);
+      setDocDirty(false);
+      setDocSaveResult(null);
+    } else {
+      setDocDraft("");
+      setDocDirty(false);
+      setDocSaveResult(null);
+      setDocMode("preview");
+    }
+  }, [activeDoc?.id]);
+
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
 
@@ -294,6 +315,43 @@ function App() {
   const openDocEditor = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
   }, []);
+
+  const onSaveDoc = useCallback(async () => {
+    if (!activeDoc) return;
+    setDocSaving(true);
+    setDocSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_doc", { id: activeDoc.id, content: docDraft });
+      setDocSaveResult(result);
+      if (result.success && result.stdout !== "unchanged") {
+        const updated = await invoke<DocumentContent>("read_doc", { id: activeDoc.id });
+        setActiveDoc(updated);
+      }
+    } catch (e) {
+      setDocSaveResult({
+        success: false,
+        action: "save_doc",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+    } finally {
+      setDocSaving(false);
+    }
+  }, [activeDoc, docDraft]);
+
+  const onResetDoc = useCallback(() => {
+    if (activeDoc) {
+      setDocDraft(activeDoc.content);
+      setDocDirty(false);
+      setDocSaveResult(null);
+    }
+  }, [activeDoc]);
+
+  const onChangeDocDraft = useCallback((value: string) => {
+    setDocDraft(value);
+    setDocDirty(value !== (activeDoc?.content ?? ""));
+  }, [activeDoc]);
 
   const loadAgentTemplate = useCallback(async () => {
     try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
@@ -660,6 +718,15 @@ function App() {
             workspaceValid={workspaceValid}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}
+            docDraft={docDraft}
+            docDirty={docDirty}
+            docSaving={docSaving}
+            docSaveResult={docSaveResult}
+            docMode={docMode}
+            onSetDocMode={setDocMode}
+            onChangeDocDraft={onChangeDocDraft}
+            onSaveDoc={onSaveDoc}
+            onResetDoc={onResetDoc}
           />
         )}
 

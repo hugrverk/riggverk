@@ -2,13 +2,13 @@ use serde::Serialize;
 use std::path::Path;
 use std::process::Command;
 
-#[derive(Serialize)]
+#[derive(Serialize, Debug)]
 pub struct ActionResult {
-    success: bool,
-    action: String,
-    stdout: String,
-    stderr: String,
-    exit_code: Option<i32>,
+    pub(crate) success: bool,
+    pub(crate) action: String,
+    pub(crate) stdout: String,
+    pub(crate) stderr: String,
+    pub(crate) exit_code: Option<i32>,
 }
 
 impl ActionResult {

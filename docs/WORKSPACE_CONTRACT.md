@@ -34,6 +34,8 @@ All markers must be present for a workspace to pass validation. A folder missing
 
 All workspace contents (docs, skills, templates, scripts) are user-owned and user-editable. The app reads and displays these files; it does not hide or encrypt them. Users can version their workspace with git like any normal directory.
 
+The app supports editing curated workspace docs through an allowlisted doc registry. Only known doc ids can be written, and only within the validated workspace root. Existing content is backed up before overwrite when changed.
+
 ## Transition state
 
 This repository currently contains both:

@@ -1,5 +1,6 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent_targets;
 
@@ -177,13 +178,119 @@ pub fn open_doc(id: String) -> Result<ActionResult, String> {
     }
 }
 
+const MAX_DOC_SIZE: usize = 512 * 1024;
+
+fn doc_backup_path(doc_id: &str, target_path: &Path) -> Result<PathBuf, String> {
+    let root = super::backups::backup_root()?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "system clock error".to_string())?
+        .as_nanos();
+    let safe_id = doc_id.replace(['/', '\\'], "_");
+    let file_name = target_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "invalid target file name".to_string())?;
+    let backup_dir = root.join("docs").join(format!("{}-{}", safe_id, timestamp));
+    std::fs::create_dir_all(&backup_dir).map_err(|e| format!("create backup dir error: {}", e))?;
+    Ok(backup_dir.join(file_name))
+}
+
+fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult, String> {
+    if content.len() > MAX_DOC_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
+
+    let entry = curated_doc_registry()
+        .iter()
+        .find(|e| e.id == id)
+        .ok_or_else(|| format!("unknown doc: {}", id))?;
+
+    if entry.rel_path.contains("..") || Path::new(entry.rel_path).is_absolute() {
+        return Err("invalid registry path".to_string());
+    }
+
+    let target_path = root.join(entry.rel_path);
+
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize workspace: {}", e))?;
+    let canonical_target = if target_path.exists() {
+        target_path
+            .canonicalize()
+            .map_err(|e| format!("cannot canonicalize target: {}", e))?
+    } else {
+        let parent = target_path.parent().ok_or("invalid target path")?;
+        let file_name = target_path.file_name().ok_or("invalid target path")?;
+        let canonical_parent = parent
+            .canonicalize()
+            .map_err(|e| format!("cannot canonicalize parent: {}", e))?;
+        canonical_parent.join(file_name)
+    };
+
+    if !canonical_target.starts_with(&canonical_root) {
+        return Err("target path is outside workspace".to_string());
+    }
+
+    if let Some(parent) = target_path.parent() {
+        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
+    }
+
+    if target_path.exists() {
+        let existing =
+            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+        if existing == content {
+            return Ok(ActionResult::new(
+                true,
+                "save_doc",
+                "unchanged".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        let backup_path = doc_backup_path(id, &target_path)?;
+        std::fs::write(&backup_path, &existing)
+            .map_err(|e| format!("backup write error: {}", e))?;
+
+        std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+
+        return Ok(ActionResult::new(
+            true,
+            "save_doc",
+            "saved with backup".to_string(),
+            String::new(),
+            Some(0),
+        ));
+    }
+
+    std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(ActionResult::new(
+        true,
+        "save_doc",
+        "saved".to_string(),
+        String::new(),
+        Some(0),
+    ))
+}
+
+#[tauri::command]
+pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
+    let root = workspace_root()?;
+    save_doc_at_root(&root, &id, &content)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
+    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    static BACKUP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -277,6 +384,119 @@ mod tests {
         assert_eq!(by_id.get("README.md"), Some(&"Start"));
         assert_eq!(by_id.get("docs/WORKFLOW.md"), Some(&"Private / Operator"));
         assert_eq!(by_id.get("docs/INSTALL.md"), Some(&"Reference"));
+    }
+
+    #[test]
+    fn save_doc_unknown_id_rejected() {
+        let root = temp_root("save-unknown");
+        write_file(&root, "README.md", "# readme\n");
+
+        let result = save_doc_at_root(&root, "docs/nonexistent.md", "content");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        let err = result.unwrap_err();
+        assert!(
+            err.contains("unknown doc"),
+            "expected unknown doc error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn save_doc_known_id_resolves_and_writes() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("save-known");
+        let backup_root = temp_root("save-known-backup");
+        write_file(&root, "README.md", "# old\n");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root(&root, "README.md", "# new\n");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok(), "save should succeed: {:?}", result);
+        let ar = result.unwrap();
+        assert!(ar.success);
+        assert_eq!(ar.stdout, "saved with backup");
+
+        let saved = std::fs::read_to_string(root.join("README.md")).unwrap();
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+
+        assert_eq!(saved, "# new\n");
+    }
+
+    #[test]
+    fn save_doc_path_traversal_id_rejected() {
+        let root = temp_root("save-traversal");
+        write_file(&root, "README.md", "# readme\n");
+
+        // This id is not in registry, so it should be rejected before any path check
+        let result = save_doc_at_root(&root, "../../../etc/passwd", "bad");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown doc"));
+    }
+
+    #[test]
+    fn save_doc_unchanged_content_does_not_write() {
+        let root = temp_root("save-unchanged");
+        write_file(&root, "README.md", "# same\n");
+
+        let result = save_doc_at_root(&root, "README.md", "# same\n");
+
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "unchanged");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn save_doc_creates_backup_when_changed() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("save-backup");
+        let backup_root = temp_root("save-backup-backup");
+        write_file(&root, "README.md", "# original\n");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let result = save_doc_at_root(&root, "README.md", "# modified\n");
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+
+        // Verify backup was created
+        let docs_backup_dir = backup_root.join("docs");
+        let backup_entries: Vec<_> = std::fs::read_dir(&docs_backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.starts_with("README.md-")
+            })
+            .collect();
+
+        assert!(!backup_entries.is_empty(), "backup should be created");
+        let backup_file = backup_entries[0].path().join("README.md");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+
+        assert_eq!(backup_content, "# original\n");
+    }
+
+    #[test]
+    fn save_doc_target_remains_under_workspace() {
+        let root = temp_root("save-under-root");
+        write_file(&root, "README.md", "# readme\n");
+
+        let result = save_doc_at_root(&root, "README.md", "# updated\n");
+
+        assert!(result.is_ok());
+        cleanup(&root);
     }
 
     #[test]

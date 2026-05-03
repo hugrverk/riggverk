@@ -9,7 +9,7 @@ use commands::{
     get_workspace_diagnostics, install_skills, list_backups, list_docs, list_skills,
     open_agent_template, open_backups_folder, open_config_template, open_doc,
     open_install_skills_script, open_skill, plan_create_workspace, read_agent_template,
-    read_config_template, read_doc, read_skill, run_action, update_settings,
+    read_config_template, read_doc, read_skill, run_action, save_doc, update_settings,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -28,6 +28,7 @@ pub fn run() {
             read_skill,
             list_docs,
             read_doc,
+            save_doc,
             open_doc,
             read_agent_template,
             open_agent_template,

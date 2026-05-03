@@ -109,6 +109,16 @@ Settings are validated before save: `appearance` is enum-constrained to `dark`/`
 
 The workspace creation dry-run plan (`plan_create_workspace`) is a read-only evaluation that checks whether the configured workspace path is safe and viable for initialization. It does not create directories, copy files, execute scripts, or write any user data. When the plan reports a safe status (`missing_directory` or `empty_existing_directory`), the `create_workspace_from_defaults` command copies only allowlisted bundled default files into the target. This command never overwrites existing files, never runs scripts, and never writes outside the target directory.
 
+### Docs security
+
+- `save_doc` is allowlisted by curated doc id. The backend resolves the file path exclusively through the internal curated doc registry.
+- The frontend never supplies file paths for doc writes.
+- Unknown doc ids are rejected before any filesystem access.
+- Content is capped at 512 KB.
+- The resolved target path is verified to remain under the validated workspace root.
+- Existing content is backed up before overwrite only when the new content differs.
+- No arbitrary file browsing, creation, or restoration is supported.
+
 ## Security model
 
 - Frontend requests only named actions. No arbitrary commands, paths, or arguments pass from frontend to backend.
@@ -247,8 +257,8 @@ Quiet mode (`--quiet`) suppresses child step output on success for compact app d
 Apply actions for rules and OpenCode config print backup paths when an existing diverged target is overwritten. The app displays that script output directly.
 
 ### Docs
-- Curated workspace documentation browser grouped by section (Start, Reference, Operating Model, Private / Operator, Development).
-- Two-pane cockpit layout: left nav with sectioned doc buttons, right Markdown preview pane.
+- Curated workspace documentation browser and editor grouped by section (Start, Reference, Operating Model, Private / Operator, Development).
+- Two-pane cockpit layout: left nav with sectioned doc buttons, right Markdown preview or edit pane.
 - Compact command strip with text search (filters by title, id, path, section) and doc count summary.
 - Active doc persists across view switches when the doc remains available.
 - Doc rows are real `<button>` elements with visible focus and active state indicators.
@@ -256,7 +266,11 @@ Apply actions for rules and OpenCode config print backup paths when an existing 
 - Docs are read from the validated active workspace. Missing optional docs are skipped.
 - `list_docs` returns curated doc summaries with section metadata.
 - `read_doc` renders the selected Markdown file.
+- `save_doc` writes the selected allowlisted doc only. Unknown doc ids are rejected. No arbitrary file paths are accepted.
+- Existing content is backed up before overwrite when the content has changed. Unchanged content does not write.
 - `open_doc` opens the selected file in the system editor.
+- Preview/edit mode toggle: preview renders Markdown; edit shows a plain textarea with save and reset controls.
+- Dirty state indicator shows when the draft differs from the saved file.
 - The Global Agent Rules template is rendered inline in the Rules view.
 - Templates and configs remain in their own views.
 

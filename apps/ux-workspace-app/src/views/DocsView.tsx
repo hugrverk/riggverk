@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Markdown } from "../components/Markdown";
+import type { ActionResult } from "../components/TerminalOutput";
 import type { DocumentContent, DocSummary } from "../types";
 
 interface DocGroup {
@@ -26,9 +27,33 @@ interface DocsViewProps {
   workspaceValid: boolean;
   onSelectDoc: (id: string) => void;
   onOpenDoc: (id: string) => void;
+  docDraft: string;
+  docDirty: boolean;
+  docSaving: boolean;
+  docSaveResult: ActionResult | null;
+  docMode: "preview" | "edit";
+  onSetDocMode: (mode: "preview" | "edit") => void;
+  onChangeDocDraft: (value: string) => void;
+  onSaveDoc: () => void;
+  onResetDoc: () => void;
 }
 
-export function DocsView({ docs, activeDoc, workspaceValid, onSelectDoc, onOpenDoc }: DocsViewProps) {
+export function DocsView({
+  docs,
+  activeDoc,
+  workspaceValid,
+  onSelectDoc,
+  onOpenDoc,
+  docDraft,
+  docDirty,
+  docSaving,
+  docSaveResult,
+  docMode,
+  onSetDocMode,
+  onChangeDocDraft,
+  onSaveDoc,
+  onResetDoc,
+}: DocsViewProps) {
   const [search, setSearch] = useState("");
 
   if (docs.length === 0) {
@@ -114,17 +139,80 @@ export function DocsView({ docs, activeDoc, workspaceValid, onSelectDoc, onOpenD
           )}
         </div>
 
-        <div className="docs-preview">
+        <div className="docs-editor">
           {activeDoc ? (
             <>
-              <div className="docs-preview-header">
-                <div className="docs-preview-header-left">
+              <div className="docs-editor-header">
+                <div className="docs-editor-header-left">
                   <span className="docs-preview-title">{activeDoc.title}</span>
                   <span className="docs-preview-meta">{activeDoc.section} &middot; {activeDoc.path}</span>
                 </div>
-                <button className="btn btn-sm" onClick={() => onOpenDoc(activeDoc.id)}>open</button>
+                <div className="docs-editor-header-right">
+                  {docDirty && (
+                    <span className="docs-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                  )}
+                  <button className="btn btn-sm" onClick={() => onOpenDoc(activeDoc.id)}>open</button>
+                </div>
               </div>
-              <div className="docs-preview-body"><Markdown content={activeDoc.content} /></div>
+
+              <div className="docs-mode-tabs" role="tablist" aria-label="Doc view mode">
+                <button
+                  className={`btn btn-sm ${docMode === "preview" ? "btn-active" : ""}`}
+                  onClick={() => onSetDocMode("preview")}
+                  role="tab"
+                  aria-selected={docMode === "preview"}
+                >
+                  preview
+                </button>
+                <button
+                  className={`btn btn-sm ${docMode === "edit" ? "btn-active" : ""}`}
+                  onClick={() => onSetDocMode("edit")}
+                  role="tab"
+                  aria-selected={docMode === "edit"}
+                >
+                  edit
+                </button>
+              </div>
+
+              <div className="docs-editor-body">
+                {docMode === "preview" ? (
+                  <div className="docs-preview-body"><Markdown content={activeDoc.content} /></div>
+                ) : (
+                  <textarea
+                    className="docs-textarea"
+                    value={docDraft}
+                    onChange={e => onChangeDocDraft(e.target.value)}
+                    spellCheck={false}
+                    aria-label="Edit document"
+                  />
+                )}
+              </div>
+
+              {docMode === "edit" && (
+                <div className="docs-save-row">
+                  <button
+                    className="btn btn-primary btn-sm"
+                    onClick={onSaveDoc}
+                    disabled={docSaving || !docDirty}
+                  >
+                    {docSaving ? "saving..." : "save"}
+                  </button>
+                  <button
+                    className="btn btn-sm"
+                    onClick={onResetDoc}
+                    disabled={docSaving || !docDirty}
+                  >
+                    reset
+                  </button>
+                  {docSaveResult && (
+                    <span className={`docs-save-status ${docSaveResult.success ? "docs-save-ok" : "docs-save-fail"}`}>
+                      {docSaveResult.success
+                        ? docSaveResult.stdout
+                        : docSaveResult.stderr || "save failed"}
+                    </span>
+                  )}
+                </div>
+              )}
             </>
           ) : (
             <div className="docs-preview-empty">Select a doc to preview</div>

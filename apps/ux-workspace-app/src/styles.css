@@ -1104,6 +1104,102 @@ html, body, #root {
   padding: 12px 18px;
 }
 
+/* ---- docs editor (edit mode) ---- */
+
+.docs-editor {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  flex: 1;
+}
+
+.docs-editor-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.docs-editor-header-left {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  flex: 1;
+  min-width: 0;
+}
+
+.docs-editor-header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.docs-dirty-indicator {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dirty);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.docs-mode-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.docs-editor-body {
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.docs-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: var(--bg-inset);
+  border: none;
+  border-radius: 0;
+  padding: 12px 18px;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  resize: none;
+  outline: none;
+}
+
+.docs-textarea:focus {
+  box-shadow: inset 0 0 0 1px rgba(110, 168, 254, 0.35);
+}
+
+.docs-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.docs-save-status {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.docs-save-ok { color: var(--accent); }
+.docs-save-fail { color: var(--fail); }
+
 /* ---- markdown ---- */
 
 .markdown-body {
