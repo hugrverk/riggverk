@@ -745,9 +745,11 @@ function App() {
   }, [fetchStatus, loadBackups, workspaceDiagnostics]);
 
   const handleLeftAction = useCallback(async (action: string) => {
+    const dirtyBefore = agentTemplateDirty;
+    if (dirtyBefore && !confirmDiscardDirtyEditor()) return;
     setView("rules");
     await runAction(action);
-  }, [runAction]);
+  }, [runAction, agentTemplateDirty]);
 
   const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
   const enabledRuleSet = new Set(status?.enabled_rule_target_ids ?? []);
