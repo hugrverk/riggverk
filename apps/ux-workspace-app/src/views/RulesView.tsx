@@ -53,21 +53,21 @@ export function RulesView({
 
   return (
     <div className="console-layout">
-      <main className="console-main" style={{ flexDirection: "column" }}>
-        <div className="doc-viewer-header" style={{ flexShrink: 0 }}>
-          <span className="cell-value">{agentTemplate?.path ?? "templates/global-agent-rules.md"}</span>
+      <main className="console-main rules-main">
+        <div className="rules-template-header">
+          <span className="rules-template-path">{agentTemplate?.path ?? "templates/global-agent-rules.md"}</span>
           <button className="btn btn-sm" onClick={onOpenTemplate}>open</button>
         </div>
-        <div className="doc-viewer-body" style={{ flex: 1 }}>
-          {agentTemplate ? (
+        {agentTemplate ? (
+          <div className="rules-template-body">
             <Markdown content={agentTemplate.content} />
-          ) : (
-            <div className="log-empty" style={{ padding: "2rem" }}>
-              <span className="log-prompt">$</span> no template loaded
-            </div>
-          )}
-        </div>
-        <section className="panel log-panel" style={{ flex: "0 0 auto", maxHeight: "35%", borderTop: "1px solid var(--border)" }}>
+          </div>
+        ) : (
+          <div className="rules-template-empty">
+            <span className="log-prompt">$</span> {status ? "no template loaded" : "no valid workspace"}
+          </div>
+        )}
+        <section className="panel log-panel rules-terminal">
           <div className="terminal-grid" aria-hidden="true" />
           <TerminalState
             runningLabel={running}
@@ -79,8 +79,8 @@ export function RulesView({
         </section>
       </main>
 
-      <aside className="console-side">
-        <section className="console-section">
+      <aside className="console-side rules-side">
+        <section className="console-section rules-status">
           <div className="console-section-label">status</div>
           <div className="console-status-list">
             <div className="console-status-row">
@@ -106,7 +106,7 @@ export function RulesView({
           </div>
         </section>
 
-        <section className="console-section">
+        <section className="console-section rules-actions">
           <div className="console-section-label">actions</div>
           <div className="console-actions">
             <div className="console-action-group">
@@ -130,7 +130,7 @@ export function RulesView({
           </div>
         </section>
 
-        <section className="console-section console-section-targets">
+        <section className="console-section console-section-targets rules-targets">
           <div className="console-section-label">rules enabled {rsc.total}/{ruleTargets.length}</div>
           <div className="targets-body">
             {ruleTargets.map(t => {
