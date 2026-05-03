@@ -11,8 +11,8 @@ mod workspace;
 pub use actions::run_action;
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use content::{
-    list_docs, open_agent_template, open_doc, open_opencode_config, read_agent_template, read_doc,
-    read_opencode_config,
+    list_docs, open_agent_template, open_config_template, open_doc, open_opencode_config,
+    read_agent_template, read_config_template, read_doc, read_opencode_config,
 };
 pub use defaults::get_default_workspace_summary;
 pub use settings_commands::{

@@ -2,7 +2,7 @@ export interface StatusData {
   repo_path: string; git_available: boolean; branch: string; dirty: boolean; latest_commit: string;
   rules_codex: string; rules_opencode: string; rules_auggie: string;
   rules_claude: string; rules_gemini: string;
-  opencode_config: string; host_name: string;
+  opencode_config: string; config_statuses: Record<string, string>; host_name: string;
   enabled_rule_target_ids: string[];
   enabled_config_target_ids: string[];
   enabled_target_ids: string[];

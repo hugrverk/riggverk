@@ -34,7 +34,7 @@ function App() {
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
-  const [opencodeConfig, setOpencodeConfig] = useState<DocumentContent | null>(null);
+  const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
 
   // configs view state
   const [configLog, setConfigLog] = useState<ActionResult | null>(null);
@@ -225,8 +225,8 @@ function App() {
     try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
   }, []);
 
-  const loadOpencodeConfig = useCallback(async () => {
-    try { setOpencodeConfig(await invoke<DocumentContent>("read_opencode_config")); } catch (e) { setError(`Config: ${e}`); }
+  const loadConfigTemplate = useCallback(async (targetId: string) => {
+    try { setConfigTemplateContent(await invoke<DocumentContent>("read_config_template", { targetId })); } catch (e) { setError(`Config: ${e}`); }
   }, []);
 
   const runInstall = useCallback(async (dry: boolean) => {
@@ -300,7 +300,7 @@ function App() {
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); }, [loadSettings, loadWorkspaceDiagnostics]);
+  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }, [loadSettings, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary]);
 
   const saveSettings = useCallback(async () => {
     if (!appSettings) return;
@@ -358,11 +358,11 @@ function App() {
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
     else if (v === "skills") loadSkills();
     else if (v === "docs") loadDocs();
-    else if (v === "configs") { loadOpencodeConfig(); fetchStatus(); }
+    else if (v === "configs") { loadConfigTemplate(activeConfigTargetId); fetchStatus(); }
     else if (v === "health") { loadBackups(); }
     else if (v === "settings") { loadSettings(); }
     else if (v === "agent-rules") loadAgentTemplate();
-  }, [loadSkills, loadDocs, loadAgentTemplate, loadOpencodeConfig, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [loadSkills, loadDocs, loadAgentTemplate, loadConfigTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const runConfigAction = useCallback(async (action: string) => {
     const startedAt = performance.now();
@@ -426,8 +426,15 @@ function App() {
   const enabledRuleSet = new Set(status?.enabled_rule_target_ids ?? []);
   const rsc = status ? ruleSyncCount(status, enabledRuleSet) : { synced: 0, total: 0 };
   const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
-  const opencodeConfigEnabled = (appSettings?.enabled_target_ids ?? status?.enabled_target_ids ?? DEFAULT_TARGET_IDS).includes("opencode_config");
+  const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = agentTargets.filter(t => t.kind === "config");
+  const activeConfigTargetId = (() => {
+    const firstEnabled = configTargets.find(t => enabledSet.has(t.id));
+    if (firstEnabled) return firstEnabled.id;
+    if (configTargets.length > 0) return configTargets[0].id;
+    return "";
+  })();
+  const activeConfigEnabled = enabledSet.has(activeConfigTargetId);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
 
@@ -580,14 +587,16 @@ function App() {
         {view === "configs" && (
           <ConfigsView
             status={status}
-            opencodeConfig={opencodeConfig}
-            opencodeConfigEnabled={opencodeConfigEnabled}
+            activeConfigContent={configTemplateContent}
+            activeConfigTargetId={activeConfigTargetId}
+            activeConfigEnabled={activeConfigEnabled}
+            configEnabled={configEnabled}
             configLog={configLog}
             configRunning={configRunning}
             configTargets={configTargets}
             onDiffConfig={() => runConfigAction("diff_configs")}
             onSyncConfig={() => runConfigAction("sync_configs")}
-            onOpenConfig={() => invoke<ActionResult>("open_opencode_config").catch(e => setError(`Open: ${e}`))}
+            onOpenConfig={() => invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`))}
             syncTextClass={syncTextClass}
             targetDotClass={targetDotClass}
             activityIndex={activityIndex}

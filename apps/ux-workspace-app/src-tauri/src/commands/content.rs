@@ -278,6 +278,33 @@ mod tests {
         assert_eq!(by_id.get("docs/WORKFLOW.md"), Some(&"Private / Operator"));
         assert_eq!(by_id.get("docs/INSTALL.md"), Some(&"Reference"));
     }
+
+    #[test]
+    fn config_template_known_target_resolves() {
+        let root = temp_root("config-template-known");
+        write_file(&root, "templates/opencode.json", "{}");
+
+        let targets = agent_targets::config_sync_targets();
+        let opencode = targets.iter().find(|t| t.id == "opencode_config");
+        assert!(
+            opencode.is_some(),
+            "opencode_config must be in config_sync_targets"
+        );
+
+        let path = root.join(opencode.unwrap().source_rel);
+        assert!(path.exists(), "source_rel must point to an existing file");
+        cleanup(&root);
+    }
+
+    #[test]
+    fn config_template_unknown_target_rejected() {
+        let targets = agent_targets::config_sync_targets();
+        let unknown = targets.iter().find(|t| t.id == "nonexistent_config");
+        assert!(
+            unknown.is_none(),
+            "unknown config target must not be in registry"
+        );
+    }
 }
 
 #[tauri::command]
@@ -305,16 +332,26 @@ pub fn open_agent_template() -> Result<ActionResult, String> {
 
 #[tauri::command]
 pub fn read_opencode_config() -> Result<DocumentContent, String> {
+    read_config_template("opencode_config".into())
+}
+
+#[tauri::command]
+pub fn open_opencode_config() -> Result<ActionResult, String> {
+    open_config_template("opencode_config".into())
+}
+
+#[tauri::command]
+pub fn read_config_template(target_id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
     let target = agent_targets::config_sync_targets()
         .into_iter()
-        .find(|t| t.id == "opencode_config")
-        .ok_or("opencode config target not found")?;
+        .find(|t| t.id == target_id)
+        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
     let path = root.join(target.source_rel);
     let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
     Ok(DocumentContent {
-        id: "opencode-config".into(),
-        title: "opencode.json".into(),
+        id: format!("config-template:{}", target_id),
+        title: format!("{}.json", target_id),
         section: String::new(),
         path: target.source_rel.to_string(),
         content,
@@ -322,18 +359,18 @@ pub fn read_opencode_config() -> Result<DocumentContent, String> {
 }
 
 #[tauri::command]
-pub fn open_opencode_config() -> Result<ActionResult, String> {
+pub fn open_config_template(target_id: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
     let target = agent_targets::config_sync_targets()
         .into_iter()
-        .find(|t| t.id == "opencode_config")
-        .ok_or("opencode config target not found")?;
+        .find(|t| t.id == target_id)
+        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
     let path = root.join(target.source_rel);
     let path_str = path_arg(&path)?;
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
     Ok(ActionResult::new(
         ok,
-        "open_opencode_config",
+        format!("open_config_template:{}", target_id),
         out,
         err,
         code,

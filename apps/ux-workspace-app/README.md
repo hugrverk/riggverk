@@ -15,7 +15,7 @@ Top-level views are:
 - **Workspace** — workspace path controls (type, choose folder, use default), workspace diagnostics (validity, markers, rule/config target counts), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
 - **Agents** — agent rule sync/status/log with side-panel repo status, rule actions, and rule target state. Includes a link to the standalone global agent rules template viewer. Does not include tool configs or skills.
 - **Skills** — repo skill catalog, skill selection, multi-agent select, dry-run/install controls, and install output.
-- **Configs** — joined two-column frame for tool config management. Left: OpenCode config template/viewer (~60%). Right: local config terminal/output (~40%). Includes header with status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane.
+- **Configs** — joined two-column frame for config template management. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
 - **Docs** — workspace documentation browser only. No templates or configs.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets. Includes a compact note that workspace path is managed in the Workspace tab.
@@ -120,7 +120,7 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 - Allowed actions:
 
 ### Status
-- `get_status` — repo path, branch, dirty state, latest commit, sync status for five agent rule targets and OpenCode config, plus separated `enabled_rule_target_ids` and `enabled_config_target_ids`
+- `get_status` — repo path, branch, dirty state, latest commit, sync status for five agent rule targets and all registered config targets (via `config_statuses` map keyed by target id), plus separated `enabled_rule_target_ids` and `enabled_config_target_ids`
 
 ### Agents
 - Main terminal/log output for the most recent agent action.
@@ -177,12 +177,14 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 - On failure, quiet mode prints the failing agent, skill name, source path, and destination path so copy errors remain diagnosable.
 
 ### Configs
-- Joined two-column frame: OpenCode config template/viewer on the left, local config terminal on the right.
+- Configs is registry-driven via `agent_targets::config_sync_targets()`.
+- Joined two-column frame: selected config template preview on the left, local config terminal on the right.
 - Header shows config target name and live sync status (synced/diverged/missing).
+- Currently supported config target: OpenCode config (`opencode_config`).
 - Actions: diff (read-only) and sync (apply) via the allowlisted config target registry.
 - Config actions write output to the right-pane terminal and do not navigate away.
-- `open` button opens `templates/opencode.json` in the system editor.
-- Config targets are defined in an internal allowlisted registry (`agent_targets.rs`). Currently only OpenCode config is managed.
+- `open` button opens the selected config template in the system editor.
+- Config targets are defined in an internal allowlisted registry. Currently only OpenCode config is managed.
 - Future config targets should be added via registry entry + allowlisted script handling. No arbitrary config paths are accepted.
 
 ### Health

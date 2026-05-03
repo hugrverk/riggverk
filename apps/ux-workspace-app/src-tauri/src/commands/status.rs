@@ -59,6 +59,7 @@ pub struct StatusData {
     rules_claude: String,
     rules_gemini: String,
     opencode_config: String,
+    config_statuses: std::collections::HashMap<String, String>,
     host_name: String,
     enabled_rule_target_ids: Vec<String>,
     enabled_config_target_ids: Vec<String>,
@@ -92,6 +93,7 @@ pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;
     let targets = agent_targets::targets();
+    let config_targets = agent_targets::config_targets();
 
     let (git_available, branch, dirty, latest_commit) = git_status(&root);
 
@@ -118,6 +120,19 @@ pub fn get_status() -> Result<StatusData, String> {
         .map(|t| t.id.to_string())
         .collect();
 
+    let mut config_statuses = std::collections::HashMap::new();
+    for t in &config_targets {
+        config_statuses.insert(
+            t.id.to_string(),
+            sync_label(&home.join(t.target_rel), &root.join(t.source_rel)),
+        );
+    }
+
+    let opencode_config_val = config_statuses
+        .get("opencode_config")
+        .cloned()
+        .unwrap_or_else(|| "—".into());
+
     Ok(StatusData {
         repo_path: root.to_string_lossy().into_owned(),
         git_available,
@@ -129,7 +144,8 @@ pub fn get_status() -> Result<StatusData, String> {
         rules_auggie: sync("auggie_rules"),
         rules_claude: sync("claude_rules"),
         rules_gemini: sync("gemini_rules"),
-        opencode_config: sync("opencode_config"),
+        opencode_config: opencode_config_val,
+        config_statuses,
         host_name: host,
         enabled_rule_target_ids: rule_ids,
         enabled_config_target_ids: config_ids,

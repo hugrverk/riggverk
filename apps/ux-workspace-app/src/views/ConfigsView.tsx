@@ -3,8 +3,10 @@ import type { AgentTargetMeta, DocumentContent, StatusData } from "../types";
 
 interface ConfigsViewProps {
   status: StatusData | null;
-  opencodeConfig: DocumentContent | null;
-  opencodeConfigEnabled: boolean;
+  activeConfigContent: DocumentContent | null;
+  activeConfigTargetId: string;
+  activeConfigEnabled: boolean;
+  configEnabled: boolean;
   configLog: ActionResult | null;
   configRunning: string | null;
   configTargets: AgentTargetMeta[];
@@ -23,8 +25,10 @@ function formatJson(content: string): string {
 
 export function ConfigsView({
   status,
-  opencodeConfig,
-  opencodeConfigEnabled,
+  activeConfigContent,
+  activeConfigTargetId,
+  activeConfigEnabled,
+  configEnabled,
   configLog,
   configRunning,
   configTargets,
@@ -36,8 +40,9 @@ export function ConfigsView({
   activityIndex,
   activityCellClass,
 }: ConfigsViewProps) {
-  const configStatus = status?.opencode_config ?? "—";
-  const configLabel = configTargets[0]?.label ?? "opencode config";
+  const configStatus = status?.config_statuses?.[activeConfigTargetId] ?? "—";
+  const selectedTarget = configTargets.find(t => t.id === activeConfigTargetId);
+  const configLabel = selectedTarget?.label ?? "config template";
   const configCount = configTargets.length;
 
   return (
@@ -51,16 +56,16 @@ export function ConfigsView({
           <span className={`configs-frame-status ${syncTextClass(configStatus)}`}>
             <span className={targetDotClass(configStatus)} />{configStatus}
           </span>
-          {!opencodeConfigEnabled && <span className="configs-frame-note">config target disabled</span>}
-          <button className="btn btn-sm" disabled={configRunning !== null || !opencodeConfigEnabled} onClick={onDiffConfig}>diff</button>
-          <button className="btn btn-sm btn-primary" disabled={configRunning !== null || !opencodeConfigEnabled} onClick={onSyncConfig}>sync</button>
+          {!activeConfigEnabled && <span className="configs-frame-note">config target disabled</span>}
+          <button className="btn btn-sm" disabled={configRunning !== null || !configEnabled} onClick={onDiffConfig}>diff</button>
+          <button className="btn btn-sm btn-primary" disabled={configRunning !== null || !configEnabled} onClick={onSyncConfig}>sync</button>
           <button className="btn btn-sm" onClick={onOpenConfig}>open</button>
         </div>
       </header>
       <div className="configs-frame-body">
         <main className="configs-template-pane">
-          {opencodeConfig ? (
-            <pre className="configs-code">{formatJson(opencodeConfig.content)}</pre>
+          {activeConfigContent ? (
+            <pre className="configs-code">{formatJson(activeConfigContent.content)}</pre>
           ) : (
             <div className="log-empty"><span className="log-prompt">$</span> no config loaded</div>
           )}
@@ -74,8 +79,8 @@ export function ConfigsView({
               activityIndex={activityIndex}
               activityCellClass={activityCellClass}
             />
-          ) : !opencodeConfigEnabled ? (
-            <div className="log-empty"><span className="log-prompt">$</span> config target disabled</div>
+          ) : !configEnabled ? (
+            <div className="log-empty"><span className="log-prompt">$</span> no enabled config targets</div>
           ) : (
             <TerminalState
               result={configLog}
