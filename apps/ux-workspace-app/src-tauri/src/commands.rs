@@ -18,7 +18,7 @@ pub use defaults::get_default_workspace_summary;
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };
-pub use skills::{install_skills, list_skills, open_install_skills_script, open_skill};
+pub use skills::{install_skills, list_skills, open_install_skills_script, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
     create_workspace_from_defaults, get_workspace_diagnostics, plan_create_workspace,

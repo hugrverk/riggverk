@@ -106,6 +106,11 @@ function App() {
   const [installRunning, setInstallRunning] = useState(false);
   const skillsSelectionTouched = useRef(false);
 
+  // skill preview state
+  const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
+  const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
+  const [skillFilter, setSkillFilter] = useState<string | null>(null);
+
   // settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -218,8 +223,19 @@ function App() {
       if (!skillsSelectionTouched.current && loaded.length > 0) {
         setSelectedSkills(new Set(loaded.map(s => s.name)));
       }
+      if (loaded.length > 0) {
+        const first = loaded[0];
+        setActiveSkillId(first.id);
+        const content = await invoke<DocumentContent>("read_skill", { id: first.id });
+        setActiveSkillContent(content);
+      } else {
+        setActiveSkillId(null);
+        setActiveSkillContent(null);
+      }
     } catch (e) {
       setSkills([]);
+      setActiveSkillId(null);
+      setActiveSkillContent(null);
       if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
     }
   }, []);
@@ -310,6 +326,14 @@ function App() {
 
   const openSkill = useCallback((id: string) => {
     invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));
+  }, []);
+
+  const readSkill = useCallback(async (id: string) => {
+    setActiveSkillId(id);
+    try {
+      const content = await invoke<DocumentContent>("read_skill", { id });
+      setActiveSkillContent(content);
+    } catch (e) { setError(`Read skill: ${e}`); }
   }, []);
 
   const openInstallScript = useCallback(() => {
@@ -573,6 +597,11 @@ function App() {
             canInstall={canInstall}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
+            activeSkillId={activeSkillId}
+            activeSkillContent={activeSkillContent}
+            skillFilter={skillFilter}
+            onSetSkillFilter={setSkillFilter}
+            onSelectSkillPreview={readSkill}
             onToggleSkill={toggleSkill}
             onSelectAll={selectAll}
             onClearSelection={clearSelection}

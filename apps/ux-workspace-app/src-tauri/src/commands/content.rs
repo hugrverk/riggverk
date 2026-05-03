@@ -113,11 +113,11 @@ pub struct DocSummary {
 
 #[derive(Serialize)]
 pub struct DocumentContent {
-    id: String,
-    title: String,
-    path: String,
-    section: String,
-    content: String,
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub section: String,
+    pub content: String,
 }
 
 #[tauri::command]

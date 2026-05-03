@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::agent_targets;
 
+use super::content::DocumentContent;
 use super::process::{run_cmd, run_cmd_owned, ActionResult};
 use super::workspace::{path_arg, workspace_root};
 
@@ -122,6 +123,29 @@ pub fn open_skill(id: String) -> Result<ActionResult, String> {
                 err,
                 code,
             ))
+        }
+        None => Err(format!("unknown skill: {}", id)),
+    }
+}
+
+#[tauri::command]
+pub fn read_skill(id: String) -> Result<DocumentContent, String> {
+    let root = workspace_root()?;
+    let skills = list_skills()?;
+    let found = skills.iter().find(|s| s.id == id);
+    match found {
+        Some(s) => {
+            let path = root.join(&s.path);
+            let content =
+                std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+            let area = s.id.split('/').next().unwrap_or("workspace").to_string();
+            Ok(DocumentContent {
+                id: s.id.clone(),
+                title: s.name.clone(),
+                section: area,
+                path: s.path.clone(),
+                content,
+            })
         }
         None => Err(format!("unknown skill: {}", id)),
     }
@@ -465,5 +489,59 @@ mod tests {
         assert!(super::validate_agent("opeencode").is_err());
         assert!(super::validate_agent("Claude").is_err());
         assert!(super::validate_agent("gemni").is_err());
+    }
+
+    #[test]
+    fn read_skill_known_id_resolves_content() {
+        let root = temp_root("read-skill-known");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let found = skills
+            .iter()
+            .find(|s| s.name == "diagnose")
+            .expect("skill exists");
+
+        let path = root.join(&found.path);
+        let raw = std::fs::read_to_string(&path).expect("read raw");
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(raw.contains("name: diagnose"));
+        assert!(raw.contains("description: test skill"));
+    }
+
+    #[test]
+    fn read_skill_unknown_id_is_rejected_via_registry() {
+        let root = temp_root("read-skill-unknown");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let found = skills.iter().find(|s| s.id == "nonexistent/skill");
+        assert!(found.is_none(), "unknown id must not resolve");
+    }
+
+    #[test]
+    fn read_skill_path_traversal_id_is_rejected() {
+        let root = temp_root("read-skill-traversal");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let bad_ids = [
+            "../../../etc/passwd",
+            "skills/../diagnose",
+            "../../../../etc/hosts",
+        ];
+        for bad in &bad_ids {
+            let found = skills.iter().find(|s| s.id == *bad);
+            assert!(
+                found.is_none(),
+                "path traversal id '{}' must not resolve",
+                bad
+            );
+        }
     }
 }

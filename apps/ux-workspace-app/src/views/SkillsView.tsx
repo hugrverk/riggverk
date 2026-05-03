@@ -1,5 +1,6 @@
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import { INSTALL_AGENTS, type InstallAgent, type SkillSummary } from "../types";
+import { Markdown } from "../components/Markdown";
+import { INSTALL_AGENTS, type InstallAgent, type SkillSummary, type DocumentContent } from "../types";
 
 type InstallScope = "global" | "project";
 
@@ -15,6 +16,11 @@ interface SkillsViewProps {
   canInstall: boolean;
   activityIndex: number;
   activityCellClass: (index: number) => string;
+  activeSkillId: string | null;
+  activeSkillContent: DocumentContent | null;
+  skillFilter: string | null;
+  onSetSkillFilter: (area: string | null) => void;
+  onSelectSkillPreview: (id: string) => void;
   onToggleSkill: (name: string) => void;
   onSelectAll: () => void;
   onClearSelection: () => void;
@@ -32,6 +38,19 @@ function areaFromId(id: string): string {
   return area || "workspace";
 }
 
+function uniqueAreas(skills: SkillSummary[]): string[] {
+  const seen = new Set<string>();
+  const areas: string[] = [];
+  for (const s of skills) {
+    const a = areaFromId(s.id);
+    if (!seen.has(a)) {
+      seen.add(a);
+      areas.push(a);
+    }
+  }
+  return areas;
+}
+
 export function SkillsView({
   skills,
   workspaceValid,
@@ -44,6 +63,11 @@ export function SkillsView({
   canInstall,
   activityIndex,
   activityCellClass,
+  activeSkillId,
+  activeSkillContent,
+  skillFilter,
+  onSetSkillFilter,
+  onSelectSkillPreview,
   onToggleSkill,
   onSelectAll,
   onClearSelection,
@@ -56,94 +80,165 @@ export function SkillsView({
   onOpenInstallScript,
 }: SkillsViewProps) {
   const invalidWorkspace = !workspaceValid && skills.length === 0;
+  const areas = uniqueAreas(skills);
+  const filteredSkills = skillFilter
+    ? skills.filter((s) => areaFromId(s.id) === skillFilter)
+    : skills;
 
   return (
     <section className="terminal terminal-view">
       <div className="terminal-topline">
         <span className="terminal-title">SKILLS</span>
-        <span className="terminal-host">{selectedSkills.size}/{skills.length} selected</span>
+        <span className="terminal-host">
+          {activeSkillId
+            ? `preview: ${skills.find((s) => s.id === activeSkillId)?.name ?? activeSkillId}`
+            : `${selectedSkills.size}/${skills.length} selected`}
+        </span>
       </div>
+
+      <div className="skills-command-strip">
+        <div className="skills-cmd-group">
+          <span className="cell-label">INSTALL TARGETS</span>
+          {INSTALL_AGENTS.map(a => (
+            <button
+              key={a}
+              className={`btn btn-sm ${installAgents.has(a) ? "btn-active" : ""}`}
+              onClick={() => onToggleInstallAgent(a)}
+            >{a}</button>
+          ))}
+        </div>
+        <div className="skills-cmd-group">
+          <span className="cell-label">SCOPE</span>
+          {(["global", "project"] as const).map(s => (
+            <button key={s} className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`} onClick={() => onSetInstallScope(s)}>{s}</button>
+          ))}
+          {installScope === "project" && (
+            <input
+              className="install-target-input"
+              type="text"
+              placeholder="/path/to/project"
+              value={installTarget}
+              onChange={e => onSetInstallTarget(e.target.value)}
+            />
+          )}
+        </div>
+        <div className="skills-cmd-push">
+          <button className="btn btn-sm" onClick={onSelectAll}>all</button>
+          <button className="btn btn-sm" onClick={onClearSelection}>clear</button>
+        </div>
+      </div>
+
+      {areas.length > 1 && (
+        <div className="skills-filter-row">
+          <button
+            className={`skills-filter-chip ${!skillFilter ? "skills-filter-chip-active" : ""}`}
+            onClick={() => onSetSkillFilter(null)}
+          >all</button>
+          {areas.map(a => (
+            <button
+              key={a}
+              className={`skills-filter-chip ${skillFilter === a ? "skills-filter-chip-active" : ""}`}
+              onClick={() => onSetSkillFilter(a)}
+            >{a}</button>
+          ))}
+        </div>
+      )}
+
       <div className="skills-layout">
-        <div className="skills-main">
-          <div className="install-controls">
-            <div className="install-control-group">
-              <span className="cell-label">SKILL INSTALL TARGETS</span>
-              {INSTALL_AGENTS.map(a => (
-                <button
-                  key={a}
-                  className={`btn btn-sm ${installAgents.has(a) ? "btn-active" : ""}`}
-                  onClick={() => onToggleInstallAgent(a)}
-                >{a}</button>
-              ))}
-            </div>
-            <div className="install-control-group">
-              <span className="cell-label">SCOPE</span>
-              {(["global", "project"] as const).map(s => (
-                <button key={s} className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`} onClick={() => onSetInstallScope(s)}>{s}</button>
-              ))}
-              {installScope === "project" && (
-                <input
-                  className="install-target-input"
-                  type="text"
-                  placeholder="/path/to/project"
-                  value={installTarget}
-                  onChange={e => onSetInstallTarget(e.target.value)}
-                />
-              )}
-            </div>
-            <div className="install-control-group install-control-push">
-              <button className="btn btn-sm" onClick={onSelectAll}>all</button>
-              <button className="btn btn-sm" onClick={onClearSelection}>clear</button>
-            </div>
+        <div className="skills-browser">
+          <div className="skills-note">
+            Rule sync supports all agents (Codex, OpenCode, Claude, Gemini, Auggie). Skill install targets depend on each tool&apos;s supported skill directory.
           </div>
-          <div className="install-note">
-            Rule sync supports all agents (Codex, OpenCode, Claude, Gemini, Auggie). Skill install targets depend on each tool's supported skill directory.
-          </div>
-          <div className="table-wrap">
+          <div className="skills-browser-list">
             {invalidWorkspace ? (
-              <div className="workspace-empty-state">No valid workspace selected. Create or choose a workspace in Settings.</div>
-            ) : skills.length === 0 ? (
-              <div className="workspace-empty-state">No workspace skills found</div>
+              <div className="workspace-empty-state">No valid workspace selected. Create or choose a workspace in Workspace.</div>
+            ) : filteredSkills.length === 0 ? (
+              <div className="workspace-empty-state">No skills found</div>
             ) : (
-              skills.map((s) => (
-                <div key={s.id} className={`table-row table-row-install ${selectedSkills.has(s.name) ? "table-row-selected" : ""}`} onClick={() => onToggleSkill(s.name)}>
-                  <div className="table-cell table-cell-check">
-                    <span className={`install-checkbox ${selectedSkills.has(s.name) ? "install-checkbox-on" : ""}`}>
-                      {selectedSkills.has(s.name) ? "x" : ""}
-                    </span>
-                  </div>
-                  <div className="table-cell table-cell-name"><span className="cell-label">{s.name}</span></div>
-                  <div className="table-cell table-cell-area"><span className="cell-value cell-value-muted">{areaFromId(s.id)}</span></div>
-                  <div className="table-cell table-cell-desc"><span className="cell-value cell-value-muted">{s.description}</span></div>
-                  <div className="table-cell table-cell-action">
+              filteredSkills.map((s) => (
+                <div
+                  key={s.id}
+                  className={`skills-row ${activeSkillId === s.id ? "skills-row-active" : ""} ${selectedSkills.has(s.name) ? "skills-row-selected" : ""}`}
+                >
+                  <span
+                    className={`skills-row-check ${selectedSkills.has(s.name) ? "skills-row-check-on" : ""}`}
+                    onClick={(e) => { e.stopPropagation(); onToggleSkill(s.name); }}
+                    role="checkbox"
+                    aria-checked={selectedSkills.has(s.name)}
+                    tabIndex={0}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onToggleSkill(s.name); } }}
+                  >
+                    {selectedSkills.has(s.name) ? "x" : ""}
+                  </span>
+                  {/* biome-ignore lint/a11y/useKeyWithClickEvents: handled on parent */}
+                  <span className="skills-row-main" role="button" tabIndex={0} onClick={() => onSelectSkillPreview(s.id)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelectSkillPreview(s.id); } }}>
+                    <span className="skills-row-name">{s.name}</span>
+                    <span className="skills-row-area">{areaFromId(s.id)}</span>
+                    <span className="skills-row-desc">{s.description}</span>
+                  </span>
+                  <span className="skills-row-action">
                     <button className="btn btn-sm" onClick={(e) => { e.stopPropagation(); onOpenSkill(s.id); }}>open</button>
-                  </div>
+                  </span>
                 </div>
               ))
             )}
           </div>
         </div>
-        <aside className="install-panel">
-          <div className="install-actions">
-            <button className="btn" disabled={!workspaceValid || !canInstall} onClick={onDryRun}>dry run</button>
-            <button className="btn btn-primary" disabled={!workspaceValid || !canInstall} onClick={onInstallSelected}>install selected</button>
-            <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
+
+        <div className="skills-right-pane">
+          <div className="skills-preview">
+            {activeSkillContent ? (
+              <>
+                <div className="skills-preview-header">
+                  <div className="skills-preview-header-left">
+                    <span className="skills-preview-name">{activeSkillContent.title}</span>
+                    <span className="skills-preview-meta">{activeSkillContent.section} &middot; {activeSkillContent.path}</span>
+                  </div>
+                  <button className="btn btn-sm" onClick={() => onOpenSkill(activeSkillContent.id)}>open</button>
+                </div>
+                <div className="skills-preview-body"><Markdown content={activeSkillContent.content} /></div>
+              </>
+            ) : (
+              <div className="workspace-empty-state">Select a skill to preview</div>
+            )}
           </div>
-          {!workspaceValid && (
-            <div className="install-disabled-note">No valid workspace selected. Create or choose a workspace in Settings.</div>
-          )}
-          <div className="install-output">
-            <TerminalState
-              runningLabel={installRunning ? "installing" : null}
-              result={installResult}
-              readyLabel="ready"
-              activityIndex={activityIndex}
-              activityCellClass={activityCellClass}
-              sectioned={false}
-              showNoOutput={false}
-            />
+
+          <div className="skills-install-plan">
+            <div className="skills-install-summary">
+              <div className="skills-plan-row">
+                <span className="skills-plan-key">skills</span>
+                <span className="skills-plan-value">{selectedSkills.size}/{skills.length} selected</span>
+              </div>
+              <div className="skills-plan-row">
+                <span className="skills-plan-key">agents</span>
+                <span className="skills-plan-value">{installAgents.size}: {Array.from(installAgents).sort().join(", ")}</span>
+              </div>
+              <div className="skills-plan-row">
+                <span className="skills-plan-key">scope</span>
+                <span className="skills-plan-value">{installScope}{installScope === "project" && installTarget ? " \u00b7 " + installTarget : ""}</span>
+              </div>
+            </div>
+            <div className="skills-install-actions">
+              <button className="btn" disabled={!workspaceValid || !canInstall} onClick={onDryRun}>dry run</button>
+              <button className="btn btn-primary" disabled={!workspaceValid || !canInstall} onClick={onInstallSelected}>install selected</button>
+              <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
+            </div>
+            {!workspaceValid && (
+              <div className="install-disabled-note">No valid workspace selected. Create or choose a workspace in Workspace.</div>
+            )}
+            <div className="skills-install-output">
+              <TerminalState
+                runningLabel={installRunning ? "installing" : null}
+                result={installResult}
+                readyLabel="ready"
+                activityIndex={activityIndex}
+                activityCellClass={activityCellClass}
+                sectioned={false}
+                showNoOutput={false}
+              />
+            </div>
           </div>
-        </aside>
+        </div>
       </div>
     </section>
   );

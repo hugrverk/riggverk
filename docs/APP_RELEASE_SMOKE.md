@@ -80,7 +80,22 @@ Dry-runs only unless testing your own machine:
 - [ ] Do not run `--apply` actions when testing someone else's machine
 - [ ] Backups exist under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups` before real sync if applicable
 
-## 7. Known Limitations
+## 7. Skills Cockpit Smoke
+
+- [ ] Skills view shows area filter chips when filtered skills include multiple areas
+- [ ] Area filter "all" shows all skills; clicking an area chip filters to that area
+- [ ] Checkbox toggles install selection for the skill
+- [ ] Clicking the skill row/name selects it for preview (right pane)
+- [ ] Checkbox and preview selection are independent
+- [ ] Preview pane shows skill Markdown content with header (name, area, path, open button)
+- [ ] "open" button in preview opens the SKILL.md in the system editor
+- [ ] Install plan summary shows selected skills count, agent count/names, scope, and project target
+- [ ] Invalid workspace copy says "Workspace" not "Settings"
+- [ ] "Select a skill to preview" empty state when no skill is selected
+- [ ] Dry-run and install actions behave identically to previous behavior
+- [ ] "open script" button opens install-skills.sh in system editor
+
+## 8. Known Limitations
 
 - Internal repo/package names still use `ux-workspace` during transition (marker directory, workspace_type, app source directory)
 - Workspace marker naming is still `.ux-workspace/workspace.json`
@@ -91,7 +106,7 @@ Dry-runs only unless testing your own machine:
 - Workspace scripts in the created workspace are copies of the bundled defaults and may not match the repo originals after bundles are updated
 - Clean git status should be confirmed — residual dev artifacts in `dist/` or `target/` could be bundled unintentionally
 
-## 8. Pass / Fail Report Template
+## 9. Pass / Fail Report Template
 
 Copy this template and fill in results.
 
