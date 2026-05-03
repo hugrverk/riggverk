@@ -7,10 +7,21 @@ This directory stores docs, skills, templates, config, and scripts that the app 
 ## What lives here
 
 - **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting
-- **skills/** — user-installed agent skills (each skill in its own folder with a `SKILL.md`)
-- **templates/** — source templates for agent rules and tool configuration
-- **scripts/** — workspace sync and install scripts
+- **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 22 starter skills are bundled.
+- **templates/** — source templates for agent rules (`global-agent-rules.md`) and OpenCode config (`opencode.json`)
+- **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
 - **.ux-workspace/** — workspace identity marker (do not delete)
+
+## Scripts
+
+All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to see changes, `--quiet` for compact output, and `--help` for usage.
+
+- **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, Gemini, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
+- **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
+- **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all five agents), `--global`/`--project`, `--skill`, and `--all`.
+- **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
+
+All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories.
 
 ## Separation
 

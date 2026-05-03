@@ -102,6 +102,30 @@ bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-skills
 bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-agent-rules.sh
 bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh
 
+step "bundled default scripts are real (no placeholder phrases)"
+for pattern in "placeholder" "No files are written" "future app flows"; do
+  if search_has_match -l "$pattern" apps/ux-workspace-app/resources/default-workspace/scripts/; then
+    printf 'FAIL: bundled default scripts contain placeholder phrase: %s\n' "$pattern" >&2
+    exit 1
+  fi
+done
+
+step "bundled default install-skills.sh help mentions all five agents"
+for agent in codex opencode claude gemini auggie; do
+  if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
+    printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
+    exit 1
+  fi
+done
+
+step "bundled default install-agent-rules.sh help mentions all five rule targets"
+for agent in codex opencode claude gemini auggie; do
+  if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
+    printf 'FAIL: install-agent-rules.sh --help missing rule target: %s\n' "$agent" >&2
+    exit 1
+  fi
+done
+
 step "bundled default workspace marker"
 if [ ! -f apps/ux-workspace-app/resources/default-workspace/.ux-workspace/workspace.json ]; then
   printf 'FAIL: bundled default workspace marker not found\n' >&2

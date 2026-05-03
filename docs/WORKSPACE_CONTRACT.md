@@ -65,7 +65,9 @@ The app source carries a generic starter workspace under `apps/ux-workspace-app/
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
-These resources are not automatically copied into the active workspace. Future create, import, and upgrade flows may use them as source material when setting up new workspaces or resetting an existing workspace to defaults.
+A newly created default workspace includes real sync and install scripts. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie. Config sync target: OpenCode config. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install requires a real project marker and rejects broad parent directories.
+
+These resources are not automatically copied into the active workspace. Future import and upgrade flows may use them as source material when setting up new workspaces or resetting an existing workspace to defaults.
 
 The default workspace content is read-only source material. It does not contain user data, secrets, or private preferences. User workspaces remain user-owned and are separate from the bundled defaults.
 
