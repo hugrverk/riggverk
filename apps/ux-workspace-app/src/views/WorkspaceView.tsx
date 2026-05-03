@@ -15,6 +15,66 @@ interface WorkspaceViewProps {
   onCreateWorkspace: () => void;
 }
 
+const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
+  summary?.categories.find(c => c.label === label);
+
+function mapNodeClass(condition: "valid" | "invalid" | "partial" | "dim"): string {
+  switch (condition) {
+    case "valid": return "workspace-map-node workspace-map-node-valid";
+    case "invalid": return "workspace-map-node workspace-map-node-invalid";
+    case "partial": return "workspace-map-node workspace-map-node-partial";
+    case "dim": return "workspace-map-node workspace-map-node-dim";
+  }
+}
+
+function mapNodeStatus(
+  diag: WorkspaceDiagnostics | null,
+  summary: DefaultWorkspaceSummary | null,
+  node: string,
+): "valid" | "invalid" | "partial" | "dim" {
+  if (node === "workspace") {
+    if (!diag) return "dim";
+    return diag.valid ? "valid" : "invalid";
+  }
+  if (node === "rules") {
+    if (!diag) return "dim";
+    const e = diag.enabled_rule_targets;
+    const t = diag.total_rule_targets;
+    if (t === 0) return "dim";
+    if (e === t) return "valid";
+    if (e > 0) return "partial";
+    return "invalid";
+  }
+  if (node === "configs") {
+    if (!diag) return "dim";
+    const e = diag.enabled_config_targets;
+    const t = diag.total_config_targets;
+    if (t === 0) return "dim";
+    if (e === t) return "valid";
+    if (e > 0) return "partial";
+    return "invalid";
+  }
+  if (node === "skills") {
+    if (!summary) return "dim";
+    const c = findCat(summary, "Skills");
+    if (!c || c.count === 0) return "dim";
+    return "valid";
+  }
+  if (node === "docs") {
+    if (!summary) return "dim";
+    const c = findCat(summary, "Docs");
+    if (!c || c.count === 0) return "dim";
+    return c.count > 0 ? "valid" : "dim";
+  }
+  if (node === "scripts") {
+    if (!summary) return "dim";
+    const c = findCat(summary, "Scripts");
+    if (!c || c.count === 0) return "dim";
+    return c.count > 0 ? "valid" : "dim";
+  }
+  return "dim";
+}
+
 export function WorkspaceView({
   appSettings,
   onSetWorkspacePath,
@@ -31,7 +91,22 @@ export function WorkspaceView({
 }: WorkspaceViewProps) {
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
-  const resolvedPath = diag?.resolved_path ?? diag?.candidate_path ?? "—";
+  const resolvedPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
+  const summary = defaultWorkspaceSummary;
+
+  const mapNodes: { id: string; label: string }[] = [
+    { id: "workspace", label: "workspace" },
+    { id: "rules", label: "rules" },
+    { id: "skills", label: "skills" },
+    { id: "configs", label: "configs" },
+    { id: "docs", label: "docs" },
+    { id: "scripts", label: "scripts" },
+  ];
+
+  const skillsCat = findCat(summary, "Skills");
+  const docsCat = findCat(summary, "Docs");
+  const scriptsCat = findCat(summary, "Scripts");
+  const templatesCat = findCat(summary, "Templates");
 
   return (
     <section className="terminal terminal-view">
@@ -39,95 +114,177 @@ export function WorkspaceView({
         <span className="terminal-title">WORKSPACE</span>
       </div>
       {appSettings && (
-        <div className="settings-form">
-          <div className="settings-group">
-            <span className="cell-label">CURRENT WORKSPACE</span>
-            <span className={`cell-value ${diag?.valid ? "workspace-valid" : "workspace-invalid"}`}>
-              {diag ? (diag.valid ? "valid" : "invalid") : "loading…"}
-            </span>
+        <div className="workspace-landing">
+          {/* ── Hero ── */}
+          <div className="workspace-hero">
+            <div className="workspace-hero-main">
+              <h1 className="workspace-hero-title">Agent Workspace</h1>
+              <p className="workspace-hero-subtitle">
+                Local control panel for agent rules, skills, configs, and workspace scripts.
+              </p>
+            </div>
+            <div className="workspace-hero-meta">
+              <span
+                className={`workspace-status-badge ${
+                  !diag
+                    ? "workspace-status-loading"
+                    : diag.valid
+                      ? "workspace-status-valid"
+                      : "workspace-status-invalid"
+                }`}
+              >
+                {!diag ? "loading\u2026" : diag.valid ? "valid workspace" : "setup needed"}
+              </span>
+              <code className="workspace-path-console">{resolvedPath}</code>
+              <div className="workspace-hero-actions">
+                {diag && !diag.valid ? (
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={onPlanCreate}
+                    disabled={createPlanRunning}
+                  >
+                    {createPlanRunning ? "planning\u2026" : "dry-run create"}
+                  </button>
+                ) : (
+                  <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
+                    refresh
+                  </button>
+                )}
+                <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
+                  choose folder
+                </button>
+                <button className="btn btn-sm" onClick={() => onSetWorkspacePath(null)}>
+                  use default
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div className="settings-group">
-            <span className="cell-label">WORKSPACE PATH</span>
+          {/* ── Path input ── */}
+          <div className="workspace-path-panel">
             <input
-              className="settings-input"
+              className="settings-input workspace-path-input"
               type="text"
               placeholder="default (env or repo default)"
               value={appSettings.workspace_path ?? ""}
               onChange={e => onSetWorkspacePath(e.target.value || null)}
             />
-            <button className="btn btn-sm settings-path-button" onClick={onChooseWorkspaceFolder}>choose folder</button>
-            <button className="btn btn-sm settings-path-button" onClick={() => onSetWorkspacePath(null)}>use default</button>
-          </div>
-          <div className="settings-path-hint">
-            Enter workspace folder path. For a new workspace, enter the child folder to create.
+            <span className="workspace-path-hint">
+              Enter workspace folder path. For a new workspace, enter the child folder to create.
+            </span>
           </div>
 
-          <div className="workspace-diagnostics">
-            <div className="console-section-label">diagnostics</div>
-            {!diag ? (
-              <div className="workspace-diagnostics-row workspace-valid">loading diagnostics…</div>
-            ) : (
-              <>
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">path</span>
-                  <span className="cell-value-trunc">{resolvedPath}</span>
+          {/* ── Metrics ── */}
+          {diag && (
+            <div className="workspace-metrics">
+              <div className={`workspace-metric ${missingMarkers.length === 0 ? "workspace-metric-ok" : "workspace-metric-warn"}`}>
+                <span className="workspace-metric-value">
+                  {missingMarkers.length === 0 ? "\u2713" : missingMarkers.length}
+                </span>
+                <span className="workspace-metric-label">markers</span>
+              </div>
+              <div className={`workspace-metric ${diag.enabled_rule_targets > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                <span className="workspace-metric-value">
+                  {diag.enabled_rule_targets}/{diag.total_rule_targets}
+                </span>
+                <span className="workspace-metric-label">rule targets</span>
+              </div>
+              <div className={`workspace-metric ${diag.enabled_config_targets > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                <span className="workspace-metric-value">
+                  {diag.enabled_config_targets}/{diag.total_config_targets}
+                </span>
+                <span className="workspace-metric-label">config targets</span>
+              </div>
+              {skillsCat && (
+                <div className={`workspace-metric ${skillsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                  <span className="workspace-metric-value">{skillsCat.count}</span>
+                  <span className="workspace-metric-label">starter skills</span>
                 </div>
-                {diag.resolved_path && diag.resolved_path !== diag.candidate_path && (
-                  <div className="workspace-diagnostics-row">
-                    <span className="cell-label-sm">candidate</span>
-                    <span className="cell-value-trunc">{diag.candidate_path}</span>
-                  </div>
-                )}
-                {diag.error && (
-                  <div className="workspace-diagnostics-row workspace-invalid">{diag.error}</div>
-                )}
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">rules</span>
-                  <span>enabled {diag.enabled_rule_targets}/{diag.total_rule_targets}</span>
+              )}
+              {docsCat && (
+                <div className={`workspace-metric ${docsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                  <span className="workspace-metric-value">{docsCat.count}</span>
+                  <span className="workspace-metric-label">starter docs</span>
                 </div>
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">configs</span>
-                  <span>enabled {diag.enabled_config_targets}/{diag.total_config_targets}</span>
+              )}
+              {scriptsCat && (
+                <div className={`workspace-metric ${scriptsCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                  <span className="workspace-metric-value">{scriptsCat.count}</span>
+                  <span className="workspace-metric-label">starter scripts</span>
                 </div>
-                {missingMarkers.length > 0 && (
-                  <div className="workspace-marker-list">
-                    {missingMarkers.map((m, i) => (
-                      <div key={i} className="workspace-marker-missing">
-                        missing {m.kind}: {m.path}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {diag.valid && missingMarkers.length === 0 && (
-                  <div className="workspace-diagnostics-row workspace-valid">all markers present</div>
-                )}
-                <div className="workspace-diagnostics-row">
-                  <button className="btn btn-sm" onClick={onRefreshDiagnostics}>refresh</button>
+              )}
+              {templatesCat && (
+                <div className={`workspace-metric ${templatesCat.count > 0 ? "workspace-metric-ok" : "workspace-metric-dim"}`}>
+                  <span className="workspace-metric-value">{templatesCat.count}</span>
+                  <span className="workspace-metric-label">starter templates</span>
                 </div>
-              </>
-            )}
+              )}
+            </div>
+          )}
+
+          {/* ── Workspace map ── */}
+          <div className="workspace-map">
+            {!diag && <div className="workspace-map-scanning" />}
+            <div className="workspace-map-track">
+              {mapNodes.map((node, i) => (
+                <span key={node.id}>
+                  {i > 0 && <span className="workspace-map-line" />}
+                  <span className={mapNodeClass(mapNodeStatus(diag, summary, node.id))}>
+                    <span className="workspace-map-dot" />
+                    <span className="workspace-map-label">{node.label}</span>
+                  </span>
+                </span>
+              ))}
+            </div>
           </div>
 
-          <div className={`create-plan-section ${diag && !diag.valid ? "create-plan-section-attention" : ""}`}>
+          {/* ── Diagnostics details ── */}
+          {diag && (
+            <div className="workspace-diag-detail">
+              {diag.resolved_path && diag.resolved_path !== diag.candidate_path && (
+                <div className="workspace-diag-row">
+                  <span className="cell-label-sm">candidate</span>
+                  <span className="cell-value-trunc">{diag.candidate_path}</span>
+                </div>
+              )}
+              {diag.error && (
+                <div className="workspace-diag-row workspace-invalid">{diag.error}</div>
+              )}
+              {missingMarkers.length > 0 && (
+                <div className="workspace-marker-list">
+                  {missingMarkers.map((m, i) => (
+                    <div key={i} className="workspace-marker-missing">
+                      missing {m.kind}: {m.path}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {diag.valid && missingMarkers.length === 0 && (
+                <div className="workspace-diag-row workspace-valid">all markers present</div>
+              )}
+            </div>
+          )}
+
+          {/* ── Create workspace panel ── */}
+          <div className={`workspace-action-panel ${diag && !diag.valid ? "workspace-action-panel-attention" : ""}`}>
             <div className="console-section-label">create workspace</div>
-            <div className="create-plan-header">
+            <div className="workspace-action-header">
               <button
                 className="btn btn-sm"
                 onClick={onPlanCreate}
                 disabled={!appSettings || createPlanRunning}
               >
-                {createPlanRunning ? "planning..." : "dry-run create"}
+                {createPlanRunning ? "planning\u2026" : "dry-run create"}
               </button>
               <span className="create-plan-badge">read-only</span>
               <span className="create-plan-badge">no overwrite</span>
               <span className="create-plan-badge">no scripts</span>
             </div>
-            <div className="create-plan-row create-plan-muted">
+            <div className="workspace-action-desc">
               Evaluates whether the workspace path is safe for initialization. Create is only enabled for a missing folder with an existing parent, or an empty existing folder.
             </div>
             {!appSettings && (
-              <div className="create-plan-row create-plan-muted">settings not loaded</div>
+              <div className="workspace-action-desc">settings not loaded</div>
             )}
             {createPlan && (
               <div className="create-plan-result">
@@ -171,7 +328,7 @@ export function WorkspaceView({
                     onClick={onCreateWorkspace}
                     disabled={createRunning}
                   >
-                    {createRunning ? "creating..." : "create workspace"}
+                    {createRunning ? "creating\u2026" : "create workspace"}
                   </button>
                 </div>
                 <div className="create-action-warnings">
@@ -233,22 +390,23 @@ export function WorkspaceView({
             )}
           </div>
 
-          {defaultWorkspaceSummary && (
-            <div className="defaults-preview">
+          {/* ── Bundled starter preview ── */}
+          {summary && (
+            <div className="workspace-resource-panel">
               <div className="defaults-preview-header">
                 <span className="cell-label">BUNDLED STARTER</span>
                 <span className="defaults-preview-badge">read-only</span>
               </div>
-              <div className="defaults-preview-desc">{defaultWorkspaceSummary.description}</div>
+              <div className="defaults-preview-desc">{summary.description}</div>
               <div className="defaults-summary-row">
-                {defaultWorkspaceSummary.categories.map((cat, ci) => (
+                {summary.categories.map((cat, ci) => (
                   <span key={ci} className={`defaults-summary-chip ${cat.label === "Skills" && cat.count > 0 ? "defaults-summary-chip-good" : ""}`}>
                     {cat.label} {cat.count}/{cat.files.length}
                   </span>
                 ))}
               </div>
               <div className="defaults-preview-categories">
-                {defaultWorkspaceSummary.categories.map((cat, ci) => (
+                {summary.categories.map((cat, ci) => (
                   <details key={ci} className="defaults-category" open={cat.label === "Skills" || cat.label === "Docs"}>
                     <summary className="defaults-category-header">
                       <span className="cell-label-sm">{cat.label}</span>
