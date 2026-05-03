@@ -1104,6 +1104,57 @@ html, body, #root {
   opacity: 0.55;
 }
 
+.configs-target-selector {
+  display: flex;
+  gap: 6px;
+  padding: 10px 18px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.configs-target-chip {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: border-color 0.15s;
+}
+
+.configs-target-chip:hover {
+  border-color: var(--text-muted);
+}
+
+.configs-target-chip-active {
+  border-color: var(--accent);
+  background: var(--bg-panel);
+}
+
+.configs-target-chip-label {
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.configs-target-chip-status {
+  font-size: 10px;
+  font-weight: 600;
+  opacity: 0.75;
+}
+
+.configs-target-chip-path {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
 .configs-frame-body {
   display: grid;
   grid-template-columns: 3fr 2fr;

@@ -39,6 +39,7 @@ function App() {
   // configs view state
   const [configLog, setConfigLog] = useState<ActionResult | null>(null);
   const [configRunning, setConfigRunning] = useState<string | null>(null);
+  const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
 
   // health view state
   const [healthLog, setHealthLog] = useState<ActionResult | null>(null);
@@ -165,6 +166,30 @@ function App() {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
+  // initialize active config target from first enabled / first available
+  useEffect(() => {
+    const targets = agentTargets.filter(t => t.kind === "config");
+    const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
+    const firstEnabled = targets.find(t => enabledSet.has(t.id));
+    const selected = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
+    if (selected && !activeConfigTargetId) {
+      setActiveConfigTargetId(selected.id);
+    }
+  }, [agentTargets, appSettings, activeConfigTargetId]);
+
+  // fallback when active config target disappears from registry or settings
+  useEffect(() => {
+    if (!activeConfigTargetId) return;
+    const targets = agentTargets.filter(t => t.kind === "config");
+    const stillExists = targets.some(t => t.id === activeConfigTargetId);
+    if (!stillExists) {
+      const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
+      const firstEnabled = targets.find(t => enabledSet.has(t.id));
+      const fallback = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
+      setActiveConfigTargetId(fallback?.id ?? "");
+    }
+  }, [agentTargets, appSettings, activeConfigTargetId]);
+
   useEffect(() => {
     if (!running && !configRunning && !healthRunning && !installRunning) return;
     setActivityIndex(0);
@@ -228,6 +253,13 @@ function App() {
   const loadConfigTemplate = useCallback(async (targetId: string) => {
     try { setConfigTemplateContent(await invoke<DocumentContent>("read_config_template", { targetId })); } catch (e) { setError(`Config: ${e}`); }
   }, []);
+
+  // load config template when target or view changes to configs
+  useEffect(() => {
+    if (view === "configs" && activeConfigTargetId) {
+      loadConfigTemplate(activeConfigTargetId);
+    }
+  }, [view, activeConfigTargetId, loadConfigTemplate]);
 
   const runInstall = useCallback(async (dry: boolean) => {
     if (installScope === "project" && installTarget.trim() === "") return;
@@ -358,11 +390,15 @@ function App() {
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
     else if (v === "skills") loadSkills();
     else if (v === "docs") loadDocs();
-    else if (v === "configs") { loadConfigTemplate(activeConfigTargetId); fetchStatus(); }
+    else if (v === "configs") { fetchStatus(); }
     else if (v === "health") { loadBackups(); }
     else if (v === "settings") { loadSettings(); }
     else if (v === "agent-rules") loadAgentTemplate();
-  }, [loadSkills, loadDocs, loadAgentTemplate, loadConfigTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+
+  const selectConfigTarget = useCallback((targetId: string) => {
+    setActiveConfigTargetId(targetId);
+  }, []);
 
   const runConfigAction = useCallback(async (action: string) => {
     const startedAt = performance.now();
@@ -428,12 +464,6 @@ function App() {
   const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = agentTargets.filter(t => t.kind === "config");
-  const activeConfigTargetId = (() => {
-    const firstEnabled = configTargets.find(t => enabledSet.has(t.id));
-    if (firstEnabled) return firstEnabled.id;
-    if (configTargets.length > 0) return configTargets[0].id;
-    return "";
-  })();
   const activeConfigEnabled = enabledSet.has(activeConfigTargetId);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
@@ -594,6 +624,7 @@ function App() {
             configLog={configLog}
             configRunning={configRunning}
             configTargets={configTargets}
+            onSelectConfigTarget={selectConfigTarget}
             onDiffConfig={() => runConfigAction("diff_configs")}
             onSyncConfig={() => runConfigAction("sync_configs")}
             onOpenConfig={() => invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`))}

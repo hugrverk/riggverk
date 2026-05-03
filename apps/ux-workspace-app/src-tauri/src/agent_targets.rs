@@ -306,4 +306,92 @@ mod tests {
             );
         }
     }
+
+    // ── config target registry tests ──
+
+    #[test]
+    fn opencode_config_in_config_sync_targets() {
+        let targets = config_sync_targets();
+        let opencode = targets.iter().find(|t| t.id == "opencode_config");
+        assert!(
+            opencode.is_some(),
+            "opencode_config must be in config_sync_targets"
+        );
+        let t = opencode.unwrap();
+        assert_eq!(t.source_rel, "templates/opencode.json");
+        assert_eq!(t.target_rel, ".config/opencode/opencode.json");
+    }
+
+    #[test]
+    fn config_sync_target_ids_are_unique() {
+        let targets = config_sync_targets();
+        let mut seen = HashSet::new();
+        for t in &targets {
+            assert!(
+                seen.insert(t.id),
+                "Duplicate config sync target id '{}'",
+                t.id
+            );
+        }
+    }
+
+    #[test]
+    fn config_sync_source_rel_is_not_absolute() {
+        for t in config_sync_targets() {
+            assert!(
+                !t.source_rel.starts_with('/'),
+                "source_rel '{}' must not be absolute",
+                t.source_rel
+            );
+            assert!(
+                !t.target_rel.starts_with('/'),
+                "target_rel '{}' must not be absolute",
+                t.target_rel
+            );
+        }
+    }
+
+    #[test]
+    fn config_sync_source_rel_does_not_contain_parent_refs() {
+        for t in config_sync_targets() {
+            assert!(
+                !t.source_rel.contains(".."),
+                "source_rel '{}' must not contain '..'",
+                t.source_rel
+            );
+            assert!(
+                !t.target_rel.contains(".."),
+                "target_rel '{}' must not contain '..'",
+                t.target_rel
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_config_target_rejected() {
+        let targets = config_sync_targets();
+        let unknown = targets.iter().find(|t| t.id == "nonexistent_config");
+        assert!(
+            unknown.is_none(),
+            "unknown config target must not be in config_sync_targets"
+        );
+    }
+
+    #[test]
+    fn config_target_ids_unique_in_targets_registry() {
+        let all = targets();
+        let config_ids: Vec<&str> = all
+            .iter()
+            .filter(|t| matches!(t.kind, TargetKind::Config))
+            .map(|t| t.id)
+            .collect();
+        let mut seen = HashSet::new();
+        for id in &config_ids {
+            assert!(
+                seen.insert(*id),
+                "Duplicate config target id '{}' in targets() registry",
+                id
+            );
+        }
+    }
 }

@@ -15,7 +15,7 @@ Top-level views are:
 - **Workspace** — workspace path controls (type, choose folder, use default), workspace diagnostics (validity, markers, rule/config target counts), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
 - **Agents** — agent rule sync/status/log with side-panel repo status, rule actions, and rule target state. Includes a link to the standalone global agent rules template viewer. Does not include tool configs or skills.
 - **Skills** — repo skill catalog, skill selection, multi-agent select, dry-run/install controls, and install output.
-- **Configs** — joined two-column frame for config template management. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
+- **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
 - **Docs** — workspace documentation browser only. No templates or configs.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets. Includes a compact note that workspace path is managed in the Workspace tab.
@@ -178,6 +178,7 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 
 ### Configs
 - Configs is registry-driven via `agent_targets::config_sync_targets()`.
+- Config target selector shows all registered config targets with label, sync status, and source path. The selector is visible even when only one config target exists.
 - Joined two-column frame: selected config template preview on the left, local config terminal on the right.
 - Header shows config target name and live sync status (synced/diverged/missing).
 - Currently supported config target: OpenCode config (`opencode_config`).

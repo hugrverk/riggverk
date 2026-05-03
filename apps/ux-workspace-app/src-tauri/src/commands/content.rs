@@ -305,6 +305,23 @@ mod tests {
             "unknown config target must not be in registry"
         );
     }
+
+    #[test]
+    fn config_sync_target_source_paths_are_safe() {
+        let targets = agent_targets::config_sync_targets();
+        for t in &targets {
+            assert!(
+                !t.source_rel.starts_with('/'),
+                "source_rel must not be absolute: {}",
+                t.id
+            );
+            assert!(
+                !t.source_rel.contains(".."),
+                "source_rel must not contain parent refs: {}",
+                t.id
+            );
+        }
+    }
 }
 
 #[tauri::command]
@@ -328,16 +345,6 @@ pub fn open_agent_template() -> Result<ActionResult, String> {
     let path_str = path_arg(&path)?;
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
     Ok(ActionResult::new(ok, "open_agent_template", out, err, code))
-}
-
-#[tauri::command]
-pub fn read_opencode_config() -> Result<DocumentContent, String> {
-    read_config_template("opencode_config".into())
-}
-
-#[tauri::command]
-pub fn open_opencode_config() -> Result<ActionResult, String> {
-    open_config_template("opencode_config".into())
 }
 
 #[tauri::command]

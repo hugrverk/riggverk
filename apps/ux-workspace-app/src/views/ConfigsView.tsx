@@ -10,6 +10,7 @@ interface ConfigsViewProps {
   configLog: ActionResult | null;
   configRunning: string | null;
   configTargets: AgentTargetMeta[];
+  onSelectConfigTarget: (targetId: string) => void;
   onDiffConfig: () => void;
   onSyncConfig: () => void;
   onOpenConfig: () => void;
@@ -32,6 +33,7 @@ export function ConfigsView({
   configLog,
   configRunning,
   configTargets,
+  onSelectConfigTarget,
   onDiffConfig,
   onSyncConfig,
   onOpenConfig,
@@ -43,14 +45,35 @@ export function ConfigsView({
   const configStatus = status?.config_statuses?.[activeConfigTargetId] ?? "—";
   const selectedTarget = configTargets.find(t => t.id === activeConfigTargetId);
   const configLabel = selectedTarget?.label ?? "config template";
-  const configCount = configTargets.length;
+  const hasActiveTarget = activeConfigTargetId.length > 0;
 
   return (
     <section className="configs-frame">
+      {configTargets.length > 0 && (
+        <div className="configs-target-selector">
+          {configTargets.map(t => {
+            const stat = status?.config_statuses?.[t.id] ?? "—";
+            const isActive = t.id === activeConfigTargetId;
+            return (
+              <button
+                key={t.id}
+                className={`configs-target-chip${isActive ? " configs-target-chip-active" : ""}`}
+                onClick={() => onSelectConfigTarget(t.id)}
+              >
+                <span className={targetDotClass(stat)} />
+                <span className="configs-target-chip-label">{t.label}</span>
+                <span className={`configs-target-chip-status ${syncTextClass(stat)}`}>{stat}</span>
+                <span className="configs-target-chip-path">{t.source_rel}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
       <header className="configs-frame-header">
         <div className="configs-frame-title">
           <span className="terminal-title">CONFIGS</span>
-          <span className="cell-value cell-value-muted">{configLabel}{configCount === 1 ? " (only supported config target)" : ""}</span>
+          <span className="cell-value cell-value-muted">{configLabel}</span>
         </div>
         <div className="configs-frame-actions">
           <span className={`configs-frame-status ${syncTextClass(configStatus)}`}>
@@ -59,7 +82,7 @@ export function ConfigsView({
           {!activeConfigEnabled && <span className="configs-frame-note">config target disabled</span>}
           <button className="btn btn-sm" disabled={configRunning !== null || !configEnabled} onClick={onDiffConfig}>diff</button>
           <button className="btn btn-sm btn-primary" disabled={configRunning !== null || !configEnabled} onClick={onSyncConfig}>sync</button>
-          <button className="btn btn-sm" onClick={onOpenConfig}>open</button>
+          <button className="btn btn-sm" disabled={!hasActiveTarget} onClick={onOpenConfig}>open</button>
         </div>
       </header>
       <div className="configs-frame-body">
