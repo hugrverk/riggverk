@@ -171,12 +171,8 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 ./scripts/install-skills.sh --agent opencode --agent auggie --global
 ```
 
-Backward-compatible aliases `both` (codex + opencode) and `all` (codex + opencode + auggie) remain supported:
+`--all` installs all available workspace skills. It is a skill scope flag, not an agent alias.
 
-```
-./scripts/install-skills.sh --agent both --global
-./scripts/install-skills.sh --agent all --global
-```
 - On failure, quiet mode prints the failing agent, skill name, source path, and destination path so copy errors remain diagnosable.
 
 ### Configs

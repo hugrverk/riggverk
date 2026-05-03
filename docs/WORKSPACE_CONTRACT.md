@@ -45,7 +45,7 @@ This is a transitional arrangement. The `ux-workspace` naming (marker directory,
 
 Over time the two concerns will be separated:
 
-- A public app repository will bundle generic starter workspace resources (default scripts, templates, a README, an empty skills directory, and a workspace marker).
+- A public app repository will bundle generic starter workspace resources (default scripts, templates, a README, 22 starter skills, and a workspace marker).
 - Private workspace repositories will store user-owned docs, skills, templates, and config without containing app source code.
 - Create, import, and upgrade flows for workspaces are future work.
 
@@ -61,7 +61,7 @@ Script-backed actions will remain allowlisted regardless of where the scripts li
 
 ## Bundled default workspace resources
 
-The app source carries a generic starter workspace under `apps/ux-workspace-app/resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, placeholder scripts, and an empty skills directory.
+The app source carries a generic starter workspace under `apps/ux-workspace-app/resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, real install/sync scripts, and 22 starter skills.
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 

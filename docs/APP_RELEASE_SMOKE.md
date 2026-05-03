@@ -74,11 +74,11 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 
 Dry-runs only unless testing your own machine:
 
-- [ ] In a created or selected workspace, `scripts/install-agent-rules.sh --quiet --diff --opencode --codex --auggie` reports synced/diverged
+- [ ] In a created or selected workspace, `scripts/install-agent-rules.sh --quiet --diff --opencode --codex --claude --gemini --auggie` reports synced/diverged
 - [ ] In a created or selected workspace, `scripts/install-opencode-config.sh --quiet --diff` reports synced/diverged
-- [ ] In a created or selected workspace, `scripts/install-skills.sh --quiet --dry-run --agent opencode --global` reports planned counts
+- [ ] In a created or selected workspace, `scripts/install-skills.sh --quiet --dry-run --agent codex --agent opencode --agent claude --agent gemini --agent auggie --global` reports planned counts
 - [ ] install-skills dry-run from a created workspace reports the bundled skills
-- [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --auggie` completes without error
+- [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --gemini --auggie` completes without error
 - [ ] Do not run `--apply` actions when testing someone else's machine
 - [ ] Backups exist under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups` before real sync if applicable
 

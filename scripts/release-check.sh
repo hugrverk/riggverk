@@ -39,6 +39,7 @@ scan_forbidden() {
   scan_tmp="$(mktemp)"
   if command -v rg >/dev/null 2>&1; then
     rg -n "$pattern" scripts apps/ux-workspace-app/src-tauri apps/ux-workspace-app/src \
+      apps/ux-workspace-app/resources/default-workspace/scripts \
       -g '!scripts/release-check.sh' \
       -g '!apps/ux-workspace-app/src-tauri/target/**' \
       -g '!apps/ux-workspace-app/node_modules/**' \
@@ -46,6 +47,7 @@ scan_forbidden() {
       >"$scan_tmp" || true
   else
     find scripts apps/ux-workspace-app/src-tauri apps/ux-workspace-app/src \
+      apps/ux-workspace-app/resources/default-workspace/scripts \
       \( -name target -o -name node_modules -o -name dist \) -prune -o \
       -type f ! -name release-check.sh -exec grep -n -E "$pattern" /dev/null {} \; \
       >"$scan_tmp" || true
@@ -125,6 +127,23 @@ for agent in codex opencode claude gemini auggie; do
     exit 1
   fi
 done
+
+step "bundled default install-skills.sh rejects unsafe skill names"
+for bad in "" "../../" "../escape" "bad name" "BAD" "-bad" "a..b" "a/b"; do
+  if bash apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run 2>/dev/null; then
+    printf 'FAIL: install-skills.sh accepted unsafe skill name: %s\n' "$bad" >&2
+    exit 1
+  fi
+done
+
+step "bundled default install-skills.sh no unguarded rm -rf before containment check"
+skill_file="apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh"
+if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
+  if ! grep -q 'ensure_contained' "$skill_file"; then
+    printf 'FAIL: install-skills.sh has rm -rf without ensure_contained guard\n' >&2
+    exit 1
+  fi
+fi
 
 step "bundled default workspace marker"
 if [ ! -f apps/ux-workspace-app/resources/default-workspace/.ux-workspace/workspace.json ]; then

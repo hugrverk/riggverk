@@ -50,6 +50,77 @@ extract_frontmatter() {
   done < "$file"
 }
 
+validate_skill_name() {
+  local name="$1"
+  local source="$2"
+  if [ -z "$name" ]; then
+    printf 'install-skills.sh: invalid skill name (empty) from %s\n' "$source" >&2
+    return 1
+  fi
+  case "$name" in
+    */*|*..*)
+      printf 'install-skills.sh: skill name contains path traversal: "%s" from %s\n' "$name" "$source" >&2
+      return 1
+      ;;
+  esac
+  case "$name" in
+    *[!a-z0-9-]*)
+      printf 'install-skills.sh: invalid skill name: "%s" from %s\n' "$name" "$source" >&2
+      printf 'install-skills.sh: skill names must start with a-z0-9 and contain only a-z0-9-\n' >&2
+      return 1
+      ;;
+  esac
+  case "${name:0:1}" in
+    [a-z0-9]) ;;
+    *)
+      printf 'install-skills.sh: skill name must start with a-z0-9: "%s" from %s\n' "$name" "$source" >&2
+      return 1
+      ;;
+  esac
+}
+
+ensure_contained() {
+  local dest_root="$1"
+  local name="$2"
+  local dest_dir="${dest_root}/${name}"
+
+  if [ ! -d "$dest_root" ]; then
+    printf 'install-skills.sh: destination root does not exist: %s\n' "$dest_root" >&2
+    return 1
+  fi
+
+  local real_root
+  real_root="$(cd "$dest_root" && pwd -P 2>/dev/null)" || {
+    printf 'install-skills.sh: cannot resolve destination root: %s\n' "$dest_root" >&2
+    return 1
+  }
+
+  if [ -z "$real_root" ] || [ ! -d "$real_root" ]; then
+    printf 'install-skills.sh: destination root not resolvable: %s\n' "$dest_root" >&2
+    return 1
+  fi
+
+  local join_result="${real_root}/${name}"
+  if [ -d "$join_result" ]; then
+    join_result="$(cd "$join_result" && pwd -P 2>/dev/null)" || {
+      printf 'install-skills.sh: cannot resolve destination: %s\n' "${real_root}/${name}" >&2
+      return 1
+    }
+  fi
+
+  case "$join_result" in
+    ""|"/"|"$real_root")
+      printf 'install-skills.sh: unsafe destination path: %s\n' "$join_result" >&2
+      return 1
+      ;;
+    "$real_root"|"$real_root"/*) ;;
+    *)
+      printf 'install-skills.sh: destination outside root: %s\n' "$join_result" >&2
+      return 1
+      ;;
+  esac
+}
+
 discover_skills() {
   local found=0
   local names_seen=""
@@ -63,6 +134,9 @@ discover_skills() {
     name="$(extract_frontmatter "$skill_md" "name")"
     if [ -z "$name" ]; then
       name="$dir_name"
+    fi
+    if ! validate_skill_name "$name" "$skill_md"; then
+      exit 1
     fi
     local desc
     desc="$(extract_frontmatter "$skill_md" "description")"
@@ -187,6 +261,9 @@ while [ $# -gt 0 ]; do
       shift
       if [ $# -eq 0 ]; then
         printf 'install-skills.sh: --skill requires a skill name\n' >&2
+        exit 1
+      fi
+      if ! validate_skill_name "$1" "--skill arg"; then
         exit 1
       fi
       selected_skills+=("$1")
@@ -356,6 +433,16 @@ for agent in "${selected_agents[@]}"; do
     dir="${install_dirs[$i]}"
     src_dir="$SKILLS_DIR/$dir"
     dest_dir="$dest_root/$name"
+    if ! ensure_contained "$dest_root" "$name"; then
+      if $quiet; then
+        printf '  %-10s FAIL %s (containment check failed)\n' "${agent}:" "$name"
+      else
+        printf '    FAIL %s (containment check failed)\n' "$name"
+      fi
+      exit_code=1
+      i=$((i + 1))
+      continue
+    fi
     if [ -d "$dest_dir" ]; then
       rm -rf "$dest_dir"
     fi
