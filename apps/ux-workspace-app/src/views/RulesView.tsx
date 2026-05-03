@@ -79,7 +79,7 @@ export function RulesView({
 
         {agentTemplate ? (
           <>
-            <div className="rules-mode-tabs" role="tablist" aria-label="Rules view mode">
+            <div className="editor-mode-tabs" role="tablist" aria-label="Rules view mode">
               <button
                 className={`btn btn-sm ${agentTemplateMode === "preview" ? "btn-active" : ""}`}
                 onClick={() => onSetAgentTemplateMode("preview")}
@@ -97,7 +97,7 @@ export function RulesView({
                 edit
               </button>
               {agentTemplateDirty && (
-                <span className="rules-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                <span className="editor-dirty" aria-label="Unsaved changes">modified</span>
               )}
             </div>
 
@@ -108,7 +108,7 @@ export function RulesView({
                 </div>
               ) : (
                 <textarea
-                  className="rules-textarea"
+                  className="editor-textarea"
                   value={agentTemplateDraft}
                   onChange={e => onChangeAgentTemplateDraft(e.target.value)}
                   spellCheck={false}
@@ -118,7 +118,7 @@ export function RulesView({
             </div>
 
             {agentTemplateMode === "edit" && (
-              <div className="rules-save-row">
+              <div className="editor-save-row">
                 <button
                   className="btn btn-primary btn-sm"
                   onClick={onSaveAgentTemplate}
@@ -134,13 +134,13 @@ export function RulesView({
                   reset
                 </button>
                 {agentTemplateSaveResult && (
-                  <span className={`rules-save-status ${agentTemplateSaveResult.success ? "rules-save-ok" : "rules-save-fail"}`}>
+                  <span className={`editor-save-status ${agentTemplateSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
                     {agentTemplateSaveResult.success
                       ? agentTemplateSaveResult.stdout
                       : agentTemplateSaveResult.stderr || "save failed"}
                   </span>
                 )}
-                <span className="rules-save-note">template only</span>
+                <span className="editor-save-note">template only</span>
               </div>
             )}
           </>

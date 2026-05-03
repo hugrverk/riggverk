@@ -309,9 +309,9 @@ apps/ux-workspace-app/
 │   │   ├── status.ts     Status count and class-name helpers
 │   │   └── timing.ts     Small timing helpers
 │   ├── views/
-│   │   ├── RulesView.tsx Rules template preview, status, actions, terminals, and targets
-│   │   ├── ConfigsView.tsx Config management view
-│   │   ├── DocsView.tsx  Workspace docs browser
+│   │   ├── RulesView.tsx Rules template preview, edit, save, status, actions, terminals, and targets
+│   │   ├── ConfigsView.tsx Config template editor and management view
+│   │   ├── DocsView.tsx  Workspace docs browser and editor
 │   │   ├── HealthView.tsx Release-check view
 │   │   ├── SettingsView.tsx Settings view
 │   │   ├── SkillsView.tsx  Skill catalog and install view

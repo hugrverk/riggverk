@@ -106,6 +106,18 @@ html, body, #root {
   background: var(--accent-dim);
 }
 
+.tab-dirty {
+  color: var(--dirty);
+  border-color: rgba(245, 158, 11, 0.25);
+  background: rgba(245, 158, 11, 0.08);
+}
+
+.tab-dirty.tab-active {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.25);
+  background: var(--accent-dim);
+}
+
 .status-ok { color: var(--accent); }
 
 /* ---- console ---- */
@@ -1105,6 +1117,70 @@ html, body, #root {
   padding: 12px 18px;
 }
 
+/* ---- shared editor primitives ---- */
+
+.editor-dirty {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--dirty);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.editor-mode-tabs {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 5px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-textarea {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  background: var(--bg-inset);
+  border: none;
+  border-radius: 0;
+  padding: 12px 18px;
+  font-family: var(--font);
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--text);
+  resize: none;
+  outline: none;
+}
+
+.editor-textarea:focus {
+  box-shadow: inset 0 0 0 1px rgba(110, 168, 254, 0.35);
+}
+
+.editor-save-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-top: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.editor-save-status {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+.editor-save-ok { color: var(--accent); }
+.editor-save-fail { color: var(--fail); }
+
+.editor-save-note {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  margin-left: auto;
+}
+
 /* ---- docs editor (edit mode) ---- */
 
 .docs-editor {
@@ -1139,22 +1215,6 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-.docs-dirty-indicator {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--dirty);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.docs-mode-tabs {
-  display: flex;
-  gap: 4px;
-  padding: 6px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
 .docs-editor-body {
   flex: 1;
   min-height: 0;
@@ -1162,44 +1222,6 @@ html, body, #root {
   display: flex;
   flex-direction: column;
 }
-
-.docs-textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  background: var(--bg-inset);
-  border: none;
-  border-radius: 0;
-  padding: 12px 18px;
-  font-family: var(--font);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-  resize: none;
-  outline: none;
-}
-
-.docs-textarea:focus {
-  box-shadow: inset 0 0 0 1px rgba(110, 168, 254, 0.35);
-}
-
-.docs-save-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.docs-save-status {
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: auto;
-}
-
-.docs-save-ok { color: var(--accent); }
-.docs-save-fail { color: var(--fail); }
 
 .docs-create-form {
   display: flex;
@@ -1340,74 +1362,12 @@ html, body, #root {
   border-top: 1px solid var(--border);
 }
 
-.rules-mode-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
 .rules-template-content {
   flex: 1;
   min-height: 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
-}
-
-.rules-textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  background: var(--bg-inset);
-  border: none;
-  border-radius: 0;
-  padding: 12px 18px;
-  font-family: var(--font);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-  resize: none;
-  outline: none;
-}
-
-.rules-textarea:focus {
-  box-shadow: inset 0 0 0 1px rgba(110, 168, 254, 0.35);
-}
-
-.rules-save-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.rules-dirty-indicator {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--dirty);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.rules-save-status {
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: auto;
-}
-
-.rules-save-ok { color: var(--accent); }
-.rules-save-fail { color: var(--fail); }
-
-.rules-save-note {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.5;
-  margin-left: auto;
 }
 
 /* ---- markdown ---- */
@@ -1856,72 +1816,10 @@ html, body, #root {
   white-space: nowrap;
 }
 
-.configs-mode-tabs {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 5px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.configs-dirty-indicator {
-  font-size: 10px;
-  font-weight: 600;
-  color: var(--dirty);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.configs-textarea {
-  flex: 1;
-  width: 100%;
-  min-height: 0;
-  background: var(--bg-inset);
-  border: none;
-  border-radius: 0;
-  padding: 12px 18px;
-  font-family: var(--font);
-  font-size: 13px;
-  line-height: 1.6;
-  color: var(--text);
-  resize: none;
-  outline: none;
-}
-
-.configs-textarea:focus {
-  box-shadow: inset 0 0 0 1px rgba(110, 168, 254, 0.35);
-}
-
-.configs-save-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 6px 14px;
-  border-top: 1px solid var(--border);
-  flex-shrink: 0;
-}
-
-.configs-save-status {
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: auto;
-}
-
-.configs-save-ok { color: var(--accent); }
-.configs-save-fail { color: var(--fail); }
-
 .configs-template-content {
   flex: 1;
   min-height: 0;
   overflow: auto;
-}
-
-.configs-save-note {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.5;
-  margin-left: auto;
 }
 
 .configs-console-pane {

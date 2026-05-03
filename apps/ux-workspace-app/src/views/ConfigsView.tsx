@@ -126,7 +126,7 @@ export function ConfigsView({
                 )}
               </div>
 
-              <div className="configs-mode-tabs" role="tablist" aria-label="Config view mode">
+              <div className="editor-mode-tabs" role="tablist" aria-label="Config view mode">
                 <button
                   className={`btn btn-sm ${configMode === "preview" ? "btn-active" : ""}`}
                   onClick={() => onSetConfigMode("preview")}
@@ -144,7 +144,7 @@ export function ConfigsView({
                   edit
                 </button>
                 {configDirty && (
-                  <span className="configs-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                  <span className="editor-dirty" aria-label="Unsaved changes">modified</span>
                 )}
               </div>
 
@@ -153,7 +153,7 @@ export function ConfigsView({
                   <pre className="configs-code">{formatJson(activeConfigContent.content)}</pre>
                 ) : (
                   <textarea
-                    className="configs-textarea"
+                    className="editor-textarea"
                     value={configDraft}
                     onChange={e => onChangeConfigDraft(e.target.value)}
                     spellCheck={false}
@@ -163,7 +163,7 @@ export function ConfigsView({
               </div>
 
               {configMode === "edit" && (
-                <div className="configs-save-row">
+                <div className="editor-save-row">
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={onSaveConfig}
@@ -179,13 +179,13 @@ export function ConfigsView({
                     reset
                   </button>
                   {configSaveResult && (
-                    <span className={`configs-save-status ${configSaveResult.success ? "configs-save-ok" : "configs-save-fail"}`}>
-                      {configSaveResult.success
-                        ? configSaveResult.stdout
-                        : configSaveResult.stderr || "save failed"}
-                    </span>
+                  <span className={`editor-save-status ${configSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
+                    {configSaveResult.success
+                      ? configSaveResult.stdout
+                      : configSaveResult.stderr || "save failed"}
+                  </span>
                   )}
-                  <span className="configs-save-note">template only</span>
+                  <span className="editor-save-note">template only</span>
                 </div>
               )}
             </>

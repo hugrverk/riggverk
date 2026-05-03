@@ -17,8 +17,8 @@ const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "op
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
-function confirmDiscardDirtyEditor(): boolean {
-  return window.confirm("Discard unsaved changes?");
+function confirmLeaveDirtyEditor(): boolean {
+  return window.confirm("Leave with unsaved changes?");
 }
 
 type View = "workspace" | "rules" | "skills" | "configs" | "health" | "docs" | "settings";
@@ -347,7 +347,7 @@ function App() {
   }, []);
 
   const selectDoc = useCallback(async (id: string) => {
-    if (docDirty && id !== activeDoc?.id && !confirmDiscardDirtyEditor()) return;
+    if (docDirty && id !== activeDoc?.id && !confirmLeaveDirtyEditor()) return;
     activeDocIdRef.current = id;
     try { setActiveDoc(await invoke<DocumentContent>("read_doc", { id })); } catch (e) { setError(`Read doc: ${e}`); }
   }, [docDirty, activeDoc?.id]);
@@ -446,7 +446,7 @@ function App() {
   }, [configTemplateContent]);
 
   const onCreateDoc = useCallback(async () => {
-    if (docDirty && !confirmDiscardDirtyEditor()) return;
+    if (docDirty && !confirmLeaveDirtyEditor()) return;
     const title = createDocTitle.trim();
     const slug = createDocSlug.trim();
     if (!title || !slug) {
@@ -673,7 +673,7 @@ function App() {
       const isDocsDirty = view === "docs" && docDirty;
       const isRulesDirty = view === "rules" && agentTemplateDirty;
       const isConfigsDirty = view === "configs" && configDirty;
-      if ((isDocsDirty || isRulesDirty || isConfigsDirty) && !confirmDiscardDirtyEditor()) return;
+      if ((isDocsDirty || isRulesDirty || isConfigsDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
@@ -687,7 +687,7 @@ function App() {
   }, [view, docDirty, agentTemplateDirty, configDirty, loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
-    if (configDirty && targetId !== activeConfigTargetId && !confirmDiscardDirtyEditor()) return;
+    if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
     setActiveConfigTargetId(targetId);
   }, [configDirty, activeConfigTargetId]);
 
@@ -746,7 +746,7 @@ function App() {
 
   const handleLeftAction = useCallback(async (action: string) => {
     const dirtyBefore = agentTemplateDirty;
-    if (dirtyBefore && !confirmDiscardDirtyEditor()) return;
+    if (dirtyBefore && !confirmLeaveDirtyEditor()) return;
     setView("rules");
     await runAction(action);
   }, [runAction, agentTemplateDirty]);
@@ -808,11 +808,11 @@ function App() {
       <header className="app-header" data-tauri-drag-region>
         <nav className="view-tabs">
           <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
-          <button className={`tab ${view === "rules" ? "tab-active" : ""}`} onClick={() => switchView("rules")}>rules</button>
+          <button className={`tab ${view === "rules" ? "tab-active" : ""}${agentTemplateDirty ? " tab-dirty" : ""}`} onClick={() => switchView("rules")} aria-label={agentTemplateDirty ? "Rules, unsaved changes" : "Rules"}>rules{agentTemplateDirty && " *"}</button>
           <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
-          <button className={`tab ${view === "configs" ? "tab-active" : ""}`} onClick={() => switchView("configs")}>configs</button>
+          <button className={`tab ${view === "configs" ? "tab-active" : ""}${configDirty ? " tab-dirty" : ""}`} onClick={() => switchView("configs")} aria-label={configDirty ? "Configs, unsaved changes" : "Configs"}>configs{configDirty && " *"}</button>
           <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
-          <button className={`tab ${view === "docs" ? "tab-active" : ""}`} onClick={() => switchView("docs")}>docs</button>
+          <button className={`tab ${view === "docs" ? "tab-active" : ""}${docDirty ? " tab-dirty" : ""}`} onClick={() => switchView("docs")} aria-label={docDirty ? "Docs, unsaved changes" : "Docs"}>docs{docDirty && " *"}</button>
           <button className={`tab ${view === "settings" ? "tab-active" : ""}`} onClick={() => switchView("settings")}>settings</button>
         </nav>
       </header>

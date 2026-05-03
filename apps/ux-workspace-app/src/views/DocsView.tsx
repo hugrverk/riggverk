@@ -272,13 +272,13 @@ export function DocsView({
                 </div>
                 <div className="docs-editor-header-right">
                   {docDirty && (
-                    <span className="docs-dirty-indicator" aria-label="Unsaved changes">modified</span>
+                    <span className="editor-dirty" aria-label="Unsaved changes">modified</span>
                   )}
                   <button className="btn btn-sm" onClick={() => onOpenDoc(activeDoc.id)}>open</button>
                 </div>
               </div>
 
-              <div className="docs-mode-tabs" role="tablist" aria-label="Doc view mode">
+              <div className="editor-mode-tabs" role="tablist" aria-label="Doc view mode">
                 <button
                   className={`btn btn-sm ${docMode === "preview" ? "btn-active" : ""}`}
                   onClick={() => onSetDocMode("preview")}
@@ -302,7 +302,7 @@ export function DocsView({
                   <div className="docs-preview-body"><Markdown content={activeDoc.content} /></div>
                 ) : (
                   <textarea
-                    className="docs-textarea"
+                    className="editor-textarea"
                     value={docDraft}
                     onChange={e => onChangeDocDraft(e.target.value)}
                     spellCheck={false}
@@ -312,7 +312,7 @@ export function DocsView({
               </div>
 
               {docMode === "edit" && (
-                <div className="docs-save-row">
+                <div className="editor-save-row">
                   <button
                     className="btn btn-primary btn-sm"
                     onClick={onSaveDoc}
@@ -328,7 +328,7 @@ export function DocsView({
                     reset
                   </button>
                   {docSaveResult && (
-                    <span className={`docs-save-status ${docSaveResult.success ? "docs-save-ok" : "docs-save-fail"}`}>
+                    <span className={`editor-save-status ${docSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
                       {docSaveResult.success
                         ? docSaveResult.stdout
                         : docSaveResult.stderr || "save failed"}
