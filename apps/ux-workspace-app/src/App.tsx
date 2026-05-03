@@ -32,6 +32,7 @@ function App() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
+  const activeDocIdRef = useRef<string | null>(null);
   const [agentTemplate, setAgentTemplate] = useState<DocumentContent | null>(null);
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
 
@@ -265,8 +266,19 @@ function App() {
     try {
       const list = await invoke<DocSummary[]>("list_docs");
       setDocs(list);
-      if (list.length > 0) setActiveDoc(await invoke<DocumentContent>("read_doc", { id: list[0].id }));
-      else setActiveDoc(null);
+      if (list.length === 0) {
+        activeDocIdRef.current = null;
+        setActiveDoc(null);
+      } else {
+        const persistedId = activeDocIdRef.current;
+        if (persistedId && list.some(d => d.id === persistedId)) {
+          setActiveDoc(await invoke<DocumentContent>("read_doc", { id: persistedId }));
+        } else {
+          const first = list[0];
+          activeDocIdRef.current = first.id;
+          setActiveDoc(await invoke<DocumentContent>("read_doc", { id: first.id }));
+        }
+      }
     } catch (e) {
       setDocs([]);
       setActiveDoc(null);
@@ -275,6 +287,7 @@ function App() {
   }, []);
 
   const selectDoc = useCallback(async (id: string) => {
+    activeDocIdRef.current = id;
     try { setActiveDoc(await invoke<DocumentContent>("read_doc", { id })); } catch (e) { setError(`Read doc: ${e}`); }
   }, []);
 

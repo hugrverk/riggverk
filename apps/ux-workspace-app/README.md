@@ -248,6 +248,10 @@ Apply actions for rules and OpenCode config print backup paths when an existing 
 
 ### Docs
 - Curated workspace documentation browser grouped by section (Start, Reference, Operating Model, Private / Operator, Development).
+- Two-pane cockpit layout: left nav with sectioned doc buttons, right Markdown preview pane.
+- Compact command strip with text search (filters by title, id, path, section) and doc count summary.
+- Active doc persists across view switches when the doc remains available.
+- Doc rows are real `<button>` elements with visible focus and active state indicators.
 - Only known doc ids from the curated registry are shown — not every `.md` file in `docs/`.
 - Docs are read from the validated active workspace. Missing optional docs are skipped.
 - `list_docs` returns curated doc summaries with section metadata.
