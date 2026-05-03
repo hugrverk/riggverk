@@ -1,7 +1,8 @@
+import { Markdown } from "../components/Markdown";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, StatusData } from "../types";
+import type { AgentTargetMeta, DocumentContent, StatusData } from "../types";
 
-interface AgentsViewProps {
+interface RulesViewProps {
   status: StatusData | null;
   log: ActionResult | null;
   running: string | null;
@@ -14,7 +15,8 @@ interface AgentsViewProps {
   syncTextClass: (value: string) => string;
   targetDotClass: (value: string) => string;
   onRunAction: (action: string) => void;
-  onOpenGlobalRules: () => void;
+  agentTemplate: DocumentContent | null;
+  onOpenTemplate: () => void;
 }
 
 function statusValue(status: StatusData, id: string): string {
@@ -29,7 +31,7 @@ function statusValue(status: StatusData, id: string): string {
   }
 }
 
-export function AgentsView({
+export function RulesView({
   status,
   log,
   running,
@@ -42,16 +44,30 @@ export function AgentsView({
   syncTextClass,
   targetDotClass,
   onRunAction,
-  onOpenGlobalRules,
-}: AgentsViewProps) {
+  agentTemplate,
+  onOpenTemplate,
+}: RulesViewProps) {
   const ruleTargets = agentTargets.filter(t => t.kind === "rules");
   const stateLabel = status ? (gitAvailable ? (status.dirty ? "dirty" : "clean") : "not git") : "—";
   const stateClass = status ? (gitAvailable ? (status.dirty ? "pill pill-dirty" : "pill pill-clean") : "pill pill-muted") : "pill pill-muted";
 
   return (
     <div className="console-layout">
-      <main className="console-main">
-        <section className="panel log-panel">
+      <main className="console-main" style={{ flexDirection: "column" }}>
+        <div className="doc-viewer-header" style={{ flexShrink: 0 }}>
+          <span className="cell-value">{agentTemplate?.path ?? "templates/global-agent-rules.md"}</span>
+          <button className="btn btn-sm" onClick={onOpenTemplate}>open</button>
+        </div>
+        <div className="doc-viewer-body" style={{ flex: 1 }}>
+          {agentTemplate ? (
+            <Markdown content={agentTemplate.content} />
+          ) : (
+            <div className="log-empty" style={{ padding: "2rem" }}>
+              <span className="log-prompt">$</span> no template loaded
+            </div>
+          )}
+        </div>
+        <section className="panel log-panel" style={{ flex: "0 0 auto", maxHeight: "35%", borderTop: "1px solid var(--border)" }}>
           <div className="terminal-grid" aria-hidden="true" />
           <TerminalState
             runningLabel={running}
@@ -132,9 +148,6 @@ export function AgentsView({
                 </div>
               );
             })}
-          </div>
-          <div className="agent-template-link">
-            <button className="btn btn-sm" onClick={onOpenGlobalRules}>global rules</button>
           </div>
         </section>
       </aside>

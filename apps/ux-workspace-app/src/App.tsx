@@ -4,8 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { ruleSyncCount, syncTextClass, targetDotClass } from "./lib/status";
 import { wait } from "./lib/timing";
-import { AgentRulesView } from "./views/AgentRulesView";
-import { AgentsView } from "./views/AgentsView";
+import { RulesView } from "./views/RulesView";
 import { ConfigsView } from "./views/ConfigsView";
 import { DocsView } from "./views/DocsView";
 import { HealthView } from "./views/HealthView";
@@ -18,7 +17,7 @@ const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "op
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
-type View = "workspace" | "agents" | "skills" | "configs" | "health" | "docs" | "settings" | "agent-rules";
+type View = "workspace" | "rules" | "skills" | "configs" | "health" | "docs" | "settings";
 
 /* ---- main app ---- */
 
@@ -393,7 +392,7 @@ function App() {
     else if (v === "configs") { fetchStatus(); }
     else if (v === "health") { loadBackups(); }
     else if (v === "settings") { loadSettings(); }
-    else if (v === "agent-rules") loadAgentTemplate();
+    else if (v === "rules") { fetchStatus(); loadAgentTemplate(); }
   }, [loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
@@ -454,7 +453,7 @@ function App() {
   }, [fetchStatus, loadBackups, workspaceDiagnostics]);
 
   const handleLeftAction = useCallback(async (action: string) => {
-    setView("agents");
+    setView("rules");
     await runAction(action);
   }, [runAction]);
 
@@ -515,7 +514,7 @@ function App() {
       <header className="app-header" data-tauri-drag-region>
         <nav className="view-tabs">
           <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
-          <button className={`tab ${view === "agents" ? "tab-active" : ""}`} onClick={() => switchView("agents")}>agents</button>
+          <button className={`tab ${view === "rules" ? "tab-active" : ""}`} onClick={() => switchView("rules")}>rules</button>
           <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
           <button className={`tab ${view === "configs" ? "tab-active" : ""}`} onClick={() => switchView("configs")}>configs</button>
           <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
@@ -542,8 +541,8 @@ function App() {
           />
         )}
 
-        {view === "agents" && (
-          <AgentsView
+        {view === "rules" && (
+          <RulesView
             status={status}
             log={log}
             running={running}
@@ -556,7 +555,8 @@ function App() {
             syncTextClass={syncTextClass}
             targetDotClass={targetDotClass}
             onRunAction={handleLeftAction}
-            onOpenGlobalRules={() => switchView("agent-rules")}
+            agentTemplate={agentTemplate}
+            onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
           />
         )}
 
@@ -632,14 +632,6 @@ function App() {
             targetDotClass={targetDotClass}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
-          />
-        )}
-
-        {view === "agent-rules" && (
-          <AgentRulesView
-            agentTemplate={agentTemplate}
-            onBack={() => switchView("agents")}
-            onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
           />
         )}
 

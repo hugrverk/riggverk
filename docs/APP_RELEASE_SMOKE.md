@@ -66,7 +66,7 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 - [ ] Bundled starter preview in Workspace tab shows known categories and file paths
 - [ ] Bundled starter preview shows non-empty Skills category
 - [ ] Bundled default resources contain no private names, secrets, or core-skill-subset language
-- [ ] Workspace docs are separate from templates/config views (Agents, Configs)
+- [ ] Workspace docs are separate from templates/config views (Rules, Configs)
 
 ## 6. Sync / Install Smoke (Caution)
 

@@ -13,7 +13,7 @@ App-triggered script actions use each script's `--quiet` option for compact term
 Top-level views are:
 
 - **Workspace** — workspace path controls (type, choose folder, use default), workspace diagnostics (validity, markers, rule/config target counts), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
-- **Agents** — agent rule sync/status/log with side-panel repo status, rule actions, and rule target state. Includes a link to the standalone global agent rules template viewer. Does not include tool configs or skills.
+- **Rules** — global agent rules template preview, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Does not include tool configs or skills.
 - **Skills** — repo skill catalog, skill selection, multi-agent select, dry-run/install controls, and install output.
 - **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview (~60%). Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
 - **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
@@ -22,7 +22,7 @@ Top-level views are:
 
 ### Agent Rules Template
 
-A standalone read-only view for `templates/global-agent-rules.md`, accessible via the "global rules" button at the bottom of the Agents side panel. Renders the template using the existing markdown viewer with an "open in editor" button. Not a top-level nav tab.
+The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Rules view as a scrollable Markdown preview with an "open" button to open the template in the system editor. The template loads automatically when the Rules tab is active.
 
 ## Prerequisites
 
@@ -122,12 +122,13 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 ### Status
 - `get_status` — repo path, branch, dirty state, latest commit, sync status for five agent rule targets and all registered config targets (via `config_statuses` map keyed by target id), plus separated `enabled_rule_target_ids` and `enabled_config_target_ids`
 
-### Agents
-- Main terminal/log output for the most recent agent action.
+### Rules
+- Global agent rules template rendered inline with scrollable Markdown preview and "open" button.
+- Terminal/log output for the most recent rule action.
 - Right-side control panel with repo status (repo path, commit, branch, dirty state, rule sync count).
 - Action groups: repo (pull, verify) and rules (diff, sync).
 - Verify compares enabled rule targets only. Config drift is handled in the Configs view.
-- Agent rule targets list with per-target sync status. Config targets are tracked separately in the Configs view.
+- Rule targets list with per-target sync status. Config targets are tracked separately in the Configs view.
 - Bootstrap actions remain available as backend commands but are not part of the primary app UI.
 - Script stdout/stderr is displayed exactly as returned by the backend; the frontend does not filter or parse terminal output.
 
@@ -191,7 +192,7 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 ### Health
 - Runs `scripts/release-check.sh` through the allowlisted `release_check` action.
 - The check is read-only: it does not run apply commands, install skills, or write user config folders.
-- Output stays in the Health terminal and does not reuse Agents, Configs, or Skills terminal state.
+    - Output stays in the Health terminal and does not reuse Rules, Configs, or Skills terminal state.
 - Manual GUI smoke remains separate; see [docs/RELEASE.md](../../docs/RELEASE.md). For app release smoke, see [docs/APP_RELEASE_SMOKE.md](../../docs/APP_RELEASE_SMOKE.md).
 - Shows read-only backup history from the script backup directory. Lists recent backup runs without reading file contents. Can open the backup folder in Finder. The backup folder is never created by viewing Health. Backup creation remains script-owned during `--apply` overwrite.
 - Selecting a backup run shows read-only backup details: target id, filename, backup file size, and current target status (missing/matches/differs/unknown). The app does not show file contents or textual diffs. The app does not restore backups. Current target status is metadata-only, computed by comparing file sizes and byte equality without exposing contents.
@@ -248,7 +249,7 @@ Apply actions for rules and OpenCode config print backup paths when an existing 
 - `list_docs` returns curated doc summaries with section metadata.
 - `read_doc` renders the selected Markdown file.
 - `open_doc` opens the selected file in the system editor.
-- The Global Agent Rules template remains separate in the Agents view.
+- The Global Agent Rules template is rendered inline in the Rules view.
 - Templates and configs remain in their own views.
 
 Unknown actions return an error. No command is executed for unknown actions.
@@ -273,8 +274,7 @@ apps/ux-workspace-app/
 │   │   ├── status.ts     Status count and class-name helpers
 │   │   └── timing.ts     Small timing helpers
 │   ├── views/
-│   │   ├── AgentRulesView.tsx Global agent rules template view
-│   │   ├── AgentsView.tsx Agents status, actions, and terminal view
+│   │   ├── RulesView.tsx Rules template preview, status, actions, terminals, and targets
 │   │   ├── ConfigsView.tsx Config management view
 │   │   ├── DocsView.tsx  Workspace docs browser
 │   │   ├── HealthView.tsx Release-check view
