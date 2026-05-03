@@ -2,8 +2,11 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
+import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel, dirtyTabSuffix } from "./lib/editorGuards";
+import { defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
 import { ruleSyncCount, syncTextClass, targetDotClass } from "./lib/status";
 import { wait } from "./lib/timing";
+import { useBackups } from "./lib/useBackups";
 import { RulesView } from "./views/RulesView";
 import { ConfigsView } from "./views/ConfigsView";
 import { DocsView } from "./views/DocsView";
@@ -11,15 +14,10 @@ import { HealthView } from "./views/HealthView";
 import { SkillsView } from "./views/SkillsView";
 import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
-import type { AgentTargetMeta, AppSettings, BackupRunDetails, BackupRunSummary, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
-const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
-
-function confirmLeaveDirtyEditor(): boolean {
-  return window.confirm("Leave with unsaved changes?");
-}
 
 type View = "workspace" | "rules" | "skills" | "configs" | "health" | "docs" | "settings";
 
@@ -106,35 +104,7 @@ function App() {
   const [healthRunning, setHealthRunning] = useState<string | null>(null);
 
   // backup history state
-  const [backups, setBackups] = useState<BackupRunSummary[]>([]);
-  const [selectedBackupId, setSelectedBackupId] = useState<string | null>(null);
-  const [backupDetails, setBackupDetails] = useState<BackupRunDetails | null>(null);
-
-  const loadBackups = useCallback(async () => {
-    try {
-      const list = await invoke<BackupRunSummary[]>("list_backups");
-      setBackups(list);
-      if (selectedBackupId) {
-        if (list.some(r => r.id === selectedBackupId)) {
-          try {
-            setBackupDetails(await invoke<BackupRunDetails>("get_backup_details", { runId: selectedBackupId }));
-          } catch { setBackupDetails(null); }
-        } else {
-          setSelectedBackupId(null);
-          setBackupDetails(null);
-        }
-      }
-    } catch (e) { setError(`Backups: ${e}`); }
-  }, [selectedBackupId]);
-
-  const loadBackupDetails = useCallback(async (runId: string) => {
-    setSelectedBackupId(runId);
-    try { setBackupDetails(await invoke<BackupRunDetails>("get_backup_details", { runId })); } catch (e) { setError(`Backup details: ${e}`); }
-  }, []);
-
-  const openBackupsFolder = useCallback(() => {
-    invoke<ActionResult>("open_backups_folder").catch(e => setError(`Open backups: ${e}`));
-  }, []);
+  const { backups, selectedBackupId, backupDetails, loadBackups, loadBackupDetails, openBackupsFolder } = useBackups(setError);
 
   // workspace diagnostics state
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
@@ -184,7 +154,7 @@ function App() {
 
   const settingsDirty = useMemo(() => {
     if (!appSettings || savedSettingsRef.current === null) return false;
-    return JSON.stringify(appSettings) !== savedSettingsRef.current;
+    return serializeSettingsForCompare(appSettings) !== savedSettingsRef.current;
   }, [appSettings]);
 
   // create workspace plan state
@@ -615,7 +585,7 @@ function App() {
         invoke<TargetProfileMeta[]>("get_target_profiles"),
       ]);
       setAppSettings(s);
-      savedSettingsRef.current = JSON.stringify(s);
+      savedSettingsRef.current = serializeSettingsForCompare(s);
       setAgentTargets(targets);
       setTargetProfiles(profiles);
       document.documentElement.setAttribute("data-theme", s.appearance);
@@ -630,7 +600,7 @@ function App() {
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
       setAppSettings(s);
-      savedSettingsRef.current = JSON.stringify(s);
+      savedSettingsRef.current = serializeSettingsForCompare(s);
       document.documentElement.setAttribute("data-theme", s.appearance);
       setSettingsMsg({ ok: true, text: "settings saved" });
       fetchStatus();
@@ -639,13 +609,13 @@ function App() {
   }, [appSettings, fetchStatus, loadWorkspaceDiagnostics]);
 
   const resetSettings = useCallback(async () => {
-    const defaults: AppSettings = { appearance: "dark", workspace_path: null, enabled_target_ids: DEFAULT_TARGET_IDS };
+    const defaults = defaultSettings();
     setCreatePlan(null);
     setCreateResult(null);
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: defaults });
       setAppSettings(s);
-      savedSettingsRef.current = JSON.stringify(s);
+      savedSettingsRef.current = serializeSettingsForCompare(s);
       document.documentElement.setAttribute("data-theme", s.appearance);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
       fetchStatus();
@@ -818,12 +788,12 @@ function App() {
       <header className="app-header" data-tauri-drag-region>
         <nav className="view-tabs">
           <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
-          <button className={`tab ${view === "rules" ? "tab-active" : ""}${agentTemplateDirty ? " tab-dirty" : ""}`} onClick={() => switchView("rules")} aria-label={agentTemplateDirty ? "Rules, unsaved changes" : "Rules"}>rules{agentTemplateDirty && " *"}</button>
+          <button className={`tab ${view === "rules" ? "tab-active" : ""}${dirtyTabClass(agentTemplateDirty)}`} onClick={() => switchView("rules")} aria-label={dirtyTabAriaLabel(agentTemplateDirty, "Rules")}>rules{dirtyTabSuffix(agentTemplateDirty)}</button>
           <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
-          <button className={`tab ${view === "configs" ? "tab-active" : ""}${configDirty ? " tab-dirty" : ""}`} onClick={() => switchView("configs")} aria-label={configDirty ? "Configs, unsaved changes" : "Configs"}>configs{configDirty && " *"}</button>
+          <button className={`tab ${view === "configs" ? "tab-active" : ""}${dirtyTabClass(configDirty)}`} onClick={() => switchView("configs")} aria-label={dirtyTabAriaLabel(configDirty, "Configs")}>configs{dirtyTabSuffix(configDirty)}</button>
           <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
-          <button className={`tab ${view === "docs" ? "tab-active" : ""}${docDirty ? " tab-dirty" : ""}`} onClick={() => switchView("docs")} aria-label={docDirty ? "Docs, unsaved changes" : "Docs"}>docs{docDirty && " *"}</button>
-          <button className={`tab ${view === "settings" ? "tab-active" : ""}${settingsDirty ? " tab-dirty" : ""}`} onClick={() => switchView("settings")} aria-label={settingsDirty ? "Settings, unsaved changes" : "Settings"}>settings{settingsDirty && " *"}</button>
+          <button className={`tab ${view === "docs" ? "tab-active" : ""}${dirtyTabClass(docDirty)}`} onClick={() => switchView("docs")} aria-label={dirtyTabAriaLabel(docDirty, "Docs")}>docs{dirtyTabSuffix(docDirty)}</button>
+          <button className={`tab ${view === "settings" ? "tab-active" : ""}${dirtyTabClass(settingsDirty)}`} onClick={() => switchView("settings")} aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}>settings{dirtyTabSuffix(settingsDirty)}</button>
         </nav>
       </header>
 

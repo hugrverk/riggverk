@@ -306,8 +306,11 @@ apps/ux-workspace-app/
 │   │   ├── Markdown.tsx  Markdown renderer
 │   │   └── TerminalOutput.tsx Shared terminal output primitives
 │   ├── lib/
+│   │   ├── editorGuards.ts  Dirty editor guard helpers
+│   │   ├── settingsDraft.ts  Settings defaults and comparison
 │   │   ├── status.ts     Status count and class-name helpers
-│   │   └── timing.ts     Small timing helpers
+│   │   ├── timing.ts     Small timing helpers
+│   │   └── useBackups.ts  Backup state hook
 │   ├── views/
 │   │   ├── RulesView.tsx Rules template preview, edit, save, status, actions, terminals, and targets
 │   │   ├── ConfigsView.tsx Config template editor and management view
