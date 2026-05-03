@@ -2000,6 +2000,170 @@ html, body, #root {
   margin-bottom: 6px;
 }
 
+/* ── interactive system nodes ── */
+
+.workspace-system-node-group {
+  display: inline-flex;
+  align-items: center;
+}
+
+.workspace-system-node {
+  display: inline-flex;
+  align-items: center;
+  border: none;
+  background: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font);
+  outline-offset: 3px;
+}
+
+.workspace-system-node:hover .workspace-map-dot {
+  transform: scale(1.35);
+}
+
+.workspace-system-node:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.5);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+
+.workspace-system-node-expanded .workspace-map-dot {
+  box-shadow: 0 0 10px rgba(110, 168, 254, 0.45) !important;
+  transform: scale(1.4);
+}
+
+.workspace-system-node-expanded .workspace-map-label {
+  color: var(--accent) !important;
+  opacity: 0.85 !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-system-node:hover .workspace-map-dot {
+    transform: none;
+  }
+  .workspace-system-node-expanded .workspace-map-dot {
+    transform: none;
+  }
+}
+
+.workspace-node-details {
+  margin-top: 10px;
+  padding: 10px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  animation: workspace-node-details-in 120ms ease-out;
+}
+
+@keyframes workspace-node-details-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .workspace-node-details {
+    animation: none;
+  }
+}
+
+.workspace-node-details-inner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.workspace-node-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  font-size: 12px;
+}
+
+.workspace-node-detail-label {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  min-width: 72px;
+  flex-shrink: 0;
+}
+
+.workspace-node-detail-value {
+  color: var(--text);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workspace-node-detail-dim {
+  color: var(--text-muted);
+  opacity: 0.45;
+}
+
+/* ── workspace next-step (create workspace guided flow) ── */
+
+.workspace-next-step {
+  padding: 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+}
+
+.workspace-next-step-attention {
+  border-color: rgba(251, 191, 36, 0.18);
+  background: rgba(251, 191, 36, 0.04);
+}
+
+.workspace-next-step-ready {
+  border-color: rgba(110, 168, 254, 0.18);
+  background: var(--accent-dim);
+}
+
+.workspace-next-step-body {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.workspace-next-step-guide {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--text);
+  line-height: 1.4;
+}
+
+.workspace-next-step-icon {
+  color: var(--accent);
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.workspace-next-step-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.workspace-next-step-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.workspace-next-step-create-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+}
+
 /* ── resource panel (bundled starter) ── */
 
 .workspace-resource-panel {

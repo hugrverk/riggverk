@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, WorkspaceDiagnostics } from "../types";
 
 interface WorkspaceViewProps {
@@ -89,6 +90,8 @@ export function WorkspaceView({
   createRunning,
   onCreateWorkspace,
 }: WorkspaceViewProps) {
+  const [expandedNode, setExpandedNode] = useState<string | null>(null);
+
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
   const resolvedPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
@@ -107,6 +110,117 @@ export function WorkspaceView({
   const docsCat = findCat(summary, "Docs");
   const scriptsCat = findCat(summary, "Scripts");
   const templatesCat = findCat(summary, "Templates");
+
+  const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
+
+  const renderNodeDetails = (nodeId: string) => {
+    switch (nodeId) {
+      case "workspace":
+        return (
+          <div className="workspace-node-details-inner">
+            {diag ? (
+              <>
+                <div className="workspace-node-detail-row">
+                  <span className="workspace-node-detail-label">path</span>
+                  <span className="workspace-node-detail-value">{resolvedPath}</span>
+                </div>
+                <div className="workspace-node-detail-row">
+                  <span className="workspace-node-detail-label">markers missing</span>
+                  <span className={`workspace-node-detail-value ${missingMarkers.length > 0 ? "workspace-invalid" : "workspace-valid"}`}>
+                    {missingMarkers.length}
+                  </span>
+                </div>
+              </>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+            )}
+          </div>
+        );
+      case "rules":
+        return (
+          <div className="workspace-node-details-inner">
+            {diag ? (
+              <div className="workspace-node-detail-row">
+                <span className="workspace-node-detail-label">enabled</span>
+                <span className={`workspace-node-detail-value ${diag.enabled_rule_targets > 0 ? "workspace-valid" : ""}`}>
+                  {diag.enabled_rule_targets}/{diag.total_rule_targets}
+                </span>
+              </div>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+            )}
+          </div>
+        );
+      case "configs":
+        return (
+          <div className="workspace-node-details-inner">
+            {diag ? (
+              <div className="workspace-node-detail-row">
+                <span className="workspace-node-detail-label">enabled</span>
+                <span className={`workspace-node-detail-value ${diag.enabled_config_targets > 0 ? "workspace-valid" : ""}`}>
+                  {diag.enabled_config_targets}/{diag.total_config_targets}
+                </span>
+              </div>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">waiting for diagnostics</div>
+            )}
+          </div>
+        );
+      case "skills": {
+        const cat = findCat(summary, "Skills");
+        return (
+          <div className="workspace-node-details-inner">
+            {cat ? (
+              <div className="workspace-node-detail-row">
+                <span className="workspace-node-detail-label">bundled</span>
+                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+                  {cat.count} skills
+                </span>
+              </div>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+            )}
+          </div>
+        );
+      }
+      case "docs": {
+        const cat = findCat(summary, "Docs");
+        return (
+          <div className="workspace-node-details-inner">
+            {cat ? (
+              <div className="workspace-node-detail-row">
+                <span className="workspace-node-detail-label">bundled</span>
+                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+                  {cat.count} docs
+                </span>
+              </div>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+            )}
+          </div>
+        );
+      }
+      case "scripts": {
+        const cat = findCat(summary, "Scripts");
+        return (
+          <div className="workspace-node-details-inner">
+            {cat ? (
+              <div className="workspace-node-detail-row">
+                <span className="workspace-node-detail-label">bundled</span>
+                <span className={`workspace-node-detail-value ${cat.count > 0 ? "workspace-valid" : ""}`}>
+                  {cat.count} scripts
+                </span>
+              </div>
+            ) : (
+              <div className="workspace-node-detail-row workspace-node-detail-dim">no starter summary</div>
+            )}
+          </div>
+        );
+      }
+      default:
+        return null;
+    }
+  };
 
   return (
     <section className="terminal terminal-view">
@@ -222,20 +336,36 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ── Workspace map ── */}
+          {/* ── Interactive system map ── */}
           <div className="workspace-map">
             {!diag && <div className="workspace-map-scanning" />}
             <div className="workspace-map-track">
-              {mapNodes.map((node, i) => (
-                <span key={node.id}>
-                  {i > 0 && <span className="workspace-map-line" />}
-                  <span className={mapNodeClass(mapNodeStatus(diag, summary, node.id))}>
-                    <span className="workspace-map-dot" />
-                    <span className="workspace-map-label">{node.label}</span>
+              {mapNodes.map((node, i) => {
+                const status = mapNodeStatus(diag, summary, node.id);
+                const isExpanded = expandedNode === node.id;
+                return (
+                  <span key={node.id} className="workspace-system-node-group">
+                    {i > 0 && <span className="workspace-map-line" />}
+                    <button
+                      className={`workspace-system-node ${isExpanded ? "workspace-system-node-expanded" : ""}`}
+                      onClick={() => setExpandedNode(isExpanded ? null : node.id)}
+                      aria-expanded={isExpanded}
+                      aria-label={`${node.label} system node`}
+                    >
+                      <span className={mapNodeClass(status)}>
+                        <span className="workspace-map-dot" />
+                        <span className="workspace-map-label">{node.label}</span>
+                      </span>
+                    </button>
                   </span>
-                </span>
-              ))}
+                );
+              })}
             </div>
+            {expandedNode && (
+              <div className="workspace-node-details" role="region" aria-label={`${mapNodes.find(n => n.id === expandedNode)?.label} details`}>
+                {renderNodeDetails(expandedNode)}
+              </div>
+            )}
           </div>
 
           {/* ── Diagnostics details ── */}
@@ -265,51 +395,136 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ── Create workspace panel ── */}
-          <div className={`workspace-action-panel ${diag && !diag.valid ? "workspace-action-panel-attention" : ""}`}>
+          {/* ── Create workspace next-step ── */}
+          <div className={`workspace-next-step ${diag && !diag.valid ? "workspace-next-step-attention" : ""} ${createPlanEligible ? "workspace-next-step-ready" : ""}`}>
             <div className="console-section-label">create workspace</div>
-            <div className="workspace-action-header">
-              <button
-                className="btn btn-sm"
-                onClick={onPlanCreate}
-                disabled={!appSettings || createPlanRunning}
-              >
-                {createPlanRunning ? "planning\u2026" : "dry-run create"}
-              </button>
-              <span className="create-plan-badge">read-only</span>
-              <span className="create-plan-badge">no overwrite</span>
-              <span className="create-plan-badge">no scripts</span>
-            </div>
-            <div className="workspace-action-desc">
-              Evaluates whether the workspace path is safe for initialization. Create is only enabled for a missing folder with an existing parent, or an empty existing folder.
-            </div>
-            {!appSettings && (
-              <div className="workspace-action-desc">settings not loaded</div>
+
+            {/* No plan state */}
+            {!createPlan && (
+              <div className="workspace-next-step-body">
+                <div className="workspace-next-step-guide">
+                  <span className="workspace-next-step-icon">\u25B8</span>
+                  <span>Run a dry-run first to evaluate whether the workspace path is safe for initialization.</span>
+                </div>
+                <div className="workspace-next-step-badges">
+                  <span className="create-plan-badge">read-only</span>
+                  <span className="create-plan-badge">no overwrite</span>
+                  <span className="create-plan-badge">no scripts</span>
+                </div>
+                <div className="workspace-next-step-actions">
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={onPlanCreate}
+                    disabled={createPlanRunning}
+                  >
+                    {createPlanRunning ? "planning\u2026" : "dry-run create"}
+                  </button>
+                </div>
+              </div>
             )}
-            {createPlan && (
-              <div className="create-plan-result">
-                <div className={`create-plan-row ${createPlan.ok ? "create-plan-ok" : "create-plan-warn"}`}>
-                  <span className="create-plan-status">{createPlan.ok ? "ok" : "warn"}</span>
-                  <span>{createPlan.status}</span>
+
+            {/* Plan warning state */}
+            {createPlan && !createPlan.ok && (
+              <div className="workspace-next-step-body">
+                <div className="create-plan-result">
+                  <div className="create-plan-row create-plan-warn">
+                    <span className="create-plan-status">warn</span>
+                    <span>{createPlan.status}</span>
+                  </div>
+                  <div className="create-plan-row create-plan-muted">
+                    target: {createPlan.target_path || "(empty)"}
+                  </div>
+                  <div className="create-plan-row">
+                    {createPlan.reason}
+                  </div>
+                  {createPlan.warnings.length > 0 && (
+                    <div className="create-plan-warnings">
+                      {createPlan.warnings.map((w, i) => (
+                        <div key={i} className="create-plan-row workspace-invalid">{w}</div>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className="create-plan-row create-plan-muted">
-                  target: {createPlan.target_path || "(empty)"}
+              </div>
+            )}
+
+            {/* Plan ok state */}
+            {createPlan && createPlan.ok && (
+              <div className="workspace-next-step-body">
+                <div className="create-plan-result">
+                  <div className="create-plan-row create-plan-ok">
+                    <span className="create-plan-status">ok</span>
+                    <span>{createPlan.status}</span>
+                  </div>
+                  <div className="create-plan-row create-plan-muted">
+                    target: {createPlan.target_path || "(empty)"}
+                  </div>
+                  <div className="create-plan-row">
+                    {createPlan.reason}
+                  </div>
+                  {createPlan.warnings.length > 0 && (
+                    <div className="create-plan-warnings">
+                      {createPlan.warnings.map((w, i) => (
+                        <div key={i} className="create-plan-row workspace-invalid">{w}</div>
+                      ))}
+                    </div>
+                  )}
+                  {createPlan.planned_files.length > 0 && (
+                    <div className="create-plan-files">
+                      <div className="create-plan-row cell-label-sm">planned files ({createPlan.planned_files.length})</div>
+                      <div className="create-plan-file-list">
+                        {createPlan.planned_files.map((f, i) => (
+                          <div key={i} className="create-plan-file-row">
+                            <span className="workspace-marker-dot workspace-valid">&#x25CF;</span>
+                            <span className="defaults-file-path">{f}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
-                <div className="create-plan-row">
-                  {createPlan.reason}
-                </div>
-                {createPlan.warnings.length > 0 && (
-                  <div className="create-plan-warnings">
-                    {createPlan.warnings.map((w, i) => (
-                      <div key={i} className="create-plan-row workspace-invalid">{w}</div>
-                    ))}
+                {createPlanEligible && (
+                  <div className="workspace-next-step-create-section">
+                    <div className="workspace-next-step-guide">
+                      <span className="workspace-next-step-icon">\u25B8</span>
+                      <span>Path is safe. Copy bundled starter files into the target directory.</span>
+                    </div>
+                    <div className="workspace-next-step-actions">
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={onCreateWorkspace}
+                        disabled={createRunning}
+                      >
+                        {createRunning ? "creating\u2026" : "create workspace"}
+                      </button>
+                    </div>
+                    <div className="workspace-next-step-badges">
+                      <span className="create-plan-badge">
+                        {createPlan.planned_files.length} files
+                      </span>
+                      <span className="create-plan-badge">no overwrite</span>
+                      <span className="create-plan-badge">no scripts</span>
+                    </div>
                   </div>
                 )}
-                {createPlan.planned_files.length > 0 && (
+              </div>
+            )}
+
+            {/* Create result */}
+            {createResult && (
+              <div className="create-result">
+                <div className={`create-plan-row ${createResult.success ? "create-plan-ok" : "create-plan-warn"}`}>
+                  <span className="create-plan-status">{createResult.success ? "ok" : "fail"}</span>
+                  <span>{createResult.message}</span>
+                </div>
+                <div className="create-plan-row create-plan-muted">
+                  status: {createResult.status} | target: {createResult.target_path}
+                </div>
+                {createResult.copied_files.length > 0 && (
                   <div className="create-plan-files">
-                    <div className="create-plan-row cell-label-sm">planned files ({createPlan.planned_files.length})</div>
+                    <div className="create-plan-row cell-label-sm">copied ({createResult.copied_files.length})</div>
                     <div className="create-plan-file-list">
-                      {createPlan.planned_files.map((f, i) => (
+                      {createResult.copied_files.map((f, i) => (
                         <div key={i} className="create-plan-file-row">
                           <span className="workspace-marker-dot workspace-valid">&#x25CF;</span>
                           <span className="defaults-file-path">{f}</span>
@@ -318,72 +533,24 @@ export function WorkspaceView({
                     </div>
                   </div>
                 )}
-              </div>
-            )}
-            {createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory") && (
-              <div className="create-action-section">
-                <div className="create-action-header">
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={onCreateWorkspace}
-                    disabled={createRunning}
-                  >
-                    {createRunning ? "creating\u2026" : "create workspace"}
-                  </button>
-                </div>
-                <div className="create-action-warnings">
-                  <div className="create-plan-row create-plan-muted">
-                    creates files from bundled starter
-                  </div>
-                  <div className="create-plan-row create-plan-muted">
-                    does not overwrite existing files
-                  </div>
-                  <div className="create-plan-row create-plan-muted">
-                    does not run scripts
-                  </div>
-                </div>
-                {createResult && (
-                  <div className="create-result">
-                    <div className={`create-plan-row ${createResult.success ? "create-plan-ok" : "create-plan-warn"}`}>
-                      <span className="create-plan-status">{createResult.success ? "ok" : "fail"}</span>
-                      <span>{createResult.message}</span>
-                    </div>
-                    <div className="create-plan-row create-plan-muted">
-                      status: {createResult.status} | target: {createResult.target_path}
-                    </div>
-                    {createResult.copied_files.length > 0 && (
-                      <div className="create-plan-files">
-                        <div className="create-plan-row cell-label-sm">copied ({createResult.copied_files.length})</div>
-                        <div className="create-plan-file-list">
-                          {createResult.copied_files.map((f, i) => (
-                            <div key={i} className="create-plan-file-row">
-                              <span className="workspace-marker-dot workspace-valid">&#x25CF;</span>
-                              <span className="defaults-file-path">{f}</span>
-                            </div>
-                          ))}
+                {createResult.skipped_files.length > 0 && (
+                  <div className="create-plan-files">
+                    <div className="create-plan-row cell-label-sm">skipped ({createResult.skipped_files.length})</div>
+                    <div className="create-plan-file-list">
+                      {createResult.skipped_files.map((f, i) => (
+                        <div key={i} className="create-plan-file-row">
+                          <span className="workspace-marker-dot workspace-invalid">&#x25CF;</span>
+                          <span className="defaults-file-path">{f}</span>
                         </div>
-                      </div>
-                    )}
-                    {createResult.skipped_files.length > 0 && (
-                      <div className="create-plan-files">
-                        <div className="create-plan-row cell-label-sm">skipped ({createResult.skipped_files.length})</div>
-                        <div className="create-plan-file-list">
-                          {createResult.skipped_files.map((f, i) => (
-                            <div key={i} className="create-plan-file-row">
-                              <span className="workspace-marker-dot workspace-invalid">&#x25CF;</span>
-                              <span className="defaults-file-path">{f}</span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {createResult.warnings.length > 0 && (
-                      <div className="create-plan-warnings">
-                        {createResult.warnings.map((w, i) => (
-                          <div key={i} className="create-plan-row workspace-invalid">{w}</div>
-                        ))}
-                      </div>
-                    )}
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {createResult.warnings.length > 0 && (
+                  <div className="create-plan-warnings">
+                    {createResult.warnings.map((w, i) => (
+                      <div key={i} className="create-plan-row workspace-invalid">{w}</div>
+                    ))}
                   </div>
                 )}
               </div>
