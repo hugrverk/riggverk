@@ -19,6 +19,15 @@ interface WorkspaceViewProps {
 const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
   summary?.categories.find(c => c.label === label);
 
+function skillDisplayName(filePath: string): string {
+  const parts = filePath.replace(/\\/g, "/").split("/");
+  const skillsIdx = parts.indexOf("skills");
+  if (skillsIdx !== -1 && skillsIdx + 1 < parts.length) {
+    return parts[skillsIdx + 1];
+  }
+  return parts[parts.length - 2] ?? parts[parts.length - 1] ?? filePath;
+}
+
 function mapNodeClass(condition: "valid" | "invalid" | "partial" | "dim"): string {
   switch (condition) {
     case "valid": return "ws-node ws-node-valid";
@@ -639,14 +648,29 @@ export function WorkspaceView({
                         <span className="ws-resource-name">{cat.label}</span>
                         <span className="ws-resource-count">{cat.count}/{cat.files.length}</span>
                       </summary>
-                      <div className="ws-resource-files">
-                        {cat.files.map((f, fi) => (
-                          <div key={fi} className={`ws-file-row ${f.exists ? "" : "ws-file-missing"}`}>
-                            <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
-                            <span className="ws-file-path">{f.path}</span>
-                          </div>
-                        ))}
-                      </div>
+                      {cat.label === "Skills" ? (
+                        <div className="ws-skill-grid">
+                          {cat.files.map((f, fi) => {
+                            const name = skillDisplayName(f.path);
+                            return (
+                              <div key={fi} className={`ws-skill-item ${f.exists ? "" : "ws-skill-item-missing"}`}>
+                                <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
+                                <span className="ws-skill-name">{name}</span>
+                                <span className="ws-skill-path">{f.path}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      ) : (
+                        <div className="ws-resource-files">
+                          {cat.files.map((f, fi) => (
+                            <div key={fi} className={`ws-file-row ${f.exists ? "" : "ws-file-missing"}`}>
+                              <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
+                              <span className="ws-file-path">{f.path}</span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </details>
                   ))}
                 </div>

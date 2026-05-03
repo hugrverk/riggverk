@@ -1977,3 +1977,65 @@ html, body, #root {
   gap: 1px;
   padding: 0 0 4px 2px;
 }
+
+/* ── skill grid (two-column compact) ── */
+
+.ws-skill-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1px 12px;
+  padding: 2px 2px 4px;
+  max-height: 260px;
+  overflow-y: auto;
+  align-content: start;
+}
+
+.ws-skill-item {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0;
+  min-width: 0;
+  border-radius: 2px;
+  transition: background 0.1s;
+}
+
+.ws-skill-item:hover {
+  background: var(--accent-dim);
+}
+
+.ws-skill-item-missing {
+  opacity: 0.35;
+}
+
+.ws-skill-item .ws-dot {
+  flex-shrink: 0;
+}
+
+.ws-skill-name {
+  font-size: 10px;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+.ws-skill-path {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex-shrink: 2;
+  margin-left: auto;
+}
+
+@media (max-width: 700px) {
+  .ws-skill-grid {
+    grid-template-columns: 1fr;
+  }
+}
