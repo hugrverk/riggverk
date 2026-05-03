@@ -12,7 +12,6 @@ interface HealthViewProps {
   onRefreshBackups: () => void;
   onOpenBackupsFolder: () => void;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
-  onRefreshDiagnostics: () => void;
   selectedBackupId: string | null;
   backupDetails: BackupRunDetails | null;
   onSelectBackup: (runId: string) => void;
@@ -44,14 +43,11 @@ export function HealthView({
   onRefreshBackups,
   onOpenBackupsFolder,
   workspaceDiagnostics,
-  onRefreshDiagnostics,
   selectedBackupId,
   backupDetails,
   onSelectBackup,
 }: HealthViewProps) {
   const diag = workspaceDiagnostics;
-  const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
-  const pathLabel = diag?.resolved_path ?? diag?.candidate_path ?? "—";
   return (
     <section className="configs-frame">
       <header className="configs-frame-header">
@@ -81,7 +77,7 @@ export function HealthView({
           <div className="console-section-label">checks</div>
           <div className="health-check-list">
             {!diag ? null : !diag.valid ? (
-              <span className="workspace-invalid">No valid workspace selected. Create or choose a workspace in Settings.</span>
+              <span className="workspace-invalid">No valid workspace selected. Use the Workspace tab.</span>
             ) : !canRunHealthCheck ? (
               <span className="workspace-invalid">Release check is available only in an app development checkout.</span>
             ) : null}
@@ -91,59 +87,6 @@ export function HealthView({
             <span>app build</span>
             <span>cargo fmt/check/clippy/test</span>
             <span>manual GUI smoke still required</span>
-          </div>
-
-          <div className="workspace-diagnostics">
-            <div className="console-section-label">workspace</div>
-            {!diag ? (
-              <div className="workspace-diagnostics-row workspace-valid">loading…</div>
-            ) : (
-              <>
-                <div className={`workspace-diagnostics-row ${diag.valid ? "workspace-valid" : "workspace-invalid"}`}>
-                  {diag.valid ? "valid workspace" : "invalid workspace"}
-                </div>
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">path</span>
-                  <span className="cell-value-trunc">{pathLabel}</span>
-                </div>
-                {diag.error && (
-                  <div className="workspace-diagnostics-row workspace-invalid">{diag.error}</div>
-                )}
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">rules</span>
-                  <span>enabled {diag.enabled_rule_targets}/{diag.total_rule_targets}</span>
-                </div>
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">configs</span>
-                  <span>enabled {diag.enabled_config_targets}/{diag.total_config_targets}</span>
-                </div>
-                <div className="workspace-diagnostics-row">
-                  <span className="cell-label-sm">backup root</span>
-                  <span className={diag.backup_root_exists ? "workspace-valid" : "workspace-invalid"}>
-                    {diag.backup_root_exists ? "exists" : diag.backup_root ? "missing" : "unresolved"}
-                  </span>
-                </div>
-                {missingMarkers.length === 0 && diag.valid ? (
-                  <div className="workspace-diagnostics-row workspace-valid">all markers present</div>
-                ) : (
-                  <div className="workspace-marker-list">
-                    {diag.markers.filter(m => !m.exists).map((m, i) => (
-                      <div key={i} className="workspace-marker-missing">
-                        missing {m.kind}: {m.path}
-                      </div>
-                    ))}
-                  </div>
-                )}
-                {!diag.valid && (
-                  <div className="workspace-diagnostics-row" style={{ color: "var(--text-muted)", fontSize: "11px", opacity: 0.55 }}>
-                    set workspace path in settings
-                  </div>
-                )}
-                <div className="workspace-diagnostics-row">
-                  <button className="btn btn-sm" onClick={onRefreshDiagnostics}>refresh</button>
-                </div>
-              </>
-            )}
           </div>
 
           <div className="backup-history">

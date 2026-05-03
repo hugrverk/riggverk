@@ -11,13 +11,14 @@ import { DocsView } from "./views/DocsView";
 import { HealthView } from "./views/HealthView";
 import { SkillsView } from "./views/SkillsView";
 import { SettingsView } from "./views/SettingsView";
+import { WorkspaceView } from "./views/WorkspaceView";
 import type { AgentTargetMeta, AppSettings, BackupRunDetails, BackupRunSummary, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
-type View = "agents" | "skills" | "configs" | "health" | "docs" | "settings" | "agent-rules";
+type View = "workspace" | "agents" | "skills" | "configs" | "health" | "docs" | "settings" | "agent-rules";
 
 /* ---- main app ---- */
 
@@ -27,7 +28,7 @@ function App() {
   const [running, setRunning] = useState<string | null>(null);
   const [activityIndex, setActivityIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>("agents");
+  const [view, setView] = useState<View>("workspace");
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [docs, setDocs] = useState<DocSummary[]>([]);
@@ -354,13 +355,14 @@ function App() {
   const switchView = useCallback((v: View) => {
     setView(v);
     setSettingsMsg(null);
-    if (v === "skills") loadSkills();
+    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
+    else if (v === "skills") loadSkills();
     else if (v === "docs") loadDocs();
     else if (v === "configs") { loadOpencodeConfig(); fetchStatus(); }
-    else if (v === "health") { loadBackups(); loadWorkspaceDiagnostics(); }
-    else if (v === "settings") { loadSettings(); loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
+    else if (v === "health") { loadBackups(); }
+    else if (v === "settings") { loadSettings(); }
     else if (v === "agent-rules") loadAgentTemplate();
-  }, [loadSkills, loadDocs, loadAgentTemplate, loadOpencodeConfig, loadBackups, loadWorkspaceDiagnostics, loadSettings, fetchStatus]);
+  }, [loadSkills, loadDocs, loadAgentTemplate, loadOpencodeConfig, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const runConfigAction = useCallback(async (action: string) => {
     const startedAt = performance.now();
@@ -386,7 +388,7 @@ function App() {
           success: false,
           action,
           stdout: "",
-          stderr: "No valid workspace selected. Create or choose a workspace in Settings.",
+          stderr: "No valid workspace selected. Use the Workspace tab.",
           exit_code: null,
         });
         return;
@@ -400,7 +402,7 @@ function App() {
           success: false,
           action,
           stdout: "",
-          stderr: "No valid workspace selected. Create or choose a workspace in Settings.",
+          stderr: "No valid workspace selected. Use the Workspace tab.",
           exit_code: null,
         });
       } else {
@@ -475,6 +477,7 @@ function App() {
 
       <header className="app-header" data-tauri-drag-region>
         <nav className="view-tabs">
+          <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
           <button className={`tab ${view === "agents" ? "tab-active" : ""}`} onClick={() => switchView("agents")}>agents</button>
           <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
           <button className={`tab ${view === "configs" ? "tab-active" : ""}`} onClick={() => switchView("configs")}>configs</button>
@@ -485,6 +488,23 @@ function App() {
       </header>
 
       <div className="view-area">
+        {view === "workspace" && (
+          <WorkspaceView
+            appSettings={appSettings}
+            onSetWorkspacePath={setWorkspacePath}
+            onChooseWorkspaceFolder={chooseWorkspaceFolder}
+            workspaceDiagnostics={workspaceDiagnostics}
+            onRefreshDiagnostics={loadWorkspaceDiagnostics}
+            defaultWorkspaceSummary={defaultWorkspaceSummary}
+            createPlan={createPlan}
+            createPlanRunning={createPlanRunning}
+            onPlanCreate={planCreate}
+            createResult={createResult}
+            createRunning={createRunning}
+            onCreateWorkspace={runCreate}
+          />
+        )}
+
         {view === "agents" && (
           <AgentsView
             status={status}
@@ -551,7 +571,6 @@ function App() {
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
             workspaceDiagnostics={workspaceDiagnostics}
-            onRefreshDiagnostics={loadWorkspaceDiagnostics}
             selectedBackupId={selectedBackupId}
             backupDetails={backupDetails}
             onSelectBackup={loadBackupDetails}
@@ -592,21 +611,10 @@ function App() {
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
             onSetAppearance={setAppearance}
-            onSetWorkspacePath={setWorkspacePath}
-            onChooseWorkspaceFolder={chooseWorkspaceFolder}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             onSave={saveSettings}
             onReset={resetSettings}
-            workspaceDiagnostics={workspaceDiagnostics}
-            onRefreshDiagnostics={loadWorkspaceDiagnostics}
-            defaultWorkspaceSummary={defaultWorkspaceSummary}
-            createPlan={createPlan}
-            createPlanRunning={createPlanRunning}
-            onPlanCreate={planCreate}
-            createResult={createResult}
-            createRunning={createRunning}
-            onCreateWorkspace={runCreate}
           />
         )}
       </div>

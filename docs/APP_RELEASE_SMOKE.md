@@ -17,21 +17,19 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] App bundle was built successfully (or dev mode confirmed working)
 - [ ] App launches without generic error banner
 - [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)
-- [ ] Bundled default workspace preview appears in Settings (not only in dev source checkout)
+- [ ] Bundled default workspace preview appears in Workspace tab (not only in dev source checkout)
 
 ## 3. Workspace Setup Smoke
 
 Folder picker and workspace path:
 
-- [ ] Click "choose folder" in Settings — native folder dialog opens
+- [ ] Click "choose folder" in Workspace tab — native folder dialog opens
 - [ ] Select a folder — draft path updates (not saved yet)
 - [ ] Cancel the picker — path remains unchanged
 - [ ] Type a path manually — draft updates
-- [ ] Save — path persists across view changes and app restart
 - [ ] Empty/cleared path falls back to env var or built-in default
 - [ ] Invalid workspace path shows missing markers and "invalid workspace"
-- [ ] Health view workspace panel shows diagnostics matching Settings
-- [ ] Health refresh updates diagnostics
+- [ ] Health view shows compact validity note when no valid workspace selected
 
 ## 4. Create Workspace Smoke
 
@@ -65,7 +63,7 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 - [ ] Docs view shows curated workspace docs grouped by section (Start, Reference, Operating Model, Private / Operator, Development)
 - [ ] Selecting a doc renders its Markdown content
 - [ ] "open" button opens the doc in the system editor
-- [ ] Bundled starter preview in Settings shows known categories and file paths
+- [ ] Bundled starter preview in Workspace tab shows known categories and file paths
 - [ ] Bundled starter preview shows non-empty Skills category
 - [ ] Bundled default resources contain no private names, secrets, or core-skill-subset language
 - [ ] Workspace docs are separate from templates/config views (Agents, Configs)

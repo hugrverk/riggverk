@@ -12,12 +12,13 @@ App-triggered script actions use each script's `--quiet` option for compact term
 
 Top-level views are:
 
+- **Workspace** — workspace path controls (type, choose folder, use default), workspace diagnostics (validity, markers, rule/config target counts), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
 - **Agents** — agent rule sync/status/log with side-panel repo status, rule actions, and rule target state. Includes a link to the standalone global agent rules template viewer. Does not include tool configs or skills.
 - **Skills** — repo skill catalog, skill selection, multi-agent select, dry-run/install controls, and install output.
 - **Configs** — joined two-column frame for tool config management. Left: OpenCode config template/viewer (~60%). Right: local config terminal/output (~40%). Includes header with status, diff/sync actions, and open button. Config actions do not navigate away — output stays in the right pane.
-- **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically.
+- **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected.
 - **Docs** — workspace documentation browser only. No templates or configs.
-- **Settings** — appearance, workspace path (type or pick folder; choosing updates the draft, Save persists it), target profiles/presets, and enabled targets separated into rule targets and config targets. Shows workspace diagnostics (validity and missing markers) near the workspace path input. Includes a read-only bundled default workspace preview with resource categories and known file paths. Includes a read-only workspace creation dry-run plan that evaluates whether the current workspace path draft is a good target for initialization. When the plan reports a safe status (missing or empty directory), a "create workspace" button appears to copy bundled default files into the target — no overwrite, no script execution.
+- **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets. Includes a compact note that workspace path is managed in the Workspace tab.
 
 ### Agent Rules Template
 
@@ -62,7 +63,7 @@ See [docs/WORKSPACE_CONTRACT.md](../../docs/WORKSPACE_CONTRACT.md) for the full 
 
 The app source includes a generic starter workspace under `apps/ux-workspace-app/resources/default-workspace/` with bundled default templates, scripts, docs, starter skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
-Bundled defaults are read-only source material previewed in Settings. They can be applied to create a new workspace via the "create workspace" button, which copies bundled default files into a safe empty or missing target directory. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
+Bundled defaults are read-only source material previewed in the Workspace tab. They can be applied to create a new workspace via the "create workspace" button, which copies bundled default files into a safe empty or missing target directory. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
 
 ### Workspace path
 
@@ -72,7 +73,7 @@ The workspace root is resolved in order of precedence:
 2. **Environment**: `UX_WORKSPACE_PATH` environment variable.
 3. **Default**: built-in fallback path (`~/Projects/ux-workspace`).
 
-Set a custom workspace path in the Settings view (type manually or use **choose folder** to pick via a native directory picker), or override temporarily with the environment variable during dev. Settings shows workspace diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
+Set a custom workspace path in the Workspace tab (type manually or use **choose folder** to pick via a native directory picker), or override temporarily with the environment variable during dev. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
 
 A custom workspace path only changes the working directory for existing allowlisted commands (`git_pull`, `bootstrap_*`, `verify_state`, `sync_agent_rules`, etc.) — it does not add or change any allowed commands.
 
@@ -191,7 +192,7 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 - Manual GUI smoke remains separate; see [docs/RELEASE.md](../../docs/RELEASE.md). For app release smoke, see [docs/APP_RELEASE_SMOKE.md](../../docs/APP_RELEASE_SMOKE.md).
 - Shows read-only backup history from the script backup directory. Lists recent backup runs without reading file contents. Can open the backup folder in Finder. The backup folder is never created by viewing Health. Backup creation remains script-owned during `--apply` overwrite.
 - Selecting a backup run shows read-only backup details: target id, filename, backup file size, and current target status (missing/matches/differs/unknown). The app does not show file contents or textual diffs. The app does not restore backups. Current target status is metadata-only, computed by comparing file sizes and byte equality without exposing contents.
-- Includes a read-only workspace validation panel that checks the configured workspace path against required markers (scripts, templates, directories) without running scripts or reading file contents. Shows missing markers, enabled rule/config target counts, and backup root status. Works for invalid workspace paths without executing anything.
+- Workspace validation and diagnostics are managed in the Workspace tab.
 
 ### Actions
 - `git_pull` — `git pull --ff-only`
@@ -275,7 +276,8 @@ apps/ux-workspace-app/
 │   │   ├── DocsView.tsx  Workspace docs browser
 │   │   ├── HealthView.tsx Release-check view
 │   │   ├── SettingsView.tsx Settings view
-│   │   └── SkillsView.tsx Skill catalog and install view
+│   │   ├── SkillsView.tsx  Skill catalog and install view
+│   │   └── WorkspaceView.tsx Workspace setup view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
 └── src-tauri/
