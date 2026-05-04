@@ -10,19 +10,15 @@ App-triggered script actions use each script's `--quiet` option for compact term
 
 ## Views
 
-Top-level views are:
+The app has three top-level views:
 
-- **Workspace** — app landing cockpit. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts), and read-only bundled starter preview with resource categories and file paths.
-- **Rules** — global agent rules template preview, edit, and save, rule target status with per-target sync state, diff/sync actions, repo status, and integrated terminal output. Rule targets are registry-driven. Save edits the workspace source template only. Sync applies the template to installed rule targets — these are separate actions. Does not include tool configs or skills.
-- **Skills** — repo skill catalog with filterable skill browser (text search and optional area chips), in-app skill preview with Markdown rendering (read-only, registry-allowlisted), multi-agent select, dry-run/install controls, install plan summary with disabled-state warnings, and install output.
-- **Configs** — joined two-column frame for config template management. Top: compact config target selector showing each target's label, sync status, and source path. Left: selected config template preview/edit with metadata rows (source template path, installed target path), mode tabs (preview/edit), and save/reset controls. Right: local config terminal/output (~40%). Config targets are registry-driven via `agent_targets::config_sync_targets()`. Includes header with per-target status, diff/sync actions, and open button. Config template save validates JSON and writes only the workspace source template — save is separate from sync. Config actions do not navigate away — output stays in the right pane. The target selector is visible even when only one config target exists, keeping the UI shape ready for additional targets. Currently supported config target: OpenCode config (`opencode_config`). Future config targets should be added via the registry + allowlisted script handling; no arbitrary config paths are accepted.
-- **Health** — read-only release-check runner for `scripts/release-check.sh`, with local terminal output and backup history. Does not run automatically. Shows a compact workspace validity note when no valid workspace is selected. Backup list is metadata-only — no restore, delete, or file-open actions. Selecting a backup run shows read-only file-level metadata (target id, filename, size, current status) without exposing file contents.
-- **Docs** — workspace documentation browser and editor for curated and custom context docs. No templates or configs.
-- **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Includes a compact note that workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
+- **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, skills install (with expandable skill selector for individual skill toggles, agent toggles, scope/target selection, dry-run and install actions), release-check, and backup management. Integrated terminal output panel. All operation actions report through a single terminal pane.
+- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering. Agents provides agent source file list with edit/open for each. Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
+- **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
 
 ### Agent Rules Template
 
-The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Rules view with preview/edit mode toggle, a textarea editor with save/reset controls, a dirty state indicator, and an "open" button to open the template in the system editor. Save writes only the workspace source template via the allowlisted `save_agent_template` command; it does not sync installed rule targets. Sync is a separate action triggered by the diff/sync buttons in the rules sidebar. The template loads automatically when the Rules tab is active.
+The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Library view under the Rules source type, with preview/edit mode toggle, a textarea editor with save/reset controls, a dirty state indicator, and an "open" button to open the template in the system editor. Save writes only the workspace source template via the allowlisted `save_agent_template` command; it does not sync installed rule targets. Sync is a separate action triggered by the diff/sync buttons in the Workspace operations section.
 
 ## Prerequisites
 
@@ -148,14 +144,10 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 - Script stdout/stderr is displayed exactly as returned by the backend; the frontend does not filter or parse terminal output.
 
 ### Skills
-- Available repo skills list with text search filtering (name, id, area, description) and optional per-area chips when multiple areas exist.
-- In-app skill preview with Markdown rendering (read-only, registry-allowlisted lookup — no arbitrary file paths accepted).
-- Skill selection (toggle button) is independent from preview selection (row button).
-- Install plan summary showing selected skills count, agent count in preferred order, scope, and project target.
+- Available repo skills listed in Library view under the Skills source type with text search filtering and read-only Markdown preview.
+- Skill install selection and controls moved to Workspace Operations: expandable skill selector with individual toggles, select all/clear, agent toggles, scope/target selection, dry-run, and install actions.
 - Native agent multi-select: toggle codex, opencode, claude, gemini, auggie independently. At least one agent must be selected.
-- Scope selector: `global` or `project`.
-- Dry-run and install selected actions call the existing `install_skills` backend command.
-- Project target validation is enforced in the backend and script. Project installs require a non-empty target path that looks like a real project checkout.
+- All install logic reuses the existing `install_skills` backend command.
 - Five install targets remain unchanged; no new install destinations added.
 
 ### Skill installation
@@ -197,30 +189,19 @@ The script supports repeated `--agent` flags for direct multi-agent selection:
 - On failure, quiet mode prints the failing agent, skill name, source path, and destination path so copy errors remain diagnosable.
 
 ### Configs
-- Configs is registry-driven via `agent_targets::config_sync_targets()`.
-- Config target selector shows all registered config targets with label, sync status, and source path. The selector is visible even when only one config target exists.
-- Joined two-column frame: selected config template editor on the left, local config terminal on the right.
-- Header shows config target name and live sync status (synced/diverged/missing).
-- Metadata rows show source template path and installed target path for the selected target.
+- Config template source editing is in Library view under the Configs source type with target selector, preview/edit mode, and save/reset controls.
+- Config operations (diff/sync) are in the Workspace Operations section.
+- Configs are registry-driven via `agent_targets::config_sync_targets()`.
 - Currently supported config target: OpenCode config (`opencode_config`).
-- Actions: diff (read-only) and sync (apply) via the allowlisted config target registry.
-- Config actions write output to the right-pane terminal and do not navigate away.
-- `open` button opens the selected config template in the system editor.
-- Preview/edit mode toggle: preview shows formatted JSON; edit shows a textarea editor with save and reset controls.
 - `save_config_template` validates JSON for the opencode_config target. Unknown targets and malformed JSON are rejected.
 - Config template save writes only the workspace source template (`templates/opencode.json`), not the installed target path.
 - Save is separate from sync: save edits the template; sync applies changes to the installed config target.
-- Config targets are defined in an internal allowlisted registry. Currently only OpenCode config is managed.
-- Future config targets should be added via registry entry + allowlisted script handling. No arbitrary config paths are accepted.
 
-### Health
-- Runs `scripts/release-check.sh` through the allowlisted `release_check` action.
+### Release Check and Backups
+- Release check runs `scripts/release-check.sh` through the allowlisted `release_check` action from the Workspace Operations section.
 - The check is read-only: it does not run apply commands, install skills, or write user config folders.
-    - Output stays in the Health terminal and does not reuse Rules, Configs, or Skills terminal state.
-- Manual GUI smoke remains separate; see [docs/RELEASE.md](../../docs/RELEASE.md). For app release smoke, see [docs/APP_RELEASE_SMOKE.md](../../docs/APP_RELEASE_SMOKE.md).
-- Shows read-only backup history from the script backup directory. Lists recent backup runs without reading file contents. Can open the backup folder in Finder. The backup folder is never created by viewing Health. Backup creation remains script-owned during `--apply` overwrite.
-- Selecting a backup run shows read-only backup details: target id, filename, backup file size, and current target status (missing/matches/differs/unknown). The app does not show file contents or textual diffs. The app does not restore backups. Current target status is metadata-only, computed by comparing file sizes and byte equality without exposing contents.
-- Workspace validation and diagnostics are managed in the Workspace tab.
+- Backup history is visible in the Workspace Operations section: refresh backup list, open backups folder.
+- Workspace validation and diagnostics are managed in the Workspace view.
 
 ### Actions
 - `git_pull` — `git pull --ff-only`
@@ -311,14 +292,10 @@ apps/ux-workspace-app/
 │   │   ├── status.ts     Status count and class-name helpers
 │   │   ├── timing.ts     Small timing helpers
 │   │   └── useBackups.ts  Backup state hook
-│   ├── views/
-│   │   ├── RulesView.tsx Rules template preview, edit, save, status, actions, terminals, and targets
-│   │   ├── ConfigsView.tsx Config template editor and management view
-│   │   ├── DocsView.tsx  Workspace docs browser and editor
-│   │   ├── HealthView.tsx Release-check view
-│   │   ├── SettingsView.tsx Settings view
-│   │   ├── SkillsView.tsx  Skill catalog and install view
-│   │   └── WorkspaceView.tsx Workspace setup view
+  │   ├── views/
+  │   │   ├── WorkspaceView.tsx Workspace operations cockpit and skills install selector
+  │   │   ├── LibraryView.tsx   Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
+  │   │   └── SettingsView.tsx  Settings view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
 └── src-tauri/

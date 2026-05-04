@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, StatusData, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, SkillSummary, StatusData, WorkspaceDiagnostics } from "../types";
+import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
   appSettings: AppSettings | null;
@@ -34,15 +35,23 @@ interface WorkspaceViewProps {
   onReleaseCheck: () => void;
   onRefreshStatus: () => void;
   // skills compact
-  skillsCount: number;
-  selectedSkillsCount: number;
+  skills: SkillSummary[];
+  selectedSkills: Set<string>;
+  skillSearch: string;
   installAgents: string[];
   installScope: string;
   installTarget: string;
   skillsCanInstall: boolean;
   onDryRunSkills: () => void;
   onInstallSkills: () => void;
-  onSwitchToSkills: () => void;
+  onToggleSkill: (name: string) => void;
+  onSelectAllSkills: () => void;
+  onClearSelectionSkills: () => void;
+  onToggleInstallAgent: (agent: InstallAgent) => void;
+  onSetInstallScope: (scope: "global" | "project") => void;
+  onSetInstallTarget: (value: string) => void;
+  onSetSkillSearch: (value: string) => void;
+  onOpenInstallScript: () => void;
   // backups
   backupCount: number;
   onRefreshBackups: () => void;
@@ -155,22 +164,44 @@ export function WorkspaceView({
   onSyncConfigs,
   onReleaseCheck,
   onRefreshStatus,
-  // skills compact
-  skillsCount,
-  selectedSkillsCount,
+  // skills
+  skills,
+  selectedSkills,
+  skillSearch,
   installAgents,
   installScope,
   installTarget,
   skillsCanInstall,
   onDryRunSkills,
   onInstallSkills,
-  onSwitchToSkills,
+  onToggleSkill,
+  onSelectAllSkills,
+  onClearSelectionSkills,
+  onToggleInstallAgent,
+  onSetInstallScope,
+  onSetInstallTarget,
+  onSetSkillSearch,
+  onOpenInstallScript,
   // backups
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
 }: WorkspaceViewProps) {
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
+  const [showSkillSelector, setShowSkillSelector] = useState(false);
+
+  const skillsCount = skills.length;
+  const selectedSkillsCount = selectedSkills.size;
+
+  const filteredSkills = (() => {
+    if (!skillSearch.trim()) return skills;
+    const q = skillSearch.toLowerCase().trim();
+    return skills.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.id.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q)
+    );
+  })();
 
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
@@ -860,7 +891,16 @@ export function WorkspaceView({
               <div className="ws-op-block-actions">
                 <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
-                <button className="btn btn-sm ws-op-link-btn" onClick={onSwitchToSkills}>select in Skills tab</button>
+                {skillsCount > 0 && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setShowSkillSelector(prev => !prev)}
+                    aria-expanded={showSkillSelector}
+                  >
+                    {showSkillSelector ? "hide selector" : "select skills"}
+                  </button>
+                )}
+                <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
               </div>
               {workspaceValid && !skillsCanInstall && !wsRunning && (
                 <div className="ws-op-block-warn">
@@ -875,6 +915,86 @@ export function WorkspaceView({
               )}
               {!workspaceValid && (
                 <div className="ws-op-block-warn">No valid workspace. Create one above.</div>
+              )}
+
+              {/* Expandable skills selector */}
+              {showSkillSelector && (
+                <div className="ws-skill-selector" role="region" aria-label="Skill selection">
+                  {/* Search + bulk actions */}
+                  <div className="ws-skill-selector-controls">
+                    <input
+                      className="skills-search"
+                      type="text"
+                      placeholder="search skills..."
+                      value={skillSearch}
+                      onChange={e => onSetSkillSearch(e.target.value)}
+                    />
+                    {skillSearch && (
+                      <button className="btn btn-sm" onClick={() => onSetSkillSearch("")}>x</button>
+                    )}
+                    <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
+                    <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
+                  </div>
+
+                  {/* Install agents toggles */}
+                  <div className="ws-skill-selector-agents">
+                    <span className="ws-skill-selector-label">targets:</span>
+                    {INSTALL_AGENTS.map(a => (
+                      <button
+                        key={a}
+                        className={`btn btn-sm ${installAgents.includes(a) ? "btn-active" : ""}`}
+                        onClick={() => onToggleInstallAgent(a)}
+                      >{a}</button>
+                    ))}
+                  </div>
+
+                  {/* Scope + target path */}
+                  <div className="ws-skill-selector-scope">
+                    <span className="ws-skill-selector-label">scope:</span>
+                    {(["global", "project"] as const).map(s => (
+                      <button
+                        key={s}
+                        className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`}
+                        onClick={() => onSetInstallScope(s)}
+                      >{s}</button>
+                    ))}
+                    {installScope === "project" && (
+                      <input
+                        className="install-target-input"
+                        type="text"
+                        placeholder="/path/to/project"
+                        value={installTarget}
+                        onChange={e => onSetInstallTarget(e.target.value)}
+                      />
+                    )}
+                  </div>
+
+                  {/* Skill list */}
+                  <div className="ws-skill-selector-list">
+                    {filteredSkills.length === 0 ? (
+                      <div className="ws-skill-selector-empty">
+                        {skillSearch ? "No matching skills" : "No skills found"}
+                      </div>
+                    ) : (
+                      filteredSkills.map(s => {
+                        const isSelected = selectedSkills.has(s.name);
+                        return (
+                          <div key={s.id} className={`ws-skill-selector-row ${isSelected ? "ws-skill-selector-row-on" : ""}`}>
+                            <button
+                              className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
+                              onClick={() => onToggleSkill(s.name)}
+                              aria-pressed={isSelected}
+                            >
+                              {isSelected ? "x" : ""}
+                            </button>
+                            <span className="ws-skill-selector-name">{s.name}</span>
+                            <span className="ws-skill-selector-desc">{s.description}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
               )}
             </div>
           </div>

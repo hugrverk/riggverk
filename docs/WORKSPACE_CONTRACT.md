@@ -84,7 +84,7 @@ When the plan reports a safe target (`missing_directory` or `empty_existing_dire
 
 ## Validation
 
-Workspace validation is read-only. It checks for required markers and reports their presence. It does not execute scripts, read file contents beyond marker existence checks, or write to the filesystem. Diagnostics are visible in the app Workspace and Health views; the backend command `get_workspace_diagnostics` reports marker-level results without running any scripts.
+Workspace validation is read-only. It checks for required markers and reports their presence. It does not execute scripts, read file contents beyond marker existence checks, or write to the filesystem. Diagnostics are visible in the app Workspace view; the backend command `get_workspace_diagnostics` reports marker-level results without running any scripts.
 
 The workspace path is resolved in this order:
 

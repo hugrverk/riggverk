@@ -29,7 +29,7 @@ Folder picker and workspace path:
 - [ ] Type a path manually — draft updates
 - [ ] Empty/cleared path falls back to env var or built-in default
 - [ ] Invalid workspace path shows missing markers and "invalid workspace"
-- [ ] Health view shows compact validity note when no valid workspace selected
+- [ ] Workspace view shows compact validity note when no valid workspace selected
 
 ## 4. Create Workspace Smoke
 
@@ -59,15 +59,16 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 - [ ] Non-empty, unsafe, valid-existing, or missing-parent targets are rejected by dry-run
 - [ ] Remove throwaway test folder after test
 
-## 5. Docs and Default Workspace Smoke
+## 5. Library and Default Workspace Smoke
 
-- [ ] Docs view shows curated workspace docs grouped by section (Start, Reference, Operating Model, Private / Operator, Development)
+- [ ] Library view shows curated workspace docs grouped by section (Start, Reference, Operating Model, Private / Operator, Development) under the Docs source type
+- [ ] Library view allows switching between source types: Docs, Rules, Skills, Agents, Configs
 - [ ] Selecting a doc renders its Markdown content
 - [ ] "open" button opens the doc in the system editor
 - [ ] Bundled starter preview in Workspace tab shows known categories and file paths
 - [ ] Bundled starter preview shows non-empty Skills category
 - [ ] Bundled default resources contain no private names, secrets, or core-skill-subset language
-- [ ] Workspace docs are separate from templates/config views (Rules, Configs)
+- [ ] Workspace docs are separate from templates/config (Library handles source editing; Workspace handles operations)
 
 ## 6. Sync / Install Smoke (Caution)
 
@@ -81,18 +82,17 @@ Dry-runs only unless testing your own machine:
 - [ ] Do not run `--apply` actions when testing someone else's machine
 - [ ] Backups exist under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups` before real sync if applicable
 
-## 7. Skills Cockpit Smoke
+## 7. Skills Selection Smoke (Workspace Operations)
 
-- [ ] Skills view shows area filter chips when filtered skills include multiple areas
-- [ ] Area filter "all" shows all skills; clicking an area chip filters to that area
-- [ ] Checkbox toggles install selection for the skill
-- [ ] Clicking the skill row/name selects it for preview (right pane)
-- [ ] Checkbox and preview selection are independent
-- [ ] Preview pane shows skill Markdown content with header (name, area, path, open button)
-- [ ] "open" button in preview opens the SKILL.md in the system editor
-- [ ] Install plan summary shows selected skills count, agent count/names, scope, and project target
-- [ ] Invalid workspace copy says "Workspace" not "Settings"
-- [ ] "Select a skill to preview" empty state when no skill is selected
+- [ ] Workspace SKILLS operation block shows selected count and agent/scope info
+- [ ] "select skills" button expands the skills selector
+- [ ] Search input filters skills by name, id, and description
+- [ ] "all" selects all skills; "clear" deselects all
+- [ ] Checkbox toggles install selection for each skill
+- [ ] Agent toggles (codex, opencode, claude, gemini, auggie) are visible and toggleable
+- [ ] Scope toggles (global/project) with project target path input work
+- [ ] Install plan info shows agent count/names, scope, and project target
+- [ ] "hide selector" collapses the skills selector
 - [ ] Dry-run and install actions behave identically to previous behavior
 - [ ] "open script" button opens install-skills.sh in system editor
 

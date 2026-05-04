@@ -6,12 +6,9 @@ The app includes a generic bundled default workspace at `apps/ux-workspace-app/r
 
 ## App Surfaces
 
-- Agents: rule target status, diff, and sync actions.
-- Skills: bundled or workspace skill catalog and install dry-runs/actions.
-- Configs: tool config template viewing, diff, and sync actions.
-- Docs: workspace documentation browser.
-- Health: release-check runner and workspace diagnostics.
-- Settings: workspace path, target profiles, bundled defaults preview, and workspace creation.
+- **Workspace**: operations cockpit (pull, diff/sync rules, diff/sync configs, skills install, release-check, backups), workspace creation, system map, diagnostics.
+- **Library**: unified source browser and editor for Docs, Rules, Skills, Agents, and Configs.
+- **Settings**: appearance, target profiles, enabled targets, workspace path.
 
 ## Local Development
 

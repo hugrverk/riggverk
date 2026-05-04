@@ -2122,7 +2122,7 @@ html, body, #root {
   opacity: 0.5;
 }
 
-/* ── shared workspace colour helpers (used by HealthView) ── */
+/* ── shared workspace colour helpers ── */
 
 .workspace-valid {
   color: var(--accent) !important;
@@ -2950,6 +2950,114 @@ html, body, #root {
   opacity: 0.9;
   color: var(--accent) !important;
   border-color: var(--accent) !important;
+}
+
+/* ── Workspace skills selector (expandable, inside SKILLS op block) ── */
+
+.ws-skill-selector {
+  margin-top: 8px;
+  padding: 6px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--surface-elevated);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-skill-selector-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ws-skill-selector-controls .skills-search {
+  flex: 1;
+  min-width: 140px;
+  font-size: 11px;
+  padding: 2px 6px;
+  height: 24px;
+}
+
+.ws-skill-selector-agents,
+.ws-skill-selector-scope {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.ws-skill-selector-label {
+  font-size: 9px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+
+.ws-skill-selector-scope .install-target-input {
+  font-size: 11px;
+  padding: 2px 6px;
+  height: 24px;
+  min-width: 160px;
+  margin-left: 4px;
+}
+
+.ws-skill-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.ws-skill-selector-empty {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  padding: 8px 4px;
+}
+
+.ws-skill-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 4px;
+  border-radius: 2px;
+  font-size: 11px;
+}
+
+.ws-skill-selector-row:hover {
+  background: var(--hover);
+}
+
+.ws-skill-selector-row-on {
+  background: var(--hover);
+}
+
+.ws-skill-selector-row .skills-row-check-button {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+}
+
+.ws-skill-selector-name {
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.ws-skill-selector-desc {
+  color: var(--text-muted);
+  opacity: 0.7;
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* ── library view ── */

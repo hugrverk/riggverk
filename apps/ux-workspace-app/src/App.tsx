@@ -4,13 +4,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel, dirtyTabSuffix } from "./lib/editorGuards";
 import { defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
-import { ruleSyncCount, syncTextClass, targetDotClass } from "./lib/status";
 import { wait } from "./lib/timing";
 import { useBackups } from "./lib/useBackups";
-import { RulesView } from "./views/RulesView";
-import { ConfigsView } from "./views/ConfigsView";
-import { HealthView } from "./views/HealthView";
-import { SkillsView } from "./views/SkillsView";
 import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
@@ -19,14 +14,12 @@ import type { AgentSourceContent, AgentSourceSummary, AgentTargetMeta, AppSettin
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
-type View = "workspace" | "rules" | "skills" | "configs" | "health" | "library" | "settings";
+type View = "workspace" | "library" | "settings";
 
 /* ---- main app ---- */
 
 function App() {
   const [status, setStatus] = useState<StatusData | null>(null);
-  const [log, setLog] = useState<ActionResult | null>(null);
-  const [running, setRunning] = useState<string | null>(null);
   const [activityIndex, setActivityIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("workspace");
@@ -87,9 +80,6 @@ function App() {
 
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
 
-  // configs view state
-  const [configLog, setConfigLog] = useState<ActionResult | null>(null);
-  const [configRunning, setConfigRunning] = useState<string | null>(null);
   const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
 
   // config template edit state
@@ -99,12 +89,8 @@ function App() {
   const [configSaveResult, setConfigSaveResult] = useState<ActionResult | null>(null);
   const [configMode, setConfigMode] = useState<"preview" | "edit">("preview");
 
-  // health view state
-  const [healthLog, setHealthLog] = useState<ActionResult | null>(null);
-  const [healthRunning, setHealthRunning] = useState<string | null>(null);
-
   // backup history state
-  const { backups, selectedBackupId, backupDetails, loadBackups, loadBackupDetails, openBackupsFolder } = useBackups(setError);
+  const { backups, loadBackups, openBackupsFolder } = useBackups(setError);
 
   // workspace operations state
   const [wsLog, setWsLog] = useState<ActionResult | null>(null);
@@ -137,14 +123,11 @@ function App() {
   const [installAgents, setInstallAgents] = useState<Set<string>>(new Set(["opencode"]));
   const [installScope, setInstallScope] = useState<"global" | "project">("global");
   const [installTarget, setInstallTarget] = useState("");
-  const [installResult, setInstallResult] = useState<ActionResult | null>(null);
-  const [installRunning, setInstallRunning] = useState(false);
   const skillsSelectionTouched = useRef(false);
 
   // skill preview state
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
-  const [skillFilter, setSkillFilter] = useState<string | null>(null);
   const [skillSearch, setSkillSearch] = useState("");
   const activeSkillIdRef = useRef<string | null>(null);
   const activeSkillContentIdRef = useRef<string | null>(null);
@@ -266,26 +249,11 @@ function App() {
   }, [agentTargets, appSettings, activeConfigTargetId]);
 
   useEffect(() => {
-    if (!running && !configRunning && !healthRunning && !installRunning && !wsRunning) return;
+    if (!wsRunning) return;
     setActivityIndex(0);
     const id = window.setInterval(() => setActivityIndex(i => (i + 1) % 8), 110);
     return () => window.clearInterval(id);
-  }, [running, configRunning, healthRunning, installRunning, wsRunning]);
-
-  const runAction = useCallback(async (action: string) => {
-    const startedAt = performance.now();
-    setRunning(action); setError(null);
-    try {
-      const result = await invoke<ActionResult>("run_action", { action });
-      setLog(result);
-      if (!action.startsWith("open_")) fetchStatus();
-    } catch (e) { setError(`${action}: ${e}`); }
-    finally {
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      setRunning(null);
-    }
-  }, [fetchStatus]);
+  }, [wsRunning]);
 
   const loadSkills = useCallback(async () => {
     try {
@@ -613,9 +581,9 @@ function App() {
     }
   }, [agentTemplate]);
 
-  // load config template when target or view changes to configs (or library configs)
+  // load config template when library configs source type is active
   useEffect(() => {
-    if ((view === "configs" || (view === "library" && librarySourceType === "configs")) && activeConfigTargetId) {
+    if ((view === "library" && librarySourceType === "configs") && activeConfigTargetId) {
       loadConfigTemplate(activeConfigTargetId);
     }
   }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate]);
@@ -633,34 +601,6 @@ function App() {
       setConfigMode("preview");
     }
   }, [configTemplateContent?.id]);
-
-  const runInstall = useCallback(async (dry: boolean) => {
-    if (installScope === "project" && installTarget.trim() === "") return;
-    setInstallRunning(true);
-    setInstallResult(null);
-    try {
-      const req: InstallSkillsRequest = {
-        agents: Array.from(installAgents),
-        scope: installScope,
-        target: installScope === "project" ? installTarget : undefined,
-        skills: Array.from(selectedSkills),
-        dry_run: dry,
-      };
-      const result = await invoke<ActionResult>("install_skills", { request: req });
-      setInstallResult(result);
-      if (!dry && result.success) fetchStatus();
-    } catch (e) {
-      setInstallResult({
-        success: false,
-        action: dry ? "install_skills:dry-run" : "install_skills",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
-      setError(`Install: ${e}`);
-    }
-    finally { setInstallRunning(false); }
-  }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus]);
 
   const toggleSkill = useCallback((name: string) => {
     skillsSelectionTouched.current = true;
@@ -772,86 +712,26 @@ function App() {
 
   const switchView = useCallback((v: View) => {
     if (v !== view) {
-      const isDocsDirty = view === "library" && librarySourceType === "docs" && docDirty;
       const isLibraryDirty = view === "library" && (
         (librarySourceType === "docs" && docDirty) ||
         (librarySourceType === "rules" && agentTemplateDirty) ||
         (librarySourceType === "configs" && configDirty) ||
         (librarySourceType === "agents" && agentDirty)
       );
-      const isRulesDirty = view === "rules" && agentTemplateDirty;
-      const isConfigsDirty = view === "configs" && configDirty;
       const isSettingsDirty = view === "settings" && settingsDirty;
-      if ((isDocsDirty || isLibraryDirty || isRulesDirty || isConfigsDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
+      if ((isLibraryDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
-    else if (v === "skills") loadSkills();
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
-    else if (v === "configs") { fetchStatus(); }
-    else if (v === "health") { loadBackups(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-    else if (v === "rules") { fetchStatus(); loadAgentTemplate(); }
-  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
     setActiveConfigTargetId(targetId);
   }, [configDirty, activeConfigTargetId]);
-
-  const runConfigAction = useCallback(async (action: string) => {
-    const startedAt = performance.now();
-    setConfigRunning(action); setError(null);
-    try {
-      const result = await invoke<ActionResult>("run_action", { action });
-      setConfigLog(result);
-      fetchStatus();
-    } catch (e) { setError(`Config: ${e}`); }
-    finally {
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      setConfigRunning(null);
-    }
-  }, [fetchStatus]);
-
-  const runHealthAction = useCallback(async (action: string) => {
-    const startedAt = performance.now();
-    setHealthRunning(action); setError(null);
-    try {
-      if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
-        setHealthLog({
-          success: false,
-          action,
-          stdout: "",
-          stderr: "No valid workspace selected. Use the Workspace tab.",
-          exit_code: null,
-        });
-        return;
-      }
-      const result = await invoke<ActionResult>("run_action", { action });
-      setHealthLog(result);
-      fetchStatus();
-    } catch (e) {
-      if (isInvalidWorkspaceError(e)) {
-        setHealthLog({
-          success: false,
-          action,
-          stdout: "",
-          stderr: "No valid workspace selected. Use the Workspace tab.",
-          exit_code: null,
-        });
-      } else {
-        setError(`Health: ${e}`);
-      }
-    }
-    finally {
-      loadBackups();
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      setHealthRunning(null);
-    }
-  }, [fetchStatus, loadBackups, workspaceDiagnostics]);
 
   const runWsAction = useCallback(async (action: string, label: string) => {
     const startedAt = performance.now();
@@ -905,28 +785,14 @@ function App() {
     }
   }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus]);
 
-  const goToSkills = useCallback(() => { switchView("skills"); }, [switchView]);
-
-  const handleLeftAction = useCallback(async (action: string) => {
-    const dirtyBefore = agentTemplateDirty;
-    if (dirtyBefore && !confirmLeaveDirtyEditor()) return;
-    setView("rules");
-    await runAction(action);
-  }, [runAction, agentTemplateDirty]);
-
-  const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
-  const enabledRuleSet = new Set(status?.enabled_rule_target_ids ?? []);
-  const rsc = status ? ruleSyncCount(status, enabledRuleSet) : { synced: 0, total: 0 };
-  const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && !wsRunning && (installScope !== "project" || installTarget.trim() !== "");
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = agentTargets.filter(t => t.kind === "config");
-  const activeConfigEnabled = enabledSet.has(activeConfigTargetId);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
   const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
   const installAgentsArray = Array.from(installAgents);
-  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
+  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning && (installScope !== "project" || installTarget.trim() !== "");
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -975,10 +841,6 @@ function App() {
       <header className="app-header" data-tauri-drag-region>
         <nav className="view-tabs">
           <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
-          <button className={`tab ${view === "rules" ? "tab-active" : ""}${dirtyTabClass(agentTemplateDirty)}`} onClick={() => switchView("rules")} aria-label={dirtyTabAriaLabel(agentTemplateDirty, "Rules")}>rules{dirtyTabSuffix(agentTemplateDirty)}</button>
-          <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
-          <button className={`tab ${view === "configs" ? "tab-active" : ""}${dirtyTabClass(configDirty)}`} onClick={() => switchView("configs")} aria-label={dirtyTabAriaLabel(configDirty, "Configs")}>configs{dirtyTabSuffix(configDirty)}</button>
-          <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
           <button className={`tab ${view === "library" ? "tab-active" : ""}${dirtyTabClass(docDirty || agentTemplateDirty || configDirty || agentDirty)}`} onClick={() => switchView("library")} aria-label={dirtyTabAriaLabel(docDirty || agentTemplateDirty || configDirty || agentDirty, "Library")}>library{dirtyTabSuffix(docDirty || agentTemplateDirty || configDirty || agentDirty)}</button>
           <button className={`tab ${view === "settings" ? "tab-active" : ""}${dirtyTabClass(settingsDirty)}`} onClick={() => switchView("settings")} aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}>settings{dirtyTabSuffix(settingsDirty)}</button>
         </nav>
@@ -1017,81 +879,28 @@ function App() {
             onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             onRefreshStatus={fetchStatus}
-            // skills compact
-            skillsCount={skills.length}
-            selectedSkillsCount={selectedSkills.size}
+            // skills
+            skills={skills}
+            selectedSkills={selectedSkills}
+            skillSearch={skillSearch}
             installAgents={installAgentsArray}
             installScope={installScope}
             installTarget={installTarget}
             skillsCanInstall={skillsCanInstall}
             onDryRunSkills={() => runWsInstall(true)}
             onInstallSkills={() => runWsInstall(false)}
-            onSwitchToSkills={goToSkills}
+            onToggleSkill={toggleSkill}
+            onSelectAllSkills={selectAll}
+            onClearSelectionSkills={clearSelection}
+            onToggleInstallAgent={toggleInstallAgent}
+            onSetInstallScope={setInstallScope}
+            onSetInstallTarget={setInstallTarget}
+            onSetSkillSearch={setSkillSearch}
+            onOpenInstallScript={openInstallScript}
             // backups
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
-          />
-        )}
-
-        {view === "rules" && (
-          <RulesView
-            status={status}
-            log={log}
-            running={running}
-            rsc={rsc}
-            gitAvailable={status?.git_available === true}
-            agentTargets={agentTargets}
-            enabledSet={enabledSet}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
-            syncTextClass={syncTextClass}
-            targetDotClass={targetDotClass}
-            onRunAction={handleLeftAction}
-            agentTemplate={agentTemplate}
-            onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
-            agentTemplateDraft={agentTemplateDraft}
-            agentTemplateDirty={agentTemplateDirty}
-            agentTemplateSaving={agentTemplateSaving}
-            agentTemplateSaveResult={agentTemplateSaveResult}
-            agentTemplateMode={agentTemplateMode}
-            onSetAgentTemplateMode={setAgentTemplateMode}
-            onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
-            onSaveAgentTemplate={onSaveAgentTemplate}
-            onResetAgentTemplate={onResetAgentTemplate}
-          />
-        )}
-
-        {view === "skills" && (
-          <SkillsView
-            skills={skills}
-            workspaceValid={workspaceValid}
-            selectedSkills={selectedSkills}
-            installAgents={installAgents}
-            installScope={installScope}
-            installTarget={installTarget}
-            installResult={installResult}
-            installRunning={installRunning}
-            canInstall={canInstall}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
-            activeSkillId={activeSkillId}
-            activeSkillContent={activeSkillContent}
-            skillFilter={skillFilter}
-            skillSearch={skillSearch}
-            onSetSkillFilter={setSkillFilter}
-            onSetSkillSearch={setSkillSearch}
-            onSelectSkillPreview={readSkill}
-            onToggleSkill={toggleSkill}
-            onSelectAll={selectAll}
-            onClearSelection={clearSelection}
-            onToggleInstallAgent={toggleInstallAgent}
-            onSetInstallScope={setInstallScope}
-            onSetInstallTarget={setInstallTarget}
-            onDryRun={() => runInstall(true)}
-            onInstallSelected={() => runInstall(false)}
-            onOpenSkill={openSkill}
-            onOpenInstallScript={openInstallScript}
           />
         )}
 
@@ -1184,54 +993,6 @@ function App() {
             onResetConfig={onResetConfig}
             // Common
             workspaceValid={workspaceValid}
-          />
-        )}
-
-        {view === "health" && (
-          <HealthView
-            healthLog={healthLog}
-            healthRunning={healthRunning}
-            onRunHealthCheck={() => runHealthAction("release_check")}
-            canRunHealthCheck={canRunReleaseCheck}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
-            backups={backups}
-            onRefreshBackups={loadBackups}
-            onOpenBackupsFolder={openBackupsFolder}
-            workspaceDiagnostics={workspaceDiagnostics}
-            selectedBackupId={selectedBackupId}
-            backupDetails={backupDetails}
-            onSelectBackup={loadBackupDetails}
-          />
-        )}
-
-        {view === "configs" && (
-          <ConfigsView
-            status={status}
-            activeConfigContent={configTemplateContent}
-            activeConfigTargetId={activeConfigTargetId}
-            activeConfigEnabled={activeConfigEnabled}
-            configEnabled={configEnabled}
-            configLog={configLog}
-            configRunning={configRunning}
-            configTargets={configTargets}
-            onSelectConfigTarget={selectConfigTarget}
-            onDiffConfig={() => runConfigAction("diff_configs")}
-            onSyncConfig={() => runConfigAction("sync_configs")}
-            onOpenConfig={() => invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`))}
-            syncTextClass={syncTextClass}
-            targetDotClass={targetDotClass}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
-            configDraft={configDraft}
-            configDirty={configDirty}
-            configSaving={configSaving}
-            configSaveResult={configSaveResult}
-            configMode={configMode}
-            onSetConfigMode={setConfigMode}
-            onChangeConfigDraft={onChangeConfigDraft}
-            onSaveConfig={onSaveConfig}
-            onResetConfig={onResetConfig}
           />
         )}
 
