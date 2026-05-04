@@ -3,7 +3,7 @@ export function confirmLeaveDirtyEditor(): boolean {
 }
 
 export function dirtyTabClass(dirty: boolean): string {
-  return dirty ? " tab-dirty" : "";
+  return dirty ? " nav-icon-dirty" : "";
 }
 
 export function dirtyTabAriaLabel(dirty: boolean, name: string): string {

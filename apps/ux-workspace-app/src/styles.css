@@ -67,8 +67,8 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 16px;
-  padding: 12px 30px 12px 90px;
-  height: 36px;
+  padding: 10px 30px 10px 90px;
+  height: 44px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -86,6 +86,68 @@ html, body, #root {
   gap: 2px;
 }
 
+.nav-icons {
+  display: flex;
+  gap: 4px;
+}
+
+.nav-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--text-muted);
+  font-family: var(--font);
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s, border-color 0.1s;
+  position: relative;
+  flex-shrink: 0;
+}
+
+.nav-icon:hover { color: var(--text); background: var(--bg-panel); }
+
+.nav-icon:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.5);
+  outline-offset: 1px;
+}
+
+.nav-icon-active {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.25);
+  background: var(--accent-dim);
+}
+
+.nav-icon-dirty {
+  color: var(--dirty);
+}
+
+.nav-icon-dirty::after {
+  content: "";
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--dirty);
+  pointer-events: none;
+}
+
+.nav-icon-dirty.nav-icon-active {
+  color: var(--accent);
+  border-color: rgba(110, 168, 254, 0.25);
+  background: var(--accent-dim);
+}
+
+.nav-icon-dirty.nav-icon-active::after {
+  background: var(--accent);
+}
+
+/* keep old .tab classes for backward compat */
 .tab {
   padding: 5px 12px;
   border: 1px solid transparent;
@@ -2145,10 +2207,10 @@ html, body, #root {
 }
 
 .ws-cmd-title {
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  color: var(--text-muted);
-  letter-spacing: 0.08em;
+  color: var(--text-heading);
+  letter-spacing: 0.06em;
   flex-shrink: 0;
 }
 
@@ -2156,7 +2218,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 11px;
+  font-size: 12px;
   flex: 1;
   min-width: 0;
 }
@@ -2183,9 +2245,9 @@ html, body, #root {
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 1px 8px;
+  padding: 2px 8px;
   font-family: var(--font);
-  font-size: 10px;
+  font-size: 11px;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -2237,13 +2299,13 @@ html, body, #root {
 .ws-pane:last-child { border-bottom: none; }
 
 .ws-pane-label {
-  padding: 5px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   color: var(--text-muted);
-  font-size: 9px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.08em;
-  opacity: 0.5;
+  opacity: 0.55;
   text-transform: uppercase;
 }
 
@@ -2256,12 +2318,12 @@ html, body, #root {
 
 .ws-status-row {
   display: grid;
-  grid-template-columns: 72px minmax(0, 1fr);
+  grid-template-columns: 78px minmax(0, 1fr);
   align-items: center;
   gap: 8px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .ws-status-row:last-child { border-bottom: none; }
@@ -2269,7 +2331,7 @@ html, body, #root {
 .ws-status-key {
   color: var(--text-muted);
   opacity: 0.55;
-  font-size: 10px;
+  font-size: 11px;
   flex-shrink: 0;
 }
 
@@ -2311,9 +2373,9 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 10px;
+  padding: 4px 10px;
   border-bottom: 1px solid var(--border);
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
 }
 
@@ -2322,7 +2384,7 @@ html, body, #root {
 .ws-diag-key {
   color: var(--text-muted);
   opacity: 0.5;
-  font-size: 10px;
+  font-size: 11px;
   min-width: 56px;
   flex-shrink: 0;
 }
@@ -2350,7 +2412,7 @@ html, body, #root {
 }
 
 .ws-cmd-row {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text);
   line-height: 1.4;
   display: flex;
@@ -2361,7 +2423,7 @@ html, body, #root {
 .ws-cmd-prompt {
   color: var(--accent);
   font-weight: 600;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   flex-shrink: 0;
   min-width: 28px;
@@ -2374,9 +2436,9 @@ html, body, #root {
 }
 
 .ws-tag {
-  font-size: 9px;
+  font-size: 10px;
   text-transform: uppercase;
-  padding: 1px 5px;
+  padding: 1px 6px;
   border: 1px solid var(--border);
   border-radius: 3px;
   color: var(--text-muted);
@@ -2425,9 +2487,9 @@ html, body, #root {
 .ws-file-row {
   display: flex;
   align-items: center;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text);
-  padding: 1px 0;
+  padding: 2px 0;
 }
 
 .ws-file-path {
@@ -2585,7 +2647,7 @@ html, body, #root {
 }
 
 .ws-map-label {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   text-transform: lowercase;
   letter-spacing: 0.03em;
@@ -2634,13 +2696,13 @@ html, body, #root {
   display: flex;
   align-items: baseline;
   gap: 8px;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .ws-detail-key {
   color: var(--text-muted);
   opacity: 0.55;
-  font-size: 10px;
+  font-size: 11px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   min-width: 64px;
@@ -2673,9 +2735,9 @@ html, body, #root {
 .ws-resource-chip {
   border: 1px solid var(--border);
   border-radius: 3px;
-  padding: 1px 6px;
+  padding: 2px 7px;
   color: var(--text-muted);
-  font-size: 10px;
+  font-size: 11px;
   line-height: 1.5;
 }
 
@@ -2690,7 +2752,7 @@ html, body, #root {
 }
 
 .ws-resource-desc {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.5;
   line-height: 1.4;
@@ -2707,9 +2769,9 @@ html, body, #root {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 3px 0;
+  padding: 4px 0;
   cursor: pointer;
-  font-size: 11px;
+  font-size: 12px;
 }
 
 .ws-resource-name {
@@ -2717,7 +2779,7 @@ html, body, #root {
 }
 
 .ws-resource-count {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.5;
 }
@@ -2764,7 +2826,7 @@ html, body, #root {
 }
 
 .ws-skill-name {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text);
   white-space: nowrap;
   overflow: hidden;
@@ -2774,7 +2836,7 @@ html, body, #root {
 }
 
 .ws-skill-path {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   opacity: 0.45;
   white-space: nowrap;
@@ -2813,13 +2875,13 @@ html, body, #root {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  padding: 5px 10px;
+  padding: 6px 10px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
 
 .ws-op-header-hint {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.6;
   text-transform: lowercase;
@@ -2828,28 +2890,28 @@ html, body, #root {
 /* central terminal panel */
 .ws-op-term-pane {
   flex-shrink: 0;
-  padding: 6px 12px;
-  max-height: 200px;
+  padding: 8px 14px;
+  max-height: 240px;
   overflow-y: auto;
   border-bottom: 1px solid var(--border);
   background: var(--bg-inset);
 }
 
 .ws-op-term-pane .log-output {
-  font-size: 10px;
-  line-height: 1.3;
-  max-height: 120px;
+  font-size: 12px;
+  line-height: 1.4;
+  max-height: 140px;
   overflow-y: auto;
 }
 
 .ws-op-term-pane .log-status {
-  font-size: 11px;
+  font-size: 12px;
 }
 
-/* operations grid */
+/* operations grid — 2-column desktop */
 .ws-op-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(2, 1fr);
   gap: 1px;
   background: var(--border);
   border-bottom: 1px solid var(--border);
@@ -2858,13 +2920,7 @@ html, body, #root {
   align-content: start;
 }
 
-@media (max-width: 780px) {
-  .ws-op-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-}
-
-@media (max-width: 520px) {
+@media (max-width: 700px) {
   .ws-op-grid {
     grid-template-columns: 1fr;
   }
@@ -2875,29 +2931,28 @@ html, body, #root {
   background: var(--bg);
   display: flex;
   flex-direction: column;
-  padding: 8px 10px;
-  gap: 6px;
+  padding: 10px 12px;
+  gap: 8px;
 }
 
 .ws-op-block-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px;
+  gap: 6px;
 }
 
 .ws-op-block-label {
-  font-size: 10px;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-heading);
-  letter-spacing: 0.06em;
-  opacity: 0.7;
+  letter-spacing: 0.04em;
 }
 
 .ws-op-block-meta {
-  font-size: 9px;
+  font-size: 11px;
   color: var(--text-muted);
-  opacity: 0.5;
+  opacity: 0.55;
   font-family: var(--font);
   text-align: right;
 }
@@ -2905,15 +2960,15 @@ html, body, #root {
 .ws-op-block-body {
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 8px;
   flex: 1;
 }
 
 .ws-op-block-desc {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.55;
-  line-height: 1.3;
+  line-height: 1.35;
 }
 
 .ws-op-block-info {
@@ -2923,20 +2978,20 @@ html, body, #root {
 .ws-op-block-actions {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 5px;
   align-items: center;
 }
 
 .ws-op-block-actions .btn {
-  font-size: 10px;
-  padding: 2px 8px;
+  font-size: 11px;
+  padding: 3px 9px;
 }
 
 .ws-op-block-warn {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--fail);
   opacity: 0.7;
-  line-height: 1.2;
+  line-height: 1.3;
 }
 
 .ws-op-link-btn {
@@ -2974,10 +3029,76 @@ html, body, #root {
 
 .ws-skill-selector-controls .skills-search {
   flex: 1;
-  min-width: 140px;
+  min-width: 180px;
+  font-size: 12px;
+  padding: 3px 8px;
+  height: 28px;
+}
+
+.ws-skill-selector-agents,
+.ws-skill-selector-scope {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.ws-skill-selector-label {
+  font-size: 10px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+  letter-spacing: 0.5px;
+  margin-right: 2px;
+}
+
+.ws-skill-selector-scope .install-target-input {
+  font-size: 12px;
+  padding: 3px 8px;
+  height: 28px;
+  min-width: 180px;
+  margin-left: 4px;
+}
+
+.ws-skill-selector-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.ws-skill-selector-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  padding: 8px 4px;
+}
+
+.ws-skill-selector-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 6px;
+  border-radius: 2px;
+  font-size: 12px;
+}
+
+.ws-skill-selector-name {
+  font-weight: 500;
+  color: var(--text);
+  white-space: nowrap;
+  min-width: 130px;
+  flex-shrink: 0;
+}
+
+.ws-skill-selector-desc {
+  color: var(--text-muted);
+  opacity: 0.7;
   font-size: 11px;
-  padding: 2px 6px;
-  height: 24px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .ws-skill-selector-agents,
@@ -3073,21 +3194,21 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 8px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
   min-height: 0;
 }
 
 .lib-topline .terminal-title {
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 600;
-  letter-spacing: 0.05em;
+  letter-spacing: 0.04em;
   color: var(--accent);
 }
 
 .lib-topline .terminal-host {
-  font-size: 11px;
+  font-size: 12px;
   color: var(--text-muted);
 }
 
@@ -3101,9 +3222,9 @@ html, body, #root {
 .lib-sidebar {
   display: flex;
   flex-direction: column;
-  width: 240px;
-  min-width: 180px;
-  max-width: 320px;
+  width: 260px;
+  min-width: 200px;
+  max-width: 340px;
   border-right: 1px solid var(--border);
   overflow: hidden;
 }
@@ -3117,8 +3238,8 @@ html, body, #root {
 
 .lib-source-tab {
   flex: 1;
-  padding: 6px 4px;
-  font-size: 10px;
+  padding: 8px 6px;
+  font-size: 12px;
   font-family: var(--font);
   color: var(--text-muted);
   background: transparent;
@@ -3128,15 +3249,22 @@ html, body, #root {
   text-align: center;
   white-space: nowrap;
   transition: color 0.15s, border-color 0.15s;
+  min-width: 0;
 }
 
 .lib-source-tab:hover {
   color: var(--text);
 }
 
+.lib-source-tab:focus-visible {
+  outline: 2px solid rgba(110, 168, 254, 0.5);
+  outline-offset: -2px;
+}
+
 .lib-source-tab-active {
   color: var(--accent);
   border-bottom-color: var(--accent);
+  font-weight: 600;
 }
 
 .lib-sidebar-body {
@@ -3150,8 +3278,8 @@ html, body, #root {
 }
 
 .lib-sidebar-group-label {
-  padding: 4px 10px 2px;
-  font-size: 9px;
+  padding: 6px 10px 3px;
+  font-size: 10px;
   font-weight: 600;
   letter-spacing: 0.04em;
   color: var(--text-muted);
@@ -3163,10 +3291,10 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 1px;
+  gap: 2px;
   width: 100%;
-  padding: 4px 10px;
-  font-size: 11px;
+  padding: 6px 10px;
+  font-size: 12px;
   font-family: var(--font);
   color: var(--text);
   background: transparent;
@@ -3175,6 +3303,7 @@ html, body, #root {
   cursor: pointer;
   text-align: left;
   transition: background 0.1s, border-color 0.1s;
+  min-height: 36px;
 }
 
 .lib-sidebar-item:hover {
@@ -3202,19 +3331,20 @@ html, body, #root {
 }
 
 .lib-sidebar-item-title {
-  font-size: 11px;
-  line-height: 1.3;
+  font-size: 12px;
+  line-height: 1.35;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
   max-width: 100%;
+  font-weight: 500;
 }
 
 .lib-sidebar-item-desc {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   opacity: 0.7;
-  line-height: 1.2;
+  line-height: 1.25;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3222,7 +3352,7 @@ html, body, #root {
 }
 
 .lib-sidebar-item-path {
-  font-size: 9px;
+  font-size: 10px;
   color: var(--text-muted);
   opacity: 0.5;
   white-space: nowrap;
@@ -3234,8 +3364,8 @@ html, body, #root {
 
 .lib-sidebar-item-tag {
   display: inline-block;
-  font-size: 8px;
-  padding: 1px 4px;
+  font-size: 9px;
+  padding: 1px 5px;
   border-radius: 2px;
   background: var(--accent-dim);
   color: var(--accent);
@@ -3248,8 +3378,8 @@ html, body, #root {
 }
 
 .lib-sidebar-empty {
-  padding: 12px 10px;
-  font-size: 11px;
+  padding: 14px 10px;
+  font-size: 12px;
   color: var(--text-muted);
   opacity: 0.7;
 }
@@ -3257,15 +3387,15 @@ html, body, #root {
 .lib-sidebar-search {
   display: flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px 8px 4px;
+  gap: 6px;
+  padding: 8px 10px 6px;
 }
 
 .lib-search-input {
   flex: 1;
   min-width: 0;
-  padding: 3px 6px;
-  font-size: 11px;
+  padding: 4px 8px;
+  font-size: 12px;
   font-family: var(--font);
   color: var(--text);
   background: var(--bg-inset);
@@ -3283,7 +3413,7 @@ html, body, #root {
 }
 
 .lib-new-btn {
-  margin: 6px 10px;
+  margin: 8px 10px;
   align-self: flex-start;
 }
 
@@ -3298,8 +3428,8 @@ html, body, #root {
 .lib-main-empty {
   display: flex;
   align-items: center;
-  padding: 16px;
-  font-size: 12px;
+  padding: 20px;
+  font-size: 13px;
   color: var(--text-muted);
   opacity: 0.7;
 }
@@ -3309,7 +3439,7 @@ html, body, #root {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
-  padding: 8px 12px;
+  padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -3317,19 +3447,19 @@ html, body, #root {
 .lib-editor-meta-left {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
   min-width: 0;
 }
 
 .lib-editor-meta-right {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   flex-shrink: 0;
 }
 
 .lib-editor-meta-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-heading);
   white-space: nowrap;
@@ -3338,7 +3468,7 @@ html, body, #root {
 }
 
 .lib-editor-meta-path {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--text-muted);
   opacity: 0.7;
   white-space: nowrap;

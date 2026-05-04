@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
-import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel, dirtyTabSuffix } from "./lib/editorGuards";
+import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
 import { defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
 import { wait } from "./lib/timing";
 import { useBackups } from "./lib/useBackups";
@@ -839,10 +839,52 @@ function App() {
       {error && <div className="error-banner">{error}</div>}
 
       <header className="app-header" data-tauri-drag-region>
-        <nav className="view-tabs">
-          <button className={`tab ${view === "workspace" ? "tab-active" : ""}`} onClick={() => switchView("workspace")}>workspace</button>
-          <button className={`tab ${view === "library" ? "tab-active" : ""}${dirtyTabClass(docDirty || agentTemplateDirty || configDirty || agentDirty)}`} onClick={() => switchView("library")} aria-label={dirtyTabAriaLabel(docDirty || agentTemplateDirty || configDirty || agentDirty, "Library")}>library{dirtyTabSuffix(docDirty || agentTemplateDirty || configDirty || agentDirty)}</button>
-          <button className={`tab ${view === "settings" ? "tab-active" : ""}${dirtyTabClass(settingsDirty)}`} onClick={() => switchView("settings")} aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}>settings{dirtyTabSuffix(settingsDirty)}</button>
+        <nav className="nav-icons">
+          {/* Workspace */}
+          <button
+            className={`nav-icon ${view === "workspace" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("workspace")}
+            aria-label="Workspace"
+            title="Workspace"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="4,17 10,11 4,5" />
+              <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
+          {/* Library */}
+          <button
+            className={`nav-icon ${view === "library" ? "nav-icon-active" : ""}${dirtyTabClass(docDirty || agentTemplateDirty || configDirty || agentDirty)}`}
+            onClick={() => switchView("library")}
+            aria-label={dirtyTabAriaLabel(docDirty || agentTemplateDirty || configDirty || agentDirty, "Library")}
+            title="Library"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4,19.5A2.5,2.5 0 0,1 6.5,17H20" />
+              <path d="M6.5,2H20v20H6.5A2.5,2.5 0 0,1 4,19.5v-15A2.5,2.5 0 0,1 6.5,2z" />
+              <line x1="8" y1="7" x2="16" y2="7" />
+              <line x1="8" y1="11" x2="14" y2="11" />
+            </svg>
+          </button>
+          {/* Settings */}
+          <button
+            className={`nav-icon ${view === "settings" ? "nav-icon-active" : ""}${dirtyTabClass(settingsDirty)}`}
+            onClick={() => switchView("settings")}
+            aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}
+            title="Settings"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="4" y1="21" x2="4" y2="14" />
+              <line x1="4" y1="10" x2="4" y2="3" />
+              <line x1="12" y1="21" x2="12" y2="12" />
+              <line x1="12" y1="8" x2="12" y2="3" />
+              <line x1="20" y1="21" x2="20" y2="16" />
+              <line x1="20" y1="12" x2="20" y2="3" />
+              <line x1="1" y1="14" x2="7" y2="14" />
+              <line x1="9" y1="8" x2="15" y2="8" />
+              <line x1="17" y1="16" x2="23" y2="16" />
+            </svg>
+          </button>
         </nav>
       </header>
 
