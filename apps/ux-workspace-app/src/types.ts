@@ -20,6 +20,14 @@ export interface SkillSummary {
   id: string; name: string; description: string; path: string;
 }
 
+export interface AgentSourceSummary {
+  id: string; title: string; path: string; exists: boolean;
+}
+
+export interface AgentSourceContent {
+  id: string; title: string; path: string; content: string; exists: boolean;
+}
+
 export const INSTALL_AGENTS = ["codex", "opencode", "claude", "gemini", "auggie"] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];

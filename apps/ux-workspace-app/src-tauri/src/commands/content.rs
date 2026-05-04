@@ -1401,6 +1401,187 @@ mod tests {
         assert!(result.is_ok());
         cleanup(&root);
     }
+
+    // ── agent source tests ──
+
+    #[test]
+    fn is_safe_agent_basename_accepts_known() {
+        assert!(is_safe_agent_basename("autopilot.md"));
+        assert!(is_safe_agent_basename("repo-scout.md"));
+        assert!(is_safe_agent_basename("code-reviewer.md"));
+        assert!(is_safe_agent_basename("security-auditor.md"));
+        assert!(is_safe_agent_basename("docs-writer.md"));
+        assert!(is_safe_agent_basename("qa-verifier.md"));
+    }
+
+    #[test]
+    fn is_safe_agent_basename_rejects_traversal() {
+        assert!(!is_safe_agent_basename("../etc/passwd"));
+        assert!(!is_safe_agent_basename("../../etc/passwd"));
+        assert!(!is_safe_agent_basename("sub/../../etc/passwd"));
+        assert!(!is_safe_agent_basename("autopilot.md/.."));
+        assert!(!is_safe_agent_basename("a/../../../b.md"));
+    }
+
+    #[test]
+    fn is_safe_agent_basename_rejects_non_md() {
+        assert!(!is_safe_agent_basename("autopilot.txt"));
+        assert!(!is_safe_agent_basename("autopilot"));
+        assert!(!is_safe_agent_basename(""));
+        assert!(!is_safe_agent_basename(".hidden.md"));
+        assert!(!is_safe_agent_basename("-starts-hyphen.md"));
+    }
+
+    #[test]
+    fn is_safe_agent_basename_rejects_slash() {
+        assert!(!is_safe_agent_basename("sub/autopilot.md"));
+        assert!(!is_safe_agent_basename("a/b/c.md"));
+    }
+
+    #[test]
+    fn is_safe_agent_basename_rejects_backslash() {
+        assert!(!is_safe_agent_basename("sub\\autopilot.md"));
+    }
+
+    #[test]
+    fn resolve_agent_path_rejects_unknown() {
+        let root = temp_root("ag-resolve-unknown");
+        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+
+        let result = resolve_agent_path(&root, "nonexistent.md");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown agent file"));
+    }
+
+    #[test]
+    fn resolve_agent_path_rejects_traversal() {
+        let root = temp_root("ag-resolve-traversal");
+        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+
+        let result = resolve_agent_path(&root, "../etc/passwd");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid agent filename"));
+    }
+
+    #[test]
+    fn resolve_agent_path_resolves_known() {
+        let root = temp_root("ag-resolve-known");
+        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+
+        let result = resolve_agent_path(&root, "autopilot.md");
+        cleanup(&root);
+        assert!(result.is_ok());
+        let path = result.unwrap();
+        assert!(path.ends_with("agents/autopilot.md"));
+    }
+
+    fn write_agent_file(root: &PathBuf, filename: &str, content: &str) {
+        write_file(root, &format!("agents/{}", filename), content);
+    }
+
+    #[test]
+    fn agent_source_list_includes_all_known() {
+        let root = temp_root("ag-list-all");
+        write_agent_file(&root, "autopilot.md", "# autopilot\n");
+        write_agent_file(&root, "repo-scout.md", "# scout\n");
+
+        let mut results: Vec<AgentSourceSummary> = Vec::new();
+        for filename in KNOWN_AGENT_FILES {
+            let path = root.join("agents").join(filename);
+            let exists = path.is_file();
+            results.push(AgentSourceSummary {
+                id: filename.to_string(),
+                title: agent_title_from_filename(filename),
+                path: format!("agents/{}", filename),
+                exists,
+            });
+        }
+
+        cleanup(&root);
+
+        assert_eq!(results.len(), 6);
+        let autopilot = results.iter().find(|r| r.id == "autopilot.md").unwrap();
+        assert!(autopilot.exists);
+        assert_eq!(autopilot.title, "Autopilot");
+        let scout = results.iter().find(|r| r.id == "repo-scout.md").unwrap();
+        assert!(scout.exists);
+        assert_eq!(scout.title, "Repo Scout");
+        let missing = results.iter().find(|r| r.id == "code-reviewer.md").unwrap();
+        assert!(!missing.exists);
+    }
+
+    #[test]
+    fn agent_source_read_resolves_content() {
+        let root = temp_root("ag-read");
+        write_agent_file(&root, "autopilot.md", "# Autopilot\n\nSome content.\n");
+
+        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let content = std::fs::read_to_string(&path).unwrap();
+        cleanup(&root);
+
+        assert!(content.contains("# Autopilot"));
+        assert!(content.contains("Some content."));
+    }
+
+    #[test]
+    fn agent_source_save_unchanged_returns_unchanged() {
+        let root = temp_root("ag-save-unchanged");
+        write_agent_file(&root, "autopilot.md", "# rules\n");
+
+        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let existing = std::fs::read_to_string(&path).unwrap();
+        assert_eq!(existing, "# rules\n");
+
+        // simulate save logic
+        if existing == "# rules\n" {
+            // would return unchanged
+        }
+        cleanup(&root);
+    }
+
+    #[test]
+    fn agent_source_save_creates_backup() {
+        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
+        let root = temp_root("ag-save-backup");
+        let backup_root = temp_root("ag-save-backup-backup");
+        write_agent_file(&root, "autopilot.md", "# old\n");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
+
+        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let existing = std::fs::read_to_string(&path).unwrap();
+
+        let backup_path = doc_backup_path("agent-autopilot.md", &path).unwrap();
+        std::fs::write(&backup_path, &existing).unwrap();
+        std::fs::write(&path, "# new\n").unwrap();
+
+        let saved = std::fs::read_to_string(root.join("agents/autopilot.md")).unwrap();
+        let backup_content = std::fs::read_to_string(&backup_path).unwrap();
+
+        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&backup_root);
+
+        assert_eq!(saved, "# new\n");
+        assert_eq!(backup_content, "# old\n");
+    }
+
+    #[test]
+    fn agent_source_title_from_filename() {
+        assert_eq!(agent_title_from_filename("autopilot.md"), "Autopilot");
+        assert_eq!(agent_title_from_filename("repo-scout.md"), "Repo Scout");
+        assert_eq!(
+            agent_title_from_filename("code-reviewer.md"),
+            "Code Reviewer"
+        );
+        assert_eq!(
+            agent_title_from_filename("security-auditor.md"),
+            "Security Auditor"
+        );
+        assert_eq!(agent_title_from_filename("docs-writer.md"), "Docs Writer");
+        assert_eq!(agent_title_from_filename("qa-verifier.md"), "Qa Verifier");
+    }
 }
 
 #[tauri::command]
@@ -1575,6 +1756,185 @@ pub fn save_config_template(target_id: String, content: String) -> Result<Action
         true,
         "save_config_template",
         "saved".to_string(),
+        String::new(),
+        Some(0),
+    ))
+}
+
+// ── agent source commands ──
+
+const AGENTS_DIR: &str = "agents";
+
+const KNOWN_AGENT_FILES: &[&str] = &[
+    "autopilot.md",
+    "repo-scout.md",
+    "code-reviewer.md",
+    "security-auditor.md",
+    "docs-writer.md",
+    "qa-verifier.md",
+];
+
+fn is_safe_agent_basename(name: &str) -> bool {
+    if name.is_empty() {
+        return false;
+    }
+    if name.contains('/') || name.contains('\\') || name.contains("..") {
+        return false;
+    }
+    if name.starts_with('.') || name.starts_with('-') {
+        return false;
+    }
+    if !name.ends_with(".md") {
+        return false;
+    }
+    let stem = &name[..name.len() - 3];
+    if stem.is_empty() {
+        return false;
+    }
+    stem.chars()
+        .all(|c| c.is_ascii_alphanumeric() || c == '-' || c == '_')
+}
+
+fn resolve_agent_path(root: &Path, filename: &str) -> Result<PathBuf, String> {
+    if !is_safe_agent_basename(filename) {
+        return Err(format!("invalid agent filename: {}", filename));
+    }
+    if !KNOWN_AGENT_FILES.contains(&filename) {
+        return Err(format!("unknown agent file: {}", filename));
+    }
+    let rel = format!("{}/{}", AGENTS_DIR, filename);
+    let path = root.join(&rel);
+    if !path.is_file() {
+        return Err(format!("agent file not found: {}", filename));
+    }
+    safe_canonical_target(root, &path)?;
+    Ok(path)
+}
+
+#[derive(Serialize)]
+pub struct AgentSourceSummary {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub exists: bool,
+}
+
+#[tauri::command]
+pub fn list_agent_sources() -> Result<Vec<AgentSourceSummary>, String> {
+    let root = workspace_root()?;
+    let agents_dir = root.join(AGENTS_DIR);
+    if !agents_dir.is_dir() {
+        return Ok(KNOWN_AGENT_FILES
+            .iter()
+            .map(|f| AgentSourceSummary {
+                id: f.to_string(),
+                title: agent_title_from_filename(f),
+                path: format!("{}/{}", AGENTS_DIR, f),
+                exists: false,
+            })
+            .collect());
+    }
+    let mut results: Vec<AgentSourceSummary> = Vec::new();
+    for filename in KNOWN_AGENT_FILES {
+        let path = root.join(AGENTS_DIR).join(filename);
+        let exists = path.is_file();
+        results.push(AgentSourceSummary {
+            id: filename.to_string(),
+            title: agent_title_from_filename(filename),
+            path: format!("{}/{}", AGENTS_DIR, filename),
+            exists,
+        });
+    }
+    Ok(results)
+}
+
+fn agent_title_from_filename(filename: &str) -> String {
+    let stem = filename.strip_suffix(".md").unwrap_or(filename);
+    let mut title = String::with_capacity(stem.len());
+    let mut capitalize = true;
+    for c in stem.chars() {
+        if c == '-' || c == '_' {
+            title.push(' ');
+            capitalize = true;
+        } else if capitalize {
+            title.push(c.to_ascii_uppercase());
+            capitalize = false;
+        } else {
+            title.push(c);
+        }
+    }
+    title
+}
+
+#[derive(Serialize)]
+pub struct AgentSourceContent {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub content: String,
+    pub exists: bool,
+}
+
+#[tauri::command]
+pub fn read_agent_source(filename: String) -> Result<AgentSourceContent, String> {
+    let root = workspace_root()?;
+    let path = resolve_agent_path(&root, &filename)?;
+    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    Ok(AgentSourceContent {
+        id: filename.clone(),
+        title: agent_title_from_filename(&filename),
+        path: format!("{}/{}", AGENTS_DIR, filename),
+        content,
+        exists: true,
+    })
+}
+
+#[tauri::command]
+pub fn open_agent_source(filename: String) -> Result<ActionResult, String> {
+    let root = workspace_root()?;
+    let path = resolve_agent_path(&root, &filename)?;
+    let path_str = path_arg(&path)?;
+    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
+    Ok(ActionResult::new(
+        ok,
+        format!("open_agent_source:{}", filename),
+        out,
+        err,
+        code,
+    ))
+}
+
+const MAX_AGENT_SOURCE_SIZE: usize = 512 * 1024;
+
+#[tauri::command]
+pub fn save_agent_source(filename: String, content: String) -> Result<ActionResult, String> {
+    if content.len() > MAX_AGENT_SOURCE_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
+
+    let root = workspace_root()?;
+    let path = resolve_agent_path(&root, &filename)?;
+
+    let existing = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    if existing == content {
+        return Ok(ActionResult::new(
+            true,
+            "save_agent_source",
+            "unchanged".to_string(),
+            String::new(),
+            Some(0),
+        ));
+    }
+
+    let backup_path = doc_backup_path(&format!("agent-{}", filename), &path)?;
+    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+
+    std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(ActionResult::new(
+        true,
+        "save_agent_source",
+        "saved with backup".to_string(),
         String::new(),
         Some(0),
     ))

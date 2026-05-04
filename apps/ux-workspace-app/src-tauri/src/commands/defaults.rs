@@ -206,7 +206,15 @@ mod tests {
             .collect();
         assert_eq!(
             labels,
-            &["Marker", "Readme", "Docs", "Templates", "Agents", "Scripts", "Skills"],
+            &[
+                "Marker",
+                "Readme",
+                "Docs",
+                "Templates",
+                "Agents",
+                "Scripts",
+                "Skills"
+            ],
             "category order must be stable"
         );
     }

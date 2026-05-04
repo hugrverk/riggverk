@@ -9,17 +9,17 @@ import { wait } from "./lib/timing";
 import { useBackups } from "./lib/useBackups";
 import { RulesView } from "./views/RulesView";
 import { ConfigsView } from "./views/ConfigsView";
-import { DocsView } from "./views/DocsView";
 import { HealthView } from "./views/HealthView";
 import { SkillsView } from "./views/SkillsView";
 import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
-import type { AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
+import type { AgentSourceContent, AgentSourceSummary, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
-type View = "workspace" | "rules" | "skills" | "configs" | "health" | "docs" | "settings";
+type View = "workspace" | "rules" | "skills" | "configs" | "health" | "library" | "settings";
 
 /* ---- main app ---- */
 
@@ -144,6 +144,33 @@ function App() {
   const [skillSearch, setSkillSearch] = useState("");
   const activeSkillIdRef = useRef<string | null>(null);
   const activeSkillContentIdRef = useRef<string | null>(null);
+
+  // library source type state
+  const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
+
+  // agent source state
+  const [agentSources, setAgentSources] = useState<AgentSourceSummary[]>([]);
+  const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
+  const [activeAgentContent, setActiveAgentContent] = useState<AgentSourceContent | null>(null);
+  const [agentDraft, setAgentDraft] = useState("");
+  const [agentDirty, setAgentDirty] = useState(false);
+  const [agentSaving, setAgentSaving] = useState(false);
+  const [agentSaveResult, setAgentSaveResult] = useState<ActionResult | null>(null);
+  const [agentMode, setAgentMode] = useState<"preview" | "edit">("preview");
+  const activeAgentIdRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (activeAgentContent) {
+      setAgentDraft(activeAgentContent.content);
+      setAgentDirty(false);
+      setAgentSaveResult(null);
+    } else {
+      setAgentDraft("");
+      setAgentDirty(false);
+      setAgentSaveResult(null);
+      setAgentMode("preview");
+    }
+  }, [activeAgentContent]);
 
   // settings state
   const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
@@ -421,6 +448,98 @@ function App() {
     }
   }, [configTemplateContent]);
 
+  // ── agent source callbacks ──
+
+  const loadAgentSources = useCallback(async () => {
+    try {
+      const list = await invoke<AgentSourceSummary[]>("list_agent_sources");
+      setAgentSources(list);
+      if (list.length > 0) {
+        const persistedId = activeAgentIdRef.current;
+        const stillExists = persistedId && list.some(a => a.id === persistedId && a.exists);
+        const firstExisting = list.find(a => a.exists);
+        if (stillExists && persistedId) {
+          setActiveAgentId(persistedId);
+          const content = await invoke<AgentSourceContent>("read_agent_source", { filename: persistedId });
+          setActiveAgentContent(content);
+        } else if (firstExisting) {
+          activeAgentIdRef.current = firstExisting.id;
+          setActiveAgentId(firstExisting.id);
+          const content = await invoke<AgentSourceContent>("read_agent_source", { filename: firstExisting.id });
+          setActiveAgentContent(content);
+        } else {
+          activeAgentIdRef.current = null;
+          setActiveAgentId(null);
+          setActiveAgentContent(null);
+        }
+      } else {
+        activeAgentIdRef.current = null;
+        setActiveAgentId(null);
+        setActiveAgentContent(null);
+      }
+    } catch (e) {
+      setAgentSources([]);
+      setActiveAgentId(null);
+      setActiveAgentContent(null);
+      if (!isInvalidWorkspaceError(e)) setError(`Agents: ${e}`);
+    }
+  }, []);
+
+  const selectAgent = useCallback(async (id: string) => {
+    if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
+    activeAgentIdRef.current = id;
+    setActiveAgentId(id);
+    try {
+      const content = await invoke<AgentSourceContent>("read_agent_source", { filename: id });
+      setActiveAgentContent(content);
+    } catch (e) { setError(`Read agent: ${e}`); }
+  }, [agentDirty, activeAgentId]);
+
+  const openAgent = useCallback(async (id: string) => {
+    try { await invoke<ActionResult>("open_agent_source", { filename: id }); } catch (e) { setError(`Open agent: ${e}`); }
+  }, []);
+
+  const onSaveAgent = useCallback(async () => {
+    if (!activeAgentId) return;
+    setAgentSaving(true);
+    setAgentSaveResult(null);
+    try {
+      const result = await invoke<ActionResult>("save_agent_source", { filename: activeAgentId, content: agentDraft });
+      setAgentSaveResult(result);
+      if (result.success) {
+        if (result.stdout !== "unchanged") {
+          const updated = await invoke<AgentSourceContent>("read_agent_source", { filename: activeAgentId });
+          setActiveAgentContent(updated);
+          setAgentDraft(updated.content);
+        }
+        setAgentDirty(false);
+      }
+    } catch (e) {
+      setAgentSaveResult({
+        success: false,
+        action: "save_agent_source",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+    } finally {
+      setAgentSaving(false);
+    }
+  }, [activeAgentId, agentDraft]);
+
+  const onResetAgent = useCallback(() => {
+    if (activeAgentContent) {
+      setAgentDraft(activeAgentContent.content);
+      setAgentDirty(false);
+      setAgentSaveResult(null);
+    }
+  }, [activeAgentContent]);
+
+  const onChangeAgentDraft = useCallback((value: string) => {
+    setAgentDraft(value);
+    setAgentDirty(value !== (activeAgentContent?.content ?? ""));
+  }, [activeAgentContent]);
+
   const onCreateDoc = useCallback(async () => {
     if (docDirty && !confirmLeaveDirtyEditor()) return;
     const title = createDocTitle.trim();
@@ -490,12 +609,12 @@ function App() {
     }
   }, [agentTemplate]);
 
-  // load config template when target or view changes to configs
+  // load config template when target or view changes to configs (or library configs)
   useEffect(() => {
-    if (view === "configs" && activeConfigTargetId) {
+    if ((view === "configs" || (view === "library" && librarySourceType === "configs")) && activeConfigTargetId) {
       loadConfigTemplate(activeConfigTargetId);
     }
-  }, [view, activeConfigTargetId, loadConfigTemplate]);
+  }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate]);
 
   useEffect(() => {
     if (configTemplateContent) {
@@ -649,22 +768,28 @@ function App() {
 
   const switchView = useCallback((v: View) => {
     if (v !== view) {
-      const isDocsDirty = view === "docs" && docDirty;
+      const isDocsDirty = view === "library" && librarySourceType === "docs" && docDirty;
+      const isLibraryDirty = view === "library" && (
+        (librarySourceType === "docs" && docDirty) ||
+        (librarySourceType === "rules" && agentTemplateDirty) ||
+        (librarySourceType === "configs" && configDirty) ||
+        (librarySourceType === "agents" && agentDirty)
+      );
       const isRulesDirty = view === "rules" && agentTemplateDirty;
       const isConfigsDirty = view === "configs" && configDirty;
       const isSettingsDirty = view === "settings" && settingsDirty;
-      if ((isDocsDirty || isRulesDirty || isConfigsDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
+      if ((isDocsDirty || isLibraryDirty || isRulesDirty || isConfigsDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
     else if (v === "skills") loadSkills();
-    else if (v === "docs") loadDocs();
+    else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "configs") { fetchStatus(); }
     else if (v === "health") { loadBackups(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
     else if (v === "rules") { fetchStatus(); loadAgentTemplate(); }
-  }, [view, docDirty, agentTemplateDirty, configDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadBackups, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -792,7 +917,7 @@ function App() {
           <button className={`tab ${view === "skills" ? "tab-active" : ""}`} onClick={() => switchView("skills")}>skills</button>
           <button className={`tab ${view === "configs" ? "tab-active" : ""}${dirtyTabClass(configDirty)}`} onClick={() => switchView("configs")} aria-label={dirtyTabAriaLabel(configDirty, "Configs")}>configs{dirtyTabSuffix(configDirty)}</button>
           <button className={`tab ${view === "health" ? "tab-active" : ""}`} onClick={() => switchView("health")}>health</button>
-          <button className={`tab ${view === "docs" ? "tab-active" : ""}${dirtyTabClass(docDirty)}`} onClick={() => switchView("docs")} aria-label={dirtyTabAriaLabel(docDirty, "Docs")}>docs{dirtyTabSuffix(docDirty)}</button>
+          <button className={`tab ${view === "library" ? "tab-active" : ""}${dirtyTabClass(docDirty || agentTemplateDirty || configDirty || agentDirty)}`} onClick={() => switchView("library")} aria-label={dirtyTabAriaLabel(docDirty || agentTemplateDirty || configDirty || agentDirty, "Library")}>library{dirtyTabSuffix(docDirty || agentTemplateDirty || configDirty || agentDirty)}</button>
           <button className={`tab ${view === "settings" ? "tab-active" : ""}${dirtyTabClass(settingsDirty)}`} onClick={() => switchView("settings")} aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}>settings{dirtyTabSuffix(settingsDirty)}</button>
         </nav>
       </header>
@@ -876,11 +1001,22 @@ function App() {
           />
         )}
 
-        {view === "docs" && (
-          <DocsView
+        {view === "library" && (
+          <LibraryView
+            sourceType={librarySourceType}
+            onSetSourceType={(type) => {
+              const currentDirty =
+                (librarySourceType === "docs" && docDirty) ||
+                (librarySourceType === "rules" && agentTemplateDirty) ||
+                (librarySourceType === "configs" && configDirty) ||
+                (librarySourceType === "agents" && agentDirty);
+              if (currentDirty && !confirmLeaveDirtyEditor()) return;
+              setLibrarySourceType(type);
+              if (type === "configs") { fetchStatus(); }
+            }}
+            // Docs
             docs={docs}
             activeDoc={activeDoc}
-            workspaceValid={workspaceValid}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}
             docDraft={docDraft}
@@ -901,6 +1037,59 @@ function App() {
             onSetCreateDocTitle={setCreateDocTitle}
             onSetCreateDocSlug={setCreateDocSlug}
             onCreateDoc={onCreateDoc}
+            // Rules
+            agentTemplate={agentTemplate}
+            onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
+            agentTemplateDraft={agentTemplateDraft}
+            agentTemplateDirty={agentTemplateDirty}
+            agentTemplateSaving={agentTemplateSaving}
+            agentTemplateSaveResult={agentTemplateSaveResult}
+            agentTemplateMode={agentTemplateMode}
+            onSetAgentTemplateMode={setAgentTemplateMode}
+            onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
+            onSaveAgentTemplate={onSaveAgentTemplate}
+            onResetAgentTemplate={onResetAgentTemplate}
+            agentTargets={agentTargets}
+            // Skills
+            skills={skills}
+            activeSkillId={activeSkillId}
+            activeSkillContent={activeSkillContent}
+            skillSearch={skillSearch}
+            onSetSkillSearch={setSkillSearch}
+            onSelectSkillPreview={readSkill}
+            onOpenSkill={openSkill}
+            // Agents
+            agentSources={agentSources}
+            activeAgentId={activeAgentId}
+            activeAgentContent={activeAgentContent}
+            onSelectAgent={selectAgent}
+            onOpenAgent={openAgent}
+            agentDraft={agentDraft}
+            agentDirty={agentDirty}
+            agentSaving={agentSaving}
+            agentSaveResult={agentSaveResult}
+            agentMode={agentMode}
+            onSetAgentMode={setAgentMode}
+            onChangeAgentDraft={onChangeAgentDraft}
+            onSaveAgent={onSaveAgent}
+            onResetAgent={onResetAgent}
+            // Configs
+            configTemplateContent={configTemplateContent}
+            activeConfigTargetId={activeConfigTargetId}
+            configTargets={configTargets}
+            onSelectConfigTarget={selectConfigTarget}
+            onOpenConfig={() => invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`))}
+            configDraft={configDraft}
+            configDirty={configDirty}
+            configSaving={configSaving}
+            configSaveResult={configSaveResult}
+            configMode={configMode}
+            onSetConfigMode={setConfigMode}
+            onChangeConfigDraft={onChangeConfigDraft}
+            onSaveConfig={onSaveConfig}
+            onResetConfig={onResetConfig}
+            // Common
+            workspaceValid={workspaceValid}
           />
         )}
 
