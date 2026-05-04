@@ -106,6 +106,10 @@ function App() {
   // backup history state
   const { backups, selectedBackupId, backupDetails, loadBackups, loadBackupDetails, openBackupsFolder } = useBackups(setError);
 
+  // workspace operations state
+  const [wsLog, setWsLog] = useState<ActionResult | null>(null);
+  const [wsRunning, setWsRunning] = useState<string | null>(null);
+
   // workspace diagnostics state
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
 
@@ -262,11 +266,11 @@ function App() {
   }, [agentTargets, appSettings, activeConfigTargetId]);
 
   useEffect(() => {
-    if (!running && !configRunning && !healthRunning && !installRunning) return;
+    if (!running && !configRunning && !healthRunning && !installRunning && !wsRunning) return;
     setActivityIndex(0);
     const id = window.setInterval(() => setActivityIndex(i => (i + 1) % 8), 110);
     return () => window.clearInterval(id);
-  }, [running, configRunning, healthRunning, installRunning]);
+  }, [running, configRunning, healthRunning, installRunning, wsRunning]);
 
   const runAction = useCallback(async (action: string) => {
     const startedAt = performance.now();
@@ -849,6 +853,60 @@ function App() {
     }
   }, [fetchStatus, loadBackups, workspaceDiagnostics]);
 
+  const runWsAction = useCallback(async (action: string, label: string) => {
+    const startedAt = performance.now();
+    setWsRunning(label); setError(null);
+    try {
+      if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
+        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+        return;
+      }
+      const result = await invoke<ActionResult>("run_action", { action });
+      setWsLog(result);
+      if (!action.startsWith("open_")) fetchStatus();
+    } catch (e) {
+      if (isInvalidWorkspaceError(e)) {
+        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+      } else {
+        setError(`${action}: ${e}`);
+      }
+    }
+    finally {
+      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
+      if (remaining > 0) await wait(remaining);
+      setWsRunning(null);
+    }
+  }, [fetchStatus, workspaceDiagnostics]);
+
+  const runWsInstall = useCallback(async (dry: boolean) => {
+    if (installScope === "project" && installTarget.trim() === "") return;
+    const label = dry ? "install skills dry-run" : "install skills";
+    const startedAt = performance.now();
+    setWsRunning(label); setError(null);
+    try {
+      const req: InstallSkillsRequest = {
+        agents: Array.from(installAgents),
+        scope: installScope,
+        target: installScope === "project" ? installTarget : undefined,
+        skills: Array.from(selectedSkills),
+        dry_run: dry,
+      };
+      const result = await invoke<ActionResult>("install_skills", { request: req });
+      setWsLog(result);
+      if (!dry && result.success) fetchStatus();
+    } catch (e) {
+      setWsLog({ success: false, action: dry ? "install_skills:dry-run" : "install_skills", stdout: "", stderr: String(e), exit_code: null });
+      setError(`Install: ${e}`);
+    }
+    finally {
+      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
+      if (remaining > 0) await wait(remaining);
+      setWsRunning(null);
+    }
+  }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus]);
+
+  const goToSkills = useCallback(() => { switchView("skills"); }, [switchView]);
+
   const handleLeftAction = useCallback(async (action: string) => {
     const dirtyBefore = agentTemplateDirty;
     if (dirtyBefore && !confirmLeaveDirtyEditor()) return;
@@ -859,12 +917,16 @@ function App() {
   const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
   const enabledRuleSet = new Set(status?.enabled_rule_target_ids ?? []);
   const rsc = status ? ruleSyncCount(status, enabledRuleSet) : { synced: 0, total: 0 };
-  const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
+  const canInstall = selectedSkills.size > 0 && installAgents.size > 0 && !installRunning && !wsRunning && (installScope !== "project" || installTarget.trim() !== "");
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = agentTargets.filter(t => t.kind === "config");
   const activeConfigEnabled = enabledSet.has(activeConfigTargetId);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
+  const gitAvailable = status?.git_available === true;
+  const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
+  const installAgentsArray = Array.from(installAgents);
+  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning && !installRunning && (installScope !== "project" || installTarget.trim() !== "");
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -937,6 +999,38 @@ function App() {
             createResult={createResult}
             createRunning={createRunning}
             onCreateWorkspace={runCreate}
+            // operations
+            wsLog={wsLog}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            ruleTargetsEnabled={ruleTargetsEnabled}
+            configEnabled={configEnabled}
+            canRunReleaseCheck={canRunReleaseCheck}
+            onPull={() => runWsAction("git_pull", "git pull")}
+            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
+            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
+            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+            onReleaseCheck={() => runWsAction("release_check", "release-check")}
+            onRefreshStatus={fetchStatus}
+            // skills compact
+            skillsCount={skills.length}
+            selectedSkillsCount={selectedSkills.size}
+            installAgents={installAgentsArray}
+            installScope={installScope}
+            installTarget={installTarget}
+            skillsCanInstall={skillsCanInstall}
+            onDryRunSkills={() => runWsInstall(true)}
+            onInstallSkills={() => runWsInstall(false)}
+            onSwitchToSkills={goToSkills}
+            // backups
+            backupCount={backups.length}
+            onRefreshBackups={loadBackups}
+            onOpenBackupsFolder={openBackupsFolder}
           />
         )}
 

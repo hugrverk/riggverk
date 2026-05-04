@@ -1,5 +1,6 @@
 import { useState } from "react";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, WorkspaceDiagnostics } from "../types";
+import { TerminalState, type ActionResult } from "../components/TerminalOutput";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, StatusData, WorkspaceDiagnostics } from "../types";
 
 interface WorkspaceViewProps {
   appSettings: AppSettings | null;
@@ -14,6 +15,38 @@ interface WorkspaceViewProps {
   createResult: CreateWorkspaceResult | null;
   createRunning: boolean;
   onCreateWorkspace: () => void;
+  // operations
+  wsLog: ActionResult | null;
+  wsRunning: string | null;
+  activityIndex: number;
+  activityCellClass: (index: number) => string;
+  status: StatusData | null;
+  workspaceValid: boolean;
+  gitAvailable: boolean;
+  ruleTargetsEnabled: boolean;
+  configEnabled: boolean;
+  canRunReleaseCheck: boolean;
+  onPull: () => void;
+  onDiffRules: () => void;
+  onSyncRules: () => void;
+  onDiffConfigs: () => void;
+  onSyncConfigs: () => void;
+  onReleaseCheck: () => void;
+  onRefreshStatus: () => void;
+  // skills compact
+  skillsCount: number;
+  selectedSkillsCount: number;
+  installAgents: string[];
+  installScope: string;
+  installTarget: string;
+  skillsCanInstall: boolean;
+  onDryRunSkills: () => void;
+  onInstallSkills: () => void;
+  onSwitchToSkills: () => void;
+  // backups
+  backupCount: number;
+  onRefreshBackups: () => void;
+  onOpenBackupsFolder: () => void;
 }
 
 const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
@@ -104,6 +137,38 @@ export function WorkspaceView({
   createResult,
   createRunning,
   onCreateWorkspace,
+  // operations
+  wsLog,
+  wsRunning,
+  activityIndex,
+  activityCellClass,
+  status,
+  workspaceValid,
+  gitAvailable,
+  ruleTargetsEnabled,
+  configEnabled,
+  canRunReleaseCheck,
+  onPull,
+  onDiffRules,
+  onSyncRules,
+  onDiffConfigs,
+  onSyncConfigs,
+  onReleaseCheck,
+  onRefreshStatus,
+  // skills compact
+  skillsCount,
+  selectedSkillsCount,
+  installAgents,
+  installScope,
+  installTarget,
+  skillsCanInstall,
+  onDryRunSkills,
+  onInstallSkills,
+  onSwitchToSkills,
+  // backups
+  backupCount,
+  onRefreshBackups,
+  onOpenBackupsFolder,
 }: WorkspaceViewProps) {
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
 
@@ -705,6 +770,149 @@ export function WorkspaceView({
           </div>
         </div>
       )}
+
+      {/* ── Operations Cockpit ── */}
+      <div className="ws-section-divider" />
+      <div className="ws-operations">
+        <div className="ws-operations-header">
+          <span className="ws-pane-label">OPERATIONS</span>
+          <span className="ws-op-header-hint">{wsRunning ? `running: ${wsRunning}` : wsLog ? (wsLog.success ? "last: ok" : "last: failed") : "ready"}</span>
+        </div>
+
+        {/* Central terminal panel */}
+        <div className="ws-op-term-pane" role="region" aria-label="Operations terminal output">
+          <TerminalState
+            runningLabel={wsRunning}
+            result={wsLog}
+            readyLabel="operations ready"
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+          />
+        </div>
+
+        {/* Operation blocks grid */}
+        <div className="ws-op-grid">
+          {/* ── Workspace ── */}
+          <div className="ws-op-block" role="group" aria-label="Workspace operations">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">WORKSPACE</span>
+              <span className="ws-op-block-meta">{status?.branch ?? "\u2014"}</span>
+            </div>
+            <div className="ws-op-block-body">
+              <span className="ws-op-block-desc">pull latest changes, refresh status</span>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>pull</button>
+                <button className="btn btn-sm" disabled={!workspaceValid} onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); }}>refresh status</button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Rules ── */}
+          <div className="ws-op-block" role="group" aria-label="Rules operations">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">RULES</span>
+              <span className="ws-op-block-meta">
+                {status ? `${status.enabled_rule_target_ids.length} targets` : "\u2014"}
+              </span>
+            </div>
+            <div className="ws-op-block-body">
+              <span className="ws-op-block-desc">diff + sync agent rule targets</span>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Configs ── */}
+          <div className="ws-op-block" role="group" aria-label="Configs operations">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">CONFIGS</span>
+              <span className="ws-op-block-meta">
+                {status ? `${status.enabled_config_target_ids.length} targets` : "\u2014"}
+              </span>
+            </div>
+            <div className="ws-op-block-body">
+              <span className="ws-op-block-desc">diff + sync config targets</span>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>diff</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onSyncConfigs}>sync</button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Skills ── */}
+          <div className="ws-op-block" role="group" aria-label="Skills install">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">SKILLS</span>
+              <span className="ws-op-block-meta">
+                {skillsCount > 0 ? `${selectedSkillsCount}/${skillsCount} selected` : "\u2014"}
+              </span>
+            </div>
+            <div className="ws-op-block-body">
+              <div className="ws-op-block-info">
+                <span className="ws-op-block-desc">
+                  {installAgents.length > 0 ? installAgents.join(", ") : "no agents"}
+                  {" \u00b7 "}
+                  {installScope}{installScope === "project" && installTarget ? ` \u00b7 ${installTarget}` : ""}
+                </span>
+              </div>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
+                <button className="btn btn-sm ws-op-link-btn" onClick={onSwitchToSkills}>select in Skills tab</button>
+              </div>
+              {workspaceValid && !skillsCanInstall && !wsRunning && (
+                <div className="ws-op-block-warn">
+                  {selectedSkillsCount === 0
+                    ? "No skills selected."
+                    : installAgents.length === 0
+                      ? "No agents selected."
+                      : installScope === "project" && !installTarget.trim()
+                        ? "Project scope needs a target path."
+                        : null}
+                </div>
+              )}
+              {!workspaceValid && (
+                <div className="ws-op-block-warn">No valid workspace. Create one above.</div>
+              )}
+            </div>
+          </div>
+
+          {/* ── Release ── */}
+          <div className="ws-op-block" role="group" aria-label="Release check">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">RELEASE</span>
+              <span className="ws-op-block-meta">
+                {canRunReleaseCheck ? "available" : "unavailable"}
+              </span>
+            </div>
+            <div className="ws-op-block-body">
+              <span className="ws-op-block-desc">build, fmt, clippy, test smoke check</span>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm btn-primary" disabled={!canRunReleaseCheck || wsRunning !== null} onClick={onReleaseCheck}>release-check</button>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Backups ── */}
+          <div className="ws-op-block" role="group" aria-label="Backups">
+            <div className="ws-op-block-header">
+              <span className="ws-op-block-label">BACKUPS</span>
+              <span className="ws-op-block-meta">
+                {backupCount > 0 ? `${backupCount} runs` : "none"}
+              </span>
+            </div>
+            <div className="ws-op-block-body">
+              <span className="ws-op-block-desc">metadata-only; no restore action</span>
+              <div className="ws-op-block-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
+                <button className="btn btn-sm" disabled={!workspaceValid} onClick={onOpenBackupsFolder}>open folder</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
     </section>
   );
 }

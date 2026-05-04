@@ -2791,6 +2791,167 @@ html, body, #root {
   }
 }
 
+/* ── operations cockpit ── */
+
+.ws-section-divider {
+  height: 0;
+  border-top: 2px solid var(--border);
+  margin: 0 10px;
+  opacity: 0.4;
+  flex-shrink: 0;
+}
+
+.ws-operations {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws-operations-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  padding: 5px 10px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ws-op-header-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  text-transform: lowercase;
+}
+
+/* central terminal panel */
+.ws-op-term-pane {
+  flex-shrink: 0;
+  padding: 6px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.ws-op-term-pane .log-output {
+  font-size: 10px;
+  line-height: 1.3;
+  max-height: 120px;
+  overflow-y: auto;
+}
+
+.ws-op-term-pane .log-status {
+  font-size: 11px;
+}
+
+/* operations grid */
+.ws-op-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 1px;
+  background: var(--border);
+  border-bottom: 1px solid var(--border);
+  flex: 1;
+  overflow-y: auto;
+  align-content: start;
+}
+
+@media (max-width: 780px) {
+  .ws-op-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 520px) {
+  .ws-op-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* operation block card */
+.ws-op-block {
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  gap: 6px;
+}
+
+.ws-op-block-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 4px;
+}
+
+.ws-op-block-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-heading);
+  letter-spacing: 0.06em;
+  opacity: 0.7;
+}
+
+.ws-op-block-meta {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  font-family: var(--font);
+  text-align: right;
+}
+
+.ws-op-block-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.ws-op-block-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  line-height: 1.3;
+}
+
+.ws-op-block-info {
+  flex: 0 0 auto;
+}
+
+.ws-op-block-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.ws-op-block-actions .btn {
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.ws-op-block-warn {
+  font-size: 9px;
+  color: var(--fail);
+  opacity: 0.7;
+  line-height: 1.2;
+}
+
+.ws-op-link-btn {
+  color: var(--text-muted) !important;
+  opacity: 0.6;
+  border-color: var(--border) !important;
+  background: transparent !important;
+}
+
+.ws-op-link-btn:hover {
+  opacity: 0.9;
+  color: var(--accent) !important;
+  border-color: var(--accent) !important;
+}
+
 /* ── library view ── */
 
 .lib-frame {
