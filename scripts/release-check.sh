@@ -153,6 +153,27 @@ fi
 
 step "bundled default opencode.json"
 python3 -m json.tool apps/ux-workspace-app/resources/default-workspace/templates/opencode.json >/dev/null
+if ! grep -q '"default_agent": "autopilot"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing default_agent autopilot\n' >&2
+  exit 1
+fi
+if ! grep -q '"model": "opencode-go/deepseek-v4-pro"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing model deepseek-v4-pro\n' >&2
+  exit 1
+fi
+if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing small_model deepseek-v4-flash\n' >&2
+  exit 1
+fi
+if ! grep -q '"autoupdate": "notify"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing autoupdate notify\n' >&2
+  exit 1
+fi
+if ! grep -q '"snapshot": true' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
+  exit 1
+fi
+printf '  opencode.json: default_agent=autopilot model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
 
 step "bundled default agents exist and non-empty"
 for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
@@ -162,6 +183,18 @@ for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md doc
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
+if ! grep -q 'mode: primary' apps/ux-workspace-app/resources/default-workspace/agents/autopilot.md; then
+  printf 'FAIL: bundled autopilot.md missing mode: primary\n' >&2
+  exit 1
+fi
+printf '  autopilot.md: mode=primary\n'
+for subagent in repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+  if ! grep -q 'mode: subagent' "apps/ux-workspace-app/resources/default-workspace/agents/$subagent"; then
+    printf 'FAIL: bundled %s missing mode: subagent\n' "$subagent" >&2
+    exit 1
+  fi
+done
+printf '  5 subagents verified mode=subagent\n'
 
 step "bundled default install-opencode-config.sh help mentions agents"
 if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
@@ -170,7 +203,7 @@ if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-open
 fi
 
 step "bundled default install-opencode-config.sh agents count in help"
-agent_count_help="$(bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -c '\.md' || true)"
+agent_count_help="$(bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -o '\.md' | wc -l | tr -d ' ' || true)"
 if [ "$agent_count_help" -lt 2 ]; then
   printf 'FAIL: install-opencode-config.sh --help has insufficient agents references (expected >= 2 .md refs, found %s)\n' "$agent_count_help" >&2
   exit 1
@@ -193,9 +226,22 @@ for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md doc
     apply_ok=false
   fi
 done
+if ! $apply_ok; then rm -rf "$tmpdir"; exit 1; fi
+if ! grep -q '"default_agent": "autopilot"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing default_agent autopilot\n' >&2
+  apply_ok=false
+fi
+if ! grep -q 'mode: primary' "$tmpdir/agents/autopilot.md"; then
+  printf 'FAIL: smoke autopilot.md missing mode: primary\n' >&2
+  apply_ok=false
+fi
+if ! grep -q 'mode: subagent' "$tmpdir/agents/repo-scout.md"; then
+  printf 'FAIL: smoke repo-scout.md missing mode: subagent\n' >&2
+  apply_ok=false
+fi
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
-printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written\n'
+printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written, content checks passed\n'
 
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
 if OPENCODE_AGENTS_DIR=/ bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
