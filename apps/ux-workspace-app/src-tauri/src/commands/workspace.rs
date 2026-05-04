@@ -1254,6 +1254,16 @@ mod tests {
             write_file(&root, rel, "template content\n");
         }
         for &rel in &[
+            "agents/autopilot.md",
+            "agents/repo-scout.md",
+            "agents/code-reviewer.md",
+            "agents/security-auditor.md",
+            "agents/docs-writer.md",
+            "agents/qa-verifier.md",
+        ] {
+            write_file(&root, rel, "agent content\n");
+        }
+        for &rel in &[
             "scripts/bootstrap.sh",
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",

@@ -76,6 +76,17 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             ],
         ),
         (
+            "Agents",
+            &[
+                "agents/autopilot.md",
+                "agents/repo-scout.md",
+                "agents/code-reviewer.md",
+                "agents/security-auditor.md",
+                "agents/docs-writer.md",
+                "agents/qa-verifier.md",
+            ],
+        ),
+        (
             "Scripts",
             &[
                 "scripts/bootstrap.sh",
@@ -195,7 +206,7 @@ mod tests {
             .collect();
         assert_eq!(
             labels,
-            &["Marker", "Readme", "Docs", "Templates", "Scripts", "Skills"],
+            &["Marker", "Readme", "Docs", "Templates", "Agents", "Scripts", "Skills"],
             "category order must be stable"
         );
     }
@@ -331,6 +342,16 @@ mod tests {
             "templates/opencode.json",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
+        ] {
+            write_file(&root, rel);
+        }
+        for &rel in &[
+            "agents/autopilot.md",
+            "agents/repo-scout.md",
+            "agents/code-reviewer.md",
+            "agents/security-auditor.md",
+            "agents/docs-writer.md",
+            "agents/qa-verifier.md",
         ] {
             write_file(&root, rel);
         }

@@ -78,10 +78,10 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         },
         AgentSyncTarget {
             id: "opencode_config",
-            label: "opencode config",
+            label: "opencode config + agents",
             kind: TargetKind::Config,
-            target_rel: ".config/opencode/opencode.json",
-            source_rel: "templates/opencode.json",
+            target_rel: ".config/opencode/opencode.json + agents/*.md",
+            source_rel: "templates/opencode.json + agents/*.md",
         },
     ]
 }
@@ -131,7 +131,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "opencode".into(),
             label: "OpenCode".into(),
-            description: "OpenCode rules + config only".into(),
+            description: "OpenCode rules + config + agents".into(),
             target_ids: vec!["opencode_rules".into(), "opencode_config".into()],
         },
         TargetProfileMeta {
@@ -149,7 +149,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_supported".into(),
             label: "All supported".into(),
-            description: "All supported rule targets + supported config targets".into(),
+            description: "All supported rule targets + OpenCode config + agents".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
@@ -219,9 +219,9 @@ pub enum ConfigScriptMode {
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
     vec![ConfigSyncTarget {
         id: "opencode_config",
-        label: "opencode config",
+        label: "opencode config + agents",
         source_rel: "templates/opencode.json",
-        target_rel: ".config/opencode/opencode.json",
+        target_rel: ".config/opencode/opencode.json + agents/*.md",
         script: ConfigScript::OpenCode,
     }]
 }
@@ -319,7 +319,7 @@ mod tests {
         );
         let t = opencode.unwrap();
         assert_eq!(t.source_rel, "templates/opencode.json");
-        assert_eq!(t.target_rel, ".config/opencode/opencode.json");
+        assert_eq!(t.target_rel, ".config/opencode/opencode.json + agents/*.md");
     }
 
     #[test]

@@ -9,6 +9,17 @@ The source template for OpenCode configuration is `templates/opencode.json`. Thi
 - File-scope read/edit deny rules for secrets and credentials
 - Watcher ignore patterns
 
+## OpenCode agents
+
+OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled agents are provided:
+
+- `agents/autopilot.md` — Default coding orchestrator
+- `agents/repo-scout.md` — Repository structure explorer
+- `agents/code-reviewer.md` — Code review agent
+- `agents/security-auditor.md` — Security risk review
+- `agents/docs-writer.md` — Documentation writer
+- `agents/qa-verifier.md` — Non-destructive verification runner
+
 ## Permission model
 
 The default template is conservative:
@@ -25,8 +36,12 @@ The default template is conservative:
 2. Run `--diff` to see differences between the template and your current config
 3. Run `--apply` to write the template to `~/.config/opencode/opencode.json`
 
-A backup is created before overwriting if the current config differs.
+The sync also installs agent files to `~/.config/opencode/agents/*.md`. Extra existing runtime agent files in that directory are not deleted.
+
+A backup is created before overwriting if the current config or agent files differ.
 
 ## Customization
 
 The template is user-editable. Add project-specific allow/deny rules as needed. Avoid weakening the secret-file deny rules in the `read` and `edit` sections.
+
+Agent files are also user-editable. Customize agent behavior by editing `agents/*.md` files in the workspace.

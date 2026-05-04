@@ -154,6 +154,55 @@ fi
 step "bundled default opencode.json"
 python3 -m json.tool apps/ux-workspace-app/resources/default-workspace/templates/opencode.json >/dev/null
 
+step "bundled default agents exist and non-empty"
+for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+  if [ ! -s "apps/ux-workspace-app/resources/default-workspace/agents/$agent" ]; then
+    printf 'FAIL: bundled default agent missing or empty: agents/%s\n' "$agent" >&2
+    exit 1
+  fi
+done
+printf '  6 bundled agents verified non-empty\n'
+
+step "bundled default install-opencode-config.sh help mentions agents"
+if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
+  printf 'FAIL: install-opencode-config.sh --help missing agents mention\n' >&2
+  exit 1
+fi
+
+step "bundled default install-opencode-config.sh agents count in help"
+agent_count_help="$(bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -c '\.md' || true)"
+if [ "$agent_count_help" -lt 2 ]; then
+  printf 'FAIL: install-opencode-config.sh --help has insufficient agents references (expected >= 2 .md refs, found %s)\n' "$agent_count_help" >&2
+  exit 1
+fi
+
+step "bundled default install-opencode-config.sh temp apply smoke"
+tmpdir="$(mktemp -d)"
+OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
+OPENCODE_AGENTS_DIR="$tmpdir/agents" \
+UX_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+  bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
+apply_ok=true
+if [ ! -f "$tmpdir/opencode.json" ]; then
+  printf 'FAIL: install-opencode-config.sh --apply did not write opencode.json\n' >&2
+  apply_ok=false
+fi
+for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+  if [ ! -f "$tmpdir/agents/$agent" ]; then
+    printf 'FAIL: install-opencode-config.sh --apply did not write agents/%s\n' "$agent" >&2
+    apply_ok=false
+  fi
+done
+rm -rf "$tmpdir"
+if ! $apply_ok; then exit 1; fi
+printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written\n'
+
+step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
+if OPENCODE_AGENTS_DIR=/ bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
+  printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=/\n' >&2
+  exit 1
+fi
+
 step "tauri app resources config"
 if ! search_quiet "default-workspace" apps/ux-workspace-app/src-tauri/tauri.conf.json; then
   printf 'FAIL: tauri conf missing bundled default workspace resource path\n' >&2

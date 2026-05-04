@@ -67,6 +67,8 @@ export function ConfigsView({
   const sourcePath = selectedTarget?.source_rel ?? "";
   const targetPath = selectedTarget?.target_rel ?? "";
 
+  const isOpenCode = activeConfigTargetId === "opencode_config";
+
   return (
     <section className="configs-frame">
       {configTargets.length > 0 && (
@@ -125,6 +127,25 @@ export function ConfigsView({
                   </span>
                 )}
               </div>
+
+              {isOpenCode && (
+                <div className="configs-bundle-section" role="region" aria-label="OpenCode config + agents bundle">
+                  <span className="configs-bundle-header">bundle contents</span>
+                  <span className="configs-bundle-item">
+                    <span className="configs-bundle-key">config</span>
+                    <span className="configs-bundle-val">templates/opencode.json &rarr; ~/.config/opencode/opencode.json</span>
+                  </span>
+                  <span className="configs-bundle-item">
+                    <span className="configs-bundle-key">agents</span>
+                    <span className="configs-bundle-val">agents/*.md &rarr; ~/.config/opencode/agents/*.md</span>
+                  </span>
+                  <span className="configs-bundle-item">
+                    <span className="configs-bundle-key">bundled</span>
+                    <span className="configs-bundle-val">6 agents</span>
+                  </span>
+                  <span className="configs-bundle-note">sync writes both config + agent files</span>
+                </div>
+              )}
 
               <div className="editor-mode-tabs" role="tablist" aria-label="Config view mode">
                 <button

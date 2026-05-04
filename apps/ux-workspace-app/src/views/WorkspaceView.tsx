@@ -70,6 +70,12 @@ function mapNodeStatus(
     if (!c || c.count === 0) return "dim";
     return "valid";
   }
+  if (node === "agents") {
+    if (!summary) return "dim";
+    const c = findCat(summary, "Agents");
+    if (!c || c.count === 0) return "dim";
+    return "valid";
+  }
   if (node === "docs") {
     if (!summary) return "dim";
     const c = findCat(summary, "Docs");
@@ -110,6 +116,7 @@ export function WorkspaceView({
     { id: "workspace", label: "workspace" },
     { id: "rules", label: "rules" },
     { id: "configs", label: "configs" },
+    { id: "agents", label: "agents" },
     { id: "skills", label: "skills" },
     { id: "docs", label: "docs" },
     { id: "scripts", label: "scripts" },
@@ -119,6 +126,7 @@ export function WorkspaceView({
   const docsCat = findCat(summary, "Docs");
   const scriptsCat = findCat(summary, "Scripts");
   const templatesCat = findCat(summary, "Templates");
+  const agentsCat = findCat(summary, "Agents");
 
   const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
 
@@ -204,6 +212,23 @@ export function WorkspaceView({
           </div>
         );
       }
+      case "agents": {
+        const cat = findCat(summary, "Agents");
+        return (
+          <div className="ws-detail-body">
+            {cat ? (
+              <div className="ws-detail-row">
+                <span className="ws-detail-key">bundled</span>
+                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
+                  {cat.count} agents
+                </span>
+              </div>
+            ) : (
+              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
+            )}
+          </div>
+        );
+      }
       case "docs": {
         const cat = findCat(summary, "Docs");
         return (
@@ -266,6 +291,7 @@ export function WorkspaceView({
   }
   const resourceRows: { key: string; value: string; cat: typeof skillsCat }[] = [
     { key: "skills", value: skillsCat ? String(skillsCat.count) : "\u2014", cat: skillsCat },
+    { key: "agents", value: agentsCat ? String(agentsCat.count) : "\u2014", cat: agentsCat },
     { key: "docs", value: docsCat ? String(docsCat.count) : "\u2014", cat: docsCat },
     { key: "scripts", value: scriptsCat ? String(scriptsCat.count) : "\u2014", cat: scriptsCat },
     { key: "templates", value: templatesCat ? String(templatesCat.count) : "\u2014", cat: templatesCat },
@@ -573,9 +599,9 @@ export function WorkspaceView({
                       );
                     })}
                   </div>
-                  {/* Row 1: rules, scripts, docs */}
+                  {/* Row 1: rules, agents, scripts, docs */}
                   <div className="ws-map-row ws-map-row-mid">
-                    {mapNodes.filter(n => n.id === "rules" || n.id === "scripts" || n.id === "docs").map(node => {
+                    {mapNodes.filter(n => n.id === "rules" || n.id === "agents" || n.id === "scripts" || n.id === "docs").map(node => {
                       const status = mapNodeStatus(diag, summary, node.id);
                       const isExpanded = expandedNode === node.id;
                       return (
