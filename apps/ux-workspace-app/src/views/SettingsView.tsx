@@ -48,13 +48,24 @@ export function SettingsView({
   const accentValid = accentDraft === "" || isValidAccentHex(accentDraft);
   const canSave = settingsDirty && accentValid;
 
+  // Color picker hex: always resolve to a valid color so the native picker shows something.
+  const pickerHex = (accentDraft && isValidAccentHex(accentDraft))
+    ? accentDraft.toLowerCase()
+    : (appSettings?.accent_color && isValidAccentHex(appSettings.accent_color))
+      ? appSettings.accent_color.toLowerCase()
+      : "#6ea8fe";
+
   const handleAccentChange = (value: string) => {
     setAccentTouched(true);
-    setAccentDraft(value);
     if (value === "") {
+      setAccentDraft("");
       onSetAccentColor(null);
     } else if (isValidAccentHex(value)) {
-      onSetAccentColor(value);
+      const normalized = value.toLowerCase();
+      setAccentDraft(normalized);
+      onSetAccentColor(normalized);
+    } else {
+      setAccentDraft(value);
     }
   };
 
@@ -93,6 +104,13 @@ export function SettingsView({
                 </label>
                 <div className="settings-accent-input-group">
                   <input
+                    type="color"
+                    value={pickerHex}
+                    onChange={e => handleAccentChange(e.target.value)}
+                    className="settings-accent-picker"
+                    aria-label="Pick accent color"
+                  />
+                  <input
                     id="accent-color-input"
                     className="settings-input settings-accent-input"
                     type="text"
@@ -102,17 +120,10 @@ export function SettingsView({
                     aria-label="Accent color hex code"
                     aria-invalid={!accentValid}
                   />
-                  {accentValid && isValidAccentHex(accentDraft) && (
-                    <span
-                      className="settings-accent-swatch"
-                      style={{ backgroundColor: accentDraft }}
-                      aria-hidden="true"
-                    />
-                  )}
                   <button
                     className="btn btn-sm"
                     onClick={() => { setAccentDraft(""); setAccentTouched(false); onSetAccentColor(null); }}
-                    aria-label="Reset accent color to default"
+                    aria-label="Use default accent color"
                   >
                     default
                   </button>

@@ -16,6 +16,9 @@
   --dirty: #f59e0b;
   --radius: 4px;
   --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+  --header-height: 44px;
+  --traffic-light-reserve: 104px;
+  --nav-icon-size: 32px;
 }
 
 [data-theme="light"] {
@@ -68,8 +71,8 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 24px 0 78px;
-  height: 40px;
+  padding: 0 24px 0 var(--traffic-light-reserve);
+  height: var(--header-height);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
 }
@@ -77,14 +80,16 @@ html, body, #root {
 .nav-icons {
   display: flex;
   gap: 4px;
+  height: 100%;
+  align-items: center;
 }
 
 .nav-icon {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
+  width: var(--nav-icon-size);
+  height: var(--nav-icon-size);
   border: 1px solid transparent;
   border-radius: 4px;
   background: transparent;
@@ -1556,13 +1561,29 @@ html, body, #root {
   width: 130px;
 }
 
-.settings-accent-swatch {
-  display: inline-block;
-  width: 22px;
-  height: 22px;
-  border-radius: 3px;
+.settings-accent-picker {
+  width: 28px;
+  height: 28px;
+  padding: 2px;
   border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  cursor: pointer;
   flex-shrink: 0;
+  background: transparent;
+}
+
+.settings-accent-picker::-webkit-color-swatch-wrapper {
+  padding: 0;
+}
+
+.settings-accent-picker::-webkit-color-swatch {
+  border: none;
+  border-radius: 2px;
+}
+
+.settings-accent-picker:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
 }
 
 .settings-accent-hint {
@@ -3311,6 +3332,7 @@ html, body, #root {
   text-align: center;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
   min-width: 0;
+  position: relative;
 }
 
 .lib-source-rail-btn:hover {
@@ -3325,7 +3347,21 @@ html, body, #root {
 
 .lib-source-rail-btn-active {
   color: var(--accent);
-  border-left-color: var(--accent);
+  background: rgba(var(--accent-rgb), 0.06);
+}
+
+.lib-source-rail-btn-active::after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 18px;
+  height: 2px;
+  background: var(--accent);
+  border-radius: 1px;
+  opacity: 0.6;
+  pointer-events: none;
 }
 
 .lib-source-rail-label {
@@ -3333,6 +3369,10 @@ html, body, #root {
   letter-spacing: 0.04em;
   text-transform: uppercase;
   font-weight: 500;
+}
+
+.lib-source-rail-btn-active .lib-source-rail-label {
+  font-weight: 600;
 }
 
 .lib-source-rail-count {
