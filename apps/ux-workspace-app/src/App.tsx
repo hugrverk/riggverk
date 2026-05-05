@@ -10,7 +10,7 @@ import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
 import { RoutingView } from "./views/RoutingView";
-import type { AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
@@ -437,12 +437,12 @@ function App() {
 
   const loadAgentSources = useCallback(async () => {
     try {
-      const list = await invoke<AgentMetadataResponse[]>("list_agent_metadata");
-      setAgentSources(list);
-      if (list.length > 0) {
+      const list = await invoke<AgentMetadataListResponse>("list_agent_metadata");
+      setAgentSources(list.agents);
+      if (list.agents.length > 0) {
         const persistedId = activeAgentIdRef.current;
-        const stillExists = persistedId && list.some(a => a.id === persistedId && a.exists);
-        const firstExisting = list.find(a => a.exists);
+        const stillExists = persistedId && list.agents.some(a => a.id === persistedId && a.exists);
+        const firstExisting = list.agents.find(a => a.exists);
         if (stillExists && persistedId) {
           setActiveAgentId(persistedId);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: persistedId });

@@ -236,7 +236,10 @@ function SkillItemList({
         (s) =>
           s.name.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q) ||
-          s.description.toLowerCase().includes(q)
+          s.description.toLowerCase().includes(q) ||
+          s.category.toLowerCase().includes(q) ||
+          s.targets.some((t) => t.toLowerCase().includes(q)) ||
+          s.related.some((r) => r.toLowerCase().includes(q))
       )
     : skills;
 
@@ -275,9 +278,12 @@ function SkillItemList({
                   <span className="lib-sidebar-item-tag">{s.category}</span>
                 )}
                 {s.risk && (
-                  <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-risk lib-sidebar-item-tag-${s.risk}`}>
+                  <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${s.risk}`}>
                     {s.risk}
                   </span>
+                )}
+                {s.targets.length > 0 && (
+                  <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">{s.targets.join(", ")}</span>
                 )}
               </span>
             </button>
@@ -327,6 +333,9 @@ function AgentItemList({
               <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${a.metadata.risk}`}>
                 {a.metadata.risk}
               </span>
+            )}
+            {a.metadata && (a.metadata.targets.length > 0) && (
+              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">{a.metadata.targets.join(", ")}</span>
             )}
             {a.metadata && !a.metadata.safe_to_edit_runtime && (
               <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn" title="Runtime-sensitive frontmatter — edit with care">runtime</span>
@@ -692,7 +701,7 @@ export function LibraryView(props: LibraryViewProps) {
                 {meta.summary && (
                   <div className="configs-bundle-item">
                     <span className="configs-bundle-key">summary</span>
-                    <span className="configs-bundle-val" style={{ fontSize: 11 }}>{meta.summary}</span>
+                    <span className="configs-bundle-val configs-bundle-val-sm">{meta.summary}</span>
                   </div>
                 )}
                 {meta.risk && (
@@ -724,7 +733,7 @@ export function LibraryView(props: LibraryViewProps) {
                     <span className="configs-bundle-header">notes</span>
                     {meta.notes.map((note, i) => (
                       <div key={i} className="configs-bundle-item">
-                        <span className="configs-bundle-val" style={{ fontSize: 11, opacity: 0.75 }}>{note}</span>
+                        <span className="configs-bundle-val configs-bundle-val-note">{note}</span>
                       </div>
                     ))}
                   </div>

@@ -1981,33 +1981,122 @@ pub struct AgentMetadataResponse {
     pub metadata: Option<AgentMetadataEntry>,
 }
 
-fn load_agent_metadata(root: &Path) -> std::collections::HashMap<String, AgentMetadataEntry> {
+#[derive(Serialize, Clone, Debug)]
+pub struct AgentMetadataListResponse {
+    pub agents: Vec<AgentMetadataResponse>,
+    pub warnings: Vec<String>,
+}
+
+/// Load agent metadata sidecar. Returns (map, warnings).
+/// Warnings are emitted for:
+/// - oversized file (metadata ignored)
+/// - invalid JSON (metadata ignored)
+/// - unknown agent keys in metadata (no matching agent file)
+/// - unreadable file (metadata ignored)
+pub(crate) fn load_agent_metadata(
+    root: &Path,
+) -> (
+    std::collections::HashMap<String, AgentMetadataEntry>,
+    Vec<String>,
+) {
+    let mut warnings: Vec<String> = Vec::new();
     let path = root.join(AGENT_METADATA_REL);
+
     if !path.is_file() {
-        return std::collections::HashMap::new();
+        return (std::collections::HashMap::new(), warnings);
     }
+
     let metadata = match std::fs::metadata(&path) {
         Ok(m) => m,
-        Err(_) => return std::collections::HashMap::new(),
+        Err(e) => {
+            warnings.push(format!(
+                "cannot read agent metadata file metadata: {}",
+                e
+            ));
+            return (std::collections::HashMap::new(), warnings);
+        }
     };
+
     if metadata.len() > MAX_AGENT_METADATA_SIZE as u64 {
-        return std::collections::HashMap::new();
+        warnings.push(format!(
+            "agent metadata file exceeds {} KB limit; metadata ignored",
+            MAX_AGENT_METADATA_SIZE / 1024
+        ));
+        return (std::collections::HashMap::new(), warnings);
     }
+
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
-        Err(_) => return std::collections::HashMap::new(),
+        Err(e) => {
+            warnings.push(format!(
+                "cannot read agent metadata file: {}",
+                e
+            ));
+            return (std::collections::HashMap::new(), warnings);
+        }
     };
+
     let parsed: AgentMetadataFile = match serde_json::from_str(&content) {
         Ok(p) => p,
-        Err(_) => return std::collections::HashMap::new(),
+        Err(e) => {
+            warnings.push(format!(
+                "invalid agent metadata JSON: {}",
+                e
+            ));
+            return (std::collections::HashMap::new(), warnings);
+        }
     };
-    parsed.agents
+
+    // Validate keys against known agent files
+    let known = known_agent_files();
+    for key in parsed.agents.keys() {
+        if !known.contains(&key.as_str()) {
+            warnings.push(format!(
+                "agent metadata references unknown agent key '{}' (not in known agent files)",
+                key
+            ));
+        }
+    }
+
+    (parsed.agents, warnings)
+}
+
+/// Validate default_skills in agent metadata against discovered workspace skills.
+fn validate_agent_default_skills(
+    metadata_map: &std::collections::HashMap<String, AgentMetadataEntry>,
+    root: &Path,
+) -> Vec<String> {
+    let mut warnings: Vec<String> = Vec::new();
+    let skills = match super::skills::discover_skills(root) {
+        Ok(s) => s,
+        Err(_) => return warnings,
+    };
+    let skill_names: std::collections::HashSet<&str> =
+        skills.iter().map(|s| s.name.as_str()).collect();
+
+    for (agent_id, entry) in metadata_map.iter() {
+        for skill in &entry.default_skills {
+            if !skill_names.contains(skill.as_str()) {
+                warnings.push(format!(
+                    "agent '{}' references unknown default skill '{}'",
+                    agent_id, skill
+                ));
+            }
+        }
+    }
+
+    warnings
 }
 
 #[tauri::command]
-pub fn list_agent_metadata() -> Result<Vec<AgentMetadataResponse>, String> {
+pub fn list_agent_metadata() -> Result<AgentMetadataListResponse, String> {
     let root = workspace_root()?;
-    let metadata_map = load_agent_metadata(&root);
+    let (metadata_map, mut warnings) = load_agent_metadata(&root);
+
+    // Validate default_skills against discovered skills
+    let skill_warnings = validate_agent_default_skills(&metadata_map, &root);
+    warnings.extend(skill_warnings);
+
     let known = known_agent_files();
     let agents_dir = root.join(AGENTS_DIR);
 
@@ -2024,7 +2113,10 @@ pub fn list_agent_metadata() -> Result<Vec<AgentMetadataResponse>, String> {
             metadata,
         });
     }
-    Ok(results)
+    Ok(AgentMetadataListResponse {
+        agents: results,
+        warnings,
+    })
 }
 
 #[cfg(test)]
@@ -2054,15 +2146,26 @@ mod agent_metadata_tests {
         fs::write(dir.join(filename), "# agent\n").expect("write agent file");
     }
 
+    fn write_skill(root: &PathBuf, name: &str) {
+        let dir = root.join("skills").join(name);
+        fs::create_dir_all(&dir).expect("create skill dir");
+        fs::write(
+            dir.join("SKILL.md"),
+            format!("---\nname: {}\ndescription: test\n---\n", name),
+        )
+        .expect("write skill");
+    }
+
     #[test]
     fn missing_metadata_returns_none_for_all_agents() {
         let root = temp_root("no-meta");
         write_agent_file(&root, "autopilot.md");
 
-        let map = load_agent_metadata(&root);
+        let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
 
         assert!(map.is_empty());
+        assert!(warnings.is_empty(), "no warnings for missing file");
     }
 
     #[test]
@@ -2075,10 +2178,11 @@ mod agent_metadata_tests {
             r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
-        let map = load_agent_metadata(&root);
+        let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(map.len(), 1);
+        assert!(warnings.is_empty(), "valid metadata should produce no warnings");
         let entry = map.get("autopilot.md").expect("autopilot metadata");
         assert_eq!(entry.role, "primary");
         assert_eq!(entry.risk, "medium");
@@ -2087,19 +2191,24 @@ mod agent_metadata_tests {
     }
 
     #[test]
-    fn invalid_json_returns_empty_map() {
+    fn invalid_json_returns_empty_map_with_warning() {
         let root = temp_root("invalid-meta");
         write_agent_file(&root, "autopilot.md");
         write_metadata(&root, "not json");
 
-        let map = load_agent_metadata(&root);
+        let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
 
         assert!(map.is_empty());
+        assert!(
+            warnings.iter().any(|w| w.contains("invalid agent metadata JSON")),
+            "invalid JSON should produce warning, got: {:?}",
+            warnings
+        );
     }
 
     #[test]
-    fn oversized_metadata_rejected() {
+    fn oversized_metadata_rejected_with_warning() {
         let root = temp_root("oversized-meta");
         write_agent_file(&root, "autopilot.md");
         let big = format!(
@@ -2108,14 +2217,18 @@ mod agent_metadata_tests {
         );
         write_metadata(&root, &big);
 
-        let map = load_agent_metadata(&root);
+        let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
 
         assert!(map.is_empty());
+        assert!(
+            warnings.iter().any(|w| w.contains("exceeds")),
+            "oversized metadata should produce warning"
+        );
     }
 
     #[test]
-    fn unknown_agent_key_does_not_crash() {
+    fn unknown_agent_key_produces_warning() {
         let root = temp_root("unknown-key");
         write_agent_file(&root, "autopilot.md");
         write_metadata(
@@ -2123,11 +2236,68 @@ mod agent_metadata_tests {
             r#"{"agents":{"nonexistent.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
-        let map = load_agent_metadata(&root);
+        let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
 
-        // nonexistent.md is in metadata but not a known agent, so it's ignored
+        // nonexistent.md is in metadata but not a known agent
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("nonexistent.md"));
+        assert!(
+            warnings.iter().any(|w| w.contains("unknown agent key 'nonexistent.md'")),
+            "unknown agent key should produce warning, got: {:?}",
+            warnings
+        );
+    }
+
+    #[test]
+    fn unknown_default_skill_reference_produces_warning() {
+        let root = temp_root("unknown-skill");
+        write_agent_file(&root, "autopilot.md");
+        write_skill(&root, "diagnose"); // needed so discover_skills can find something
+        write_metadata(
+            &root,
+            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["nonexistent-skill"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let (map, _) = load_agent_metadata(&root);
+        let skill_warnings = validate_agent_default_skills(&map, &root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(
+            skill_warnings.iter().any(|w| w.contains("unknown default skill")),
+            "unknown default skill should produce warning, got: {:?}",
+            skill_warnings
+        );
+    }
+
+    #[test]
+    fn fixed_path_only_no_frontend_path_accepted() {
+        // load_agent_metadata always uses the hardcoded AGENT_METADATA_REL path.
+        // There is no parameter for a custom path — it only takes root: &Path.
+        let root = temp_root("fixed-path");
+        write_agent_file(&root, "autopilot.md");
+        write_metadata(
+            &root,
+            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let (_map, _) = load_agent_metadata(&root);
+
+        // Write unrelated metadata file at a different path — it should NOT be read
+        let alt_dir = root.join("some/other/path");
+        fs::create_dir_all(&alt_dir).expect("create alt dir");
+        fs::write(
+            alt_dir.join("agents.json"),
+            r#"{"agents":{"autopilot.md":{"role":"alt","summary":"alt","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":true,"notes":[]}}}"#,
+        )
+        .expect("write alt metadata");
+
+        // Re-load — still uses the fixed path, new file should have no effect
+        let (map2, _) = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(map2.len(), 1, "only metadata/agents.json is read");
+        let entry = map2.get("autopilot.md").expect("autopilot metadata");
+        assert_eq!(entry.role, "primary", "must use the fixed-path metadata");
     }
 }

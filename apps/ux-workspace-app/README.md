@@ -10,7 +10,7 @@ App-triggered script actions use each script's `--quiet` option for compact term
 
 ## Views
 
-The app has three top-level views:
+The app has four top-level views:
 
 - **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, skills install (with expandable skill selector for individual skill toggles, agent toggles, scope/target selection, dry-run and install actions), release-check, and backup management. Integrated terminal output panel. All operation actions report through a single terminal pane.
 - **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
@@ -366,8 +366,11 @@ The metadata sidecar is loaded read-only. Missing or invalid metadata falls back
 The Routing view now consumes skill and agent metadata for richer validation:
 
 - **Target compatibility warnings**: When a routing profile targets a tool not present in a referenced skill's `targets` field, a non-blocking warning is shown.
+- **Agent target compatibility warnings**: When a routing profile targets a tool not present in the referenced agent's metadata `targets` field, a non-blocking warning is shown.
 - **Risk mismatch warnings**: When a profile has `risk: "low"` but references a `risk: "high"` skill, a non-blocking warning is shown.
+- **Agent risk mismatch warnings**: When a profile has `risk: "low"` but references a `risk: "high"` agent (per metadata), a non-blocking warning is shown.
 - **Skill metadata display**: Each skill listed in a routing profile detail shows its category, risk, and targets as compact chips (when available from skill metadata).
+- **Agent metadata display**: When a selected routing profile references an agent with metadata, the agent's role, risk, targets, and runtime-sensitivity warning are shown as compact chips.
 
 All warnings remain non-blocking. Existing profiles still work. Metadata is not auto-generated. Public starter profiles should not produce avoidable warnings.
 
@@ -375,10 +378,10 @@ All warnings remain non-blocking. Existing profiles still work. Metadata is not 
 
 A compact read-only table in the Routing view shows resource counts per target tool:
 
-| Target | Skills | Agents | Profiles | Warnings |
-|--------|--------|--------|----------|----------|
-| opencode | *n* | *n* | *n* | *n* |
-| codex | *n* | *n* | *n* | *n* |
+| Target | Skills | Agents | Profiles | Ready |
+|--------|--------|--------|----------|-------|
+| opencode | *n* | *n* | *n* | *n*/n |
+| codex | *n* | *n* | *n* | *n*/n |
 | ... | ... | ... | ... | ... |
 
 No install buttons, sync buttons, execution, or target settings changes.
@@ -419,7 +422,9 @@ apps/ux-workspace-app/
   │   │   ├── routing/
   │   │   │   ├── routingTemplates.ts  Profile templates, starter skill/agent validation
   │   │   │   ├── routingHelpers.ts    risk/status helpers, metadata block formatter
-  │   │   │   └── RoutingMatrix.tsx    Profile compatibility matrix component
+  │   │   │   ├── routingCompatibility.ts  Deterministic compatibility row builder
+  │   │   │   ├── RoutingMatrix.tsx    Profile compatibility matrix component
+  │   │   │   └── RoutingCompatibilityOverview.tsx  Per-target resource counts and readiness
   │   │   └── SettingsView.tsx     Settings view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles

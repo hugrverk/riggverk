@@ -92,6 +92,7 @@ fn validate_profiles(
     profiles: &[RawProfile],
     skill_summaries: &[super::skills::SkillSummary],
     agent_filenames: &[String],
+    agent_metadata: &std::collections::HashMap<String, super::content::AgentMetadataEntry>,
 ) -> (Vec<RoutingProfile>, Vec<String>) {
     let mut warnings: Vec<String> = Vec::new();
     let mut seen_ids: HashSet<&str> = HashSet::new();
@@ -177,6 +178,39 @@ fn validate_profiles(
                         if !warnings.contains(&warn) {
                             warnings.push(warn);
                         }
+                    }
+                }
+            }
+        }
+
+        // Agent metadata validation for agent_profile
+        if let Some(ref agent_filename) = raw.agent_profile {
+            if let Some(meta) = agent_metadata.get(agent_filename.as_str()) {
+                // Target tool not in agent metadata targets
+                if !meta.targets.is_empty()
+                    && VALID_TARGET_TOOLS.contains(&raw.target_tool.as_str())
+                    && !meta.targets.contains(&raw.target_tool)
+                {
+                    let warn = format!(
+                        "profile '{}' targets '{}' but agent '{}' targets only [{}]",
+                        raw.id,
+                        raw.target_tool,
+                        agent_filename,
+                        meta.targets.join(", ")
+                    );
+                    if !warnings.contains(&warn) {
+                        warnings.push(warn);
+                    }
+                }
+
+                // Low-risk profile referencing high-risk agent
+                if raw.risk == "low" && meta.risk == "high" {
+                    let warn = format!(
+                        "profile '{}' has risk 'low' but references high-risk agent '{}'",
+                        raw.id, agent_filename
+                    );
+                    if !warnings.contains(&warn) {
+                        warnings.push(warn);
                     }
                 }
             }
@@ -269,8 +303,9 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
 
     let skill_summaries = load_skill_summaries(&root);
     let agent_filenames = load_agent_filenames(&root);
+    let agent_metadata = super::content::load_agent_metadata(&root).0;
 
-    let (profiles, warnings) = validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames);
+    let (profiles, warnings) = validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames, &agent_metadata);
 
     let resolved_path = path.to_string_lossy().into_owned();
 
@@ -820,9 +855,10 @@ mod tests {
 
         let skill_summaries = load_skill_summaries(root);
         let agent_filenames = load_agent_filenames(root);
+        let agent_metadata = crate::commands::content::load_agent_metadata(root).0;
 
         let (profiles, warnings) =
-            validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames);
+            validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames, &agent_metadata);
 
         let resolved_path = path.to_string_lossy().into_owned();
 
@@ -1061,5 +1097,112 @@ mod tests {
 
         let has_risk_warning = response.warnings.iter().any(|w| w.contains("risk 'low' but references high-risk"));
         assert!(!has_risk_warning, "medium risk with high-risk skill should not produce warning (only low triggers it)");
+    }
+
+    // ── agent metadata compatibility tests ──
+
+    fn write_agent_metadata(root: &PathBuf, json: &str) {
+        let dir = root.join("metadata");
+        std::fs::create_dir_all(&dir).expect("create metadata dir");
+        std::fs::write(dir.join("agents.json"), json).expect("write agents.json");
+    }
+
+    #[test]
+    fn agent_target_tool_not_in_agent_targets_produces_warning() {
+        let root = temp_root("ag-target-mismatch");
+        write_skill(&root, "diagnose");
+        write_agent(&root, "autopilot.md");
+        write_agent_metadata(
+            &root,
+            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode","codex"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| {
+            w.contains("targets 'claude' but agent 'autopilot.md' targets only")
+        }));
+    }
+
+    #[test]
+    fn low_risk_profile_with_high_risk_agent_produces_warning() {
+        let root = temp_root("ag-risk-mismatch");
+        write_skill(&root, "diagnose");
+        write_agent(&root, "security-auditor.md");
+        write_agent_metadata(
+            &root,
+            r#"{"agents":{"security-auditor.md":{"role":"security","summary":"test","targets":["opencode"],"risk":"high","default_skills":["security-review"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "low", "skills": ["diagnose"], "agent_profile": "security-auditor.md"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| {
+            w.contains("risk 'low' but references high-risk agent 'security-auditor.md'")
+        }));
+    }
+
+    #[test]
+    fn missing_agent_metadata_does_not_warn_if_file_exists() {
+        let root = temp_root("ag-no-meta");
+        write_skill(&root, "diagnose");
+        write_agent(&root, "autopilot.md");
+        // No metadata file written
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        // Should not produce agent target/risk warnings since no metadata exists
+        let has_agent_warning = response.warnings.iter().any(|w| {
+            w.contains("agent metadata") || w.contains("but agent")
+        });
+        assert!(!has_agent_warning, "missing agent metadata must not create noise");
+        // But should still validate file existence
+        assert!(!response.profiles[0].missing_agent);
+    }
+
+    #[test]
+    fn invalid_agent_metadata_file_handled_gracefully() {
+        let root = temp_root("ag-metadata-invalid");
+        write_skill(&root, "diagnose");
+        write_agent(&root, "autopilot.md");
+        write_agent_metadata(&root, "this is not valid json");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        // Invalid JSON should be handled gracefully, no crash
+        assert!(response.exists);
+        // Don't check for missing_agent - the agent file exists
+        assert!(!response.profiles[0].missing_agent);
     }
 }

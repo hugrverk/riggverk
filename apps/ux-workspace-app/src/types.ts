@@ -43,6 +43,11 @@ export interface AgentMetadataResponse {
   metadata: AgentMetadataEntry | null;
 }
 
+export interface AgentMetadataListResponse {
+  agents: AgentMetadataResponse[];
+  warnings: string[];
+}
+
 export interface AgentSourceContent {
   id: string; title: string; path: string; content: string; exists: boolean;
 }

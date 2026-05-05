@@ -4,6 +4,7 @@ import type { ActionResult, AgentMetadataResponse, RoutingProfilesResponse, Skil
 import { ProfileTemplate, PROFILE_TEMPLATES } from "./routing/routingTemplates";
 import { riskClass, riskLabel, copyMetadataBlock } from "./routing/routingHelpers";
 import { RoutingMatrix } from "./routing/RoutingMatrix";
+import { RoutingCompatibilityOverview } from "./routing/RoutingCompatibilityOverview";
 
 interface RoutingViewProps {
   routingData: RoutingProfilesResponse | null;
@@ -409,54 +410,13 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
               )}
 
               {/* Resource compatibility overview */}
-              {(() => {
-                const tools = ["codex", "opencode", "claude", "gemini", "auggie"];
-                const skillCount = skills.filter((s) => s.targets.length > 0).length;
-                const agentCount = agentSources.filter((a) => (a.metadata?.targets.length ?? 0) > 0).length;
-                const hasCompatData = skillCount > 0 || agentCount > 0;
-                if (!hasCompatData) return null;
-                return (
-                  <div className="configs-bundle-section" role="region" aria-label="Resource compatibility overview">
-                    <span className="configs-bundle-header">compatibility</span>
-                    <table className="routing-matrix" style={{ marginTop: 0 }}>
-                      <thead>
-                        <tr>
-                          <th>target</th>
-                          <th className="routing-matrix-cell-center">skills</th>
-                          <th className="routing-matrix-cell-center">agents</th>
-                          <th className="routing-matrix-cell-center">profiles</th>
-                          <th className="routing-matrix-cell-center">warnings</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {tools.map((tool) => {
-                          const skillCount = skills.filter((s) => s.targets.includes(tool)).length;
-                          const agentCount = agentSources.filter((a) => (a.metadata?.targets ?? []).includes(tool)).length;
-                          const profileCount = profiles.filter((p) => p.target_tool === tool).length;
-                          const warningCount = (routingData?.warnings ?? []).filter((w) =>
-                            w.includes(`targets '${tool}'`) || w.includes(`'${tool}'`)
-                          ).length;
-                          return (
-                            <tr key={tool}>
-                              <td>{tool}</td>
-                              <td className="routing-matrix-cell-center">{skillCount}</td>
-                              <td className="routing-matrix-cell-center">{agentCount}</td>
-                              <td className="routing-matrix-cell-center">{profileCount}</td>
-                              <td className="routing-matrix-cell-center">
-                                {warningCount > 0 ? (
-                                  <span className="ws-color-warn">{warningCount}</span>
-                                ) : (
-                                  <span className="ws-color-ok">0</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                );
-              })()}
+              {profiles.length > 0 && (
+                <RoutingCompatibilityOverview
+                  skills={skills}
+                  agentSources={agentSources}
+                  profiles={profiles}
+                />
+              )}
 
               {/* Meta strip */}
               <div className="lib-editor-meta-strip">
@@ -556,12 +516,38 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                   )}
                 </span>
                 {selected.agent_profile ? (
-                  <span className="configs-bundle-item">
-                    <span className={`configs-bundle-val ${selected.missing_agent ? "ws-color-fail" : ""}`}>
-                      {selected.agent_profile}
-                      {selected.missing_agent && " (not in workspace)"}
+                  <>
+                    <span className="configs-bundle-item">
+                      <span className={`configs-bundle-val ${selected.missing_agent ? "ws-color-fail" : ""}`}>
+                        {selected.agent_profile}
+                        {selected.missing_agent && " (not in workspace)"}
+                      </span>
                     </span>
-                  </span>
+                    {(() => {
+                      const agentMeta = agentSources.find(
+                        (a) => a.id === selected.agent_profile
+                      )?.metadata;
+                      if (!agentMeta) return null;
+                      return (
+                        <span className="configs-bundle-item">
+                          <span className="configs-bundle-val" style={{ display: "flex", flexWrap: "wrap", gap: "3px 6px", alignItems: "center" }}>
+                            {agentMeta.role && (
+                              <span className="lib-sidebar-item-tag" style={{ fontSize: 8 }}>{agentMeta.role}</span>
+                            )}
+                            {agentMeta.risk && (
+                              <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${agentMeta.risk}`} style={{ fontSize: 8 }}>{agentMeta.risk}</span>
+                            )}
+                            {agentMeta.targets.length > 0 && (
+                              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim" style={{ fontSize: 8 }}>{agentMeta.targets.join(", ")}</span>
+                            )}
+                            {!agentMeta.safe_to_edit_runtime && (
+                              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn" style={{ fontSize: 8 }} title="Runtime-sensitive frontmatter — edit with care">runtime</span>
+                            )}
+                          </span>
+                        </span>
+                      );
+                    })()}
+                  </>
                 ) : (
                   <span className="configs-bundle-item">
                     <span className="configs-bundle-val ws-detail-dim">none specified</span>

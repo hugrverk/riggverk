@@ -2074,6 +2074,15 @@ html, body, #root {
   font-family: var(--font-mono, var(--font));
 }
 
+.configs-bundle-val-sm {
+  font-size: 11px;
+}
+
+.configs-bundle-val-note {
+  font-size: 11px;
+  opacity: 0.75;
+}
+
 .configs-bundle-note {
   font-size: 10px;
   color: var(--text-muted);
@@ -3545,6 +3554,14 @@ html, body, #root {
 .lib-sidebar-item-tag-high {
   background: rgba(248, 113, 113, 0.12);
   color: var(--fail);
+}
+
+.lib-sidebar-item-tag-dim {
+  background: transparent;
+  color: var(--text-muted);
+  padding-left: 0;
+  padding-right: 0;
+  opacity: 0.65;
 }
 
 .lib-sidebar-empty {
