@@ -38,6 +38,7 @@ interface WorkspaceViewProps {
   onRefreshStatus: () => void;
   // skills compact
   skills: SkillSummary[];
+  skillsLoaded: boolean;
   selectedSkills: Set<string>;
   skillSearch: string;
   installAgents: string[];
@@ -173,6 +174,7 @@ export function WorkspaceView({
   onRefreshStatus,
   // skills
   skills,
+  skillsLoaded,
   selectedSkills,
   skillSearch,
   installAgents,
@@ -640,7 +642,7 @@ export function WorkspaceView({
                   <div className="ws-lane-actions">
                     <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
                     <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
-                    {skillsCount > 0 && (
+                    {skillsLoaded && skillsCount > 0 && (
                       <button
                         className="btn btn-sm"
                         onClick={() => setShowSkillSelector(prev => !prev)}
@@ -685,15 +687,20 @@ export function WorkspaceView({
                   />
                 </div>
               )}
-              {workspaceValid && !skillsCanInstall && !wsRunning && (
+              {workspaceValid && !skillsLoaded && !wsRunning && (
+                <div className="ws-lane-warn">Loading skills...</div>
+              )}
+              {workspaceValid && skillsLoaded && !skillsCanInstall && !wsRunning && (
                 <div className="ws-lane-warn">
-                  {selectedSkillsCount === 0
-                    ? "No skills selected."
-                    : installAgents.length === 0
-                      ? "No agents selected."
-                      : installScope === "project" && !installTarget.trim()
-                        ? "Project scope needs a target path."
-                        : null}
+                  {skills.length === 0
+                    ? "No skills found in workspace."
+                    : selectedSkillsCount === 0
+                      ? "No skills selected."
+                      : installAgents.length === 0
+                        ? "No agents selected."
+                        : installScope === "project" && !installTarget.trim()
+                          ? "Project scope needs a target path."
+                          : null}
                 </div>
               )}
               {!workspaceValid && (

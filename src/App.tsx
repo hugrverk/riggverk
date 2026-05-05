@@ -26,6 +26,7 @@ function App() {
   const [view, setView] = useState<View>("workspace");
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
+  const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [docs, setDocs] = useState<DocSummary[]>([]);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const activeDocIdRef = useRef<string | null>(null);
@@ -250,6 +251,7 @@ function App() {
     try {
       const loaded = await invoke<SkillSummary[]>("list_skills");
       setSkills(loaded);
+      setSkillsLoaded(true);
       if (!skillsSelectionTouched.current && loaded.length > 0) {
         setSelectedSkills(new Set(loaded.map(s => s.name)));
       }
@@ -280,6 +282,7 @@ function App() {
       }
     } catch (e) {
       setSkills([]);
+      setSkillsLoaded(true);
       activeSkillIdRef.current = null;
       activeSkillContentIdRef.current = null;
       setActiveSkillId(null);
@@ -459,6 +462,17 @@ function App() {
     }
   }, []);
 
+  const loadWorkspaceResources = useCallback(async () => {
+    await Promise.all([
+      loadSkills().catch(() => {}),
+      loadDocs().catch(() => {}),
+      loadAgentSources().catch(() => {}),
+      loadRoutingData().catch(() => {}),
+      loadContract().catch(() => {}),
+      fetchStatus().catch(() => {}),
+    ]);
+  }, [loadSkills, loadDocs, loadAgentSources, loadRoutingData, loadContract, fetchStatus]);
+
   const runCreate = useCallback(async () => {
     setCreateRunning(true);
     setCreateResult(null);
@@ -467,22 +481,22 @@ function App() {
       const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
       setCreateResult(result);
       if (result.success && appSettings) {
+        skillsSelectionTouched.current = false;
+        setSelectedSkills(new Set());
         const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
         setAppSettings(s);
         savedSettingsRef.current = serializeSettingsForCompare(s);
         applyThemeSettings(s);
         setSettingsMsg({ ok: true, text: "workspace created" });
-        fetchStatus();
-        loadWorkspaceDiagnostics();
-        loadContract();
-        loadSkills();
-        loadDocs();
-        loadAgentSources();
+        Promise.all([
+          loadWorkspaceDiagnostics(),
+          loadWorkspaceResources(),
+        ]);
         setCreatePlan(null);
       }
     } catch (e) { setError(`Create: ${e}`); }
     finally { setCreateRunning(false); }
-  }, [appSettings, fetchStatus, loadWorkspaceDiagnostics, loadContract, loadSkills, loadDocs, loadAgentSources]);
+  }, [appSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const selectAgent = useCallback(async (id: string) => {
     if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
@@ -683,7 +697,7 @@ function App() {
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }, [loadSettings, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary]);
+  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadWorkspaceResources]);
 
   const saveSettings = useCallback(async () => {
     if (!appSettings) return;
@@ -704,6 +718,9 @@ function App() {
     setCreateResult(null);
     if (!appSettings) return;
     try {
+      // Reset skill selection for the new workspace
+      skillsSelectionTouched.current = false;
+      setSelectedSkills(new Set());
       const nextSettings = { ...appSettings, workspace_path: workspacePath };
       const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
       setAppSettings(s);
@@ -713,17 +730,12 @@ function App() {
       // Refresh all workspace-dependent data
       await Promise.all([
         loadWorkspaceDiagnostics().catch(() => {}),
-        loadContract().catch(() => {}),
-        fetchStatus().catch(() => {}),
-        loadSkills().catch(() => {}),
-        loadDocs().catch(() => {}),
-        loadAgentSources().catch(() => {}),
-        loadRoutingData().catch(() => {}),
+        loadWorkspaceResources(),
       ]);
     } catch (e) {
       setError(`Apply workspace path: ${e}`);
     }
-  }, [appSettings, loadWorkspaceDiagnostics, loadContract, fetchStatus, loadSkills, loadDocs, loadAgentSources, loadRoutingData]);
+  }, [appSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
@@ -1018,6 +1030,7 @@ function App() {
             onRefreshStatus={fetchStatus}
             // skills
             skills={skills}
+            skillsLoaded={skillsLoaded}
             selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             installAgents={installAgentsArray}
