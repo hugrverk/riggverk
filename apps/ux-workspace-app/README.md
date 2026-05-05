@@ -37,6 +37,14 @@ The file is read-only operator guidance. It does not:
 
 Profiles may reference skills or agent files that are not present in the current workspace. Missing references are displayed as non-blocking validation warnings in the UI. A "copy metadata block" button copies a plain-text operator summary (target tool, model, DB/migration, risk, skills, agent profile, routing profile id) without generating a full prompt.
 
+Validation warnings are surfaced for common configuration mistakes:
+- Duplicate profile ids
+- Invalid `risk` values (must be `low`, `medium`, or `high`)
+- Invalid `db_migration` values (must be `NO`, `YES`, or `POSSIBLE`)
+- Unknown `target_tool` values (must be `codex`, `opencode`, `claude`, `gemini`, or `auggie`)
+- OpenCode-targeted profiles using GPT model names instead of OpenCode model ids (e.g. `opencode-go/deepseek-v4-pro`)
+- Codex-targeted profiles using OpenCode model ids
+
 ### Agent Rules Template
 
 The global agent rules template (`templates/global-agent-rules.md`) is rendered inline in the Library view under the Rules source type, with preview/edit mode toggle, a textarea editor with save/reset controls, a dirty state indicator, and an "open" button to open the template in the system editor. Save writes only the workspace source template via the allowlisted `save_agent_template` command; it does not sync installed rule targets. Sync is a separate action triggered by the diff/sync buttons in the Workspace operations section.

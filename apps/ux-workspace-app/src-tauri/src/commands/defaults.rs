@@ -122,6 +122,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "skills/zoom-out/SKILL.md",
             ],
         ),
+        ("Routing", &["routing/profiles.json"]),
     ]
 }
 
@@ -213,7 +214,8 @@ mod tests {
                 "Templates",
                 "Agents",
                 "Scripts",
-                "Skills"
+                "Skills",
+                "Routing"
             ],
             "category order must be stable"
         );
@@ -371,6 +373,7 @@ mod tests {
         ] {
             write_file(&root, rel);
         }
+        write_file(&root, "routing/profiles.json");
         for &rel in &[
             "skills/accessibility-review/SKILL.md",
             "skills/agent-report-review/SKILL.md",

@@ -1,10 +1,15 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::Path;
 
 use super::workspace::workspace_root;
 
 const ROUTING_PROFILES_PATH: &str = "routing/profiles.json";
 const MAX_ROUTING_FILE_SIZE: usize = 256 * 1024;
+
+const VALID_TARGET_TOOLS: &[&str] = &["codex", "opencode", "claude", "gemini", "auggie"];
+const VALID_RISK_VALUES: &[&str] = &["low", "medium", "high"];
+const VALID_DB_MIGRATION_VALUES: &[&str] = &["NO", "YES", "POSSIBLE"];
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RoutingProfile {
@@ -91,6 +96,56 @@ fn validate_profiles(
     agent_filenames: &[String],
 ) -> (Vec<RoutingProfile>, Vec<String>) {
     let mut warnings: Vec<String> = Vec::new();
+    let mut seen_ids: HashSet<&str> = HashSet::new();
+
+    for raw in profiles {
+        // Duplicate profile id warning
+        if !seen_ids.insert(&raw.id) {
+            warnings.push(format!("duplicate profile id '{}'", raw.id));
+        }
+
+        // Risk enum validation
+        if !VALID_RISK_VALUES.contains(&raw.risk.as_str()) {
+            warnings.push(format!(
+                "profile '{}' has invalid risk '{}' (expected: low, medium, high)",
+                raw.id, raw.risk
+            ));
+        }
+
+        // DB/migration enum validation
+        if !VALID_DB_MIGRATION_VALUES.contains(&raw.db_migration.as_str()) {
+            warnings.push(format!(
+                "profile '{}' has invalid db_migration '{}' (expected: NO, YES, POSSIBLE)",
+                raw.id, raw.db_migration
+            ));
+        }
+
+        // Target tool validation
+        if !VALID_TARGET_TOOLS.contains(&raw.target_tool.as_str()) {
+            warnings.push(format!(
+                "profile '{}' has unknown target_tool '{}' (expected: codex, opencode, claude, gemini, auggie)",
+                raw.id, raw.target_tool
+            ));
+        }
+
+        // Target/model mismatch warnings
+        if raw.target_tool == "opencode"
+            && (raw.recommended_model.starts_with("GPT")
+                || raw.recommended_model.starts_with("gpt"))
+        {
+            warnings.push(format!(
+                "profile '{}' targets opencode but recommended_model '{}' looks like a GPT tier (expected OpenCode model id, e.g. opencode-go/deepseek-v4-pro)",
+                raw.id, raw.recommended_model
+            ));
+        }
+        if raw.target_tool == "codex" && raw.recommended_model.contains("opencode-go/") {
+            warnings.push(format!(
+                "profile '{}' targets codex but recommended_model '{}' looks like an OpenCode model id",
+                raw.id, raw.recommended_model
+            ));
+        }
+    }
+
     let mut results: Vec<RoutingProfile> = Vec::new();
 
     for raw in profiles {
@@ -155,6 +210,10 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
             )],
         });
     }
+
+    // Defense-in-depth: verify path remains under workspace root
+    super::content::safe_canonical_target(&root, &path)
+        .map_err(|e| format!("routing file path rejected: {}", e))?;
 
     let metadata = std::fs::metadata(&path)
         .map_err(|e| format!("cannot read routing file metadata: {}", e))?;
@@ -267,7 +326,7 @@ mod tests {
       "title": "Bug Diagnosis",
       "description": "Debug and fix bugs",
       "target_tool": "opencode",
-      "recommended_model": "GPT-5.5 Medium",
+      "recommended_model": "opencode-go/deepseek-v4-pro",
       "risk": "medium",
       "skills": ["diagnose", "security-review"]
     },
@@ -430,6 +489,144 @@ mod tests {
 
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("exceeds"));
+    }
+
+    #[test]
+    fn duplicate_profile_ids_produce_warning() {
+        let root = temp_root("dup-ids");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T1", "description": "D1", "target_tool": "opencode", "recommended_model": "m1"},
+    {"id": "test", "title": "T2", "description": "D2", "target_tool": "opencode", "recommended_model": "m2"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert_eq!(response.profiles.len(), 2);
+        assert!(response.warnings.iter().any(|w| w.contains("duplicate profile id")));
+    }
+
+    #[test]
+    fn invalid_risk_value_produces_warning() {
+        let root = temp_root("bad-risk");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "critical"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("invalid risk")));
+    }
+
+    #[test]
+    fn invalid_db_migration_produces_warning() {
+        let root = temp_root("bad-db");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "db_migration": "MAYBE"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("invalid db_migration")));
+    }
+
+    #[test]
+    fn unknown_target_tool_produces_warning() {
+        let root = temp_root("bad-tool");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "foobar", "recommended_model": "m"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("unknown target_tool")));
+    }
+
+    #[test]
+    fn opencode_target_with_gpt_model_produces_warning() {
+        let root = temp_root("oc-gpt");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "GPT-5.5 Medium"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("GPT")));
+    }
+
+    #[test]
+    fn codex_target_with_opencode_model_produces_warning() {
+        let root = temp_root("cx-oc");
+        write_skill(&root, "diagnose");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "codex", "recommended_model": "opencode-go/deepseek-v4-pro"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("OpenCode model id")));
+    }
+
+    #[test]
+    fn valid_enum_values_produce_no_enum_warnings() {
+        let root = temp_root("valid-enums");
+        write_skill(&root, "diagnose");
+        write_agent(&root, "autopilot.md");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "t1", "title": "T1", "description": "D", "target_tool": "opencode", "recommended_model": "opencode-go/deepseek-v4-pro", "risk": "low", "db_migration": "NO"},
+    {"id": "t2", "title": "T2", "description": "D", "target_tool": "codex", "recommended_model": "GPT-5.5 Medium", "risk": "medium", "db_migration": "YES"},
+    {"id": "t3", "title": "T3", "description": "D", "target_tool": "claude", "recommended_model": "Claude Sonnet", "risk": "high", "db_migration": "POSSIBLE"}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        let has_enum_warning = response.warnings.iter().any(|w| {
+            w.contains("invalid risk")
+                || w.contains("invalid db_migration")
+                || w.contains("unknown target_tool")
+                || w.contains("GPT")
+                || w.contains("OpenCode model id")
+        });
+        assert!(!has_enum_warning, "valid enum values should not produce warnings");
     }
 
     fn read_profiles_at_root(root: &PathBuf) -> Result<RoutingProfilesResponse, String> {

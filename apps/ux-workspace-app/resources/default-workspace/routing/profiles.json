@@ -5,7 +5,7 @@
       "title": "Frontend UI",
       "description": "Design or improve frontend user interfaces with visual, accessibility, and browser verification.",
       "target_tool": "opencode",
-      "recommended_model": "GPT-5.5 Medium",
+      "recommended_model": "opencode-go/deepseek-v4-pro",
       "db_migration": "NO",
       "risk": "medium",
       "skills": [
@@ -25,7 +25,7 @@
       "title": "Bug Diagnosis",
       "description": "Debug bugs, failures, flakes, slowness, or regressions with reproduce-minimise-hypothesise-instrument-fix loop.",
       "target_tool": "opencode",
-      "recommended_model": "GPT-5.5 Medium",
+      "recommended_model": "opencode-go/deepseek-v4-pro",
       "db_migration": "NO",
       "risk": "medium",
       "skills": [
@@ -44,7 +44,7 @@
       "title": "Security Review",
       "description": "Review security risks for auth, user input, API endpoints, secrets, uploads, and sensitive data handling.",
       "target_tool": "opencode",
-      "recommended_model": "GPT-5.5 Medium",
+      "recommended_model": "opencode-go/deepseek-v4-pro",
       "db_migration": "NO",
       "risk": "high",
       "skills": [
@@ -62,7 +62,7 @@
       "title": "Release Check",
       "description": "Pre-merge or pre-deploy readiness check covering git state, build/test, migrations, env risk, and smoke routes.",
       "target_tool": "opencode",
-      "recommended_model": "GPT-5.5 Medium",
+      "recommended_model": "opencode-go/deepseek-v4-flash",
       "db_migration": "NO",
       "risk": "low",
       "skills": [

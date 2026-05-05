@@ -353,7 +353,7 @@ fn doc_backup_path(doc_id: &str, target_path: &Path) -> Result<PathBuf, String> 
     Ok(backup_dir.join(file_name))
 }
 
-fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<PathBuf, String> {
+pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<PathBuf, String> {
     let canonical_root = root
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize workspace: {}", e))?;

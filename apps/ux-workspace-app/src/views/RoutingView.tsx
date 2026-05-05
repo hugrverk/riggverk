@@ -1,4 +1,4 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import type { RoutingProfile, RoutingProfilesResponse } from "../types";
 
 interface RoutingViewProps {
@@ -40,6 +40,11 @@ function copyMetadataBlock(profile: RoutingProfile): string {
   return block;
 }
 
+function profileStatus(profile: RoutingProfile): "ready" | "warnings" {
+  if (profile.missing_skills.length > 0 || profile.missing_agent) return "warnings";
+  return "ready";
+}
+
 export function RoutingView({ routingData, routingError, workspaceValid }: RoutingViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
@@ -67,10 +72,16 @@ export function RoutingView({ routingData, routingError, workspaceValid }: Routi
     }
   }, [selected]);
 
-  // Auto-select first profile if none selected
-  if (!selectedId && profiles.length > 0) {
-    setSelectedId(profiles[0].id);
-  }
+  // Auto-select first profile when data loads, and clear stale selections
+  useEffect(() => {
+    if (profiles.length === 0) {
+      setSelectedId(null);
+      return;
+    }
+    if (!selectedId || !profiles.some((p) => p.id === selectedId)) {
+      setSelectedId(profiles[0].id);
+    }
+  }, [profiles, selectedId]);
 
   const fileStatusText = !routingData
     ? "loading"
@@ -148,6 +159,83 @@ export function RoutingView({ routingData, routingError, workspaceValid }: Routi
             </div>
           ) : (
             <>
+              {/* Compatibility / status matrix */}
+              {profiles.length > 0 && (
+                <div className="configs-bundle-section" role="region" aria-label="Profile compatibility matrix">
+                  <span className="configs-bundle-header">
+                    profiles ({profiles.length})
+                  </span>
+                  <div style={{ overflowX: "auto" }}>
+                    <table className="routing-matrix" style={{
+                      width: "100%", borderCollapse: "collapse", fontSize: 11,
+                      border: "1px solid var(--ws-border, #2d2d2d)",
+                    }}>
+                      <thead>
+                        <tr>
+                          <th style={{ padding: "4px 8px", textAlign: "left", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>profile</th>
+                          <th style={{ padding: "4px 8px", textAlign: "left", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>tool</th>
+                          <th style={{ padding: "4px 8px", textAlign: "left", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>model</th>
+                          <th style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>risk</th>
+                          <th style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>DB</th>
+                          <th style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>skills</th>
+                          <th style={{ padding: "4px 8px", textAlign: "left", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>agent</th>
+                          <th style={{ padding: "4px 8px", textAlign: "center", borderBottom: "1px solid var(--ws-border, #2d2d2d)", fontWeight: 600, opacity: 0.7 }}>status</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {profiles.map((p) => {
+                          const status = profileStatus(p);
+                          const missingSkillCount = p.missing_skills.length;
+                          const totalSkills = p.skills.length;
+                          const agentLabel = p.agent_profile
+                            ? (p.missing_agent ? p.agent_profile + " \u2717" : p.agent_profile)
+                            : "\u2014";
+                          return (
+                            <tr
+                              key={p.id}
+                              onClick={() => { setSelectedId(p.id); setCopied(false); }}
+                              style={{
+                                cursor: "pointer",
+                                backgroundColor: selectedId === p.id ? "var(--ws-row-active, rgba(255,255,255,0.06))" : "transparent",
+                                borderBottom: "1px solid var(--ws-hairline, rgba(255,255,255,0.06))",
+                              }}
+                              aria-current={selectedId === p.id ? "true" : undefined}
+                            >
+                              <td style={{ padding: "3px 8px", whiteSpace: "nowrap" }}>
+                                <span style={{ fontWeight: 500 }}>{p.title}</span>
+                                <span style={{ opacity: 0.5, marginLeft: 6 }}>{p.id}</span>
+                              </td>
+                              <td style={{ padding: "3px 8px", whiteSpace: "nowrap" }}>{p.target_tool}</td>
+                              <td style={{ padding: "3px 8px", whiteSpace: "nowrap", maxWidth: 180, overflow: "hidden", textOverflow: "ellipsis", opacity: 0.8 }}>{p.recommended_model}</td>
+                              <td style={{ padding: "3px 8px", textAlign: "center" }}>
+                                <span className={riskClass(p.risk)} style={{ fontWeight: 600 }}>{riskLabel(p.risk)}</span>
+                              </td>
+                              <td style={{ padding: "3px 8px", textAlign: "center", opacity: 0.7 }}>{p.db_migration}</td>
+                              <td style={{ padding: "3px 8px", textAlign: "center" }}>
+                                <span>{totalSkills}</span>
+                                {missingSkillCount > 0 && (
+                                  <span className="ws-color-fail" style={{ marginLeft: 3 }}>-{missingSkillCount}</span>
+                                )}
+                              </td>
+                              <td style={{ padding: "3px 8px", whiteSpace: "nowrap", opacity: p.agent_profile ? 0.85 : 0.4, fontSize: 10 }}>
+                                {agentLabel}
+                              </td>
+                              <td style={{ padding: "3px 8px", textAlign: "center" }}>
+                                {status === "ready" ? (
+                                  <span className="ws-color-ok">ready</span>
+                                ) : (
+                                  <span className="ws-color-warn">warnings</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
               {/* Meta strip */}
               <div className="lib-editor-meta-strip">
                 <div className="lib-editor-meta-left">
