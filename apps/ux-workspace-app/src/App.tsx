@@ -95,6 +95,7 @@ function App() {
   // workspace operations state
   const [wsLog, setWsLog] = useState<ActionResult | null>(null);
   const [wsRunning, setWsRunning] = useState<string | null>(null);
+  const [wsLogCompletedAt, setWsLogCompletedAt] = useState<number | null>(null);
 
   // workspace diagnostics state
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
@@ -665,6 +666,7 @@ function App() {
       setAppSettings(s);
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
+      setAccentResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "settings saved" });
       fetchStatus();
       loadWorkspaceDiagnostics();
@@ -680,6 +682,7 @@ function App() {
       setAppSettings(s);
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
+      setAccentResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
       fetchStatus();
       loadWorkspaceDiagnostics();
@@ -757,6 +760,7 @@ function App() {
       }
       const result = await invoke<ActionResult>("run_action", { action });
       setWsLog(result);
+      setWsLogCompletedAt(Date.now());
       if (!action.startsWith("open_")) fetchStatus();
     } catch (e) {
       if (isInvalidWorkspaceError(e)) {
@@ -787,6 +791,7 @@ function App() {
       };
       const result = await invoke<ActionResult>("install_skills", { request: req });
       setWsLog(result);
+      setWsLogCompletedAt(Date.now());
       if (!dry && result.success) fetchStatus();
     } catch (e) {
       setWsLog({ success: false, action: dry ? "install_skills:dry-run" : "install_skills", stdout: "", stderr: String(e), exit_code: null });
@@ -818,6 +823,8 @@ function App() {
       return { ...prev, enabled_target_ids: ids };
     });
   }, []);
+
+  const [accentResetKey, setAccentResetKey] = useState(0);
 
   const applyTargetProfile = useCallback((profileId: string) => {
     const profile = targetProfiles.find(p => p.id === profileId);
@@ -919,6 +926,7 @@ function App() {
             onCreateWorkspace={runCreate}
             // operations
             wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
@@ -1066,6 +1074,7 @@ function App() {
             onApplyProfile={applyTargetProfile}
             onSave={saveSettings}
             onReset={resetSettings}
+            accentResetKey={accentResetKey}
           />
         )}
       </div>

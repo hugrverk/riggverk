@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { isValidAccentHex } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, TargetProfileMeta } from "../types";
 
@@ -20,6 +20,7 @@ interface SettingsViewProps {
   onApplyProfile: (profileId: string) => void;
   onSave: () => void;
   onReset: () => void;
+  accentResetKey: number;
 }
 
 export function SettingsView({
@@ -35,15 +36,28 @@ export function SettingsView({
   onApplyProfile,
   onSave,
   onReset,
+  accentResetKey,
 }: SettingsViewProps) {
   const [accentDraft, setAccentDraft] = useState(appSettings?.accent_color ?? "");
   const [accentTouched, setAccentTouched] = useState(false);
 
+  // Sync from appSettings when not actively editing an invalid value.
+  // An explicit accentResetKey increment (save/reset) always resets.
+  const prevResetKeyRef = useRef(accentResetKey);
+
   useEffect(() => {
+    // Force-reset after save or reset defaults
+    if (accentResetKey !== prevResetKeyRef.current) {
+      prevResetKeyRef.current = accentResetKey;
+      setAccentTouched(false);
+      setAccentDraft(appSettings?.accent_color ?? "");
+      return;
+    }
+
     if (!accentTouched) {
       setAccentDraft(appSettings?.accent_color ?? "");
     }
-  }, [appSettings?.accent_color, accentTouched]);
+  }, [accentResetKey, appSettings?.accent_color, accentTouched]);
 
   const accentValid = accentDraft === "" || isValidAccentHex(accentDraft);
   const canSave = settingsDirty && accentValid;

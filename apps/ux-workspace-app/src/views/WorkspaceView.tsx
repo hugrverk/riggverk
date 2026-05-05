@@ -18,6 +18,7 @@ interface WorkspaceViewProps {
   onCreateWorkspace: () => void;
   // operations
   wsLog: ActionResult | null;
+  wsLogCompletedAt: number | null;
   wsRunning: string | null;
   activityIndex: number;
   activityCellClass: (index: number) => string;
@@ -148,6 +149,7 @@ export function WorkspaceView({
   onCreateWorkspace,
   // operations
   wsLog,
+  wsLogCompletedAt,
   wsRunning,
   activityIndex,
   activityCellClass,
@@ -430,14 +432,32 @@ export function WorkspaceView({
 
       {/* ---- Primary: Operations Cockpit ---- */}
       <div className="ws-operations">
-        {/* Central terminal panel — larger, more prominent */}
+        {/* Central terminal panel */}
         <div className="ws-op-term-pane" role="region" aria-label="Operations terminal output">
           <TerminalState
             runningLabel={wsRunning}
             result={wsLog}
+            completedAt={wsLogCompletedAt ?? undefined}
             readyLabel="operations ready"
             activityIndex={activityIndex}
             activityCellClass={activityCellClass}
+            idleContent={
+              <div className="log-empty">
+                <div><span className="log-prompt">$</span> operations ready</div>
+                {status ? (
+                  <div className="ws-idle-context">
+                    <span>workspace: {workspaceValid ? "valid" : "invalid"}</span>
+                    {gitAvailable && <span>branch: {status.branch}</span>}
+                    <span>targets: {status.enabled_rule_target_ids.length} rules, {status.enabled_config_target_ids.length} configs</span>
+                    <span className="ws-idle-hint">try: pull, diff rules, sync configs, release-check</span>
+                  </div>
+                ) : (
+                  <div className="ws-idle-context">
+                    <span>waiting for workspace status...</span>
+                  </div>
+                )}
+              </div>
+            }
           />
         </div>
 

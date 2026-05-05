@@ -6,6 +6,15 @@ export interface ActionResult {
   exit_code: number | null;
 }
 
+function relativeTime(ts: number): string {
+  const seconds = Math.floor((Date.now() - ts) / 1000);
+  if (seconds < 5) return "just now";
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  return "earlier";
+}
+
 export function ActivityLoader({
   activityIndex,
   activityCellClass,
@@ -44,10 +53,12 @@ export function ReadyState({ label }: { label: string }) {
 
 export function ActionResultOutput({
   result,
+  completedAt,
   sectioned = true,
   showNoOutput = true,
 }: {
   result: ActionResult;
+  completedAt?: number;
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
@@ -56,6 +67,9 @@ export function ActionResultOutput({
       <div className={`log-status ${result.success ? "log-ok" : "log-fail"}`}>
         <span className="log-prompt">$</span> {result.action}: {result.success ? "OK" : "FAILED"}
         {result.exit_code !== null && ` (exit ${result.exit_code})`}
+        {completedAt !== undefined && (
+          <span className="log-status-when"> &middot; {relativeTime(completedAt)}</span>
+        )}
       </div>
       {sectioned ? (
         <>
@@ -88,7 +102,9 @@ export function ActionResultOutput({
 export function TerminalState({
   runningLabel,
   result,
+  completedAt,
   readyLabel,
+  idleContent,
   activityIndex,
   activityCellClass,
   sectioned = true,
@@ -96,7 +112,9 @@ export function TerminalState({
 }: {
   runningLabel?: string | null;
   result?: ActionResult | null;
+  completedAt?: number;
   readyLabel: string;
+  idleContent?: React.ReactNode;
   activityIndex: number;
   activityCellClass: (index: number) => string;
   sectioned?: boolean;
@@ -107,7 +125,11 @@ export function TerminalState({
   }
 
   if (result) {
-    return <ActionResultOutput result={result} sectioned={sectioned} showNoOutput={showNoOutput} />;
+    return <ActionResultOutput result={result} completedAt={completedAt} sectioned={sectioned} showNoOutput={showNoOutput} />;
+  }
+
+  if (idleContent) {
+    return <>{idleContent}</>;
   }
 
   return <ReadyState label={readyLabel} />;

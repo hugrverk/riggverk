@@ -30,6 +30,10 @@ Folder picker and workspace path:
 - [ ] Empty/cleared path falls back to env var or built-in default
 - [ ] Invalid workspace path shows missing markers and "invalid workspace"
 - [ ] Workspace view shows compact validity note when no valid workspace selected
+- [ ] Idle terminal shows "$ operations ready" with workspace status, branch, and target counts
+- [ ] Idle terminal suggests next commands: "try: pull, diff rules, sync configs, release-check"
+- [ ] After a command runs, the terminal shows the action name, OK/FAILED status, exit code, and relative timestamp
+- [ ] Running commands show "$ <label>..." with activity loader animation
 
 ## 4. Create Workspace Smoke
 
@@ -61,10 +65,17 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 
 ## 5. Library and Default Workspace Smoke
 
-- [ ] Library view shows curated workspace docs grouped by section (Start, Reference, Operating Model, Private / Operator, Development) under the Docs source type
+- [ ] Library view shows a three-column layout: source rail (Docs, Rules, Skills, Agents, Configs), item sidebar, and content pane
+- [ ] Source rail uses text-only labels with count badges; no unicode icons
+- [ ] Source rail active source has a subtle accent underline indicator
 - [ ] Library view allows switching between source types: Docs, Rules, Skills, Agents, Configs
-- [ ] Selecting a doc renders its Markdown content
+- [ ] Docs are grouped by section in the sidebar
+- [ ] Selecting a doc renders its Markdown content in the main pane
 - [ ] "open" button opens the doc in the system editor
+- [ ] Rules shows Global Rules template with preview/edit tabs
+- [ ] Skills shows search-filtered skill list with preview
+- [ ] Agents shows agent source list with edit/save functionality
+- [ ] Configs shows config targets with JSON preview and edit
 - [ ] Bundled starter preview in Workspace tab shows known categories and file paths
 - [ ] Bundled starter preview shows non-empty Skills category
 - [ ] Bundled default resources contain no private names, secrets, or core-skill-subset language
@@ -96,7 +107,21 @@ Dry-runs only unless testing your own machine:
 - [ ] Dry-run and install actions behave identically to previous behavior
 - [ ] "open script" button opens install-skills.sh in system editor
 
-## 8. Known Limitations
+## 8. Settings Smoke
+
+- [ ] Settings view shows Appearance (dark/light/system) and Accent color picker with hex input
+- [ ] Changing accent via color picker updates the hex input and applies accent immediately
+- [ ] Typing a valid hex color updates the color picker and applies accent immediately
+- [ ] Typing an invalid hex shows a validation hint and disables the save button
+- [ ] The last valid accent remains applied while an invalid hex is being typed
+- [ ] Clicking "default" on the accent row clears the input and resets to the built-in accent
+- [ ] "save" button saves accent color to persisted settings
+- [ ] After save, the hex input and picker remain in sync with persisted settings
+- [ ] "reset defaults" clears the accent and all settings to factory defaults
+- [ ] Rule targets and config targets can be toggled individually
+- [ ] Target profiles can be applied and show matched profile name
+
+## 9. Known Limitations
 
 - Internal repo/package names still use `ux-workspace` during transition (marker directory, workspace_type, app source directory)
 - Workspace marker naming is still `.ux-workspace/workspace.json`
@@ -107,7 +132,7 @@ Dry-runs only unless testing your own machine:
 - Workspace scripts in the created workspace are copies of the bundled defaults and may not match the repo originals after bundles are updated
 - Clean git status should be confirmed — residual dev artifacts in `dist/` or `target/` could be bundled unintentionally
 
-## 9. Pass / Fail Report Template
+## 10. Pass / Fail Report Template
 
 Copy this template and fill in results.
 
@@ -123,9 +148,10 @@ Copy this template and fill in results.
 ### Checks Passed
 - [ ] Preflight (clean git, release-check, build)
 - [ ] Build/install (launch, no error banner, product name, bundled preview)
-- [ ] Workspace setup (folder picker, save, diagnostics)
+- [ ] Workspace setup (folder picker, save, diagnostics, idle terminal, result timestamp)
 - [ ] Create workspace (dry-run, create, files, validation, no-overwrite, no-execute, rejection of unsafe targets)
-- [ ] Docs and defaults (curated docs, bundled preview, no private names)
+- [ ] Library (source rail nav, sidebar items, edit/save docs, agents, configs, skills)
+- [ ] Settings (appearance, accent picker, hex input, save, reset)
 - [ ] Sync dry-runs (rules diff, config diff, skills dry-run, bootstrap diff)
 
 ### Checks Failed
