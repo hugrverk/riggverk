@@ -1,0 +1,72 @@
+{
+  "agents": {
+    "autopilot.md": {
+      "role": "primary",
+      "summary": "Default OpenCode autonomous implementation orchestrator. Break work into bounded slices, inspect repository reality first, delegate to subagents, implement safe patches, verify, and report.",
+      "targets": ["opencode"],
+      "risk": "medium",
+      "default_skills": ["diagnose", "implementation-plan"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Runtime frontmatter affects OpenCode behavior. Do not edit casually.",
+        "Permission blocks are behavior-sensitive."
+      ]
+    },
+    "repo-scout.md": {
+      "role": "investigation",
+      "summary": "Read-only repository scout. Maps structure, ownership, patterns, and constraints before implementation.",
+      "targets": ["opencode"],
+      "risk": "low",
+      "default_skills": ["zoom-out"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Read-only agent. Safe to use for any workspace exploration."
+      ]
+    },
+    "code-reviewer.md": {
+      "role": "review",
+      "summary": "Read-only code reviewer for bugs, regressions, security mistakes, complexity, and pattern mismatches.",
+      "targets": ["opencode"],
+      "risk": "low",
+      "default_skills": ["diagnose", "tdd"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Read-only agent. Use after implementation or before commit."
+      ]
+    },
+    "security-auditor.md": {
+      "role": "review",
+      "summary": "Read-only security auditor for auth, permissions, uploads, forms, checkout, API routes, DB access, secrets, shell execution, and webhooks.",
+      "targets": ["opencode"],
+      "risk": "high",
+      "default_skills": ["security-review"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Read-only agent. Use for security-sensitive changes before merge/deploy.",
+        "Do not expose credentials."
+      ]
+    },
+    "docs-writer.md": {
+      "role": "documentation",
+      "summary": "Read-only documentation writer for README, docs, runbooks, QA checklists, changelogs, and operator guides.",
+      "targets": ["opencode"],
+      "risk": "low",
+      "default_skills": ["write-a-skill"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Read-only agent. Produces documentation, does not mutate code."
+      ]
+    },
+    "qa-verifier.md": {
+      "role": "verification",
+      "summary": "Read-only QA verifier. Runs non-destructive verification commands, inspects failures, and summarizes evidence.",
+      "targets": ["opencode"],
+      "risk": "low",
+      "default_skills": ["browser-qa"],
+      "safe_to_edit_runtime": false,
+      "notes": [
+        "Read-only agent except for normal test/build artifacts."
+      ]
+    }
+  }
+}

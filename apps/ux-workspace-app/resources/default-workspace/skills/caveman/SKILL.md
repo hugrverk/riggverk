@@ -1,6 +1,10 @@
 ---
 name: caveman
 description: Use compressed technical communication. Trigger when the user asks for caveman mode, fewer tokens, terse answers, or very brief technical output.
+category: workflow
+risk: low
+targets: codex, opencode, claude, gemini, auggie
+related: context-budget
 ---
 
 # Caveman

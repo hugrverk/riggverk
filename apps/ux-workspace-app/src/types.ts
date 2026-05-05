@@ -18,10 +18,29 @@ export interface DocSummary {
 
 export interface SkillSummary {
   id: string; name: string; description: string; path: string;
+  category: string; risk: string; targets: string[]; related: string[];
 }
 
 export interface AgentSourceSummary {
   id: string; title: string; path: string; exists: boolean;
+}
+
+export interface AgentMetadataEntry {
+  role: string;
+  summary: string;
+  targets: string[];
+  risk: string;
+  default_skills: string[];
+  safe_to_edit_runtime: boolean;
+  notes: string[];
+}
+
+export interface AgentMetadataResponse {
+  id: string;
+  title: string;
+  path: string;
+  exists: boolean;
+  metadata: AgentMetadataEntry | null;
 }
 
 export interface AgentSourceContent {

@@ -1,8 +1,8 @@
 import { Markdown } from "../components/Markdown";
 import type { ActionResult } from "../components/TerminalOutput";
 import type {
+  AgentMetadataResponse,
   AgentSourceContent,
-  AgentSourceSummary,
   AgentTargetMeta,
   DocSummary,
   DocumentContent,
@@ -71,7 +71,7 @@ interface LibraryViewProps {
   onOpenSkill: (id: string) => void;
 
   // Agents
-  agentSources: AgentSourceSummary[];
+  agentSources: AgentMetadataResponse[];
   activeAgentId: string | null;
   activeAgentContent: AgentSourceContent | null;
   onSelectAgent: (id: string) => void;
@@ -270,6 +270,16 @@ function SkillItemList({
             >
               <span className="lib-sidebar-item-title">{s.name}</span>
               <span className="lib-sidebar-item-desc">{s.description}</span>
+              <span className="lib-sidebar-item-meta-row">
+                {s.category && (
+                  <span className="lib-sidebar-item-tag">{s.category}</span>
+                )}
+                {s.risk && (
+                  <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-risk lib-sidebar-item-tag-${s.risk}`}>
+                    {s.risk}
+                  </span>
+                )}
+              </span>
             </button>
           ))}
         </div>
@@ -283,7 +293,7 @@ function AgentItemList({
   activeId,
   onSelect,
 }: {
-  agents: AgentSourceSummary[];
+  agents: AgentMetadataResponse[];
   activeId: string | null;
   onSelect: (id: string) => void;
 }) {
@@ -309,6 +319,19 @@ function AgentItemList({
           {!a.exists && (
             <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn">not in ws</span>
           )}
+          <span className="lib-sidebar-item-meta-row">
+            {a.metadata?.role && (
+              <span className="lib-sidebar-item-tag">{a.metadata.role}</span>
+            )}
+            {a.metadata?.risk && (
+              <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${a.metadata.risk}`}>
+                {a.metadata.risk}
+              </span>
+            )}
+            {a.metadata && !a.metadata.safe_to_edit_runtime && (
+              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn" title="Runtime-sensitive frontmatter — edit with care">runtime</span>
+            )}
+          </span>
         </button>
       ))}
     </div>
@@ -364,6 +387,15 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "skills": return "Skills";
     case "agents": return "Agents";
     case "configs": return "Configs";
+  }
+}
+
+function skillRiskClass(risk: string): string {
+  switch (risk.toLowerCase()) {
+    case "low": return "ws-color-ok";
+    case "medium": return "ws-color-warn";
+    case "high": return "ws-color-fail";
+    default: return "";
   }
 }
 
@@ -579,6 +611,8 @@ export function LibraryView(props: LibraryViewProps) {
 
     case "skills":
       if (activeSkillContent) {
+        // Find the full SkillSummary for metadata display
+        const activeSkill = skills.find((s) => s.id === activeSkillContent.id);
         mainContent = (
           <>
             <div className="lib-editor-meta-strip">
@@ -590,6 +624,35 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={() => onOpenSkill(activeSkillContent.id)}>open</button>
               </div>
             </div>
+            {activeSkill && (activeSkill.category || activeSkill.risk || activeSkill.targets.length > 0 || activeSkill.related.length > 0) && (
+              <div className="configs-bundle-section" role="region" aria-label="Skill metadata">
+                <span className="configs-bundle-header">metadata</span>
+                {activeSkill.category && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">category</span>
+                    <span className="configs-bundle-val">{activeSkill.category}</span>
+                  </div>
+                )}
+                {activeSkill.risk && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">risk</span>
+                    <span className={`configs-bundle-val ${skillRiskClass(activeSkill.risk)}`}>{activeSkill.risk}</span>
+                  </div>
+                )}
+                {activeSkill.targets.length > 0 && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">targets</span>
+                    <span className="configs-bundle-val">{activeSkill.targets.join(", ")}</span>
+                  </div>
+                )}
+                {activeSkill.related.length > 0 && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">related</span>
+                    <span className="configs-bundle-val">{activeSkill.related.join(", ")}</span>
+                  </div>
+                )}
+              </div>
+            )}
             <div className="lib-editor-body">
               <div className="lib-preview-body"><Markdown content={activeSkillContent.content} /></div>
             </div>
@@ -600,6 +663,8 @@ export function LibraryView(props: LibraryViewProps) {
 
     case "agents":
       if (activeAgentContent) {
+        const activeSrc = agentSources.find((s) => s.id === activeAgentContent.id);
+        const meta = activeSrc?.metadata;
         mainContent = (
           <>
             <div className="lib-editor-meta-strip">
@@ -615,6 +680,57 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={() => onOpenAgent(activeAgentContent.id)}>open</button>
               </div>
             </div>
+            {meta && (
+              <div className="configs-bundle-section" role="region" aria-label="Agent metadata">
+                <span className="configs-bundle-header">metadata</span>
+                {meta.role && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">role</span>
+                    <span className="configs-bundle-val">{meta.role}</span>
+                  </div>
+                )}
+                {meta.summary && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">summary</span>
+                    <span className="configs-bundle-val" style={{ fontSize: 11 }}>{meta.summary}</span>
+                  </div>
+                )}
+                {meta.risk && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">risk</span>
+                    <span className={`configs-bundle-val ${skillRiskClass(meta.risk)}`}>{meta.risk}</span>
+                  </div>
+                )}
+                {meta.targets.length > 0 && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">targets</span>
+                    <span className="configs-bundle-val">{meta.targets.join(", ")}</span>
+                  </div>
+                )}
+                {meta.default_skills.length > 0 && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">default skills</span>
+                    <span className="configs-bundle-val">{meta.default_skills.join(", ")}</span>
+                  </div>
+                )}
+                {!meta.safe_to_edit_runtime && (
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-key">edit safety</span>
+                    <span className="configs-bundle-val ws-color-warn">runtime-sensitive — edit with care</span>
+                  </div>
+                )}
+                {meta.notes.length > 0 && (
+                  <div className="configs-bundle-section" role="region" aria-label="Agent notes">
+                    <span className="configs-bundle-header">notes</span>
+                    {meta.notes.map((note, i) => (
+                      <div key={i} className="configs-bundle-item">
+                        <span className="configs-bundle-val" style={{ fontSize: 11, opacity: 0.75 }}>{note}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
             <div className="editor-mode-tabs" role="tablist" aria-label="Agent view mode">
               <button className={`btn btn-sm ${agentMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetAgentMode("preview")} role="tab" aria-selected={agentMode === "preview"}>preview</button>
               <button className={`btn btn-sm ${agentMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetAgentMode("edit")} role="tab" aria-selected={agentMode === "edit"}>edit</button>

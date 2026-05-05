@@ -2,6 +2,10 @@
 name: zoom-out
 description: Explain unfamiliar code in broader system context. Use when the user needs module relationships, callers, dependencies, risks, or safe next steps before editing.
 disable-model-invocation: true
+category: architecture
+risk: low
+targets: codex, opencode, claude, auggie
+related: diagnose
 ---
 
 # Zoom Out

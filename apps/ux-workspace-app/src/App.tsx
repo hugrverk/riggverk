@@ -10,7 +10,7 @@ import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
 import { RoutingView } from "./views/RoutingView";
-import type { AgentSourceContent, AgentSourceSummary, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
@@ -138,7 +138,7 @@ function App() {
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
 
   // agent source state
-  const [agentSources, setAgentSources] = useState<AgentSourceSummary[]>([]);
+  const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
   const [activeAgentId, setActiveAgentId] = useState<string | null>(null);
   const [activeAgentContent, setActiveAgentContent] = useState<AgentSourceContent | null>(null);
   const [agentDraft, setAgentDraft] = useState("");
@@ -437,7 +437,7 @@ function App() {
 
   const loadAgentSources = useCallback(async () => {
     try {
-      const list = await invoke<AgentSourceSummary[]>("list_agent_sources");
+      const list = await invoke<AgentMetadataResponse[]>("list_agent_metadata");
       setAgentSources(list);
       if (list.length > 0) {
         const persistedId = activeAgentIdRef.current;
@@ -1098,6 +1098,8 @@ function App() {
             workspaceValid={workspaceValid}
             onProfilesChanged={loadRoutingData}
             onRoutingDirtyChange={setRoutingDirty}
+            skills={skills}
+            agentSources={agentSources}
           />
         )}
 

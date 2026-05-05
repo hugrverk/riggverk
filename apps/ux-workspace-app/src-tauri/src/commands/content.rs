@@ -1,4 +1,4 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -1949,4 +1949,185 @@ pub fn save_agent_source(filename: String, content: String) -> Result<ActionResu
         String::new(),
         Some(0),
     ))
+}
+
+// ── agent metadata sidecar ──
+
+const AGENT_METADATA_REL: &str = "metadata/agents.json";
+const MAX_AGENT_METADATA_SIZE: usize = 128 * 1024;
+
+#[derive(Deserialize, Serialize, Clone, Debug)]
+pub struct AgentMetadataEntry {
+    pub role: String,
+    pub summary: String,
+    pub targets: Vec<String>,
+    pub risk: String,
+    pub default_skills: Vec<String>,
+    pub safe_to_edit_runtime: bool,
+    pub notes: Vec<String>,
+}
+
+#[derive(Deserialize)]
+struct AgentMetadataFile {
+    agents: std::collections::HashMap<String, AgentMetadataEntry>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct AgentMetadataResponse {
+    pub id: String,
+    pub title: String,
+    pub path: String,
+    pub exists: bool,
+    pub metadata: Option<AgentMetadataEntry>,
+}
+
+fn load_agent_metadata(root: &Path) -> std::collections::HashMap<String, AgentMetadataEntry> {
+    let path = root.join(AGENT_METADATA_REL);
+    if !path.is_file() {
+        return std::collections::HashMap::new();
+    }
+    let metadata = match std::fs::metadata(&path) {
+        Ok(m) => m,
+        Err(_) => return std::collections::HashMap::new(),
+    };
+    if metadata.len() > MAX_AGENT_METADATA_SIZE as u64 {
+        return std::collections::HashMap::new();
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(_) => return std::collections::HashMap::new(),
+    };
+    let parsed: AgentMetadataFile = match serde_json::from_str(&content) {
+        Ok(p) => p,
+        Err(_) => return std::collections::HashMap::new(),
+    };
+    parsed.agents
+}
+
+#[tauri::command]
+pub fn list_agent_metadata() -> Result<Vec<AgentMetadataResponse>, String> {
+    let root = workspace_root()?;
+    let metadata_map = load_agent_metadata(&root);
+    let known = known_agent_files();
+    let agents_dir = root.join(AGENTS_DIR);
+
+    let mut results: Vec<AgentMetadataResponse> = Vec::new();
+    for filename in known {
+        let path = format!("{}/{}", AGENTS_DIR, filename);
+        let exists = agents_dir.join(filename).is_file();
+        let metadata = metadata_map.get(filename.to_owned()).cloned();
+        results.push(AgentMetadataResponse {
+            id: filename.to_string(),
+            title: agent_title_from_filename(filename),
+            path,
+            exists,
+            metadata,
+        });
+    }
+    Ok(results)
+}
+
+#[cfg(test)]
+mod agent_metadata_tests {
+    use super::*;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("ux-workspace-app-agmeta-{name}-{nonce}"))
+    }
+
+    fn write_metadata(root: &PathBuf, json: &str) {
+        let dir = root.join("metadata");
+        fs::create_dir_all(&dir).expect("create metadata dir");
+        fs::write(dir.join("agents.json"), json).expect("write agents.json");
+    }
+
+    fn write_agent_file(root: &PathBuf, filename: &str) {
+        let dir = root.join("agents");
+        fs::create_dir_all(&dir).expect("create agents dir");
+        fs::write(dir.join(filename), "# agent\n").expect("write agent file");
+    }
+
+    #[test]
+    fn missing_metadata_returns_none_for_all_agents() {
+        let root = temp_root("no-meta");
+        write_agent_file(&root, "autopilot.md");
+
+        let map = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn valid_metadata_loads_for_known_agents() {
+        let root = temp_root("valid-meta");
+        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "repo-scout.md");
+        write_metadata(
+            &root,
+            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let map = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(map.len(), 1);
+        let entry = map.get("autopilot.md").expect("autopilot metadata");
+        assert_eq!(entry.role, "primary");
+        assert_eq!(entry.risk, "medium");
+        assert_eq!(entry.targets, vec!["opencode"]);
+        assert!(!entry.safe_to_edit_runtime);
+    }
+
+    #[test]
+    fn invalid_json_returns_empty_map() {
+        let root = temp_root("invalid-meta");
+        write_agent_file(&root, "autopilot.md");
+        write_metadata(&root, "not json");
+
+        let map = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn oversized_metadata_rejected() {
+        let root = temp_root("oversized-meta");
+        write_agent_file(&root, "autopilot.md");
+        let big = format!(
+            r#"{{"agents":{{"autopilot.md":{{"role":"primary","summary":"{}","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}}}}"#,
+            "x".repeat(MAX_AGENT_METADATA_SIZE)
+        );
+        write_metadata(&root, &big);
+
+        let map = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        assert!(map.is_empty());
+    }
+
+    #[test]
+    fn unknown_agent_key_does_not_crash() {
+        let root = temp_root("unknown-key");
+        write_agent_file(&root, "autopilot.md");
+        write_metadata(
+            &root,
+            r#"{"agents":{"nonexistent.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+        );
+
+        let map = load_agent_metadata(&root);
+        let _ = fs::remove_dir_all(&root);
+
+        // nonexistent.md is in metadata but not a known agent, so it's ignored
+        assert_eq!(map.len(), 1);
+        assert!(map.contains_key("nonexistent.md"));
+    }
 }

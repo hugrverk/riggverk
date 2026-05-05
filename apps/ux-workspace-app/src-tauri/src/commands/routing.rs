@@ -69,12 +69,8 @@ struct RawProfilesFile {
     profiles: Vec<RawProfile>,
 }
 
-fn load_skill_names(root: &Path) -> Vec<String> {
-    super::skills::discover_skills(root)
-        .unwrap_or_default()
-        .into_iter()
-        .map(|s| s.name)
-        .collect()
+fn load_skill_summaries(root: &Path) -> Vec<super::skills::SkillSummary> {
+    super::skills::discover_skills(root).unwrap_or_default()
 }
 
 fn load_agent_filenames(root: &Path) -> Vec<String> {
@@ -94,11 +90,13 @@ fn load_agent_filenames(root: &Path) -> Vec<String> {
 
 fn validate_profiles(
     profiles: &[RawProfile],
-    skill_names: &[String],
+    skill_summaries: &[super::skills::SkillSummary],
     agent_filenames: &[String],
 ) -> (Vec<RoutingProfile>, Vec<String>) {
     let mut warnings: Vec<String> = Vec::new();
     let mut seen_ids: HashSet<&str> = HashSet::new();
+
+    let skill_names: Vec<String> = skill_summaries.iter().map(|s| s.name.clone()).collect();
 
     for raw in profiles {
         // Duplicate profile id warning
@@ -145,6 +143,43 @@ fn validate_profiles(
                 "profile '{}' targets codex but recommended_model '{}' looks like an OpenCode model id",
                 raw.id, raw.recommended_model
             ));
+        }
+
+        // Target tool vs skill targets compatibility
+        if VALID_TARGET_TOOLS.contains(&raw.target_tool.as_str()) {
+            for skill_name in &raw.skills {
+                if let Some(skill) = skill_summaries.iter().find(|s| &s.name == skill_name) {
+                    if !skill.targets.is_empty() && !skill.targets.contains(&raw.target_tool) {
+                        let warn = format!(
+                            "profile '{}' targets '{}' but skill '{}' targets only [{}]",
+                            raw.id,
+                            raw.target_tool,
+                            skill_name,
+                            skill.targets.join(", ")
+                        );
+                        if !warnings.contains(&warn) {
+                            warnings.push(warn);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Profile risk vs skill risk mismatch
+        if raw.risk == "low" {
+            for skill_name in &raw.skills {
+                if let Some(skill) = skill_summaries.iter().find(|s| &s.name == skill_name) {
+                    if skill.risk == "high" {
+                        let warn = format!(
+                            "profile '{}' has risk 'low' but references high-risk skill '{}'",
+                            raw.id, skill_name
+                        );
+                        if !warnings.contains(&warn) {
+                            warnings.push(warn);
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -232,10 +267,10 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
     let raw: RawProfilesFile =
         serde_json::from_str(&content).map_err(|e| format!("invalid routing JSON: {}", e))?;
 
-    let skill_names = load_skill_names(&root);
+    let skill_summaries = load_skill_summaries(&root);
     let agent_filenames = load_agent_filenames(&root);
 
-    let (profiles, warnings) = validate_profiles(&raw.profiles, &skill_names, &agent_filenames);
+    let (profiles, warnings) = validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames);
 
     let resolved_path = path.to_string_lossy().into_owned();
 
@@ -386,6 +421,26 @@ mod tests {
             ),
         )
         .expect("write skill");
+    }
+
+    fn write_skill_with_targets(
+        root: &PathBuf,
+        skill_name: &str,
+        targets: &str,
+        risk: &str,
+    ) {
+        let path = root.join("skills").join(skill_name).join("SKILL.md");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create skill dir");
+        }
+        fs::write(
+            path,
+            format!(
+                "---\nname: {}\ndescription: test\ntargets: {}\nrisk: {}\n---\n",
+                skill_name, targets, risk
+            ),
+        )
+        .expect("write skill with metadata");
     }
 
     fn write_agent(root: &PathBuf, agent_name: &str) {
@@ -763,11 +818,11 @@ mod tests {
         let raw: RawProfilesFile = serde_json::from_str(&content)
             .map_err(|e| format!("invalid routing JSON: {}", e))?;
 
-        let skill_names = load_skill_names(root);
+        let skill_summaries = load_skill_summaries(root);
         let agent_filenames = load_agent_filenames(root);
 
         let (profiles, warnings) =
-            validate_profiles(&raw.profiles, &skill_names, &agent_filenames);
+            validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames);
 
         let resolved_path = path.to_string_lossy().into_owned();
 
@@ -929,5 +984,82 @@ mod tests {
         let saved = std::fs::read_to_string(&path).unwrap();
         cleanup(&root);
         assert_eq!(saved, json);
+    }
+
+    // ── metadata-based compatibility warnings ──
+
+    #[test]
+    fn target_tool_not_in_skill_targets_produces_warning() {
+        let root = temp_root("target-mismatch");
+        write_skill_with_targets(&root, "diagnose", "opencode, codex", "medium");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "auggie", "recommended_model": "m", "skills": ["diagnose"]}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("targets 'auggie' but skill 'diagnose' targets only")));
+    }
+
+    #[test]
+    fn skill_without_targets_produces_no_target_warning() {
+        let root = temp_root("no-targets-skill");
+        write_skill(&root, "diagnose"); // no targets field
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "auggie", "recommended_model": "m", "skills": ["diagnose"]}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        // skill has no targets metadata, so no target mismatch warning
+        let has_target_warning = response.warnings.iter().any(|w| w.contains("targets only"));
+        assert!(!has_target_warning, "skill without targets should not produce target mismatch warning");
+    }
+
+    #[test]
+    fn low_risk_profile_with_high_risk_skill_produces_warning() {
+        let root = temp_root("risk-mismatch");
+        write_skill_with_targets(&root, "security-review", "opencode, codex", "high");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "low", "skills": ["security-review"]}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        assert!(response.warnings.iter().any(|w| w.contains("risk 'low' but references high-risk skill 'security-review'")));
+    }
+
+    #[test]
+    fn medium_risk_profile_with_high_risk_skill_does_not_warn() {
+        let root = temp_root("risk-ok");
+        write_skill_with_targets(&root, "security-review", "opencode, codex", "high");
+
+        let json = r#"{
+  "profiles": [
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "medium", "skills": ["security-review"]}
+  ]
+}"#;
+        write_file(&root, "routing/profiles.json", json);
+
+        let response = read_profiles_at_root(&root).expect("should succeed");
+        cleanup(&root);
+
+        let has_risk_warning = response.warnings.iter().any(|w| w.contains("risk 'low' but references high-risk"));
+        assert!(!has_risk_warning, "medium risk with high-risk skill should not produce warning (only low triggers it)");
     }
 }

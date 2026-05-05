@@ -1,6 +1,10 @@
 ---
 name: diagnose
 description: Debug bugs, failures, flakes, slowness, or regressions with reproduce -> minimise -> hypothesise -> instrument -> fix -> regression-test.
+category: diagnosis
+risk: medium
+targets: codex, opencode, claude, auggie
+related: tdd
 ---
 
 # Diagnose

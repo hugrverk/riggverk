@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActionResult, RoutingProfilesResponse } from "../types";
+import type { ActionResult, AgentMetadataResponse, RoutingProfilesResponse, SkillSummary } from "../types";
 import { ProfileTemplate, PROFILE_TEMPLATES } from "./routing/routingTemplates";
 import { riskClass, riskLabel, copyMetadataBlock } from "./routing/routingHelpers";
 import { RoutingMatrix } from "./routing/RoutingMatrix";
@@ -11,11 +11,13 @@ interface RoutingViewProps {
   workspaceValid: boolean;
   onProfilesChanged: () => void;
   onRoutingDirtyChange?: (dirty: boolean) => void;
+  skills: SkillSummary[];
+  agentSources: AgentMetadataResponse[];
 }
 
 type RoutingMode = "preview" | "edit";
 
-export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged, onRoutingDirtyChange }: RoutingViewProps) {
+export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged, onRoutingDirtyChange, skills, agentSources }: RoutingViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -406,6 +408,56 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                 />
               )}
 
+              {/* Resource compatibility overview */}
+              {(() => {
+                const tools = ["codex", "opencode", "claude", "gemini", "auggie"];
+                const skillCount = skills.filter((s) => s.targets.length > 0).length;
+                const agentCount = agentSources.filter((a) => (a.metadata?.targets.length ?? 0) > 0).length;
+                const hasCompatData = skillCount > 0 || agentCount > 0;
+                if (!hasCompatData) return null;
+                return (
+                  <div className="configs-bundle-section" role="region" aria-label="Resource compatibility overview">
+                    <span className="configs-bundle-header">compatibility</span>
+                    <table className="routing-matrix" style={{ marginTop: 0 }}>
+                      <thead>
+                        <tr>
+                          <th>target</th>
+                          <th className="routing-matrix-cell-center">skills</th>
+                          <th className="routing-matrix-cell-center">agents</th>
+                          <th className="routing-matrix-cell-center">profiles</th>
+                          <th className="routing-matrix-cell-center">warnings</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {tools.map((tool) => {
+                          const skillCount = skills.filter((s) => s.targets.includes(tool)).length;
+                          const agentCount = agentSources.filter((a) => (a.metadata?.targets ?? []).includes(tool)).length;
+                          const profileCount = profiles.filter((p) => p.target_tool === tool).length;
+                          const warningCount = (routingData?.warnings ?? []).filter((w) =>
+                            w.includes(`targets '${tool}'`) || w.includes(`'${tool}'`)
+                          ).length;
+                          return (
+                            <tr key={tool}>
+                              <td>{tool}</td>
+                              <td className="routing-matrix-cell-center">{skillCount}</td>
+                              <td className="routing-matrix-cell-center">{agentCount}</td>
+                              <td className="routing-matrix-cell-center">{profileCount}</td>
+                              <td className="routing-matrix-cell-center">
+                                {warningCount > 0 ? (
+                                  <span className="ws-color-warn">{warningCount}</span>
+                                ) : (
+                                  <span className="ws-color-ok">0</span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                );
+              })()}
+
               {/* Meta strip */}
               <div className="lib-editor-meta-strip">
                 <div className="lib-editor-meta-left">
@@ -467,11 +519,25 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                 ) : (
                   selected.skills.map((skill, i) => {
                     const isMissing = selected.missing_skills.includes(skill);
+                    const skillMeta = skills.find((s) => s.name === skill);
                     return (
                       <span key={i} className="configs-bundle-item">
                         <span className={`configs-bundle-val ${isMissing ? "ws-color-fail" : ""}`}>
                           {skill}
                           {isMissing && " (not in workspace)"}
+                          {skillMeta && (
+                            <span style={{ marginLeft: 6, display: "inline-flex", gap: 3, verticalAlign: "middle", flexWrap: "wrap" }}>
+                              {skillMeta.category && (
+                                <span className="lib-sidebar-item-tag" style={{ fontSize: 8 }}>{skillMeta.category}</span>
+                              )}
+                              {skillMeta.risk && (
+                                <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${skillMeta.risk}`} style={{ fontSize: 8 }}>{skillMeta.risk}</span>
+                              )}
+                              {skillMeta.targets.length > 0 && (
+                                <span className="lib-sidebar-item-tag" style={{ fontSize: 8, opacity: 0.7 }}>{skillMeta.targets.join(", ")}</span>
+                              )}
+                            </span>
+                          )}
                         </span>
                       </span>
                     );

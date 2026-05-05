@@ -1,6 +1,10 @@
 ---
 name: dependency-evaluation
 description: Evaluate build-vs-buy and dependency risk before adding packages, plugins, SDKs, MCP servers, CLIs, or new internal abstractions.
+category: dependency
+risk: medium
+targets: codex, opencode, claude, auggie
+related: security-review
 ---
 
 # Dependency Evaluation

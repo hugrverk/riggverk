@@ -13,6 +13,10 @@ pub struct SkillSummary {
     pub(crate) name: String,
     pub(crate) description: String,
     pub(crate) path: String,
+    pub(crate) category: String,
+    pub(crate) risk: String,
+    pub(crate) targets: Vec<String>,
+    pub(crate) related: Vec<String>,
 }
 
 fn skill_summary_from_path(
@@ -24,6 +28,10 @@ fn skill_summary_from_path(
     let content = std::fs::read_to_string(skill_md).unwrap_or_default();
     let name = extract_frontmatter(&content, "name");
     let desc = extract_frontmatter(&content, "description");
+    let category = extract_frontmatter(&content, "category");
+    let risk = extract_frontmatter(&content, "risk");
+    let targets = extract_frontmatter_list(&content, "targets");
+    let related = extract_frontmatter_list(&content, "related");
     let rel = skill_md
         .strip_prefix(root)
         .unwrap_or(skill_md)
@@ -35,6 +43,10 @@ fn skill_summary_from_path(
         name: if name.is_empty() { fallback_name } else { name },
         description: desc,
         path: rel,
+        category,
+        risk,
+        targets,
+        related,
     }
 }
 
@@ -165,6 +177,17 @@ fn extract_frontmatter(content: &str, key: &str) -> String {
         }
     }
     String::new()
+}
+
+fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
+    let raw = extract_frontmatter(content, key);
+    if raw.is_empty() {
+        return Vec::new();
+    }
+    raw.split(',')
+        .map(|s| s.trim().to_string())
+        .filter(|s| !s.is_empty())
+        .collect()
 }
 
 fn has_project_marker(target: &Path) -> bool {
@@ -366,6 +389,29 @@ mod tests {
         .expect("write skill");
     }
 
+    fn write_skill_with_metadata(
+        root: &PathBuf,
+        rel: &str,
+        name: &str,
+        category: &str,
+        risk: &str,
+        targets: &str,
+        related: &str,
+    ) {
+        let path = root.join(rel).join("SKILL.md");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create skill parent");
+        }
+        fs::write(
+            path,
+            format!(
+                "---\nname: {}\ndescription: test skill\ncategory: {}\nrisk: {}\ntargets: {}\nrelated: {}\n---\n",
+                name, category, risk, targets, related
+            ),
+        )
+        .expect("write skill with metadata");
+    }
+
     #[test]
     fn flat_skill_layout_is_listed() {
         let root = temp_root("flat-skills");
@@ -544,5 +590,93 @@ mod tests {
                 bad
             );
         }
+    }
+
+    #[test]
+    fn minimal_skill_has_empty_metadata_fields() {
+        let root = temp_root("minimal-meta");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].category, "");
+        assert_eq!(skills[0].risk, "");
+        assert!(skills[0].targets.is_empty());
+        assert!(skills[0].related.is_empty());
+    }
+
+    #[test]
+    fn metadata_fields_parse_correctly() {
+        let root = temp_root("meta-fields");
+        write_skill_with_metadata(
+            &root,
+            "skills/frontend-design",
+            "frontend-design",
+            "frontend",
+            "medium",
+            "codex, opencode, claude, auggie",
+            "screenshot-review, browser-qa, accessibility-review",
+        );
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(skills.len(), 1);
+        let s = &skills[0];
+        assert_eq!(s.name, "frontend-design");
+        assert_eq!(s.category, "frontend");
+        assert_eq!(s.risk, "medium");
+        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "auggie"]);
+        assert_eq!(
+            s.related,
+            vec!["screenshot-review", "browser-qa", "accessibility-review"]
+        );
+    }
+
+    #[test]
+    fn comma_lists_parse_deterministically() {
+        let root = temp_root("meta-lists");
+        write_skill_with_metadata(
+            &root,
+            "skills/security-review",
+            "security-review",
+            "security",
+            "high",
+            "codex,  opencode , claude,auggie,  ",
+            "diagnose,  ,release-check,",
+        );
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let s = &skills[0];
+        // whitespace trimmed, empty entries removed
+        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "auggie"]);
+        assert_eq!(s.related, vec!["diagnose", "release-check"]);
+    }
+
+    #[test]
+    fn empty_metadata_stays_empty() {
+        let root = temp_root("empty-meta");
+        write_skill_with_metadata(
+            &root,
+            "skills/diagnose",
+            "diagnose",
+            "",
+            "",
+            "",
+            "",
+        );
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let s = &skills[0];
+        assert_eq!(s.category, "");
+        assert_eq!(s.risk, "");
+        assert!(s.targets.is_empty());
+        assert!(s.related.is_empty());
     }
 }

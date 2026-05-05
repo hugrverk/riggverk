@@ -13,9 +13,9 @@ App-triggered script actions use each script's `--quiet` option for compact term
 The app has three top-level views:
 
 - **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, skills install (with expandable skill selector for individual skill toggles, agent toggles, scope/target selection, dry-run and install actions), release-check, and backup management. Integrated terminal output panel. All operation actions report through a single terminal pane.
-- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering. Agents provides agent source file list with edit/open for each. Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
+- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
-- **Routing** — operator guidance view with edit support. Displays routing profiles from an optional `routing/profiles.json` sidecar file in the workspace. Each profile recommends tool/model/skill/agent combinations for specific task types. Profiles are purely informational operator guidance — they do not affect agent runtime behavior, do not run agents, and do not change OpenCode/Codex/Claude/Gemini/Auggie configuration. Missing `routing/profiles.json` is handled gracefully. Profile references to skills or agent files not present in the workspace are surfaced as non-blocking validation warnings. A "copy metadata block" action copies operator metadata for clipboard use without generating a full prompt. **Routing profiles can now be edited and saved directly from the app.** An edit JSON mode provides a full text editor for `routing/profiles.json`. A template insert control helps add new profile stubs (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) without manual JSON construction. Save validates JSON before writing, rejects oversized content (>256 KB), backs up the existing file before overwrite, and only writes to the fixed `routing/profiles.json` path under the validated workspace root — no arbitrary file paths are accepted. **Unsaved routing edits are protected by a top-level navigation guard.** Navigating away from Routing with unsaved JSON changes prompts for confirmation, and the Routing nav tab shows a dirty indicator (orange dot). **The editor includes format and validate buttons** for JSON ergonomics. Format pretty-prints valid JSON; validate checks structure locally without writing. Missing `routing/profiles.json` initializes the editor with an empty profiles draft (`{"profiles": []}`) for quick start. Duplicate profile ids are blocked during template insertion. Routing is safe to omit.
+- **Routing** — operator guidance view with edit support. Displays routing profiles from an optional `routing/profiles.json` sidecar file in the workspace. Each profile recommends tool/model/skill/agent combinations for specific task types. Profiles are purely informational operator guidance — they do not affect agent runtime behavior, do not run agents, and do not change OpenCode/Codex/Claude/Gemini/Auggie configuration. Missing `routing/profiles.json` is handled gracefully. Profile references to skills or agent files not present in the workspace are surfaced as non-blocking validation warnings. Skill metadata (category, risk, targets) is displayed as compact chips next to each referenced skill when available. Target compatibility and risk mismatch warnings are surfaced from skill metadata. A resource compatibility overview table shows skills, agents, profiles, and warning counts per target tool. A "copy metadata block" action copies operator metadata for clipboard use without generating a full prompt. **Routing profiles can now be edited and saved directly from the app.** An edit JSON mode provides a full text editor for `routing/profiles.json`. A template insert control helps add new profile stubs (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) without manual JSON construction. Save validates JSON before writing, rejects oversized content (>256 KB), backs up the existing file before overwrite, and only writes to the fixed `routing/profiles.json` path under the validated workspace root — no arbitrary file paths are accepted. **Unsaved routing edits are protected by a top-level navigation guard.** Navigating away from Routing with unsaved JSON changes prompts for confirmation, and the Routing nav tab shows a dirty indicator (orange dot). **The editor includes format and validate buttons** for JSON ergonomics. Format pretty-prints valid JSON; validate checks structure locally without writing. Missing `routing/profiles.json` initializes the editor with an empty profiles draft (`{"profiles": []}`) for quick start. Duplicate profile ids are blocked during template insertion. Routing is safe to omit.
 
 ### Routing profiles
 
@@ -311,6 +311,86 @@ Apply actions for rules and OpenCode config print backup paths when an existing 
 Unknown actions return an error. No command is executed for unknown actions.
 
 The UI information architecture groups existing surfaces only. No backend command behavior, script behavior, settings semantics, sync semantics, bootstrap semantics, or install semantics are changed by the app layout.
+
+## Resource Intelligence v1
+
+Resource Intelligence enriches the GUI's understanding of skills and agents with safe metadata. It improves Library/Routing visibility while keeping the app a narrow local workspace management GUI — not an orchestration layer.
+
+### What it does
+
+- **Describes resources** with category, risk, target compatibility, and related-skill references.
+- **Validates references** between routing profiles and the resources they cite.
+- **Shows compatibility** between skills, agents, and target tools.
+- **Helps the operator choose better** without automating execution.
+
+### What it does NOT do
+
+- Run agents or trigger tool actions.
+- Route automatically or generate prompts automatically.
+- Mutate runtime configs, OpenCode config, or agent permission blocks.
+- Install or sync from Routing.
+- Add MCP, background workers, memory, task queues, chat, or agent execution.
+- Add arbitrary filesystem browsing or new dependencies.
+
+### Skill metadata (backed by `skills/*/SKILL.md`)
+
+Skills can now carry optional metadata in their frontmatter. Fields:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `name` | string | Required. Skill name (existing). |
+| `description` | string | Required. Short description (existing). |
+| `category` | string | Optional. E.g. `frontend`, `security`, `diagnosis`, `planning`. |
+| `risk` | string | Optional. `low`, `medium`, or `high`. |
+| `targets` | string | Optional. Comma-separated list of compatible tools: `codex, opencode, claude, auggie`. |
+| `related` | string | Optional. Comma-separated list of related skill names. |
+
+Skills without these fields continue to work normally. Missing metadata produces no noise. Metadata is displayed as compact chips in the Library skill sidebar rows and as a details section in the skill preview pane.
+
+### Agent metadata (backed by `metadata/agents.json`)
+
+Agent metadata is stored in a read-only sidecar file (`metadata/agents.json`) to avoid modifying OpenCode runtime-sensitive frontmatter. Each agent entry includes:
+
+- `role` — agent function (primary, investigation, review, documentation, verification)
+- `summary` — short description
+- `targets` — compatible tools (currently all `opencode`)
+- `risk` — `low`, `medium`, or `high`
+- `default_skills` — skills commonly used with this agent
+- `safe_to_edit_runtime` — whether the agent file can be safely edited (`false` for OpenCode agents)
+- `notes` — operator guidance
+
+The metadata sidecar is loaded read-only. Missing or invalid metadata falls back gracefully. A "runtime-sensitive" warning appears next to agents whose frontmatter affects OpenCode behavior.
+
+### Routing metadata consumption
+
+The Routing view now consumes skill and agent metadata for richer validation:
+
+- **Target compatibility warnings**: When a routing profile targets a tool not present in a referenced skill's `targets` field, a non-blocking warning is shown.
+- **Risk mismatch warnings**: When a profile has `risk: "low"` but references a `risk: "high"` skill, a non-blocking warning is shown.
+- **Skill metadata display**: Each skill listed in a routing profile detail shows its category, risk, and targets as compact chips (when available from skill metadata).
+
+All warnings remain non-blocking. Existing profiles still work. Metadata is not auto-generated. Public starter profiles should not produce avoidable warnings.
+
+### Compatibility overview
+
+A compact read-only table in the Routing view shows resource counts per target tool:
+
+| Target | Skills | Agents | Profiles | Warnings |
+|--------|--------|--------|----------|----------|
+| opencode | *n* | *n* | *n* | *n* |
+| codex | *n* | *n* | *n* | *n* |
+| ... | ... | ... | ... | ... |
+
+No install buttons, sync buttons, execution, or target settings changes.
+
+### Safety constraints verified
+
+- No changes to `default_agent`, OpenCode runtime permissions, or agent permission blocks.
+- No changes to `scripts/install-skills.sh`, `scripts/install-opencode-config.sh`, or sync semantics.
+- No changes to install destinations or script behavior.
+- No new dependencies.
+- No arbitrary frontend-supplied file paths.
+- Metadata files are read-only unless explicitly edited through existing safe editors.
 
 ## Architecture
 

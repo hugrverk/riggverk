@@ -7,12 +7,12 @@ use commands::{
     create_doc, create_workspace_from_defaults, get_agent_targets, get_backup_details,
     get_default_workspace_summary, get_routing_profiles, get_settings, get_status,
     get_target_profiles,
-    get_workspace_diagnostics, install_skills, list_agent_sources, list_backups, list_docs,
-    list_skills, open_agent_source, open_agent_template, open_backups_folder, open_config_template,
-    open_doc, open_install_skills_script, open_skill, plan_create_workspace, read_agent_source,
-    read_agent_template, read_config_template, read_doc, read_routing_profiles_file, read_skill,
-    run_action, save_agent_source, save_agent_template, save_config_template, save_doc,
-    save_routing_profiles, update_settings,
+    get_workspace_diagnostics, install_skills, list_agent_metadata, list_agent_sources, list_backups,
+    list_docs, list_skills, open_agent_source, open_agent_template, open_backups_folder,
+    open_config_template, open_doc, open_install_skills_script, open_skill, plan_create_workspace,
+    read_agent_source, read_agent_template, read_config_template, read_doc,
+    read_routing_profiles_file, read_skill, run_action, save_agent_source, save_agent_template,
+    save_config_template, save_doc, save_routing_profiles, update_settings,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -41,6 +41,7 @@ pub fn run() {
             open_config_template,
             save_config_template,
             list_agent_sources,
+            list_agent_metadata,
             read_agent_source,
             open_agent_source,
             save_agent_source,

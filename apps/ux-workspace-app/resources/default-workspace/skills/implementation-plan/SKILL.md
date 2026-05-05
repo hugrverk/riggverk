@@ -1,6 +1,10 @@
 ---
 name: implementation-plan
 description: Create small verifiable implementation slices with exact files, steps, commands, risks, and no placeholders.
+category: planning
+risk: low
+targets: codex, opencode, claude, auggie
+related: context-budget
 ---
 
 # Implementation Plan

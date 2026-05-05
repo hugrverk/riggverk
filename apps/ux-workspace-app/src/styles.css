@@ -3525,6 +3525,28 @@ html, body, #root {
   color: var(--warn);
 }
 
+.lib-sidebar-item-meta-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 3px;
+  flex-wrap: wrap;
+}
+
+.lib-sidebar-item-tag-low {
+  background: rgba(16, 185, 129, 0.12);
+  color: #10b981;
+}
+
+.lib-sidebar-item-tag-medium {
+  background: rgba(245, 158, 11, 0.12);
+  color: var(--warn);
+}
+
+.lib-sidebar-item-tag-high {
+  background: rgba(248, 113, 113, 0.12);
+  color: var(--fail);
+}
+
 .lib-sidebar-empty {
   padding: 14px 10px;
   font-size: 12px;

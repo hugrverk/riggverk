@@ -1,6 +1,10 @@
 ---
 name: database-migrations
 description: Plan and review safe database schema or data changes across common stacks, with explicit migration, rollback, and DB push reporting.
+category: database
+risk: high
+targets: codex, opencode, claude, auggie
+related: security-review, release-check
 ---
 
 # Database Migrations

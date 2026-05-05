@@ -1,6 +1,10 @@
 ---
 name: improve-codebase-architecture
 description: Find bounded architecture improvements that reduce maintenance cost without broad rewrites.
+category: architecture
+risk: medium
+targets: codex, opencode, claude, auggie
+related: zoom-out
 ---
 
 # Improve Codebase Architecture
