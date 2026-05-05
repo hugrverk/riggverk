@@ -2009,10 +2009,7 @@ pub(crate) fn load_agent_metadata(
     let metadata = match std::fs::metadata(&path) {
         Ok(m) => m,
         Err(e) => {
-            warnings.push(format!(
-                "cannot read agent metadata file metadata: {}",
-                e
-            ));
+            warnings.push(format!("cannot read agent metadata file metadata: {}", e));
             return (std::collections::HashMap::new(), warnings);
         }
     };
@@ -2028,10 +2025,7 @@ pub(crate) fn load_agent_metadata(
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(e) => {
-            warnings.push(format!(
-                "cannot read agent metadata file: {}",
-                e
-            ));
+            warnings.push(format!("cannot read agent metadata file: {}", e));
             return (std::collections::HashMap::new(), warnings);
         }
     };
@@ -2039,10 +2033,7 @@ pub(crate) fn load_agent_metadata(
     let parsed: AgentMetadataFile = match serde_json::from_str(&content) {
         Ok(p) => p,
         Err(e) => {
-            warnings.push(format!(
-                "invalid agent metadata JSON: {}",
-                e
-            ));
+            warnings.push(format!("invalid agent metadata JSON: {}", e));
             return (std::collections::HashMap::new(), warnings);
         }
     };
@@ -2182,7 +2173,10 @@ mod agent_metadata_tests {
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(map.len(), 1);
-        assert!(warnings.is_empty(), "valid metadata should produce no warnings");
+        assert!(
+            warnings.is_empty(),
+            "valid metadata should produce no warnings"
+        );
         let entry = map.get("autopilot.md").expect("autopilot metadata");
         assert_eq!(entry.role, "primary");
         assert_eq!(entry.risk, "medium");
@@ -2201,7 +2195,9 @@ mod agent_metadata_tests {
 
         assert!(map.is_empty());
         assert!(
-            warnings.iter().any(|w| w.contains("invalid agent metadata JSON")),
+            warnings
+                .iter()
+                .any(|w| w.contains("invalid agent metadata JSON")),
             "invalid JSON should produce warning, got: {:?}",
             warnings
         );
@@ -2243,7 +2239,9 @@ mod agent_metadata_tests {
         assert_eq!(map.len(), 1);
         assert!(map.contains_key("nonexistent.md"));
         assert!(
-            warnings.iter().any(|w| w.contains("unknown agent key 'nonexistent.md'")),
+            warnings
+                .iter()
+                .any(|w| w.contains("unknown agent key 'nonexistent.md'")),
             "unknown agent key should produce warning, got: {:?}",
             warnings
         );
@@ -2264,7 +2262,9 @@ mod agent_metadata_tests {
         let _ = fs::remove_dir_all(&root);
 
         assert!(
-            skill_warnings.iter().any(|w| w.contains("unknown default skill")),
+            skill_warnings
+                .iter()
+                .any(|w| w.contains("unknown default skill")),
             "unknown default skill should produce warning, got: {:?}",
             skill_warnings
         );

@@ -50,8 +50,8 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         return Err("HOME is empty".to_string());
     }
 
-    let default_root = PathBuf::from(&home)
-        .join("Library/Application Support/ai.agentworkspace.app/backups");
+    let default_root =
+        PathBuf::from(&home).join("Library/Application Support/ai.agentworkspace.app/backups");
 
     let root = if let Ok(env_override) = std::env::var("UX_WORKSPACE_BACKUP_DIR") {
         let trimmed = env_override.trim().to_string();

@@ -66,8 +66,7 @@ fn settings_file() -> Result<PathBuf, String> {
     if home.is_empty() {
         return Err("HOME is empty".to_string());
     }
-    Ok(PathBuf::from(home)
-        .join("Library/Application Support/ai.agentworkspace.app/settings.json"))
+    Ok(PathBuf::from(home).join("Library/Application Support/ai.agentworkspace.app/settings.json"))
 }
 
 pub fn load() -> AppSettings {

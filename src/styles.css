@@ -2343,6 +2343,111 @@ html, body, #root {
 .ws-status-invalid { color: var(--fail); }
 .ws-status-dim { color: var(--text-muted); opacity: 0.6; }
 
+/* ---- workspace setup panel (invalid workspace) ---- */
+
+.ws-setup {
+  border-bottom: 1px solid var(--border);
+  background: var(--accent-dim);
+  flex-shrink: 0;
+}
+
+.ws-setup-heading {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  padding: 8px 14px 4px;
+  opacity: 0.7;
+}
+
+.ws-setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 4px 14px 10px;
+}
+
+.ws-setup-path {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.ws-setup-label {
+  color: var(--text-muted);
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.ws-setup-value {
+  font-family: var(--font);
+  color: var(--text);
+  font-size: 12px;
+}
+
+.ws-setup-error {
+  font-size: 11px;
+  color: var(--fail);
+}
+
+.ws-setup-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-setup-action-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ws-setup-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.ws-setup-plan {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.ws-setup-create-action {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding-top: 4px;
+  border-top: 1px solid var(--border);
+  margin-top: 2px;
+}
+
+.ws-setup-result {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px 8px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+}
+
+.ws-cmd-path-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---- workspace operations (primary cockpit) ---- */
 
 .ws-operations {

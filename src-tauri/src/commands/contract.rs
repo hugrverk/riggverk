@@ -273,7 +273,11 @@ fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
                 .into_owned();
 
             root_skills.push(ContractSkill {
-                name: if skill_name.is_empty() { name.clone() } else { skill_name },
+                name: if skill_name.is_empty() {
+                    name.clone()
+                } else {
+                    skill_name
+                },
                 description,
                 rel_path: rel,
             });
@@ -417,7 +421,7 @@ fn validate_routing_contract(
         let profile_id = profile
             .get("id")
             .and_then(|v| v.as_str())
-            .unwrap_or(&"unknown");
+            .unwrap_or("unknown");
         if let Some(notes) = profile.get("notes") {
             if !notes.is_array() {
                 notes_failures.push(format!("profile '{}' (index {})", profile_id, i));
@@ -494,8 +498,10 @@ fn validate_routing_contract(
     }
 
     // Check each agent_profile references a known agent file
-    let known_agents: HashSet<&str> =
-        super::content::known_agent_files().iter().copied().collect();
+    let known_agents: HashSet<&str> = super::content::known_agent_files()
+        .iter()
+        .copied()
+        .collect();
     let agents_dir = root.join("agents");
 
     let mut missing_agents: Vec<String> = Vec::new();
@@ -649,10 +655,8 @@ fn validate_agent_metadata_contract(
             }
             for (j, note) in notes.as_array().unwrap().iter().enumerate() {
                 if !note.is_string() {
-                    notes_failures.push(format!(
-                        "agent '{}' notes[{}] is not a string",
-                        agent_id, j
-                    ));
+                    notes_failures
+                        .push(format!("agent '{}' notes[{}] is not a string", agent_id, j));
                 }
             }
         }
@@ -676,8 +680,10 @@ fn validate_agent_metadata_contract(
     }
 
     // Check agent keys exist in known agent files
-    let known_agents: HashSet<&str> =
-        super::content::known_agent_files().iter().copied().collect();
+    let known_agents: HashSet<&str> = super::content::known_agent_files()
+        .iter()
+        .copied()
+        .collect();
     let mut unknown_keys: Vec<String> = Vec::new();
     for key in agents.keys() {
         if !known_agents.contains(key.as_str()) {
@@ -821,10 +827,7 @@ mod tests {
         }
         fs::write(
             path,
-            format!(
-                "---\nname: {}\ndescription: test\n---\n",
-                skill_name
-            ),
+            format!("---\nname: {}\ndescription: test\n---\n", skill_name),
         )
         .expect("write skill");
     }
@@ -848,10 +851,7 @@ mod tests {
         }
         fs::write(
             path,
-            format!(
-                "---\nname: {}\ndescription: legacy\n---\n",
-                skill_name
-            ),
+            format!("---\nname: {}\ndescription: legacy\n---\n", skill_name),
         )
         .expect("write legacy skill");
     }
@@ -966,11 +966,7 @@ mod tests {
 
         // Override the second one to have the same name
         let path = root.join("skills/diagnose-v2/SKILL.md");
-        fs::write(
-            path,
-            "---\nname: diagnose\ndescription: test\n---\n",
-        )
-        .expect("overwrite");
+        fs::write(path, "---\nname: diagnose\ndescription: test\n---\n").expect("overwrite");
 
         let mut checks = Vec::new();
         let mut errors = Vec::new();
@@ -1110,10 +1106,7 @@ mod tests {
 
         cleanup(&root);
 
-        let defaults_check = checks
-            .iter()
-            .find(|c| c.id == "metadata-defaults")
-            .unwrap();
+        let defaults_check = checks.iter().find(|c| c.id == "metadata-defaults").unwrap();
         assert_eq!(
             defaults_check.status,
             CheckStatus::Fail,
@@ -1137,7 +1130,10 @@ mod tests {
 
         let file_check = checks.iter().find(|c| c.id == "routing-file").unwrap();
         assert_eq!(file_check.status, CheckStatus::Warn);
-        assert!(errors.is_empty(), "missing optional routing should not error");
+        assert!(
+            errors.is_empty(),
+            "missing optional routing should not error"
+        );
     }
 
     #[test]
@@ -1155,7 +1151,10 @@ mod tests {
 
         let file_check = checks.iter().find(|c| c.id == "metadata-file").unwrap();
         assert_eq!(file_check.status, CheckStatus::Warn);
-        assert!(errors.is_empty(), "missing optional metadata should not error");
+        assert!(
+            errors.is_empty(),
+            "missing optional metadata should not error"
+        );
     }
 
     #[test]

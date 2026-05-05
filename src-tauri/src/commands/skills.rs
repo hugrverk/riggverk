@@ -660,15 +660,7 @@ mod tests {
     #[test]
     fn empty_metadata_stays_empty() {
         let root = temp_root("empty-meta");
-        write_skill_with_metadata(
-            &root,
-            "skills/diagnose",
-            "diagnose",
-            "",
-            "",
-            "",
-            "",
-        );
+        write_skill_with_metadata(&root, "skills/diagnose", "diagnose", "", "", "", "");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);

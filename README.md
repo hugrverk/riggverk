@@ -53,7 +53,7 @@ See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the full worksp
 
 The app source includes a generic starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, starter skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
-Bundled defaults are read-only source material previewed in the Workspace tab. They can be applied to create a new workspace via the "create workspace" button, which copies bundled default files into a safe empty or missing target directory. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
+Bundled defaults are read-only source material previewed in the Workspace tab. They can be applied to create a new workspace via the **create workspace** button, which copies bundled default files into a safe empty or missing target directory. The Workspace tab shows a **Workspace Setup** panel when the active path is invalid (e.g. default path does not exist). Click **dry-run create** to evaluate safety, then **create workspace** to initialize. No files are created automatically on launch — all create actions are explicit user operations. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
 
 ### Workspace path
 
@@ -63,7 +63,7 @@ The workspace root is resolved in order of precedence:
 2. **Environment**: `UX_WORKSPACE_PATH` environment variable.
 3. **Default**: built-in fallback path (`~/Agent Workspace`).
 
-Set a custom workspace path in the Workspace tab (type manually or use **choose folder** to pick via a native directory picker), or override temporarily with the environment variable during dev. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
+Set a custom workspace path in the Workspace tab using **choose folder** (native directory picker) or **use default** (resets to `~/Agent Workspace`). Both actions save the path immediately to app settings and refresh diagnostics, status, contract, and all resource views — no separate Save step required. Manual path entry in the Inventory panel updates the local draft only. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
 
 A custom workspace path only changes the working directory for existing allowlisted commands (`git_pull`, `bootstrap_*`, `verify_state`, `sync_agent_rules`, etc.) — it does not add or change any allowed commands.
 

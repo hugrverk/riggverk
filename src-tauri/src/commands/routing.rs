@@ -224,10 +224,7 @@ fn validate_profiles(
         for skill in &raw.skills {
             if !skill_names.iter().any(|s| s == skill) {
                 missing_skills.push(skill.clone());
-                let warn = format!(
-                    "profile '{}' references unknown skill '{}'",
-                    raw.id, skill
-                );
+                let warn = format!("profile '{}' references unknown skill '{}'", raw.id, skill);
                 if !warnings.contains(&warn) {
                     warnings.push(warn);
                 }
@@ -275,10 +272,7 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
             exists: false,
             path: rel.to_string(),
             profiles: vec![],
-            warnings: vec![format!(
-                "routing profiles file not found at {}",
-                rel
-            )],
+            warnings: vec![format!("routing profiles file not found at {}", rel)],
         });
     }
 
@@ -305,7 +299,12 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
     let agent_filenames = load_agent_filenames(&root);
     let agent_metadata = super::content::load_agent_metadata(&root).0;
 
-    let (profiles, warnings) = validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames, &agent_metadata);
+    let (profiles, warnings) = validate_profiles(
+        &raw.profiles,
+        &skill_summaries,
+        &agent_filenames,
+        &agent_metadata,
+    );
 
     let resolved_path = path.to_string_lossy().into_owned();
 
@@ -345,8 +344,7 @@ fn routing_backup_path(target_path: &Path) -> Result<std::path::PathBuf, String>
     let backup_dir = backup_root
         .join("routing")
         .join(format!("{}-{}", file_name, timestamp));
-    std::fs::create_dir_all(&backup_dir)
-        .map_err(|e| format!("create backup dir error: {}", e))?;
+    std::fs::create_dir_all(&backup_dir).map_err(|e| format!("create backup dir error: {}", e))?;
     Ok(backup_dir.join(file_name))
 }
 
@@ -375,13 +373,11 @@ fn save_routing_profiles_inner(root: &Path, content: &str) -> Result<ActionResul
 
     // Ensure routing/ directory exists under workspace root
     if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)
-            .map_err(|e| format!("create routing dir error: {}", e))?;
+        std::fs::create_dir_all(parent).map_err(|e| format!("create routing dir error: {}", e))?;
     }
 
     if path.exists() {
-        let existing =
-            std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+        let existing = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
         if existing == content {
             return Ok(ActionResult::new(
                 true,
@@ -450,20 +446,12 @@ mod tests {
         }
         fs::write(
             path,
-            format!(
-                "---\nname: {}\ndescription: test\n---\n",
-                skill_name
-            ),
+            format!("---\nname: {}\ndescription: test\n---\n", skill_name),
         )
         .expect("write skill");
     }
 
-    fn write_skill_with_targets(
-        root: &PathBuf,
-        skill_name: &str,
-        targets: &str,
-        risk: &str,
-    ) {
+    fn write_skill_with_targets(root: &PathBuf, skill_name: &str, targets: &str, risk: &str) {
         let path = root.join("skills").join(skill_name).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill dir");
@@ -494,17 +482,13 @@ mod tests {
     fn missing_file_returns_exists_false() {
         let root = temp_root("missing-file");
 
-        let response =
-            read_profiles_at_root(&root).expect("should succeed");
+        let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
         assert!(!response.exists);
         assert!(response.profiles.is_empty());
         assert!(!response.warnings.is_empty());
-        assert!(response
-            .warnings
-            .iter()
-            .any(|w| w.contains("not found")));
+        assert!(response.warnings.iter().any(|w| w.contains("not found")));
     }
 
     #[test]
@@ -585,9 +569,16 @@ mod tests {
         assert!(response.exists);
         let profile = &response.profiles[0];
         assert_eq!(profile.missing_skills.len(), 2);
-        assert!(profile.missing_skills.contains(&"nonexistent-skill".to_string()));
-        assert!(profile.missing_skills.contains(&"another-missing".to_string()));
-        assert!(response.warnings.iter().any(|w| w.contains("nonexistent-skill")));
+        assert!(profile
+            .missing_skills
+            .contains(&"nonexistent-skill".to_string()));
+        assert!(profile
+            .missing_skills
+            .contains(&"another-missing".to_string()));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("nonexistent-skill")));
     }
 
     #[test]
@@ -616,7 +607,10 @@ mod tests {
         assert!(response.exists);
         let profile = &response.profiles[0];
         assert!(profile.missing_agent);
-        assert!(response.warnings.iter().any(|w| w.contains("nonexistent-agent.md")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("nonexistent-agent.md")));
     }
 
     #[test]
@@ -704,7 +698,10 @@ mod tests {
         cleanup(&root);
 
         assert_eq!(response.profiles.len(), 2);
-        assert!(response.warnings.iter().any(|w| w.contains("duplicate profile id")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("duplicate profile id")));
     }
 
     #[test]
@@ -740,7 +737,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| w.contains("invalid db_migration")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("invalid db_migration")));
     }
 
     #[test]
@@ -758,7 +758,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| w.contains("unknown target_tool")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("unknown target_tool")));
     }
 
     #[test]
@@ -794,7 +797,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| w.contains("OpenCode model id")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("OpenCode model id")));
     }
 
     #[test]
@@ -822,7 +828,10 @@ mod tests {
                 || w.contains("GPT")
                 || w.contains("OpenCode model id")
         });
-        assert!(!has_enum_warning, "valid enum values should not produce warnings");
+        assert!(
+            !has_enum_warning,
+            "valid enum values should not produce warnings"
+        );
     }
 
     fn read_profiles_at_root(root: &PathBuf) -> Result<RoutingProfilesResponse, String> {
@@ -838,8 +847,8 @@ mod tests {
             });
         }
 
-        let metadata =
-            std::fs::metadata(&path).map_err(|e| format!("cannot read routing file metadata: {}", e))?;
+        let metadata = std::fs::metadata(&path)
+            .map_err(|e| format!("cannot read routing file metadata: {}", e))?;
         if metadata.len() > MAX_ROUTING_FILE_SIZE as u64 {
             return Err(format!(
                 "routing file exceeds {} KB limit",
@@ -850,15 +859,19 @@ mod tests {
         let content = std::fs::read_to_string(&path)
             .map_err(|e| format!("cannot read routing file: {}", e))?;
 
-        let raw: RawProfilesFile = serde_json::from_str(&content)
-            .map_err(|e| format!("invalid routing JSON: {}", e))?;
+        let raw: RawProfilesFile =
+            serde_json::from_str(&content).map_err(|e| format!("invalid routing JSON: {}", e))?;
 
         let skill_summaries = load_skill_summaries(root);
         let agent_filenames = load_agent_filenames(root);
         let agent_metadata = crate::commands::content::load_agent_metadata(root).0;
 
-        let (profiles, warnings) =
-            validate_profiles(&raw.profiles, &skill_summaries, &agent_filenames, &agent_metadata);
+        let (profiles, warnings) = validate_profiles(
+            &raw.profiles,
+            &skill_summaries,
+            &agent_filenames,
+            &agent_metadata,
+        );
 
         let resolved_path = path.to_string_lossy().into_owned();
 
@@ -910,7 +923,10 @@ mod tests {
         assert_eq!(ar.stdout, "created");
 
         let path = root.join("routing/profiles.json");
-        assert!(path.exists(), "file should be created at routing/profiles.json");
+        assert!(
+            path.exists(),
+            "file should be created at routing/profiles.json"
+        );
 
         let saved = std::fs::read_to_string(&path).unwrap();
         cleanup(&root);
@@ -1039,7 +1055,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| w.contains("targets 'auggie' but skill 'diagnose' targets only")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("targets 'auggie' but skill 'diagnose' targets only")));
     }
 
     #[test]
@@ -1059,7 +1078,10 @@ mod tests {
 
         // skill has no targets metadata, so no target mismatch warning
         let has_target_warning = response.warnings.iter().any(|w| w.contains("targets only"));
-        assert!(!has_target_warning, "skill without targets should not produce target mismatch warning");
+        assert!(
+            !has_target_warning,
+            "skill without targets should not produce target mismatch warning"
+        );
     }
 
     #[test]
@@ -1077,7 +1099,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| w.contains("risk 'low' but references high-risk skill 'security-review'")));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| w.contains("risk 'low' but references high-risk skill 'security-review'")));
     }
 
     #[test]
@@ -1095,8 +1120,14 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        let has_risk_warning = response.warnings.iter().any(|w| w.contains("risk 'low' but references high-risk"));
-        assert!(!has_risk_warning, "medium risk with high-risk skill should not produce warning (only low triggers it)");
+        let has_risk_warning = response
+            .warnings
+            .iter()
+            .any(|w| w.contains("risk 'low' but references high-risk"));
+        assert!(
+            !has_risk_warning,
+            "medium risk with high-risk skill should not produce warning (only low triggers it)"
+        );
     }
 
     // ── agent metadata compatibility tests ──
@@ -1127,9 +1158,10 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| {
-            w.contains("targets 'claude' but agent 'autopilot.md' targets only")
-        }));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| { w.contains("targets 'claude' but agent 'autopilot.md' targets only") }));
     }
 
     #[test]
@@ -1175,10 +1207,14 @@ mod tests {
         cleanup(&root);
 
         // Should not produce agent target/risk warnings since no metadata exists
-        let has_agent_warning = response.warnings.iter().any(|w| {
-            w.contains("agent metadata") || w.contains("but agent")
-        });
-        assert!(!has_agent_warning, "missing agent metadata must not create noise");
+        let has_agent_warning = response
+            .warnings
+            .iter()
+            .any(|w| w.contains("agent metadata") || w.contains("but agent"));
+        assert!(
+            !has_agent_warning,
+            "missing agent metadata must not create noise"
+        );
         // But should still validate file existence
         assert!(!response.profiles[0].missing_agent);
     }

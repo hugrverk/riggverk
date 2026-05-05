@@ -195,7 +195,7 @@ function App() {
     setCreatePlan(null);
     setCreateResult(null);
     try {
-      const target = appSettings?.workspace_path ?? null;
+      const target = appSettings?.workspace_path ?? "~/Agent Workspace";
       const plan = await invoke<CreateWorkspacePlan>("plan_create_workspace", { targetPath: target });
       setCreatePlan(plan);
     } catch (e) { setError(`Plan: ${e}`); }
@@ -212,26 +212,6 @@ function App() {
       if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
     }
   }, []);
-
-  const runCreate = useCallback(async () => {
-    setCreateRunning(true);
-    setCreateResult(null);
-    try {
-      const target = appSettings?.workspace_path ?? null;
-      const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
-      setCreateResult(result);
-      if (result.success && appSettings) {
-        const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
-        setAppSettings(s);
-        applyThemeSettings(s);
-        setSettingsMsg({ ok: true, text: "workspace created" });
-        fetchStatus();
-        loadWorkspaceDiagnostics();
-        setCreatePlan(null);
-      }
-    } catch (e) { setError(`Create: ${e}`); }
-    finally { setCreateRunning(false); }
-  }, [appSettings, fetchStatus, loadWorkspaceDiagnostics]);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -479,6 +459,31 @@ function App() {
     }
   }, []);
 
+  const runCreate = useCallback(async () => {
+    setCreateRunning(true);
+    setCreateResult(null);
+    try {
+      const target = appSettings?.workspace_path ?? "~/Agent Workspace";
+      const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
+      setCreateResult(result);
+      if (result.success && appSettings) {
+        const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
+        setAppSettings(s);
+        savedSettingsRef.current = serializeSettingsForCompare(s);
+        applyThemeSettings(s);
+        setSettingsMsg({ ok: true, text: "workspace created" });
+        fetchStatus();
+        loadWorkspaceDiagnostics();
+        loadContract();
+        loadSkills();
+        loadDocs();
+        loadAgentSources();
+        setCreatePlan(null);
+      }
+    } catch (e) { setError(`Create: ${e}`); }
+    finally { setCreateRunning(false); }
+  }, [appSettings, fetchStatus, loadWorkspaceDiagnostics, loadContract, loadSkills, loadDocs, loadAgentSources]);
+
   const selectAgent = useCallback(async (id: string) => {
     if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
     activeAgentIdRef.current = id;
@@ -694,6 +699,32 @@ function App() {
     } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
   }, [appSettings, fetchStatus, loadWorkspaceDiagnostics]);
 
+  const applyWorkspacePath = useCallback(async (workspacePath: string | null) => {
+    setCreatePlan(null);
+    setCreateResult(null);
+    if (!appSettings) return;
+    try {
+      const nextSettings = { ...appSettings, workspace_path: workspacePath };
+      const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
+      setAppSettings(s);
+      savedSettingsRef.current = serializeSettingsForCompare(s);
+      applyThemeSettings(s);
+      setSettingsMsg(null);
+      // Refresh all workspace-dependent data
+      await Promise.all([
+        loadWorkspaceDiagnostics().catch(() => {}),
+        loadContract().catch(() => {}),
+        fetchStatus().catch(() => {}),
+        loadSkills().catch(() => {}),
+        loadDocs().catch(() => {}),
+        loadAgentSources().catch(() => {}),
+        loadRoutingData().catch(() => {}),
+      ]);
+    } catch (e) {
+      setError(`Apply workspace path: ${e}`);
+    }
+  }, [appSettings, loadWorkspaceDiagnostics, loadContract, fetchStatus, loadSkills, loadDocs, loadAgentSources, loadRoutingData]);
+
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
     setCreatePlan(null);
@@ -741,12 +772,13 @@ function App() {
     try {
       const selected = await open({ directory: true, multiple: false });
       if (selected) {
-        setWorkspacePath(selected);
+        const path = Array.isArray(selected) ? selected[0] : selected;
+        if (path) await applyWorkspacePath(path);
       }
     } catch (e) {
       setError(`Choose folder: ${e}`);
     }
-  }, [setWorkspacePath]);
+  }, [applyWorkspacePath]);
 
   // routing state
   const [routingData, setRoutingData] = useState<RoutingProfilesResponse | null>(null);
@@ -954,6 +986,7 @@ function App() {
           <WorkspaceView
             appSettings={appSettings}
             onSetWorkspacePath={setWorkspacePath}
+            onApplyWorkspacePath={applyWorkspacePath}
             onChooseWorkspaceFolder={chooseWorkspaceFolder}
             workspaceDiagnostics={workspaceDiagnostics}
             onRefreshDiagnostics={loadWorkspaceDiagnostics}

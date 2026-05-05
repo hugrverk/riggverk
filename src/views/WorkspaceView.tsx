@@ -6,6 +6,7 @@ import { INSTALL_AGENTS } from "../types";
 interface WorkspaceViewProps {
   appSettings: AppSettings | null;
   onSetWorkspacePath: (value: string | null) => void;
+  onApplyWorkspacePath: (value: string | null) => void;
   onChooseWorkspaceFolder: () => void;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   onRefreshDiagnostics: () => void;
@@ -140,6 +141,7 @@ function mapNodeStatus(
 export function WorkspaceView({
   appSettings,
   onSetWorkspacePath,
+  onApplyWorkspacePath,
   onChooseWorkspaceFolder,
   workspaceDiagnostics,
   onRefreshDiagnostics,
@@ -214,7 +216,11 @@ export function WorkspaceView({
 
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
-  const resolvedPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
+  const defaultLabel = "~/Agent Workspace";
+  // Show settings path immediately (no stale diagnostic dependency)
+  const displayPath = appSettings?.workspace_path ?? defaultLabel;
+  // Diagnostics path for resolved/validated view (may lag behind settings change)
+  const diagnosticsPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
   const summary = defaultWorkspaceSummary;
 
   const mapNodes: { id: string; label: string }[] = [
@@ -256,7 +262,7 @@ export function WorkspaceView({
               <>
                 <div className="ws-detail-row">
                   <span className="ws-detail-key">path</span>
-                  <span className="ws-detail-val">{resolvedPath}</span>
+                  <span className="ws-detail-val">{diagnosticsPath}</span>
                 </div>
                 <div className="ws-detail-row">
                   <span className="ws-detail-key">markers missing</span>
@@ -412,7 +418,12 @@ export function WorkspaceView({
           <span className={`ws-cmd-status-val ${statusClass}`}>{statusText}</span>
           <span className="ws-cmd-sep">|</span>
           <span className="ws-cmd-status-key">path:</span>
-          <span className="ws-cmd-path">{resolvedPath}</span>
+          <span className="ws-cmd-path">{displayPath}</span>
+          {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
+            <span className="ws-cmd-path-hint" title={`validated: ${diagnosticsPath}`}>
+              {" "}(resolved: {diagnosticsPath})
+            </span>
+          )}
         </div>
         <div className="ws-cmd-actions">
           <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
@@ -430,11 +441,117 @@ export function WorkspaceView({
           <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
             choose folder
           </button>
-          <button className="btn btn-sm" onClick={() => onSetWorkspacePath(null)}>
+          <button className="btn btn-sm" onClick={() => onApplyWorkspacePath(null)}>
             use default
           </button>
         </div>
       </div>
+
+      {/* ---- Workspace Setup (visible when invalid) ---- */}
+      {diag && !diag.valid && (
+        <div className="ws-setup" role="region" aria-label="Workspace setup">
+          <div className="ws-setup-heading">Workspace Setup</div>
+          <div className="ws-setup-body">
+            <div className="ws-setup-path">
+              <span className="ws-setup-label">candidate path:</span>
+              <span className="ws-setup-value">{displayPath}</span>
+            </div>
+            {diag.error && (
+              <div className="ws-setup-error">diagnostics: {diag.error}</div>
+            )}
+            {missingMarkers.length > 0 && (
+              <div className="ws-setup-error">
+                {missingMarkers.length} required marker(s) missing
+              </div>
+            )}
+
+            <div className="ws-setup-actions">
+              {/* No plan yet — show dry-run trigger */}
+              {!createPlan && !createResult && (
+                <div className="ws-setup-action-row">
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={onPlanCreate}
+                    disabled={createPlanRunning}
+                  >
+                    {createPlanRunning ? "planning\u2026" : "dry-run create"}
+                  </button>
+                  <span className="ws-setup-hint">
+                    evaluate if the path is safe for workspace initialization
+                  </span>
+                </div>
+              )}
+
+              {/* Plan result */}
+              {createPlan && (
+                <div className="ws-setup-plan">
+                  <div className={`ws-cmd-row ${createPlan.ok ? "ws-color-ok" : "ws-color-fail"}`}>
+                    <span className="ws-cmd-prompt">{createPlan.ok ? "safe" : "blocked"}</span>
+                    <span>{createPlan.status}</span>
+                  </div>
+                  <div className="ws-cmd-row ws-color-dim">
+                    target: {createPlan.target_path || "(empty)"}
+                  </div>
+                  <div className="ws-cmd-row">{createPlan.reason}</div>
+                  {createPlan.warnings.length > 0 && (
+                    <div className="ws-cmd-warnings">
+                      {createPlan.warnings.map((w, i) => (
+                        <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
+                      ))}
+                    </div>
+                  )}
+                  {createPlan.planned_files.length > 0 && (
+                    <div className="ws-cmd-row ws-color-dim">
+                      {createPlan.planned_files.length} files planned
+                    </div>
+                  )}
+
+                  {/* Create button when safe */}
+                  {createPlanEligible && (
+                    <div className="ws-setup-create-action">
+                      <button
+                        className="btn btn-sm btn-primary"
+                        onClick={onCreateWorkspace}
+                        disabled={createRunning}
+                      >
+                        {createRunning ? "creating\u2026" : "create workspace"}
+                      </button>
+                      <span className="ws-tag">{createPlan.planned_files.length} files</span>
+                      <span className="ws-tag">no overwrite</span>
+                      <span className="ws-tag">no scripts</span>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Create result */}
+              {createResult && (
+                <div className="ws-setup-result">
+                  <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>
+                    <span className="ws-cmd-prompt">{createResult.success ? "ok" : "fail"}</span>
+                    <span>{createResult.message}</span>
+                  </div>
+                  <div className="ws-cmd-row ws-color-dim">
+                    status: {createResult.status} | target: {createResult.target_path}
+                  </div>
+                  {createResult.copied_files.length > 0 && (
+                    <div className="ws-cmd-row ws-color-dim">
+                      copied {createResult.copied_files.length} file(s)
+                    </div>
+                  )}
+                  {createResult.warnings.length > 0 && (
+                    <div className="ws-cmd-warnings">
+                      {createResult.warnings.map((w, i) => (
+                        <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ---- Primary: Operations Cockpit ---- */}
       <div className="ws-operations">
