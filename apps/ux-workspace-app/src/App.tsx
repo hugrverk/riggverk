@@ -10,7 +10,7 @@ import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
 import { RoutingView } from "./views/RoutingView";
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
@@ -100,6 +100,15 @@ function App() {
 
   // workspace diagnostics state
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
+
+  // workspace contract validation
+  const [contractResult, setContractResult] = useState<WorkspaceContractResult | null>(null);
+
+  const loadContract = useCallback(async () => {
+    try {
+      setContractResult(await invoke<WorkspaceContractResult>("validate_workspace_contract"));
+    } catch (e) { setError(`Contract: ${e}`); }
+  }, []);
 
   const loadWorkspaceDiagnostics = useCallback(async () => {
     try {
@@ -758,7 +767,7 @@ function App() {
     }
     setView(v);
     setSettingsMsg(null);
-    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); }
+    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "routing") { loadRoutingData(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
@@ -996,6 +1005,9 @@ function App() {
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
+            // contract
+            contractResult={contractResult}
+            onRefreshContract={loadContract}
           />
         )}
 
@@ -1100,6 +1112,7 @@ function App() {
             onRoutingDirtyChange={setRoutingDirty}
             skills={skills}
             agentSources={agentSources}
+            contractResult={contractResult}
           />
         )}
 

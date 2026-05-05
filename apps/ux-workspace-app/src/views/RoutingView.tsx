@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActionResult, AgentMetadataResponse, RoutingProfilesResponse, SkillSummary } from "../types";
+import type { ActionResult, AgentMetadataResponse, RoutingProfilesResponse, SkillSummary, WorkspaceContractResult } from "../types";
 import { ProfileTemplate, PROFILE_TEMPLATES } from "./routing/routingTemplates";
 import { riskClass, riskLabel, copyMetadataBlock } from "./routing/routingHelpers";
 import { RoutingMatrix } from "./routing/RoutingMatrix";
@@ -14,11 +14,12 @@ interface RoutingViewProps {
   onRoutingDirtyChange?: (dirty: boolean) => void;
   skills: SkillSummary[];
   agentSources: AgentMetadataResponse[];
+  contractResult: WorkspaceContractResult | null;
 }
 
 type RoutingMode = "preview" | "edit";
 
-export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged, onRoutingDirtyChange, skills, agentSources }: RoutingViewProps) {
+export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged, onRoutingDirtyChange, skills, agentSources, contractResult }: RoutingViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -32,6 +33,15 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
 
   const profiles = routingData?.profiles ?? [];
   const selected = profiles.find((p) => p.id === selectedId) ?? null;
+
+  // Routing-related contract failures
+  const routingContractFails = contractResult?.checks.filter(
+    c => c.status === "fail" && c.id.startsWith("routing-")
+  ) ?? [];
+  const routingContractWarns = contractResult?.checks.filter(
+    c => c.status === "warn" && c.id.startsWith("routing-")
+  ) ?? [];
+  const hasContractRoutingIssues = routingContractFails.length > 0 || routingContractWarns.length > 0;
 
   const onCopy = useCallback(async () => {
     if (!selected) return;
@@ -256,6 +266,9 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
           <span className={fileStatusClass}>routing/profiles.json: {fileStatusText}</span>
           {routingData?.exists && <span> &middot; {profiles.length} profile{profiles.length !== 1 ? "s" : ""}</span>}
           {routingError && <span className="ws-color-fail"> &middot; {routingError}</span>}
+          {hasContractRoutingIssues && (
+            <span className="ws-color-warn"> &middot; contract: {routingContractFails.length}f / {routingContractWarns.length}w</span>
+          )}
         </span>
       </div>
 
@@ -578,6 +591,27 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                       <span className="configs-bundle-val ws-color-fail">{w}</span>
                     </div>
                   ))}
+                </div>
+              )}
+
+              {/* Contract routing failures */}
+              {hasContractRoutingIssues && (
+                <div className="configs-bundle-section" role="region" aria-label="Contract validation for routing">
+                  <span className="configs-bundle-header ws-color-warn">
+                    contract validation for routing
+                  </span>
+                  {[...routingContractFails, ...routingContractWarns].map(check => (
+                    <div key={check.id} className="configs-bundle-item">
+                      <span className={`configs-bundle-val ${check.status === "fail" ? "ws-color-fail" : "ws-color-warn"}`}>
+                        [{check.status}] {check.label}: {check.detail}
+                      </span>
+                    </div>
+                  ))}
+                  <div className="configs-bundle-item">
+                    <span className="configs-bundle-val ws-detail-dim">
+                      See Workspace &rarr; CONTRACT for full validation.
+                    </span>
+                  </div>
                 </div>
               )}
 

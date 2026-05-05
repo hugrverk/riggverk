@@ -3799,3 +3799,126 @@ html, body, #root {
     flex: 1;
   }
 }
+
+/* ── Workspace Contract panel ── */
+
+.ws-contract-body {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-contract-empty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+}
+
+.ws-contract-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  font-size: 11px;
+  font-family: var(--font);
+}
+
+.ws-contract-status {
+  font-weight: 600;
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.ws-contract-status-valid {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.3);
+  background: var(--accent-dim);
+}
+
+.ws-contract-status-invalid {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-contract-details {
+  font-size: 11px;
+  font-family: var(--font);
+}
+
+.ws-contract-details-summary {
+  font-size: 10px;
+  color: var(--text-muted);
+  cursor: pointer;
+  padding: 2px 0;
+  user-select: none;
+}
+
+.ws-contract-details-summary:hover {
+  color: var(--text);
+}
+
+.ws-contract-checks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 4px;
+  padding-left: 2px;
+  border-left: 2px solid var(--border);
+}
+
+.ws-contract-check-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px;
+  padding: 2px 0 2px 8px;
+}
+
+.ws-contract-check-status {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  font-family: var(--font);
+}
+
+.ws-contract-check-pass {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: var(--accent-dim);
+}
+
+.ws-contract-check-warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.ws-contract-check-fail {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-contract-check-label {
+  font-size: 11px;
+  color: var(--text);
+  flex: 1;
+  min-width: 0;
+}
+
+.ws-contract-check-detail {
+  font-size: 10px;
+  word-break: break-word;
+  width: 100%;
+}

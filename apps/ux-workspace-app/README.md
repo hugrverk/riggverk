@@ -395,6 +395,75 @@ No install buttons, sync buttons, execution, or target settings changes.
 - No arbitrary frontend-supplied file paths.
 - Metadata files are read-only unless explicitly edited through existing safe editors.
 
+## Workspace Contract Validator
+
+The app includes a read-only Workspace Contract Validator that checks an active workspace against the public app contract. It validates skills, routing, agent metadata, and agents without executing scripts or modifying files.
+
+### What it checks
+
+| Check | Description |
+|-------|-------------|
+| Workspace root | Resolves and verifies `.ux-workspace/workspace.json` exists |
+| Skills directory | `skills/` exists and contains root-level skills at `skills/<skill>/SKILL.md` |
+| Skill metadata | Every `SKILL.md` has required `name` and `description` fields |
+| Skill uniqueness | No duplicate skill names (deterministic failure) |
+| Legacy skills | No legacy nested skills at `skills/engineering/*/SKILL.md` (fails — public contract is root-level only) |
+| Routing file | `routing/profiles.json` is optional; validates JSON, size, and structure when present |
+| Routing notes | All notes fields are string arrays (fails on type mismatch) |
+| Skill references | Every skill referenced in routing profiles exists in the workspace |
+| Agent references | Every agent_profile in routing references a known agent file present in the workspace |
+| Agent metadata | `metadata/agents.json` is optional; validates JSON, size, and structure when present |
+| Metadata notes | All notes fields in agent metadata are string arrays |
+| Metadata keys | All agent keys in metadata map to known agent files (warns on unknown keys) |
+| Default skills | All `default_skills` in agent metadata reference existing workspace skills |
+| Agent files | Lists known agent source files and reports presence |
+
+### What it does NOT do
+
+- Run scripts, install skills, or sync configs
+- Modify any files in the workspace
+- Change OpenCode runtime behavior or agent permission blocks
+- Change `default_agent`, install destinations, or sync semantics
+- Fix or auto-correct validation failures
+- Execute shell commands, read secrets, or browse arbitrary filesystem paths
+
+### Current skill layout
+
+The public app contract requires root-level skills:
+```
+skills/<skill>/SKILL.md
+```
+
+Examples:
+```
+skills/diagnose/SKILL.md
+skills/security-review/SKILL.md
+skills/frontend-design/SKILL.md
+```
+
+### Legacy skills are invalid
+
+Nested skill layouts like `skills/engineering/<skill>/SKILL.md` are legacy and fail contract validation. The current public contract is root-level skills only. Legacy skills must be moved to the root level.
+
+### Routing and metadata sidecars
+
+`routing/profiles.json` and `metadata/agents.json` are optional workspace sidecar files. When present, they are validated for correctness:
+- Valid JSON within size limits (256 KB for routing, 128 KB for metadata)
+- Notes fields must be string arrays
+- Referenced skills, agents, and default_skills must resolve to existing workspace resources
+
+Missing optional files produce warnings (`warn` status), not errors (`fail` status). The workspace remains valid without these optional sidecars.
+
+### UI surface
+
+The contract panel is in the Workspace view under the INVENTORY section (CONTRACT row). It shows:
+- Overall status: `valid` or `failed`
+- Counts of pass/warn/fail checks
+- Expandable list of individual check results with status badges and details
+- A **refresh** button to re-run validation
+
+Routing-specific contract failures are also surfaced in the Routing view's warnings section with a link back to the Workspace Contract panel for full validation.
+
 ## Architecture
 
 ```

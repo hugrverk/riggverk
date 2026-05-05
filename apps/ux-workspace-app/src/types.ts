@@ -190,3 +190,17 @@ export interface ActionResult {
   stderr: string;
   exit_code: number | null;
 }
+
+export interface ContractCheck {
+  id: string;
+  label: string;
+  status: "pass" | "warn" | "fail";
+  detail: string;
+}
+
+export interface WorkspaceContractResult {
+  valid: boolean;
+  warnings: string[];
+  errors: string[];
+  checks: ContractCheck[];
+}

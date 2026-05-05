@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, SkillSummary, StatusData, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -57,6 +57,9 @@ interface WorkspaceViewProps {
   backupCount: number;
   onRefreshBackups: () => void;
   onOpenBackupsFolder: () => void;
+  // contract
+  contractResult: WorkspaceContractResult | null;
+  onRefreshContract: () => void;
 }
 
 const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
@@ -188,6 +191,9 @@ export function WorkspaceView({
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
+  // contract
+  contractResult,
+  onRefreshContract,
 }: WorkspaceViewProps) {
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [showSkillSelector, setShowSkillSelector] = useState(false);
@@ -762,6 +768,65 @@ export function WorkspaceView({
                   )}
                 </div>
               )}
+
+              {/* Workspace Contract */}
+              <div className="ws-inv-row">
+                <div className="ws-inv-row-label">CONTRACT</div>
+                <div className="ws-contract-body">
+                  {!contractResult ? (
+                    <div className="ws-contract-empty">
+                      <span className="ws-detail-dim">Not validated</span>
+                      <button className="btn btn-sm" onClick={onRefreshContract}>
+                        validate
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="ws-contract-summary">
+                        <span className={`ws-contract-status ${contractResult.valid ? "ws-contract-status-valid" : "ws-contract-status-invalid"}`}>
+                          {contractResult.valid ? "valid" : "failed"}
+                        </span>
+                        {contractResult.checks.filter(c => c.status === "fail").length > 0 && (
+                          <span className="ws-inv-chip ws-inv-chip-warn">
+                            {contractResult.checks.filter(c => c.status === "fail").length} fail
+                          </span>
+                        )}
+                        {contractResult.checks.filter(c => c.status === "warn").length > 0 && (
+                          <span className="ws-inv-chip ws-inv-chip-dim">
+                            {contractResult.checks.filter(c => c.status === "warn").length} warn
+                          </span>
+                        )}
+                        <span className="ws-inv-chip ws-inv-chip-ok">
+                          {contractResult.checks.filter(c => c.status === "pass").length} pass
+                        </span>
+                        <button className="btn btn-sm" onClick={onRefreshContract} aria-label="Refresh workspace contract validation">
+                          refresh
+                        </button>
+                      </div>
+                      <details className="ws-contract-details">
+                        <summary className="ws-contract-details-summary">
+                          {contractResult.checks.length} checks
+                        </summary>
+                        <div className="ws-contract-checks-list">
+                          {contractResult.checks.map(check => {
+                            const statusLabel = check.status === "pass" ? "PASS" : check.status === "warn" ? "WARN" : "FAIL";
+                            const statusClass = check.status === "pass" ? "ws-contract-check-pass" : check.status === "warn" ? "ws-contract-check-warn" : "ws-contract-check-fail";
+                            return (
+                              <div key={check.id} className="ws-contract-check-row">
+                                <span className={`ws-contract-check-status ${statusClass}`} aria-label={`Status ${statusLabel}`}>
+                                  {statusLabel}
+                                </span>
+                                <span className="ws-contract-check-label">{check.label}</span>
+                                <span className="ws-contract-check-detail ws-detail-dim">{check.detail}</span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </details>
+                    </>
+                  )}
+                </div>
+              </div>
 
               {/* Resources — compact summary + expandable */}
               {summary && (
