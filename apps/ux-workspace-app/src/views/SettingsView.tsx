@@ -1,3 +1,5 @@
+import { useState, useEffect } from "react";
+import { isValidAccentHex } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, TargetProfileMeta } from "../types";
 
 interface SettingsMessage {
@@ -13,6 +15,7 @@ interface SettingsViewProps {
   activeProfileId: string | null;
   settingsDirty: boolean;
   onSetAppearance: (appearance: AppSettings["appearance"]) => void;
+  onSetAccentColor: (value: string | null) => void;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   onSave: () => void;
@@ -27,11 +30,34 @@ export function SettingsView({
   activeProfileId,
   settingsDirty,
   onSetAppearance,
+  onSetAccentColor,
   onToggleTarget,
   onApplyProfile,
   onSave,
   onReset,
 }: SettingsViewProps) {
+  const [accentDraft, setAccentDraft] = useState(appSettings?.accent_color ?? "");
+  const [accentTouched, setAccentTouched] = useState(false);
+
+  useEffect(() => {
+    if (!accentTouched) {
+      setAccentDraft(appSettings?.accent_color ?? "");
+    }
+  }, [appSettings?.accent_color, accentTouched]);
+
+  const accentValid = accentDraft === "" || isValidAccentHex(accentDraft);
+  const canSave = settingsDirty && accentValid;
+
+  const handleAccentChange = (value: string) => {
+    setAccentTouched(true);
+    setAccentDraft(value);
+    if (value === "") {
+      onSetAccentColor(null);
+    } else if (isValidAccentHex(value)) {
+      onSetAccentColor(value);
+    }
+  };
+
   return (
     <section className="settings-layout">
       <div className="lib-topline">
@@ -58,6 +84,44 @@ export function SettingsView({
                     {m}
                   </button>
                 ))}
+              </div>
+
+              {/* Accent color */}
+              <div className="settings-accent-row">
+                <label className="settings-accent-label" htmlFor="accent-color-input">
+                  Accent
+                </label>
+                <div className="settings-accent-input-group">
+                  <input
+                    id="accent-color-input"
+                    className="settings-input settings-accent-input"
+                    type="text"
+                    placeholder="#6ea8fe"
+                    value={accentDraft}
+                    onChange={e => handleAccentChange(e.target.value)}
+                    aria-label="Accent color hex code"
+                    aria-invalid={!accentValid}
+                  />
+                  {accentValid && isValidAccentHex(accentDraft) && (
+                    <span
+                      className="settings-accent-swatch"
+                      style={{ backgroundColor: accentDraft }}
+                      aria-hidden="true"
+                    />
+                  )}
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => { setAccentDraft(""); setAccentTouched(false); onSetAccentColor(null); }}
+                    aria-label="Reset accent color to default"
+                  >
+                    default
+                  </button>
+                </div>
+                {!accentValid && (
+                  <div className="settings-accent-hint settings-accent-hint-invalid">
+                    Enter a valid hex color (e.g. #6ea8fe)
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -145,7 +209,7 @@ export function SettingsView({
             <div className="settings-section-label">ACTIONS</div>
             <div className="settings-section-body">
               <div className="settings-actions">
-                <button className="btn btn-primary" onClick={onSave}>save</button>
+                <button className="btn btn-primary" onClick={onSave} disabled={!canSave}>save</button>
                 <button className="btn" onClick={onReset}>reset defaults</button>
               </div>
               <div className="settings-path-hint">

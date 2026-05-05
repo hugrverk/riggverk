@@ -3,7 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
-import { defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
+import { applyThemeSettings, defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
 import { wait } from "./lib/timing";
 import { useBackups } from "./lib/useBackups";
 import { SettingsView } from "./views/SettingsView";
@@ -212,7 +212,7 @@ function App() {
       if (result.success && appSettings) {
         const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
         setAppSettings(s);
-        document.documentElement.setAttribute("data-theme", s.appearance);
+        applyThemeSettings(s);
         setSettingsMsg({ ok: true, text: "workspace created" });
         fetchStatus();
         loadWorkspaceDiagnostics();
@@ -651,7 +651,7 @@ function App() {
       savedSettingsRef.current = serializeSettingsForCompare(s);
       setAgentTargets(targets);
       setTargetProfiles(profiles);
-      document.documentElement.setAttribute("data-theme", s.appearance);
+      applyThemeSettings(s);
       setSettingsMsg(null);
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
@@ -664,7 +664,7 @@ function App() {
       const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
       setAppSettings(s);
       savedSettingsRef.current = serializeSettingsForCompare(s);
-      document.documentElement.setAttribute("data-theme", s.appearance);
+      applyThemeSettings(s);
       setSettingsMsg({ ok: true, text: "settings saved" });
       fetchStatus();
       loadWorkspaceDiagnostics();
@@ -679,7 +679,7 @@ function App() {
       const s = await invoke<AppSettings>("update_settings", { settings: defaults });
       setAppSettings(s);
       savedSettingsRef.current = serializeSettingsForCompare(s);
-      document.documentElement.setAttribute("data-theme", s.appearance);
+      applyThemeSettings(s);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
       fetchStatus();
       loadWorkspaceDiagnostics();
@@ -688,8 +688,22 @@ function App() {
 
   const setAppearance = useCallback((appearance: AppSettings["appearance"]) => {
     setSettingsMsg(null);
-    setAppSettings(prev => prev ? { ...prev, appearance } : prev);
-    document.documentElement.setAttribute("data-theme", appearance);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, appearance };
+      applyThemeSettings(next);
+      return next;
+    });
+  }, []);
+
+  const setAccentColor = useCallback((accentColor: string | null) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, accent_color: accentColor };
+      applyThemeSettings(next);
+      return next;
+    });
   }, []);
 
   const setWorkspacePath = useCallback((workspacePath: string | null) => {
@@ -1047,6 +1061,7 @@ function App() {
             activeProfileId={activeProfileId}
             settingsDirty={settingsDirty}
             onSetAppearance={setAppearance}
+            onSetAccentColor={setAccentColor}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             onSave={saveSettings}

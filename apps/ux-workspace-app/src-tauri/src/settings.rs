@@ -11,6 +11,8 @@ pub struct AppSettings {
     pub workspace_path: Option<String>,
     #[serde(default = "agent_targets::default_enabled_ids")]
     pub enabled_target_ids: Vec<String>,
+    #[serde(default)]
+    pub accent_color: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -19,8 +21,25 @@ impl Default for AppSettings {
             appearance: "dark".into(),
             workspace_path: None,
             enabled_target_ids: agent_targets::default_enabled_ids(),
+            accent_color: None,
         }
     }
+}
+
+fn validate_accent_color(raw: &str) -> Option<String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    let hex = if !trimmed.starts_with('#') {
+        return None;
+    } else {
+        &trimmed[1..]
+    };
+    if hex.len() != 6 || !hex.chars().all(|c| c.is_ascii_hexdigit()) {
+        return None;
+    }
+    Some(format!("#{}", hex.to_lowercase()))
 }
 
 fn normalize(settings: &mut AppSettings) {
@@ -35,6 +54,11 @@ fn normalize(settings: &mut AppSettings) {
 
     settings.enabled_target_ids =
         agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+
+    settings.accent_color = settings
+        .accent_color
+        .as_deref()
+        .and_then(validate_accent_color);
 }
 
 fn settings_file() -> Result<PathBuf, String> {
@@ -73,13 +97,14 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize, AppSettings};
+    use super::{normalize, validate_accent_color, AppSettings};
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
             appearance: "dark".into(),
             workspace_path: path.map(|s| s.to_string()),
             enabled_target_ids: vec![],
+            accent_color: None,
         }
     }
 
@@ -123,5 +148,66 @@ mod tests {
         normalize(&mut settings);
 
         assert_eq!(settings.workspace_path, None);
+    }
+
+    // ── accent_color tests ──
+
+    #[test]
+    fn accent_color_accepts_valid_hex() {
+        assert_eq!(validate_accent_color("#ff00aa"), Some("#ff00aa".into()));
+    }
+
+    #[test]
+    fn accent_color_normalizes_uppercase() {
+        assert_eq!(validate_accent_color("#FF00AA"), Some("#ff00aa".into()));
+    }
+
+    #[test]
+    fn accent_color_rejects_missing_hash() {
+        assert_eq!(validate_accent_color("ff00aa"), None);
+    }
+
+    #[test]
+    fn accent_color_rejects_invalid_hex() {
+        assert_eq!(validate_accent_color("#xyzxyz"), None);
+    }
+
+    #[test]
+    fn accent_color_rejects_three_digit_hex() {
+        assert_eq!(validate_accent_color("#fff"), None);
+    }
+
+    #[test]
+    fn accent_color_empty_string_is_none() {
+        assert_eq!(validate_accent_color(""), None);
+    }
+
+    #[test]
+    fn accent_color_whitespace_only_is_none() {
+        assert_eq!(validate_accent_color("   "), None);
+    }
+
+    #[test]
+    fn accent_color_normalized_in_settings() {
+        let mut s = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: None,
+            enabled_target_ids: vec![],
+            accent_color: Some("#FFAA00".into()),
+        };
+        normalize(&mut s);
+        assert_eq!(s.accent_color, Some("#ffaa00".into()));
+    }
+
+    #[test]
+    fn accent_color_invalid_becomes_none_in_settings() {
+        let mut s = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: None,
+            enabled_target_ids: vec![],
+            accent_color: Some("bad".into()),
+        };
+        normalize(&mut s);
+        assert_eq!(s.accent_color, None);
     }
 }

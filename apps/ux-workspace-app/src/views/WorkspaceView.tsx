@@ -430,11 +430,6 @@ export function WorkspaceView({
 
       {/* ---- Primary: Operations Cockpit ---- */}
       <div className="ws-operations">
-        <div className="ws-operations-header">
-          <span className="ws-pane-label">OPERATIONS</span>
-          <span className="ws-op-header-hint">{wsRunning ? `running: ${wsRunning}` : wsLog ? (wsLog.success ? "last: ok" : "last: failed") : "ready"}</span>
-        </div>
-
         {/* Central terminal panel — larger, more prominent */}
         <div className="ws-op-term-pane" role="region" aria-label="Operations terminal output">
           <TerminalState

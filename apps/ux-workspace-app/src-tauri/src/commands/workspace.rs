@@ -930,6 +930,7 @@ mod tests {
             appearance: "dark".into(),
             workspace_path: Some("~/Desktop/test".into()),
             enabled_target_ids: vec![],
+            accent_color: None,
         };
         let candidate = repo_path_from_settings(&settings)
             .to_string_lossy()

@@ -11,12 +11,12 @@ import type {
 
 export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
 
-const SOURCE_TYPES: { id: LibrarySourceType; label: string; icon: string }[] = [
-  { id: "docs", label: "Docs", icon: "\u2630" },
-  { id: "rules", label: "Rules", icon: "\u2691" },
-  { id: "skills", label: "Skills", icon: "\u2699" },
-  { id: "agents", label: "Agents", icon: "\u263A" },
-  { id: "configs", label: "Configs", icon: "\u2692" },
+const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
+  { id: "docs", label: "Docs" },
+  { id: "rules", label: "Rules" },
+  { id: "skills", label: "Skills" },
+  { id: "agents", label: "Agents" },
+  { id: "configs", label: "Configs" },
 ];
 
 interface LibraryViewProps {
@@ -804,7 +804,6 @@ export function LibraryView(props: LibraryViewProps) {
                 aria-selected={sourceType === st.id}
                 title={`${st.label}${count ? ` (${count})` : ""}`}
               >
-                <span className="lib-source-rail-icon">{st.icon}</span>
                 <span className="lib-source-rail-label">{st.label}</span>
                 {count && <span className="lib-source-rail-count">{count}</span>}
               </button>
