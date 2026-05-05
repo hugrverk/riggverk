@@ -283,7 +283,10 @@ fn routing_backup_path(target_path: &Path) -> Result<std::path::PathBuf, String>
 #[tauri::command]
 pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
+    save_routing_profiles_inner(&root, &content)
+}
 
+fn save_routing_profiles_inner(root: &Path, content: &str) -> Result<ActionResult, String> {
     if content.len() > MAX_ROUTING_FILE_SIZE {
         return Err(format!(
             "content exceeds {} KB limit",
@@ -292,12 +295,12 @@ pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
     }
 
     // Validate JSON before writing
-    serde_json::from_str::<RawProfilesFile>(&content)
+    serde_json::from_str::<RawProfilesFile>(content)
         .map_err(|e| format!("invalid routing JSON: {}", e))?;
 
     let path = root.join(ROUTING_PROFILES_PATH);
 
-    super::content::safe_canonical_target(&root, &path)
+    super::content::safe_canonical_target(root, &path)
         .map_err(|e| format!("routing file path rejected: {}", e))?;
 
     // Ensure routing/ directory exists under workspace root
@@ -323,7 +326,7 @@ pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
-        std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+        std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
 
         return Ok(ActionResult::new(
             true,
@@ -335,7 +338,7 @@ pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
     }
 
     // File does not exist — create it after validation
-    std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+    std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
 
     Ok(ActionResult::new(
         true,
@@ -358,7 +361,9 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-workspace-app-routing-{name}-{nonce}"))
+        let root = std::env::temp_dir().join(format!("ux-workspace-app-routing-{name}-{nonce}"));
+        fs::create_dir_all(&root).expect("create temp root");
+        root
     }
 
     fn write_file(root: &PathBuf, rel: &str, content: &str) {
@@ -777,59 +782,7 @@ mod tests {
     // ── save_routing_profiles tests ──
 
     fn save_at_root(root: &PathBuf, content: &str) -> Result<ActionResult, String> {
-        if content.len() > MAX_ROUTING_FILE_SIZE {
-            return Err(format!(
-                "content exceeds {} KB limit",
-                MAX_ROUTING_FILE_SIZE / 1024
-            ));
-        }
-
-        serde_json::from_str::<RawProfilesFile>(content)
-            .map_err(|e| format!("invalid routing JSON: {}", e))?;
-
-        let path = root.join(ROUTING_PROFILES_PATH);
-
-        if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).expect("create routing dir");
-        }
-
-        if path.exists() {
-            let existing = std::fs::read_to_string(&path)
-                .map_err(|e| format!("read error: {}", e))?;
-            if existing == content {
-                return Ok(ActionResult::new(
-                    true,
-                    "save_routing_profiles",
-                    "unchanged".to_string(),
-                    String::new(),
-                    Some(0),
-                ));
-            }
-
-            let backup_path = routing_backup_path(&path)?;
-            std::fs::write(&backup_path, &existing)
-                .map_err(|e| format!("backup write error: {}", e))?;
-
-            std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
-
-            return Ok(ActionResult::new(
-                true,
-                "save_routing_profiles",
-                "saved with backup".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-
-        std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
-
-        Ok(ActionResult::new(
-            true,
-            "save_routing_profiles",
-            "created".to_string(),
-            String::new(),
-            Some(0),
-        ))
+        save_routing_profiles_inner(root, content)
     }
 
     #[test]

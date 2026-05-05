@@ -1,131 +1,21 @@
 import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActionResult, RoutingProfile, RoutingProfilesResponse } from "../types";
+import type { ActionResult, RoutingProfilesResponse } from "../types";
+import { ProfileTemplate, PROFILE_TEMPLATES } from "./routing/routingTemplates";
+import { riskClass, riskLabel, copyMetadataBlock } from "./routing/routingHelpers";
+import { RoutingMatrix } from "./routing/RoutingMatrix";
 
 interface RoutingViewProps {
   routingData: RoutingProfilesResponse | null;
   routingError: string | null;
   workspaceValid: boolean;
   onProfilesChanged: () => void;
+  onRoutingDirtyChange?: (dirty: boolean) => void;
 }
 
 type RoutingMode = "preview" | "edit";
 
-interface ProfileTemplate {
-  id: string;
-  title: string;
-  description: string;
-  target_tool: string;
-  recommended_model: string;
-  db_migration: string;
-  risk: string;
-  skills: string[];
-  agent_profile: string | null;
-  notes: string[];
-}
-
-const PROFILE_TEMPLATES: { label: string; profile: ProfileTemplate }[] = [
-  {
-    label: "generic-codex-review",
-    profile: {
-      id: "generic-codex-review",
-      title: "Generic Codex Review",
-      description: "Code review with Codex for general-purpose tasks.",
-      target_tool: "codex",
-      recommended_model: "GPT-5.5 Medium",
-      db_migration: "NO",
-      risk: "low",
-      skills: ["code-reviewer"],
-      agent_profile: "code-reviewer.md",
-      notes: [],
-    },
-  },
-  {
-    label: "generic-opencode-implementation",
-    profile: {
-      id: "generic-opencode-implementation",
-      title: "Generic OpenCode Implementation",
-      description: "Implementation work using OpenCode with diagnostics support.",
-      target_tool: "opencode",
-      recommended_model: "opencode-go/deepseek-v4-pro",
-      db_migration: "NO",
-      risk: "medium",
-      skills: ["diagnose", "implementation-plan"],
-      agent_profile: null,
-      notes: [],
-    },
-  },
-  {
-    label: "frontend-ui",
-    profile: {
-      id: "frontend-ui",
-      title: "Frontend UI",
-      description: "Frontend design and implementation with accessibility review.",
-      target_tool: "opencode",
-      recommended_model: "opencode-go/deepseek-v4-pro",
-      db_migration: "NO",
-      risk: "medium",
-      skills: ["frontend-design", "accessibility-review", "browser-qa"],
-      agent_profile: null,
-      notes: [],
-    },
-  },
-  {
-    label: "security-review",
-    profile: {
-      id: "security-review",
-      title: "Security Review",
-      description: "Security audit with backend code analysis.",
-      target_tool: "opencode",
-      recommended_model: "opencode-go/deepseek-v4-pro",
-      db_migration: "NO",
-      risk: "high",
-      skills: ["security-review", "diagnose"],
-      agent_profile: "security-auditor.md",
-      notes: ["Run security-review before any deployment affecting auth, uploads, or payments."],
-    },
-  },
-];
-
-function riskClass(risk: string): string {
-  switch (risk.toLowerCase()) {
-    case "low": return "ws-color-ok";
-    case "medium": return "ws-color-warn";
-    case "high": return "ws-color-fail";
-    default: return "";
-  }
-}
-
-function riskLabel(risk: string): string {
-  switch (risk.toLowerCase()) {
-    case "low": return "Low";
-    case "medium": return "Medium";
-    case "high": return "High";
-    default: return risk;
-  }
-}
-
-function copyMetadataBlock(profile: RoutingProfile): string {
-  const riskText = riskLabel(profile.risk);
-  const skills = profile.skills.join(", ") || "none";
-  const agent = profile.agent_profile ?? "none";
-  const block = [
-    `Recommended target: ${profile.target_tool} / ${profile.recommended_model}`,
-    `DB/migration: ${profile.db_migration}`,
-    `Token/audit warning: ${riskText}`,
-    `Skills: ${skills}`,
-    `Agent profile: ${agent}`,
-    `Routing profile: ${profile.id}`,
-  ].join("\n");
-  return block;
-}
-
-function profileStatus(profile: RoutingProfile): "ready" | "warnings" {
-  if (profile.missing_skills.length > 0 || profile.missing_agent) return "warnings";
-  return "ready";
-}
-
-export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged }: RoutingViewProps) {
+export function RoutingView({ routingData, routingError, workspaceValid, onProfilesChanged, onRoutingDirtyChange }: RoutingViewProps) {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
 
@@ -170,20 +60,26 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
     }
   }, [profiles, selectedId]);
 
-  // Load raw JSON when entering edit mode
+  // Propagate dirty state to parent for navigation guards
+  useEffect(() => {
+    onRoutingDirtyChange?.(dirty);
+  }, [dirty, onRoutingDirtyChange]);
+
+  // Load raw JSON when entering edit mode; initialize empty draft for missing file
   useEffect(() => {
     if (mode === "edit" && workspaceValid) {
       invoke<string>("read_routing_profiles_file")
         .then((raw) => {
+          const content = raw || "{\n  \"profiles\": []\n}";
           setRawJSON(raw);
-          setDraftJSON(raw);
-          setDirty(false);
+          setDraftJSON(content);
+          setDirty(raw !== content);
           setSaveResult(null);
         })
         .catch(() => {
           setRawJSON("");
-          setDraftJSON("");
-          setDirty(false);
+          setDraftJSON("{\n  \"profiles\": []\n}");
+          setDirty(true);
         });
     }
   }, [mode, workspaceValid]);
@@ -244,6 +140,17 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
         });
         return;
       }
+      const existingIds = new Set(current.profiles.map((p: { id: string }) => p.id));
+      if (existingIds.has(template.id)) {
+        setSaveResult({
+          success: false,
+          action: "insert_template",
+          stdout: "",
+          stderr: `Profile id "${template.id}" already exists. Remove the duplicate before inserting.`,
+          exit_code: null,
+        });
+        return;
+      }
       const newProfiles = [...current.profiles, template];
       const updated = { ...current, profiles: newProfiles };
       const json = JSON.stringify(updated, null, 2);
@@ -261,6 +168,55 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
     }
   }, [draftJSON, rawJSON]);
 
+  const onFormatJSON = useCallback(() => {
+    try {
+      const parsed = JSON.parse(draftJSON);
+      const formatted = JSON.stringify(parsed, null, 2);
+      setDraftJSON(formatted);
+      setDirty(formatted !== rawJSON);
+      setSaveResult(null);
+    } catch {
+      setSaveResult({
+        success: false,
+        action: "format_json",
+        stdout: "",
+        stderr: "Cannot format: invalid JSON.",
+        exit_code: null,
+      });
+    }
+  }, [draftJSON, rawJSON]);
+
+  const onValidateJSON = useCallback(() => {
+    try {
+      const parsed = JSON.parse(draftJSON);
+      if (!parsed || !Array.isArray(parsed.profiles)) {
+        setSaveResult({
+          success: false,
+          action: "validate_json",
+          stdout: "",
+          stderr: "Invalid structure: missing 'profiles' array.",
+          exit_code: null,
+        });
+        return;
+      }
+      setSaveResult({
+        success: true,
+        action: "validate_json",
+        stdout: `Valid JSON with ${parsed.profiles.length} profile(s).`,
+        stderr: "",
+        exit_code: null,
+      });
+    } catch (e) {
+      setSaveResult({
+        success: false,
+        action: "validate_json",
+        stdout: "",
+        stderr: `Invalid JSON: ${String(e)}`,
+        exit_code: null,
+      });
+    }
+  }, [draftJSON]);
+
   const fileStatusText = !routingData
     ? "loading"
     : routingData.exists
@@ -272,6 +228,22 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
     : routingData.exists
       ? "ws-status-valid"
       : "ws-status-invalid";
+
+  const jsonValid = useCallback(() => {
+    try {
+      const parsed = JSON.parse(draftJSON);
+      return parsed && Array.isArray(parsed.profiles);
+    } catch {
+      return false;
+    }
+  }, [draftJSON]);
+
+  const templateButtonsDisabled = !jsonValid();
+
+  const handleSelectId = useCallback((id: string) => {
+    setSelectedId(id);
+    setCopied(false);
+  }, []);
 
   return (
     <section className="lib-frame">
@@ -308,7 +280,7 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                     <button
                       key={p.id}
                       className={`lib-sidebar-item ${selectedId === p.id ? "lib-sidebar-item-active" : ""}`}
-                      onClick={() => { setSelectedId(p.id); setCopied(false); }}
+                      onClick={() => handleSelectId(p.id)}
                       aria-current={selectedId === p.id ? "true" : undefined}
                     >
                       <span className="lib-sidebar-item-title">{p.title}</span>
@@ -360,6 +332,7 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                     key={t.label}
                     className="btn btn-sm"
                     onClick={() => onInsertTemplate(t.profile)}
+                    disabled={templateButtonsDisabled}
                   >
                     {t.label}
                   </button>
@@ -391,6 +364,18 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
                 >
                   reset
                 </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={onFormatJSON}
+                >
+                  format
+                </button>
+                <button
+                  className="btn btn-sm"
+                  onClick={onValidateJSON}
+                >
+                  validate
+                </button>
                 {saveResult && (
                   <span className={`editor-save-status ${saveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
                     {saveResult.success ? saveResult.stdout : saveResult.stderr}
@@ -414,83 +399,11 @@ export function RoutingView({ routingData, routingError, workspaceValid, onProfi
             <>
               {/* Compatibility / status matrix */}
               {profiles.length > 0 && (
-                <div className="configs-bundle-section" role="region" aria-label="Profile compatibility matrix">
-                  <span className="configs-bundle-header">
-                    profiles ({profiles.length})
-                  </span>
-                  <div style={{ overflowX: "auto" }}>
-                    <table className="routing-matrix">
-                      <thead>
-                        <tr>
-                          <th>profile</th>
-                          <th>tool</th>
-                          <th>model</th>
-                          <th className="routing-matrix-cell-center">risk</th>
-                          <th className="routing-matrix-cell-center">DB</th>
-                          <th className="routing-matrix-cell-center">skills</th>
-                          <th>agent</th>
-                          <th className="routing-matrix-cell-center">status</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {profiles.map((p) => {
-                          const status = profileStatus(p);
-                          const missingSkillCount = p.missing_skills.length;
-                          const totalSkills = p.skills.length;
-                          const agentLabel = p.agent_profile
-                            ? (p.missing_agent ? p.agent_profile + " \u2717" : p.agent_profile)
-                            : "\u2014";
-                          const isActive = selectedId === p.id;
-                          return (
-                            <tr
-                              key={p.id}
-                              tabIndex={0}
-                              role="row"
-                              className={isActive ? "routing-matrix-row-active" : ""}
-                              onClick={() => { setSelectedId(p.id); setCopied(false); }}
-                              onKeyDown={(e) => {
-                                if (e.key === "Enter" || e.key === " ") {
-                                  e.preventDefault();
-                                  setSelectedId(p.id);
-                                  setCopied(false);
-                                }
-                              }}
-                              aria-current={isActive ? "true" : undefined}
-                              aria-label={`${p.title} — ${riskLabel(p.risk)} risk${status === "warnings" ? ", warnings" : ""}`}
-                            >
-                              <td>
-                                <span className="routing-matrix-title">{p.title}</span>
-                                <span className="routing-matrix-id">{p.id}</span>
-                              </td>
-                              <td>{p.target_tool}</td>
-                              <td className="routing-matrix-model">{p.recommended_model}</td>
-                              <td className="routing-matrix-cell-center">
-                                <span className={riskClass(p.risk)} style={{ fontWeight: 600 }}>{riskLabel(p.risk)}</span>
-                              </td>
-                              <td className="routing-matrix-cell-center" style={{ opacity: 0.7 }}>{p.db_migration}</td>
-                              <td className="routing-matrix-cell-center">
-                                <span>{totalSkills}</span>
-                                {missingSkillCount > 0 && (
-                                  <span className="ws-color-fail" style={{ marginLeft: 3 }}>-{missingSkillCount}</span>
-                                )}
-                              </td>
-                              <td style={{ opacity: p.agent_profile ? 0.85 : 0.4, fontSize: 10 }}>
-                                {agentLabel}
-                              </td>
-                              <td className="routing-matrix-cell-center">
-                                {status === "ready" ? (
-                                  <span className="ws-color-ok">ready</span>
-                                ) : (
-                                  <span className="ws-color-warn">warnings</span>
-                                )}
-                              </td>
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <RoutingMatrix
+                  profiles={profiles}
+                  selectedId={selectedId}
+                  onSelectId={handleSelectId}
+                />
               )}
 
               {/* Meta strip */}

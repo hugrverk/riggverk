@@ -739,6 +739,11 @@ function App() {
     }
   }, [setWorkspacePath]);
 
+  // routing state
+  const [routingData, setRoutingData] = useState<RoutingProfilesResponse | null>(null);
+  const [routingError, setRoutingError] = useState<string | null>(null);
+  const [routingDirty, setRoutingDirty] = useState(false);
+
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && (
@@ -748,7 +753,8 @@ function App() {
         (librarySourceType === "agents" && agentDirty)
       );
       const isSettingsDirty = view === "settings" && settingsDirty;
-      if ((isLibraryDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
+      const isRoutingDirty = view === "routing" && routingDirty;
+      if ((isLibraryDirty || isSettingsDirty || isRoutingDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
@@ -756,7 +762,7 @@ function App() {
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "routing") { loadRoutingData(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, routingDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -839,10 +845,6 @@ function App() {
 
   const [accentResetKey, setAccentResetKey] = useState(0);
 
-  // routing state
-  const [routingData, setRoutingData] = useState<RoutingProfilesResponse | null>(null);
-  const [routingError, setRoutingError] = useState<string | null>(null);
-
   const applyTargetProfile = useCallback((profileId: string) => {
     const profile = targetProfiles.find(p => p.id === profileId);
     if (!profile) return;
@@ -906,9 +908,9 @@ function App() {
           </button>
           {/* Routing */}
           <button
-            className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}`}
+            className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}${dirtyTabClass(routingDirty)}`}
             onClick={() => switchView("routing")}
-            aria-label="Routing"
+            aria-label={dirtyTabAriaLabel(routingDirty, "Routing")}
             title="Routing"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1095,6 +1097,7 @@ function App() {
             routingError={routingError}
             workspaceValid={workspaceValid}
             onProfilesChanged={loadRoutingData}
+            onRoutingDirtyChange={setRoutingDirty}
           />
         )}
 

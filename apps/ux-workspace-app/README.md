@@ -15,7 +15,7 @@ The app has three top-level views:
 - **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, skills install (with expandable skill selector for individual skill toggles, agent toggles, scope/target selection, dry-run and install actions), release-check, and backup management. Integrated terminal output panel. All operation actions report through a single terminal pane.
 - **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering. Agents provides agent source file list with edit/open for each. Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
-- **Routing** — operator guidance view with edit support. Displays routing profiles from an optional `routing/profiles.json` sidecar file in the workspace. Each profile recommends tool/model/skill/agent combinations for specific task types. Profiles are purely informational operator guidance — they do not affect agent runtime behavior, do not run agents, and do not change OpenCode/Codex/Claude/Gemini/Auggie configuration. Missing `routing/profiles.json` is handled gracefully. Profile references to skills or agent files not present in the workspace are surfaced as non-blocking validation warnings. A "copy metadata block" action copies operator metadata for clipboard use without generating a full prompt. **Routing profiles can now be edited and saved directly from the app.** An edit JSON mode provides a full text editor for `routing/profiles.json`. A template insert control helps add new profile stubs (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) without manual JSON construction. Save validates JSON before writing, rejects oversized content (>256 KB), backs up the existing file before overwrite, and only writes to the fixed `routing/profiles.json` path under the validated workspace root — no arbitrary file paths are accepted. Routing is safe to omit.
+- **Routing** — operator guidance view with edit support. Displays routing profiles from an optional `routing/profiles.json` sidecar file in the workspace. Each profile recommends tool/model/skill/agent combinations for specific task types. Profiles are purely informational operator guidance — they do not affect agent runtime behavior, do not run agents, and do not change OpenCode/Codex/Claude/Gemini/Auggie configuration. Missing `routing/profiles.json` is handled gracefully. Profile references to skills or agent files not present in the workspace are surfaced as non-blocking validation warnings. A "copy metadata block" action copies operator metadata for clipboard use without generating a full prompt. **Routing profiles can now be edited and saved directly from the app.** An edit JSON mode provides a full text editor for `routing/profiles.json`. A template insert control helps add new profile stubs (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) without manual JSON construction. Save validates JSON before writing, rejects oversized content (>256 KB), backs up the existing file before overwrite, and only writes to the fixed `routing/profiles.json` path under the validated workspace root — no arbitrary file paths are accepted. **Unsaved routing edits are protected by a top-level navigation guard.** Navigating away from Routing with unsaved JSON changes prompts for confirmation, and the Routing nav tab shows a dirty indicator (orange dot). **The editor includes format and validate buttons** for JSON ergonomics. Format pretty-prints valid JSON; validate checks structure locally without writing. Missing `routing/profiles.json` initializes the editor with an empty profiles draft (`{"profiles": []}`) for quick start. Duplicate profile ids are blocked during template insertion. Routing is safe to omit.
 
 ### Routing profiles
 
@@ -31,9 +31,13 @@ The app has three top-level views:
 
 The file can be edited and saved from the Routing view:
 - **Preview mode** shows the profile matrix, details, and validation warnings (read-only operator guidance).
-- **Edit JSON mode** provides a raw JSON textarea editor with save/reset controls.
-- **Template insertion** — compact buttons (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) append a new profile object to the `profiles` array when the JSON is valid.
+- **Edit JSON mode** provides a raw JSON textarea editor with save/reset/format/validate controls.
+- **Format JSON** parses and pretty-prints the current draft (`JSON.stringify(value, null, 2)`). Invalid JSON shows an error without mutating the draft.
+- **Validate JSON** parses the draft locally and reports structure validity without writing. Does not call the backend.
+- **Template insertion** — compact buttons (generic-codex-review, generic-opencode-implementation, frontend-ui, security-review) append a new profile object to the `profiles` array when the JSON is valid. Duplicate profile ids are rejected with a clear error. Template buttons are disabled when the JSON is not parseable.
+- **Missing file handling** — when `routing/profiles.json` is missing and edit mode opens, the editor initializes with `{"profiles": []}`. No file is written until the user saves.
 - **Save validation** — JSON is validated against the profile schema before writing. Invalid JSON is rejected with a backend error. Content is capped at 256 KB. The existing file is backed up under the standard backup root before overwrite when content changes. Unchanged content returns "unchanged" without writing.
+- **Dirty state protection** — unsaved edits show a dirty indicator on the Routing nav tab. Navigating away from Routing with unsaved JSON prompts for confirmation.
 - **No arbitrary paths** — the frontend never supplies a file path. The backend always writes to the fixed `routing/profiles.json` under the validated workspace root.
 
 The file is operator guidance only. It does not:
@@ -329,10 +333,14 @@ apps/ux-workspace-app/
 │   │   ├── timing.ts     Small timing helpers
 │   │   └── useBackups.ts  Backup state hook
   │   ├── views/
-  │   │   ├── WorkspaceView.tsx Workspace operations cockpit and skills install selector
-  │   │   ├── LibraryView.tsx   Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
-  │   │   ├── RoutingView.tsx   Read-only routing profiles viewer
-  │   │   └── SettingsView.tsx  Settings view
+  │   │   ├── WorkspaceView.tsx    Workspace operations cockpit and skills install selector
+  │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
+  │   │   ├── RoutingView.tsx      Routing profiles orchestrator (preview, edit, matrix)
+  │   │   ├── routing/
+  │   │   │   ├── routingTemplates.ts  Profile templates, starter skill/agent validation
+  │   │   │   ├── routingHelpers.ts    risk/status helpers, metadata block formatter
+  │   │   │   └── RoutingMatrix.tsx    Profile compatibility matrix component
+  │   │   └── SettingsView.tsx     Settings view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
 └── src-tauri/
