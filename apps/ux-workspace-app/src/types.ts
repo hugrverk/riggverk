@@ -158,3 +158,11 @@ export interface RoutingProfilesResponse {
   profiles: RoutingProfile[];
   warnings: string[];
 }
+
+export interface ActionResult {
+  success: boolean;
+  action: string;
+  stdout: string;
+  stderr: string;
+  exit_code: number | null;
+}

@@ -10,8 +10,9 @@ use commands::{
     get_workspace_diagnostics, install_skills, list_agent_sources, list_backups, list_docs,
     list_skills, open_agent_source, open_agent_template, open_backups_folder, open_config_template,
     open_doc, open_install_skills_script, open_skill, plan_create_workspace, read_agent_source,
-    read_agent_template, read_config_template, read_doc, read_skill, run_action, save_agent_source,
-    save_agent_template, save_config_template, save_doc, update_settings,
+    read_agent_template, read_config_template, read_doc, read_routing_profiles_file, read_skill,
+    run_action, save_agent_source, save_agent_template, save_config_template, save_doc,
+    save_routing_profiles, update_settings,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -53,6 +54,8 @@ pub fn run() {
             open_backups_folder,
             get_backup_details,
             get_routing_profiles,
+            read_routing_profiles_file,
+            save_routing_profiles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

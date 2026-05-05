@@ -3634,6 +3634,114 @@ html, body, #root {
   padding: 12px;
 }
 
+/* ── routing matrix ── */
+
+.routing-matrix {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+  border: 1px solid var(--ws-border, var(--border));
+}
+
+.routing-matrix thead th {
+  padding: 4px 8px;
+  text-align: left;
+  border-bottom: 1px solid var(--ws-border, var(--border));
+  font-weight: 600;
+  opacity: 0.7;
+}
+
+.routing-matrix thead th.routing-matrix-cell-center {
+  text-align: center;
+}
+
+.routing-matrix tbody tr {
+  cursor: pointer;
+  border-bottom: 1px solid var(--ws-hairline, rgba(255,255,255,0.06));
+}
+
+.routing-matrix tbody tr:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: -2px;
+}
+
+.routing-matrix tbody tr:hover {
+  background: var(--accent-dim);
+}
+
+.routing-matrix-row-active {
+  background: var(--ws-row-active, rgba(255,255,255,0.06));
+}
+
+.routing-matrix td {
+  padding: 3px 8px;
+  white-space: nowrap;
+}
+
+.routing-matrix-cell-center {
+  text-align: center;
+}
+
+.routing-matrix-model {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  opacity: 0.8;
+}
+
+.routing-matrix-title {
+  font-weight: 500;
+}
+
+.routing-matrix-id {
+  opacity: 0.5;
+  margin-left: 6px;
+}
+
+/* ── routing edit mode ── */
+
+.routing-edit-layout {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.routing-edit-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.routing-edit-status {
+  font-size: 11px;
+  font-weight: 500;
+  margin-left: auto;
+}
+
+/* ── routing template inserts ── */
+
+.routing-template-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.routing-template-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  margin-left: auto;
+}
+
 /* responsive: stack sidebar on narrow screens */
 @media (max-width: 640px) {
   .lib-layout {

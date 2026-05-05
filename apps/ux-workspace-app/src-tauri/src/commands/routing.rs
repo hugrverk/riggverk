@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::path::Path;
+use std::time::{SystemTime, UNIX_EPOCH};
 
+use super::process::ActionResult;
 use super::workspace::workspace_root;
 
 const ROUTING_PROFILES_PATH: &str = "routing/profiles.json";
@@ -243,6 +245,105 @@ pub fn get_routing_profiles() -> Result<RoutingProfilesResponse, String> {
         profiles,
         warnings,
     })
+}
+
+#[tauri::command]
+pub fn read_routing_profiles_file() -> Result<String, String> {
+    let root = workspace_root()?;
+    let path = root.join(ROUTING_PROFILES_PATH);
+
+    if !path.exists() {
+        return Ok(String::new());
+    }
+
+    super::content::safe_canonical_target(&root, &path)
+        .map_err(|e| format!("routing file path rejected: {}", e))?;
+
+    std::fs::read_to_string(&path).map_err(|e| format!("cannot read routing file: {}", e))
+}
+
+fn routing_backup_path(target_path: &Path) -> Result<std::path::PathBuf, String> {
+    let backup_root = super::backups::backup_root()?;
+    let timestamp = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map_err(|_| "system clock error".to_string())?
+        .as_nanos();
+    let file_name = target_path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .ok_or_else(|| "invalid target file name".to_string())?;
+    let backup_dir = backup_root
+        .join("routing")
+        .join(format!("{}-{}", file_name, timestamp));
+    std::fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("create backup dir error: {}", e))?;
+    Ok(backup_dir.join(file_name))
+}
+
+#[tauri::command]
+pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
+    let root = workspace_root()?;
+
+    if content.len() > MAX_ROUTING_FILE_SIZE {
+        return Err(format!(
+            "content exceeds {} KB limit",
+            MAX_ROUTING_FILE_SIZE / 1024
+        ));
+    }
+
+    // Validate JSON before writing
+    serde_json::from_str::<RawProfilesFile>(&content)
+        .map_err(|e| format!("invalid routing JSON: {}", e))?;
+
+    let path = root.join(ROUTING_PROFILES_PATH);
+
+    super::content::safe_canonical_target(&root, &path)
+        .map_err(|e| format!("routing file path rejected: {}", e))?;
+
+    // Ensure routing/ directory exists under workspace root
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)
+            .map_err(|e| format!("create routing dir error: {}", e))?;
+    }
+
+    if path.exists() {
+        let existing =
+            std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+        if existing == content {
+            return Ok(ActionResult::new(
+                true,
+                "save_routing_profiles",
+                "unchanged".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        let backup_path = routing_backup_path(&path)?;
+        std::fs::write(&backup_path, &existing)
+            .map_err(|e| format!("backup write error: {}", e))?;
+
+        std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+
+        return Ok(ActionResult::new(
+            true,
+            "save_routing_profiles",
+            "saved with backup".to_string(),
+            String::new(),
+            Some(0),
+        ));
+    }
+
+    // File does not exist — create it after validation
+    std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+
+    Ok(ActionResult::new(
+        true,
+        "save_routing_profiles",
+        "created".to_string(),
+        String::new(),
+        Some(0),
+    ))
 }
 
 #[cfg(test)]
@@ -671,5 +772,209 @@ mod tests {
             profiles,
             warnings,
         })
+    }
+
+    // ── save_routing_profiles tests ──
+
+    fn save_at_root(root: &PathBuf, content: &str) -> Result<ActionResult, String> {
+        if content.len() > MAX_ROUTING_FILE_SIZE {
+            return Err(format!(
+                "content exceeds {} KB limit",
+                MAX_ROUTING_FILE_SIZE / 1024
+            ));
+        }
+
+        serde_json::from_str::<RawProfilesFile>(content)
+            .map_err(|e| format!("invalid routing JSON: {}", e))?;
+
+        let path = root.join(ROUTING_PROFILES_PATH);
+
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).expect("create routing dir");
+        }
+
+        if path.exists() {
+            let existing = std::fs::read_to_string(&path)
+                .map_err(|e| format!("read error: {}", e))?;
+            if existing == content {
+                return Ok(ActionResult::new(
+                    true,
+                    "save_routing_profiles",
+                    "unchanged".to_string(),
+                    String::new(),
+                    Some(0),
+                ));
+            }
+
+            let backup_path = routing_backup_path(&path)?;
+            std::fs::write(&backup_path, &existing)
+                .map_err(|e| format!("backup write error: {}", e))?;
+
+            std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
+
+            return Ok(ActionResult::new(
+                true,
+                "save_routing_profiles",
+                "saved with backup".to_string(),
+                String::new(),
+                Some(0),
+            ));
+        }
+
+        std::fs::write(&path, content).map_err(|e| format!("write error: {}", e))?;
+
+        Ok(ActionResult::new(
+            true,
+            "save_routing_profiles",
+            "created".to_string(),
+            String::new(),
+            Some(0),
+        ))
+    }
+
+    #[test]
+    fn save_invalid_json_rejected() {
+        let root = temp_root("save-invalid-json");
+
+        let result = save_at_root(&root, "not json");
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid routing JSON"));
+    }
+
+    #[test]
+    fn save_oversized_content_rejected() {
+        let root = temp_root("save-oversized");
+        let big = format!("{{\"profiles\":[{}]}}", "x".repeat(MAX_ROUTING_FILE_SIZE));
+
+        let result = save_at_root(&root, &big);
+        cleanup(&root);
+
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("exceeds"));
+    }
+
+    #[test]
+    fn save_creates_file_under_routing_profiles_json() {
+        let root = temp_root("save-creates");
+
+        let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
+        let result = save_at_root(&root, json);
+        assert!(result.is_ok(), "save should succeed: {:?}", result);
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "created");
+
+        let path = root.join("routing/profiles.json");
+        assert!(path.exists(), "file should be created at routing/profiles.json");
+
+        let saved = std::fs::read_to_string(&path).unwrap();
+        cleanup(&root);
+        assert_eq!(saved, json);
+    }
+
+    #[test]
+    fn save_unchanged_returns_unchanged() {
+        let root = temp_root("save-unchanged");
+        let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
+        write_file(&root, "routing/profiles.json", json);
+
+        let result = save_at_root(&root, json);
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        cleanup(&root);
+        assert_eq!(ar.stdout, "unchanged");
+    }
+
+    #[test]
+    fn save_changed_creates_backup() {
+        let root = temp_root("save-backup");
+        let original = "{\"profiles\":[{\"id\":\"test\",\"title\":\"Old\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
+        let modified = "{\"profiles\":[{\"id\":\"test\",\"title\":\"New\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
+        write_file(&root, "routing/profiles.json", original);
+
+        let result = save_at_root(&root, modified);
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "saved with backup");
+
+        // Verify file was updated
+        let saved = std::fs::read_to_string(root.join("routing/profiles.json")).unwrap();
+        assert_eq!(saved, modified);
+
+        // Verify backup was created (using default backup root)
+        let home = std::env::var("HOME").unwrap();
+        let backup_root = std::path::PathBuf::from(
+            std::env::var("UX_WORKSPACE_BACKUP_DIR").unwrap_or_else(|_| {
+                format!(
+                    "{}/Library/Application Support/ai.openworkspace.ux-workspace/backups",
+                    home
+                )
+            }),
+        );
+        let routing_backup_dir = backup_root.join("routing");
+        assert!(
+            routing_backup_dir.exists(),
+            "backup routing dir should exist"
+        );
+        let backup_entries: Vec<_> = std::fs::read_dir(&routing_backup_dir)
+            .unwrap()
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                let name = e.file_name().to_string_lossy().into_owned();
+                name.starts_with("profiles.json-")
+            })
+            .collect();
+        assert!(!backup_entries.is_empty(), "backup should be created");
+
+        let backup_file = backup_entries[0].path().join("profiles.json");
+        let backup_content = std::fs::read_to_string(&backup_file).unwrap();
+        assert_eq!(backup_content, original);
+
+        cleanup(&root);
+        let _ = std::fs::remove_dir_all(&routing_backup_dir);
+    }
+
+    #[test]
+    fn save_no_arbitrary_frontend_path_accepted() {
+        // save_routing_profiles always writes to the fixed ROUTING_PROFILES_PATH,
+        // regardless of content. The content is pure JSON — no path parameter exists.
+        let root = temp_root("save-no-path");
+        let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
+
+        let result = save_at_root(&root, json);
+        assert!(result.is_ok());
+
+        // Only routing/profiles.json should be written
+        let path = root.join("routing/profiles.json");
+        assert!(path.exists());
+
+        // No other file should have been created
+        let mut count = 0;
+        if let Ok(entries) = std::fs::read_dir(root.join("routing")) {
+            for _ in entries.flatten() {
+                count += 1;
+            }
+        }
+        cleanup(&root);
+        assert_eq!(count, 1, "only profiles.json should exist in routing/");
+    }
+
+    #[test]
+    fn save_empty_profiles_creates_file() {
+        let root = temp_root("save-empty");
+        let json = "{\"profiles\":[]}";
+
+        let result = save_at_root(&root, json);
+        assert!(result.is_ok());
+        let ar = result.unwrap();
+        assert_eq!(ar.stdout, "created");
+
+        let path = root.join("routing/profiles.json");
+        assert!(path.exists());
+
+        let saved = std::fs::read_to_string(&path).unwrap();
+        cleanup(&root);
+        assert_eq!(saved, json);
     }
 }

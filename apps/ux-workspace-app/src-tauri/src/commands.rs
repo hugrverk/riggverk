@@ -17,7 +17,7 @@ pub use content::{
     read_doc, save_agent_source, save_agent_template, save_config_template, save_doc,
 };
 pub use defaults::get_default_workspace_summary;
-pub use routing::get_routing_profiles;
+pub use routing::{get_routing_profiles, read_routing_profiles_file, save_routing_profiles};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };

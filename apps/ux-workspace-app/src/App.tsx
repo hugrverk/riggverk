@@ -1094,6 +1094,7 @@ function App() {
             routingData={routingData}
             routingError={routingError}
             workspaceValid={workspaceValid}
+            onProfilesChanged={loadRoutingData}
           />
         )}
 
