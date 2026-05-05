@@ -61,7 +61,7 @@ The workspace root is resolved in order of precedence:
 
 1. **Settings**: `workspace_path` in app settings (if set to a non-empty string).
 2. **Environment**: `UX_WORKSPACE_PATH` environment variable.
-3. **Default**: built-in fallback path (`~/Projects/agent-workspace`).
+3. **Default**: built-in fallback path (`~/Agent Workspace`).
 
 Set a custom workspace path in the Workspace tab (type manually or use **choose folder** to pick via a native directory picker), or override temporarily with the environment variable during dev. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
 

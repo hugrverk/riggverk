@@ -93,8 +93,8 @@ fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
         }
     }
     agent_targets::home_dir()
-        .map(|h| h.join("Projects/agent-workspace"))
-        .unwrap_or_else(|_| PathBuf::from("Projects/agent-workspace"))
+        .map(|h| h.join("Agent Workspace"))
+        .unwrap_or_else(|_| PathBuf::from("Agent Workspace"))
 }
 
 pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
