@@ -57,44 +57,21 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
     let entries =
         std::fs::read_dir(&skills_dir).map_err(|e| format!("cannot read skills dir: {}", e))?;
 
-    for area_entry in entries {
-        let area_entry = area_entry.map_err(|e| format!("read error: {}", e))?;
-        if !area_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read error: {}", e))?;
+        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
             continue;
         }
 
-        let area_path = area_entry.path();
-        let area = area_entry.file_name().to_string_lossy().into_owned();
-        let flat_skill_md = area_path.join("SKILL.md");
-        if flat_skill_md.is_file() {
-            discovered.push(skill_summary_from_path(
-                root,
-                &flat_skill_md,
-                format!("workspace/{}", area),
-                area,
-            ));
-            continue;
-        }
-
-        let skill_entries =
-            std::fs::read_dir(&area_path).map_err(|e| format!("read error: {}", e))?;
-
-        for skill_entry in skill_entries {
-            let skill_entry = skill_entry.map_err(|e| format!("read error: {}", e))?;
-            if !skill_entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-                continue;
-            }
-            let skill_md = skill_entry.path().join("SKILL.md");
-            if !skill_md.is_file() {
-                continue;
-            }
-
-            let skill_dir = skill_entry.file_name().to_string_lossy().into_owned();
+        let skill_path = entry.path();
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let skill_md = skill_path.join("SKILL.md");
+        if skill_md.is_file() {
             discovered.push(skill_summary_from_path(
                 root,
                 &skill_md,
-                format!("{}/{}", area, skill_dir),
-                skill_dir,
+                format!("workspace/{}", name),
+                name,
             ));
         }
     }
@@ -427,15 +404,29 @@ mod tests {
     }
 
     #[test]
-    fn nested_skill_layout_is_still_listed() {
-        let root = temp_root("nested-skills");
+    fn nested_skill_layout_is_ignored() {
+        let root = temp_root("nested-ignored");
         write_skill(&root, "skills/debug/diagnose", "diagnose");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
+        assert_eq!(skills.len(), 0, "nested skills must be ignored");
+    }
+
+    #[test]
+    fn root_skill_wins_without_descending() {
+        let root = temp_root("root-wins");
+        write_skill(&root, "skills/diagnose", "diagnose");
+        write_skill(&root, "skills/debug/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        // Only root-level diagnose should be discovered
         assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].id, "debug/diagnose");
+        assert_eq!(skills[0].id, "workspace/diagnose");
+        assert_eq!(skills[0].path, "skills/diagnose/SKILL.md");
     }
 
     #[test]
@@ -455,16 +446,19 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_skill_names_choose_deterministic_first_id() {
-        let root = temp_root("duplicate-skills");
-        write_skill(&root, "skills/diagnose", "diagnose");
-        write_skill(&root, "skills/debug/diagnose", "diagnose");
+    fn duplicate_root_skill_names_choose_deterministic_first_id() {
+        let root = temp_root("duplicate-root-skills");
+        // Two root-level directories, both with same name: frontmatter
+        // ids sort as workspace/diagnose-b < workspace/diagnose-c
+        write_skill(&root, "skills/diagnose-c", "duplicate-skill");
+        write_skill(&root, "skills/diagnose-b", "duplicate-skill");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].id, "debug/diagnose");
+        // First in sorted order by id wins
+        assert_eq!(skills[0].id, "workspace/diagnose-b");
     }
 
     #[test]

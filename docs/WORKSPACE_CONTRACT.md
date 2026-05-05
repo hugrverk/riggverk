@@ -73,6 +73,14 @@ The app can display a read-only summary of bundled default resources in Settings
 
 When the plan reports a safe target (`missing_directory` or `empty_existing_directory`), the app can create a new workspace by copying only allowlisted bundled default files into the target directory. Create does not overwrite existing files, does not execute scripts, does not write outside the target directory, and rejects unsafe, non-empty, valid-existing, and missing-parent targets. Created workspaces remain user-owned — the app does not take ownership or enforce schema beyond the initial copy.
 
+## Skill layout
+
+Canonical skill files live at `skills/<skill>/SKILL.md` — one directory per skill, directly under `skills/`.
+
+Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the public workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills, including private workspace skills, must follow the root-level layout.
+
+This is generic app behavior, not specific to any particular workspace or group.
+
 ## Validation
 
 Workspace validation is read-only. It checks for required markers and reports their presence. It does not execute scripts, read file contents beyond marker existence checks, or write to the filesystem. Diagnostics are visible in the app Workspace view; the backend command `get_workspace_diagnostics` reports marker-level results without running any scripts.

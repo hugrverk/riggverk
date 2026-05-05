@@ -180,7 +180,7 @@ The app includes a read-only Workspace Contract Validator that checks an active 
 | Skills directory | `skills/` exists and contains root-level skills at `skills/<skill>/SKILL.md` |
 | Skill metadata | Every `SKILL.md` has required `name` and `description` fields |
 | Skill uniqueness | No duplicate skill names (deterministic failure) |
-| Legacy skills | No legacy nested skills at `skills/engineering/*/SKILL.md` (fails — public contract is root-level only) |
+| Legacy skills | No legacy nested skills at `skills/<group>/<skill>/SKILL.md` (fails — public contract is root-level only; nested skills are ignored by skill discovery) |
 | Routing file | `routing/profiles.json` is optional; validates JSON, size, and structure when present |
 | Routing notes | All notes fields are string arrays (fails on type mismatch) |
 | Skill references | Every skill referenced in routing profiles exists in the workspace |
