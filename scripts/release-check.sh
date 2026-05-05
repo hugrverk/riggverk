@@ -38,16 +38,16 @@ scan_forbidden() {
   printf '  --> %s\n' "$label"
   scan_tmp="$(mktemp)"
   if command -v rg >/dev/null 2>&1; then
-    rg -n "$pattern" scripts apps/ux-workspace-app/src-tauri apps/ux-workspace-app/src \
-      apps/ux-workspace-app/resources/default-workspace/scripts \
+    rg -n "$pattern" scripts src-tauri src \
+      resources/default-workspace/scripts \
       -g '!scripts/release-check.sh' \
-      -g '!apps/ux-workspace-app/src-tauri/target/**' \
-      -g '!apps/ux-workspace-app/node_modules/**' \
-      -g '!apps/ux-workspace-app/dist/**' \
+      -g '!src-tauri/target/**' \
+      -g '!node_modules/**' \
+      -g '!dist/**' \
       >"$scan_tmp" || true
   else
-    find scripts apps/ux-workspace-app/src-tauri apps/ux-workspace-app/src \
-      apps/ux-workspace-app/resources/default-workspace/scripts \
+    find scripts src-tauri src \
+      resources/default-workspace/scripts \
       \( -name target -o -name node_modules -o -name dist \) -prune -o \
       -type f ! -name release-check.sh -exec grep -n -E "$pattern" /dev/null {} \; \
       >"$scan_tmp" || true
@@ -89,24 +89,24 @@ if ! grep -q "Matt Poc""ock" NOTICE.md; then
   printf 'FAIL: NOTICE.md must preserve Matt Pocock attribution\n' >&2
   exit 1
 fi
-if grep -q "<title>UX Work""space</title>" apps/ux-workspace-app/index.html; then
+if grep -q "<title>UX Work""space</title>" index.html; then
   printf 'FAIL: app HTML title is stale\n' >&2
   exit 1
 fi
-if grep -q "both the app source and private workspace d""ata" apps/ux-workspace-app/README.md; then
+if grep -q "both the app source and private workspace d""ata" README.md; then
   printf 'FAIL: app README contains stale private workspace transition copy\n' >&2
   exit 1
 fi
 
 step "bundled default workspace scripts"
-bash -n apps/ux-workspace-app/resources/default-workspace/scripts/bootstrap.sh
-bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh
-bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-agent-rules.sh
-bash -n apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh
+bash -n resources/default-workspace/scripts/bootstrap.sh
+bash -n resources/default-workspace/scripts/install-skills.sh
+bash -n resources/default-workspace/scripts/install-agent-rules.sh
+bash -n resources/default-workspace/scripts/install-opencode-config.sh
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
-  if search_has_match -l "$pattern" apps/ux-workspace-app/resources/default-workspace/scripts/; then
+  if search_has_match -l "$pattern" resources/default-workspace/scripts/; then
     printf 'FAIL: bundled default scripts contain placeholder phrase: %s\n' "$pattern" >&2
     exit 1
   fi
@@ -114,7 +114,7 @@ done
 
 step "bundled default install-skills.sh help mentions all five agents"
 for agent in codex opencode claude gemini auggie; do
-  if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
+  if ! bash resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
     exit 1
   fi
@@ -122,7 +122,7 @@ done
 
 step "bundled default install-agent-rules.sh help mentions all five rule targets"
 for agent in codex opencode claude gemini auggie; do
-  if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
+  if ! bash resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-agent-rules.sh --help missing rule target: %s\n' "$agent" >&2
     exit 1
   fi
@@ -130,14 +130,14 @@ done
 
 step "bundled default install-skills.sh rejects unsafe skill names"
 for bad in "" "../../" "../escape" "bad name" "BAD" "-bad" "a..b" "a/b"; do
-  if bash apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run 2>/dev/null; then
+  if bash resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run 2>/dev/null; then
     printf 'FAIL: install-skills.sh accepted unsafe skill name: %s\n' "$bad" >&2
     exit 1
   fi
 done
 
 step "bundled default install-skills.sh no unguarded rm -rf before containment check"
-skill_file="apps/ux-workspace-app/resources/default-workspace/scripts/install-skills.sh"
+skill_file="resources/default-workspace/scripts/install-skills.sh"
 if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
   if ! grep -q 'ensure_contained' "$skill_file"; then
     printf 'FAIL: install-skills.sh has rm -rf without ensure_contained guard\n' >&2
@@ -146,30 +146,30 @@ if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
 fi
 
 step "bundled default workspace marker"
-if [ ! -f apps/ux-workspace-app/resources/default-workspace/.ux-workspace/workspace.json ]; then
+if [ ! -f resources/default-workspace/.ux-workspace/workspace.json ]; then
   printf 'FAIL: bundled default workspace marker not found\n' >&2
   exit 1
 fi
 
 step "bundled default opencode.json"
-python3 -m json.tool apps/ux-workspace-app/resources/default-workspace/templates/opencode.json >/dev/null
-if ! grep -q '"default_agent": "autopilot"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+python3 -m json.tool resources/default-workspace/templates/opencode.json >/dev/null
+if ! grep -q '"default_agent": "autopilot"' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing default_agent autopilot\n' >&2
   exit 1
 fi
-if ! grep -q '"model": "opencode-go/deepseek-v4-pro"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+if ! grep -q '"model": "opencode-go/deepseek-v4-pro"' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing model deepseek-v4-pro\n' >&2
   exit 1
 fi
-if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing small_model deepseek-v4-flash\n' >&2
   exit 1
 fi
-if ! grep -q '"autoupdate": "notify"' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+if ! grep -q '"autoupdate": "notify"' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing autoupdate notify\n' >&2
   exit 1
 fi
-if ! grep -q '"snapshot": true' apps/ux-workspace-app/resources/default-workspace/templates/opencode.json; then
+if ! grep -q '"snapshot": true' resources/default-workspace/templates/opencode.json; then
   printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
   exit 1
 fi
@@ -177,19 +177,19 @@ printf '  opencode.json: default_agent=autopilot model=deepseek-v4-pro small_mod
 
 step "bundled default agents exist and non-empty"
 for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
-  if [ ! -s "apps/ux-workspace-app/resources/default-workspace/agents/$agent" ]; then
+  if [ ! -s "resources/default-workspace/agents/$agent" ]; then
     printf 'FAIL: bundled default agent missing or empty: agents/%s\n' "$agent" >&2
     exit 1
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
-if ! grep -q 'mode: primary' apps/ux-workspace-app/resources/default-workspace/agents/autopilot.md; then
+if ! grep -q 'mode: primary' resources/default-workspace/agents/autopilot.md; then
   printf 'FAIL: bundled autopilot.md missing mode: primary\n' >&2
   exit 1
 fi
 printf '  autopilot.md: mode=primary\n'
 for subagent in repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
-  if ! grep -q 'mode: subagent' "apps/ux-workspace-app/resources/default-workspace/agents/$subagent"; then
+  if ! grep -q 'mode: subagent' "resources/default-workspace/agents/$subagent"; then
     printf 'FAIL: bundled %s missing mode: subagent\n' "$subagent" >&2
     exit 1
   fi
@@ -197,13 +197,13 @@ done
 printf '  5 subagents verified mode=subagent\n'
 
 step "bundled default install-opencode-config.sh help mentions agents"
-if ! bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
+if ! bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
   printf 'FAIL: install-opencode-config.sh --help missing agents mention\n' >&2
   exit 1
 fi
 
 step "bundled default install-opencode-config.sh agents count in help"
-agent_count_help="$(bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -o '\.md' | wc -l | tr -d ' ' || true)"
+agent_count_help="$(bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -o '\.md' | wc -l | tr -d ' ' || true)"
 if [ "$agent_count_help" -lt 2 ]; then
   printf 'FAIL: install-opencode-config.sh --help has insufficient agents references (expected >= 2 .md refs, found %s)\n' "$agent_count_help" >&2
   exit 1
@@ -214,7 +214,7 @@ tmpdir="$(mktemp -d)"
 OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
 OPENCODE_AGENTS_DIR="$tmpdir/agents" \
 UX_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
+  bash resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
 apply_ok=true
 if [ ! -f "$tmpdir/opencode.json" ]; then
   printf 'FAIL: install-opencode-config.sh --apply did not write opencode.json\n' >&2
@@ -244,19 +244,19 @@ if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written, content checks passed\n'
 
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
-if OPENCODE_AGENTS_DIR=/ bash apps/ux-workspace-app/resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
+if OPENCODE_AGENTS_DIR=/ bash resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
   printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=/\n' >&2
   exit 1
 fi
 
 step "tauri app resources config"
-if ! search_quiet "default-workspace" apps/ux-workspace-app/src-tauri/tauri.conf.json; then
+if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
   printf 'FAIL: tauri conf missing bundled default workspace resource path\n' >&2
   exit 1
 fi
 
 step "bundled default skills non-empty"
-skill_files="$(find apps/ux-workspace-app/resources/default-workspace/skills -type f -name SKILL.md)"
+skill_files="$(find resources/default-workspace/skills -type f -name SKILL.md)"
 if [ -z "$skill_files" ]; then
   printf 'FAIL: bundled default skills must be non-empty\n' >&2
   exit 1
@@ -283,14 +283,14 @@ done < <(printf '%s\n' "$skill_files")
 
 step "bundled default baseline skills exist"
 for baseline in diagnose security-review context-budget to-prd grill-with-docs improve-codebase-architecture; do
-  if [ ! -f "apps/ux-workspace-app/resources/default-workspace/skills/${baseline}/SKILL.md" ]; then
+  if [ ! -f "resources/default-workspace/skills/${baseline}/SKILL.md" ]; then
     printf 'FAIL: baseline bundled skill missing: skills/%s/SKILL.md\n' "$baseline" >&2
     exit 1
   fi
 done
 
 step "bundled default public skill count"
-skill_count="$(find apps/ux-workspace-app/resources/default-workspace/skills -type f -name SKILL.md | wc -l | tr -d ' ')"
+skill_count="$(find resources/default-workspace/skills -type f -name SKILL.md | wc -l | tr -d ' ')"
 if [ "$skill_count" -ne 22 ]; then
   printf 'FAIL: expected 22 public starter skills, found %s\n' "$skill_count" >&2
   exit 1
@@ -298,8 +298,8 @@ fi
 
 step "bundled default no private workflow skills"
 if search_has_match "woocommerce-pdp-review|wordpress-woocommerce|nextjs-product-slice|supabase-rls-review" \
-  apps/ux-workspace-app/resources/default-workspace \
-  apps/ux-workspace-app/src-tauri/src/commands/defaults.rs; then
+  resources/default-workspace \
+  src-tauri/src/commands/defaults.rs; then
   printf 'FAIL: bundled default workspace must not contain private/domain-specific workflow skills\n' >&2
   exit 1
 fi
@@ -307,7 +307,7 @@ fi
 step "bundled default no private names"
 private_name_pattern="$(printf '%s|' "C""arl" "Dis""chornan" "Disch""örnan" "Hantverks""registret" "Auggie cred""its" "personal mod""el")"
 private_name_pattern="${private_name_pattern%|}"
-if search_has_match -w "$private_name_pattern" apps/ux-workspace-app/resources/default-workspace; then
+if search_has_match -w "$private_name_pattern" resources/default-workspace; then
   printf 'FAIL: bundled default workspace must not contain private names\n' >&2
   exit 1
 fi
@@ -320,7 +320,6 @@ scan_forbidden 'skills@latest' 'skills@latest'
 scan_forbidden '\.agents/skills' '.agents/skills'
 
 step "app checks"
-cd apps/ux-workspace-app
 npm run build
 
 cd src-tauri

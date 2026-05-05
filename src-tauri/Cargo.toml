@@ -1,12 +1,12 @@
 [package]
-name = "ux-workspace-app"
+name = "agent-workspace"
 version = "0.1.0"
-description = "Local macOS GUI for UX Workspace"
+description = "Local macOS GUI for Agent Workspace"
 authors = []
 edition = "2021"
 
 [lib]
-name = "ux_workspace_app_lib"
+name = "agent_workspace_lib"
 crate-type = ["lib", "cdylib", "staticlib"]
 
 [build-dependencies]

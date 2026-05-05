@@ -55,7 +55,7 @@ backup_root() {
   elif [ -n "${UX_WORKSPACE_BACKUP_DIR:-}" ]; then
     printf '%s' "$UX_WORKSPACE_BACKUP_DIR"
   else
-    printf '%s/Library/Application Support/ai.openworkspace.ux-workspace/backups' "${HOME:?}"
+    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
   fi
 }
 

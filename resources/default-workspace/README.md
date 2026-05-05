@@ -21,7 +21,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all five agents), `--global`/`--project`, `--skill`, and `--all`.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
-All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories.
+All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories.
 
 ## Separation
 

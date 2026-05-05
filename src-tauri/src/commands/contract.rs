@@ -802,7 +802,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("ux-workspace-app-contract-{name}-{nonce}"));
+        let root = std::env::temp_dir().join(format!("agent-workspace-contract-{name}-{nonce}"));
         fs::create_dir_all(&root).expect("create temp root");
         root
     }

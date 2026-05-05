@@ -2,7 +2,7 @@
   "$schema": "https://raw.githubusercontent.com/nicedoc/schemas/main/json/tauri/config.schema.json",
   "productName": "Agent Workspace",
   "version": "0.1.0",
-  "identifier": "ai.openworkspace.ux-workspace",
+  "identifier": "ai.agentworkspace.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",

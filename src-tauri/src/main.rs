@@ -2,5 +2,5 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 fn main() {
-    ux_workspace_app_lib::run()
+    agent_workspace_lib::run()
 }

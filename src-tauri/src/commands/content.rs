@@ -521,7 +521,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-workspace-app-docs-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("agent-workspace-docs-{name}-{nonce}"))
     }
 
     fn write_file(root: &PathBuf, rel: &str, content: &str) {
@@ -2131,7 +2131,7 @@ mod agent_metadata_tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-workspace-app-agmeta-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("agent-workspace-agmeta-{name}-{nonce}"))
     }
 
     fn write_metadata(root: &PathBuf, json: &str) {

@@ -93,8 +93,8 @@ fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
         }
     }
     agent_targets::home_dir()
-        .map(|h| h.join("Projects/ux-workspace"))
-        .unwrap_or_else(|_| PathBuf::from("Projects/ux-workspace"))
+        .map(|h| h.join("Projects/agent-workspace"))
+        .unwrap_or_else(|_| PathBuf::from("Projects/agent-workspace"))
 }
 
 pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
@@ -792,7 +792,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-workspace-app-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("agent-workspace-{name}-{nonce}"))
     }
 
     fn mkdir(root: &PathBuf, rel: &str) {
@@ -860,7 +860,7 @@ mod tests {
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
-        // No apps/ux-workspace-app directory — this should still be valid
+        // No app source directory inside workspace — this should still be valid
 
         let result = validate_workspace_root(root.clone());
         cleanup(&root);

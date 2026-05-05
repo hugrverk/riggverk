@@ -1,7 +1,7 @@
 .DS_Store
 
 # Tauri app build artifacts
-apps/ux-workspace-app/node_modules/
-apps/ux-workspace-app/dist/
-apps/ux-workspace-app/src-tauri/target/
-apps/ux-workspace-app/src-tauri/gen/
+node_modules/
+dist/
+src-tauri/target/
+src-tauri/gen/

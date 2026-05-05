@@ -431,7 +431,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        let root = std::env::temp_dir().join(format!("ux-workspace-app-routing-{name}-{nonce}"));
+        let root = std::env::temp_dir().join(format!("agent-workspace-routing-{name}-{nonce}"));
         fs::create_dir_all(&root).expect("create temp root");
         root
     }
@@ -951,7 +951,7 @@ mod tests {
         let backup_root = std::path::PathBuf::from(
             std::env::var("UX_WORKSPACE_BACKUP_DIR").unwrap_or_else(|_| {
                 format!(
-                    "{}/Library/Application Support/ai.openworkspace.ux-workspace/backups",
+                    "{}/Library/Application Support/ai.agentworkspace.app/backups",
                     home
                 )
             }),

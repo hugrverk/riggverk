@@ -8,8 +8,8 @@ Run this checklist before sharing a built app bundle with another user.
 
 - [ ] `git status --short` is clean (no uncommitted changes)
 - [ ] `./scripts/release-check.sh` passes
-- [ ] `cd apps/ux-workspace-app && npm run tauri build` succeeds (skip if environment cannot produce macOS bundles)
-- [ ] No secrets, private keys, names, or credential-bearing data in `apps/ux-workspace-app/resources/default-workspace/`
+- [ ] `npm run tauri build` succeeds (skip if environment cannot produce macOS bundles)
+- [ ] No secrets, private keys, names, or credential-bearing data in `resources/default-workspace/`
 - [ ] Current branch and commit noted for the pass/fail report
 
 ## 2. Build / Install Smoke
@@ -91,7 +91,7 @@ Dry-runs only unless testing your own machine:
 - [ ] install-skills dry-run from a created workspace reports the bundled skills
 - [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --gemini --auggie` completes without error
 - [ ] Do not run `--apply` actions when testing someone else's machine
-- [ ] Backups exist under `~/Library/Application Support/ai.openworkspace.ux-workspace/backups` before real sync if applicable
+- [ ] Backups exist under `~/Library/Application Support/ai.agentworkspace.app/backups` before real sync if applicable
 
 ## 7. Skills Selection Smoke (Workspace Operations)
 
@@ -123,8 +123,7 @@ Dry-runs only unless testing your own machine:
 
 ## 9. Known Limitations
 
-- Internal repo/package names still use `ux-workspace` during transition (marker directory, workspace_type, app source directory)
-- Workspace marker naming is still `.ux-workspace/workspace.json`
+- Workspace marker naming is `.ux-workspace/workspace.json` (established contract marker; rename is a future dedicated slice)
 - Create flow has no rollback on rare I/O/race failure after preflight
 - Import/upgrade flow is not implemented
 - First public/share build should be tested as an installed `.app` bundle, not only dev mode

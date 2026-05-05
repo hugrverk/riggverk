@@ -165,7 +165,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-workspace-app-status-{name}-{nonce}"))
+        std::env::temp_dir().join(format!("agent-workspace-status-{name}-{nonce}"))
     }
 
     #[test]

@@ -4,7 +4,7 @@
 
 A workspace folder is a user-owned data directory containing configuration, documentation, skills, templates, and scripts that can be synced to agent tool folders. It is identified by `.ux-workspace/workspace.json` and a set of required workspace markers.
 
-Workspace contents are user-writable and can be git-versioned. The workspace folder does not need to contain the ux-workspace-app source code. The app operates on a workspace folder, not the other way around.
+Workspace contents are user-writable and can be git-versioned. The workspace folder does not need to contain the Agent Workspace app source code. The app operates on a workspace folder, not the other way around.
 
 ## Current required markers
 
@@ -27,7 +27,7 @@ All markers must be present for a workspace to pass validation. A folder missing
 
 ## What a workspace is not
 
-- The workspace folder is not the app source checkout. The app source lives in `apps/ux-workspace-app/`, which is no longer required inside the workspace folder.
+- The workspace folder is not the app source checkout. The app source lives in the repository root and is separate from any workspace folder.
 - The workspace is not a generic sync target. All backend actions remain allowlisted and only operate on known-marker paths within the validated workspace root.
 - The workspace does not contain secrets, private keys, or credential-bearing data. `.env` files and similar are outside the workspace contract.
 
@@ -43,18 +43,9 @@ The app supports editing `templates/global-agent-rules.md` through the allowlist
 
 ## Transition state
 
-This repository currently contains both:
+The workspace marker directory `.ux-workspace/` and the `UX_WORKSPACE_PATH` / `UX_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
-- The ux-workspace-app source code (`apps/ux-workspace-app/`).
-- Private workspace data (docs, skills, templates, scripts, config).
-
-This is a transitional arrangement. The `ux-workspace` naming (marker directory, workspace_type, app source directory) is the current transitional naming — the final public app name is "Agent Workspace". Internal identifiers are not renamed in this slice; only public-facing copy is clarified.
-
-Over time the two concerns will be separated:
-
-- A public app repository will bundle generic starter workspace resources (default scripts, templates, a README, 22 starter skills, and a workspace marker).
-- Private workspace repositories will store user-owned docs, skills, templates, and config without containing app source code.
-- Create, import, and upgrade flows for workspaces are future work.
+This repository is the public Agent Workspace app source. Private workspace repositories store user-owned docs, skills, templates, and config without containing app source code. Create, import, and upgrade flows for workspaces are future work.
 
 ## Script location
 
@@ -68,7 +59,7 @@ Script-backed actions will remain allowlisted regardless of where the scripts li
 
 ## Bundled default workspace resources
 
-The app source carries a generic starter workspace under `apps/ux-workspace-app/resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, and 22 starter skills.
+The app source carries a generic starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, and 22 starter skills.
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 

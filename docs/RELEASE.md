@@ -66,4 +66,4 @@ After code changes that affect the app, manually check:
 ## Remaining Limits
 
 - Release check does not replace manual GUI smoke for view wiring, folder picker behavior, installed bundles, or native file-open behavior.
-- Internal package, crate, marker, settings, and source path identifiers still use transitional `ux-workspace` names.
+- The workspace marker directory `.ux-workspace/` and related env vars (`UX_WORKSPACE_PATH`, `UX_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.
