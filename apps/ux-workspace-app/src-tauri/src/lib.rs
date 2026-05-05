@@ -5,7 +5,8 @@ mod settings;
 
 use commands::{
     create_doc, create_workspace_from_defaults, get_agent_targets, get_backup_details,
-    get_default_workspace_summary, get_settings, get_status, get_target_profiles,
+    get_default_workspace_summary, get_routing_profiles, get_settings, get_status,
+    get_target_profiles,
     get_workspace_diagnostics, install_skills, list_agent_sources, list_backups, list_docs,
     list_skills, open_agent_source, open_agent_template, open_backups_folder, open_config_template,
     open_doc, open_install_skills_script, open_skill, plan_create_workspace, read_agent_source,
@@ -51,6 +52,7 @@ pub fn run() {
             list_backups,
             open_backups_folder,
             get_backup_details,
+            get_routing_profiles,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -136,3 +136,25 @@ export interface CreateWorkspaceResult {
   warnings: string[];
   message: string;
 }
+
+export interface RoutingProfile {
+  id: string;
+  title: string;
+  description: string;
+  target_tool: string;
+  recommended_model: string;
+  db_migration: string;
+  risk: string;
+  skills: string[];
+  agent_profile: string | null;
+  notes: string[];
+  missing_skills: string[];
+  missing_agent: boolean;
+}
+
+export interface RoutingProfilesResponse {
+  exists: boolean;
+  path: string;
+  profiles: RoutingProfile[];
+  warnings: string[];
+}

@@ -1765,6 +1765,17 @@ pub fn save_config_template(target_id: String, content: String) -> Result<Action
 
 const AGENTS_DIR: &str = "agents";
 
+pub(crate) fn known_agent_files() -> &'static [&'static str] {
+    &[
+        "autopilot.md",
+        "repo-scout.md",
+        "code-reviewer.md",
+        "security-auditor.md",
+        "docs-writer.md",
+        "qa-verifier.md",
+    ]
+}
+
 const KNOWN_AGENT_FILES: &[&str] = &[
     "autopilot.md",
     "repo-scout.md",

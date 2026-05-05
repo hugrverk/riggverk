@@ -9,10 +9,10 @@ use super::workspace::{path_arg, workspace_root};
 
 #[derive(Serialize)]
 pub struct SkillSummary {
-    id: String,
-    name: String,
-    description: String,
-    path: String,
+    pub(crate) id: String,
+    pub(crate) name: String,
+    pub(crate) description: String,
+    pub(crate) path: String,
 }
 
 fn skill_summary_from_path(
@@ -38,7 +38,7 @@ fn skill_summary_from_path(
     }
 }
 
-fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> {
+pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> {
     let skills_dir = root.join("skills");
     let mut discovered: Vec<SkillSummary> = Vec::new();
 

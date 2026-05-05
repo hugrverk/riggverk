@@ -15,6 +15,27 @@ The app has three top-level views:
 - **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, skills install (with expandable skill selector for individual skill toggles, agent toggles, scope/target selection, dry-run and install actions), release-check, and backup management. Integrated terminal output panel. All operation actions report through a single terminal pane.
 - **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, and custom context doc creation. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering. Agents provides agent source file list with edit/open for each. Configs provides config template preview/edit per target with metadata. Library handles source editing; operations (sync, install) happen in Workspace.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
+- **Routing** — read-only operator guidance view. Displays routing profiles from an optional `routing/profiles.json` sidecar file in the workspace. Each profile recommends tool/model/skill/agent combinations for specific task types. Profiles are purely informational operator guidance — they do not affect agent runtime behavior, do not run agents, and do not change OpenCode/Codex/Claude/Gemini/Auggie configuration. Missing `routing/profiles.json` is handled gracefully. Profile references to skills or agent files not present in the workspace are surfaced as non-blocking validation warnings. A "copy metadata block" action copies operator metadata for clipboard use without generating a full prompt. Routing is safe to omit.
+
+### Routing profiles
+
+`routing/profiles.json` is an optional workspace sidecar file. Each profile includes:
+- `id`, `title`, `description` — profile identity
+- `target_tool` — recommended coding tool (e.g. `opencode`, `codex`)
+- `recommended_model` — recommended model
+- `db_migration` — whether the profile assumes DB changes (`YES`/`NO`)
+- `risk` — operator risk level (`low`/`medium`/`high`)
+- `skills` — recommended skill names matching workspace skill sources
+- `agent_profile` — optional recommended agent source file (e.g. `security-auditor.md`)
+- `notes` — free-form operator guidance notes
+
+The file is read-only operator guidance. It does not:
+- Run agents or trigger tool actions
+- Change OpenCode config behavior
+- Modify skill install destinations or sync semantics
+- Affect enabled target selection or settings
+
+Profiles may reference skills or agent files that are not present in the current workspace. Missing references are displayed as non-blocking validation warnings in the UI. A "copy metadata block" button copies a plain-text operator summary (target tool, model, DB/migration, risk, skills, agent profile, routing profile id) without generating a full prompt.
 
 ### Agent Rules Template
 
@@ -295,6 +316,7 @@ apps/ux-workspace-app/
   │   ├── views/
   │   │   ├── WorkspaceView.tsx Workspace operations cockpit and skills install selector
   │   │   ├── LibraryView.tsx   Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
+  │   │   ├── RoutingView.tsx   Read-only routing profiles viewer
   │   │   └── SettingsView.tsx  Settings view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
@@ -311,6 +333,7 @@ apps/ux-workspace-app/
         │   ├── actions.rs  Action dispatcher and script actions
         │   ├── content.rs  Docs/templates/config content commands
         │   ├── process.rs  Command result and process helpers
+        │   ├── routing.rs  Routing profile commands
         │   ├── settings_commands.rs Settings and target commands
         │   ├── skills.rs   Skill listing/install commands
         │   ├── status.rs   Workspace status command
