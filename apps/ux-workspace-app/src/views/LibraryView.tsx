@@ -11,12 +11,12 @@ import type {
 
 export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
 
-const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
-  { id: "docs", label: "Docs" },
-  { id: "rules", label: "Rules" },
-  { id: "skills", label: "Skills" },
-  { id: "agents", label: "Agents" },
-  { id: "configs", label: "Configs" },
+const SOURCE_TYPES: { id: LibrarySourceType; label: string; icon: string }[] = [
+  { id: "docs", label: "Docs", icon: "\u2630" },
+  { id: "rules", label: "Rules", icon: "\u2691" },
+  { id: "skills", label: "Skills", icon: "\u2699" },
+  { id: "agents", label: "Agents", icon: "\u263A" },
+  { id: "configs", label: "Configs", icon: "\u2692" },
 ];
 
 interface LibraryViewProps {
@@ -359,16 +359,11 @@ function ConfigItemList({
 
 function sourceTypeLabel(type: LibrarySourceType): string {
   switch (type) {
-    case "docs":
-      return "Docs";
-    case "rules":
-      return "Rules";
-    case "skills":
-      return "Skills";
-    case "agents":
-      return "Agents";
-    case "configs":
-      return "Configs";
+    case "docs": return "Docs";
+    case "rules": return "Rules";
+    case "skills": return "Skills";
+    case "agents": return "Agents";
+    case "configs": return "Configs";
   }
 }
 
@@ -733,6 +728,61 @@ export function LibraryView(props: LibraryViewProps) {
 
   const sourceTypeTitle = sourceTypeLabel(sourceType);
 
+  // Sidebar content per source type
+  const sidebarContent = () => {
+    switch (sourceType) {
+      case "docs":
+        return (
+          <DocItemList
+            docs={docs}
+            activeId={activeDoc?.id ?? null}
+            onSelect={onSelectDoc}
+            workspaceValid={workspaceValid}
+            onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
+          />
+        );
+      case "rules":
+        return <RulesItemList agentTemplate={agentTemplate} ruleTargets={ruleTargets} />;
+      case "skills":
+        return (
+          <SkillItemList
+            skills={skills}
+            activeId={activeSkillId}
+            onSelect={onSelectSkillPreview}
+            search={skillSearch}
+            onSearch={onSetSkillSearch}
+          />
+        );
+      case "agents":
+        return <AgentItemList agents={agentSources} activeId={activeAgentId} onSelect={onSelectAgent} />;
+      case "configs":
+        return (
+          <ConfigItemList
+            configTargets={configTargets}
+            activeTargetId={activeConfigTargetId}
+            onSelect={onSelectConfigTarget}
+            configContent={configTemplateContent}
+          />
+        );
+    }
+  };
+
+  // Count helpers for source rail badges
+  const docsCount = docs.length;
+  const skillsCount = skills.length;
+  const agentsCount = agentSources.length;
+  const configCount = configTargets.length;
+
+  function sourceCount(type: LibrarySourceType): string | null {
+    switch (type) {
+      case "docs": return docsCount > 0 ? String(docsCount) : null;
+      case "skills": return skillsCount > 0 ? String(skillsCount) : null;
+      case "agents": return agentsCount > 0 ? String(agentsCount) : null;
+      case "configs": return configCount > 0 ? String(configCount) : null;
+      default: return null;
+    }
+  }
+
   return (
     <section className="lib-frame">
       <div className="lib-topline">
@@ -741,56 +791,33 @@ export function LibraryView(props: LibraryViewProps) {
       </div>
 
       <div className="lib-layout">
-        <div className="lib-sidebar">
-          <nav className="lib-source-tabs" role="tablist" aria-label="Source type">
-            {SOURCE_TYPES.map((st) => (
+        {/* Vertical source rail */}
+        <nav className="lib-source-rail" role="tablist" aria-label="Source type">
+          {SOURCE_TYPES.map((st) => {
+            const count = sourceCount(st.id);
+            return (
               <button
                 key={st.id}
-                className={`lib-source-tab ${sourceType === st.id ? "lib-source-tab-active" : ""}`}
+                className={`lib-source-rail-btn ${sourceType === st.id ? "lib-source-rail-btn-active" : ""}`}
                 onClick={() => onSetSourceType(st.id)}
                 role="tab"
                 aria-selected={sourceType === st.id}
+                title={`${st.label}${count ? ` (${count})` : ""}`}
               >
-                {st.label}
+                <span className="lib-source-rail-icon">{st.icon}</span>
+                <span className="lib-source-rail-label">{st.label}</span>
+                {count && <span className="lib-source-rail-count">{count}</span>}
               </button>
-            ))}
-          </nav>
+            );
+          })}
+        </nav>
 
-          {/* sidebar content based on source type */}
-          {sourceType === "docs" && (
-            <DocItemList
-              docs={docs}
-              activeId={activeDoc?.id ?? null}
-              onSelect={onSelectDoc}
-              workspaceValid={workspaceValid}
-              onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
-            />
-          )}
-          {sourceType === "rules" && (
-            <RulesItemList agentTemplate={agentTemplate} ruleTargets={ruleTargets} />
-          )}
-          {sourceType === "skills" && (
-            <SkillItemList
-              skills={skills}
-              activeId={activeSkillId}
-              onSelect={onSelectSkillPreview}
-              search={skillSearch}
-              onSearch={onSetSkillSearch}
-            />
-          )}
-          {sourceType === "agents" && (
-            <AgentItemList agents={agentSources} activeId={activeAgentId} onSelect={onSelectAgent} />
-          )}
-          {sourceType === "configs" && (
-            <ConfigItemList
-              configTargets={configTargets}
-              activeTargetId={activeConfigTargetId}
-              onSelect={onSelectConfigTarget}
-              configContent={configTemplateContent}
-            />
-          )}
+        {/* Item list sidebar */}
+        <div className="lib-sidebar">
+          {sidebarContent()}
         </div>
 
+        {/* Main content */}
         <div className="lib-main">
           {mainContent ? (
             mainContent
