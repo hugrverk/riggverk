@@ -2,32 +2,58 @@
 
 ## What this is
 
-This is an agent workspace — a user-owned directory that stores docs, skills, templates, and scripts. An agent workspace app can read this directory, display its contents, and sync templates to agent tool folders on your system.
+This is an agent workspace — a user-owned directory that stores docs, skills, templates, and scripts. The Agent Workspace app reads this directory, displays its contents, and syncs templates to agent tool folders on your system.
+
+## What the app is and is not
+
+The app is a desktop sync tool for managing agent configuration across tools like OpenCode, Codex, Claude, Gemini, and Auggie. It helps you:
+
+- Browse and edit workspace docs, skills, templates, and rules
+- Preview sync operations (dry-run/diff) before writing files
+- Sync agent rules and config to tool folders
+- Install skills to agent tool directories
+- Run release verification checks on the workspace
+
+The app does not:
+
+- Write files automatically on launch — all writes are explicit
+- Manage GitHub authentication or create remote repos automatically
+- Encrypt workspace contents — the workspace is plain text owned by you
+- Auto-create workspace directories — you confirm the path first
+- Import or upgrade existing non-workspace directories
 
 ## Mental model
 
-The app manages sync and display. The workspace is your data. The app reads your workspace; it does not overwrite your files without your action.
+- **The app** manages sync and display operations.
+- **The workspace** is your data — a directory of plain-text files you own and version.
+- The app reads your workspace but never overwrites anything without your explicit action.
 
-## What the app manages
+## Safe first steps (first 5 minutes)
 
-- Displays workspace docs, templates, and skill catalog
-- Syncs agent rules from `templates/global-agent-rules.md` to configured agent tool paths
-- Syncs OpenCode config from `templates/opencode.json`
-- Installs skills from `skills/` to agent tool skill folders
-- Runs read-only release verification
+1. **Inspect the default workspace** — the app shows a "Bundled Starter" preview in the Workspace tab.
+2. **Create a workspace** — choose a folder or use the default path, then dry-run and create.
+3. **Open the Library tab** — browse this doc, Concepts, and guides grouped under Start, Guides, and Reference.
+4. **Read CONCEPTS.md** — understand workspace terms before editing.
+5. **Review templates** — look at `templates/global-agent-rules.md` and `templates/opencode.json`.
 
-## Safest first steps
+## What to click in the app
 
-1. Review `templates/global-agent-rules.md` — this defines agent behavior rules synced to your tools.
-2. Review `templates/opencode.json` — this defines permission boundaries and tool configuration.
-3. Add skills under `skills/` — each skill lives in its own folder with a `SKILL.md` file.
-4. Run dry-run before sync — verify what would change without writing files.
-5. Apply only after reviewing diffs.
+- **Workspace tab**: View diagnostics, create workspace, sync rules/configs, install skills, verify workspace.
+- **Library tab**: Read and edit docs, rules, skills, agents, and config templates.
+- **Routing tab**: Manage sync routing profiles for different setups.
+- **Settings tab**: Configure appearance and target tool settings.
 
 ## Dry-run before apply
 
-Always prefer dry-run (preview/diff) before applying changes to your agent tool folders. This lets you review what would be written before writing anything.
+Always dry-run (preview/diff) before applying changes. The app shows what would be written without touching files. Scripts follow the same pattern: `--dry-run`, `--diff`, then `--apply`.
 
 ## Workspace ownership
 
-This workspace is yours. You can edit docs, add skills, modify templates, and version everything with git. The app does not hide or encrypt your workspace contents.
+This workspace is yours. Edit docs, add skills, modify templates, version with Git. The app does not hide, encrypt, or lock your workspace contents.
+
+## Next steps
+
+- Read [CONCEPTS.md](CONCEPTS.md) for core terms
+- Read [USING_THE_APP.md](USING_THE_APP.md) for a practical walkthrough
+- Read [GIT_VERSIONING.md](GIT_VERSIONING.md) to version the workspace
+- Run a dry-run sync to preview what would change

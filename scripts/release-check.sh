@@ -145,6 +145,24 @@ if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
   fi
 fi
 
+step "bundled default docs exist and non-empty"
+for doc in \
+  resources/default-workspace/docs/START_HERE.md \
+  resources/default-workspace/docs/CONCEPTS.md \
+  resources/default-workspace/docs/USING_THE_APP.md \
+  resources/default-workspace/docs/GIT_VERSIONING.md \
+  resources/default-workspace/docs/WORKFLOWS.md \
+  resources/default-workspace/docs/SKILLS.md \
+  resources/default-workspace/docs/AGENT_RULES.md \
+  resources/default-workspace/docs/OPENCODE_CONFIG.md \
+  resources/default-workspace/docs/TROUBLESHOOTING.md; do
+  if [ ! -s "$doc" ]; then
+    printf 'FAIL: bundled default doc missing or empty: %s\n' "$doc" >&2
+    exit 1
+  fi
+done
+printf '  9 bundled docs verified non-empty\n'
+
 step "bundled default workspace marker"
 if [ ! -f resources/default-workspace/.ux-workspace/workspace.json ]; then
   printf 'FAIL: bundled default workspace marker not found\n' >&2

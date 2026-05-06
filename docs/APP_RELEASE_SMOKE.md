@@ -29,7 +29,8 @@ Folder picker and workspace path:
 - [ ] Type a path manually — draft updates
 - [ ] Empty/cleared path falls back to env var or built-in default
 - [ ] Invalid workspace path shows missing markers and "invalid workspace"
-- [ ] Workspace view shows compact validity note when no valid workspace selected
+- [ ] Workspace view shows compact validity note and first-run guide when no valid workspace selected
+- [ ] First-run guide shows 5 numbered steps (choose path, dry-run, create, library, dry-run sync) and security hints
 - [ ] Idle terminal shows "$ operations ready" with workspace status, branch, and target counts
 - [ ] Idle terminal suggests next commands: "try: pull, diff rules, sync configs, release-check"
 - [ ] After a command runs, the terminal shows the action name, OK/FAILED status, exit code, and relative timestamp
@@ -69,7 +70,10 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 - [ ] Source rail uses text-only labels with count badges; no unicode icons
 - [ ] Source rail active source has a subtle accent underline indicator
 - [ ] Library view allows switching between source types: Docs, Rules, Skills, Agents, Configs
-- [ ] Docs are grouped by section in the sidebar
+- [ ] Docs are grouped by section in the sidebar (Start, Guides, Reference, Context)
+- [ ] Start section includes README, Start Here, and Concepts
+- [ ] Guides section includes Using the App, Git Versioning, and Workflows (when present)
+- [ ] Reference section includes Skills, Agent Rules, OpenCode Config, and Troubleshooting (when present)
 - [ ] Selecting a doc renders its Markdown content in the main pane
 - [ ] "open" button opens the doc in the system editor
 - [ ] Rules shows Global Rules template with preview/edit tabs

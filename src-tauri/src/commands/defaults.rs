@@ -60,6 +60,9 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             &[
                 "docs/START_HERE.md",
                 "docs/CONCEPTS.md",
+                "docs/USING_THE_APP.md",
+                "docs/GIT_VERSIONING.md",
+                "docs/WORKFLOWS.md",
                 "docs/SKILLS.md",
                 "docs/AGENT_RULES.md",
                 "docs/OPENCODE_CONFIG.md",
@@ -342,6 +345,9 @@ mod tests {
         for &rel in &[
             "docs/START_HERE.md",
             "docs/CONCEPTS.md",
+            "docs/USING_THE_APP.md",
+            "docs/GIT_VERSIONING.md",
+            "docs/WORKFLOWS.md",
             "docs/SKILLS.md",
             "docs/AGENT_RULES.md",
             "docs/OPENCODE_CONFIG.md",

@@ -1239,6 +1239,9 @@ mod tests {
         for &rel in &[
             "docs/START_HERE.md",
             "docs/CONCEPTS.md",
+            "docs/USING_THE_APP.md",
+            "docs/GIT_VERSIONING.md",
+            "docs/WORKFLOWS.md",
             "docs/SKILLS.md",
             "docs/AGENT_RULES.md",
             "docs/OPENCODE_CONFIG.md",

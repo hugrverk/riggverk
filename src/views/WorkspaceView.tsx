@@ -548,8 +548,54 @@ export function WorkspaceView({
                       ))}
                     </div>
                   )}
+                  {createResult.success && (
+                    <div className="ws-setup-hint-row">
+                      <div className="ws-setup-hint">
+                        Next: open <strong>Library &gt; Start Here</strong>
+                      </div>
+                      <div className="ws-setup-hint ws-setup-hint-dim">
+                        Optional: initialize Git in the workspace (see GIT_VERSIONING.md)
+                      </div>
+                    </div>
+                  )}
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---- First Run Guide (visible when no valid workspace) ---- */}
+      {!workspaceValid && (
+        <div className="ws-guide" role="region" aria-label="First run guide">
+          <div className="ws-guide-heading">First Run</div>
+          <div className="ws-guide-body">
+            <p className="ws-guide-intro">
+              Agent Workspace manages agent rules, skills, and configs.
+              It <strong>never</strong> writes files automatically — all writes are explicit.
+            </p>
+            <ol className="ws-guide-steps">
+              <li><span className="ws-guide-step-label">Choose or use default workspace path</span>
+                <span className="ws-guide-step-hint">— the app needs a workspace folder to operate</span>
+              </li>
+              <li><span className="ws-guide-step-label">Dry-run create</span>
+                <span className="ws-guide-step-hint">— preview what would happen before writing files</span>
+              </li>
+              <li><span className="ws-guide-step-label">Create workspace</span>
+                <span className="ws-guide-step-hint">— copies starter files only (no scripts execute)</span>
+              </li>
+              <li><span className="ws-guide-step-label">Open Library tab</span>
+                <span className="ws-guide-step-hint">— browse the Start Here guide, Concepts, and reference docs</span>
+              </li>
+              <li><span className="ws-guide-step-label">Run dry-run sync before apply</span>
+                <span className="ws-guide-step-hint">— preview rule/config changes before writing to your tools</span>
+              </li>
+            </ol>
+            <div className="ws-guide-footer">
+              <div className="ws-guide-hint">
+                Tip: The workspace is plain text. Version it with Git (see <em>GIT_VERSIONING.md</em>).
+                Never store secrets or tokens in workspace files.
+              </div>
             </div>
           </div>
         </div>

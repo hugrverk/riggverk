@@ -23,22 +23,40 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "README.md",
         },
         DocEntry {
-            id: "docs/WORKSPACE_CONTRACT.md",
+            id: "docs/START_HERE.md",
             section: "Start",
-            title: "Workspace Contract",
-            rel_path: "docs/WORKSPACE_CONTRACT.md",
+            title: "Start Here",
+            rel_path: "docs/START_HERE.md",
         },
         DocEntry {
-            id: "docs/INSTALL.md",
-            section: "Reference",
-            title: "Install Skills",
-            rel_path: "docs/INSTALL.md",
+            id: "docs/CONCEPTS.md",
+            section: "Start",
+            title: "Concepts",
+            rel_path: "docs/CONCEPTS.md",
         },
         DocEntry {
-            id: "docs/BOOTSTRAP.md",
+            id: "docs/USING_THE_APP.md",
+            section: "Guides",
+            title: "Using the App",
+            rel_path: "docs/USING_THE_APP.md",
+        },
+        DocEntry {
+            id: "docs/GIT_VERSIONING.md",
+            section: "Guides",
+            title: "Git Versioning",
+            rel_path: "docs/GIT_VERSIONING.md",
+        },
+        DocEntry {
+            id: "docs/WORKFLOWS.md",
+            section: "Guides",
+            title: "Workflows",
+            rel_path: "docs/WORKFLOWS.md",
+        },
+        DocEntry {
+            id: "docs/SKILLS.md",
             section: "Reference",
-            title: "Bootstrap",
-            rel_path: "docs/BOOTSTRAP.md",
+            title: "Skills",
+            rel_path: "docs/SKILLS.md",
         },
         DocEntry {
             id: "docs/AGENT_RULES.md",
@@ -53,34 +71,10 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/OPENCODE_CONFIG.md",
         },
         DocEntry {
-            id: "docs/OPERATING_MODEL.md",
-            section: "Operating Model",
-            title: "Operating Model",
-            rel_path: "docs/OPERATING_MODEL.md",
-        },
-        DocEntry {
-            id: "docs/WORKFLOW.md",
-            section: "Private / Operator",
-            title: "Workflow",
-            rel_path: "docs/WORKFLOW.md",
-        },
-        DocEntry {
-            id: "docs/PROMPTING.md",
-            section: "Private / Operator",
-            title: "Prompting",
-            rel_path: "docs/PROMPTING.md",
-        },
-        DocEntry {
-            id: "docs/FRONTIER_PLANNER_HANDOFF.md",
-            section: "Private / Operator",
-            title: "Frontier Planner Handoff",
-            rel_path: "docs/FRONTIER_PLANNER_HANDOFF.md",
-        },
-        DocEntry {
-            id: "docs/RELEASE.md",
-            section: "Development",
-            title: "Release",
-            rel_path: "docs/RELEASE.md",
+            id: "docs/TROUBLESHOOTING.md",
+            section: "Reference",
+            title: "Troubleshooting",
+            rel_path: "docs/TROUBLESHOOTING.md",
         },
     ]
 }
@@ -539,23 +533,23 @@ mod tests {
     fn curated_registry_skips_missing_optional_docs() {
         let root = temp_root("missing-optional");
         write_file(&root, "README.md", "# readme\n");
-        write_file(&root, "docs/WORKSPACE_CONTRACT.md", "# contract\n");
-        // docs/INSTALL.md and others intentionally missing
+        write_file(&root, "docs/START_HERE.md", "# start\n");
+        // docs/CONCEPTS.md and others intentionally missing
 
         let docs = existing_curated_docs(&root);
         cleanup(&root);
 
         let ids: Vec<&str> = docs.iter().map(|(id, _, _, _)| id.as_str()).collect();
-        assert_eq!(ids, &["README.md", "docs/WORKSPACE_CONTRACT.md"]);
+        assert_eq!(ids, &["README.md", "docs/START_HERE.md"]);
     }
 
     #[test]
     fn curated_registry_order_is_stable() {
         let root = temp_root("stable-order");
         write_file(&root, "README.md", "# readme\n");
-        write_file(&root, "docs/WORKSPACE_CONTRACT.md", "# contract\n");
-        write_file(&root, "docs/RELEASE.md", "# release\n");
-        write_file(&root, "docs/INSTALL.md", "# install\n");
+        write_file(&root, "docs/START_HERE.md", "# start\n");
+        write_file(&root, "docs/TROUBLESHOOTING.md", "# troubleshooting\n");
+        write_file(&root, "docs/AGENT_RULES.md", "# rules\n");
 
         let docs = existing_curated_docs(&root);
         cleanup(&root);
@@ -563,9 +557,9 @@ mod tests {
         let ids: Vec<&str> = docs.iter().map(|(id, _, _, _)| id.as_str()).collect();
         let expected = &[
             "README.md",
-            "docs/WORKSPACE_CONTRACT.md",
-            "docs/INSTALL.md",
-            "docs/RELEASE.md",
+            "docs/START_HERE.md",
+            "docs/AGENT_RULES.md",
+            "docs/TROUBLESHOOTING.md",
         ];
         assert_eq!(
             ids, expected,
@@ -594,8 +588,9 @@ mod tests {
     fn sections_are_assigned_correctly() {
         let root = temp_root("section-check");
         write_file(&root, "README.md", "# readme\n");
-        write_file(&root, "docs/WORKFLOW.md", "# workflow\n");
-        write_file(&root, "docs/INSTALL.md", "# install\n");
+        write_file(&root, "docs/START_HERE.md", "# start\n");
+        write_file(&root, "docs/GIT_VERSIONING.md", "# git\n");
+        write_file(&root, "docs/AGENT_RULES.md", "# rules\n");
 
         let docs = existing_curated_docs(&root);
         cleanup(&root);
@@ -606,8 +601,9 @@ mod tests {
             .collect();
 
         assert_eq!(by_id.get("README.md"), Some(&"Start"));
-        assert_eq!(by_id.get("docs/WORKFLOW.md"), Some(&"Private / Operator"));
-        assert_eq!(by_id.get("docs/INSTALL.md"), Some(&"Reference"));
+        assert_eq!(by_id.get("docs/START_HERE.md"), Some(&"Start"));
+        assert_eq!(by_id.get("docs/GIT_VERSIONING.md"), Some(&"Guides"));
+        assert_eq!(by_id.get("docs/AGENT_RULES.md"), Some(&"Reference"));
     }
 
     #[test]

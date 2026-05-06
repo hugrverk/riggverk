@@ -29,4 +29,9 @@ This workspace folder is separate from the app source code. The app operates on 
 
 ## Start here
 
-See [docs/START_HERE.md](docs/START_HERE.md) for a first-run guide.
+- [docs/START_HERE.md](docs/START_HERE.md) — first 5 minutes, safe first actions, what the app can and cannot do
+- [docs/CONCEPTS.md](docs/CONCEPTS.md) — core terms and mental model
+- [docs/USING_THE_APP.md](docs/USING_THE_APP.md) — practical walkthrough of each tab
+- [docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md) — how to version the workspace with Git and GitHub
+- [docs/WORKFLOWS.md](docs/WORKFLOWS.md) — common workflow recipes
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — help when things go wrong

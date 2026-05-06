@@ -2,59 +2,68 @@
 
 ## Workspace
 
-A workspace is a user-owned directory containing docs, skills, templates, and scripts. It is identified by `.ux-workspace/workspace.json` and a set of required files. The app validates a workspace by checking for these markers.
+A workspace is a user-owned directory containing docs, skills, templates, and scripts. The app identifies a workspace by the presence of `.ux-workspace/workspace.json` and a set of required files.
 
-Workspace contents are user-editable and can be git-versioned.
+The workspace is plain-text, user-editable, and can be versioned with Git. The app operates on a workspace but does not modify it without explicit action.
+
+## Mental model summary
+
+| Concept | Location | Purpose |
+|---------|----------|---------|
+| Docs | `docs/` | Workspace documentation and guides |
+| Skills | `skills/` | Reusable agent instruction files |
+| Templates | `templates/` | Source templates for rules and config |
+| Scripts | `scripts/` | Sync, install, and bootstrap operations |
+| Agents | `agents/` | Agent prompt definitions |
+| Routing | `routing/` | Sync routing profiles |
 
 ## Skills
 
-Skills are reusable agent instruction files. Each skill lives in its own directory under `skills/` and must contain a `SKILL.md` file. Skills can be installed globally (system-wide) or per-project by the app or the install script.
+Skills are reusable agent instruction files. Each skill lives in its own directory under `skills/` with a `SKILL.md` file. Skills define specialized behaviors for coding agents (e.g., frontend design, security review, debugging).
+
+Skills can be installed globally (system-wide) or per-project. The bundled workspace includes 22 starter skills.
 
 See [SKILLS.md](SKILLS.md) for the full skill directory contract.
 
 ## Agent Rules
 
-Agent rules define default behavior for coding agents: how they communicate, what they can modify, security boundaries, and verification requirements. The source template lives at `templates/global-agent-rules.md`.
+Agent rules define default behavior for coding agents: communication style, modification boundaries, security rules, and verification requirements. The source template is `templates/global-agent-rules.md`.
 
-Rules are synced to tool-specific global rule paths. Each agent tool (e.g., Codex, OpenCode, Auggie) stores its rules at a different filesystem path. The install-agent-rules script handles this mapping.
+Rules are synced to tool-specific global rule paths. Each agent tool (OpenCode, Codex, Claude, Gemini, Auggie) stores rules at a different filesystem path. The `install-agent-rules.sh` script maps rules to each tool.
 
 See [AGENT_RULES.md](AGENT_RULES.md).
 
 ## Tool Configuration
 
-Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace currently manages OpenCode configuration via `templates/opencode.json`.
-
-Tool config sync follows the same dry-run/diff/apply pattern as agent rules.
+Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`.
 
 See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md).
 
 ## Scripts
 
-Workspace scripts handle sync, install, and bootstrap operations. The four required scripts are:
+Four required scripts handle sync, install, and bootstrap operations:
 
 - `bootstrap.sh` — run all sync and install steps together
-- `install-skills.sh` — install skills to agent tool folders
+- `install-skills.sh` — install skills to agent tool directories
 - `install-agent-rules.sh` — sync agent rules to tool paths
-- `install-opencode-config.sh` — sync OpenCode config
+- `install-opencode-config.sh` — sync OpenCode config and agents
 
-Scripts support `--help`, `--dry-run`, `--diff`, and `--apply` modes.
+All scripts support `--help`, `--dry-run`, `--diff`, and `--apply` modes. Dry-run is always the default.
+
+## Sync operation pattern
+
+1. **Dry-run** — preview what would happen (no files written)
+2. **Diff** — show differences between template and target
+3. **Apply** — write template to target (backups created before overwrite)
 
 ## Targets
 
-A target is an installed agent tool that the workspace can sync to. Targets have a type (rules or config) and a filesystem path. The app manages which targets are enabled for sync.
-
-## Sync
-
-Sync is the process of copying a workspace template to a target path. The pattern is:
-
-1. **Dry-run** — preview what would happen (no files written)
-2. **Diff** — show differences between template and target (files not written)
-3. **Apply** — write template to target (backups created before overwrite)
-
-## Dry-run
-
-Dry-run mode shows planned operations without writing files. Use it before applying changes to verify what would be modified.
+A target is an installed agent tool the workspace can sync to. Each target has a type (rules or config) and a filesystem path. The app manages which targets are enabled for sync.
 
 ## Backups
 
-When apply mode overwrites an existing diverged target file, a backup is created before the overwrite. Backups are stored under the app's application support directory. Backups are created only during apply; diff and dry-run modes do not create backups.
+When apply mode overwrites an existing diverged file, a backup is created first. Backups live under `~/Library/Application Support/ai.agentworkspace.app/backups`. Dry-run and diff modes never create backups.
+
+## Routing profiles
+
+Routing profiles define sets of enabled targets for different scenarios. Use them to switch between development, production, or machine-specific sync configurations. See the Routing tab in the app.
