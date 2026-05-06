@@ -92,9 +92,19 @@ validate_json() {
 
 # ── Agent file helpers ──
 
+# Safe iteration using find -print0 + while read -r -d ''
+# Handles spaces and newlines in filenames properly
+iterate_agent_files() {
+  if [ -d "$AGENTS_SOURCE_DIR" ]; then
+    find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | while IFS= read -r -d '' agent_src; do
+      printf '%s\n' "$agent_src"
+    done
+  fi
+}
+
 list_agent_files() {
   if [ -d "$AGENTS_SOURCE_DIR" ]; then
-    find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f | sort
+    find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | tr '\0' '\n'
   fi
 }
 
@@ -143,7 +153,7 @@ if $diff_mode; then
   fi
 
   # Agent diffs
-  for agent_src in $(list_agent_files); do
+  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
     agent_name="$(agent_basename "$agent_src")"
     agent_target="$TARGET_AGENTS_DIR/$agent_name"
     if [ -f "$agent_target" ]; then
@@ -156,7 +166,7 @@ if $diff_mode; then
       printf '\n--- agent missing: %s (no target at %s)\n' "$agent_name" "$agent_target"
       has_diffs=true
     fi
-  done
+  done < <(list_agent_files)
 
   if ! $has_diffs; then
     if ! $quiet; then printf '  opencode config + agents synced\n'; fi
@@ -178,8 +188,8 @@ if $apply; then
     if cmp -s "$SOURCE_FILE" "$TARGET"; then
       if ! $quiet; then printf '  opencode config already synced\n'; fi
     else
-      ts="$(date -u +%Y%m%dT%H%M%SZ)"
-      backup_dir="$BACKUP_ROOT/$ts/opencode_config"
+      ts="$(date -u +%Y%m%d-%H%M%S)"
+      backup_dir="$BACKUP_ROOT/$ts/opencode-config"
       mkdir -p "$backup_dir"
       backup_file="$backup_dir/opencode.json"
       cp "$TARGET" "$backup_file"
@@ -196,15 +206,15 @@ if $apply; then
 
   # ── Apply agents ──
   mkdir -p "$TARGET_AGENTS_DIR"
-  ts="$(date -u +%Y%m%dT%H%M%SZ)"
-  for agent_src in $(list_agent_files); do
+  ts="$(date -u +%Y%m%d-%H%M%S)"
+  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
     agent_name="$(agent_basename "$agent_src")"
     agent_target="$TARGET_AGENTS_DIR/$agent_name"
     if [ -f "$agent_target" ]; then
       if cmp -s "$agent_src" "$agent_target"; then
         if ! $quiet; then printf '  agent %s already synced\n' "$agent_name"; fi
       else
-        backup_dir="$BACKUP_ROOT/$ts/opencode_agents"
+        backup_dir="$BACKUP_ROOT/$ts/opencode-agents"
         mkdir -p "$backup_dir"
         backup_file="$backup_dir/$agent_name"
         cp "$agent_target" "$backup_file"
@@ -216,7 +226,7 @@ if $apply; then
       cp "$agent_src" "$agent_target"
       if ! $quiet; then printf '  agent %s created\n' "$agent_name"; fi
     fi
-  done
+  done < <(list_agent_files)
 
   if ! $quiet; then printf '  opencode config + %s agents synced\n' "$(agent_count)"; fi
   exit 0
@@ -240,19 +250,19 @@ else
 fi
 
 # Agent checks
-for agent_src in $(list_agent_files); do
-  agent_name="$(agent_basename "$agent_src")"
-  agent_target="$TARGET_AGENTS_DIR/$agent_name"
-  if [ -f "$agent_target" ]; then
-    if ! cmp -s "$agent_src" "$agent_target"; then
-      if ! $quiet; then printf '  agent %s diverged (use --apply to sync)\n' "$agent_name"; fi
+  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
+    agent_name="$(agent_basename "$agent_src")"
+    agent_target="$TARGET_AGENTS_DIR/$agent_name"
+    if [ -f "$agent_target" ]; then
+      if ! cmp -s "$agent_src" "$agent_target"; then
+        if ! $quiet; then printf '  agent %s diverged (use --apply to sync)\n' "$agent_name"; fi
+        all_synced=false
+      fi
+    else
+      if ! $quiet; then printf '  agent %s missing (use --apply to create)\n' "$agent_name"; fi
       all_synced=false
     fi
-  else
-    if ! $quiet; then printf '  agent %s missing (use --apply to create)\n' "$agent_name"; fi
-    all_synced=false
-  fi
-done
+  done < <(list_agent_files)
 
 if $all_synced && [ -f "$TARGET" ]; then
   if ! $quiet; then printf '  opencode config + %s agents synced\n' "$(agent_count)"; fi

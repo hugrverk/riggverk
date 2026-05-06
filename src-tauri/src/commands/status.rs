@@ -46,6 +46,68 @@ fn sync_label(path: &Path, source: &Path) -> String {
     }
 }
 
+/// Compute opencode_config status: config file + all bundled agents must be synced for "synced" status
+fn opencode_config_status(root: &Path, home: &Path) -> String {
+    let config_target = home.join(".config/opencode/opencode.json");
+    let config_source = root.join("templates/opencode.json");
+
+    // Check config file
+    if !config_target.exists() {
+        return "missing".into();
+    }
+    if !config_source.exists() {
+        return "missing".into();
+    }
+    if !file_eq(&config_target, &config_source) {
+        return "diverged".into();
+    }
+
+    // Check bundled agents (agents/*.md in workspace)
+    let agents_dir = root.join("agents");
+    if !agents_dir.is_dir() {
+        return "diverged".into();
+    }
+
+    // Read bundled agent files from workspace
+    let agents_source_dir = match std::fs::read_dir(&agents_dir) {
+        Ok(entries) => entries,
+        Err(_) => return "diverged".into(),
+    };
+
+    let bundled_agents: Vec<String> = agents_source_dir
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map(|ext| ext == "md").unwrap_or(false)
+                && e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+        })
+        .filter(|e| {
+            let name = e.file_name();
+            !name.to_string_lossy().starts_with('.')
+        })
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    if bundled_agents.is_empty() {
+        return "diverged".into();
+    }
+
+    // Check each bundled agent
+    let agents_target_dir = home.join(".config/opencode/agents");
+    for agent_name in bundled_agents {
+        let agent_target = agents_target_dir.join(&agent_name);
+        let agent_source = agents_dir.join(&agent_name);
+
+        if !agent_target.exists() {
+            return "missing".into();
+        }
+        if !file_eq(&agent_target, &agent_source) {
+            return "diverged".into();
+        }
+    }
+
+    "synced".into()
+}
+
 #[derive(Serialize)]
 pub struct StatusData {
     repo_path: String,
@@ -122,10 +184,12 @@ pub fn get_status() -> Result<StatusData, String> {
 
     let mut config_statuses = std::collections::HashMap::new();
     for t in &config_targets {
-        config_statuses.insert(
-            t.id.to_string(),
-            sync_label(&home.join(t.target_rel), &root.join(t.source_rel)),
-        );
+        let status = if t.id == "opencode_config" {
+            opencode_config_status(&root, &home)
+        } else {
+            sync_label(&home.join(t.target_rel), &root.join(t.source_rel))
+        };
+        config_statuses.insert(t.id.to_string(), status);
     }
 
     let opencode_config_val = config_statuses

@@ -80,8 +80,8 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             id: "opencode_config",
             label: "opencode config + agents",
             kind: TargetKind::Config,
-            target_rel: ".config/opencode/opencode.json + agents/*.md",
-            source_rel: "templates/opencode.json + agents/*.md",
+            target_rel: ".config/opencode/opencode.json",
+            source_rel: "templates/opencode.json",
         },
     ]
 }
@@ -221,7 +221,7 @@ pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
         id: "opencode_config",
         label: "opencode config + agents",
         source_rel: "templates/opencode.json",
-        target_rel: ".config/opencode/opencode.json + agents/*.md",
+        target_rel: ".config/opencode/opencode.json",
         script: ConfigScript::OpenCode,
     }]
 }
@@ -319,7 +319,7 @@ mod tests {
         );
         let t = opencode.unwrap();
         assert_eq!(t.source_rel, "templates/opencode.json");
-        assert_eq!(t.target_rel, ".config/opencode/opencode.json + agents/*.md");
+        assert_eq!(t.target_rel, ".config/opencode/opencode.json");
     }
 
     #[test]

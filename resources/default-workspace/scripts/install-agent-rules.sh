@@ -95,11 +95,11 @@ resolve_target() {
 
 target_label() {
   case "$1" in
-    codex)    printf 'codex' ;;
-    opencode) printf 'opencode' ;;
-    auggie)   printf 'auggie' ;;
-    claude)   printf 'claude' ;;
-    gemini)   printf 'gemini' ;;
+    codex)    printf 'codex-rules' ;;
+    opencode) printf 'opencode-rules' ;;
+    auggie)   printf 'auggie-rules' ;;
+    claude)  printf 'claude-rules' ;;
+    gemini)  printf 'gemini-rules' ;;
   esac
 }
 
@@ -153,8 +153,8 @@ handle_target() {
         return 0
       fi
       local ts
-      ts="$(date -u +%Y%m%dT%H%M%SZ)"
-      local backup_dir="$BACKUP_ROOT/$ts/$agent_id"
+      ts="$(date -u +%Y%m%d-%H%M%S)"
+      local backup_dir="$BACKUP_ROOT/$ts/$(target_label "$1")"
       mkdir -p "$backup_dir"
       local backup_file="$backup_dir/$(basename "$target")"
       cp "$target" "$backup_file"
