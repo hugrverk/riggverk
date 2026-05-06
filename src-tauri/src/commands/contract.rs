@@ -427,12 +427,14 @@ fn validate_routing_contract(
                 notes_failures.push(format!("profile '{}' (index {})", profile_id, i));
                 continue;
             }
-            for (j, note) in notes.as_array().unwrap().iter().enumerate() {
-                if !note.is_string() {
-                    notes_failures.push(format!(
-                        "profile '{}' notes[{}] is not a string",
-                        profile_id, j
-                    ));
+            if let Some(arr) = notes.as_array() {
+                for (j, note) in arr.iter().enumerate() {
+                    if !note.is_string() {
+                        notes_failures.push(format!(
+                            "profile '{}' notes[{}] is not a string",
+                            profile_id, j
+                        ));
+                    }
                 }
             }
         }
@@ -653,10 +655,12 @@ fn validate_agent_metadata_contract(
                 notes_failures.push(format!("agent '{}' notes is not an array", agent_id));
                 continue;
             }
-            for (j, note) in notes.as_array().unwrap().iter().enumerate() {
-                if !note.is_string() {
-                    notes_failures
-                        .push(format!("agent '{}' notes[{}] is not a string", agent_id, j));
+            if let Some(arr) = notes.as_array() {
+                for (j, note) in arr.iter().enumerate() {
+                    if !note.is_string() {
+                        notes_failures
+                            .push(format!("agent '{}' notes[{}] is not a string", agent_id, j));
+                    }
                 }
             }
         }

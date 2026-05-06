@@ -98,11 +98,11 @@ pub fn get_status() -> Result<StatusData, String> {
     let (git_available, branch, dirty, latest_commit) = git_status(&root);
 
     let sync = |id: &str| -> String {
-        let t = targets
+        targets
             .iter()
             .find(|t| t.id == id)
-            .expect("unknown agent target");
-        sync_label(&home.join(t.target_rel), &root.join(t.source_rel))
+            .map(|t| sync_label(&home.join(t.target_rel), &root.join(t.source_rel)))
+            .unwrap_or_else(|| "unknown".into())
     };
 
     let host = host_name();

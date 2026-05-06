@@ -42,8 +42,8 @@ fn enabled_rule_flags() -> Vec<&'static str> {
     let enabled = settings::load().enabled_target_ids;
     agent_targets::targets()
         .iter()
-        .filter(|t| enabled.contains(&t.id.to_string()) && t.script_flag().is_some())
-        .map(|t| t.script_flag().unwrap())
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .filter_map(|t| t.script_flag())
         .collect()
 }
 
