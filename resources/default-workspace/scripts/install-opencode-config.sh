@@ -92,16 +92,9 @@ validate_json() {
 
 # ── Agent file helpers ──
 
-# Safe iteration using find -print0 + while read -r -d ''
-# Handles spaces and newlines in filenames properly
-iterate_agent_files() {
-  if [ -d "$AGENTS_SOURCE_DIR" ]; then
-    find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | while IFS= read -r -d '' agent_src; do
-      printf '%s\n' "$agent_src"
-    done
-  fi
-}
-
+# Lists agent source files, one per line.
+# Handles spaces in filenames correctly via NUL-delimited find + tr.
+# Does NOT handle newlines in filenames (line-based consumers would break).
 list_agent_files() {
   if [ -d "$AGENTS_SOURCE_DIR" ]; then
     find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | tr '\0' '\n'

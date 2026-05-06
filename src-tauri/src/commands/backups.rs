@@ -351,11 +351,19 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
             let (current_path, current_exists, current_status) =
                 match resolve_current_target(target_id) {
                     Ok(cp) => {
-                        let exists = cp.exists() && cp.is_file();
+                        // For directory targets (opencode-agents), resolve each
+                        // backup file to its matching runtime file by joining
+                        // the filename onto the target directory path.
+                        let cp_file = if *target_id == "opencode-agents" {
+                            cp.join(&filename)
+                        } else {
+                            cp
+                        };
+                        let exists = cp_file.exists() && cp_file.is_file();
                         let status = if !exists {
                             "missing".to_string()
                         } else {
-                            let current_meta = std::fs::metadata(&cp);
+                            let current_meta = std::fs::metadata(&cp_file);
                             match current_meta {
                                 Ok(cm) => {
                                     let cs = cm.len();
@@ -364,7 +372,7 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
                                     } else if cs > MAX_COMPARE_SIZE {
                                         "unknown".to_string()
                                     } else {
-                                        match compare_files_match(&backup_path, &cp) {
+                                        match compare_files_match(&backup_path, &cp_file) {
                                             Ok(true) => "matches".to_string(),
                                             Ok(false) => "differs".to_string(),
                                             Err(_) => "unknown".to_string(),
@@ -374,7 +382,7 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
                                 Err(_) => "unknown".to_string(),
                             }
                         };
-                        (cp.to_string_lossy().into_owned(), exists, status)
+                        (cp_file.to_string_lossy().into_owned(), exists, status)
                     }
                     Err(_) => (String::new(), false, "unknown".to_string()),
                 };
@@ -531,6 +539,45 @@ mod tests {
         fs::write(&a, b"hello\n").expect("write a");
         fs::write(&b, b"world\n").expect("write b");
         assert!(!compare_files_match(&a, &b).unwrap());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn opencode_agents_backup_file_maps_to_correct_current_path() {
+        let root = temp_root("agents-path-test");
+        fs::create_dir_all(&root).expect("create backup root");
+        let run_dir = root.join("20260501-143000");
+        fs::create_dir_all(&run_dir).expect("create run dir");
+
+        let agents_dir = run_dir.join("opencode-agents");
+        fs::create_dir_all(&agents_dir).expect("create opencode-agents dir");
+        fs::write(agents_dir.join("autopilot.md"), b"autopilot content")
+            .expect("write autopilot.md");
+
+        let result = get_backup_details_from_root(&root, "20260501-143000");
+        assert!(result.is_ok());
+        let details = result.unwrap();
+
+        let autopilot = details
+            .files
+            .iter()
+            .find(|f| f.filename == "autopilot.md" && f.target_id == "opencode-agents");
+        assert!(
+            autopilot.is_some(),
+            "autopilot.md should be found in opencode-agents target"
+        );
+
+        let summary = autopilot.unwrap();
+        // Verify the current_path joins the agents directory with the filename
+        assert!(
+            summary
+                .current_path
+                .ends_with(".config/opencode/agents/autopilot.md"),
+            "current_path should end with .config/opencode/agents/autopilot.md, got: {}",
+            summary.current_path
+        );
+        // current_exists may be false in CI, but the path shape is what matters
+
         let _ = fs::remove_dir_all(&root);
     }
 

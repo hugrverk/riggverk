@@ -252,32 +252,47 @@ fi
 step "bundled default install-opencode-config.sh works with space in workspace path"
 tmpdir="$(mktemp -d)"
 space_dir="$tmpdir/Agent Workspace"
-mkdir -p "$space_dir"
-# Fake a workspace with config + agents
-mkdir -p "$space_dir/templates"
-mkdir -p "$space_dir/agents"
-cp resources/default-workspace/templates/opencode.json "$space_dir/templates/"
+runtime_config="$tmpdir/runtime/opencode.json"
+runtime_agents="$tmpdir/runtime/agents"
+backup_dir="$tmpdir/runtime/backups"
+
+# Copy entire workspace tree to space-containing path so the script
+# itself runs from a path with spaces and computes SCRIPT_DIR / SOURCE_FILE
+# / AGENTS_SOURCE_DIR from that location.
+cp -R resources/default-workspace "$space_dir"
+
+# Run --apply from the copied workspace, targeting separate runtime dirs
+OPENCODE_CONFIG_PATH="$runtime_config" \
+OPENCODE_AGENTS_DIR="$runtime_agents" \
+UX_WORKSPACE_BACKUP_DIR="$backup_dir" \
+  bash "$space_dir/scripts/install-opencode-config.sh" --apply >/dev/null
+
+apply_ok=true
+if [ ! -f "$runtime_config" ]; then
+  printf 'FAIL: space-in-path apply did not create opencode.json\n' >&2
+  apply_ok=false
+fi
+if ! grep -q '"default_agent": "autopilot"' "$runtime_config"; then
+  printf 'FAIL: space-in-path opencode.json missing default_agent autopilot\n' >&2
+  apply_ok=false
+fi
+
 for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
-  cp "resources/default-workspace/agents/$agent" "$space_dir/agents/" 2>/dev/null || true
+  if [ ! -f "$runtime_agents/$agent" ]; then
+    printf 'FAIL: space-in-path apply did not create agents/%s\n' "$agent" >&2
+    apply_ok=false
+  fi
 done
 
-# Test dry-run from space-in-path workspace
-SCRIPT_DIR="$(cd resources/default-workspace/scripts && pwd)"
-WORKSPACE_ROOT="$space_dir" \
-OPENCODE_CONFIG_PATH="$space_dir/opencode.json" \
-OPENCODE_AGENTS_DIR="$space_dir/agents" \
-UX_WORKSPACE_BACKUP_DIR="$space_dir/backups" \
-  bash "$SCRIPT_DIR/install-opencode-config.sh" >/dev/null
-
-# Verify all 6 agents were processed
-agent_count="$(ls "$space_dir/agents"/*.md 2>/dev/null | wc -l | tr -d ' ')"
+agent_count="$(find "$runtime_agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
 if [ "$agent_count" -ne 6 ]; then
-  printf 'FAIL: space-in-path test found only %s agents, expected 6\n' "$agent_count" >&2
-  rm -rf "$tmpdir"
-  exit 1
+  printf 'FAIL: space-in-path apply wrote %s agents, expected 6\n' "$agent_count" >&2
+  apply_ok=false
 fi
+
 rm -rf "$tmpdir"
-printf '  install-opencode-config.sh handles space-in-path correctly: 6 agents processed\n'
+if ! $apply_ok; then exit 1; fi
+printf '  install-opencode-config.sh handles space-in-path correctly: 6 agents applied from space-containing workspace\n'
 
 step "backup schema matches app expectations"
 tmpdir="$(mktemp -d)"
