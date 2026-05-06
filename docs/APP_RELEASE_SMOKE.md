@@ -24,7 +24,7 @@ Run this checklist before sharing a built app bundle with another user.
 Folder picker and workspace path:
 
 - [ ] Click "choose folder" in Workspace tab — native folder dialog opens
-- [ ] Select a folder — draft path updates (not saved yet)
+- [ ] Select a folder — workspace path is saved and diagnostics refresh
 - [ ] Cancel the picker — path remains unchanged
 - [ ] Type a path manually — draft updates
 - [ ] Empty/cleared path falls back to env var or built-in default
@@ -95,7 +95,7 @@ Dry-runs only unless testing your own machine:
 - [ ] install-skills dry-run from a created workspace reports the bundled skills
 - [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --gemini --auggie` completes without error
 - [ ] Do not run `--apply` actions when testing someone else's machine
-- [ ] Backups exist under `~/Library/Application Support/ai.agentworkspace.app/backups` before real sync if applicable
+- [ ] Real apply creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwriting diverged target files
 
 ## 7. Skills Selection Smoke (Workspace Operations)
 

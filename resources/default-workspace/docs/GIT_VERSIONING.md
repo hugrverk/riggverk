@@ -1,6 +1,6 @@
 # Git Versioning
 
-The workspace is a plain-text directory that can be versioned with Git like any other project. The app does not manage Git operations automatically — you control your version history.
+The workspace is a plain-text directory that can be versioned with Git like any other project. The app does not initialize repositories, create commits, create remotes, manage GitHub auth, or push changes. Its Pull button runs `git pull --ff-only` only when the selected workspace is already a Git checkout.
 
 ## Workflow
 
@@ -47,7 +47,7 @@ Workspace files are designed to be versioned:
 
 ## What not to commit
 
-- **Secrets, tokens, passwords, private keys** — never store credentials in workspace files
+- **Secrets, tokens, passwords, private keys, cookies, auth headers, signed/private URLs** — never store credential-bearing data in workspace files
 - **`.env` files** — keep environment variables out of the workspace
 - **Machine-specific paths** — absolute paths that differ between machines
 - **Backup directories** — app backups live outside the workspace
@@ -88,7 +88,8 @@ The app reads workspace files and displays their state. It does not:
 
 - Run `git init`, `git add`, or `git commit`
 - Create GitHub remotes or manage auth
-- Push or pull from remotes
+- Push to remotes
+- Pull except through the explicit Workspace Pull action (`git pull --ff-only`)
 - Detect Git state beyond basic branch information
 
 Use your normal Git workflow (CLI, GitHub Desktop, IDE) to manage version history.

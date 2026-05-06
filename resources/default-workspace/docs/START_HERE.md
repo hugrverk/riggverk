@@ -20,6 +20,7 @@ The app does not:
 - Manage GitHub authentication or create remote repos automatically
 - Encrypt workspace contents — the workspace is plain text owned by you
 - Auto-create workspace directories — you confirm the path first
+- Run agents, route tasks automatically, or change tool config from Routing
 - Import or upgrade existing non-workspace directories
 
 ## Mental model
@@ -40,8 +41,8 @@ The app does not:
 
 - **Workspace tab**: View diagnostics, create workspace, sync rules/configs, install skills, verify workspace.
 - **Library tab**: Read and edit docs, rules, skills, agents, and config templates.
-- **Routing tab**: Manage sync routing profiles for different setups.
-- **Settings tab**: Configure appearance and target tool settings.
+- **Routing tab**: Review and edit operator guidance profiles.
+- **Settings tab**: Configure appearance and enabled sync targets. Settings target profiles are separate from Routing profiles.
 
 ## Dry-run before apply
 
@@ -50,6 +51,8 @@ Always dry-run (preview/diff) before applying changes. The app shows what would 
 ## Workspace ownership
 
 This workspace is yours. Edit docs, add skills, modify templates, version with Git. The app does not hide, encrypt, or lock your workspace contents.
+
+Do not store or commit secrets, tokens, passwords, private keys, cookies, auth headers, signed/private URLs, or `.env` values in workspace files.
 
 ## Next steps
 

@@ -45,7 +45,7 @@ The app supports editing `templates/global-agent-rules.md` through the allowlist
 
 The workspace marker directory `.ux-workspace/` and the `UX_WORKSPACE_PATH` / `UX_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
-This repository is the public Agent Workspace app source. Private workspace repositories store user-owned docs, skills, templates, and config without containing app source code. Create, import, and upgrade flows for workspaces are future work.
+This repository is the public Agent Workspace app source. Private workspace repositories can store user-owned docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults. Import and upgrade flows for existing workspaces are future work.
 
 ## Script location
 
@@ -69,7 +69,7 @@ These resources are not automatically copied into the active workspace. Future i
 
 The default workspace content is read-only source material. It does not contain user data, secrets, or private preferences. User workspaces remain user-owned and are separate from the bundled defaults.
 
-The app can display a read-only summary of bundled default resources in Settings, showing known file paths and existence status without executing scripts or copying files. The app can also run a read-only workspace creation dry-run plan that evaluates whether a given path is safe and viable for future initialization using the bundled defaults — no files or directories are created.
+The app can display a read-only summary of bundled default resources in the Workspace tab, showing known file paths and existence status without executing scripts or copying files. The app can also run a read-only workspace creation dry-run plan that evaluates whether a given path is safe and viable for initialization using the bundled defaults — no files or directories are created.
 
 When the plan reports a safe target (`missing_directory` or `empty_existing_directory`), the app can create a new workspace by copying only allowlisted bundled default files into the target directory. Create does not overwrite existing files, does not execute scripts, does not write outside the target directory, and rejects unsafe, non-empty, valid-existing, and missing-parent targets. Created workspaces remain user-owned — the app does not take ownership or enforce schema beyond the initial copy.
 

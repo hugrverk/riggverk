@@ -6,7 +6,7 @@ Common workspace workflows with step-by-step instructions.
 
 1. Open the **Settings tab**
 2. Under Targets, enable only the OpenCode rule and config targets (disable Codex, Claude, Gemini, Auggie)
-3. Go to **Workspace tab**, run "Pull" to refresh status
+3. Go to **Workspace tab**, run "Pull" only if the workspace is a Git checkout and you want `git pull --ff-only`
 4. Run "Diff Rules" to preview rule sync
 5. Run "Diff Configs" to preview config sync
 6. Review diffs, then run "Sync Rules" and "Sync Configs" to apply
@@ -34,7 +34,7 @@ Common workspace workflows with step-by-step instructions.
 
 1. Make workspace changes (edit docs, rules, config, or add skills)
 2. Run a dry-run sync to verify changes work as expected
-3. Run release-check to validate workspace integrity
+3. If this workspace includes `scripts/release-check.sh`, run release-check; otherwise use dry-run/diff plus Git review
 4. Run `git status` to review changed files
 5. Run `git diff` to inspect specific changes
 6. Commit: `git commit -m "update: [describe change]"`
@@ -42,33 +42,32 @@ Common workspace workflows with step-by-step instructions.
 
 See [GIT_VERSIONING.md](GIT_VERSIONING.md) for full Git setup and guidelines.
 
-## Run release check before sharing or syncing
+## Run release check when available
 
-1. Ensure valid workspace is active in the Workspace tab
-2. In the VERIFY lane, click "release-check"
-3. Check the terminal output — all checks should pass
-4. If checks fail, read the error messages and fix the indicated issue
-5. Re-run release-check until all checks pass
+1. Ensure a valid workspace is active in the Workspace tab
+2. Confirm the workspace includes `scripts/release-check.sh`
+3. In the VERIFY lane, click "release-check"
+4. Check the terminal output — all checks should pass
+5. If checks fail, read the error messages and fix the indicated issue
+6. Re-run release-check until all checks pass
 
-The release check validates:
-- All required workspace files are present
-- Scripts have valid syntax and no placeholder phrases
-- Agent definitions are non-empty with correct modes
-- No private names or secrets in the bundle
-- Skill count and baseline skills are intact
+The app repository release-check validates bundled default docs, scripts, starter metadata, forbidden source patterns, the frontend build, and Rust format/check/clippy/tests. It does not replace manual GUI smoke testing.
 
-## Change sync target profiles
+## Change enabled sync targets
 
-1. Open the **Routing tab**
-2. Create or select a profile with the desired target configuration
-3. Go to **Settings tab**, under Profiles, apply the profile
-4. Targets update immediately — the Workspace tab status reflects the new enabled targets
+1. Open the **Settings tab**
+2. Apply a Settings target profile or toggle individual targets
+3. Review the modified draft state
+4. Click Save to persist the enabled target selection
+5. Return to the Workspace tab and run diff before sync
+
+Routing profiles are separate operator guidance. Editing Routing does not change enabled sync targets.
 
 ## Debug a sync issue
 
-1. In the **Workspace tab**, run "Pull" to get the latest status
+1. In the **Workspace tab**, run "Pull" only if you need to update the workspace Git checkout
 2. Check the system map for rule/config target states (valid, partial, dim)
 3. Expand target nodes to see specific paths and issues
 4. Run "Diff Rules" or "Diff Configs" to see what would change
 5. Check `docs/TROUBLESHOOTING.md` for common issues
-6. Run release-check to validate workspace integrity
+6. If release-check is available in this workspace, run it; otherwise inspect the dry-run/diff output and relevant docs

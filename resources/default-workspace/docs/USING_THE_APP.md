@@ -20,9 +20,9 @@ The app never writes files automatically. Create workspace copies files only —
 
 Available when a valid workspace is active. Three action lanes:
 
-- **SYNC**: Pull workspace status, diff rules (preview changes), sync rules (apply), diff configs, sync configs, run release check
+- **SYNC**: Pull from Git (`git pull --ff-only`), diff rules (preview changes), sync rules (apply), diff configs, sync configs
 - **SKILLS**: Select skills, choose agents and scope, dry-run install, apply install
-- **VERIFY**: Run workspace contract validation, view backup count, open backups folder
+- **VERIFY**: Run workspace contract validation, view backup count, open backups folder, and run `release-check` only when the selected workspace includes `scripts/release-check.sh`
 
 ### Inventory panel (collapsible)
 
@@ -31,7 +31,8 @@ Shows workspace structure: marker status, file categories, system map (rules/con
 ### After creating a workspace
 
 - Open the **Library tab** to browse docs
-- Visit the **Routing tab** to enable sync targets
+- Visit the **Settings tab** to enable sync targets
+- Use the **Routing tab** only for operator guidance profiles
 - Run a dry-run sync before applying anything
 - Optional: initialize Git (see GIT_VERSIONING.md)
 
@@ -71,13 +72,15 @@ View and edit `templates/opencode.json`. The JSON is formatted for readability.
 
 ## Routing Tab
 
-Manage sync routing profiles. Profiles define which targets are enabled for different scenarios. Switch between profiles to change which agent tools receive syncs.
+Review and edit routing profiles. Profiles recommend tools, models, skills, and agents for task types.
+
+Routing profiles are guidance only. They do not change enabled sync targets, run agents, generate prompts, or mutate OpenCode/Codex/Claude/Gemini/Auggie configuration.
 
 ## Settings Tab
 
 - **Appearance**: Dark, light, or system theme. Accent color picker with hex input.
 - **Targets**: Enable or disable individual rule and config targets per tool.
-- **Profiles**: Apply target profiles to quickly switch between setups.
+- **Profiles**: Apply Settings target profiles to update the local target-selection draft. Save is required to persist.
 
 ## Dry-run before sync
 
@@ -96,10 +99,8 @@ The app creates backups when applying changes that would overwrite existing file
 
 ## Release check
 
-Run "release-check" in the Workspace VERIFY lane to validate the workspace:
-- All required files present
-- Scripts are valid and pass syntax checks
-- No private names or secrets in the bundle
-- Agent definitions are non-empty with correct modes
+Run "release-check" in the Workspace VERIFY lane only when the selected workspace has `scripts/release-check.sh`. The public bundled starter does not include that script; the app development checkout does.
+
+The app repository release-check validates bundled default docs, scripts, starter metadata, forbidden source patterns, the frontend build, and Rust format/check/clippy/tests. It is not a GUI smoke test and it is not a comprehensive secret scanner.
 
 See [WORKFLOWS.md](WORKFLOWS.md) for common workflow patterns.

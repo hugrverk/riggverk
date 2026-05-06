@@ -15,7 +15,7 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Sync, install, and bootstrap operations |
 | Agents | `agents/` | Agent prompt definitions |
-| Routing | `routing/` | Sync routing profiles |
+| Routing | `routing/` | Operator guidance profiles |
 
 ## Skills
 
@@ -48,7 +48,7 @@ Four required scripts handle sync, install, and bootstrap operations:
 - `install-agent-rules.sh` — sync agent rules to tool paths
 - `install-opencode-config.sh` — sync OpenCode config and agents
 
-All scripts support `--help`, `--dry-run`, `--diff`, and `--apply` modes. Dry-run is always the default.
+All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.
 
 ## Sync operation pattern
 
@@ -66,4 +66,6 @@ When apply mode overwrites an existing diverged file, a backup is created first.
 
 ## Routing profiles
 
-Routing profiles define sets of enabled targets for different scenarios. Use them to switch between development, production, or machine-specific sync configurations. See the Routing tab in the app.
+Routing profiles are informational operator guidance. They recommend tools, models, skills, and agents for task types. They do not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude/Gemini/Auggie config.
+
+Settings target profiles are separate. Use Settings to choose which rule and config targets are enabled for diff/sync.

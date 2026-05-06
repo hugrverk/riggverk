@@ -4,6 +4,8 @@ Your workspace for managing agent skills, rules, configuration, and scripts.
 
 This directory stores docs, skills, templates, config, and scripts that the app can read, display, and sync to agent tool folders. It is user-owned and can be versioned with git.
 
+Workspace files are plain text. The app does not encrypt them. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed/private URLs, or `.env` values in this workspace, and do not commit those values to GitHub.
+
 ## What lives here
 
 - **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting
@@ -21,7 +23,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all five agents), `--global`/`--project`, `--skill`, and `--all`.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
-All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories.
+All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories. Use dry-run or diff before every apply.
 
 ## Separation
 

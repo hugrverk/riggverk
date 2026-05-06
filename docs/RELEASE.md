@@ -24,44 +24,33 @@ For installed-app release smoke (create workspace, folder picker, bundled defaul
 
 After code changes that affect the app, manually check:
 
-- App starts.
-- Agents opens by default.
-- Agents verify checks rule targets only.
-- Agents diff/sync rules still work against a valid selected workspace.
-- Agents global rules template view still opens.
-- Configs diff writes output to the Configs terminal.
-- Configs sync button respects `opencode_config` enablement.
-- Health release-check still works.
-- Health backup history lists recent backup runs without reading file contents.
-- Health backup history shows "no backups found" when no backups exist.
-- Health selecting a backup run loads details: target id, filename, size, and current status.
-- Health backup details do not display file contents or textual diffs.
-- Health backup details do not include a restore button.
-- Health refresh preserves selection when selected backup still exists.
-- Health refresh clears selection when selected backup no longer exists.
-- Health refresh updates the backup list.
-- Health open backups opens the backup folder in Finder when it exists.
-- Health does not create the backup folder just to show/open it.
-- Backup creation remains script-owned during apply overwrite.
-- Skills dry-run works for global target with a valid selected workspace.
+- App starts and opens the Workspace view.
+- Workspace diagnostics show valid and invalid workspace paths correctly.
+- Workspace create flow requires dry-run first, copies starter files only, and rejects unsafe targets.
+- Pull runs `git pull --ff-only` only inside a Git workspace.
+- Diff/sync rules respect saved enabled rule targets.
+- Diff/sync configs respect saved enabled config targets.
+- Skills dry-run works for global targets with a valid selected workspace.
 - Skills project target without markers is rejected.
 - Skills project target with `.git` marker is accepted.
-- Docs list/read/open works.
+- Backups list recent backup runs without reading file contents.
+- Backup details show target id, filename, size, and current status only.
+- Backup details do not display file contents, textual diffs, or a restore button.
+- Refresh preserves selection when the selected backup still exists and clears it when it does not.
+- Open backups opens the backup folder in Finder when it exists and does not create it only to show it.
+- Backup creation remains script-owned during apply overwrite.
+- Library docs list/read/open/edit works.
+- Library rules, agents, and configs edit/save only workspace source files.
+- Routing profiles display as guidance and do not change enabled sync targets.
+- Routing JSON validate/format/save handles invalid JSON and protects unsaved edits.
 - Settings save/reset works.
 - Settings target profile buttons are visible.
-- Applying Core profile selects codex_rules + opencode_rules + auggie_rules + opencode_config.
-- Applying OpenCode profile selects opencode_rules + opencode_config only.
-- Applying Extended profile selects all six targets.
-- Applying Rules only profile selects codex_rules + opencode_rules + auggie_rules.
-- Manual checkbox change shows "custom" profile state.
-- Save persists the selected profile targets.
-- Reset restores default (Core-equivalent) target selection.
-- Invalid workspace path refuses script-backed actions.
-- Health workspace panel shows valid workspace with all markers present.
-- Health workspace panel shows rule/config target counts.
-- Health workspace panel shows backup root exists/missing.
-- Health workspace refresh updates diagnostics.
-- Invalid workspace path in Settings shows invalid workspace and missing/error state in Health workspace panel.
+- Applying OpenCode selects `opencode_rules` + `opencode_config`.
+- Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, `claude_rules`, and `gemini_rules`.
+- Applying All supported selects all rule targets plus `opencode_config`.
+- Manual checkbox changes show custom target selection.
+- Save persists selected targets; Reset restores defaults.
+- Invalid workspace paths refuse script-backed actions.
 
 ## Remaining Limits
 
