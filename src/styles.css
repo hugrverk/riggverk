@@ -3782,6 +3782,116 @@ html, body, #root {
   padding: 12px;
 }
 
+/* ── routing preview two-column layout ── */
+
+.routing-preview-layout {
+  display: grid;
+  grid-template-columns: minmax(360px, 1fr) minmax(0, 1.4fr);
+  flex: 1;
+  min-height: 0;
+}
+
+.routing-left-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  background: var(--bg-inset);
+}
+
+.routing-left-panel .routing-matrix {
+  border: none;
+}
+
+.routing-left-panel .configs-bundle-section {
+  background: transparent;
+}
+
+/* Compact compatibility summary bar */
+.routing-compat-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 8px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+
+.routing-compat-bar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+/* Right panel (selected route details) */
+.routing-right-panel {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.routing-right-panel .configs-bundle-section {
+  background: transparent;
+}
+
+/* Empty state inside right panel */
+.routing-right-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  min-height: 160px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  font-size: 13px;
+}
+
+/* Full-viewport empty state (no profiles / error / loading) */
+.routing-main-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 160px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  font-size: 13px;
+  gap: 6px;
+}
+
+.routing-main-empty-path {
+  font-size: 10px;
+  opacity: 0.65;
+  font-family: var(--font);
+}
+
+/* responsive: stack routing panels on narrow screens */
+@media (max-width: 900px) {
+  .routing-preview-layout {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
+  }
+
+  .routing-left-panel {
+    max-height: 45%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .routing-right-panel {
+    overflow-y: auto;
+  }
+}
+
 /* ── routing matrix ── */
 
 .routing-matrix {
