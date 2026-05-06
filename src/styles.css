@@ -140,7 +140,7 @@ html, body, #root {
 }
 
 .nav-icon-dirty.nav-icon-active::after {
-  background: var(--accent);
+  background: var(--dirty);
 }
 
 .status-ok { color: var(--accent); }
@@ -524,6 +524,10 @@ html, body, #root {
 .btn:hover:not(:disabled) { background: var(--bg-panel); border-color: var(--border-strong); }
 .btn:active:not(:disabled) { background: #333; }
 .btn:disabled { opacity: 0.25; cursor: default; }
+.btn:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
+}
 
 .btn-sm { padding: 2px 8px; font-size: 11px; }
 
@@ -4026,4 +4030,21 @@ html, body, #root {
   font-size: 10px;
   word-break: break-word;
   width: 100%;
+}
+
+/* ── shared focus-visible outlines for inputs ── */
+
+.settings-input:focus-visible,
+.skills-search:focus-visible,
+.install-target-input:focus-visible,
+.docs-create-input:focus-visible,
+.lib-search-input:focus-visible,
+.docs-search:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
+}
+
+.editor-textarea:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: -2px;
 }
