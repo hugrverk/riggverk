@@ -3801,7 +3801,7 @@ html, body, #root {
   background: var(--bg-inset);
 }
 
-.routing-left-panel .routing-matrix {
+.routing-left-panel .routing-profile-list {
   border: none;
 }
 
@@ -3892,68 +3892,137 @@ html, body, #root {
   }
 }
 
-/* ── routing matrix ── */
+/* ── routing profile list (left panel blocks) ── */
 
-.routing-matrix {
+.routing-profile-list {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.routing-profile-block {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
   width: 100%;
-  border-collapse: collapse;
-  font-size: 11px;
-  border: 1px solid var(--ws-border, var(--border));
-}
-
-.routing-matrix thead th {
-  padding: 4px 8px;
   text-align: left;
-  border-bottom: 1px solid var(--ws-border, var(--border));
-  font-weight: 600;
-  opacity: 0.7;
-}
-
-.routing-matrix thead th.routing-matrix-cell-center {
-  text-align: center;
-}
-
-.routing-matrix tbody tr {
+  padding: 6px 10px;
+  border: none;
+  border-bottom: 1px solid var(--border);
+  border-left: 2px solid transparent;
+  background: transparent;
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
   cursor: pointer;
-  border-bottom: 1px solid var(--ws-hairline, rgba(255,255,255,0.06));
-}
-
-.routing-matrix tbody tr:focus-visible {
-  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  transition: background 0.1s, border-color 0.1s;
   outline-offset: -2px;
 }
 
-.routing-matrix tbody tr:hover {
+.routing-profile-block:hover {
   background: var(--accent-dim);
 }
 
-.routing-matrix-row-active {
-  background: var(--ws-row-active, rgba(255,255,255,0.06));
+.routing-profile-block:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
 }
 
-.routing-matrix td {
-  padding: 3px 8px;
+.routing-profile-block-active {
+  background: var(--accent-bg);
+  border-left-color: var(--accent);
+}
+
+.routing-profile-block-active:hover {
+  background: var(--accent-bg);
+}
+
+/* Row 1: title + status */
+.routing-profile-row1 {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  min-width: 0;
+}
+
+.routing-profile-title {
+  font-weight: 600;
+  color: var(--text-heading);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.routing-matrix-cell-center {
-  text-align: center;
+.routing-profile-status {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  flex-shrink: 0;
 }
 
-.routing-matrix-model {
-  max-width: 180px;
+/* Row 2: profile id */
+.routing-profile-row2 {
+  min-width: 0;
+}
+
+.routing-profile-id {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.6;
   overflow: hidden;
   text-overflow: ellipsis;
-  opacity: 0.8;
+  white-space: nowrap;
+  display: block;
 }
 
-.routing-matrix-title {
-  font-weight: 500;
+/* Row 3: tool, model, risk, DB — inline with separators */
+.routing-profile-row3 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
 }
 
-.routing-matrix-id {
+/* Row 4: skills + agent */
+.routing-profile-row4 {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.routing-profile-field {
+  color: var(--text-muted);
+  opacity: 0.65;
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.routing-profile-val {
+  color: var(--text);
+  opacity: 0.85;
+}
+
+.routing-profile-val-dim {
+  color: var(--text-muted);
   opacity: 0.5;
-  margin-left: 6px;
+}
+
+.routing-profile-sep {
+  color: var(--border);
+  opacity: 0.5;
+  font-size: 9px;
+  user-select: none;
+}
+
+.routing-profile-missing {
+  color: var(--fail);
 }
 
 /* ── routing edit mode ── */
