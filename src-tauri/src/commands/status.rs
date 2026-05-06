@@ -219,7 +219,7 @@ pub fn get_status() -> Result<StatusData, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{git_available, git_status};
+    use super::{git_available, git_status, opencode_config_status};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -231,6 +231,215 @@ mod tests {
             .as_nanos();
         std::env::temp_dir().join(format!("agent-workspace-status-{name}-{nonce}"))
     }
+
+    fn write_file(path: &PathBuf, content: &str) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create parent dir");
+        }
+        fs::write(path, content).expect("write file");
+    }
+
+    // ── opencode_config_status tests ──
+
+    #[test]
+    fn opencode_config_status_synced_when_config_and_agents_match() {
+        let root = temp_root("opencode-synced");
+        let home = temp_root("home-synced");
+
+        write_file(&root.join("templates/opencode.json"), r#"{"key":"val"}"#);
+        write_file(
+            &root.join("agents/autopilot.md"),
+            "# autopilot\nmode: primary",
+        );
+        write_file(
+            &root.join("agents/repo-scout.md"),
+            "# repo-scout\nmode: subagent",
+        );
+
+        write_file(
+            &home.join(".config/opencode/opencode.json"),
+            r#"{"key":"val"}"#,
+        );
+        write_file(
+            &home.join(".config/opencode/agents/autopilot.md"),
+            "# autopilot\nmode: primary",
+        );
+        write_file(
+            &home.join(".config/opencode/agents/repo-scout.md"),
+            "# repo-scout\nmode: subagent",
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "synced");
+    }
+
+    #[test]
+    fn opencode_config_status_missing_when_config_target_absent() {
+        let root = temp_root("opencode-no-target");
+        let home = temp_root("home-no-target");
+
+        write_file(&root.join("templates/opencode.json"), r#"{"key":"val"}"#);
+        // No config target in home
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "missing");
+    }
+
+    #[test]
+    fn opencode_config_status_missing_when_config_source_absent() {
+        let root = temp_root("opencode-no-source");
+        let home = temp_root("home-no-source");
+
+        // No templates/opencode.json in root
+        write_file(
+            &home.join(".config/opencode/opencode.json"),
+            r#"{"key":"val"}"#,
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "missing");
+    }
+
+    #[test]
+    fn opencode_config_status_diverged_when_config_differs() {
+        let root = temp_root("opencode-div-cfg");
+        let home = temp_root("home-div-cfg");
+
+        write_file(&root.join("templates/opencode.json"), r#"{"updated":true}"#);
+        write_file(
+            &home.join(".config/opencode/opencode.json"),
+            r#"{"updated":false}"#,
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
+    }
+
+    #[test]
+    fn opencode_config_status_missing_when_an_agent_is_missing() {
+        let root = temp_root("opencode-agent-missing");
+        let home = temp_root("home-agent-missing");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        write_file(&root.join("agents/autopilot.md"), "autopilot");
+        write_file(&root.join("agents/repo-scout.md"), "repo-scout");
+
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+        write_file(
+            &home.join(".config/opencode/agents/autopilot.md"),
+            "autopilot",
+        );
+        // repo-scout.md is NOT written to home target
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "missing");
+    }
+
+    #[test]
+    fn opencode_config_status_diverged_when_agent_content_differs() {
+        let root = temp_root("opencode-agent-div");
+        let home = temp_root("home-agent-div");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        write_file(&root.join("agents/autopilot.md"), "updated agent");
+
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+        write_file(
+            &home.join(".config/opencode/agents/autopilot.md"),
+            "old agent",
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
+    }
+
+    #[test]
+    fn opencode_config_status_diverged_when_no_agents_dir() {
+        let root = temp_root("opencode-no-agents-dir");
+        let home = temp_root("home-no-agents-dir");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        // No agents/ directory at all
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
+    }
+
+    #[test]
+    fn opencode_config_status_diverged_when_agents_dir_empty() {
+        let root = temp_root("opencode-empty-agents");
+        let home = temp_root("home-empty-agents");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        fs::create_dir_all(root.join("agents")).expect("create agents dir");
+        // No .md files in agents dir
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
+    }
+
+    #[test]
+    fn opencode_config_status_ignores_dotfiles_in_agents() {
+        let root = temp_root("opencode-dotfile");
+        let home = temp_root("home-dotfile");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        write_file(&root.join("agents/autopilot.md"), "autopilot");
+        // Dotfile should be ignored
+        write_file(&root.join("agents/.DS_Store"), "garbage");
+
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+        write_file(
+            &home.join(".config/opencode/agents/autopilot.md"),
+            "autopilot",
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "synced");
+    }
+
+    #[test]
+    fn opencode_config_status_ignores_non_md_files_in_agents() {
+        let root = temp_root("opencode-nonmd");
+        let home = temp_root("home-nonmd");
+
+        write_file(&root.join("templates/opencode.json"), r#"{}"#);
+        write_file(&root.join("agents/autopilot.md"), "autopilot");
+        write_file(&root.join("agents/notes.txt"), "not an agent");
+
+        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
+        write_file(
+            &home.join(".config/opencode/agents/autopilot.md"),
+            "autopilot",
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "synced");
+    }
+
+    // ── git tests ──
 
     #[test]
     fn non_git_workspace_is_reported_as_not_git() {
