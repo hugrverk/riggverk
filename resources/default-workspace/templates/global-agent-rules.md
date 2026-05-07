@@ -11,7 +11,22 @@ Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, 
 
 ## Working model
 Optimize for correctness, bounded scope, repository consistency, low maintenance, and solo-developer cognitive load. Prefer boring robust solutions, smallest safe diffs, and existing patterns. Do not trade away correctness, security, or final judgment quality to save usage.
-Use installed skills when relevant. Prefer precise skill selection over loading many skills.
+
+## Skill routing
+Use the installed skill system as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full bundled starter catalog when working inside this workspace.
+
+- **Bugs/regressions/performance/flakes**: `diagnose`; add `tdd` for narrow regression tests.
+- **Unfamiliar/risky areas**: `zoom-out`; add `implementation-plan` for edits.
+- **Multi-step work**: `implementation-plan`; add `context-budget` for broad prompts or token overhead.
+- **UI/frontend**: `frontend-design`; add `screenshot-review`, `browser-qa`, or `accessibility-review` as needed.
+- **Security/auth/uploads/endpoints/secrets/shell/payments**: `security-review`.
+- **DB/schema/data changes**: `database-migrations`.
+- **Dependencies/SDKs/CLIs/packages**: `dependency-evaluation`; add `current-docs` for fast-moving APIs.
+- **Release/merge/deploy/handoff**: `release-check`.
+- **Executor reports**: `agent-report-review`.
+- **Product/spec/triage/planning**: `to-prd`, `triage`, `grill-me`, or `grill-with-docs`.
+- **Skill authoring**: `write-a-skill`.
+- **Compressed technical output**: `caveman` only when explicitly requested.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.

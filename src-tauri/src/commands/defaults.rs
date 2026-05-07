@@ -429,4 +429,32 @@ mod tests {
             );
         }
     }
+
+    #[test]
+    fn global_agent_rules_template_contains_skill_routing() {
+        let root = source_tree_default_workspace_root();
+        let template_path = root.join("templates/global-agent-rules.md");
+        let content = std::fs::read_to_string(&template_path)
+            .unwrap_or_else(|_| panic!("failed to read {}", template_path.display()));
+        assert!(
+            content.contains("## Skill routing"),
+            "template must contain ## Skill routing section"
+        );
+        assert!(
+            content.contains("diagnose"),
+            "template must reference diagnose skill"
+        );
+        assert!(
+            content.contains("implementation-plan"),
+            "template must reference implementation-plan skill"
+        );
+        assert!(
+            content.contains("security-review"),
+            "template must reference security-review skill"
+        );
+        assert!(
+            content.contains("release-check"),
+            "template must reference release-check skill"
+        );
+    }
 }

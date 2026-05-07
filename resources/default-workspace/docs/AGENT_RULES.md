@@ -7,6 +7,7 @@ The source template for agent behavior rules is `templates/global-agent-rules.md
 - Communication style and language preferences
 - Security boundaries (no secrets, no credential-bearing data)
 - Working model (small diffs, boring solutions, bounded scope)
+- Skill routing (task-specific skill selection with concrete routing bullets)
 - Task flow (inspect, plan, implement, verify, report)
 - Verification requirements (never claim done without evidence)
 - Git conventions
