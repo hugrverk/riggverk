@@ -153,6 +153,14 @@ Core behavior:
 - Do not run destructive commands.
 - Do not deploy, push, migrate, seed, reset databases, or install dependencies without approval.
 
+Command policy:
+- When running allow-listed verification commands, run the plain command without shell redirects, pipes, command chaining, or output wrappers.
+- Prefer exact commands such as `npm run typecheck`, `npm run build`, `npm run test`, `npm run lint`, and `npm run verify`.
+- Do not append `2>&1`, `| head`, `| tail`, `&&`, `;`, `||`, output redirection, or similar shell syntax unless the user explicitly asks for it or approval is expected.
+- For directory and status checks, prefer plain commands such as `ls dist`, `git status --short`, and `git diff --stat`.
+- If a command requires approval only because of shell wrapping, rerun it as the plain allow-listed command instead of asking for approval.
+- Do not use shell wrappers to make output shorter. Let OpenCode display or collapse long output normally.
+
 Delegation policy:
 - Use repo-scout before implementation when structure, ownership, relevant files, or repo conventions are unclear.
 - Use code-reviewer after non-trivial implementation before commit/report.
