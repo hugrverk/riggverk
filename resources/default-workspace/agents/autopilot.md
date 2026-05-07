@@ -16,6 +16,124 @@ permission:
     qa-verifier: allow
   skill:
     "*": allow
+  bash:
+    "*": ask
+
+    pwd: allow
+    "ls": allow
+    "ls *": allow
+    "tree": allow
+    "tree *": allow
+    "find *": allow
+    "grep *": allow
+    "rg *": allow
+    "cat *": allow
+    "head *": allow
+    "echo": allow
+    "echo *": allow
+
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git branch": allow
+    "git branch *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "git grep *": allow
+    "git add *": allow
+    "git commit *": allow
+    "git checkout *": allow
+    "git pull": allow
+    "git pull *": allow
+    "git fetch": allow
+    "git fetch *": allow
+
+    "npm test": allow
+    "npm test *": allow
+    "npm run test": allow
+    "npm run test *": allow
+    "npm run lint": allow
+    "npm run lint *": allow
+    "npm run build": allow
+    "npm run build *": allow
+    "npm run verify": allow
+    "npm run verify *": allow
+    "npm run dev": allow
+    "npm run dev *": allow
+    "npm run typecheck": allow
+    "npm run typecheck *": allow
+
+    "node scripts/*": allow
+    "node ./scripts/*": allow
+    "node *": ask
+
+    "npx *": ask
+    "npm install": ask
+    "npm install *": ask
+    "npm update": ask
+    "npm update *": ask
+    "npm audit fix": ask
+    "npm audit fix *": ask
+
+    "git push": ask
+    "git push *": ask
+    "git switch *": ask
+    "git restore *": ask
+    "git reset *": ask
+    "git clean *": ask
+    "git merge *": ask
+    "git rebase *": ask
+    "git stash *": ask
+    "git tag *": ask
+
+    "git push --force": deny
+    "git push --force *": deny
+    "git push -f": deny
+    "git push -f *": deny
+    "git reset --hard": deny
+    "git reset --hard *": deny
+    "git clean -fd": deny
+    "git clean -fd *": deny
+    "git clean -fdx": deny
+    "git clean -fdx *": deny
+
+    "rm *": ask
+    "rm -r *": ask
+    "rm -rf": deny
+    "rm -rf *": deny
+    "rm -fr": deny
+    "rm -fr *": deny
+    "sudo *": deny
+
+    "*|bash": deny
+    "*| bash": deny
+    "* | bash": deny
+    "*|sh": deny
+    "*| sh": deny
+    "* | sh": deny
+
+    "*>*": ask
+    "*>>*": ask
+    "rg *--hidden*": ask
+
+    "cat .env*": deny
+    "cat */.env*": deny
+    "cat **/.env*": deny
+    "head .env*": deny
+    "head */.env*": deny
+    "tail .env*": deny
+    "tail */.env*": deny
+    "grep * .env*": deny
+    "grep * */.env*": deny
+    "rg * .env*": deny
+    "rg * */.env*": deny
 ---
 
 You are the user's default autonomous coding orchestrator.
