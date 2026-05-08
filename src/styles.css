@@ -2269,8 +2269,82 @@ html, body, #root {
   min-height: 0;
   display: flex;
   flex-direction: column;
-  overflow-x: hidden;
+  overflow: hidden;
+}
+
+/* workspace two-column shell */
+
+.ws-shell {
+  display: grid;
+  grid-template-columns: 440px minmax(0, 1fr);
+  gap: 16px;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws-left {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow-y: auto;
+  gap: 0;
+}
+
+.ws-right {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ws-terminal-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.ws-terminal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.ws-terminal-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-heading);
+}
+
+.ws-terminal-status {
+  font-size: 10px;
+  color: var(--text-muted);
+}
+
+.ws-terminal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 14px 18px;
+}
+
+@media (max-width: 800px) {
+  .ws-shell {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ws-right {
+    min-height: 300px;
+  }
 }
 
 /* workspace command strip */
@@ -2543,35 +2617,12 @@ html, body, #root {
   white-space: nowrap;
 }
 
-/* ---- workspace operations (primary cockpit) ---- */
-
-.ws-operations {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 320px;
-  overflow: hidden;
-}
-
-/* central terminal panel — prominent, stable height */
-.ws-op-term-pane {
-  flex: 1;
-  min-height: 100px;
-  max-height: 280px;
-  padding: 14px 18px;
-  overflow-y: auto;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg-inset);
-}
-
-/* action lanes */
+/* ---- workspace action lanes (now inside left column) ---- */
 .ws-lanes {
   display: flex;
   flex-direction: column;
   gap: 0;
   flex-shrink: 0;
-  overflow-y: auto;
-  max-height: 340px;
 }
 
 .ws-lane {
