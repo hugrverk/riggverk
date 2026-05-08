@@ -236,6 +236,23 @@ function App() {
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
+  const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
+    switch (sourceType) {
+      case "docs": return docDirty;
+      case "rules": return agentTemplateDirty;
+      case "agents": return agentDirty;
+      case "configs": return configDirty;
+      case "skills": return false;
+    }
+  }, [docDirty, agentTemplateDirty, agentDirty, configDirty]);
+
+  const setGuardedLibrarySourceType = useCallback((type: LibrarySourceType) => {
+    if (type === librarySourceType) return;
+    if (isLibrarySourceDirty(librarySourceType) && !confirmLeaveDirtyEditor()) return;
+    setLibrarySourceType(type);
+    if (type === "configs") fetchStatus();
+  }, [librarySourceType, isLibrarySourceDirty, fetchStatus]);
+
   // initialize active config target from first enabled / first available
   useEffect(() => {
     const targets = agentTargets.filter(t => t.kind === "config");
@@ -920,12 +937,7 @@ function App() {
   // routing state
   const switchView = useCallback((v: View) => {
     if (v !== view) {
-      const isLibraryDirty = view === "library" && (
-        (librarySourceType === "docs" && docDirty) ||
-        (librarySourceType === "rules" && agentTemplateDirty) ||
-        (librarySourceType === "configs" && configDirty) ||
-        (librarySourceType === "agents" && agentDirty)
-      );
+      const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
       const isSettingsDirty = view === "settings" && settingsDirty;
       if ((isLibraryDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
     }
@@ -934,7 +946,7 @@ function App() {
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1203,16 +1215,7 @@ function App() {
         {view === "library" && (
           <LibraryView
             sourceType={librarySourceType}
-            onSetSourceType={(type) => {
-              const currentDirty =
-                (librarySourceType === "docs" && docDirty) ||
-                (librarySourceType === "rules" && agentTemplateDirty) ||
-                (librarySourceType === "configs" && configDirty) ||
-                (librarySourceType === "agents" && agentDirty);
-              if (currentDirty && !confirmLeaveDirtyEditor()) return;
-              setLibrarySourceType(type);
-              if (type === "configs") { fetchStatus(); }
-            }}
+            onSetSourceType={setGuardedLibrarySourceType}
             // Docs
             docs={docs}
             activeDoc={activeDoc}
