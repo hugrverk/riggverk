@@ -3,7 +3,7 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::agent_targets;
-use crate::path_utils::normalize_user_workspace_path;
+use crate::path_utils::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AppSettings {
@@ -61,6 +61,27 @@ fn normalize(settings: &mut AppSettings) {
         .and_then(validate_accent_color);
 }
 
+fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
+    match settings.appearance.as_str() {
+        "dark" | "light" | "system" => {}
+        _ => settings.appearance = "dark".into(),
+    }
+
+    if let Some(ref val) = settings.workspace_path {
+        settings.workspace_path = normalize_user_workspace_path_for_save(val)?;
+    }
+
+    settings.enabled_target_ids =
+        agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+
+    settings.accent_color = settings
+        .accent_color
+        .as_deref()
+        .and_then(validate_accent_color);
+
+    Ok(())
+}
+
 fn settings_file() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
     if home.is_empty() {
@@ -83,7 +104,7 @@ pub fn load() -> AppSettings {
 }
 
 pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
-    normalize(&mut settings);
+    normalize_for_save(&mut settings)?;
 
     let path = settings_file()?;
     if let Some(parent) = path.parent() {
@@ -96,7 +117,7 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize, validate_accent_color, AppSettings};
+    use super::{normalize, normalize_for_save, validate_accent_color, AppSettings};
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -112,7 +133,7 @@ mod tests {
         let home = std::env::var("HOME").expect("HOME required for test");
         let mut settings = settings_with_path(Some("~"));
 
-        normalize(&mut settings);
+        normalize_for_save(&mut settings).expect("save normalization should succeed");
 
         assert_eq!(settings.workspace_path, Some(home));
     }
@@ -126,16 +147,16 @@ mod tests {
             .into_owned();
         let mut settings = settings_with_path(Some("~/Desktop/test"));
 
-        normalize(&mut settings);
+        normalize_for_save(&mut settings).expect("save normalization should succeed");
 
         assert_eq!(settings.workspace_path, Some(expected));
     }
 
     #[test]
-    fn saved_workspace_path_trims_whitespace() {
+    fn saved_workspace_path_accepts_trimmed_absolute_path() {
         let mut settings = settings_with_path(Some("  /tmp/workspace  "));
 
-        normalize(&mut settings);
+        normalize_for_save(&mut settings).expect("save normalization should succeed");
 
         assert_eq!(settings.workspace_path, Some("/tmp/workspace".into()));
     }
@@ -143,6 +164,30 @@ mod tests {
     #[test]
     fn saved_empty_workspace_path_becomes_none() {
         let mut settings = settings_with_path(Some(" \n\t "));
+
+        normalize_for_save(&mut settings).expect("save normalization should succeed");
+
+        assert_eq!(settings.workspace_path, None);
+    }
+
+    #[test]
+    fn saved_workspace_path_rejects_relative_paths() {
+        for path in ["workspace/local", "./workspace", "../workspace"] {
+            let mut settings = settings_with_path(Some(path));
+
+            let result = normalize_for_save(&mut settings);
+
+            assert!(result.is_err(), "expected {path:?} to be rejected");
+            assert_eq!(
+                result.unwrap_err(),
+                "workspace path must be absolute or start with ~/"
+            );
+        }
+    }
+
+    #[test]
+    fn loaded_legacy_relative_workspace_path_becomes_none() {
+        let mut settings = settings_with_path(Some("workspace/local"));
 
         normalize(&mut settings);
 

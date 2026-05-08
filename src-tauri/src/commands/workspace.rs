@@ -4,7 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use crate::agent_targets;
-use crate::path_utils::normalize_user_workspace_path;
+use crate::path_utils::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
 use crate::settings;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -294,7 +294,32 @@ fn evaluate_create_plan(target_path: Option<String>) -> CreateWorkspacePlan {
         }
     };
 
-    let path_str = normalize_user_workspace_path(&raw).unwrap_or_default();
+    let path_str = match normalize_user_workspace_path_for_save(&raw) {
+        Ok(Some(path)) => path,
+        Ok(None) => {
+            return CreateWorkspacePlan {
+                ok: false,
+                status: "missing_target".into(),
+                target_path: String::new(),
+                reason: "No target path provided. Enter a workspace path in the field above."
+                    .into(),
+                warnings: vec![],
+                planned_files: vec![],
+            };
+        }
+        Err(err) => {
+            return CreateWorkspacePlan {
+                ok: false,
+                status: "invalid_target".into(),
+                target_path: raw.trim().to_string(),
+                reason: err,
+                warnings: vec![
+                    "Workspace paths must not depend on the app process working directory.".into(),
+                ],
+                planned_files: vec![],
+            };
+        }
+    };
     let target = Path::new(&path_str);
 
     if is_unsafe_target(target) {
@@ -944,6 +969,37 @@ mod tests {
 
         assert_eq!(candidate, expected);
         assert_eq!(plan.target_path, candidate);
+    }
+
+    #[test]
+    fn diagnostics_ignore_legacy_relative_workspace_path() {
+        let settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some("workspace/local".into()),
+            enabled_target_ids: vec![],
+            accent_color: None,
+        };
+
+        let candidate = repo_path_from_settings(&settings)
+            .to_string_lossy()
+            .into_owned();
+
+        assert_ne!(candidate, "workspace/local");
+    }
+
+    #[test]
+    fn plan_rejects_relative_workspace_paths() {
+        for path in ["workspace/local", "./workspace", "../workspace"] {
+            let plan = plan_create_workspace(Some(path.into())).expect("plan should succeed");
+
+            assert_eq!(plan.status, "invalid_target");
+            assert!(!plan.ok);
+            assert_eq!(plan.target_path, path);
+            assert_eq!(
+                plan.reason,
+                "workspace path must be absolute or start with ~/"
+            );
+        }
     }
 
     #[test]

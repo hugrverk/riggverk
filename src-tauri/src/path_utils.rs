@@ -27,12 +27,27 @@ pub(crate) fn normalize_user_workspace_path(raw: &str) -> Option<String> {
         }
     }
 
-    Some(trimmed.to_string())
+    if PathBuf::from(trimmed).is_absolute() {
+        return Some(trimmed.to_string());
+    }
+
+    None
+}
+
+pub(crate) fn normalize_user_workspace_path_for_save(raw: &str) -> Result<Option<String>, String> {
+    let trimmed = raw.trim();
+    if trimmed.is_empty() {
+        return Ok(None);
+    }
+
+    normalize_user_workspace_path(trimmed)
+        .map(Some)
+        .ok_or_else(|| "workspace path must be absolute or start with ~/".to_string())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::normalize_user_workspace_path;
+    use super::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> &'static Mutex<()> {
@@ -77,10 +92,31 @@ mod tests {
     }
 
     #[test]
-    fn non_tilde_relative_paths_stay_relative() {
+    fn legacy_non_tilde_relative_paths_become_none() {
+        assert_eq!(normalize_user_workspace_path("workspace/local"), None);
+    }
+
+    #[test]
+    fn save_normalization_rejects_relative_paths() {
+        for path in ["workspace/local", "./workspace", "../workspace"] {
+            let result = normalize_user_workspace_path_for_save(path);
+            assert!(result.is_err(), "expected {path:?} to be rejected");
+            assert_eq!(
+                result.unwrap_err(),
+                "workspace path must be absolute or start with ~/"
+            );
+        }
+    }
+
+    #[test]
+    fn save_normalization_accepts_absolute_and_empty_paths() {
         assert_eq!(
-            normalize_user_workspace_path("workspace/local"),
-            Some("workspace/local".into())
+            normalize_user_workspace_path_for_save("  /tmp/example  "),
+            Ok(Some("/tmp/example".into()))
+        );
+        assert_eq!(
+            normalize_user_workspace_path_for_save("   \n\t  "),
+            Ok(None)
         );
     }
 }

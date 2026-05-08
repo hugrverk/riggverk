@@ -489,6 +489,9 @@ fn create_doc_at_root(
     } else {
         format!("# {}\n", trimmed_title)
     };
+    if initial_content.len() > MAX_DOC_SIZE {
+        return Err("content exceeds 512 KB limit".to_string());
+    }
     std::fs::write(&target_path, &initial_content).map_err(|e| format!("write error: {}", e))?;
 
     Ok(DocumentContent {
@@ -829,6 +832,24 @@ mod tests {
         let saved = std::fs::read_to_string(root.join(custom_doc_rel_path("my-notes"))).unwrap();
         cleanup(&root);
         assert_eq!(saved, "");
+    }
+
+    #[test]
+    fn create_doc_rejects_explicit_content_over_limit_without_writing() {
+        let root = temp_root("create-doc-oversize");
+        std::fs::create_dir_all(&root).expect("create root dir");
+        let target_path = root.join(custom_doc_rel_path("too-large"));
+        let oversized = "a".repeat(MAX_DOC_SIZE + 1);
+
+        let result = create_doc_at_root(&root, "Too Large", "too-large", Some(oversized));
+
+        assert!(result.is_err());
+        assert_eq!(result.unwrap_err(), "content exceeds 512 KB limit");
+        assert!(
+            !target_path.exists(),
+            "oversized create_doc must not leave a file behind"
+        );
+        cleanup(&root);
     }
 
     #[test]
