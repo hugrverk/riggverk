@@ -32,7 +32,7 @@ Shows workspace structure: marker status, file categories, system map (rules/con
 
 - Open the **Library tab** to browse docs
 - Visit the **Settings tab** to enable sync targets
-- Use the **Routing tab** only for operator guidance profiles
+- Use the **Brain Setup tab** to copy instruction blocks for your AI assistant
 - Run a dry-run sync before applying anything
 - Optional: initialize Git (see GIT_VERSIONING.md)
 
@@ -70,11 +70,37 @@ View and edit agent prompt definitions (`agents/*.md`). Each agent shows its mod
 
 View and edit `templates/opencode.json`. The JSON is formatted for readability.
 
-## Routing Tab
+## Brain Setup Tab
 
-Review and edit routing profiles. Profiles recommend tools, models, skills, and agents for task types.
+Teach your AI assistant how to route work through installed skills. Agent Workspace does not automatically control ChatGPT, Claude Web, or other external chat UIs.
 
-Routing profiles are guidance only. They do not change enabled sync targets, run agents, generate prompts, or mutate OpenCode/Codex/Claude/Gemini/Auggie configuration.
+### Brain setup block
+
+The primary action is **copy brain setup** — a block of persistent instructions you paste into Custom Instructions, project instructions, or the first message of a long-running assistant workspace.
+
+The instruction block tells your assistant to:
+- Route coding and product tasks through relevant installed skills.
+- Recommend target model/tool before implementation prompts.
+- Include DB/migration status before implementation prompts.
+- Translate skill names into concrete execution steps, acceptance criteria, and verification.
+- Prefer repository reality over assumptions.
+- Keep diffs small and bounded.
+- Never print secrets, tokens, or credentials.
+- Never claim verification passed unless commands were actually run.
+
+A skill routing reference is included, describing when to use skills like diagnose, implementation-plan, frontend-design, security-review, release-check, and others.
+
+### Execution profiles
+
+Execution profiles are reusable prompt metadata defined in an optional `routing/profiles.json` sidecar file. Each profile recommends tool, model, skills, agent, DB/migration status, and risk level for a specific task type.
+
+Profiles are prompt metadata only. They do not execute automatically, do not change enabled sync targets, and do not run agents.
+
+The **copy profile header** action copies a selected profile as a prompt header block, including recommended model/tool, DB status, relevant skills, execution profile id, and risk notes.
+
+### JSON editor
+
+Switch to **edit JSON** mode to add, edit, or delete profiles directly. The editor includes template inserts for common profile patterns (codex-review, opencode-implementation, frontend-ui, security-review). Save validates JSON structure, backs up the existing file, and rejects oversized content (>256 KB).
 
 ## Settings Tab
 

@@ -61,7 +61,7 @@ The app repository release-check validates bundled default docs, scripts, starte
 4. Click Save to persist the enabled target selection
 5. Return to the Workspace tab and run diff before sync
 
-Routing profiles are separate operator guidance. Editing Routing does not change enabled sync targets.
+Execution profiles are prompt metadata. Editing profiles does not change enabled sync targets.
 
 ## Debug a sync issue
 

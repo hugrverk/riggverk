@@ -963,8 +963,8 @@ function App() {
           <button
             className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}${dirtyTabClass(routingDirty)}`}
             onClick={() => switchView("routing")}
-            aria-label={dirtyTabAriaLabel(routingDirty, "Routing")}
-            title="Routing"
+            aria-label={dirtyTabAriaLabel(routingDirty, "Brain Setup")}
+            title="Brain Setup"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <circle cx="6" cy="6" r="2.5" />

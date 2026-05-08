@@ -4160,6 +4160,75 @@ html, body, #root {
   margin-left: auto;
 }
 
+/* ── brain setup panel ── */
+
+.brain-setup-panel {
+  border-bottom: 1px solid var(--border);
+  background: var(--accent-dim);
+  flex-shrink: 0;
+}
+
+.brain-setup-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+}
+
+.brain-setup-explain {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.85;
+  line-height: 1.6;
+  margin: 0;
+  max-width: 720px;
+}
+
+.brain-setup-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-top: 2px;
+}
+
+.brain-setup-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.brain-setup-preview-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.brain-setup-pre {
+  padding: 10px 14px;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 200px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-inset);
+}
+
+/* ── routing empty state hints ── */
+
+.routing-main-empty-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
 /* responsive: stack sidebar on narrow screens */
 @media (max-width: 640px) {
   .lib-layout {
