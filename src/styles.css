@@ -3873,39 +3873,131 @@ html, body, #root {
   padding: 12px;
 }
 
-/* ── routing preview two-column layout ── */
+/* ── brain layout two-column ── */
 
-.routing-preview-layout {
+.brain-layout {
   display: grid;
-  grid-template-columns: minmax(360px, 1fr) minmax(0, 1.4fr);
+  grid-template-columns: minmax(340px, 0.42fr) minmax(0, 1fr);
   flex: 1;
   min-height: 0;
 }
 
-.routing-left-panel {
+.brain-left {
   display: flex;
   flex-direction: column;
   min-width: 0;
   min-height: 0;
   overflow-y: auto;
   border-right: 1px solid var(--border);
-  background: var(--bg-inset);
 }
 
-.routing-left-panel .routing-profile-list {
-  border: none;
+.brain-right {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-.routing-left-panel .configs-bundle-section {
+.brain-right .configs-bundle-section {
   background: transparent;
 }
 
-/* Compact compatibility summary bar */
-.routing-compat-bar {
+/* ── brain setup panel (inside left column) ── */
+
+.brain-panel {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.brain-panel-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px 14px 12px;
+}
+
+.brain-panel-explain {
+  font-size: 12px;
+  color: var(--text);
+  opacity: 0.78;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.brain-panel-actions {
   display: flex;
   align-items: center;
   gap: 8px;
-  padding: 3px 8px;
+}
+
+.brain-panel-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.brain-panel-preview-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.brain-panel-pre {
+  padding: 10px 14px;
+  font-family: var(--font);
+  font-size: 10px;
+  line-height: 1.5;
+  color: var(--text-muted);
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 160px;
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-inset);
+}
+
+/* ── execution profile section (inside left column) ── */
+
+.exec-profile-section {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.exec-profile-header {
+  padding: 8px 14px 6px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.exec-profile-title {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+
+.exec-profile-helper {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  margin-top: 3px;
+  line-height: 1.4;
+}
+
+.exec-profile-compat {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 3px 14px;
   border-bottom: 1px solid var(--border);
   font-size: 10px;
   color: var(--text-muted);
@@ -3914,38 +4006,115 @@ html, body, #root {
   flex-wrap: wrap;
 }
 
-.routing-compat-bar-item {
+.exec-profile-compat-item {
   display: inline-flex;
   align-items: center;
   gap: 3px;
 }
 
-/* Right panel (selected route details) */
-.routing-right-panel {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
+.exec-profile-section .routing-profile-list {
+  border: none;
+  flex: 1;
   overflow-y: auto;
 }
 
-.routing-right-panel .configs-bundle-section {
+.exec-profile-section .configs-bundle-section {
   background: transparent;
 }
 
-/* Empty state inside right panel */
-.routing-right-empty {
+/* exec profile empty state (when no profiles) */
+.exec-profile-empty {
   display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  flex: 1;
+  min-height: 120px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 12px;
+  gap: 4px;
+  padding: 20px;
+  text-align: center;
+  line-height: 1.5;
+}
+
+/* ── right column: profile detail ── */
+
+.profile-detail-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 8px 14px;
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.profile-detail-row {
+  display: flex;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.profile-detail-key {
+  color: var(--text-muted);
+  opacity: 0.6;
+  min-width: 110px;
+  flex-shrink: 0;
+}
+
+.profile-detail-val {
+  color: var(--text);
+  opacity: 0.8;
+  font-family: var(--font-mono, var(--font));
+}
+
+.profile-header-pre {
+  padding: 10px 14px;
+  font-family: var(--font);
+  font-size: 11px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  white-space: pre;
+  overflow-x: auto;
+  overflow-y: auto;
+  max-height: 200px;
+  margin: 0;
+  user-select: all;
+  cursor: text;
+}
+
+.profile-empty-state {
+  display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   height: 100%;
   min-height: 160px;
   color: var(--text-muted);
-  opacity: 0.6;
-  font-size: 13px;
+  opacity: 0.55;
+  font-size: 12px;
+  gap: 4px;
+  padding: 24px;
+  text-align: center;
+  line-height: 1.5;
 }
 
-/* Full-viewport empty state (no profiles / error / loading) */
+.profile-chip-row {
+  display: inline-flex;
+  gap: 3px;
+  vertical-align: middle;
+  flex-wrap: wrap;
+}
+
+.profile-chip {
+  font-family: var(--font);
+  font-size: 8px;
+}
+
+/* ── full-viewport empty state (no valid workspace / error / loading) ── */
+
 .routing-main-empty {
   display: flex;
   flex-direction: column;
@@ -3965,20 +4134,26 @@ html, body, #root {
   font-family: var(--font);
 }
 
-/* responsive: stack routing panels on narrow screens */
+.routing-main-empty-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+/* responsive: stack brain layout columns on narrow screens */
 @media (max-width: 900px) {
-  .routing-preview-layout {
+  .brain-layout {
     grid-template-columns: 1fr;
     grid-template-rows: auto 1fr;
   }
 
-  .routing-left-panel {
+  .brain-left {
     max-height: 45%;
     border-right: none;
     border-bottom: 1px solid var(--border);
   }
 
-  .routing-right-panel {
+  .brain-right {
     overflow-y: auto;
   }
 }
@@ -4158,75 +4333,6 @@ html, body, #root {
   color: var(--text-muted);
   opacity: 0.6;
   margin-left: auto;
-}
-
-/* ── brain setup panel ── */
-
-.brain-setup-panel {
-  border-bottom: 1px solid var(--border);
-  background: var(--accent-dim);
-  flex-shrink: 0;
-}
-
-.brain-setup-body {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  padding: 12px 14px;
-}
-
-.brain-setup-explain {
-  font-size: 12px;
-  color: var(--text);
-  opacity: 0.85;
-  line-height: 1.6;
-  margin: 0;
-  max-width: 720px;
-}
-
-.brain-setup-actions {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-top: 2px;
-}
-
-.brain-setup-preview {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.brain-setup-preview-hint {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.6;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.brain-setup-pre {
-  padding: 10px 14px;
-  font-family: var(--font);
-  font-size: 11px;
-  line-height: 1.55;
-  color: var(--text-muted);
-  white-space: pre;
-  overflow-x: auto;
-  overflow-y: auto;
-  max-height: 200px;
-  margin: 0;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: var(--bg-inset);
-}
-
-/* ── routing empty state hints ── */
-
-.routing-main-empty-hint {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.55;
 }
 
 /* responsive: stack sidebar on narrow screens */
