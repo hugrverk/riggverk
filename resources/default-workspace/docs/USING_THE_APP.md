@@ -72,35 +72,25 @@ View and edit `templates/opencode.json`. The JSON is formatted for readability.
 
 ## Brain Setup Tab
 
-Teach your AI assistant how to route work through installed skills. Agent Workspace does not automatically control ChatGPT, Claude Web, or other external chat UIs.
+A focused copy-paste setup surface for external AI assistants. Agent Workspace does not automatically control ChatGPT, Claude Web, or other external chat UIs.
 
-### Brain setup block
+### How it works
 
-The primary action is **copy brain setup** — a block of persistent instructions you paste into Custom Instructions, project instructions, or the first message of a long-running assistant workspace.
+1. Click **copy brain setup** to copy a durable instruction block.
+2. Paste the block into your assistant&rsquo;s Custom Instructions, project instructions, or the first message of a long-running workspace.
+3. Your assistant will route tasks through installed skills, recommend models, check DB/migration status, and enforce verification discipline.
 
-The instruction block tells your assistant to:
-- Route coding and product tasks through relevant installed skills.
-- Recommend target model/tool before implementation prompts.
-- Include DB/migration status before implementation prompts.
-- Translate skill names into concrete execution steps, acceptance criteria, and verification.
-- Prefer repository reality over assumptions.
-- Keep diffs small and bounded.
-- Never print secrets, tokens, or credentials.
-- Never claim verification passed unless commands were actually run.
+The instruction block covers:
+- Skill routing discipline — when to use diagnose, implementation-plan, frontend-design, security-review, release-check, and others.
+- Model/tool recommendations before implementation prompts.
+- DB/migration awareness before implementation prompts.
+- Security rules — never print secrets, tokens, or credentials.
+- Verification discipline — never claim verification passed unless commands were actually run.
+- Repository reality over assumptions.
 
-A skill routing reference is included, describing when to use skills like diagnose, implementation-plan, frontend-design, security-review, release-check, and others.
+A preview of the full prompt block is shown on the page.
 
-### Execution profiles
-
-Execution profiles are reusable prompt metadata defined in an optional `routing/profiles.json` sidecar file. Each profile recommends tool, model, skills, agent, DB/migration status, and risk level for a specific task type.
-
-Profiles are prompt metadata only. They do not execute automatically, do not change enabled sync targets, and do not run agents.
-
-The **copy profile header** action copies a selected profile as a prompt header block, including recommended model/tool, DB status, relevant skills, execution profile id, and risk notes.
-
-### JSON editor
-
-Switch to **edit JSON** mode to add, edit, or delete profiles directly. The editor includes template inserts for common profile patterns (codex-review, opencode-implementation, frontend-ui, security-review). Save validates JSON structure, backs up the existing file, and rejects oversized content (>256 KB).
+Execution profiles (`routing/profiles.json`) remain supported as backend metadata but are no longer visible in the Brain Setup UI. Advanced users can manage profiles directly in the workspace file system.
 
 ## Settings Tab
 

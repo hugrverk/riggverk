@@ -10,7 +10,7 @@ import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
 import { RoutingView } from "./views/RoutingView";
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, RoutingProfilesResponse, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
@@ -315,17 +315,6 @@ function App() {
     }
   }, []);
 
-  const loadRoutingData = useCallback(async () => {
-    try {
-      const data = await invoke<RoutingProfilesResponse>("get_routing_profiles");
-      setRoutingData(data);
-      setRoutingError(null);
-    } catch (e) {
-      setRoutingData(null);
-      setRoutingError(String(e));
-    }
-  }, []);
-
   const selectDoc = useCallback(async (id: string) => {
     if (docDirty && id !== activeDoc?.id && !confirmLeaveDirtyEditor()) return;
     activeDocIdRef.current = id;
@@ -467,11 +456,10 @@ function App() {
       loadSkills().catch(() => {}),
       loadDocs().catch(() => {}),
       loadAgentSources().catch(() => {}),
-      loadRoutingData().catch(() => {}),
       loadContract().catch(() => {}),
       fetchStatus().catch(() => {}),
     ]);
-  }, [loadSkills, loadDocs, loadAgentSources, loadRoutingData, loadContract, fetchStatus]);
+  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus]);
 
   const runCreate = useCallback(async () => {
     setCreateRunning(true);
@@ -793,10 +781,6 @@ function App() {
   }, [applyWorkspacePath]);
 
   // routing state
-  const [routingData, setRoutingData] = useState<RoutingProfilesResponse | null>(null);
-  const [routingError, setRoutingError] = useState<string | null>(null);
-  const [routingDirty, setRoutingDirty] = useState(false);
-
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && (
@@ -806,16 +790,14 @@ function App() {
         (librarySourceType === "agents" && agentDirty)
       );
       const isSettingsDirty = view === "settings" && settingsDirty;
-      const isRoutingDirty = view === "routing" && routingDirty;
-      if ((isLibraryDirty || isSettingsDirty || isRoutingDirty) && !confirmLeaveDirtyEditor()) return;
+      if ((isLibraryDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
     setSettingsMsg(null);
     if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
-    else if (v === "routing") { loadRoutingData(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, routingDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, docDirty, agentTemplateDirty, configDirty, agentDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -961,9 +943,9 @@ function App() {
           </button>
           {/* Routing */}
           <button
-            className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}${dirtyTabClass(routingDirty)}`}
+            className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}${dirtyTabClass(false)}`}
             onClick={() => switchView("routing")}
-            aria-label={dirtyTabAriaLabel(routingDirty, "Brain Setup")}
+            aria-label={dirtyTabAriaLabel(false, "Brain Setup")}
             title="Brain Setup"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1156,16 +1138,7 @@ function App() {
         )}
 
         {view === "routing" && (
-          <RoutingView
-            routingData={routingData}
-            routingError={routingError}
-            workspaceValid={workspaceValid}
-            onProfilesChanged={loadRoutingData}
-            onRoutingDirtyChange={setRoutingDirty}
-            skills={skills}
-            agentSources={agentSources}
-            contractResult={contractResult}
-          />
+          <RoutingView workspaceValid={workspaceValid} />
         )}
 
         {view === "settings" && (
