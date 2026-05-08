@@ -527,7 +527,7 @@ mod tests {
         std::env::temp_dir().join(format!("agent-workspace-docs-{name}-{nonce}"))
     }
 
-    fn write_file(root: &PathBuf, rel: &str, content: &str) {
+    fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
@@ -1202,7 +1202,7 @@ mod tests {
     }
 
     fn save_doc_at_root_for_config(
-        root: &PathBuf,
+        root: &Path,
         target_id: &str,
         content: &str,
         custom_backup_root: Option<&Path>,
@@ -1275,7 +1275,7 @@ mod tests {
     // ── agent template save tests ──
 
     fn save_agent_template_at_root(
-        root: &PathBuf,
+        root: &Path,
         content: &str,
         custom_backup_root: Option<&Path>,
     ) -> Result<ActionResult, String> {
@@ -1483,7 +1483,7 @@ mod tests {
         assert!(path.ends_with("agents/architect.md"));
     }
 
-    fn write_agent_file(root: &PathBuf, filename: &str, content: &str) {
+    fn write_agent_file(root: &Path, filename: &str, content: &str) {
         write_file(root, &format!("agents/{}", filename), content);
     }
 
@@ -2122,19 +2122,19 @@ mod agent_metadata_tests {
         std::env::temp_dir().join(format!("agent-workspace-agmeta-{name}-{nonce}"))
     }
 
-    fn write_metadata(root: &PathBuf, json: &str) {
+    fn write_metadata(root: &Path, json: &str) {
         let dir = root.join("metadata");
         fs::create_dir_all(&dir).expect("create metadata dir");
         fs::write(dir.join("agents.json"), json).expect("write agents.json");
     }
 
-    fn write_agent_file(root: &PathBuf, filename: &str) {
+    fn write_agent_file(root: &Path, filename: &str) {
         let dir = root.join("agents");
         fs::create_dir_all(&dir).expect("create agents dir");
         fs::write(dir.join(filename), "# agent\n").expect("write agent file");
     }
 
-    fn write_skill(root: &PathBuf, name: &str) {
+    fn write_skill(root: &Path, name: &str) {
         let dir = root.join("skills").join(name);
         fs::create_dir_all(&dir).expect("create skill dir");
         fs::write(

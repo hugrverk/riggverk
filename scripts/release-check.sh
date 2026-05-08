@@ -528,7 +528,7 @@ npm run build
 cd src-tauri
 cargo fmt --check
 cargo check
-cargo clippy -- -D warnings
+cargo clippy --all-targets --all-features -- -D warnings
 cargo test
 
 step "release smoke doc"

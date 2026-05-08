@@ -168,7 +168,7 @@ pub fn get_default_workspace_summary(
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_root(name: &str) -> PathBuf {
@@ -179,7 +179,7 @@ mod tests {
         std::env::temp_dir().join(format!("agent-workspace-defaults-{name}-{nonce}"))
     }
 
-    fn write_file(root: &PathBuf, rel: &str) {
+    fn write_file(root: &Path, rel: &str) {
         if let Some(parent) = root.join(rel).parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }

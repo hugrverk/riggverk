@@ -442,14 +442,14 @@ mod tests {
         root
     }
 
-    fn write_file(root: &PathBuf, rel: &str, content: &str) {
+    fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
         fs::write(root.join(rel), content).expect("write file");
     }
 
-    fn write_skill(root: &PathBuf, skill_name: &str) {
+    fn write_skill(root: &Path, skill_name: &str) {
         let path = root.join("skills").join(skill_name).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill dir");
@@ -461,7 +461,7 @@ mod tests {
         .expect("write skill");
     }
 
-    fn write_skill_with_targets(root: &PathBuf, skill_name: &str, targets: &str, risk: &str) {
+    fn write_skill_with_targets(root: &Path, skill_name: &str, targets: &str, risk: &str) {
         let path = root.join("skills").join(skill_name).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill dir");
@@ -476,7 +476,7 @@ mod tests {
         .expect("write skill with metadata");
     }
 
-    fn write_agent(root: &PathBuf, agent_name: &str) {
+    fn write_agent(root: &Path, agent_name: &str) {
         let path = root.join("agents").join(agent_name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create agents dir");
@@ -844,7 +844,7 @@ mod tests {
         );
     }
 
-    fn read_profiles_at_root(root: &PathBuf) -> Result<RoutingProfilesResponse, String> {
+    fn read_profiles_at_root(root: &Path) -> Result<RoutingProfilesResponse, String> {
         let rel = ROUTING_PROFILES_PATH;
         let path = root.join(rel);
 
@@ -896,7 +896,7 @@ mod tests {
     // ── save_routing_profiles tests ──
 
     fn save_at_root(
-        root: &PathBuf,
+        root: &Path,
         content: &str,
         custom_backup_root: Option<&Path>,
     ) -> Result<ActionResult, String> {
@@ -1138,7 +1138,7 @@ mod tests {
 
     // ── agent metadata compatibility tests ──
 
-    fn write_agent_metadata(root: &PathBuf, json: &str) {
+    fn write_agent_metadata(root: &Path, json: &str) {
         let dir = root.join("metadata");
         std::fs::create_dir_all(&dir).expect("create metadata dir");
         std::fs::write(dir.join("agents.json"), json).expect("write agents.json");

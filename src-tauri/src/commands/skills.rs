@@ -343,7 +343,7 @@ pub fn open_install_skills_script() -> Result<ActionResult, String> {
 mod tests {
     use super::{discover_skills, validate_project_install_target};
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_root(name: &str) -> PathBuf {
@@ -354,7 +354,7 @@ mod tests {
         std::env::temp_dir().join(format!("agent-workspace-{name}-{nonce}"))
     }
 
-    fn write_skill(root: &PathBuf, rel: &str, name: &str) {
+    fn write_skill(root: &Path, rel: &str, name: &str) {
         let path = root.join(rel).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill parent");
@@ -367,7 +367,7 @@ mod tests {
     }
 
     fn write_skill_with_metadata(
-        root: &PathBuf,
+        root: &Path,
         rel: &str,
         name: &str,
         category: &str,

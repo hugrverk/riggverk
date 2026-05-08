@@ -817,14 +817,14 @@ mod tests {
         root
     }
 
-    fn write_file(root: &PathBuf, rel: &str, content: &str) {
+    fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
         fs::write(root.join(rel), content).expect("write file");
     }
 
-    fn write_skill(root: &PathBuf, skill_name: &str) {
+    fn write_skill(root: &Path, skill_name: &str) {
         let path = root.join("skills").join(skill_name).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill dir");
@@ -836,7 +836,7 @@ mod tests {
         .expect("write skill");
     }
 
-    fn write_skill_no_meta(root: &PathBuf, skill_name: &str) {
+    fn write_skill_no_meta(root: &Path, skill_name: &str) {
         let path = root.join("skills").join(skill_name).join("SKILL.md");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create skill dir");
@@ -844,7 +844,7 @@ mod tests {
         fs::write(path, "# No frontmatter\n").expect("write skill");
     }
 
-    fn write_legacy_skill(root: &PathBuf, category: &str, skill_name: &str) {
+    fn write_legacy_skill(root: &Path, category: &str, skill_name: &str) {
         let path = root
             .join("skills")
             .join(category)
@@ -860,7 +860,7 @@ mod tests {
         .expect("write legacy skill");
     }
 
-    fn write_agent(root: &PathBuf, agent_name: &str) {
+    fn write_agent(root: &Path, agent_name: &str) {
         let path = root.join("agents").join(agent_name);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create agents dir");

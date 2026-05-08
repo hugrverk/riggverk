@@ -784,7 +784,7 @@ mod tests {
     };
     use crate::settings::AppSettings;
     use std::fs;
-    use std::path::PathBuf;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_root(name: &str) -> PathBuf {
@@ -795,11 +795,11 @@ mod tests {
         std::env::temp_dir().join(format!("agent-workspace-{name}-{nonce}"))
     }
 
-    fn mkdir(root: &PathBuf, rel: &str) {
+    fn mkdir(root: &Path, rel: &str) {
         fs::create_dir_all(root.join(rel)).expect("create dir");
     }
 
-    fn write_file(root: &PathBuf, rel: &str, content: &str) {
+    fn write_file(root: &Path, rel: &str, content: &str) {
         if let Some(parent) = root.join(rel).parent() {
             fs::create_dir_all(parent).expect("create parent dirs");
         }
@@ -919,7 +919,7 @@ mod tests {
         );
     }
 
-    fn plan_target(root: &PathBuf) -> String {
+    fn plan_target(root: &Path) -> String {
         root.to_string_lossy().into_owned()
     }
 
@@ -1306,7 +1306,7 @@ mod tests {
         root
     }
 
-    fn create_target(parent: &PathBuf, name: &str) -> PathBuf {
+    fn create_target(parent: &Path, name: &str) -> PathBuf {
         parent.join(name)
     }
 
