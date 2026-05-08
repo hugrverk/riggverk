@@ -43,19 +43,18 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
           ) : (
             <div className="brain-setup-page">
               <div className="brain-setup-grid">
-                {/* ── Left column: explanation + actions + steps ── */}
+                {/* ── Left column ── */}
                 <div className="brain-setup-left" role="region" aria-label="Brain Setup instructions">
-                  <h1 className="brain-setup-heading">Brain Setup</h1>
+                  <span className="brain-setup-eyebrow">Brain Setup</span>
+                  <h1 className="brain-setup-heading">Copy your assistant setup</h1>
                   <p className="brain-setup-subtitle">
-                    Teach your AI assistant how to route work through installed skills.
+                    Teach ChatGPT, Claude, Codex, or another assistant to route work through
+                    installed skills.
                   </p>
                   <p className="brain-setup-explain">
-                    Agent Workspace does not automatically control ChatGPT, Claude Web, Codex, or other
-                    external assistants. Skill routing works when you give your assistant persistent
-                    instructions. Paste the block into Custom Instructions, Claude Project Instructions,
-                    Codex project instructions, or the first message of a long-running assistant
-                    workspace. Your assistant will then route tasks through the installed skills,
-                    recommend models, check DB/migration status, and enforce verification discipline.
+                    Agent Workspace cannot control external chat UIs directly. This setup block
+                    teaches your assistant how to apply installed skills, recommend tools and models,
+                    check DB risk, and require verification before claiming anything passed.
                   </p>
 
                   <div className="brain-setup-copy-row">
@@ -74,21 +73,21 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
                     </div>
                     <div className="brain-setup-step">
                       <span className="brain-setup-step-num">2. paste</span>
-                      <span className="brain-setup-step-text">Paste into your assistant&rsquo;s Custom Instructions or project instructions.</span>
+                      <span className="brain-setup-step-text">Paste into your assistant&rsquo;s Custom Instructions.</span>
                     </div>
                     <div className="brain-setup-step">
                       <span className="brain-setup-step-num">3. prompt</span>
-                      <span className="brain-setup-step-text">Ask for implementation plans or coding tasks. Your assistant will route through skills automatically.</span>
+                      <span className="brain-setup-step-text">Ask for implementation plans. Your assistant routes through skills.</span>
                     </div>
                   </div>
                 </div>
 
-                {/* ── Right column: prompt preview ── */}
-                <div className="brain-setup-right" role="region" aria-label="Brain setup prompt preview">
+                {/* ── Right column ── */}
+                <div className="brain-setup-right" role="region" aria-label="Prompt preview">
                   <div className="brain-preview-card">
                     <div className="brain-preview-header">
-                      <span className="brain-preview-title">Brain setup prompt</span>
-                      <span className="brain-preview-hint">This is the exact block copied to clipboard.</span>
+                      <span className="brain-preview-title">Prompt preview</span>
+                      <span className="brain-preview-hint">This exact text is copied to clipboard.</span>
                     </div>
                     <pre id="brain-setup-block" className="brain-setup-pre">
                       {brainSetupBlock}
