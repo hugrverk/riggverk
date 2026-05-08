@@ -259,6 +259,47 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
 done
 printf '  bundled OpenCode permission hardening checks passed\n'
 
+# Expanded secret deny pattern checks
+step "bundled opencode.json secret deny coverage"
+secret_read_patterns=(id_rsa id_ed25519 kubeconfig '.kube/' terraform.tfstate terraform.tfvars master.key .pgpass .my.cnf .envrc)
+for pat in "${secret_read_patterns[@]}"; do
+  if ! grep -Fq "\"**/${pat}" resources/default-workspace/templates/opencode.json; then
+    printf 'FAIL: bundled opencode.json read deny missing %s\n' "$pat" >&2
+    exit 1
+  fi
+done
+printf '  bundled opencode.json read deny covers expanded secret patterns\n'
+
+step "bundled architect git checkout and git pull are ask-gated"
+if grep -Eq '"git checkout \*":[[:space:]]*allow|git checkout \*: allow' resources/default-workspace/agents/architect.md; then
+  printf 'FAIL: bundled architect.md must not allow git checkout * (ask-gate it)\n' >&2
+  exit 1
+fi
+if grep -Eq '"git pull":[[:space:]]*allow|git pull: allow' resources/default-workspace/agents/architect.md; then
+  printf 'FAIL: bundled architect.md must not allow git pull (ask-gate it)\n' >&2
+  exit 1
+fi
+printf '  bundled architect.md git checkout and git pull are ask-gated\n'
+
+step "bundled architect npm run dev is ask-gated"
+if grep -Eq '"npm run dev":[[:space:]]*allow|npm run dev: allow' resources/default-workspace/agents/architect.md; then
+  printf 'FAIL: bundled architect.md must not allow npm run dev (ask-gate it)\n' >&2
+  exit 1
+fi
+printf '  bundled architect.md npm run dev is ask-gated\n'
+
+step "bundled agents bash deny coverage for expanded secret patterns"
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  file="resources/default-workspace/agents/$agent"
+  for pat in id_rsa id_ed25519 kubeconfig terraform.tfstate terraform.tfvars master.key .pgpass .my.cnf; do
+    if ! grep -q "\"cat ${pat}" "$file" || ! grep -q "\"grep \* ${pat}" "$file"; then
+      printf 'FAIL: bundled %s bash deny missing %s (cat or grep)\n' "$agent" "$pat" >&2
+      exit 1
+    fi
+  done
+done
+printf '  bundled agent bash deny coverage verified for expanded secret patterns\n'
+
 step "bundled default install-opencode-config.sh help mentions agents"
 if ! bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
   printf 'FAIL: install-opencode-config.sh --help missing agents mention\n' >&2

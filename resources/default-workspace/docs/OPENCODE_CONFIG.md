@@ -30,13 +30,15 @@ The default template is conservative:
 
 - Sharing is disabled
 - Most operations default to "ask"
-- Read access is broadly allowed except for secret-bearing files (`.env`, keys, certificates, auth files)
+- Read access is broadly allowed except for secret-bearing files (`.env` files, SSH private keys, kubeconfig, Terraform state/vars, Ansible vaults, shell history, local credential files)
 - Native read/grep/list tools are preferred for file inspection because they honor read-deny rules
 - Bash content commands (`cat`, `head`, `tail`, `sed`, `grep`, `rg`, `git grep`) are ask-gated because bash permissions are separate from read permissions
-- Secret-file protections exist in both read/edit permissions and bash permissions
+- Secret-file protections exist in read, edit, and bash permissions for: `.env` files, SSH private keys (`id_rsa`, `id_ed25519`, `id_ecdsa`, `id_dsa`), `kubeconfig` and `.kube/**`, Terraform state/vars (`terraform.tfstate*`, `terraform.tfvars`, `*.tfvars`), Ansible vault files (`vault.yml`, `secrets.yml`), shell history (`.bash_history`, `.zsh_history`), and local credential files (`master.key`, `.pgpass`, `.my.cnf`, `.envrc`, `*.ppk`, `*.jks`, `Pulumi.*.yaml`)
 - Write access is restricted to source code directories
 - Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`, pipe-to-bash) are denied globally and in each agent
 - Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
+- `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
+- `npm run dev` and other dev server commands are ask-gated in the public starter template
 
 ## Sync workflow
 

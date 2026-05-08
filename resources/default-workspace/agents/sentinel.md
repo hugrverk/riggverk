@@ -67,6 +67,26 @@ permission:
     "cat .aws/**": deny
     "cat .config/gh/**": deny
     "cat .docker/config.json": deny
+    "cat id_rsa": deny
+    "cat id_ed25519": deny
+    "cat id_ecdsa": deny
+    "cat id_dsa": deny
+    "cat kubeconfig": deny
+    "cat .kube/**": deny
+    "cat terraform.tfvars": deny
+    "cat *.tfvars": deny
+    "cat terraform.tfstate*": deny
+    "cat vault.yml": deny
+    "cat secrets.yml": deny
+    "cat master.key": deny
+    "cat .pgpass": deny
+    "cat .my.cnf": deny
+    "cat .envrc": deny
+    "cat .bash_history": deny
+    "cat .zsh_history": deny
+    "cat *.ppk": deny
+    "cat *.jks": deny
+    "cat Pulumi.*.yaml": deny
     "head .env*": deny
     "head */.env*": deny
     "head **/.env*": deny
@@ -93,6 +113,26 @@ permission:
     "head .aws/**": deny
     "head .config/gh/**": deny
     "head .docker/config.json": deny
+    "head id_rsa": deny
+    "head id_ed25519": deny
+    "head id_ecdsa": deny
+    "head id_dsa": deny
+    "head kubeconfig": deny
+    "head .kube/**": deny
+    "head terraform.tfvars": deny
+    "head *.tfvars": deny
+    "head terraform.tfstate*": deny
+    "head vault.yml": deny
+    "head secrets.yml": deny
+    "head master.key": deny
+    "head .pgpass": deny
+    "head .my.cnf": deny
+    "head .envrc": deny
+    "head .bash_history": deny
+    "head .zsh_history": deny
+    "head *.ppk": deny
+    "head *.jks": deny
+    "head Pulumi.*.yaml": deny
     "tail .env*": deny
     "tail */.env*": deny
     "tail **/.env*": deny
@@ -119,6 +159,26 @@ permission:
     "tail .aws/**": deny
     "tail .config/gh/**": deny
     "tail .docker/config.json": deny
+    "tail id_rsa": deny
+    "tail id_ed25519": deny
+    "tail id_ecdsa": deny
+    "tail id_dsa": deny
+    "tail kubeconfig": deny
+    "tail .kube/**": deny
+    "tail terraform.tfvars": deny
+    "tail *.tfvars": deny
+    "tail terraform.tfstate*": deny
+    "tail vault.yml": deny
+    "tail secrets.yml": deny
+    "tail master.key": deny
+    "tail .pgpass": deny
+    "tail .my.cnf": deny
+    "tail .envrc": deny
+    "tail .bash_history": deny
+    "tail .zsh_history": deny
+    "tail *.ppk": deny
+    "tail *.jks": deny
+    "tail Pulumi.*.yaml": deny
     "sed .env*": deny
     "sed */.env*": deny
     "sed **/.env*": deny
@@ -145,6 +205,26 @@ permission:
     "sed .aws/**": deny
     "sed .config/gh/**": deny
     "sed .docker/config.json": deny
+    "sed id_rsa": deny
+    "sed id_ed25519": deny
+    "sed id_ecdsa": deny
+    "sed id_dsa": deny
+    "sed kubeconfig": deny
+    "sed .kube/**": deny
+    "sed terraform.tfvars": deny
+    "sed *.tfvars": deny
+    "sed terraform.tfstate*": deny
+    "sed vault.yml": deny
+    "sed secrets.yml": deny
+    "sed master.key": deny
+    "sed .pgpass": deny
+    "sed .my.cnf": deny
+    "sed .envrc": deny
+    "sed .bash_history": deny
+    "sed .zsh_history": deny
+    "sed *.ppk": deny
+    "sed *.jks": deny
+    "sed Pulumi.*.yaml": deny
     "grep * .env*": deny
     "grep * */.env*": deny
     "grep * **/.env*": deny
@@ -171,6 +251,26 @@ permission:
     "grep * .aws/**": deny
     "grep * .config/gh/**": deny
     "grep * .docker/config.json": deny
+    "grep * id_rsa": deny
+    "grep * id_ed25519": deny
+    "grep * id_ecdsa": deny
+    "grep * id_dsa": deny
+    "grep * kubeconfig": deny
+    "grep * .kube/**": deny
+    "grep * terraform.tfvars": deny
+    "grep * *.tfvars": deny
+    "grep * terraform.tfstate*": deny
+    "grep * vault.yml": deny
+    "grep * secrets.yml": deny
+    "grep * master.key": deny
+    "grep * .pgpass": deny
+    "grep * .my.cnf": deny
+    "grep * .envrc": deny
+    "grep * .bash_history": deny
+    "grep * .zsh_history": deny
+    "grep * *.ppk": deny
+    "grep * *.jks": deny
+    "grep * Pulumi.*.yaml": deny
     "rg * .env*": deny
     "rg * */.env*": deny
     "rg * **/.env*": deny
@@ -197,6 +297,26 @@ permission:
     "rg * .aws/**": deny
     "rg * .config/gh/**": deny
     "rg * .docker/config.json": deny
+    "rg * id_rsa": deny
+    "rg * id_ed25519": deny
+    "rg * id_ecdsa": deny
+    "rg * id_dsa": deny
+    "rg * kubeconfig": deny
+    "rg * .kube/**": deny
+    "rg * terraform.tfvars": deny
+    "rg * *.tfvars": deny
+    "rg * terraform.tfstate*": deny
+    "rg * vault.yml": deny
+    "rg * secrets.yml": deny
+    "rg * master.key": deny
+    "rg * .pgpass": deny
+    "rg * .my.cnf": deny
+    "rg * .envrc": deny
+    "rg * .bash_history": deny
+    "rg * .zsh_history": deny
+    "rg * *.ppk": deny
+    "rg * *.jks": deny
+    "rg * Pulumi.*.yaml": deny
     "git grep * .env*": deny
     "git grep * */.env*": deny
     "git grep * **/.env*": deny
@@ -223,6 +343,26 @@ permission:
     "git grep * .aws/**": deny
     "git grep * .config/gh/**": deny
     "git grep * .docker/config.json": deny
+    "git grep * id_rsa": deny
+    "git grep * id_ed25519": deny
+    "git grep * id_ecdsa": deny
+    "git grep * id_dsa": deny
+    "git grep * kubeconfig": deny
+    "git grep * .kube/**": deny
+    "git grep * terraform.tfvars": deny
+    "git grep * *.tfvars": deny
+    "git grep * terraform.tfstate*": deny
+    "git grep * vault.yml": deny
+    "git grep * secrets.yml": deny
+    "git grep * master.key": deny
+    "git grep * .pgpass": deny
+    "git grep * .my.cnf": deny
+    "git grep * .envrc": deny
+    "git grep * .bash_history": deny
+    "git grep * .zsh_history": deny
+    "git grep * *.ppk": deny
+    "git grep * *.jks": deny
+    "git grep * Pulumi.*.yaml": deny
 ---
 
 You are a read-only security auditor.
