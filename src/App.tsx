@@ -24,6 +24,14 @@ function App() {
   const [activityIndex, setActivityIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("workspace");
+  const workspaceLoadGenerationRef = useRef(0);
+  const workspaceActionLockRef = useRef(false);
+  const workspaceActionRequestIdRef = useRef(0);
+  const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
+
+  const isWorkspaceLoadCurrent = useCallback((generation: number) => {
+    return workspaceLoadGenerationRef.current === generation;
+  }, []);
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
@@ -105,17 +113,27 @@ function App() {
   // workspace contract validation
   const [contractResult, setContractResult] = useState<WorkspaceContractResult | null>(null);
 
-  const loadContract = useCallback(async () => {
+  const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      setContractResult(await invoke<WorkspaceContractResult>("validate_workspace_contract"));
-    } catch (e) { setError(`Contract: ${e}`); }
-  }, []);
+      const result = await invoke<WorkspaceContractResult>("validate_workspace_contract");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setContractResult(result);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Contract: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
 
-  const loadWorkspaceDiagnostics = useCallback(async () => {
+  const loadWorkspaceDiagnostics = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      setWorkspaceDiagnostics(await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics"));
-    } catch (e) { setError(`Workspace diagnostics: ${e}`); }
-  }, []);
+      const diagnostics = await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setWorkspaceDiagnostics(diagnostics);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Workspace diagnostics: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
 
   // default workspace preview state
   const [defaultWorkspaceSummary, setDefaultWorkspaceSummary] = useState<DefaultWorkspaceSummary | null>(null);
@@ -203,16 +221,18 @@ function App() {
     finally { setCreatePlanRunning(false); }
   }, [appSettings]);
 
-  const fetchStatus = useCallback(async () => {
+  const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const data = await invoke<StatusData>("get_status");
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setStatus(data);
       setError(null);
     } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setStatus(null);
       if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
     }
-  }, []);
+  }, [isWorkspaceLoadCurrent]);
 
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
@@ -247,9 +267,10 @@ function App() {
     return () => window.clearInterval(id);
   }, [wsRunning]);
 
-  const loadSkills = useCallback(async () => {
+  const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const loaded = await invoke<SkillSummary[]>("list_skills");
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setSkills(loaded);
       setSkillsLoaded(true);
       if (!skillsSelectionTouched.current && loaded.length > 0) {
@@ -263,6 +284,7 @@ function App() {
           setActiveSkillId(persistedId);
           if (!alreadyLoaded) {
             const content = await invoke<DocumentContent>("read_skill", { id: persistedId });
+            if (!isWorkspaceLoadCurrent(generation)) return;
             activeSkillContentIdRef.current = persistedId;
             setActiveSkillContent(content);
           }
@@ -271,6 +293,7 @@ function App() {
           activeSkillIdRef.current = first.id;
           setActiveSkillId(first.id);
           const content = await invoke<DocumentContent>("read_skill", { id: first.id });
+          if (!isWorkspaceLoadCurrent(generation)) return;
           activeSkillContentIdRef.current = first.id;
           setActiveSkillContent(content);
         }
@@ -281,6 +304,7 @@ function App() {
         setActiveSkillContent(null);
       }
     } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setSkills([]);
       setSkillsLoaded(true);
       activeSkillIdRef.current = null;
@@ -289,11 +313,12 @@ function App() {
       setActiveSkillContent(null);
       if (!isInvalidWorkspaceError(e)) setError(`Skills: ${e}`);
     }
-  }, []);
+  }, [isWorkspaceLoadCurrent]);
 
-  const loadDocs = useCallback(async () => {
+  const loadDocs = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const list = await invoke<DocSummary[]>("list_docs");
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs(list);
       if (list.length === 0) {
         activeDocIdRef.current = null;
@@ -301,25 +326,38 @@ function App() {
       } else {
         const persistedId = activeDocIdRef.current;
         if (persistedId && list.some(d => d.id === persistedId)) {
-          setActiveDoc(await invoke<DocumentContent>("read_doc", { id: persistedId }));
+          const doc = await invoke<DocumentContent>("read_doc", { id: persistedId });
+          if (!isWorkspaceLoadCurrent(generation)) return;
+          setActiveDoc(doc);
         } else {
           const first = list[0];
           activeDocIdRef.current = first.id;
-          setActiveDoc(await invoke<DocumentContent>("read_doc", { id: first.id }));
+          const doc = await invoke<DocumentContent>("read_doc", { id: first.id });
+          if (!isWorkspaceLoadCurrent(generation)) return;
+          setActiveDoc(doc);
         }
       }
     } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs([]);
       setActiveDoc(null);
       if (!isInvalidWorkspaceError(e)) setError(`Docs: ${e}`);
     }
-  }, []);
+  }, [isWorkspaceLoadCurrent]);
 
   const selectDoc = useCallback(async (id: string) => {
     if (docDirty && id !== activeDoc?.id && !confirmLeaveDirtyEditor()) return;
     activeDocIdRef.current = id;
-    try { setActiveDoc(await invoke<DocumentContent>("read_doc", { id })); } catch (e) { setError(`Read doc: ${e}`); }
-  }, [docDirty, activeDoc?.id]);
+    const generation = workspaceLoadGenerationRef.current;
+    try {
+      const doc = await invoke<DocumentContent>("read_doc", { id });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setActiveDoc(doc);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Read doc: ${e}`);
+    }
+  }, [docDirty, activeDoc?.id, isWorkspaceLoadCurrent]);
 
   const openDocEditor = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
@@ -371,9 +409,16 @@ function App() {
     setConfigDirty(value !== (configTemplateContent?.content ?? ""));
   }, [configTemplateContent]);
 
-  const loadConfigTemplate = useCallback(async (targetId: string) => {
-    try { setConfigTemplateContent(await invoke<DocumentContent>("read_config_template", { targetId })); } catch (e) { setError(`Config: ${e}`); }
-  }, []);
+  const loadConfigTemplate = useCallback(async (targetId: string, generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const content = await invoke<DocumentContent>("read_config_template", { targetId });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setConfigTemplateContent(content);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Config: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
 
   const onSaveConfig = useCallback(async () => {
     if (!activeConfigTargetId) return;
@@ -416,9 +461,10 @@ function App() {
 
   // ── agent source callbacks ──
 
-  const loadAgentSources = useCallback(async () => {
+  const loadAgentSources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const list = await invoke<AgentMetadataListResponse>("list_agent_metadata");
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setAgentSources(list.agents);
       if (list.agents.length > 0) {
         const persistedId = activeAgentIdRef.current;
@@ -427,11 +473,13 @@ function App() {
         if (stillExists && persistedId) {
           setActiveAgentId(persistedId);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: persistedId });
+          if (!isWorkspaceLoadCurrent(generation)) return;
           setActiveAgentContent(content);
         } else if (firstExisting) {
           activeAgentIdRef.current = firstExisting.id;
           setActiveAgentId(firstExisting.id);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: firstExisting.id });
+          if (!isWorkspaceLoadCurrent(generation)) return;
           setActiveAgentContent(content);
         } else {
           activeAgentIdRef.current = null;
@@ -444,22 +492,59 @@ function App() {
         setActiveAgentContent(null);
       }
     } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setAgentSources([]);
       setActiveAgentId(null);
       setActiveAgentContent(null);
       if (!isInvalidWorkspaceError(e)) setError(`Agents: ${e}`);
     }
-  }, []);
+  }, [isWorkspaceLoadCurrent]);
 
-  const loadWorkspaceResources = useCallback(async () => {
+  const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
-      loadSkills().catch(() => {}),
-      loadDocs().catch(() => {}),
-      loadAgentSources().catch(() => {}),
-      loadContract().catch(() => {}),
-      fetchStatus().catch(() => {}),
+      loadSkills(generation).catch(() => {}),
+      loadDocs(generation).catch(() => {}),
+      loadAgentSources(generation).catch(() => {}),
+      loadContract(generation).catch(() => {}),
+      fetchStatus(generation).catch(() => {}),
     ]);
   }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus]);
+
+  const resetWorkspaceBoundState = useCallback(() => {
+    workspaceActionRequestIdRef.current += 1;
+    setStatus(null);
+    setWorkspaceDiagnostics(null);
+    setContractResult(null);
+    setWsLog(null);
+    setWsLogCompletedAt(null);
+    setWsRunning(null);
+
+    setSkills([]);
+    setSkillsLoaded(false);
+    skillsSelectionTouched.current = false;
+    setSelectedSkills(new Set());
+    activeSkillIdRef.current = null;
+    activeSkillContentIdRef.current = null;
+    setActiveSkillId(null);
+    setActiveSkillContent(null);
+
+    activeDocIdRef.current = null;
+    setDocs([]);
+    setActiveDoc(null);
+
+    activeAgentIdRef.current = null;
+    setAgentSources([]);
+    setActiveAgentId(null);
+    setActiveAgentContent(null);
+    setAgentTemplate(null);
+    setConfigTemplateContent(null);
+  }, []);
+
+  const beginWorkspaceLoadGeneration = useCallback(() => {
+    workspaceLoadGenerationRef.current += 1;
+    resetWorkspaceBoundState();
+    return workspaceLoadGenerationRef.current;
+  }, [resetWorkspaceBoundState]);
 
   const runCreate = useCallback(async () => {
     setCreateRunning(true);
@@ -469,32 +554,38 @@ function App() {
       const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
       setCreateResult(result);
       if (result.success && appSettings) {
-        skillsSelectionTouched.current = false;
-        setSelectedSkills(new Set());
+        const generation = beginWorkspaceLoadGeneration();
         const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
+        if (!isWorkspaceLoadCurrent(generation)) return;
         setAppSettings(s);
+        appliedWorkspacePathRef.current = s.workspace_path ?? null;
         savedSettingsRef.current = serializeSettingsForCompare(s);
         applyThemeSettings(s);
         setSettingsMsg({ ok: true, text: "workspace created" });
-        Promise.all([
-          loadWorkspaceDiagnostics(),
-          loadWorkspaceResources(),
+        await Promise.all([
+          loadWorkspaceDiagnostics(generation),
+          loadWorkspaceResources(generation),
         ]);
         setCreatePlan(null);
       }
     } catch (e) { setError(`Create: ${e}`); }
     finally { setCreateRunning(false); }
-  }, [appSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const selectAgent = useCallback(async (id: string) => {
     if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
     activeAgentIdRef.current = id;
     setActiveAgentId(id);
+    const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<AgentSourceContent>("read_agent_source", { filename: id });
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setActiveAgentContent(content);
-    } catch (e) { setError(`Read agent: ${e}`); }
-  }, [agentDirty, activeAgentId]);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Read agent: ${e}`);
+    }
+  }, [agentDirty, activeAgentId, isWorkspaceLoadCurrent]);
 
   const openAgent = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_agent_source", { filename: id }); } catch (e) { setError(`Open agent: ${e}`); }
@@ -566,9 +657,16 @@ function App() {
     }
   }, [docDirty, createDocTitle, createDocSlug, loadDocs]);
 
-  const loadAgentTemplate = useCallback(async () => {
-    try { setAgentTemplate(await invoke<DocumentContent>("read_agent_template")); } catch (e) { setError(`Template: ${e}`); }
-  }, []);
+  const loadAgentTemplate = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const template = await invoke<DocumentContent>("read_agent_template");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setAgentTemplate(template);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Template: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
 
   const onChangeAgentTemplateDraft = useCallback((value: string) => {
     setAgentTemplateDraft(value);
@@ -658,12 +756,17 @@ function App() {
   const readSkill = useCallback(async (id: string) => {
     activeSkillIdRef.current = id;
     setActiveSkillId(id);
+    const generation = workspaceLoadGenerationRef.current;
     try {
       const content = await invoke<DocumentContent>("read_skill", { id });
+      if (!isWorkspaceLoadCurrent(generation)) return;
       activeSkillContentIdRef.current = id;
       setActiveSkillContent(content);
-    } catch (e) { setError(`Read skill: ${e}`); }
-  }, []);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Read skill: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
 
   const openInstallScript = useCallback(() => {
     invoke<ActionResult>("open_install_skills_script").catch(e => setError(`Open: ${e}`));
@@ -676,6 +779,9 @@ function App() {
         invoke<AgentTargetMeta[]>("get_agent_targets"),
         invoke<TargetProfileMeta[]>("get_target_profiles"),
       ]);
+      if (appliedWorkspacePathRef.current === undefined) {
+        appliedWorkspacePathRef.current = s.workspace_path ?? null;
+      }
       setAppSettings(s);
       savedSettingsRef.current = serializeSettingsForCompare(s);
       setAgentTargets(targets);
@@ -689,57 +795,88 @@ function App() {
 
   const saveSettings = useCallback(async () => {
     if (!appSettings) return;
+    const nextWorkspacePath = appSettings.workspace_path ?? null;
+    const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
+      && nextWorkspacePath !== appliedWorkspacePathRef.current;
+    const generation = workspacePathChanged
+      ? beginWorkspaceLoadGeneration()
+      : workspaceLoadGenerationRef.current;
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
+      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
+      appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
       setAccentResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "settings saved" });
-      fetchStatus();
-      loadWorkspaceDiagnostics();
+      if (workspacePathChanged) {
+        await Promise.all([
+          loadWorkspaceDiagnostics(generation).catch(() => {}),
+          loadWorkspaceResources(generation),
+        ]);
+      } else {
+        fetchStatus(generation);
+        loadWorkspaceDiagnostics(generation);
+      }
     } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
-  }, [appSettings, fetchStatus, loadWorkspaceDiagnostics]);
+  }, [appSettings, beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const applyWorkspacePath = useCallback(async (workspacePath: string | null) => {
     setCreatePlan(null);
     setCreateResult(null);
     if (!appSettings) return;
+    const generation = beginWorkspaceLoadGeneration();
     try {
-      // Reset skill selection for the new workspace
-      skillsSelectionTouched.current = false;
-      setSelectedSkills(new Set());
       const nextSettings = { ...appSettings, workspace_path: workspacePath };
       const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
+      appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
       setSettingsMsg(null);
       // Refresh all workspace-dependent data
       await Promise.all([
-        loadWorkspaceDiagnostics().catch(() => {}),
-        loadWorkspaceResources(),
+        loadWorkspaceDiagnostics(generation).catch(() => {}),
+        loadWorkspaceResources(generation),
       ]);
     } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
       setError(`Apply workspace path: ${e}`);
     }
-  }, [appSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
     setCreatePlan(null);
     setCreateResult(null);
+    const nextWorkspacePath = defaults.workspace_path ?? null;
+    const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
+      && nextWorkspacePath !== appliedWorkspacePathRef.current;
+    const generation = workspacePathChanged
+      ? beginWorkspaceLoadGeneration()
+      : workspaceLoadGenerationRef.current;
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: defaults });
+      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
+      appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
       setAccentResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
-      fetchStatus();
-      loadWorkspaceDiagnostics();
+      if (workspacePathChanged) {
+        await Promise.all([
+          loadWorkspaceDiagnostics(generation).catch(() => {}),
+          loadWorkspaceResources(generation),
+        ]);
+      } else {
+        fetchStatus(generation);
+        loadWorkspaceDiagnostics(generation);
+      }
     } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
-  }, [fetchStatus, loadWorkspaceDiagnostics]);
+  }, [beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const setAppearance = useCallback((appearance: AppSettings["appearance"]) => {
     setSettingsMsg(null);
@@ -805,18 +942,27 @@ function App() {
   }, [configDirty, activeConfigTargetId]);
 
   const runWsAction = useCallback(async (action: string, label: string) => {
+    if (workspaceActionLockRef.current) return;
+    workspaceActionLockRef.current = true;
+    const requestId = workspaceActionRequestIdRef.current + 1;
+    workspaceActionRequestIdRef.current = requestId;
+    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
     const startedAt = performance.now();
     setWsRunning(label); setError(null);
     try {
       if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
-        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+        if (isCurrentAction()) {
+          setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+        }
         return;
       }
       const result = await invoke<ActionResult>("run_action", { action });
+      if (!isCurrentAction()) return;
       setWsLog(result);
       setWsLogCompletedAt(Date.now());
       if (!action.startsWith("open_")) fetchStatus();
     } catch (e) {
+      if (!isCurrentAction()) return;
       if (isInvalidWorkspaceError(e)) {
         setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
       } else {
@@ -826,12 +972,18 @@ function App() {
     finally {
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
       if (remaining > 0) await wait(remaining);
-      setWsRunning(null);
+      if (isCurrentAction()) setWsRunning(null);
+      workspaceActionLockRef.current = false;
     }
   }, [fetchStatus, workspaceDiagnostics]);
 
   const runWsInstall = useCallback(async (dry: boolean) => {
     if (installScope === "project" && installTarget.trim() === "") return;
+    if (workspaceActionLockRef.current) return;
+    workspaceActionLockRef.current = true;
+    const requestId = workspaceActionRequestIdRef.current + 1;
+    workspaceActionRequestIdRef.current = requestId;
+    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
     const label = dry ? "install skills dry-run" : "install skills";
     const startedAt = performance.now();
     setWsRunning(label); setError(null);
@@ -844,17 +996,20 @@ function App() {
         dry_run: dry,
       };
       const result = await invoke<ActionResult>("install_skills", { request: req });
+      if (!isCurrentAction()) return;
       setWsLog(result);
       setWsLogCompletedAt(Date.now());
       if (!dry && result.success) fetchStatus();
     } catch (e) {
+      if (!isCurrentAction()) return;
       setWsLog({ success: false, action: dry ? "install_skills:dry-run" : "install_skills", stdout: "", stderr: String(e), exit_code: null });
       setError(`Install: ${e}`);
     }
     finally {
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
       if (remaining > 0) await wait(remaining);
-      setWsRunning(null);
+      if (isCurrentAction()) setWsRunning(null);
+      workspaceActionLockRef.current = false;
     }
   }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus]);
 
