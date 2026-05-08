@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Markdown } from "../components/Markdown";
 import type { ActionResult } from "../components/TerminalOutput";
+import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import type { DocumentContent, DocSummary } from "../types";
 
 interface DocGroup {
@@ -330,8 +331,8 @@ export function DocsView({
                   {docSaveResult && (
                     <span className={`editor-save-status ${docSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
                       {docSaveResult.success
-                        ? docSaveResult.stdout
-                        : docSaveResult.stderr || "save failed"}
+                        ? redactTerminalOutput(docSaveResult.stdout)
+                        : redactTerminalOutput(docSaveResult.stderr) || "save failed"}
                     </span>
                   )}
                 </div>

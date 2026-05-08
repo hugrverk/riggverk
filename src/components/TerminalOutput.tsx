@@ -1,3 +1,5 @@
+import { redactTerminalOutput } from "../lib/redactTerminalOutput";
+
 export interface ActionResult {
   success: boolean;
   action: string;
@@ -62,6 +64,10 @@ export function ActionResultOutput({
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
+  const safeStdout = redactTerminalOutput(result.stdout);
+  const safeStderr = redactTerminalOutput(result.stderr);
+  const redacted = safeStdout !== result.stdout || safeStderr !== result.stderr;
+
   return (
     <>
       <div className={`log-status ${result.success ? "log-ok" : "log-fail"}`}>
@@ -70,26 +76,27 @@ export function ActionResultOutput({
         {completedAt !== undefined && (
           <span className="log-status-when"> &middot; {relativeTime(completedAt)}</span>
         )}
+        {redacted && <span className="log-status-when"> &middot; output redacted</span>}
       </div>
       {sectioned ? (
         <>
           {result.stdout ? (
             <div className="log-section">
               <span className="log-section-label">STDOUT</span>
-              <pre className="log-output">{result.stdout}</pre>
+              <pre className="log-output">{safeStdout}</pre>
             </div>
           ) : null}
           {result.stderr ? (
             <div className="log-section">
               <span className="log-section-label">STDERR</span>
-              <pre className="log-output log-stderr">{result.stderr}</pre>
+              <pre className="log-output log-stderr">{safeStderr}</pre>
             </div>
           ) : null}
         </>
       ) : (
         <>
-          {result.stdout && <pre className="log-output">{result.stdout}</pre>}
-          {result.stderr && <pre className="log-output log-stderr">{result.stderr}</pre>}
+          {result.stdout && <pre className="log-output">{safeStdout}</pre>}
+          {result.stderr && <pre className="log-output log-stderr">{safeStderr}</pre>}
         </>
       )}
       {showNoOutput && !result.stdout && !result.stderr && (

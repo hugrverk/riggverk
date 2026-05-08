@@ -1,5 +1,6 @@
 import { Markdown } from "../components/Markdown";
 import type { ActionResult } from "../components/TerminalOutput";
+import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import type {
   AgentMetadataResponse,
   AgentSourceContent,
@@ -538,7 +539,9 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={onResetDoc} disabled={docSaving || !docDirty}>reset</button>
                 {docSaveResult && (
                   <span className={`editor-save-status ${docSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {docSaveResult.success ? docSaveResult.stdout : docSaveResult.stderr || "save failed"}
+                    {docSaveResult.success
+                      ? redactTerminalOutput(docSaveResult.stdout)
+                      : redactTerminalOutput(docSaveResult.stderr) || "save failed"}
                   </span>
                 )}
               </div>
@@ -607,7 +610,9 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={onResetAgentTemplate} disabled={agentTemplateSaving || !agentTemplateDirty}>reset</button>
                 {agentTemplateSaveResult && (
                   <span className={`editor-save-status ${agentTemplateSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {agentTemplateSaveResult.success ? agentTemplateSaveResult.stdout : agentTemplateSaveResult.stderr || "save failed"}
+                    {agentTemplateSaveResult.success
+                      ? redactTerminalOutput(agentTemplateSaveResult.stdout)
+                      : redactTerminalOutput(agentTemplateSaveResult.stderr) || "save failed"}
                   </span>
                 )}
                 <span className="editor-save-note">template only</span>
@@ -765,7 +770,9 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={onResetAgent} disabled={agentSaving || !agentDirty}>reset</button>
                 {agentSaveResult && (
                   <span className={`editor-save-status ${agentSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {agentSaveResult.success ? agentSaveResult.stdout : agentSaveResult.stderr || "save failed"}
+                    {agentSaveResult.success
+                      ? redactTerminalOutput(agentSaveResult.stdout)
+                      : redactTerminalOutput(agentSaveResult.stderr) || "save failed"}
                   </span>
                 )}
                 <span className="editor-save-note">workspace source</span>
@@ -839,7 +846,9 @@ export function LibraryView(props: LibraryViewProps) {
                 <button className="btn btn-sm" onClick={onResetConfig} disabled={configSaving || !configDirty}>reset</button>
                 {configSaveResult && (
                   <span className={`editor-save-status ${configSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {configSaveResult.success ? configSaveResult.stdout : configSaveResult.stderr || "save failed"}
+                    {configSaveResult.success
+                      ? redactTerminalOutput(configSaveResult.stdout)
+                      : redactTerminalOutput(configSaveResult.stderr) || "save failed"}
                   </span>
                 )}
                 <span className="editor-save-note">template only</span>
