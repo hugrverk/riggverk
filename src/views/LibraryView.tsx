@@ -1,6 +1,4 @@
-import { Markdown } from "../components/Markdown";
 import type { ActionResult } from "../components/TerminalOutput";
-import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import type {
   AgentMetadataResponse,
   AgentSourceContent,
@@ -9,6 +7,11 @@ import type {
   DocumentContent,
   SkillSummary,
 } from "../types";
+import { DocContent } from "./library/DocContent";
+import { RulesContent } from "./library/RulesContent";
+import { SkillsContent } from "./library/SkillsContent";
+import { AgentContent } from "./library/AgentContent";
+import { ConfigContent } from "./library/ConfigContent";
 
 export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
 
@@ -105,14 +108,6 @@ interface LibraryViewProps {
 
   // Common
   workspaceValid: boolean;
-}
-
-function formatJson(content: string): string {
-  try {
-    return JSON.stringify(JSON.parse(content), null, 2);
-  } catch {
-    return content;
-  }
 }
 
 // ── sidebar item list components ──
@@ -400,15 +395,6 @@ function sourceTypeLabel(type: LibrarySourceType): string {
   }
 }
 
-function skillRiskClass(risk: string): string {
-  switch (risk.toLowerCase()) {
-    case "low": return "ws-color-ok";
-    case "medium": return "ws-color-warn";
-    case "high": return "ws-color-fail";
-    default: return "";
-  }
-}
-
 // ── main view ──
 
 export function LibraryView(props: LibraryViewProps) {
@@ -488,378 +474,96 @@ export function LibraryView(props: LibraryViewProps) {
   } = props;
 
   const ruleTargets = agentTargets.filter((t) => t.kind === "rules");
-  const selectedConfigTarget = configTargets.find((t) => t.id === activeConfigTargetId);
 
   // ── derive active content for main pane ──
 
   let mainContent: React.ReactNode = null;
 
-  switch (sourceType) {
-    case "docs":
-      if (activeDoc) {
-        mainContent = (
-          <>
-            <div className="lib-editor-meta-strip">
-              <div className="lib-editor-meta-left">
-                <span className="lib-editor-meta-title">{activeDoc.title}</span>
-                <span className="lib-editor-meta-path">
-                  {activeDoc.section} &middot; {activeDoc.path}
-                  {activeDoc.source === "custom" && (
-                    <span className="docs-source-tag">context</span>
-                  )}
-                </span>
-              </div>
-              <div className="lib-editor-meta-right">
-                {docDirty && <span className="editor-dirty" aria-label="Unsaved changes">modified</span>}
-                <button className="btn btn-sm" onClick={() => onOpenDoc(activeDoc.id)}>open</button>
-              </div>
-            </div>
-            <div className="editor-mode-tabs" role="tablist" aria-label="Doc view mode">
-              <button className={`btn btn-sm ${docMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetDocMode("preview")} role="tab" aria-selected={docMode === "preview"}>preview</button>
-              <button className={`btn btn-sm ${docMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetDocMode("edit")} role="tab" aria-selected={docMode === "edit"}>edit</button>
-            </div>
-            <div className="lib-editor-body">
-              {docMode === "preview" ? (
-                <div className="lib-preview-body"><Markdown content={activeDoc.content} /></div>
-              ) : (
-                <textarea
-                  className="editor-textarea"
-                  value={docDraft}
-                  onChange={(e) => onChangeDocDraft(e.target.value)}
-                  spellCheck={false}
-                  aria-label="Edit document"
-                />
-              )}
-            </div>
-            {docMode === "edit" && (
-              <div className="editor-save-row">
-                <button className="btn btn-primary btn-sm" onClick={onSaveDoc} disabled={docSaving || !docDirty}>
-                  {docSaving ? "saving..." : "save"}
-                </button>
-                <button className="btn btn-sm" onClick={onResetDoc} disabled={docSaving || !docDirty}>reset</button>
-                {docSaveResult && (
-                  <span className={`editor-save-status ${docSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {docSaveResult.success
-                      ? redactTerminalOutput(docSaveResult.stdout)
-                      : redactTerminalOutput(docSaveResult.stderr) || "save failed"}
-                  </span>
-                )}
-              </div>
-            )}
-            {showCreateDoc && (
-              <div className="docs-create-form">
-                <label className="docs-create-label">
-                  <span>Title</span>
-                  <input className="docs-create-input" type="text" placeholder="My Context Notes" value={createDocTitle} onChange={(e) => onSetCreateDocTitle(e.target.value)} aria-label="New doc title" />
-                </label>
-                <label className="docs-create-label">
-                  <span>Slug</span>
-                  <input className="docs-create-input" type="text" placeholder="my-context-notes" value={createDocSlug} onChange={(e) => onSetCreateDocSlug(e.target.value)} aria-label="New doc slug" />
-                </label>
-                <div className="docs-create-actions">
-                  <button className="btn btn-primary btn-sm" onClick={onCreateDoc} disabled={createDocCreating || !createDocTitle.trim() || !createDocSlug.trim()}>
-                    {createDocCreating ? "creating..." : "create"}
-                  </button>
-                  <button className="btn btn-sm" onClick={() => { onSetShowCreateDoc(false); }}>cancel</button>
-                  <span className="docs-create-hint">docs/context/</span>
-                </div>
-                {createDocError && <div className="docs-create-error">{createDocError}</div>}
-              </div>
-            )}
-          </>
-        );
-      }
-      break;
-
-    case "rules":
-      if (agentTemplate) {
-        mainContent = (
-          <>
-            <div className="lib-editor-meta-strip">
-              <div className="lib-editor-meta-left">
-                <span className="lib-editor-meta-title">Global Rules</span>
-                <span className="lib-editor-meta-path">{agentTemplate.path}</span>
-              </div>
-              <div className="lib-editor-meta-right">
-                {agentTemplateDirty && <span className="editor-dirty" aria-label="Unsaved changes">modified</span>}
-                <button className="btn btn-sm" onClick={onOpenTemplate}>open</button>
-              </div>
-            </div>
-            <div className="editor-mode-tabs" role="tablist" aria-label="Rules view mode">
-              <button className={`btn btn-sm ${agentTemplateMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetAgentTemplateMode("preview")} role="tab" aria-selected={agentTemplateMode === "preview"}>preview</button>
-              <button className={`btn btn-sm ${agentTemplateMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetAgentTemplateMode("edit")} role="tab" aria-selected={agentTemplateMode === "edit"}>edit</button>
-            </div>
-            <div className="lib-editor-body">
-              {agentTemplateMode === "preview" ? (
-                <div className="lib-preview-body"><Markdown content={agentTemplate.content} /></div>
-              ) : (
-                <textarea
-                  className="editor-textarea"
-                  value={agentTemplateDraft}
-                  onChange={(e) => onChangeAgentTemplateDraft(e.target.value)}
-                  spellCheck={false}
-                  aria-label="Edit agent rules template"
-                />
-              )}
-            </div>
-            {agentTemplateMode === "edit" && (
-              <div className="editor-save-row">
-                <button className="btn btn-primary btn-sm" onClick={onSaveAgentTemplate} disabled={agentTemplateSaving || !agentTemplateDirty}>
-                  {agentTemplateSaving ? "saving..." : "save"}
-                </button>
-                <button className="btn btn-sm" onClick={onResetAgentTemplate} disabled={agentTemplateSaving || !agentTemplateDirty}>reset</button>
-                {agentTemplateSaveResult && (
-                  <span className={`editor-save-status ${agentTemplateSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {agentTemplateSaveResult.success
-                      ? redactTerminalOutput(agentTemplateSaveResult.stdout)
-                      : redactTerminalOutput(agentTemplateSaveResult.stderr) || "save failed"}
-                  </span>
-                )}
-                <span className="editor-save-note">template only</span>
-              </div>
-            )}
-          </>
-        );
-      }
-      break;
-
-    case "skills":
-      if (activeSkillContent) {
-        // Find the full SkillSummary for metadata display
-        const activeSkill = skills.find((s) => s.id === activeSkillContent.id);
-        mainContent = (
-          <>
-            <div className="lib-editor-meta-strip">
-              <div className="lib-editor-meta-left">
-                <span className="lib-editor-meta-title">{activeSkillContent.title}</span>
-                <span className="lib-editor-meta-path">{activeSkillContent.section} &middot; {activeSkillContent.path}</span>
-              </div>
-              <div className="lib-editor-meta-right">
-                <button className="btn btn-sm" onClick={() => onOpenSkill(activeSkillContent.id)}>open</button>
-              </div>
-            </div>
-            {activeSkill && (activeSkill.category || activeSkill.risk || activeSkill.targets.length > 0 || activeSkill.related.length > 0) && (
-              <div className="configs-bundle-section" role="region" aria-label="Skill metadata">
-                <span className="configs-bundle-header">metadata</span>
-                {activeSkill.category && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">category</span>
-                    <span className="configs-bundle-val">{activeSkill.category}</span>
-                  </div>
-                )}
-                {activeSkill.risk && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">risk</span>
-                    <span className={`configs-bundle-val ${skillRiskClass(activeSkill.risk)}`}>{activeSkill.risk}</span>
-                  </div>
-                )}
-                {activeSkill.targets.length > 0 && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">targets</span>
-                    <span className="configs-bundle-val">{activeSkill.targets.join(", ")}</span>
-                  </div>
-                )}
-                {activeSkill.related.length > 0 && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">related</span>
-                    <span className="configs-bundle-val">{activeSkill.related.join(", ")}</span>
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="lib-editor-body">
-              <div className="lib-preview-body"><Markdown content={activeSkillContent.content} /></div>
-            </div>
-          </>
-        );
-      }
-      break;
-
-    case "agents":
-      if (activeAgentContent) {
-        const activeSrc = agentSources.find((s) => s.id === activeAgentContent.id);
-        const meta = activeSrc?.metadata;
-        mainContent = (
-          <>
-            <div className="lib-editor-meta-strip">
-              <div className="lib-editor-meta-left">
-                <span className="lib-editor-meta-title">{activeAgentContent.title}</span>
-                <span className="lib-editor-meta-path">{activeAgentContent.path}</span>
-                {!activeAgentContent.exists && (
-                  <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn">not in workspace</span>
-                )}
-              </div>
-              <div className="lib-editor-meta-right">
-                {agentDirty && <span className="editor-dirty" aria-label="Unsaved changes">modified</span>}
-                <button className="btn btn-sm" onClick={() => onOpenAgent(activeAgentContent.id)}>open</button>
-              </div>
-            </div>
-            {meta && (
-              <div className="configs-bundle-section" role="region" aria-label="Agent metadata">
-                <span className="configs-bundle-header">metadata</span>
-                {meta.role && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">role</span>
-                    <span className="configs-bundle-val">{meta.role}</span>
-                  </div>
-                )}
-                {meta.summary && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">summary</span>
-                    <span className="configs-bundle-val configs-bundle-val-sm">{meta.summary}</span>
-                  </div>
-                )}
-                {meta.risk && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">risk</span>
-                    <span className={`configs-bundle-val ${skillRiskClass(meta.risk)}`}>{meta.risk}</span>
-                  </div>
-                )}
-                {meta.targets.length > 0 && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">targets</span>
-                    <span className="configs-bundle-val">{meta.targets.join(", ")}</span>
-                  </div>
-                )}
-                {meta.default_skills.length > 0 && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">default skills</span>
-                    <span className="configs-bundle-val">{meta.default_skills.join(", ")}</span>
-                  </div>
-                )}
-                {!meta.safe_to_edit_runtime && (
-                  <div className="configs-bundle-item">
-                    <span className="configs-bundle-key">edit safety</span>
-                    <span className="configs-bundle-val ws-color-warn">runtime-sensitive — edit with care</span>
-                  </div>
-                )}
-                {meta.notes.length > 0 && (
-                  <div className="configs-bundle-section" role="region" aria-label="Agent notes">
-                    <span className="configs-bundle-header">notes</span>
-                    {meta.notes.map((note, i) => (
-                      <div key={i} className="configs-bundle-item">
-                        <span className="configs-bundle-val configs-bundle-val-note">{note}</span>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="editor-mode-tabs" role="tablist" aria-label="Agent view mode">
-              <button className={`btn btn-sm ${agentMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetAgentMode("preview")} role="tab" aria-selected={agentMode === "preview"}>preview</button>
-              <button className={`btn btn-sm ${agentMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetAgentMode("edit")} role="tab" aria-selected={agentMode === "edit"}>edit</button>
-            </div>
-            <div className="lib-editor-body">
-              {agentMode === "preview" ? (
-                <div className="lib-preview-body"><Markdown content={activeAgentContent.content} /></div>
-              ) : (
-                <textarea
-                  className="editor-textarea"
-                  value={agentDraft}
-                  onChange={(e) => onChangeAgentDraft(e.target.value)}
-                  spellCheck={false}
-                  aria-label="Edit agent source"
-                />
-              )}
-            </div>
-            {agentMode === "edit" && (
-              <div className="editor-save-row">
-                <button className="btn btn-primary btn-sm" onClick={onSaveAgent} disabled={agentSaving || !agentDirty}>
-                  {agentSaving ? "saving..." : "save"}
-                </button>
-                <button className="btn btn-sm" onClick={onResetAgent} disabled={agentSaving || !agentDirty}>reset</button>
-                {agentSaveResult && (
-                  <span className={`editor-save-status ${agentSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {agentSaveResult.success
-                      ? redactTerminalOutput(agentSaveResult.stdout)
-                      : redactTerminalOutput(agentSaveResult.stderr) || "save failed"}
-                  </span>
-                )}
-                <span className="editor-save-note">workspace source</span>
-              </div>
-            )}
-          </>
-        );
-      }
-      break;
-
-    case "configs":
-      if (configTemplateContent) {
-        const sourcePath = selectedConfigTarget?.source_rel ?? "";
-        const targetPath = selectedConfigTarget?.target_rel ?? "";
-        mainContent = (
-          <>
-            <div className="lib-editor-meta-strip">
-              <div className="lib-editor-meta-left">
-                <span className="lib-editor-meta-title">{selectedConfigTarget?.label ?? "Config"}</span>
-                <span className="lib-editor-meta-path">
-                  {sourcePath && <span>template: {sourcePath}</span>}
-                  {sourcePath && targetPath && <span> &middot; </span>}
-                  {targetPath && <span>target: {targetPath}</span>}
-                </span>
-              </div>
-              <div className="lib-editor-meta-right">
-                {configDirty && <span className="editor-dirty" aria-label="Unsaved changes">modified</span>}
-                <button className="btn btn-sm" onClick={onOpenConfig}>open</button>
-              </div>
-            </div>
-            {activeConfigTargetId === "opencode_config" && (
-              <div className="configs-bundle-section" role="region" aria-label="OpenCode config + agents bundle">
-                <span className="configs-bundle-header">bundle contents</span>
-                <span className="configs-bundle-item">
-                  <span className="configs-bundle-key">config</span>
-                  <span className="configs-bundle-val">templates/opencode.json &rarr; ~/.config/opencode/opencode.json</span>
-                </span>
-                <span className="configs-bundle-item">
-                  <span className="configs-bundle-key">agents</span>
-                  <span className="configs-bundle-val">agents/*.md &rarr; ~/.config/opencode/agents/*.md</span>
-                </span>
-                <span className="configs-bundle-item">
-                  <span className="configs-bundle-key">bundled</span>
-                  <span className="configs-bundle-val">
-                    {agentSources.length > 0 ? `${agentSources.length} agents` : "agents bundled"}
-                  </span>
-                </span>
-                <span className="configs-bundle-note">sync writes both config + agent files</span>
-              </div>
-            )}
-            <div className="editor-mode-tabs" role="tablist" aria-label="Config view mode">
-              <button className={`btn btn-sm ${configMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetConfigMode("preview")} role="tab" aria-selected={configMode === "preview"}>preview</button>
-              <button className={`btn btn-sm ${configMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetConfigMode("edit")} role="tab" aria-selected={configMode === "edit"}>edit</button>
-            </div>
-            <div className="lib-editor-body">
-              {configMode === "preview" ? (
-                <pre className="configs-code">{formatJson(configTemplateContent.content)}</pre>
-              ) : (
-                <textarea
-                  className="editor-textarea"
-                  value={configDraft}
-                  onChange={(e) => onChangeConfigDraft(e.target.value)}
-                  spellCheck={false}
-                  aria-label="Edit config template"
-                />
-              )}
-            </div>
-            {configMode === "edit" && (
-              <div className="editor-save-row">
-                <button className="btn btn-primary btn-sm" onClick={onSaveConfig} disabled={configSaving || !configDirty}>
-                  {configSaving ? "saving..." : "save"}
-                </button>
-                <button className="btn btn-sm" onClick={onResetConfig} disabled={configSaving || !configDirty}>reset</button>
-                {configSaveResult && (
-                  <span className={`editor-save-status ${configSaveResult.success ? "editor-save-ok" : "editor-save-fail"}`}>
-                    {configSaveResult.success
-                      ? redactTerminalOutput(configSaveResult.stdout)
-                      : redactTerminalOutput(configSaveResult.stderr) || "save failed"}
-                  </span>
-                )}
-                <span className="editor-save-note">template only</span>
-              </div>
-            )}
-          </>
-        );
-      }
-      break;
+  if (sourceType === "docs" && activeDoc) {
+    mainContent = (
+      <DocContent
+        activeDoc={activeDoc}
+        onOpenDoc={onOpenDoc}
+        docDraft={docDraft}
+        docDirty={docDirty}
+        docSaving={docSaving}
+        docSaveResult={docSaveResult}
+        docMode={docMode}
+        onSetDocMode={onSetDocMode}
+        onChangeDocDraft={onChangeDocDraft}
+        onSaveDoc={onSaveDoc}
+        onResetDoc={onResetDoc}
+        showCreateDoc={showCreateDoc}
+        createDocTitle={createDocTitle}
+        createDocSlug={createDocSlug}
+        createDocError={createDocError}
+        createDocCreating={createDocCreating}
+        onSetShowCreateDoc={onSetShowCreateDoc}
+        onSetCreateDocTitle={onSetCreateDocTitle}
+        onSetCreateDocSlug={onSetCreateDocSlug}
+        onCreateDoc={onCreateDoc}
+      />
+    );
+  } else if (sourceType === "rules" && agentTemplate) {
+    mainContent = (
+      <RulesContent
+        agentTemplate={agentTemplate}
+        onOpenTemplate={onOpenTemplate}
+        agentTemplateDraft={agentTemplateDraft}
+        agentTemplateDirty={agentTemplateDirty}
+        agentTemplateSaving={agentTemplateSaving}
+        agentTemplateSaveResult={agentTemplateSaveResult}
+        agentTemplateMode={agentTemplateMode}
+        onSetAgentTemplateMode={onSetAgentTemplateMode}
+        onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
+        onSaveAgentTemplate={onSaveAgentTemplate}
+        onResetAgentTemplate={onResetAgentTemplate}
+      />
+    );
+  } else if (sourceType === "skills" && activeSkillContent) {
+    mainContent = (
+      <SkillsContent
+        skills={skills}
+        activeSkillContent={activeSkillContent}
+        onOpenSkill={onOpenSkill}
+      />
+    );
+  } else if (sourceType === "agents" && activeAgentContent) {
+    mainContent = (
+      <AgentContent
+        agentSources={agentSources}
+        activeAgentContent={activeAgentContent}
+        onOpenAgent={onOpenAgent}
+        agentDraft={agentDraft}
+        agentDirty={agentDirty}
+        agentSaving={agentSaving}
+        agentSaveResult={agentSaveResult}
+        agentMode={agentMode}
+        onSetAgentMode={onSetAgentMode}
+        onChangeAgentDraft={onChangeAgentDraft}
+        onSaveAgent={onSaveAgent}
+        onResetAgent={onResetAgent}
+      />
+    );
+  } else if (sourceType === "configs" && configTemplateContent) {
+    mainContent = (
+      <ConfigContent
+        configTemplateContent={configTemplateContent}
+        activeConfigTargetId={activeConfigTargetId}
+        configTargets={configTargets}
+        onOpenConfig={onOpenConfig}
+        configDraft={configDraft}
+        configDirty={configDirty}
+        configSaving={configSaving}
+        configSaveResult={configSaveResult}
+        configMode={configMode}
+        onSetConfigMode={onSetConfigMode}
+        onChangeConfigDraft={onChangeConfigDraft}
+        onSaveConfig={onSaveConfig}
+        onResetConfig={onResetConfig}
+        agentSources={agentSources}
+      />
+    );
   }
 
   const sourceTypeTitle = sourceTypeLabel(sourceType);

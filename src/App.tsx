@@ -4,15 +4,16 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
 import { applyThemeSettings, defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
-import { wait } from "./lib/timing";
 import { useBackups } from "./lib/useBackups";
+import { useWorkspaceActions } from "./lib/useWorkspaceActions";
+import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
+import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
 import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
 import { RoutingView } from "./views/RoutingView";
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, InstallSkillsRequest, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
-const MIN_RUNNING_MS = 700;
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
 type View = "workspace" | "library" | "routing" | "settings";
@@ -21,17 +22,9 @@ type View = "workspace" | "library" | "routing" | "settings";
 
 function App() {
   const [status, setStatus] = useState<StatusData | null>(null);
-  const [activityIndex, setActivityIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("workspace");
-  const workspaceLoadGenerationRef = useRef(0);
-  const workspaceActionLockRef = useRef(false);
-  const workspaceActionRequestIdRef = useRef(0);
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
-
-  const isWorkspaceLoadCurrent = useCallback((generation: number) => {
-    return workspaceLoadGenerationRef.current === generation;
-  }, []);
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
@@ -102,12 +95,10 @@ function App() {
   // backup history state
   const { backups, loadBackups, openBackupsFolder } = useBackups(setError);
 
-  // workspace operations state
-  const [wsLog, setWsLog] = useState<ActionResult | null>(null);
-  const [wsRunning, setWsRunning] = useState<string | null>(null);
-  const [wsLogCompletedAt, setWsLogCompletedAt] = useState<number | null>(null);
+  // workspace resource generation
+  const { workspaceLoadGenerationRef, isWorkspaceLoadCurrent, beginWorkspaceLoadGeneration } = useWorkspaceGeneration();
 
-  // workspace diagnostics state
+  // workspace operations state (moved to hook)
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
 
   // workspace contract validation
@@ -237,13 +228,7 @@ function App() {
   useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
   const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
-    switch (sourceType) {
-      case "docs": return docDirty;
-      case "rules": return agentTemplateDirty;
-      case "agents": return agentDirty;
-      case "configs": return configDirty;
-      case "skills": return false;
-    }
+    return isLibrarySourceTypeDirty(sourceType, docDirty, agentTemplateDirty, agentDirty, configDirty);
   }, [docDirty, agentTemplateDirty, agentDirty, configDirty]);
 
   const setGuardedLibrarySourceType = useCallback((type: LibrarySourceType) => {
@@ -276,13 +261,6 @@ function App() {
       setActiveConfigTargetId(fallback?.id ?? "");
     }
   }, [agentTargets, appSettings, activeConfigTargetId]);
-
-  useEffect(() => {
-    if (!wsRunning) return;
-    setActivityIndex(0);
-    const id = window.setInterval(() => setActivityIndex(i => (i + 1) % 8), 110);
-    return () => window.clearInterval(id);
-  }, [wsRunning]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -527,14 +505,34 @@ function App() {
     ]);
   }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus]);
 
+  // workspace action runner (terminal output, activity animation, action wrappers)
+  const {
+    wsRunning,
+    wsLog,
+    wsLogCompletedAt,
+    activityIndex,
+    activityCellClass,
+    runWsAction,
+    runWsInstall,
+    workspaceActionRequestIdRef,
+    resetTerminalOutput,
+  } = useWorkspaceActions({
+    fetchStatus,
+    isInvalidWorkspaceError,
+    workspaceDiagnostics,
+    installAgents,
+    installScope,
+    installTarget,
+    selectedSkills,
+    setError,
+  });
+
   const resetWorkspaceBoundState = useCallback(() => {
     workspaceActionRequestIdRef.current += 1;
+    resetTerminalOutput();
     setStatus(null);
     setWorkspaceDiagnostics(null);
     setContractResult(null);
-    setWsLog(null);
-    setWsLogCompletedAt(null);
-    setWsRunning(null);
 
     setSkills([]);
     setSkillsLoaded(false);
@@ -555,13 +553,7 @@ function App() {
     setActiveAgentContent(null);
     setAgentTemplate(null);
     setConfigTemplateContent(null);
-  }, []);
-
-  const beginWorkspaceLoadGeneration = useCallback(() => {
-    workspaceLoadGenerationRef.current += 1;
-    resetWorkspaceBoundState();
-    return workspaceLoadGenerationRef.current;
-  }, [resetWorkspaceBoundState]);
+  }, [workspaceActionRequestIdRef, resetTerminalOutput]);
 
   const runCreate = useCallback(async () => {
     setCreateRunning(true);
@@ -571,7 +563,7 @@ function App() {
       const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
       setCreateResult(result);
       if (result.success && appSettings) {
-        const generation = beginWorkspaceLoadGeneration();
+        const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
         const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
         if (!isWorkspaceLoadCurrent(generation)) return;
         setAppSettings(s);
@@ -816,7 +808,7 @@ function App() {
     const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
       && nextWorkspacePath !== appliedWorkspacePathRef.current;
     const generation = workspacePathChanged
-      ? beginWorkspaceLoadGeneration()
+      ? beginWorkspaceLoadGeneration(resetWorkspaceBoundState)
       : workspaceLoadGenerationRef.current;
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
@@ -843,7 +835,7 @@ function App() {
     setCreatePlan(null);
     setCreateResult(null);
     if (!appSettings) return;
-    const generation = beginWorkspaceLoadGeneration();
+    const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
     try {
       const nextSettings = { ...appSettings, workspace_path: workspacePath };
       const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
@@ -872,7 +864,7 @@ function App() {
     const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
       && nextWorkspacePath !== appliedWorkspacePathRef.current;
     const generation = workspacePathChanged
-      ? beginWorkspaceLoadGeneration()
+      ? beginWorkspaceLoadGeneration(resetWorkspaceBoundState)
       : workspaceLoadGenerationRef.current;
     try {
       const s = await invoke<AppSettings>("update_settings", { settings: defaults });
@@ -953,78 +945,6 @@ function App() {
     setActiveConfigTargetId(targetId);
   }, [configDirty, activeConfigTargetId]);
 
-  const runWsAction = useCallback(async (action: string, label: string) => {
-    if (workspaceActionLockRef.current) return;
-    workspaceActionLockRef.current = true;
-    const requestId = workspaceActionRequestIdRef.current + 1;
-    workspaceActionRequestIdRef.current = requestId;
-    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
-    const startedAt = performance.now();
-    setWsRunning(label); setError(null);
-    try {
-      if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
-        if (isCurrentAction()) {
-          setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
-        }
-        return;
-      }
-      const result = await invoke<ActionResult>("run_action", { action });
-      if (!isCurrentAction()) return;
-      setWsLog(result);
-      setWsLogCompletedAt(Date.now());
-      if (!action.startsWith("open_")) fetchStatus();
-    } catch (e) {
-      if (!isCurrentAction()) return;
-      if (isInvalidWorkspaceError(e)) {
-        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
-      } else {
-        setError(`${action}: ${e}`);
-      }
-    }
-    finally {
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      if (isCurrentAction()) setWsRunning(null);
-      workspaceActionLockRef.current = false;
-    }
-  }, [fetchStatus, workspaceDiagnostics]);
-
-  const runWsInstall = useCallback(async (dry: boolean) => {
-    if (installScope === "project" && installTarget.trim() === "") return;
-    if (workspaceActionLockRef.current) return;
-    workspaceActionLockRef.current = true;
-    const requestId = workspaceActionRequestIdRef.current + 1;
-    workspaceActionRequestIdRef.current = requestId;
-    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
-    const label = dry ? "install skills dry-run" : "install skills";
-    const startedAt = performance.now();
-    setWsRunning(label); setError(null);
-    try {
-      const req: InstallSkillsRequest = {
-        agents: Array.from(installAgents),
-        scope: installScope,
-        target: installScope === "project" ? installTarget : undefined,
-        skills: Array.from(selectedSkills),
-        dry_run: dry,
-      };
-      const result = await invoke<ActionResult>("install_skills", { request: req });
-      if (!isCurrentAction()) return;
-      setWsLog(result);
-      setWsLogCompletedAt(Date.now());
-      if (!dry && result.success) fetchStatus();
-    } catch (e) {
-      if (!isCurrentAction()) return;
-      setWsLog({ success: false, action: dry ? "install_skills:dry-run" : "install_skills", stdout: "", stderr: String(e), exit_code: null });
-      setError(`Install: ${e}`);
-    }
-    finally {
-      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
-      if (remaining > 0) await wait(remaining);
-      if (isCurrentAction()) setWsRunning(null);
-      workspaceActionLockRef.current = false;
-    }
-  }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus]);
-
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = agentTargets.filter(t => t.kind === "config");
   const workspaceValid = workspaceDiagnostics?.valid === true;
@@ -1067,14 +987,6 @@ function App() {
     });
     return match ? match.id : null;
   })();
-
-  function activityCellClass(index: number): string {
-    const distance = (index - activityIndex + 8) % 8;
-    if (distance === 0) return "terminal-activity-cell terminal-activity-cell-active";
-    if (distance === 1 || distance === 7) return "terminal-activity-cell terminal-activity-cell-mid";
-    if (distance === 2 || distance === 6) return "terminal-activity-cell terminal-activity-cell-low";
-    return "terminal-activity-cell";
-  }
 
   return (
     <div className="app-shell">
