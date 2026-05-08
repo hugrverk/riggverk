@@ -1,6 +1,7 @@
 ---
 description: Use automatically after implementation or before commit to review changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, unnecessary complexity, and mismatch with existing project patterns. Read-only.
 mode: subagent
+model: opencode-go/deepseek-v4-pro
 temperature: 0.1
 steps: 40
 hidden: true

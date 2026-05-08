@@ -22,7 +22,7 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled a
 - `agents/scribe.md` — Documentation writer
 - `agents/verifier.md` — Non-destructive verification runner
 
-Model selection is controlled by `templates/opencode.json` via `model` and `small_model`. Agent files are intentionally model-agnostic and define behavior, permissions, temperature, steps, and role-specific instructions. Per-agent model overrides are intentionally avoided unless a documented exception is added later.
+`templates/opencode.json` defines global `model`, `small_model`, and `default_agent`. Canonical agent files may also pin explicit models when runtime behavior requires per-agent model selection. Current agents pin Pro for architect/inspector/sentinel and Flash for scout/scribe/verifier.
 
 ## Permission model
 
