@@ -53,7 +53,7 @@ pub(crate) fn resolve_default_workspace_root(app: &tauri::AppHandle) -> Result<P
 
 pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static str])> {
     vec![
-        ("Marker", &[".ux-workspace/workspace.json"]),
+        ("Marker", &[".agent-workspace/workspace.json"]),
         ("Readme", &["README.md"]),
         (
             "Docs",
@@ -235,7 +235,7 @@ mod tests {
             .filter_map(|c| {
                 c.files
                     .iter()
-                    .find(|f| f.path == ".ux-workspace/workspace.json")
+                    .find(|f| f.path == ".agent-workspace/workspace.json")
                     .map(|_| c.label.as_str())
             })
             .collect();
@@ -340,7 +340,7 @@ mod tests {
     #[test]
     fn all_files_present_when_root_is_valid() {
         let root = temp_root("full-bundle");
-        write_file(&root, ".ux-workspace/workspace.json");
+        write_file(&root, ".agent-workspace/workspace.json");
         write_file(&root, "README.md");
         for &rel in &[
             "docs/START_HERE.md",

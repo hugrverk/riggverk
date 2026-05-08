@@ -46,7 +46,7 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 - [ ] "create workspace" button appears (only for safe statuses)
 - [ ] Click "create workspace"
 - [ ] Confirm created files:
-  - [ ] `.ux-workspace/workspace.json`
+  - [ ] `.agent-workspace/workspace.json`
   - [ ] `README.md`
   - [ ] `docs/`
   - [ ] `templates/`
@@ -127,7 +127,7 @@ Dry-runs only unless testing your own machine:
 
 ## 9. Known Limitations
 
-- Workspace marker naming is `.ux-workspace/workspace.json` (established contract marker; rename is a future dedicated slice)
+- Workspace marker naming is `.agent-workspace/workspace.json` (established contract marker)
 - Create flow has no rollback on rare I/O/race failure after preflight
 - Import/upgrade flow is not implemented
 - First public/share build should be tested as an installed `.app` bundle, not only dev mode

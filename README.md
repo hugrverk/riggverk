@@ -45,7 +45,7 @@ The check validates bundled default workspace scripts and metadata, scans app so
 
 The app operates on a workspace folder — a user-owned data directory containing configuration, docs, skills, templates, and scripts. The workspace folder is not the app source checkout.
 
-Workspace validation uses `.ux-workspace/workspace.json` and required workspace markers (scripts, templates, README, skills directory).
+Workspace validation uses `.agent-workspace/workspace.json` and required workspace markers (scripts, templates, README, skills directory).
 
 This repository is the public app source repo. User workspace content lives in separate user-owned workspace folders outside this checkout.
 
@@ -73,7 +73,7 @@ Skill selection is per-workspace. When the workspace path changes (via **choose 
 The workspace root is resolved in order of precedence:
 
 1. **Settings**: `workspace_path` in app settings (if set to a non-empty string).
-2. **Environment**: `UX_WORKSPACE_PATH` environment variable.
+2. **Environment**: `AGENT_WORKSPACE_PATH` environment variable.
 3. **Default**: built-in fallback path (`~/Agent Workspace`).
 
 Set a custom workspace path in the Workspace tab using **choose folder** (native directory picker) or **use default** (resets to `~/Agent Workspace`). Both actions save the path immediately to app settings and refresh diagnostics, status, contract, and all resource views — no separate Save step required. Manual path entry in the Inventory panel updates the local draft only. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
@@ -89,7 +89,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
-| `workspace_path` | `string` or `null` | `null` | Custom workspace root path. When `null` or missing, falls back to `UX_WORKSPACE_PATH` env or built-in default. Whitespace-only values are saved as `null`. |
+| `workspace_path` | `string` or `null` | `null` | Custom workspace root path. When `null` or missing, falls back to `AGENT_WORKSPACE_PATH` env or built-in default. Whitespace-only values are saved as `null`. |
 | `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules) and config targets (opencode_config) are filtered by kind in the UI. Claude and Gemini rule targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (OpenCode, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
@@ -155,7 +155,7 @@ The app has four top-level views:
 | `--claude` | `${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}` |
 | `--gemini` | `${GEMINI_RULES_PATH:-$HOME/.gemini/GEMINI.md}` |
 
-On apply, existing diverged rule targets are backed up under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwrite. `UX_WORKSPACE_BACKUP_DIR` can override the backup root for testing or advanced local use. Diff and dry-run modes do not create backups.
+On apply, existing diverged rule targets are backed up under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwrite. `AGENT_WORKSPACE_BACKUP_DIR` can override the backup root for testing or advanced local use. Diff and dry-run modes do not create backups.
 
 ## Skill installation
 
@@ -176,7 +176,7 @@ The app includes a read-only Workspace Contract Validator that checks an active 
 
 | Check | Description |
 |-------|-------------|
-| Workspace root | Resolves and verifies `.ux-workspace/workspace.json` exists |
+| Workspace root | Resolves and verifies `.agent-workspace/workspace.json` exists |
 | Skills directory | `skills/` exists and contains root-level skills at `skills/<skill>/SKILL.md` |
 | Skill metadata | Every `SKILL.md` has required `name` and `description` fields |
 | Skill uniqueness | No duplicate skill names (deterministic failure) |

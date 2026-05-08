@@ -59,10 +59,10 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
     let default_root =
         PathBuf::from(&home).join("Library/Application Support/ai.agentworkspace.app/backups");
 
-    let root = if let Ok(env_override) = std::env::var("UX_WORKSPACE_BACKUP_DIR") {
+    let root = if let Ok(env_override) = std::env::var("AGENT_WORKSPACE_BACKUP_DIR") {
         let trimmed = env_override.trim().to_string();
         if trimmed.is_empty() {
-            return Err("UX_WORKSPACE_BACKUP_DIR is set but empty".to_string());
+            return Err("AGENT_WORKSPACE_BACKUP_DIR is set but empty".to_string());
         }
         PathBuf::from(&trimmed)
     } else {
@@ -438,7 +438,7 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .expect("system clock before unix epoch")
             .as_nanos();
-        std::env::temp_dir().join(format!("ux-backups-{}-{}", name, nonce))
+        std::env::temp_dir().join(format!("agent-workspace-backups-{name}-{nonce}"))
     }
 
     #[test]

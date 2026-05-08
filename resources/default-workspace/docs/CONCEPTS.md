@@ -2,7 +2,7 @@
 
 ## Workspace
 
-A workspace is a user-owned directory containing docs, skills, templates, and scripts. The app identifies a workspace by the presence of `.ux-workspace/workspace.json` and a set of required files.
+A workspace is a user-owned directory containing docs, skills, templates, and scripts. The app identifies a workspace by the presence of `.agent-workspace/workspace.json` and a set of required files.
 
 The workspace is plain-text, user-editable, and can be versioned with Git. The app operates on a workspace but does not modify it without explicit action.
 

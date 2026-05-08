@@ -331,8 +331,15 @@ pub fn open_doc(id: String) -> Result<ActionResult, String> {
 
 const MAX_DOC_SIZE: usize = 512 * 1024;
 
-fn doc_backup_path(doc_id: &str, target_path: &Path) -> Result<PathBuf, String> {
-    let root = super::backups::backup_root()?;
+fn doc_backup_path(
+    doc_id: &str,
+    target_path: &Path,
+    custom_backup_root: Option<&Path>,
+) -> Result<PathBuf, String> {
+    let root = match custom_backup_root {
+        Some(path) => path.to_path_buf(),
+        None => super::backups::backup_root()?,
+    };
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "system clock error".to_string())?
@@ -392,7 +399,12 @@ pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<P
     Ok(canonical_target)
 }
 
-fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult, String> {
+fn save_doc_at_root(
+    root: &Path,
+    id: &str,
+    content: &str,
+    custom_backup_root: Option<&Path>,
+) -> Result<ActionResult, String> {
     if content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
@@ -424,7 +436,7 @@ fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult
         ));
     }
 
-    let backup_path = doc_backup_path(&resolved_id, &target_path)?;
+    let backup_path = doc_backup_path(&resolved_id, &target_path, custom_backup_root)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
     std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
@@ -441,7 +453,7 @@ fn save_doc_at_root(root: &Path, id: &str, content: &str) -> Result<ActionResult
 #[tauri::command]
 pub fn save_doc(id: String, content: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
-    save_doc_at_root(&root, &id, &content)
+    save_doc_at_root(&root, &id, &content, None)
 }
 
 fn create_doc_at_root(
@@ -505,10 +517,7 @@ mod tests {
     use std::collections::HashMap;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Mutex;
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    static BACKUP_TEST_LOCK: Mutex<()> = Mutex::new(());
 
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -611,7 +620,7 @@ mod tests {
         let root = temp_root("save-unknown");
         write_file(&root, "README.md", "# readme\n");
 
-        let result = save_doc_at_root(&root, "docs/nonexistent.md", "content");
+        let result = save_doc_at_root(&root, "docs/nonexistent.md", "content", None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -625,15 +634,12 @@ mod tests {
 
     #[test]
     fn save_doc_known_id_resolves_and_writes() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("save-known");
         let backup_root = temp_root("save-known-backup");
         write_file(&root, "README.md", "# old\n");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root(&root, "README.md", "# new\n");
+        let result = save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok(), "save should succeed: {:?}", result);
         let ar = result.unwrap();
         assert!(ar.success);
@@ -652,7 +658,7 @@ mod tests {
         write_file(&root, "README.md", "# readme\n");
 
         // This id is not in registry, so it should be rejected before any path check
-        let result = save_doc_at_root(&root, "../../../etc/passwd", "bad");
+        let result = save_doc_at_root(&root, "../../../etc/passwd", "bad", None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -664,7 +670,7 @@ mod tests {
         let root = temp_root("save-unchanged");
         write_file(&root, "README.md", "# same\n");
 
-        let result = save_doc_at_root(&root, "README.md", "# same\n");
+        let result = save_doc_at_root(&root, "README.md", "# same\n", None);
 
         assert!(result.is_ok());
         let ar = result.unwrap();
@@ -674,15 +680,12 @@ mod tests {
 
     #[test]
     fn save_doc_creates_backup_when_changed() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("save-backup");
         let backup_root = temp_root("save-backup-backup");
         write_file(&root, "README.md", "# original\n");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root(&root, "README.md", "# modified\n");
+        let result = save_doc_at_root(&root, "README.md", "# modified\n", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -712,10 +715,9 @@ mod tests {
     fn save_doc_target_remains_under_workspace() {
         let root = temp_root("save-under-root");
         let backup_root = temp_root("save-under-root-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "README.md", "# readme\n");
 
-        let result = save_doc_at_root(&root, "README.md", "# updated\n");
+        let result = save_doc_at_root(&root, "README.md", "# updated\n", Some(&backup_root));
 
         assert!(result.is_ok());
         cleanup(&root);
@@ -856,7 +858,7 @@ mod tests {
         let root = temp_root("save-missing-custom");
         std::fs::create_dir_all(&root).expect("create root dir");
 
-        let result = save_doc_at_root(&root, "custom:nonexistent", "# content\n");
+        let result = save_doc_at_root(&root, "custom:nonexistent", "# content\n", None);
         cleanup(&root);
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("custom doc does not exist"));
@@ -866,10 +868,9 @@ mod tests {
     fn save_doc_saves_existing_custom_doc() {
         let root = temp_root("save-existing-custom");
         let backup_root = temp_root("save-existing-custom-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "docs/context/my-notes.md", "# original\n");
 
-        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n");
+        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n", Some(&backup_root));
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -929,15 +930,12 @@ mod tests {
 
     #[test]
     fn save_doc_custom_creates_backup_when_changed() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("save-custom-backup");
         let backup_root = temp_root("save-custom-backup-backup");
         write_file(&root, "docs/context/my-notes.md", "# original\n");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n");
+        let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -970,7 +968,7 @@ mod tests {
         let root = temp_root("save-custom-unchanged");
         write_file(&root, "docs/context/my-notes.md", "# same\n");
 
-        let result = save_doc_at_root(&root, "custom:my-notes", "# same\n");
+        let result = save_doc_at_root(&root, "custom:my-notes", "# same\n", None);
 
         assert!(result.is_ok());
         let ar = result.unwrap();
@@ -982,10 +980,9 @@ mod tests {
     fn save_doc_custom_target_remains_under_workspace() {
         let root = temp_root("save-custom-under-root");
         let backup_root = temp_root("save-custom-under-root-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "docs/context/my-notes.md", "# readme\n");
 
-        let result = save_doc_at_root(&root, "custom:my-notes", "# updated\n");
+        let result = save_doc_at_root(&root, "custom:my-notes", "# updated\n", Some(&backup_root));
 
         assert!(result.is_ok());
         cleanup(&root);
@@ -997,7 +994,7 @@ mod tests {
         let root = temp_root("save-custom-bad-slug");
         write_file(&root, "README.md", "# readme\n");
 
-        let result = save_doc_at_root(&root, "custom:../../etc", "bad");
+        let result = save_doc_at_root(&root, "custom:../../etc", "bad", None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -1079,15 +1076,17 @@ mod tests {
 
     #[test]
     fn config_template_save_valid_json_accepted() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-valid");
         write_file(&root, "templates/opencode.json", "{}");
         let backup_root = temp_root("cfg-save-valid-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"key\":\"value\"}");
+        let result = save_doc_at_root_for_config(
+            &root,
+            "opencode_config",
+            "{\"key\":\"value\"}",
+            Some(&backup_root),
+        );
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert!(ar.success);
@@ -1100,15 +1099,13 @@ mod tests {
 
     #[test]
     fn config_template_save_invalid_json_rejected() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-invalid");
         write_file(&root, "templates/opencode.json", "{}");
         let backup_root = temp_root("cfg-save-invalid-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "opencode_config", "not json");
+        let result =
+            save_doc_at_root_for_config(&root, "opencode_config", "not json", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         cleanup(&root);
         let _ = std::fs::remove_dir_all(&backup_root);
         assert!(result.is_err());
@@ -1117,15 +1114,13 @@ mod tests {
 
     #[test]
     fn config_template_save_unknown_target_rejected() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-unknown");
         write_file(&root, "templates/opencode.json", "{}");
         let backup_root = temp_root("cfg-save-unknown-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "nonexistent_config", "{}");
+        let result =
+            save_doc_at_root_for_config(&root, "nonexistent_config", "{}", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         cleanup(&root);
         let _ = std::fs::remove_dir_all(&backup_root);
         assert!(result.is_err());
@@ -1134,15 +1129,13 @@ mod tests {
 
     #[test]
     fn config_template_save_unchanged_does_not_write() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-unchanged");
         write_file(&root, "templates/opencode.json", "{\"a\":1}");
         let backup_root = temp_root("cfg-save-unchanged-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"a\":1}");
+        let result =
+            save_doc_at_root_for_config(&root, "opencode_config", "{\"a\":1}", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "unchanged");
@@ -1152,15 +1145,17 @@ mod tests {
 
     #[test]
     fn config_template_save_target_remains_under_workspace() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-under-root");
         write_file(&root, "templates/opencode.json", "{}");
         let backup_root = temp_root("cfg-save-under-root-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"ok\":true}");
+        let result = save_doc_at_root_for_config(
+            &root,
+            "opencode_config",
+            "{\"ok\":true}",
+            Some(&backup_root),
+        );
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         cleanup(&root);
         let _ = std::fs::remove_dir_all(&backup_root);
@@ -1168,15 +1163,17 @@ mod tests {
 
     #[test]
     fn config_template_save_creates_backup_when_changed() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("cfg-save-backup");
         let backup_root = temp_root("cfg-save-backup-backup");
         write_file(&root, "templates/opencode.json", "{\"original\":true}");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_doc_at_root_for_config(&root, "opencode_config", "{\"modified\":true}");
+        let result = save_doc_at_root_for_config(
+            &root,
+            "opencode_config",
+            "{\"modified\":true}",
+            Some(&backup_root),
+        );
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -1208,6 +1205,7 @@ mod tests {
         root: &PathBuf,
         target_id: &str,
         content: &str,
+        custom_backup_root: Option<&Path>,
     ) -> Result<ActionResult, String> {
         if content.len() > 512 * 1024 {
             return Err("content exceeds 512 KB limit".to_string());
@@ -1248,7 +1246,7 @@ mod tests {
                 ));
             }
 
-            let backup_path = doc_backup_path(target_id, &target_path)?;
+            let backup_path = doc_backup_path(target_id, &target_path, custom_backup_root)?;
             std::fs::write(&backup_path, &existing)
                 .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -1276,7 +1274,11 @@ mod tests {
 
     // ── agent template save tests ──
 
-    fn save_agent_template_at_root(root: &PathBuf, content: &str) -> Result<ActionResult, String> {
+    fn save_agent_template_at_root(
+        root: &PathBuf,
+        content: &str,
+        custom_backup_root: Option<&Path>,
+    ) -> Result<ActionResult, String> {
         if content.len() > 512 * 1024 {
             return Err("content exceeds 512 KB limit".to_string());
         }
@@ -1304,7 +1306,7 @@ mod tests {
             ));
         }
 
-        let backup_path = doc_backup_path("agent-template", &target_path)?;
+        let backup_path = doc_backup_path("agent-template", &target_path, custom_backup_root)?;
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -1325,7 +1327,7 @@ mod tests {
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
 
         let big = "x".repeat(512 * 1024 + 1);
-        let result = save_agent_template_at_root(&root, &big);
+        let result = save_agent_template_at_root(&root, &big, None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -1337,7 +1339,7 @@ mod tests {
         let root = temp_root("ag-save-unchanged");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
 
-        let result = save_agent_template_at_root(&root, "# rules\n");
+        let result = save_agent_template_at_root(&root, "# rules\n", None);
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "unchanged");
@@ -1346,15 +1348,12 @@ mod tests {
 
     #[test]
     fn agent_template_save_creates_backup_when_changed() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("ag-save-backup");
         let backup_root = temp_root("ag-save-backup-backup");
         write_file(&root, "templates/global-agent-rules.md", "# old rules\n");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let result = save_agent_template_at_root(&root, "# new rules\n");
+        let result = save_agent_template_at_root(&root, "# new rules\n", Some(&backup_root));
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -1390,7 +1389,7 @@ mod tests {
         let root = temp_root("ag-save-missing");
         std::fs::create_dir_all(&root).expect("create root dir");
 
-        let result = save_agent_template_at_root(&root, "# content\n");
+        let result = save_agent_template_at_root(&root, "# content\n", None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -1401,10 +1400,9 @@ mod tests {
     fn agent_template_save_target_remains_under_workspace() {
         let root = temp_root("ag-save-under-root");
         let backup_root = temp_root("ag-save-under-root-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
 
-        let result = save_agent_template_at_root(&root, "# updated\n");
+        let result = save_agent_template_at_root(&root, "# updated\n", Some(&backup_root));
         assert!(result.is_ok());
         cleanup(&root);
         let _ = fs::remove_dir_all(&backup_root);
@@ -1551,23 +1549,20 @@ mod tests {
 
     #[test]
     fn agent_source_save_creates_backup() {
-        let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("ag-save-backup");
         let backup_root = temp_root("ag-save-backup-backup");
         write_agent_file(&root, "architect.md", "# old\n");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
         let path = resolve_agent_path(&root, "architect.md").unwrap();
         let existing = std::fs::read_to_string(&path).unwrap();
 
-        let backup_path = doc_backup_path("agent-architect.md", &path).unwrap();
+        let backup_path = doc_backup_path("agent-architect.md", &path, Some(&backup_root)).unwrap();
         std::fs::write(&backup_path, &existing).unwrap();
         std::fs::write(&path, "# new\n").unwrap();
 
         let saved = std::fs::read_to_string(root.join("agents/architect.md")).unwrap();
         let backup_content = std::fs::read_to_string(&backup_path).unwrap();
 
-        std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
         cleanup(&root);
         let _ = std::fs::remove_dir_all(&backup_root);
 
@@ -1640,7 +1635,7 @@ pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
         ));
     }
 
-    let backup_path = doc_backup_path("agent-template", &target_path)?;
+    let backup_path = doc_backup_path("agent-template", &target_path, None)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
     std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
@@ -1737,7 +1732,7 @@ pub fn save_config_template(target_id: String, content: String) -> Result<Action
             ));
         }
 
-        let backup_path = doc_backup_path(&target_id, &target_path)?;
+        let backup_path = doc_backup_path(&target_id, &target_path, None)?;
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -1939,7 +1934,7 @@ pub fn save_agent_source(filename: String, content: String) -> Result<ActionResu
         ));
     }
 
-    let backup_path = doc_backup_path(&format!("agent-{}", filename), &path)?;
+    let backup_path = doc_backup_path(&format!("agent-{}", filename), &path, None)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
     std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;

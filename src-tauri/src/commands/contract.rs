@@ -51,20 +51,20 @@ pub fn validate_workspace_contract() -> Result<WorkspaceContractResult, String> 
         detail: format!("{}", root.display()),
     });
 
-    let marker = root.join(".ux-workspace/workspace.json");
+    let marker = root.join(".agent-workspace/workspace.json");
     if marker.is_file() {
         checks.push(ContractCheck {
             id: "ws-marker".into(),
-            label: ".ux-workspace/workspace.json exists".into(),
+            label: ".agent-workspace/workspace.json exists".into(),
             status: CheckStatus::Pass,
             detail: "Workspace marker found".into(),
         });
     } else {
-        let msg = ".ux-workspace/workspace.json is missing";
+        let msg = ".agent-workspace/workspace.json is missing";
         errors.push(msg.into());
         checks.push(ContractCheck {
             id: "ws-marker".into(),
-            label: ".ux-workspace/workspace.json exists".into(),
+            label: ".agent-workspace/workspace.json exists".into(),
             status: CheckStatus::Fail,
             detail: msg.into(),
         });
@@ -870,7 +870,7 @@ mod tests {
 
     fn setup_valid_workspace(name: &str) -> PathBuf {
         let root = temp_root(name);
-        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
         write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
         write_file(
             &root,
@@ -929,26 +929,26 @@ mod tests {
     #[test]
     fn missing_workspace_marker_fails() {
         let root = temp_root("missing-marker");
-        // No .ux-workspace/workspace.json
+        // No .agent-workspace/workspace.json
 
         let mut checks: Vec<ContractCheck> = Vec::new();
         let mut errors: Vec<String> = Vec::new();
 
         // Simulate the check without workspace_root()
-        let marker = root.join(".ux-workspace/workspace.json");
+        let marker = root.join(".agent-workspace/workspace.json");
         if marker.is_file() {
             checks.push(ContractCheck {
                 id: "ws-marker".into(),
-                label: ".ux-workspace/workspace.json exists".into(),
+                label: ".agent-workspace/workspace.json exists".into(),
                 status: CheckStatus::Pass,
                 detail: "Workspace marker found".into(),
             });
         } else {
-            let msg = ".ux-workspace/workspace.json is missing";
+            let msg = ".agent-workspace/workspace.json is missing";
             errors.push(msg.into());
             checks.push(ContractCheck {
                 id: "ws-marker".into(),
-                label: ".ux-workspace/workspace.json exists".into(),
+                label: ".agent-workspace/workspace.json exists".into(),
                 status: CheckStatus::Fail,
                 detail: msg.into(),
             });

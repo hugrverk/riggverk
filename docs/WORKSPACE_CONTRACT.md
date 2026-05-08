@@ -2,7 +2,7 @@
 
 ## What a workspace folder is
 
-A workspace folder is a user-owned data directory containing configuration, documentation, skills, templates, and scripts that can be synced to agent tool folders. It is identified by `.ux-workspace/workspace.json` and a set of required workspace markers.
+A workspace folder is a user-owned data directory containing configuration, documentation, skills, templates, and scripts that can be synced to agent tool folders. It is identified by `.agent-workspace/workspace.json` and a set of required workspace markers.
 
 Workspace contents are user-writable and can be git-versioned. The workspace folder does not need to contain the Agent Workspace app source code. The app operates on a workspace folder, not the other way around.
 
@@ -12,7 +12,7 @@ Workspace validation checks for these markers inside the workspace root:
 
 | Marker | Kind | Purpose |
 |--------|------|---------|
-| `.ux-workspace/workspace.json` | file | Workspace identity marker |
+| `.agent-workspace/workspace.json` | file | Workspace identity marker |
 | `scripts/bootstrap.sh` | file | Full bootstrap script |
 | `scripts/install-agent-rules.sh` | file | Agent rules sync script |
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
@@ -43,7 +43,7 @@ The app supports editing `templates/global-agent-rules.md` through the allowlist
 
 ## Transition state
 
-The workspace marker directory `.ux-workspace/` and the `UX_WORKSPACE_PATH` / `UX_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
+The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
 This repository is the public Agent Workspace app source. Private workspace repositories can store user-owned docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults. Import and upgrade flows for existing workspaces are future work.
 
@@ -88,7 +88,7 @@ Workspace validation is read-only. It checks for required markers and reports th
 The workspace path is resolved in this order:
 
 1. `workspace_path` in app settings (if non-empty).
-2. `UX_WORKSPACE_PATH` environment variable.
+2. `AGENT_WORKSPACE_PATH` environment variable.
 3. Built-in default path.
 
 Validation passes when all markers exist at the resolved canonical path. It fails with a descriptive error when any marker is missing or when the path cannot be resolved.

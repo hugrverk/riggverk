@@ -164,7 +164,7 @@ done
 printf '  9 bundled docs verified non-empty\n'
 
 step "bundled default workspace marker"
-if [ ! -f resources/default-workspace/.ux-workspace/workspace.json ]; then
+if [ ! -f resources/default-workspace/.agent-workspace/workspace.json ]; then
   printf 'FAIL: bundled default workspace marker not found\n' >&2
   exit 1
 fi
@@ -236,7 +236,7 @@ step "bundled default install-opencode-config.sh temp apply smoke"
 tmpdir="$(mktemp -d)"
 OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
 OPENCODE_AGENTS_DIR="$tmpdir/agents" \
-UX_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
   bash resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
 apply_ok=true
 if [ ! -f "$tmpdir/opencode.json" ]; then
@@ -301,7 +301,7 @@ cp -R resources/default-workspace "$space_dir"
 # Run --apply from the copied workspace, targeting separate runtime dirs
 OPENCODE_CONFIG_PATH="$runtime_config" \
 OPENCODE_AGENTS_DIR="$runtime_agents" \
-UX_WORKSPACE_BACKUP_DIR="$backup_dir" \
+AGENT_WORKSPACE_BACKUP_DIR="$backup_dir" \
   bash "$space_dir/scripts/install-opencode-config.sh" --apply >/dev/null
 
 apply_ok=true

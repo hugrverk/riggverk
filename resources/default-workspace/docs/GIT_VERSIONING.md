@@ -42,7 +42,7 @@ Workspace files are designed to be versioned:
 - `scripts/` — sync and install scripts
 - `routing/` — routing profiles
 - `metadata/` — agent metadata
-- `.ux-workspace/workspace.json` — workspace marker
+- `.agent-workspace/workspace.json` — workspace marker
 - `README.md`
 
 ## What not to commit

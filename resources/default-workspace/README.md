@@ -12,7 +12,7 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 - **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 22 starter skills are bundled.
 - **templates/** — source templates for agent rules (`global-agent-rules.md`) and OpenCode config (`opencode.json`)
 - **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
-- **.ux-workspace/** — workspace identity marker (do not delete)
+- **.agent-workspace/** — workspace identity marker (do not delete)
 
 ## Scripts
 

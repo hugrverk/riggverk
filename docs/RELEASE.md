@@ -55,4 +55,4 @@ After code changes that affect the app, manually check:
 ## Remaining Limits
 
 - Release check does not replace manual GUI smoke for view wiring, folder picker behavior, installed bundles, or native file-open behavior.
-- The workspace marker directory `.ux-workspace/` and related env vars (`UX_WORKSPACE_PATH`, `UX_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.
+- The workspace marker directory `.agent-workspace/` and related env vars (`AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.

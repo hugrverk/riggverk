@@ -331,8 +331,14 @@ pub fn read_routing_profiles_file() -> Result<String, String> {
     std::fs::read_to_string(&path).map_err(|e| format!("cannot read routing file: {}", e))
 }
 
-fn routing_backup_path(target_path: &Path) -> Result<std::path::PathBuf, String> {
-    let backup_root = super::backups::backup_root()?;
+fn routing_backup_path(
+    target_path: &Path,
+    custom_backup_root: Option<&Path>,
+) -> Result<std::path::PathBuf, String> {
+    let backup_root = match custom_backup_root {
+        Some(path) => path.to_path_buf(),
+        None => super::backups::backup_root()?,
+    };
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|_| "system clock error".to_string())?
@@ -351,10 +357,14 @@ fn routing_backup_path(target_path: &Path) -> Result<std::path::PathBuf, String>
 #[tauri::command]
 pub fn save_routing_profiles(content: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
-    save_routing_profiles_inner(&root, &content)
+    save_routing_profiles_inner(&root, &content, None)
 }
 
-fn save_routing_profiles_inner(root: &Path, content: &str) -> Result<ActionResult, String> {
+fn save_routing_profiles_inner(
+    root: &Path,
+    content: &str,
+    custom_backup_root: Option<&Path>,
+) -> Result<ActionResult, String> {
     if content.len() > MAX_ROUTING_FILE_SIZE {
         return Err(format!(
             "content exceeds {} KB limit",
@@ -388,7 +398,7 @@ fn save_routing_profiles_inner(root: &Path, content: &str) -> Result<ActionResul
             ));
         }
 
-        let backup_path = routing_backup_path(&path)?;
+        let backup_path = routing_backup_path(&path, custom_backup_root)?;
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -885,15 +895,19 @@ mod tests {
 
     // ── save_routing_profiles tests ──
 
-    fn save_at_root(root: &PathBuf, content: &str) -> Result<ActionResult, String> {
-        save_routing_profiles_inner(root, content)
+    fn save_at_root(
+        root: &PathBuf,
+        content: &str,
+        custom_backup_root: Option<&Path>,
+    ) -> Result<ActionResult, String> {
+        save_routing_profiles_inner(root, content, custom_backup_root)
     }
 
     #[test]
     fn save_invalid_json_rejected() {
         let root = temp_root("save-invalid-json");
 
-        let result = save_at_root(&root, "not json");
+        let result = save_at_root(&root, "not json", None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -905,7 +919,7 @@ mod tests {
         let root = temp_root("save-oversized");
         let big = format!("{{\"profiles\":[{}]}}", "x".repeat(MAX_ROUTING_FILE_SIZE));
 
-        let result = save_at_root(&root, &big);
+        let result = save_at_root(&root, &big, None);
         cleanup(&root);
 
         assert!(result.is_err());
@@ -917,7 +931,7 @@ mod tests {
         let root = temp_root("save-creates");
 
         let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
-        let result = save_at_root(&root, json);
+        let result = save_at_root(&root, json, None);
         assert!(result.is_ok(), "save should succeed: {:?}", result);
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "created");
@@ -939,7 +953,7 @@ mod tests {
         let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
         write_file(&root, "routing/profiles.json", json);
 
-        let result = save_at_root(&root, json);
+        let result = save_at_root(&root, json, None);
         assert!(result.is_ok());
         let ar = result.unwrap();
         cleanup(&root);
@@ -950,12 +964,11 @@ mod tests {
     fn save_changed_creates_backup() {
         let root = temp_root("save-backup");
         let backup_root = temp_root("routing-save-backup");
-        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         let original = "{\"profiles\":[{\"id\":\"test\",\"title\":\"Old\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
         let modified = "{\"profiles\":[{\"id\":\"test\",\"title\":\"New\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
         write_file(&root, "routing/profiles.json", original);
 
-        let result = save_at_root(&root, modified);
+        let result = save_at_root(&root, modified, Some(&backup_root));
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -995,7 +1008,7 @@ mod tests {
         let root = temp_root("save-no-path");
         let json = "{\"profiles\":[{\"id\":\"test\",\"title\":\"T\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
 
-        let result = save_at_root(&root, json);
+        let result = save_at_root(&root, json, None);
         assert!(result.is_ok());
 
         // Only routing/profiles.json should be written
@@ -1018,7 +1031,7 @@ mod tests {
         let root = temp_root("save-empty");
         let json = "{\"profiles\":[]}";
 
-        let result = save_at_root(&root, json);
+        let result = save_at_root(&root, json, None);
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "created");

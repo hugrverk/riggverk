@@ -39,7 +39,7 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
     &[
         MarkerDef {
             kind: MarkerKind::File,
-            rel_path: ".ux-workspace/workspace.json",
+            rel_path: ".agent-workspace/workspace.json",
         },
         MarkerDef {
             kind: MarkerKind::File,
@@ -87,7 +87,7 @@ fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
             return PathBuf::from(normalized);
         }
     }
-    if let Ok(p) = std::env::var("UX_WORKSPACE_PATH") {
+    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
         if !p.is_empty() {
             return PathBuf::from(p);
         }
@@ -812,7 +812,7 @@ mod tests {
 
     fn setup_valid_workspace(name: &str) -> PathBuf {
         let root = temp_root(name);
-        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
         write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
         write_file(
             &root,
@@ -843,7 +843,7 @@ mod tests {
     #[test]
     fn accepts_valid_workspace_without_app_source() {
         let root = temp_root("no-app-source");
-        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
         write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
         write_file(
             &root,
@@ -889,7 +889,7 @@ mod tests {
         write_file(&root, "templates/opencode.json", "{}");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
-        // Missing .ux-workspace/workspace.json
+        // Missing .agent-workspace/workspace.json
 
         let result = validate_workspace_root(root.clone());
         cleanup(&root);
@@ -1094,7 +1094,7 @@ mod tests {
         cleanup(&root);
         let files: Vec<&str> = plan.planned_files.iter().map(|s| s.as_str()).collect();
         assert!(
-            files.contains(&".ux-workspace/workspace.json"),
+            files.contains(&".agent-workspace/workspace.json"),
             "planned files must include workspace marker"
         );
         assert!(
@@ -1234,7 +1234,7 @@ mod tests {
 
     fn setup_source_root(name: &str) -> PathBuf {
         let root = temp_root(name);
-        write_file(&root, ".ux-workspace/workspace.json", "{}");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
         write_file(&root, "README.md", "# readme\n");
         for &rel in &[
             "docs/START_HERE.md",
@@ -1332,7 +1332,7 @@ mod tests {
         assert!(result
             .copied_files
             .iter()
-            .any(|f| f == ".ux-workspace/workspace.json"));
+            .any(|f| f == ".agent-workspace/workspace.json"));
         assert!(result.copied_files.iter().any(|f| f == "README.md"));
         assert!(result.copied_files.iter().any(|f| f.starts_with("docs/")));
         assert!(result
@@ -1437,7 +1437,7 @@ mod tests {
         let target = temp_root("no-overwrite-target");
         fs::create_dir_all(&target).expect("create target");
         // Place a file at a planned destination path but leave the dir otherwise empty
-        let marker_dir = target.join(".ux-workspace");
+        let marker_dir = target.join(".agent-workspace");
         fs::create_dir_all(&marker_dir).expect("create marker dir");
         let existing_content = "preexisting-data";
         fs::write(marker_dir.join("workspace.json"), existing_content).expect("write preexisting");
@@ -1445,10 +1445,10 @@ mod tests {
         let result =
             create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
 
-        // Target has entries (the .ux-workspace dir) so planner says non_empty_non_workspace
+        // Target has entries (the .agent-workspace dir) so planner says non_empty_non_workspace
         // Verify it was rejected
         let file_content =
-            fs::read_to_string(target.join(".ux-workspace/workspace.json")).unwrap_or_default();
+            fs::read_to_string(target.join(".agent-workspace/workspace.json")).unwrap_or_default();
         cleanup(&source);
         cleanup(&target);
 
@@ -1491,7 +1491,7 @@ mod tests {
     fn preflight_missing_source_writes_nothing() {
         let source = temp_root("preflight-missing-source");
         // Set up a source root that is MISSING several required files
-        write_file(&source, ".ux-workspace/workspace.json", "{}");
+        write_file(&source, ".agent-workspace/workspace.json", "{}");
         write_file(&source, "README.md", "# readme\n");
         // Missing: docs/, templates/, scripts/, skills/
 
@@ -1531,7 +1531,7 @@ mod tests {
         let target = temp_root("preflight-dest-exists-target");
         fs::create_dir_all(&target).expect("create target dir");
         // Place a planned file directly; planner sees entries and rejects
-        let marker_dir = target.join(".ux-workspace");
+        let marker_dir = target.join(".agent-workspace");
         fs::create_dir_all(&marker_dir).expect("create marker dir");
         let existing_content = "should-not-be-touched";
         fs::write(marker_dir.join("workspace.json"), existing_content)
@@ -1540,7 +1540,7 @@ mod tests {
         let result =
             create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
         let file_content =
-            fs::read_to_string(target.join(".ux-workspace/workspace.json")).unwrap_or_default();
+            fs::read_to_string(target.join(".agent-workspace/workspace.json")).unwrap_or_default();
         cleanup(&source);
         cleanup(&target);
 
@@ -1570,7 +1570,7 @@ mod tests {
         let result =
             create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
 
-        let marker_exists = target.join(".ux-workspace/workspace.json").is_file();
+        let marker_exists = target.join(".agent-workspace/workspace.json").is_file();
         let template_exists = target.join("templates/global-agent-rules.md").is_file();
         let script_exists = target.join("scripts/bootstrap.sh").is_file();
         cleanup(&source);

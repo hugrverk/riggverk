@@ -4,7 +4,7 @@
 
 The app validates the workspace path before any operations. If the workspace is reported as invalid:
 
-1. Verify `.ux-workspace/workspace.json` exists in the workspace root
+1. Verify `.agent-workspace/workspace.json` exists in the workspace root
 2. Verify all required markers are present: scripts, templates, README, and skills directory
 3. Check that the workspace path in settings points to a valid directory
 4. Verify file permissions allow reading the workspace directory
@@ -15,7 +15,7 @@ The workspace requires these markers:
 
 | Marker | Kind |
 |--------|------|
-| `.ux-workspace/workspace.json` | file |
+| `.agent-workspace/workspace.json` | file |
 | `scripts/bootstrap.sh` | file |
 | `scripts/install-skills.sh` | file |
 | `scripts/install-agent-rules.sh` | file |
