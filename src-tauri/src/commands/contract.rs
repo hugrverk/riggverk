@@ -1067,13 +1067,13 @@ mod tests {
     fn metadata_notes_non_array_fails() {
         let root = setup_valid_workspace("meta-notes-bad");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
 
         // notes is a string, not an array
         write_file(
             &root,
             "metadata/agents.json",
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":"not an array"}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":"not an array"}}}"#,
         );
 
         let mut checks = Vec::new();
@@ -1095,12 +1095,12 @@ mod tests {
     fn metadata_default_skill_missing_fails() {
         let root = setup_valid_workspace("meta-default-missing");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
 
         write_file(
             &root,
             "metadata/agents.json",
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["nonexistent-skill"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["nonexistent-skill"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let mut checks = Vec::new();

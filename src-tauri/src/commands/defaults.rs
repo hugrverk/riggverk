@@ -81,12 +81,12 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
         (
             "Agents",
             &[
-                "agents/autopilot.md",
-                "agents/repo-scout.md",
-                "agents/code-reviewer.md",
-                "agents/security-auditor.md",
-                "agents/docs-writer.md",
-                "agents/qa-verifier.md",
+                "agents/architect.md",
+                "agents/scout.md",
+                "agents/inspector.md",
+                "agents/sentinel.md",
+                "agents/scribe.md",
+                "agents/verifier.md",
             ],
         ),
         (
@@ -364,12 +364,12 @@ mod tests {
             write_file(&root, rel);
         }
         for &rel in &[
-            "agents/autopilot.md",
-            "agents/repo-scout.md",
-            "agents/code-reviewer.md",
-            "agents/security-auditor.md",
-            "agents/docs-writer.md",
-            "agents/qa-verifier.md",
+            "agents/architect.md",
+            "agents/scout.md",
+            "agents/inspector.md",
+            "agents/sentinel.md",
+            "agents/scribe.md",
+            "agents/verifier.md",
         ] {
             write_file(&root, rel);
         }

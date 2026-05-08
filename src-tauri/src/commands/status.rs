@@ -248,25 +248,22 @@ mod tests {
 
         write_file(&root.join("templates/opencode.json"), r#"{"key":"val"}"#);
         write_file(
-            &root.join("agents/autopilot.md"),
-            "# autopilot\nmode: primary",
+            &root.join("agents/architect.md"),
+            "# architect\nmode: primary",
         );
-        write_file(
-            &root.join("agents/repo-scout.md"),
-            "# repo-scout\nmode: subagent",
-        );
+        write_file(&root.join("agents/scout.md"), "# scout\nmode: subagent");
 
         write_file(
             &home.join(".config/opencode/opencode.json"),
             r#"{"key":"val"}"#,
         );
         write_file(
-            &home.join(".config/opencode/agents/autopilot.md"),
-            "# autopilot\nmode: primary",
+            &home.join(".config/opencode/agents/architect.md"),
+            "# architect\nmode: primary",
         );
         write_file(
-            &home.join(".config/opencode/agents/repo-scout.md"),
-            "# repo-scout\nmode: subagent",
+            &home.join(".config/opencode/agents/scout.md"),
+            "# scout\nmode: subagent",
         );
 
         let status = opencode_config_status(&root, &home);
@@ -329,15 +326,15 @@ mod tests {
         let home = temp_root("home-agent-missing");
 
         write_file(&root.join("templates/opencode.json"), r#"{}"#);
-        write_file(&root.join("agents/autopilot.md"), "autopilot");
-        write_file(&root.join("agents/repo-scout.md"), "repo-scout");
+        write_file(&root.join("agents/architect.md"), "architect");
+        write_file(&root.join("agents/scout.md"), "scout");
 
         write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
-            &home.join(".config/opencode/agents/autopilot.md"),
-            "autopilot",
+            &home.join(".config/opencode/agents/architect.md"),
+            "architect",
         );
-        // repo-scout.md is NOT written to home target
+        // scout.md is NOT written to home target
 
         let status = opencode_config_status(&root, &home);
         let _ = fs::remove_dir_all(&root);
@@ -351,11 +348,11 @@ mod tests {
         let home = temp_root("home-agent-div");
 
         write_file(&root.join("templates/opencode.json"), r#"{}"#);
-        write_file(&root.join("agents/autopilot.md"), "updated agent");
+        write_file(&root.join("agents/architect.md"), "updated agent");
 
         write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
-            &home.join(".config/opencode/agents/autopilot.md"),
+            &home.join(".config/opencode/agents/architect.md"),
             "old agent",
         );
 
@@ -402,14 +399,14 @@ mod tests {
         let home = temp_root("home-dotfile");
 
         write_file(&root.join("templates/opencode.json"), r#"{}"#);
-        write_file(&root.join("agents/autopilot.md"), "autopilot");
+        write_file(&root.join("agents/architect.md"), "architect");
         // Dotfile should be ignored
         write_file(&root.join("agents/.DS_Store"), "garbage");
 
         write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
-            &home.join(".config/opencode/agents/autopilot.md"),
-            "autopilot",
+            &home.join(".config/opencode/agents/architect.md"),
+            "architect",
         );
 
         let status = opencode_config_status(&root, &home);
@@ -424,13 +421,13 @@ mod tests {
         let home = temp_root("home-nonmd");
 
         write_file(&root.join("templates/opencode.json"), r#"{}"#);
-        write_file(&root.join("agents/autopilot.md"), "autopilot");
+        write_file(&root.join("agents/architect.md"), "architect");
         write_file(&root.join("agents/notes.txt"), "not an agent");
 
         write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
-            &home.join(".config/opencode/agents/autopilot.md"),
-            "autopilot",
+            &home.join(".config/opencode/agents/architect.md"),
+            "architect",
         );
 
         let status = opencode_config_status(&root, &home);

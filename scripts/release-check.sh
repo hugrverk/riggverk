@@ -171,8 +171,8 @@ fi
 
 step "bundled default opencode.json"
 python3 -m json.tool resources/default-workspace/templates/opencode.json >/dev/null
-if ! grep -q '"default_agent": "autopilot"' resources/default-workspace/templates/opencode.json; then
-  printf 'FAIL: bundled opencode.json missing default_agent autopilot\n' >&2
+if ! grep -q '"default_agent": "architect"' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing default_agent architect\n' >&2
   exit 1
 fi
 if ! grep -q '"model": "opencode-go/deepseek-v4-pro"' resources/default-workspace/templates/opencode.json; then
@@ -191,22 +191,22 @@ if ! grep -q '"snapshot": true' resources/default-workspace/templates/opencode.j
   printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
   exit 1
 fi
-printf '  opencode.json: default_agent=autopilot model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
+printf '  opencode.json: default_agent=architect model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
 
 step "bundled default agents exist and non-empty"
-for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -s "resources/default-workspace/agents/$agent" ]; then
     printf 'FAIL: bundled default agent missing or empty: agents/%s\n' "$agent" >&2
     exit 1
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
-if ! grep -q 'mode: primary' resources/default-workspace/agents/autopilot.md; then
-  printf 'FAIL: bundled autopilot.md missing mode: primary\n' >&2
+if ! grep -q 'mode: primary' resources/default-workspace/agents/architect.md; then
+  printf 'FAIL: bundled architect.md missing mode: primary\n' >&2
   exit 1
 fi
-printf '  autopilot.md: mode=primary\n'
-for subagent in repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+printf '  architect.md: mode=primary\n'
+for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if ! grep -q 'mode: subagent' "resources/default-workspace/agents/$subagent"; then
     printf 'FAIL: bundled %s missing mode: subagent\n' "$subagent" >&2
     exit 1
@@ -238,25 +238,27 @@ if [ ! -f "$tmpdir/opencode.json" ]; then
   printf 'FAIL: install-opencode-config.sh --apply did not write opencode.json\n' >&2
   apply_ok=false
 fi
-for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -f "$tmpdir/agents/$agent" ]; then
     printf 'FAIL: install-opencode-config.sh --apply did not write agents/%s\n' "$agent" >&2
     apply_ok=false
   fi
 done
 if ! $apply_ok; then rm -rf "$tmpdir"; exit 1; fi
-if ! grep -q '"default_agent": "autopilot"' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing default_agent autopilot\n' >&2
+if ! grep -q '"default_agent": "architect"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing default_agent architect\n' >&2
   apply_ok=false
 fi
-if ! grep -q 'mode: primary' "$tmpdir/agents/autopilot.md"; then
-  printf 'FAIL: smoke autopilot.md missing mode: primary\n' >&2
+if ! grep -q 'mode: primary' "$tmpdir/agents/architect.md"; then
+  printf 'FAIL: smoke architect.md missing mode: primary\n' >&2
   apply_ok=false
 fi
-if ! grep -q 'mode: subagent' "$tmpdir/agents/repo-scout.md"; then
-  printf 'FAIL: smoke repo-scout.md missing mode: subagent\n' >&2
-  apply_ok=false
-fi
+for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  if ! grep -q 'mode: subagent' "$tmpdir/agents/$subagent"; then
+    printf 'FAIL: smoke %s missing mode: subagent\n' "$subagent" >&2
+    apply_ok=false
+  fi
+done
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written, content checks passed\n'
@@ -290,12 +292,12 @@ if [ ! -f "$runtime_config" ]; then
   printf 'FAIL: space-in-path apply did not create opencode.json\n' >&2
   apply_ok=false
 fi
-if ! grep -q '"default_agent": "autopilot"' "$runtime_config"; then
-  printf 'FAIL: space-in-path opencode.json missing default_agent autopilot\n' >&2
+if ! grep -q '"default_agent": "architect"' "$runtime_config"; then
+  printf 'FAIL: space-in-path opencode.json missing default_agent architect\n' >&2
   apply_ok=false
 fi
 
-for agent in autopilot.md repo-scout.md code-reviewer.md security-auditor.md docs-writer.md qa-verifier.md; do
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -f "$runtime_agents/$agent" ]; then
     printf 'FAIL: space-in-path apply did not create agents/%s\n' "$agent" >&2
     apply_ok=false
@@ -324,8 +326,8 @@ mkdir -p "$tmpdir/$ts/opencode-agents"
 echo "config" > "$tmpdir/$ts/opencode-config/opencode.json"
 echo "rules" > "$tmpdir/$ts/codex-rules/AGENTS.md"
 echo "rules" > "$tmpdir/$ts/opencode-rules/AGENTS.md"
-echo "agent" > "$tmpdir/$ts/opencode-agents/autopilot.md"
-echo "agent" > "$tmpdir/$ts/opencode-agents/repo-scout.md"
+echo "agent" > "$tmpdir/$ts/opencode-agents/architect.md"
+echo "agent" > "$tmpdir/$ts/opencode-agents/scout.md"
 
 # Verify the timestamp format is readable by app (via Rust test)
 # We're testing that directories matching YYYYMMDD-HHMMSS are found

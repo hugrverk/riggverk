@@ -1,8 +1,8 @@
 {
   "agents": {
-    "autopilot.md": {
-      "role": "primary",
-      "summary": "Default OpenCode autonomous implementation orchestrator. Break work into bounded slices, inspect repository reality first, delegate to subagents, implement safe patches, verify, and report.",
+    "architect.md": {
+      "role": "Default autonomous implementation architect/orchestrator",
+      "summary": "Default OpenCode autonomous implementation architect/orchestrator. Break work into bounded slices, inspect repository reality first, delegate to subagents, implement safe patches, verify, and report.",
       "targets": ["opencode"],
       "risk": "medium",
       "default_skills": ["diagnose", "implementation-plan"],
@@ -12,8 +12,8 @@
         "Permission blocks are behavior-sensitive."
       ]
     },
-    "repo-scout.md": {
-      "role": "investigation",
+    "scout.md": {
+      "role": "Repository structure scout",
       "summary": "Read-only repository scout. Maps structure, ownership, patterns, and constraints before implementation.",
       "targets": ["opencode"],
       "risk": "low",
@@ -23,9 +23,9 @@
         "Read-only agent. Safe to use for any workspace exploration."
       ]
     },
-    "code-reviewer.md": {
-      "role": "review",
-      "summary": "Read-only code reviewer for bugs, regressions, security mistakes, complexity, and pattern mismatches.",
+    "inspector.md": {
+      "role": "Post-implementation code inspector/reviewer",
+      "summary": "Read-only code inspector/reviewer for bugs, regressions, security mistakes, complexity, and pattern mismatches.",
       "targets": ["opencode"],
       "risk": "low",
       "default_skills": ["diagnose", "tdd"],
@@ -34,9 +34,9 @@
         "Read-only agent. Use after implementation or before commit."
       ]
     },
-    "security-auditor.md": {
-      "role": "review",
-      "summary": "Read-only security auditor for auth, permissions, uploads, forms, checkout, API routes, DB access, secrets, shell execution, and webhooks.",
+    "sentinel.md": {
+      "role": "Security-focused sentinel/auditor",
+      "summary": "Read-only security sentinel/auditor for auth, permissions, uploads, forms, checkout, API routes, DB access, secrets, shell execution, and webhooks.",
       "targets": ["opencode"],
       "risk": "high",
       "default_skills": ["security-review"],
@@ -46,8 +46,8 @@
         "Do not expose credentials."
       ]
     },
-    "docs-writer.md": {
-      "role": "documentation",
+    "scribe.md": {
+      "role": "Documentation writer",
       "summary": "Read-only documentation writer for README, docs, runbooks, QA checklists, changelogs, and operator guides.",
       "targets": ["opencode"],
       "risk": "low",
@@ -57,8 +57,8 @@
         "Read-only agent. Produces documentation, does not mutate code."
       ]
     },
-    "qa-verifier.md": {
-      "role": "verification",
+    "verifier.md": {
+      "role": "QA verifier",
       "summary": "Read-only QA verifier. Runs non-destructive verification commands, inspects failures, and summarizes evidence.",
       "targets": ["opencode"],
       "risk": "low",

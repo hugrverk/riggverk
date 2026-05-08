@@ -13,12 +13,12 @@ The source template for OpenCode configuration is `templates/opencode.json`. Thi
 
 OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled agents are provided:
 
-- `agents/autopilot.md` — Default coding orchestrator
-- `agents/repo-scout.md` — Repository structure explorer
-- `agents/code-reviewer.md` — Code review agent
-- `agents/security-auditor.md` — Security risk review
-- `agents/docs-writer.md` — Documentation writer
-- `agents/qa-verifier.md` — Non-destructive verification runner
+- `agents/architect.md` — Default coding architect/orchestrator
+- `agents/scout.md` — Repository structure explorer
+- `agents/inspector.md` — Code inspection/review agent
+- `agents/sentinel.md` — Security sentinel/audit review
+- `agents/scribe.md` — Documentation writer
+- `agents/verifier.md` — Non-destructive verification runner
 
 ## Permission model
 

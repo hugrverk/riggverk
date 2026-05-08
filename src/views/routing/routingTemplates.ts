@@ -37,12 +37,12 @@ export const VALID_STARTER_SKILLS: Set<string> = new Set([
 ]);
 
 export const VALID_STARTER_AGENTS: Set<string> = new Set([
-  "autopilot.md",
-  "code-reviewer.md",
-  "docs-writer.md",
-  "qa-verifier.md",
-  "repo-scout.md",
-  "security-auditor.md",
+  "architect.md",
+  "scout.md",
+  "inspector.md",
+  "sentinel.md",
+  "scribe.md",
+  "verifier.md",
 ]);
 
 function isValidTemplateSkill(skill: string): boolean {
@@ -65,7 +65,7 @@ export const PROFILE_TEMPLATES: { label: string; profile: ProfileTemplate }[] = 
       db_migration: "NO",
       risk: "low",
       skills: ["agent-report-review"],
-      agent_profile: "code-reviewer.md",
+      agent_profile: "inspector.md",
       notes: [],
     },
   },
@@ -110,7 +110,7 @@ export const PROFILE_TEMPLATES: { label: string; profile: ProfileTemplate }[] = 
       db_migration: "NO",
       risk: "high",
       skills: ["security-review", "diagnose"],
-      agent_profile: "security-auditor.md",
+      agent_profile: "sentinel.md",
       notes: ["Run security-review before any deployment affecting auth, uploads, or payments."],
     },
   },

@@ -51,7 +51,7 @@
         "security-review",
         "implementation-plan"
       ],
-      "agent_profile": "security-auditor.md",
+      "agent_profile": "sentinel.md",
       "notes": [
         "Security review is read-only — do not modify or execute.",
         "Always review auth, authorization, and user input boundaries."

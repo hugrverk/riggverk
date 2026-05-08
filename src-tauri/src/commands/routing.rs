@@ -497,7 +497,7 @@ mod tests {
         write_skill(&root, "diagnose");
         write_skill(&root, "security-review");
         write_skill(&root, "frontend-design");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
 
         let json = r#"{
   "profiles": [
@@ -518,7 +518,7 @@ mod tests {
       "recommended_model": "GPT-5.5 Medium",
       "risk": "low",
       "skills": ["frontend-design"],
-      "agent_profile": "autopilot.md"
+      "agent_profile": "architect.md"
     }
   ]
 }"#;
@@ -539,7 +539,7 @@ mod tests {
 
         let second = &response.profiles[1];
         assert_eq!(second.id, "frontend-ui");
-        assert_eq!(second.agent_profile.as_deref(), Some("autopilot.md"));
+        assert_eq!(second.agent_profile.as_deref(), Some("architect.md"));
         assert!(!second.missing_agent);
         assert!(second.missing_skills.is_empty());
     }
@@ -584,7 +584,7 @@ mod tests {
     #[test]
     fn missing_agent_profile_produces_warning() {
         let root = temp_root("missing-agent");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
 
         let json = r#"{
   "profiles": [
@@ -807,7 +807,7 @@ mod tests {
     fn valid_enum_values_produce_no_enum_warnings() {
         let root = temp_root("valid-enums");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
 
         let json = r#"{
   "profiles": [
@@ -949,6 +949,8 @@ mod tests {
     #[test]
     fn save_changed_creates_backup() {
         let root = temp_root("save-backup");
+        let backup_root = temp_root("routing-save-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         let original = "{\"profiles\":[{\"id\":\"test\",\"title\":\"Old\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
         let modified = "{\"profiles\":[{\"id\":\"test\",\"title\":\"New\",\"description\":\"D\",\"target_tool\":\"opencode\",\"recommended_model\":\"m\"}]}";
         write_file(&root, "routing/profiles.json", original);
@@ -962,16 +964,7 @@ mod tests {
         let saved = std::fs::read_to_string(root.join("routing/profiles.json")).unwrap();
         assert_eq!(saved, modified);
 
-        // Verify backup was created (using default backup root)
-        let home = std::env::var("HOME").unwrap();
-        let backup_root = std::path::PathBuf::from(
-            std::env::var("UX_WORKSPACE_BACKUP_DIR").unwrap_or_else(|_| {
-                format!(
-                    "{}/Library/Application Support/ai.agentworkspace.app/backups",
-                    home
-                )
-            }),
-        );
+        // Verify backup was created.
         let routing_backup_dir = backup_root.join("routing");
         assert!(
             routing_backup_dir.exists(),
@@ -992,7 +985,7 @@ mod tests {
         assert_eq!(backup_content, original);
 
         cleanup(&root);
-        let _ = std::fs::remove_dir_all(&routing_backup_dir);
+        let _ = fs::remove_dir_all(&backup_root);
     }
 
     #[test]
@@ -1142,15 +1135,15 @@ mod tests {
     fn agent_target_tool_not_in_agent_targets_produces_warning() {
         let root = temp_root("ag-target-mismatch");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
         write_agent_metadata(
             &root,
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode","codex"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode","codex"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let json = r#"{
   "profiles": [
-    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "architect.md"}
   ]
 }"#;
         write_file(&root, "routing/profiles.json", json);
@@ -1161,22 +1154,22 @@ mod tests {
         assert!(response
             .warnings
             .iter()
-            .any(|w| { w.contains("targets 'claude' but agent 'autopilot.md' targets only") }));
+            .any(|w| { w.contains("targets 'claude' but agent 'architect.md' targets only") }));
     }
 
     #[test]
     fn low_risk_profile_with_high_risk_agent_produces_warning() {
         let root = temp_root("ag-risk-mismatch");
         write_skill(&root, "diagnose");
-        write_agent(&root, "security-auditor.md");
+        write_agent(&root, "sentinel.md");
         write_agent_metadata(
             &root,
-            r#"{"agents":{"security-auditor.md":{"role":"security","summary":"test","targets":["opencode"],"risk":"high","default_skills":["security-review"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"sentinel.md":{"role":"security","summary":"test","targets":["opencode"],"risk":"high","default_skills":["security-review"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let json = r#"{
   "profiles": [
-    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "low", "skills": ["diagnose"], "agent_profile": "security-auditor.md"}
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "risk": "low", "skills": ["diagnose"], "agent_profile": "sentinel.md"}
   ]
 }"#;
         write_file(&root, "routing/profiles.json", json);
@@ -1184,21 +1177,22 @@ mod tests {
         let response = read_profiles_at_root(&root).expect("should succeed");
         cleanup(&root);
 
-        assert!(response.warnings.iter().any(|w| {
-            w.contains("risk 'low' but references high-risk agent 'security-auditor.md'")
-        }));
+        assert!(response
+            .warnings
+            .iter()
+            .any(|w| { w.contains("risk 'low' but references high-risk agent 'sentinel.md'") }));
     }
 
     #[test]
     fn missing_agent_metadata_does_not_warn_if_file_exists() {
         let root = temp_root("ag-no-meta");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
         // No metadata file written
 
         let json = r#"{
   "profiles": [
-    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+    {"id": "test", "title": "T", "description": "D", "target_tool": "claude", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "architect.md"}
   ]
 }"#;
         write_file(&root, "routing/profiles.json", json);
@@ -1223,12 +1217,12 @@ mod tests {
     fn invalid_agent_metadata_file_handled_gracefully() {
         let root = temp_root("ag-metadata-invalid");
         write_skill(&root, "diagnose");
-        write_agent(&root, "autopilot.md");
+        write_agent(&root, "architect.md");
         write_agent_metadata(&root, "this is not valid json");
 
         let json = r#"{
   "profiles": [
-    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "autopilot.md"}
+    {"id": "test", "title": "T", "description": "D", "target_tool": "opencode", "recommended_model": "m", "skills": ["diagnose"], "agent_profile": "architect.md"}
   ]
 }"#;
         write_file(&root, "routing/profiles.json", json);

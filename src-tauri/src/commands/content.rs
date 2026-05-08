@@ -711,12 +711,15 @@ mod tests {
     #[test]
     fn save_doc_target_remains_under_workspace() {
         let root = temp_root("save-under-root");
+        let backup_root = temp_root("save-under-root-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "README.md", "# readme\n");
 
         let result = save_doc_at_root(&root, "README.md", "# updated\n");
 
         assert!(result.is_ok());
         cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
     }
 
     #[test]
@@ -862,6 +865,8 @@ mod tests {
     #[test]
     fn save_doc_saves_existing_custom_doc() {
         let root = temp_root("save-existing-custom");
+        let backup_root = temp_root("save-existing-custom-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "docs/context/my-notes.md", "# original\n");
 
         let result = save_doc_at_root(&root, "custom:my-notes", "# modified\n");
@@ -871,6 +876,7 @@ mod tests {
 
         let saved = std::fs::read_to_string(root.join("docs/context/my-notes.md")).unwrap();
         cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
         assert_eq!(saved, "# modified\n");
     }
 
@@ -975,12 +981,15 @@ mod tests {
     #[test]
     fn save_doc_custom_target_remains_under_workspace() {
         let root = temp_root("save-custom-under-root");
+        let backup_root = temp_root("save-custom-under-root-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "docs/context/my-notes.md", "# readme\n");
 
         let result = save_doc_at_root(&root, "custom:my-notes", "# updated\n");
 
         assert!(result.is_ok());
         cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
     }
 
     #[test]
@@ -1391,23 +1400,26 @@ mod tests {
     #[test]
     fn agent_template_save_target_remains_under_workspace() {
         let root = temp_root("ag-save-under-root");
+        let backup_root = temp_root("ag-save-under-root-backup");
+        std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
 
         let result = save_agent_template_at_root(&root, "# updated\n");
         assert!(result.is_ok());
         cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
     }
 
     // ── agent source tests ──
 
     #[test]
     fn is_safe_agent_basename_accepts_known() {
-        assert!(is_safe_agent_basename("autopilot.md"));
-        assert!(is_safe_agent_basename("repo-scout.md"));
-        assert!(is_safe_agent_basename("code-reviewer.md"));
-        assert!(is_safe_agent_basename("security-auditor.md"));
-        assert!(is_safe_agent_basename("docs-writer.md"));
-        assert!(is_safe_agent_basename("qa-verifier.md"));
+        assert!(is_safe_agent_basename("architect.md"));
+        assert!(is_safe_agent_basename("scout.md"));
+        assert!(is_safe_agent_basename("inspector.md"));
+        assert!(is_safe_agent_basename("sentinel.md"));
+        assert!(is_safe_agent_basename("scribe.md"));
+        assert!(is_safe_agent_basename("verifier.md"));
     }
 
     #[test]
@@ -1415,14 +1427,14 @@ mod tests {
         assert!(!is_safe_agent_basename("../etc/passwd"));
         assert!(!is_safe_agent_basename("../../etc/passwd"));
         assert!(!is_safe_agent_basename("sub/../../etc/passwd"));
-        assert!(!is_safe_agent_basename("autopilot.md/.."));
+        assert!(!is_safe_agent_basename("architect.md/.."));
         assert!(!is_safe_agent_basename("a/../../../b.md"));
     }
 
     #[test]
     fn is_safe_agent_basename_rejects_non_md() {
-        assert!(!is_safe_agent_basename("autopilot.txt"));
-        assert!(!is_safe_agent_basename("autopilot"));
+        assert!(!is_safe_agent_basename("architect.txt"));
+        assert!(!is_safe_agent_basename("architect"));
         assert!(!is_safe_agent_basename(""));
         assert!(!is_safe_agent_basename(".hidden.md"));
         assert!(!is_safe_agent_basename("-starts-hyphen.md"));
@@ -1430,19 +1442,19 @@ mod tests {
 
     #[test]
     fn is_safe_agent_basename_rejects_slash() {
-        assert!(!is_safe_agent_basename("sub/autopilot.md"));
+        assert!(!is_safe_agent_basename("sub/architect.md"));
         assert!(!is_safe_agent_basename("a/b/c.md"));
     }
 
     #[test]
     fn is_safe_agent_basename_rejects_backslash() {
-        assert!(!is_safe_agent_basename("sub\\autopilot.md"));
+        assert!(!is_safe_agent_basename("sub\\architect.md"));
     }
 
     #[test]
     fn resolve_agent_path_rejects_unknown() {
         let root = temp_root("ag-resolve-unknown");
-        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+        write_file(&root, "agents/architect.md", "# architect\n");
 
         let result = resolve_agent_path(&root, "nonexistent.md");
         cleanup(&root);
@@ -1453,7 +1465,7 @@ mod tests {
     #[test]
     fn resolve_agent_path_rejects_traversal() {
         let root = temp_root("ag-resolve-traversal");
-        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+        write_file(&root, "agents/architect.md", "# architect\n");
 
         let result = resolve_agent_path(&root, "../etc/passwd");
         cleanup(&root);
@@ -1464,13 +1476,13 @@ mod tests {
     #[test]
     fn resolve_agent_path_resolves_known() {
         let root = temp_root("ag-resolve-known");
-        write_file(&root, "agents/autopilot.md", "# autopilot\n");
+        write_file(&root, "agents/architect.md", "# architect\n");
 
-        let result = resolve_agent_path(&root, "autopilot.md");
+        let result = resolve_agent_path(&root, "architect.md");
         cleanup(&root);
         assert!(result.is_ok());
         let path = result.unwrap();
-        assert!(path.ends_with("agents/autopilot.md"));
+        assert!(path.ends_with("agents/architect.md"));
     }
 
     fn write_agent_file(root: &PathBuf, filename: &str, content: &str) {
@@ -1480,8 +1492,8 @@ mod tests {
     #[test]
     fn agent_source_list_includes_all_known() {
         let root = temp_root("ag-list-all");
-        write_agent_file(&root, "autopilot.md", "# autopilot\n");
-        write_agent_file(&root, "repo-scout.md", "# scout\n");
+        write_agent_file(&root, "architect.md", "# architect\n");
+        write_agent_file(&root, "scout.md", "# scout\n");
 
         let mut results: Vec<AgentSourceSummary> = Vec::new();
         for filename in KNOWN_AGENT_FILES {
@@ -1498,35 +1510,35 @@ mod tests {
         cleanup(&root);
 
         assert_eq!(results.len(), 6);
-        let autopilot = results.iter().find(|r| r.id == "autopilot.md").unwrap();
-        assert!(autopilot.exists);
-        assert_eq!(autopilot.title, "Autopilot");
-        let scout = results.iter().find(|r| r.id == "repo-scout.md").unwrap();
+        let architect = results.iter().find(|r| r.id == "architect.md").unwrap();
+        assert!(architect.exists);
+        assert_eq!(architect.title, "Architect");
+        let scout = results.iter().find(|r| r.id == "scout.md").unwrap();
         assert!(scout.exists);
-        assert_eq!(scout.title, "Repo Scout");
-        let missing = results.iter().find(|r| r.id == "code-reviewer.md").unwrap();
+        assert_eq!(scout.title, "Scout");
+        let missing = results.iter().find(|r| r.id == "inspector.md").unwrap();
         assert!(!missing.exists);
     }
 
     #[test]
     fn agent_source_read_resolves_content() {
         let root = temp_root("ag-read");
-        write_agent_file(&root, "autopilot.md", "# Autopilot\n\nSome content.\n");
+        write_agent_file(&root, "architect.md", "# Architect\n\nSome content.\n");
 
-        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let path = resolve_agent_path(&root, "architect.md").unwrap();
         let content = std::fs::read_to_string(&path).unwrap();
         cleanup(&root);
 
-        assert!(content.contains("# Autopilot"));
+        assert!(content.contains("# Architect"));
         assert!(content.contains("Some content."));
     }
 
     #[test]
     fn agent_source_save_unchanged_returns_unchanged() {
         let root = temp_root("ag-save-unchanged");
-        write_agent_file(&root, "autopilot.md", "# rules\n");
+        write_agent_file(&root, "architect.md", "# rules\n");
 
-        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let path = resolve_agent_path(&root, "architect.md").unwrap();
         let existing = std::fs::read_to_string(&path).unwrap();
         assert_eq!(existing, "# rules\n");
 
@@ -1542,17 +1554,17 @@ mod tests {
         let _guard = BACKUP_TEST_LOCK.lock().unwrap();
         let root = temp_root("ag-save-backup");
         let backup_root = temp_root("ag-save-backup-backup");
-        write_agent_file(&root, "autopilot.md", "# old\n");
+        write_agent_file(&root, "architect.md", "# old\n");
         std::env::set_var("UX_WORKSPACE_BACKUP_DIR", &backup_root);
 
-        let path = resolve_agent_path(&root, "autopilot.md").unwrap();
+        let path = resolve_agent_path(&root, "architect.md").unwrap();
         let existing = std::fs::read_to_string(&path).unwrap();
 
-        let backup_path = doc_backup_path("agent-autopilot.md", &path).unwrap();
+        let backup_path = doc_backup_path("agent-architect.md", &path).unwrap();
         std::fs::write(&backup_path, &existing).unwrap();
         std::fs::write(&path, "# new\n").unwrap();
 
-        let saved = std::fs::read_to_string(root.join("agents/autopilot.md")).unwrap();
+        let saved = std::fs::read_to_string(root.join("agents/architect.md")).unwrap();
         let backup_content = std::fs::read_to_string(&backup_path).unwrap();
 
         std::env::remove_var("UX_WORKSPACE_BACKUP_DIR");
@@ -1565,18 +1577,12 @@ mod tests {
 
     #[test]
     fn agent_source_title_from_filename() {
-        assert_eq!(agent_title_from_filename("autopilot.md"), "Autopilot");
-        assert_eq!(agent_title_from_filename("repo-scout.md"), "Repo Scout");
-        assert_eq!(
-            agent_title_from_filename("code-reviewer.md"),
-            "Code Reviewer"
-        );
-        assert_eq!(
-            agent_title_from_filename("security-auditor.md"),
-            "Security Auditor"
-        );
-        assert_eq!(agent_title_from_filename("docs-writer.md"), "Docs Writer");
-        assert_eq!(agent_title_from_filename("qa-verifier.md"), "Qa Verifier");
+        assert_eq!(agent_title_from_filename("architect.md"), "Architect");
+        assert_eq!(agent_title_from_filename("scout.md"), "Scout");
+        assert_eq!(agent_title_from_filename("inspector.md"), "Inspector");
+        assert_eq!(agent_title_from_filename("sentinel.md"), "Sentinel");
+        assert_eq!(agent_title_from_filename("scribe.md"), "Scribe");
+        assert_eq!(agent_title_from_filename("verifier.md"), "Verifier");
     }
 }
 
@@ -1763,22 +1769,22 @@ const AGENTS_DIR: &str = "agents";
 
 pub(crate) fn known_agent_files() -> &'static [&'static str] {
     &[
-        "autopilot.md",
-        "repo-scout.md",
-        "code-reviewer.md",
-        "security-auditor.md",
-        "docs-writer.md",
-        "qa-verifier.md",
+        "architect.md",
+        "scout.md",
+        "inspector.md",
+        "sentinel.md",
+        "scribe.md",
+        "verifier.md",
     ]
 }
 
 const KNOWN_AGENT_FILES: &[&str] = &[
-    "autopilot.md",
-    "repo-scout.md",
-    "code-reviewer.md",
-    "security-auditor.md",
-    "docs-writer.md",
-    "qa-verifier.md",
+    "architect.md",
+    "scout.md",
+    "inspector.md",
+    "sentinel.md",
+    "scribe.md",
+    "verifier.md",
 ];
 
 fn is_safe_agent_basename(name: &str) -> bool {
@@ -2146,7 +2152,7 @@ mod agent_metadata_tests {
     #[test]
     fn missing_metadata_returns_none_for_all_agents() {
         let root = temp_root("no-meta");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
 
         let (map, warnings) = load_agent_metadata(&root);
         let _ = fs::remove_dir_all(&root);
@@ -2158,11 +2164,11 @@ mod agent_metadata_tests {
     #[test]
     fn valid_metadata_loads_for_known_agents() {
         let root = temp_root("valid-meta");
-        write_agent_file(&root, "autopilot.md");
-        write_agent_file(&root, "repo-scout.md");
+        write_agent_file(&root, "architect.md");
+        write_agent_file(&root, "scout.md");
         write_metadata(
             &root,
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let (map, warnings) = load_agent_metadata(&root);
@@ -2173,7 +2179,7 @@ mod agent_metadata_tests {
             warnings.is_empty(),
             "valid metadata should produce no warnings"
         );
-        let entry = map.get("autopilot.md").expect("autopilot metadata");
+        let entry = map.get("architect.md").expect("architect metadata");
         assert_eq!(entry.role, "primary");
         assert_eq!(entry.risk, "medium");
         assert_eq!(entry.targets, vec!["opencode"]);
@@ -2183,7 +2189,7 @@ mod agent_metadata_tests {
     #[test]
     fn invalid_json_returns_empty_map_with_warning() {
         let root = temp_root("invalid-meta");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
         write_metadata(&root, "not json");
 
         let (map, warnings) = load_agent_metadata(&root);
@@ -2202,9 +2208,9 @@ mod agent_metadata_tests {
     #[test]
     fn oversized_metadata_rejected_with_warning() {
         let root = temp_root("oversized-meta");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
         let big = format!(
-            r#"{{"agents":{{"autopilot.md":{{"role":"primary","summary":"{}","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}}}}"#,
+            r#"{{"agents":{{"architect.md":{{"role":"primary","summary":"{}","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}}}}"#,
             "x".repeat(MAX_AGENT_METADATA_SIZE)
         );
         write_metadata(&root, &big);
@@ -2222,7 +2228,7 @@ mod agent_metadata_tests {
     #[test]
     fn unknown_agent_key_produces_warning() {
         let root = temp_root("unknown-key");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
         write_metadata(
             &root,
             r#"{"agents":{"nonexistent.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
@@ -2246,11 +2252,11 @@ mod agent_metadata_tests {
     #[test]
     fn unknown_default_skill_reference_produces_warning() {
         let root = temp_root("unknown-skill");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
         write_skill(&root, "diagnose"); // needed so discover_skills can find something
         write_metadata(
             &root,
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["nonexistent-skill"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["nonexistent-skill"],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let (map, _) = load_agent_metadata(&root);
@@ -2271,10 +2277,10 @@ mod agent_metadata_tests {
         // load_agent_metadata always uses the hardcoded AGENT_METADATA_REL path.
         // There is no parameter for a custom path — it only takes root: &Path.
         let root = temp_root("fixed-path");
-        write_agent_file(&root, "autopilot.md");
+        write_agent_file(&root, "architect.md");
         write_metadata(
             &root,
-            r#"{"agents":{"autopilot.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":[],"safe_to_edit_runtime":false,"notes":[]}}}"#,
         );
 
         let (_map, _) = load_agent_metadata(&root);
@@ -2284,7 +2290,7 @@ mod agent_metadata_tests {
         fs::create_dir_all(&alt_dir).expect("create alt dir");
         fs::write(
             alt_dir.join("agents.json"),
-            r#"{"agents":{"autopilot.md":{"role":"alt","summary":"alt","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":true,"notes":[]}}}"#,
+            r#"{"agents":{"architect.md":{"role":"alt","summary":"alt","targets":[],"risk":"low","default_skills":[],"safe_to_edit_runtime":true,"notes":[]}}}"#,
         )
         .expect("write alt metadata");
 
@@ -2293,7 +2299,7 @@ mod agent_metadata_tests {
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(map2.len(), 1, "only metadata/agents.json is read");
-        let entry = map2.get("autopilot.md").expect("autopilot metadata");
+        let entry = map2.get("architect.md").expect("architect metadata");
         assert_eq!(entry.role, "primary", "must use the fixed-path metadata");
     }
 }

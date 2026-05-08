@@ -551,29 +551,29 @@ mod tests {
 
         let agents_dir = run_dir.join("opencode-agents");
         fs::create_dir_all(&agents_dir).expect("create opencode-agents dir");
-        fs::write(agents_dir.join("autopilot.md"), b"autopilot content")
-            .expect("write autopilot.md");
+        fs::write(agents_dir.join("architect.md"), b"architect content")
+            .expect("write architect.md");
 
         let result = get_backup_details_from_root(&root, "20260501-143000");
         assert!(result.is_ok());
         let details = result.unwrap();
 
-        let autopilot = details
+        let architect = details
             .files
             .iter()
-            .find(|f| f.filename == "autopilot.md" && f.target_id == "opencode-agents");
+            .find(|f| f.filename == "architect.md" && f.target_id == "opencode-agents");
         assert!(
-            autopilot.is_some(),
-            "autopilot.md should be found in opencode-agents target"
+            architect.is_some(),
+            "architect.md should be found in opencode-agents target"
         );
 
-        let summary = autopilot.unwrap();
+        let summary = architect.unwrap();
         // Verify the current_path joins the agents directory with the filename
         assert!(
             summary
                 .current_path
-                .ends_with(".config/opencode/agents/autopilot.md"),
-            "current_path should end with .config/opencode/agents/autopilot.md, got: {}",
+                .ends_with(".config/opencode/agents/architect.md"),
+            "current_path should end with .config/opencode/agents/architect.md, got: {}",
             summary.current_path
         );
         // current_exists may be false in CI, but the path shape is what matters
