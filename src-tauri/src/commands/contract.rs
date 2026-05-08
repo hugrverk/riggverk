@@ -4,9 +4,7 @@ use std::path::Path;
 
 use super::workspace::workspace_root;
 
-const ROUTING_PROFILES_REL: &str = "routing/profiles.json";
 const AGENT_METADATA_REL: &str = "metadata/agents.json";
-const MAX_ROUTING_FILE_SIZE: usize = 256 * 1024;
 const MAX_METADATA_FILE_SIZE: usize = 128 * 1024;
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -73,13 +71,10 @@ pub fn validate_workspace_contract() -> Result<WorkspaceContractResult, String> 
     // ── 2. Skills ──
     validate_skills(&root, &mut checks, &mut errors);
 
-    // ── 3. Routing ──
-    validate_routing_contract(&root, &mut checks, &mut warnings, &mut errors);
-
-    // ── 4. Agent metadata ──
+    // ── 3. Agent metadata ──
     validate_agent_metadata_contract(&root, &mut checks, &mut warnings, &mut errors);
 
-    // ── 5. Agents ──
+    // ── 4. Agents ──
     validate_agents_directory(&root, &mut checks);
 
     // Determine overall validity
@@ -311,239 +306,6 @@ fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
     legacy_paths.sort();
 
     (root_skills, legacy_paths)
-}
-
-// ─── Routing validation ───
-
-fn validate_routing_contract(
-    root: &Path,
-    checks: &mut Vec<ContractCheck>,
-    warnings: &mut Vec<String>,
-    errors: &mut Vec<String>,
-) {
-    let path = root.join(ROUTING_PROFILES_REL);
-
-    if !path.exists() {
-        checks.push(ContractCheck {
-            id: "routing-file".into(),
-            label: "routing/profiles.json exists".into(),
-            status: CheckStatus::Warn,
-            detail: "routing/profiles.json is optional but not found".into(),
-        });
-        return;
-    }
-
-    // Size check
-    let metadata = match std::fs::metadata(&path) {
-        Ok(m) => m,
-        Err(e) => {
-            let msg = format!("Cannot read routing file metadata: {e}");
-            errors.push(msg.clone());
-            checks.push(ContractCheck {
-                id: "routing-file".into(),
-                label: "routing/profiles.json readable".into(),
-                status: CheckStatus::Fail,
-                detail: msg,
-            });
-            return;
-        }
-    };
-
-    if metadata.len() > MAX_ROUTING_FILE_SIZE as u64 {
-        let msg = format!(
-            "routing file exceeds {} KB limit",
-            MAX_ROUTING_FILE_SIZE / 1024
-        );
-        errors.push(msg.clone());
-        checks.push(ContractCheck {
-            id: "routing-size".into(),
-            label: "routing/profiles.json within size limit".into(),
-            status: CheckStatus::Fail,
-            detail: msg,
-        });
-        return;
-    }
-
-    checks.push(ContractCheck {
-        id: "routing-size".into(),
-        label: "routing/profiles.json within size limit".into(),
-        status: CheckStatus::Pass,
-        detail: format!("{} bytes", metadata.len()),
-    });
-
-    // Parse JSON
-    let content = match std::fs::read_to_string(&path) {
-        Ok(c) => c,
-        Err(e) => {
-            let msg = format!("Cannot read routing file: {e}");
-            errors.push(msg.clone());
-            checks.push(ContractCheck {
-                id: "routing-json".into(),
-                label: "routing/profiles.json is valid JSON".into(),
-                status: CheckStatus::Fail,
-                detail: msg,
-            });
-            return;
-        }
-    };
-
-    let parsed: serde_json::Value = match serde_json::from_str(&content) {
-        Ok(v) => v,
-        Err(e) => {
-            let msg = format!("Invalid routing JSON: {e}");
-            errors.push(msg.clone());
-            checks.push(ContractCheck {
-                id: "routing-json".into(),
-                label: "routing/profiles.json is valid JSON".into(),
-                status: CheckStatus::Fail,
-                detail: msg,
-            });
-            return;
-        }
-    };
-
-    checks.push(ContractCheck {
-        id: "routing-json".into(),
-        label: "routing/profiles.json is valid JSON".into(),
-        status: CheckStatus::Pass,
-        detail: "JSON parsed successfully".into(),
-    });
-
-    // Check notes fields are string arrays
-    let profiles = parsed
-        .get("profiles")
-        .and_then(|v| v.as_array())
-        .cloned()
-        .unwrap_or_default();
-
-    let mut notes_failures: Vec<String> = Vec::new();
-    for (i, profile) in profiles.iter().enumerate() {
-        let profile_id = profile
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        if let Some(notes) = profile.get("notes") {
-            if !notes.is_array() {
-                notes_failures.push(format!("profile '{}' (index {})", profile_id, i));
-                continue;
-            }
-            if let Some(arr) = notes.as_array() {
-                for (j, note) in arr.iter().enumerate() {
-                    if !note.is_string() {
-                        notes_failures.push(format!(
-                            "profile '{}' notes[{}] is not a string",
-                            profile_id, j
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    if notes_failures.is_empty() {
-        checks.push(ContractCheck {
-            id: "routing-notes".into(),
-            label: "routing notes are string arrays".into(),
-            status: CheckStatus::Pass,
-            detail: format!("{} profile(s) have valid notes", profiles.len()),
-        });
-    } else {
-        let detail = format!("Invalid notes: {}", notes_failures.join("; "));
-        checks.push(ContractCheck {
-            id: "routing-notes".into(),
-            label: "routing notes are string arrays".into(),
-            status: CheckStatus::Fail,
-            detail,
-        });
-    }
-
-    // Check each referenced skill exists
-    let discovered = super::skills::discover_skills(root).unwrap_or_default();
-    let skill_names: HashSet<&str> = discovered.iter().map(|s| s.name.as_str()).collect();
-
-    let mut missing_skills: Vec<String> = Vec::new();
-    for profile in &profiles {
-        let profile_id = profile
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        if let Some(skills) = profile.get("skills").and_then(|v| v.as_array()) {
-            for skill in skills {
-                if let Some(s) = skill.as_str() {
-                    if !skill_names.contains(s) {
-                        missing_skills.push(format!(
-                            "profile '{}' references unknown skill '{}'",
-                            profile_id, s
-                        ));
-                    }
-                }
-            }
-        }
-    }
-
-    if missing_skills.is_empty() {
-        checks.push(ContractCheck {
-            id: "routing-skills-ref".into(),
-            label: "Each referenced skill exists".into(),
-            status: CheckStatus::Pass,
-            detail: "All referenced skills found in workspace".into(),
-        });
-    } else {
-        let detail = missing_skills.join("; ");
-        warnings.push(detail.clone());
-        checks.push(ContractCheck {
-            id: "routing-skills-ref".into(),
-            label: "Each referenced skill exists".into(),
-            status: CheckStatus::Fail,
-            detail,
-        });
-    }
-
-    // Check each agent_profile references a known agent file
-    let known_agents: HashSet<&str> = super::content::known_agent_files()
-        .iter()
-        .copied()
-        .collect();
-    let agents_dir = root.join("agents");
-
-    let mut missing_agents: Vec<String> = Vec::new();
-    for profile in &profiles {
-        let profile_id = profile
-            .get("id")
-            .and_then(|v| v.as_str())
-            .unwrap_or("unknown");
-        if let Some(ap) = profile.get("agent_profile").and_then(|v| v.as_str()) {
-            if !known_agents.contains(ap) {
-                missing_agents.push(format!(
-                    "profile '{}' references unknown agent '{}'",
-                    profile_id, ap
-                ));
-            } else if !agents_dir.join(ap).is_file() {
-                missing_agents.push(format!(
-                    "profile '{}' references agent '{}' not present in workspace",
-                    profile_id, ap
-                ));
-            }
-        }
-    }
-
-    if missing_agents.is_empty() {
-        checks.push(ContractCheck {
-            id: "routing-agent-ref".into(),
-            label: "Each referenced agent_profile exists".into(),
-            status: CheckStatus::Pass,
-            detail: "All referenced agents found".into(),
-        });
-    } else {
-        let detail = missing_agents.join("; ");
-        warnings.push(detail.clone());
-        checks.push(ContractCheck {
-            id: "routing-agent-ref".into(),
-            label: "Each referenced agent_profile exists".into(),
-            status: CheckStatus::Warn,
-            detail,
-        });
-    }
 }
 
 // ─── Agent metadata validation ───
@@ -1007,63 +769,6 @@ mod tests {
     }
 
     #[test]
-    fn routing_profile_missing_skill_fails() {
-        let root = setup_valid_workspace("routing-missing-skill");
-        write_skill(&root, "diagnose");
-
-        write_file(
-            &root,
-            "routing/profiles.json",
-            r#"{"profiles":[{"id":"test","title":"T","description":"D","target_tool":"opencode","recommended_model":"m","skills":["diagnose","nonexistent"]}]}"#,
-        );
-
-        let mut checks = Vec::new();
-        let mut warnings = Vec::new();
-        let mut errors = Vec::new();
-        validate_routing_contract(&root, &mut checks, &mut warnings, &mut errors);
-
-        cleanup(&root);
-
-        let ref_check = checks
-            .iter()
-            .find(|c| c.id == "routing-skills-ref")
-            .unwrap();
-        assert_eq!(
-            ref_check.status,
-            CheckStatus::Fail,
-            "missing skill ref should fail: {ref_check:?}"
-        );
-        assert!(ref_check.detail.contains("nonexistent"));
-    }
-
-    #[test]
-    fn routing_notes_non_array_fails() {
-        let root = setup_valid_workspace("routing-notes-bad");
-        write_skill(&root, "diagnose");
-
-        // notes is a string, not an array
-        write_file(
-            &root,
-            "routing/profiles.json",
-            r#"{"profiles":[{"id":"test","title":"T","description":"D","target_tool":"opencode","recommended_model":"m","notes":"not an array"}]}"#,
-        );
-
-        let mut checks = Vec::new();
-        let mut warnings = Vec::new();
-        let mut errors = Vec::new();
-        validate_routing_contract(&root, &mut checks, &mut warnings, &mut errors);
-
-        cleanup(&root);
-
-        let notes_check = checks.iter().find(|c| c.id == "routing-notes").unwrap();
-        assert_eq!(
-            notes_check.status,
-            CheckStatus::Fail,
-            "non-array notes should fail: {notes_check:?}"
-        );
-    }
-
-    #[test]
     fn metadata_notes_non_array_fails() {
         let root = setup_valid_workspace("meta-notes-bad");
         write_skill(&root, "diagnose");
@@ -1117,27 +822,6 @@ mod tests {
             "missing default skill should fail: {defaults_check:?}"
         );
         assert!(defaults_check.detail.contains("nonexistent-skill"));
-    }
-
-    #[test]
-    fn optional_routing_missing_does_not_fail() {
-        let root = setup_valid_workspace("optional-routing");
-        write_skill(&root, "diagnose");
-        // No routing/profiles.json
-
-        let mut checks = Vec::new();
-        let mut warnings = Vec::new();
-        let mut errors = Vec::new();
-        validate_routing_contract(&root, &mut checks, &mut warnings, &mut errors);
-
-        cleanup(&root);
-
-        let file_check = checks.iter().find(|c| c.id == "routing-file").unwrap();
-        assert_eq!(file_check.status, CheckStatus::Warn);
-        assert!(
-            errors.is_empty(),
-            "missing optional routing should not error"
-        );
     }
 
     #[test]

@@ -1,5 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
-import { buildBrainSetupBlock } from "./routing/routingHelpers";
+import { buildBrainSetupBlock } from "../lib/brainSetup";
 
 interface RoutingViewProps {
   workspaceValid: boolean;

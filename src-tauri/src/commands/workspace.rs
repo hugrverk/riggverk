@@ -1357,7 +1357,6 @@ mod tests {
         ] {
             write_file(&root, rel, "skill content\n");
         }
-        write_file(&root, "routing/profiles.json", "{\"profiles\":[]}");
         write_file(&root, "metadata/agents.json", "{\"agents\":{}}");
         root
     }

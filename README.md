@@ -57,7 +57,7 @@ Bundled defaults are read-only source material previewed in the Workspace tab. T
 
 ### Workspace startup
 
-On app startup, the Workspace view loads settings, diagnostics, the default workspace summary (bundled resource preview), and workspace resources (skills list, docs list, agent sources, routing data, workspace contract, and status). When a valid workspace path has been saved from a previous session, the Workspace view immediately shows the active skill count and auto-selects all workspace skills without requiring the user to open the Library first.
+On app startup, the Workspace view loads settings, diagnostics, the default workspace summary (bundled resource preview), and workspace resources (skills list, docs list, agent sources, workspace contract, and status). When a valid workspace path has been saved from a previous session, the Workspace view immediately shows the active skill count and auto-selects all workspace skills without requiring the user to open the Library first.
 
 The Skills install lane distinguishes three states:
 - **Loading** — skills are being fetched (no false "No skills selected" before data arrives).
@@ -79,6 +79,8 @@ The workspace root is resolved in order of precedence:
 Set a custom workspace path in the Workspace tab using **choose folder** (native directory picker) or **use default** (resets to `~/Agent Workspace`). Both actions save the path immediately to app settings and refresh diagnostics, status, contract, and all resource views — no separate Save step required. Manual path entry in the Inventory panel updates the local draft only. The Workspace tab shows diagnostics (validity and missing markers) so invalid workspace paths are visible immediately.
 
 A custom workspace path only changes the working directory for existing allowlisted commands (`git_pull`, `bootstrap_*`, `verify_state`, `sync_agent_rules`, etc.) — it does not add or change any allowed commands.
+
+Selecting a workspace is a trust decision. The app exposes allowlisted actions only, but sync, install, and release actions may execute scripts from the selected workspace. Use workspaces you control. No scripts run automatically on launch, and workspace creation copies starter files without executing scripts.
 
 ## Settings
 
@@ -170,7 +172,7 @@ Global destinations:
 
 ## Workspace Contract Validator
 
-The app includes a read-only Workspace Contract Validator that checks an active workspace against the public app contract. It validates skills, routing, agent metadata, and agents without executing scripts or modifying files.
+The app includes a read-only Workspace Contract Validator that checks an active workspace against the public app contract. It validates skills, agent metadata, and agents without executing scripts or modifying files.
 
 ### What it checks
 
@@ -181,10 +183,6 @@ The app includes a read-only Workspace Contract Validator that checks an active 
 | Skill metadata | Every `SKILL.md` has required `name` and `description` fields |
 | Skill uniqueness | No duplicate skill names (deterministic failure) |
 | Legacy skills | No legacy nested skills at `skills/<group>/<skill>/SKILL.md` (fails — public contract is root-level only; nested skills are ignored by skill discovery) |
-| Routing file | `routing/profiles.json` is optional; validates JSON, size, and structure when present |
-| Routing notes | All notes fields are string arrays (fails on type mismatch) |
-| Skill references | Every skill referenced in routing profiles exists in the workspace |
-| Agent references | Every agent_profile in routing references a known agent file present in the workspace |
 | Agent metadata | `metadata/agents.json` is optional; validates JSON, size, and structure when present |
 | Metadata notes | All notes fields in agent metadata are string arrays |
 | Metadata keys | All agent keys in metadata map to known agent files (warns on unknown keys) |
@@ -202,12 +200,11 @@ The app includes a read-only Workspace Contract Validator that checks an active 
 
 ## Resource Intelligence v1
 
-Resource Intelligence enriches the GUI's understanding of skills and agents with safe metadata. It improves Library/Routing visibility while keeping the app a narrow local workspace management GUI — not an orchestration layer.
+Resource Intelligence enriches the GUI's understanding of skills and agents with safe metadata. It improves Library visibility while keeping the app a narrow local workspace management GUI — not an orchestration layer.
 
 ### What it does
 
 - Describes resources with category, risk, target compatibility, and related-skill references.
-- Validates references between routing profiles and the resources they cite.
 - Shows compatibility between skills, agents, and target tools.
 - Helps the operator choose better without automating execution.
 
@@ -216,7 +213,7 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 - Run agents or trigger tool actions.
 - Route automatically or generate prompts automatically.
 - Mutate runtime configs, OpenCode config, or agent permission blocks.
-- Install or sync from Routing.
+- Install or sync from Brain Setup.
 - Add MCP, background workers, memory, task queues, chat, or agent execution.
 - Add arbitrary filesystem browsing or new dependencies.
 
@@ -234,6 +231,7 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   │   ├── Markdown.tsx  Markdown renderer
 │   │   └── TerminalOutput.tsx Shared terminal output primitives
 │   ├── lib/
+│   │   ├── brainSetup.ts  Brain Setup copy block builder
 │   │   ├── editorGuards.ts  Dirty editor guard helpers
 │   │   ├── settingsDraft.ts  Settings defaults and comparison
 │   │   ├── status.ts     Status count and class-name helpers
@@ -242,13 +240,7 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   ├── views/
 │   │   ├── WorkspaceView.tsx    Workspace operations cockpit and skills install selector
 │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
-│   │   ├── RoutingView.tsx      Routing profile guidance view (preview, edit, matrix)
-│   │   ├── routing/
-│   │   │   ├── routingTemplates.ts  Profile templates, starter skill/agent validation
-│   │   │   ├── routingHelpers.ts    risk/status helpers, metadata block formatter
-│   │   │   ├── routingCompatibility.ts  Deterministic compatibility row builder
-│   │   │   ├── RoutingMatrix.tsx    Profile compatibility matrix component
-│   │   │   └── RoutingCompatibilityOverview.tsx  Per-target resource counts and readiness
+│   │   ├── RoutingView.tsx      Brain Setup copy-paste surface
 │   │   └── SettingsView.tsx     Settings view
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
@@ -263,9 +255,11 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
         ├── commands.rs     Tauri command module root
         ├── commands/       Focused command modules
         │   ├── actions.rs  Action dispatcher and script actions
+        │   ├── backups.rs  Backup listing and Finder open commands
         │   ├── content.rs  Docs/templates/config content commands
+        │   ├── contract.rs Workspace contract validator
+        │   ├── defaults.rs Bundled starter workspace summary
         │   ├── process.rs  Command result and process helpers
-        │   ├── routing.rs  Routing profile commands
         │   ├── settings_commands.rs Settings and target commands
         │   ├── skills.rs   Skill listing/install commands
         │   ├── status.rs   Workspace status command

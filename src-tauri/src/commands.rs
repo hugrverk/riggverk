@@ -4,7 +4,6 @@ mod content;
 mod contract;
 mod defaults;
 mod process;
-mod routing;
 mod settings_commands;
 mod skills;
 mod status;
@@ -20,7 +19,6 @@ pub use content::{
 };
 pub use contract::validate_workspace_contract;
 pub use defaults::get_default_workspace_summary;
-pub use routing::{get_routing_profiles, read_routing_profiles_file, save_routing_profiles};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };

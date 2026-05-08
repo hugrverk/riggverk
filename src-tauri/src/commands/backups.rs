@@ -2,7 +2,7 @@ use std::io::{BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, workspace_root};
+use super::workspace::path_arg;
 
 const ALLOWED_TARGET_IDS: &[&str] = &[
     "codex-rules",
@@ -109,6 +109,15 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         }
     }
 
+    Ok(root)
+}
+
+fn prepare_backup_root_for_open() -> Result<PathBuf, String> {
+    let root = backup_root()?;
+    std::fs::create_dir_all(&root).map_err(|e| format!("cannot create backup directory: {}", e))?;
+    if !root.is_dir() {
+        return Err("backup path is not a directory".to_string());
+    }
     Ok(root)
 }
 
@@ -252,21 +261,9 @@ pub fn list_backups() -> Result<Vec<BackupRunSummary>, String> {
 
 #[tauri::command]
 pub fn open_backups_folder() -> Result<ActionResult, String> {
-    let ws_root = workspace_root()?;
-    let root = backup_root()?;
-
-    if !root.exists() || !root.is_dir() {
-        return Ok(ActionResult::new(
-            false,
-            "open_backups_folder",
-            String::new(),
-            "backup folder does not exist\n".into(),
-            Some(1),
-        ));
-    }
-
+    let root = prepare_backup_root_for_open()?;
     let path_str = path_arg(&root)?;
-    let (success, stdout, stderr, code) = run_cmd("open", &[&path_str], &ws_root);
+    let (success, stdout, stderr, code) = run_cmd("open", &[&path_str], &root);
 
     Ok(ActionResult::new(
         success,
@@ -539,6 +536,28 @@ mod tests {
         fs::write(&a, b"hello\n").expect("write a");
         fs::write(&b, b"world\n").expect("write b");
         assert!(!compare_files_match(&a, &b).unwrap());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn prepare_backup_root_for_open_creates_missing_root() {
+        let root = temp_root("open-create-root");
+        let backup_root = root.join("backups");
+        let previous = std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok();
+        std::env::set_var(
+            "AGENT_WORKSPACE_BACKUP_DIR",
+            backup_root.to_string_lossy().as_ref(),
+        );
+
+        let result = prepare_backup_root_for_open();
+
+        match previous {
+            Some(value) => std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", value),
+            None => std::env::remove_var("AGENT_WORKSPACE_BACKUP_DIR"),
+        }
+
+        assert!(result.is_ok(), "backup root should be created: {result:?}");
+        assert!(backup_root.is_dir(), "backup root should exist");
         let _ = fs::remove_dir_all(&root);
     }
 

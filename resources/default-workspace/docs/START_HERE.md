@@ -20,7 +20,7 @@ The app does not:
 - Manage GitHub authentication or create remote repos automatically
 - Encrypt workspace contents — the workspace is plain text owned by you
 - Auto-create workspace directories — you confirm the path first
-- Run agents, route tasks automatically, or change tool config from Routing
+- Run agents, route tasks automatically, or change tool config from Brain Setup
 - Import or upgrade existing non-workspace directories
 
 ## Mental model
@@ -41,12 +41,14 @@ The app does not:
 
 - **Workspace tab**: View diagnostics, create workspace, sync rules/configs, install skills, verify workspace.
 - **Library tab**: Read and edit docs, rules, skills, agents, and config templates.
-- **Routing tab**: Review and edit operator guidance profiles.
-- **Settings tab**: Configure appearance and enabled sync targets. Settings target profiles are separate from Routing profiles.
+- **Brain Setup tab**: Copy assistant setup instructions for skill routing discipline.
+- **Settings tab**: Configure appearance and enabled sync targets.
 
 ## Dry-run before apply
 
 Always dry-run (preview/diff) before applying changes. The app shows what would be written without touching files. Scripts follow the same pattern: `--dry-run`, `--diff`, then `--apply`.
+
+Workspace selection is a trust decision. The app exposes allowlisted actions only, but sync, install, and release actions may execute scripts from the selected workspace. Use workspaces you control. Workspace creation copies starter files but does not execute scripts.
 
 ## Workspace ownership
 

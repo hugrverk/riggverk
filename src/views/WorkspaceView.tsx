@@ -458,6 +458,9 @@ export function WorkspaceView({
                 use default
               </button>
             </div>
+            <div className="ws-path-trust-note">
+              Trust boundary: sync/install/release actions run scripts from the selected workspace. Use workspaces you control.
+            </div>
           </div>
 
           {/* ---- Workspace Setup (visible when invalid) ---- */}
@@ -688,6 +691,7 @@ export function WorkspaceView({
                           key={a}
                           className={`btn btn-sm ${installAgents.includes(a) ? "btn-active" : ""}`}
                           onClick={() => onToggleInstallAgent(a)}
+                          aria-pressed={installAgents.includes(a)}
                         >{a}</button>
                       ))}
                       <span className="ws-lane-sep">|</span>
@@ -696,6 +700,7 @@ export function WorkspaceView({
                           key={s}
                           className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`}
                           onClick={() => onSetInstallScope(s)}
+                          aria-pressed={installScope === s}
                         >{s}</button>
                       ))}
                     </div>
@@ -710,6 +715,7 @@ export function WorkspaceView({
                       placeholder="/path/to/project"
                       value={installTarget}
                       onChange={e => onSetInstallTarget(e.target.value)}
+                      aria-label="Project install target path"
                     />
                   </div>
                 )}
@@ -743,9 +749,10 @@ export function WorkspaceView({
                         placeholder="search skills..."
                         value={skillSearch}
                         onChange={e => onSetSkillSearch(e.target.value)}
+                        aria-label="Search workspace skills"
                       />
                       {skillSearch && (
-                        <button className="btn btn-sm" onClick={() => onSetSkillSearch("")}>x</button>
+                        <button className="btn btn-sm" onClick={() => onSetSkillSearch("")} aria-label="Clear workspace skills search">x</button>
                       )}
                       <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
                       <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
@@ -764,6 +771,7 @@ export function WorkspaceView({
                                 className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
                                 onClick={() => onToggleSkill(s.name)}
                                 aria-pressed={isSelected}
+                                aria-label={`${isSelected ? "Deselect" : "Select"} skill ${s.name}`}
                               >
                                 {isSelected ? "x" : ""}
                               </button>
@@ -793,8 +801,8 @@ export function WorkspaceView({
                   <div className="ws-lane-group">
                     <span className="ws-lane-group-label">backups</span>
                     <div className="ws-lane-actions">
-                      <button className="btn btn-sm" disabled={!workspaceValid || wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
-                      <button className="btn btn-sm" disabled={!workspaceValid} onClick={onOpenBackupsFolder}>open folder</button>
+                      <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
+                      <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onOpenBackupsFolder}>open folder</button>
                     </div>
                   </div>
                 </div>
@@ -861,6 +869,7 @@ export function WorkspaceView({
                         placeholder="default (env or repo default)"
                         value={appSettings.workspace_path ?? ""}
                         onChange={e => onSetWorkspacePath(e.target.value || null)}
+                        aria-label="Workspace path"
                       />
                     </div>
                   </div>
@@ -1228,7 +1237,11 @@ export function WorkspaceView({
                         <span>workspace: {workspaceValid ? "valid" : "invalid"}</span>
                         {gitAvailable && <span>branch: {status.branch}</span>}
                         <span>targets: {status.enabled_rule_target_ids.length} rules, {status.enabled_config_target_ids.length} configs</span>
-                        <span className="ws-idle-hint">try: pull, diff rules, sync configs, release-check</span>
+                        <span className="ws-idle-hint">
+                          {canRunReleaseCheck
+                            ? "try: pull, diff rules, sync configs, release-check"
+                            : "try: pull, diff rules, sync configs"}
+                        </span>
                       </div>
                     ) : (
                       <div className="ws-idle-context">

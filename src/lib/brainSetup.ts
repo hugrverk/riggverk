@@ -1,23 +1,3 @@
-import type { RoutingProfile } from "../../types";
-
-export function riskClass(risk: string): string {
-  switch (risk.toLowerCase()) {
-    case "low": return "ws-color-ok";
-    case "medium": return "ws-color-warn";
-    case "high": return "ws-color-fail";
-    default: return "";
-  }
-}
-
-export function riskLabel(risk: string): string {
-  switch (risk.toLowerCase()) {
-    case "low": return "Low";
-    case "medium": return "Medium";
-    case "high": return "High";
-    default: return risk;
-  }
-}
-
 /** Build the brain setup instruction block for external assistants. */
 export function buildBrainSetupBlock(): string {
   return [
@@ -79,37 +59,4 @@ export function buildBrainSetupBlock(): string {
     "skills/<name>/SKILL.md) to understand the full workflow and acceptance",
     "criteria for that skill.",
   ].join("\n");
-}
-
-/** Build a profile header block suitable for pasting at the top of an implementation prompt. */
-export function buildProfileHeader(profile: RoutingProfile): string {
-  const riskText = riskLabel(profile.risk);
-  const skills = profile.skills.join(", ") || "none";
-  const agent = profile.agent_profile ?? "none";
-  const block = [
-    `Recommended target model/tool: ${profile.target_tool} / ${profile.recommended_model}`,
-    `DB push before running this slice: ${profile.db_migration}`,
-    `Relevant skills: ${skills}`,
-    `Execution profile: ${profile.id}`,
-    `Risk/token/cost notes: ${riskText}`,
-    `Agent profile: ${agent}`,
-    "",
-    "Instructions:",
-    "- Use the listed skills as execution constraints.",
-    "- Convert each skill into concrete steps, acceptance criteria, and verification.",
-    "- Inspect repository reality before editing.",
-    "- Keep the diff bounded to the requested slice.",
-    "- Do not claim verification passed unless commands were actually run.",
-  ].join("\n");
-  return block;
-}
-
-/** Legacy alias kept for compatibility — returns the same block as buildProfileHeader. */
-export function copyMetadataBlock(profile: RoutingProfile): string {
-  return buildProfileHeader(profile);
-}
-
-export function profileStatus(profile: RoutingProfile): "ready" | "warnings" {
-  if (profile.missing_skills.length > 0 || profile.missing_agent) return "warnings";
-  return "ready";
 }

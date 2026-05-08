@@ -40,7 +40,6 @@ Workspace files are designed to be versioned:
 - `templates/` — agent rules and config templates
 - `agents/` — agent prompt definitions
 - `scripts/` — sync and install scripts
-- `routing/` — routing profiles
 - `metadata/` — agent metadata
 - `.agent-workspace/workspace.json` — workspace marker
 - `README.md`

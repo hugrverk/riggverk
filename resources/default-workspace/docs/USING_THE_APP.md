@@ -16,6 +16,8 @@ Visible when no valid workspace is selected. You can:
 
 The app never writes files automatically. Create workspace copies files only — no scripts execute, no Git init, no network calls.
 
+Selecting a workspace is a trust decision. The app exposes allowlisted actions only, but sync, install, and release actions may execute scripts from the selected workspace. Use workspaces you control.
+
 ### Operations Cockpit
 
 Available when a valid workspace is active. Three action lanes:
@@ -89,8 +91,6 @@ The instruction block covers:
 - Repository reality over assumptions.
 
 A preview of the full prompt block is shown on the page.
-
-Execution profiles (`routing/profiles.json`) remain supported as backend metadata but are no longer visible in the Brain Setup UI. Advanced users can manage profiles directly in the workspace file system.
 
 ## Settings Tab
 

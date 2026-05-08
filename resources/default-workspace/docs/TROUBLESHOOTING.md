@@ -56,3 +56,5 @@ If scripts fail to read or write files:
 All workspace scripts support `--help`. Run any script with `--help` to see available options and modes.
 
 Use `--quiet` for compact output suitable for app display. Omit `--quiet` for verbose output when debugging in a terminal.
+
+The app exposes allowlisted actions only, but sync, install, and release actions run scripts from the selected workspace. No scripts run automatically on launch, and workspace creation copies starter files without executing scripts. If you do not control a workspace, do not run its script-backed actions.

@@ -15,7 +15,6 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Sync, install, and bootstrap operations |
 | Agents | `agents/` | Agent prompt definitions |
-| Routing | `routing/` | Operator guidance profiles |
 
 ## Skills
 
@@ -50,6 +49,8 @@ Four required scripts handle sync, install, and bootstrap operations:
 
 All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.
 
+Selecting a workspace is a trust decision. The app exposes allowlisted actions only, but these scripts are read from and run inside the selected workspace when you trigger sync, install, or release actions. No scripts run automatically on launch, and workspace creation copies starter files without executing scripts.
+
 ## Sync operation pattern
 
 1. **Dry-run** — preview what would happen (no files written)
@@ -64,8 +65,8 @@ A target is an installed agent tool the workspace can sync to. Each target has a
 
 When apply mode overwrites an existing diverged file, a backup is created first. Backups live under `~/Library/Application Support/ai.agentworkspace.app/backups`. Dry-run and diff modes never create backups.
 
-## Routing profiles
+## Brain Setup
 
-Routing profiles are informational operator guidance. They recommend tools, models, skills, and agents for task types. They do not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude/Gemini/Auggie config.
+Brain Setup is a copy-paste instruction surface for external AI assistants. It teaches skill routing discipline, model/tool recommendation habits, security rules, and verification expectations. It does not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude/Gemini/Auggie config.
 
-Settings target profiles are separate. Use Settings to choose which rule and config targets are enabled for diff/sync.
+Use Settings to choose which rule and config targets are enabled for diff/sync.

@@ -194,14 +194,10 @@ function RulesItemList({
     <div className="lib-sidebar-body">
       <div className="lib-sidebar-group">
         <div className="lib-sidebar-group-label">Source</div>
-        <button
-          className={`lib-sidebar-item ${agentTemplate ? "lib-sidebar-item-active" : ""}`}
-          onClick={() => {}}
-          aria-current={agentTemplate ? "true" : undefined}
-        >
+        <div className={`lib-sidebar-item lib-sidebar-item-meta ${agentTemplate ? "lib-sidebar-item-active" : ""}`}>
           <span className="lib-sidebar-item-title">Global Rules</span>
           <span className="lib-sidebar-item-tag">template</span>
-        </button>
+        </div>
       </div>
       {ruleTargets.length > 0 && (
         <div className="lib-sidebar-group">
@@ -256,7 +252,7 @@ function SkillItemList({
           aria-label="Search skills"
         />
         {search && (
-          <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")}>
+          <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear skills search">
             x
           </button>
         )}
@@ -353,11 +349,13 @@ function ConfigItemList({
   activeTargetId,
   onSelect,
   configContent,
+  bundledAgentCount,
 }: {
   configTargets: AgentTargetMeta[];
   activeTargetId: string;
   onSelect: (id: string) => void;
   configContent: DocumentContent | null;
+  bundledAgentCount: number;
 }) {
   return (
     <div className="lib-sidebar-body">
@@ -380,7 +378,9 @@ function ConfigItemList({
           <div className="lib-sidebar-group-label">Bundle</div>
           <div className="lib-sidebar-item lib-sidebar-item-meta">
             <span className="lib-sidebar-item-title">Config + Agents</span>
-            <span className="lib-sidebar-item-desc">6 agents bundled</span>
+            <span className="lib-sidebar-item-desc">
+              {bundledAgentCount > 0 ? `${bundledAgentCount} agents bundled` : "agents bundled"}
+            </span>
           </div>
         </div>
       )}
@@ -816,7 +816,9 @@ export function LibraryView(props: LibraryViewProps) {
                 </span>
                 <span className="configs-bundle-item">
                   <span className="configs-bundle-key">bundled</span>
-                  <span className="configs-bundle-val">6 agents</span>
+                  <span className="configs-bundle-val">
+                    {agentSources.length > 0 ? `${agentSources.length} agents` : "agents bundled"}
+                  </span>
                 </span>
                 <span className="configs-bundle-note">sync writes both config + agent files</span>
               </div>
@@ -896,6 +898,7 @@ export function LibraryView(props: LibraryViewProps) {
             activeTargetId={activeConfigTargetId}
             onSelect={onSelectConfigTarget}
             configContent={configTemplateContent}
+            bundledAgentCount={agentSources.length}
           />
         );
     }
@@ -926,7 +929,7 @@ export function LibraryView(props: LibraryViewProps) {
 
       <div className="lib-layout">
         {/* Vertical source rail */}
-        <nav className="lib-source-rail" role="tablist" aria-label="Source type">
+        <nav className="lib-source-rail" aria-label="Source type">
           {SOURCE_TYPES.map((st) => {
             const count = sourceCount(st.id);
             return (
@@ -934,8 +937,7 @@ export function LibraryView(props: LibraryViewProps) {
                 key={st.id}
                 className={`lib-source-rail-btn ${sourceType === st.id ? "lib-source-rail-btn-active" : ""}`}
                 onClick={() => onSetSourceType(st.id)}
-                role="tab"
-                aria-selected={sourceType === st.id}
+                aria-current={sourceType === st.id ? "page" : undefined}
                 title={`${st.label}${count ? ` (${count})` : ""}`}
               >
                 <span className="lib-source-rail-label">{st.label}</span>

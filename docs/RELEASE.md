@@ -37,12 +37,12 @@ After code changes that affect the app, manually check:
 - Backup details show target id, filename, size, and current status only.
 - Backup details do not display file contents, textual diffs, or a restore button.
 - Refresh preserves selection when the selected backup still exists and clears it when it does not.
-- Open backups opens the backup folder in Finder when it exists and does not create it only to show it.
+- Open backups creates the app-level backup root when needed and opens it in Finder, independent of workspace validity.
 - Backup creation remains script-owned during apply overwrite.
 - Library docs list/read/open/edit works.
 - Library rules, agents, and configs edit/save only workspace source files.
-- Routing profiles display as guidance and do not change enabled sync targets.
-- Routing JSON validate/format/save handles invalid JSON and protects unsaved edits.
+- Brain Setup displays the copy-paste setup block and does not change enabled sync targets.
+- Copy brain setup writes the full setup block to the clipboard.
 - Settings save/reset works.
 - Settings target profile buttons are visible.
 - Applying OpenCode selects `opencode_rules` + `opencode_config`.
