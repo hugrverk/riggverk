@@ -421,22 +421,24 @@ export function WorkspaceView({
       <div className="ws-shell">
         {/* ---- Left column: controls ---- */}
         <div className="ws-left" role="region" aria-label="Workspace controls">
-          {/* ---- Command strip ---- */}
-          <div className="ws-cmd-strip">
-            <div className="ws-cmd-title">WORKSPACE</div>
-            <div className="ws-cmd-status">
-              <span className="ws-cmd-status-key">workspace:</span>
-              <span className={`ws-cmd-status-val ${statusClass}`}>{statusText}</span>
-              <span className="ws-cmd-sep">|</span>
-              <span className="ws-cmd-status-key">path:</span>
-              <span className="ws-cmd-path">{displayPath}</span>
+          {/* ---- Workspace panel ---- */}
+          <div className="ws-panel">
+            <div className="ws-panel-header">
+              <div className="ws-panel-title-row">
+                <span className="ws-panel-title">WORKSPACE</span>
+                <span className={`ws-status-chip ${statusClass}`}>{statusText}</span>
+              </div>
+            </div>
+            <div className="ws-path-row">
+              <span className="ws-path-label">path</span>
+              <span className="ws-path-value" title={displayPath}>{displayPath}</span>
               {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
-                <span className="ws-cmd-path-hint" title={`validated: ${diagnosticsPath}`}>
-                  {" "}(resolved: {diagnosticsPath})
+                <span className="ws-path-hint" title={`resolved: ${diagnosticsPath}`}>
+                  resolved: {diagnosticsPath}
                 </span>
               )}
             </div>
-            <div className="ws-cmd-actions">
+            <div className="ws-action-row">
               <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
                 refresh
               </button>
@@ -813,6 +815,20 @@ export function WorkspaceView({
                 aria-label={showInventory ? "Collapse workspace inventory" : "Expand workspace inventory"}
               >
                 <span className="ws-inventory-toggle-label">INVENTORY</span>
+                {!showInventory && statusRows.length > 0 && (
+                  <span className="ws-inventory-toggle-summary">
+                    {statusRows.map(row => (
+                      <span key={row.key} className={`ws-inv-chip ${row.ok ? "ws-inv-chip-ok" : row.warn ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
+                        {row.key} {row.value}
+                      </span>
+                    ))}
+                    {summary && resourceRows.slice(0, 3).map(row => (
+                      <span key={row.key} className={`ws-inv-chip ${row.cat && row.cat.count > 0 ? "ws-inv-chip-ok" : "ws-inv-chip-dim"}`}>
+                        {row.key} {row.value}
+                      </span>
+                    ))}
+                  </span>
+                )}
                 <span className="ws-inventory-toggle-icon">{showInventory ? "\u25bc" : "\u25b6"}</span>
               </button>
 
