@@ -31,8 +31,12 @@ The default template is conservative:
 - Sharing is disabled
 - Most operations default to "ask"
 - Read access is broadly allowed except for secret-bearing files (`.env`, keys, certificates, auth files)
+- Native read/grep/list tools are preferred for file inspection because they honor read-deny rules
+- Bash content commands (`cat`, `head`, `tail`, `sed`, `grep`, `rg`, `git grep`) are ask-gated because bash permissions are separate from read permissions
+- Secret-file protections exist in both read/edit permissions and bash permissions
 - Write access is restricted to source code directories
-- Destructive commands (`sudo`, `rm -rf`, pipe-to-bash) are denied
+- Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`, pipe-to-bash) are denied globally and in each agent
+- Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
 
 ## Sync workflow
 
@@ -46,6 +50,6 @@ A backup is created before overwriting if the current config or agent files diff
 
 ## Customization
 
-The template is user-editable. Add project-specific allow/deny rules as needed. Avoid weakening the secret-file deny rules in the `read` and `edit` sections.
+The template is user-editable. Add project-specific allow/deny rules as needed. Avoid weakening the secret-file deny rules in the `read`, `edit`, and `bash` sections.
 
 Agent files are also user-editable. Customize agent behavior by editing `agents/*.md` files in the workspace.

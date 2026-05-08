@@ -230,6 +230,34 @@ for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
   fi
 done
 printf '  5 subagents verified mode=subagent\n'
+if grep -Eq '"cat \*":[[:space:]]*allow|cat \*: allow' resources/default-workspace/agents/architect.md; then
+  printf 'FAIL: bundled architect.md must not allow broad bash cat *\n' >&2
+  exit 1
+fi
+if ! grep -Fq '"cargo check*": "allow"' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing cargo check allow\n' >&2
+  exit 1
+fi
+old_workspace_pattern="$(printf '%s|' "ux-work""space" "UX_WORK""SPACE" "ux_""workspace" "\\.ux-work""space" "ux-work""space-app" "ai\\.open""workspace")"
+old_workspace_pattern="${old_workspace_pattern%|}"
+if search_has_match "$old_workspace_pattern" resources/default-workspace src-tauri/src/commands/defaults.rs; then
+  printf 'FAIL: bundled default workspace contains old workspace naming\n' >&2
+  exit 1
+fi
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  file="resources/default-workspace/agents/$agent"
+  if ! grep -q '^model:' "$file"; then
+    printf 'FAIL: bundled %s missing model frontmatter\n' "$agent" >&2
+    exit 1
+  fi
+  for deny in 'rm -rf' 'sudo' 'git reset --hard' 'git clean -fdx'; do
+    if ! grep -q "\"$deny" "$file"; then
+      printf 'FAIL: bundled %s missing explicit deny for %s\n' "$agent" "$deny" >&2
+      exit 1
+    fi
+  done
+done
+printf '  bundled OpenCode permission hardening checks passed\n'
 
 step "bundled default install-opencode-config.sh help mentions agents"
 if ! bash resources/default-workspace/scripts/install-opencode-config.sh --help 2>&1 | grep -qF "agents"; then
