@@ -5,6 +5,8 @@
 The source template for OpenCode configuration is `templates/opencode.json`. This file defines:
 
 - Share settings (recommended: disabled)
+- Model selection via `model` and `small_model`
+- Default primary agent via `default_agent`
 - Permission model (which operations are allowed, denied, or require asking)
 - File-scope read/edit deny rules for secrets and credentials
 - Watcher ignore patterns
@@ -19,6 +21,8 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled a
 - `agents/sentinel.md` — Security sentinel/audit review
 - `agents/scribe.md` — Documentation writer
 - `agents/verifier.md` — Non-destructive verification runner
+
+Model selection is controlled by `templates/opencode.json` via `model` and `small_model`. Agent files are intentionally model-agnostic and define behavior, permissions, temperature, steps, and role-specific instructions. Per-agent model overrides are intentionally avoided unless a documented exception is added later.
 
 ## Permission model
 

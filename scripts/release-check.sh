@@ -201,6 +201,11 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
+if grep -Rqs '^model:' resources/default-workspace/agents; then
+  printf 'FAIL: bundled canonical agents must not contain model frontmatter\n' >&2
+  exit 1
+fi
+printf '  6 bundled agents verified model-agnostic\n'
 if ! grep -q 'mode: primary' resources/default-workspace/agents/architect.md; then
   printf 'FAIL: bundled architect.md missing mode: primary\n' >&2
   exit 1
@@ -247,6 +252,18 @@ done
 if ! $apply_ok; then rm -rf "$tmpdir"; exit 1; fi
 if ! grep -q '"default_agent": "architect"' "$tmpdir/opencode.json"; then
   printf 'FAIL: smoke opencode.json missing default_agent architect\n' >&2
+  apply_ok=false
+fi
+if ! grep -q '"model": "opencode-go/deepseek-v4-pro"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing model deepseek-v4-pro\n' >&2
+  apply_ok=false
+fi
+if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing small_model deepseek-v4-flash\n' >&2
+  apply_ok=false
+fi
+if grep -Rqs '^model:' "$tmpdir/agents"; then
+  printf 'FAIL: smoke canonical agents contain model frontmatter\n' >&2
   apply_ok=false
 fi
 if ! grep -q 'mode: primary' "$tmpdir/agents/architect.md"; then
