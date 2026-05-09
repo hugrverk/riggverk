@@ -11,6 +11,7 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] `npm run tauri build` succeeds (skip if environment cannot produce macOS bundles)
 - [ ] No secrets, private keys, names, or credential-bearing data in `resources/default-workspace/`
 - [ ] Current branch and commit noted for the pass/fail report
+- [ ] `./scripts/release-size-report.sh` runs and sizes are within expected range
 
 ## 2. Build / Install Smoke
 
@@ -143,7 +144,25 @@ Dry-runs only unless testing your own machine:
 - [ ] Rule targets and config targets can be toggled individually
 - [ ] Target profiles can be applied and show matched profile name
 
-## 12. Known Limitations
+## 12. Lazy-Loaded Views Smoke
+
+- [ ] Click Library tab — view loads with brief "loading library…" fallback, then renders
+- [ ] Click Brain Setup tab — view loads with brief "loading…" fallback, then renders
+- [ ] Click Settings tab — view loads with brief "loading…" fallback, then renders
+- [ ] Switching back to Workspace tab is instant (eager-loaded)
+- [ ] No console errors during lazy view transitions
+
+## 13. Keyboard Navigation Smoke
+
+- [ ] Tab through top nav icons (Workspace, Library, Brain Setup, Settings) — focus ring visible
+- [ ] Tab through Workspace controls — focus ring visible on all buttons
+- [ ] Tab through Library source rail — focus ring visible
+- [ ] Tab through skill search and selector — focus ring visible
+- [ ] Tab through Settings controls — focus ring visible
+- [ ] Escape or click dismisses error banner
+- [ ] Search "clear" buttons are labeled and keyboard-accessible
+
+## 14. Known Limitations
 
 - Workspace marker naming is `.agent-workspace/workspace.json` (established contract marker)
 - Create flow has no rollback on rare I/O/race failure after preflight
@@ -167,7 +186,7 @@ Copy this template and fill in results.
 - App bundle path: ________ (or "dev mode")
 
 ### Checks Passed
-- [ ] Preflight (clean git, release-check, build)
+- [ ] Preflight (clean git, release-check, build, size report)
 - [ ] Build/install (launch, no error banner, product name, bundled preview)
 - [ ] Workspace setup (folder picker, save, diagnostics, idle terminal, result timestamp)
 - [ ] Create workspace (dry-run, create, files, validation, no-overwrite, no-execute, rejection of unsafe targets)
@@ -177,6 +196,8 @@ Copy this template and fill in results.
 - [ ] Terminal redaction (safe fixture output, no raw secrets)
 - [ ] Settings (appearance, accent picker, hex input, save, reset)
 - [ ] Sync dry-runs (rules diff, config diff, skills dry-run, bootstrap diff)
+- [ ] Lazy-loaded views (Library, Brain Setup, Settings load with fallback)
+- [ ] Keyboard navigation (focus-visible rings, error dismiss, search clear)
 
 ### Checks Failed
 - ________

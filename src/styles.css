@@ -47,6 +47,19 @@
 
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* Focus-visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible) {
+  outline: none;
+}
+
 html, body, #root {
   height: 100%;
   background: var(--bg);
@@ -215,6 +228,16 @@ html, body, #root {
   flex-direction: column;
   padding: 8px 20px 12px;
   gap: 8px;
+}
+
+.view-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-family: var(--font);
 }
 
 /* ---- sync text ---- */
@@ -501,6 +524,31 @@ html, body, #root {
   font-size: 13px;
   font-weight: 500;
   margin: 8px 20px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.error-banner-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.error-banner-dismiss {
+  background: none;
+  border: none;
+  color: #111;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0 4px;
+  opacity: 0.7;
+  flex-shrink: 0;
+}
+
+.error-banner-dismiss:hover {
+  opacity: 1;
 }
 
 /* ---- buttons ---- */
@@ -977,6 +1025,16 @@ html, body, #root {
 
 .skills-search::placeholder { color: var(--text-muted); opacity: 0.5; }
 .skills-search:focus { border-color: rgba(var(--accent-rgb), 0.4); }
+
+.btn-clear-search {
+  font-size: 11px;
+  padding: 2px 8px;
+  opacity: 0.7;
+}
+
+.btn-clear-search:hover {
+  opacity: 1;
+}
 
 .skills-plan-warning {
   padding: 6px 14px;
@@ -3899,6 +3957,13 @@ html, body, #root {
 
 .lib-search-clear {
   flex-shrink: 0;
+  font-size: 11px;
+  padding: 2px 8px;
+  opacity: 0.7;
+}
+
+.lib-search-clear:hover {
+  opacity: 1;
 }
 
 .lib-new-btn {

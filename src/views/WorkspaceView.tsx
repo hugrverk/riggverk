@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
 import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
 import { INSTALL_AGENTS } from "../types";
@@ -206,7 +206,7 @@ export function WorkspaceView({
   const skillsCount = skills.length;
   const selectedSkillsCount = selectedSkills.size;
 
-  const filteredSkills = (() => {
+  const filteredSkills = useMemo(() => {
     if (!skillSearch.trim()) return skills;
     const q = skillSearch.toLowerCase().trim();
     return skills.filter(s =>
@@ -214,7 +214,7 @@ export function WorkspaceView({
       s.id.toLowerCase().includes(q) ||
       s.description.toLowerCase().includes(q)
     );
-  })();
+  }, [skills, skillSearch]);
 
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
@@ -752,7 +752,7 @@ export function WorkspaceView({
                         aria-label="Search workspace skills"
                       />
                       {skillSearch && (
-                        <button className="btn btn-sm" onClick={() => onSetSkillSearch("")} aria-label="Clear workspace skills search">x</button>
+                        <button className="btn btn-sm btn-clear-search" onClick={() => onSetSkillSearch("")} aria-label="Clear workspace skills search">clear</button>
                       )}
                       <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
                       <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>

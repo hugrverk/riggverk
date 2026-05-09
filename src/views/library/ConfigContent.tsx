@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { AgentMetadataResponse, AgentTargetMeta, DocumentContent } from "../../types";
@@ -50,6 +51,7 @@ export function ConfigContent(props: ConfigContentProps) {
   const selectedConfigTarget = configTargets.find((t) => t.id === activeConfigTargetId);
   const sourcePath = selectedConfigTarget?.source_rel ?? "";
   const targetPath = selectedConfigTarget?.target_rel ?? "";
+  const formattedJson = useMemo(() => formatJson(configTemplateContent.content), [configTemplateContent.content]);
 
   return (
     <>
@@ -93,7 +95,7 @@ export function ConfigContent(props: ConfigContentProps) {
       </div>
       <div className="lib-editor-body">
         {configMode === "preview" ? (
-          <pre className="configs-code">{formatJson(configTemplateContent.content)}</pre>
+          <pre className="configs-code">{formattedJson}</pre>
         ) : (
           <textarea
             className="editor-textarea"

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
@@ -8,10 +8,11 @@ import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
-import { SettingsView } from "./views/SettingsView";
 import { WorkspaceView } from "./views/WorkspaceView";
-import { LibraryView, type LibrarySourceType } from "./views/LibraryView";
-import { RoutingView } from "./views/RoutingView";
+const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
+import type { LibrarySourceType } from "./views/LibraryView";
+const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
+const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
@@ -946,12 +947,12 @@ function App() {
   }, [configDirty, activeConfigTargetId]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
-  const configTargets = agentTargets.filter(t => t.kind === "config");
+  const configTargets = useMemo(() => agentTargets.filter(t => t.kind === "config"), [agentTargets]);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
   const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
-  const installAgentsArray = Array.from(installAgents);
+  const installAgentsArray = useMemo(() => Array.from(installAgents), [installAgents]);
   const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning && (installScope !== "project" || installTarget.trim() !== "");
 
   const toggleTarget = useCallback((id: string) => {
@@ -974,7 +975,7 @@ function App() {
     setAppSettings(prev => prev ? { ...prev, enabled_target_ids: [...profile.target_ids] } : prev);
   }, [targetProfiles]);
 
-  const activeProfileId = (() => {
+  const activeProfileId = useMemo(() => {
     if (!appSettings) return null;
     const currentSet = new Set(appSettings.enabled_target_ids);
     const match = targetProfiles.find(p => {
@@ -986,11 +987,18 @@ function App() {
       return true;
     });
     return match ? match.id : null;
-  })();
+  }, [appSettings, targetProfiles]);
 
   return (
-    <div className="app-shell">
-      {error && <div className="error-banner">{error}</div>}
+      <div className="app-shell">
+      {error && (
+        <div className="error-banner" role="alert">
+          <span className="error-banner-text">{error}</span>
+          <button className="error-banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">
+            &times;
+          </button>
+        </div>
+      )}
 
       <header className="app-header" data-tauri-drag-region>
         <nav className="nav-icons">
@@ -1125,6 +1133,7 @@ function App() {
         )}
 
         {view === "library" && (
+          <Suspense fallback={<div className="view-loading">loading library…</div>}>
           <LibraryView
             sourceType={librarySourceType}
             onSetSourceType={setGuardedLibrarySourceType}
@@ -1205,13 +1214,17 @@ function App() {
             // Common
             workspaceValid={workspaceValid}
           />
+          </Suspense>
         )}
 
         {view === "routing" && (
+          <Suspense fallback={<div className="view-loading">loading…</div>}>
           <RoutingView workspaceValid={workspaceValid} />
+          </Suspense>
         )}
 
         {view === "settings" && (
+          <Suspense fallback={<div className="view-loading">loading…</div>}>
           <SettingsView
             appSettings={appSettings}
             settingsMsg={settingsMsg}
@@ -1227,6 +1240,7 @@ function App() {
             onReset={resetSettings}
             accentResetKey={accentResetKey}
           />
+          </Suspense>
         )}
       </div>
     </div>

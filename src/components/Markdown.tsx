@@ -1,4 +1,11 @@
+import { useMemo } from "react";
+
 export function Markdown({ content }: { content: string }) {
+  const els = useMemo(() => parseMarkdown(content), [content]);
+  return <div className="markdown-body">{els}</div>;
+}
+
+function parseMarkdown(content: string): React.JSX.Element[] {
   const lines = content.split("\n");
   const els: React.JSX.Element[] = [];
   let i = 0;
@@ -57,7 +64,7 @@ export function Markdown({ content }: { content: string }) {
     els.push(<p className="markdown-p" key={els.length}>{renderInline(para.join(" "))}</p>);
   }
 
-  return <div className="markdown-body">{els}</div>;
+  return els;
 }
 
 function renderInline(text: string): (string | React.JSX.Element)[] {

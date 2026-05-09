@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentMetadataResponse,
@@ -222,9 +223,10 @@ function SkillItemList({
   search: string;
   onSearch: (v: string) => void;
 }) {
-  const q = search.toLowerCase().trim();
-  const filtered = q
-    ? skills.filter(
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return skills;
+    return skills.filter(
         (s) =>
           s.name.toLowerCase().includes(q) ||
           s.id.toLowerCase().includes(q) ||
@@ -232,8 +234,8 @@ function SkillItemList({
           s.category.toLowerCase().includes(q) ||
           s.targets.some((t) => t.toLowerCase().includes(q)) ||
           s.related.some((r) => r.toLowerCase().includes(q))
-      )
-    : skills;
+      );
+  }, [skills, search]);
 
   return (
     <div className="lib-sidebar-body">
@@ -247,9 +249,7 @@ function SkillItemList({
           aria-label="Search skills"
         />
         {search && (
-          <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear skills search">
-            x
-          </button>
+          <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear skills search">clear</button>
         )}
       </div>
       {filtered.length === 0 ? (
@@ -473,7 +473,7 @@ export function LibraryView(props: LibraryViewProps) {
     workspaceValid,
   } = props;
 
-  const ruleTargets = agentTargets.filter((t) => t.kind === "rules");
+  const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
 
   // ── derive active content for main pane ──
 
