@@ -163,24 +163,6 @@ function runtimeStatusLabel(status: string): string {
   }
 }
 
-function checkStatusClass(status: string): string {
-  switch (status) {
-    case "pass": return "ws-check-pass";
-    case "warn": return "ws-check-warn";
-    case "fail": return "ws-check-fail";
-    default: return "ws-check-unknown";
-  }
-}
-
-function checkStatusLabel(status: string): string {
-  switch (status) {
-    case "pass": return "PASS";
-    case "warn": return "WARN";
-    case "fail": return "FAIL";
-    default: return "—";
-  }
-}
-
 export function WorkspaceView({
   appSettings,
   onSetWorkspacePath,
@@ -654,6 +636,24 @@ export function WorkspaceView({
             </div>
           )}
 
+          {/* ---- Rules card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-rules" role="region" aria-label="Rules sync">
+              <div className="ws-card-header">
+                <span className="ws-card-title">RULES</span>
+                {diag && (
+                  <span className={`ws-inv-chip ${diag.enabled_rule_targets === diag.total_rule_targets && diag.total_rule_targets > 0 ? "ws-inv-chip-ok" : diag.enabled_rule_targets > 0 ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
+                    {diag.enabled_rule_targets}/{diag.total_rule_targets} enabled
+                  </span>
+                )}
+              </div>
+              <div className="ws-card-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
+              </div>
+            </div>
+          )}
+
           {/* ---- OpenCode Runtime card ---- */}
           {workspaceValid && (
             <div className="ws-card ws-card-runtime" role="region" aria-label="OpenCode Runtime health">
@@ -670,93 +670,45 @@ export function WorkspaceView({
 
               {opencodeRuntimeHealth && (
                 <>
-                  {/* Paths */}
-                  <div className="ws-runtime-paths">
-                    <div className="ws-runtime-path-row">
-                      <span className="ws-runtime-path-label">template</span>
-                      <span className="ws-runtime-path-value" title={opencodeRuntimeHealth.template_config_path}>
-                        {opencodeRuntimeHealth.template_config_path}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-path-row">
-                      <span className="ws-runtime-path-label">installed</span>
-                      <span className="ws-runtime-path-value" title={opencodeRuntimeHealth.installed_config_path}>
-                        {opencodeRuntimeHealth.installed_config_path}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Config details */}
-                  <div className="ws-runtime-details">
-                    {opencodeRuntimeHealth.default_agent && (
-                      <div className="ws-runtime-detail-row">
-                        <span className="ws-runtime-detail-key">default agent</span>
-                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.default_agent}</span>
-                      </div>
-                    )}
-                    {opencodeRuntimeHealth.model && (
-                      <div className="ws-runtime-detail-row">
-                        <span className="ws-runtime-detail-key">model</span>
-                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.model}</span>
-                      </div>
-                    )}
-                    {opencodeRuntimeHealth.small_model && (
-                      <div className="ws-runtime-detail-row">
-                        <span className="ws-runtime-detail-key">small model</span>
-                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.small_model}</span>
-                      </div>
-                    )}
-                    {opencodeRuntimeHealth.qwen_context != null && (
-                      <div className="ws-runtime-detail-row">
-                        <span className="ws-runtime-detail-key">qwen3.6-plus context</span>
-                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.qwen_context.toLocaleString()}</span>
-                      </div>
-                    )}
-                    {opencodeRuntimeHealth.qwen_output != null && (
-                      <div className="ws-runtime-detail-row">
-                        <span className="ws-runtime-detail-key">qwen3.6-plus output</span>
-                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.qwen_output.toLocaleString()}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Agent counts */}
-                  <div className="ws-runtime-agents">
-                    <span className="ws-runtime-agent-count">
+                  <div className="ws-card-context">
+                    <span>
+                      config {runtimeStatusLabel(opencodeRuntimeHealth.status).toLowerCase()}{" | "}
                       {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled agents
+                      {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
+                        <> +{opencodeRuntimeHealth.extra_installed_agent_count} extra</>
+                      )}
                     </span>
-                    {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
-                      <span className="ws-runtime-extra-agents">
-                        +{opencodeRuntimeHealth.extra_installed_agent_count} extra
-                      </span>
-                    )}
                   </div>
 
-                  {/* Agent mismatches */}
                   {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
-                    <div className="ws-runtime-mismatches">
-                      {opencodeRuntimeHealth.agent_mismatches.map((m, i) => (
-                        <div key={i} className="ws-runtime-mismatch-row">
-                          <span className={`ws-runtime-mismatch-status ${checkStatusClass(m.status)}`}>
-                            {checkStatusLabel(m.status)}
-                          </span>
-                          <span className="ws-runtime-mismatch-detail">{m.detail}</span>
-                        </div>
-                      ))}
+                    <div className="ws-card-context" style={{ color: "var(--warn)" }}>
+                      <span>
+                        {opencodeRuntimeHealth.agent_mismatches[0].detail}
+                        {opencodeRuntimeHealth.agent_mismatches.length > 1 && (
+                          <> +{opencodeRuntimeHealth.agent_mismatches.length - 1} more</>
+                        )}
+                      </span>
+                    </div>
+                  )}
+                  {opencodeRuntimeHealth.warnings.length > 0 && opencodeRuntimeHealth.agent_mismatches.length === 0 && (
+                    <div className="ws-card-context" style={{ color: "var(--warn)" }}>
+                      <span>
+                        {opencodeRuntimeHealth.warnings[0]}
+                        {opencodeRuntimeHealth.warnings.length > 1 && (
+                          <> +{opencodeRuntimeHealth.warnings.length - 1} more</>
+                        )}
+                      </span>
                     </div>
                   )}
 
-                  {/* Warnings */}
-                  {opencodeRuntimeHealth.warnings.length > 0 && (
-                    <div className="ws-runtime-warnings">
-                      {opencodeRuntimeHealth.warnings.map((w, i) => (
-                        <div key={i} className="ws-runtime-warning">{w}</div>
-                      ))}
-                    </div>
-                  )}
+                  <div className="ws-card-context">
+                    {opencodeRuntimeHealth.status === "synced" && "runtime synced"}
+                    {opencodeRuntimeHealth.status === "diverged" && "runtime differs; run diff before sync"}
+                    {opencodeRuntimeHealth.status === "missing" && "runtime missing"}
+                    {opencodeRuntimeHealth.status === "invalid" && "runtime config invalid"}
+                  </div>
 
-                  {/* Actions */}
-                  <div className="ws-runtime-actions">
+                  <div className="ws-card-actions">
                     <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
                       refresh
                     </button>
@@ -769,24 +721,6 @@ export function WorkspaceView({
                   </div>
                 </>
               )}
-            </div>
-          )}
-
-          {/* ---- Rules card ---- */}
-          {workspaceValid && (
-            <div className="ws-card ws-card-rules" role="region" aria-label="Rules sync">
-              <div className="ws-card-header">
-                <span className="ws-card-title">RULES</span>
-                {diag && (
-                  <span className={`ws-inv-chip ${diag.enabled_rule_targets === diag.total_rule_targets && diag.total_rule_targets > 0 ? "ws-inv-chip-ok" : diag.enabled_rule_targets > 0 ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
-                    {diag.enabled_rule_targets}/{diag.total_rule_targets} enabled
-                  </span>
-                )}
-              </div>
-              <div className="ws-card-actions">
-                <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
-                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
-              </div>
             </div>
           )}
 
