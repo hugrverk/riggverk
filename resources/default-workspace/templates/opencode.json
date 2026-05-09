@@ -6,6 +6,15 @@
   "model": "opencode-go/deepseek-v4-pro",
   "small_model": "opencode-go/deepseek-v4-flash",
   "default_agent": "architect",
+  "provider": {
+    "opencode-go": {
+      "models": {
+        "qwen3.6-plus": {
+          "contextWindow": 1000000
+        }
+      }
+    }
+  },
   "compaction": {
     "auto": true,
     "prune": true,
