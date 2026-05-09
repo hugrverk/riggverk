@@ -2416,21 +2416,38 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 12px;
-  padding: 10px 14px 8px;
+  gap: 8px 12px;
+  padding: 8px 14px;
+  flex-wrap: wrap;
+  min-width: 0;
+}
+
+.ws-panel-header .ws-path-value {
+  max-width: 55%;
+  flex-shrink: 1;
+  min-width: 0;
+}
+
+@media (max-width: 800px) {
+  .ws-panel-header .ws-path-value {
+    max-width: 100%;
+    width: 100%;
+  }
 }
 
 .ws-panel-title-row {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
 }
 
 .ws-panel-title {
-  font-size: 13px;
+  font-size: 11px;
   font-weight: 600;
-  color: var(--text-heading);
   letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-heading);
 }
 
 .ws-status-chip {
@@ -2505,6 +2522,16 @@ html, body, #root {
   min-width: 0;
 }
 
+.ws-path-resolved {
+  padding: 0 14px 6px;
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .ws-action-row {
   display: flex;
   flex-wrap: wrap;
@@ -2513,11 +2540,11 @@ html, body, #root {
 }
 
 .ws-path-trust-note {
-  padding: 0 14px 12px;
+  padding: 0 14px 10px;
   color: var(--text-muted);
   opacity: 0.58;
-  font-size: 11px;
-  line-height: 1.45;
+  font-size: 10px;
+  line-height: 1.35;
 }
 
 /* ---- workspace setup panel (invalid workspace) ---- */
@@ -4449,6 +4476,127 @@ html, body, #root {
   color: var(--text-muted);
   opacity: 0.55;
   line-height: 1.4;
+}
+
+/* ── unified section system (replaces ws-card for standardized panels) ── */
+
+.ws-section {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 8px 14px;
+}
+
+.ws-section-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.ws-section-header:only-child {
+  margin-bottom: 0;
+}
+
+.ws-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+
+.ws-section-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.ws-section-context {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  line-height: 1.4;
+}
+
+/* ── unified chip system ── */
+
+.ws-section-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  font-family: var(--font);
+  flex-shrink: 0;
+}
+
+.ws-section-chip-ok {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: var(--accent-dim);
+}
+
+.ws-section-chip-warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.ws-section-chip-fail {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-section-chip-muted {
+  color: var(--text-muted);
+  opacity: 0.6;
+  border-color: var(--border);
+}
+
+/* ── OpenCode Runtime compact metrics ── */
+
+.ws-runtime-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  align-items: baseline;
+}
+
+.ws-runtime-metric {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+}
+
+.ws-runtime-metric-label {
+  color: var(--text-muted);
+}
+
+.ws-runtime-metric-value {
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.ws-runtime-metric-extra .ws-runtime-metric-value {
+  color: var(--accent);
+}
+
+.ws-runtime-warning {
+  font-size: 10px;
+  color: var(--warn);
+  line-height: 1.3;
+  margin-bottom: 6px;
+}
+
+.ws-runtime-metrics:last-child,
+.ws-runtime-warning:last-child {
+  margin-bottom: 0;
 }
 
 .ws-card-targets {

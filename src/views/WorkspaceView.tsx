@@ -142,18 +142,22 @@ function mapNodeStatus(
   return "dim";
 }
 
-// Runtime health status helpers
-function runtimeStatusClass(status: string): string {
+// Shared helpers for standardized panels
+function SectionChip({ label, tone }: { label: string; tone: "ok" | "warn" | "fail" | "muted" }) {
+  return <span className={`ws-section-chip ws-section-chip-${tone}`}>{label}</span>;
+}
+
+function runtimeChipTone(status: string): "ok" | "warn" | "fail" | "muted" {
   switch (status) {
-    case "synced": return "ws-runtime-status-synced";
-    case "diverged": return "ws-runtime-status-diverged";
-    case "missing": return "ws-runtime-status-missing";
-    case "invalid": return "ws-runtime-status-invalid";
-    default: return "ws-runtime-status-unknown";
+    case "synced": return "ok";
+    case "diverged": return "warn";
+    case "missing": return "fail";
+    case "invalid": return "fail";
+    default: return "muted";
   }
 }
 
-function runtimeStatusLabel(status: string): string {
+function runtimeChipLabel(status: string): string {
   switch (status) {
     case "synced": return "Synced";
     case "diverged": return "Diverged";
@@ -453,16 +457,13 @@ export function WorkspaceView({
                 <span className="ws-panel-title">WORKSPACE</span>
                 <span className={`ws-status-chip ${statusClass}`}>{statusText}</span>
               </div>
-            </div>
-            <div className="ws-path-row">
-              <span className="ws-path-label">path</span>
               <span className="ws-path-value" title={displayPath}>{displayPath}</span>
-              {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
-                <span className="ws-path-hint" title={`resolved: ${diagnosticsPath}`}>
-                  resolved: {diagnosticsPath}
-                </span>
-              )}
             </div>
+            {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
+              <div className="ws-path-resolved" title={`resolved: ${diagnosticsPath}`}>
+                {diagnosticsPath}
+              </div>
+            )}
             <div className="ws-action-row">
               <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
                 refresh
@@ -636,79 +637,73 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ---- Rules card ---- */}
+          {/* ---- Rules section ---- */}
           {workspaceValid && (
-            <div className="ws-card ws-card-rules" role="region" aria-label="Rules sync">
-              <div className="ws-card-header">
-                <span className="ws-card-title">RULES</span>
-                {diag && (
-                  <span className={`ws-inv-chip ${diag.enabled_rule_targets === diag.total_rule_targets && diag.total_rule_targets > 0 ? "ws-inv-chip-ok" : diag.enabled_rule_targets > 0 ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
-                    {diag.enabled_rule_targets}/{diag.total_rule_targets} enabled
-                  </span>
-                )}
+            <div className="ws-section" role="region" aria-label="Rules sync">
+              <div className="ws-section-header">
+                <span className="ws-section-title">RULES</span>
+                {diag && (() => {
+                  const e = diag.enabled_rule_targets;
+                  const t = diag.total_rule_targets;
+                  const tone: "ok" | "warn" | "fail" | "muted" = t === 0 ? "muted" : e === t ? "ok" : e > 0 ? "warn" : "fail";
+                  return <SectionChip label={`${e}/${t} enabled`} tone={tone} />;
+                })()}
               </div>
-              <div className="ws-card-actions">
+              <div className="ws-section-actions">
                 <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
               </div>
             </div>
           )}
 
-          {/* ---- OpenCode Runtime card ---- */}
+          {/* ---- OpenCode Runtime section ---- */}
           {workspaceValid && (
-            <div className="ws-card ws-card-runtime" role="region" aria-label="OpenCode Runtime health">
-              <div className="ws-card-header">
-                <span className="ws-card-title">OPENCODE RUNTIME</span>
+            <div className="ws-section" role="region" aria-label="OpenCode Runtime health">
+              <div className="ws-section-header">
+                <span className="ws-section-title">OPENCODE RUNTIME</span>
                 {opencodeRuntimeHealth ? (
-                  <span className={`ws-runtime-chip ${runtimeStatusClass(opencodeRuntimeHealth.status)}`}>
-                    {runtimeStatusLabel(opencodeRuntimeHealth.status)}
-                  </span>
+                  <SectionChip label={runtimeChipLabel(opencodeRuntimeHealth.status)} tone={runtimeChipTone(opencodeRuntimeHealth.status)} />
                 ) : (
-                  <span className="ws-runtime-chip ws-runtime-status-unknown">loading</span>
+                  <span className="ws-section-chip ws-section-chip-muted">loading</span>
                 )}
               </div>
 
               {opencodeRuntimeHealth && (
                 <>
-                  <div className="ws-card-context">
-                    <span>
-                      config {runtimeStatusLabel(opencodeRuntimeHealth.status).toLowerCase()}{" | "}
-                      {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled agents
-                      {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
-                        <> +{opencodeRuntimeHealth.extra_installed_agent_count} extra</>
-                      )}
+                  <div className="ws-runtime-metrics">
+                    <span className="ws-runtime-metric">
+                      <span className="ws-runtime-metric-label">Config</span>
+                      <span className="ws-runtime-metric-value">{runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}</span>
                     </span>
+                    <span className="ws-runtime-metric">
+                      <span className="ws-runtime-metric-label">Agents</span>
+                      <span className="ws-runtime-metric-value">{opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled</span>
+                    </span>
+                    {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
+                      <span className="ws-runtime-metric ws-runtime-metric-extra">
+                        <span className="ws-runtime-metric-value">+{opencodeRuntimeHealth.extra_installed_agent_count} extra</span>
+                      </span>
+                    )}
                   </div>
 
                   {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
-                    <div className="ws-card-context" style={{ color: "var(--warn)" }}>
-                      <span>
-                        {opencodeRuntimeHealth.agent_mismatches[0].detail}
-                        {opencodeRuntimeHealth.agent_mismatches.length > 1 && (
-                          <> +{opencodeRuntimeHealth.agent_mismatches.length - 1} more</>
-                        )}
-                      </span>
+                    <div className="ws-runtime-warning">
+                      {opencodeRuntimeHealth.agent_mismatches[0].detail}
+                      {opencodeRuntimeHealth.agent_mismatches.length > 1 && (
+                        <> +{opencodeRuntimeHealth.agent_mismatches.length - 1} more</>
+                      )}
                     </div>
                   )}
                   {opencodeRuntimeHealth.warnings.length > 0 && opencodeRuntimeHealth.agent_mismatches.length === 0 && (
-                    <div className="ws-card-context" style={{ color: "var(--warn)" }}>
-                      <span>
-                        {opencodeRuntimeHealth.warnings[0]}
-                        {opencodeRuntimeHealth.warnings.length > 1 && (
-                          <> +{opencodeRuntimeHealth.warnings.length - 1} more</>
-                        )}
-                      </span>
+                    <div className="ws-runtime-warning">
+                      {opencodeRuntimeHealth.warnings[0]}
+                      {opencodeRuntimeHealth.warnings.length > 1 && (
+                        <> +{opencodeRuntimeHealth.warnings.length - 1} more</>
+                      )}
                     </div>
                   )}
 
-                  <div className="ws-card-context">
-                    {opencodeRuntimeHealth.status === "synced" && "runtime synced"}
-                    {opencodeRuntimeHealth.status === "diverged" && "runtime differs; run diff before sync"}
-                    {opencodeRuntimeHealth.status === "missing" && "runtime missing"}
-                    {opencodeRuntimeHealth.status === "invalid" && "runtime config invalid"}
-                  </div>
-
-                  <div className="ws-card-actions">
+                  <div className="ws-section-actions">
                     <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
                       refresh
                     </button>
@@ -724,16 +719,17 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ---- Skills card ---- */}
+          {/* ---- Skills section ---- */}
           {workspaceValid && (
-            <div className="ws-card ws-card-skills" role="region" aria-label="Skills install">
-              <div className="ws-card-header">
-                <span className="ws-card-title">SKILLS</span>
-                {skillsCount > 0 && (
-                  <span className="ws-card-meta">{selectedSkillsCount}/{skillsCount} selected</span>
-                )}
+            <div className="ws-section" role="region" aria-label="Skills install">
+              <div className="ws-section-header">
+                <span className="ws-section-title">SKILLS</span>
+                {skillsCount > 0 && (() => {
+                  const tone: "ok" | "warn" | "fail" | "muted" = selectedSkillsCount === skillsCount ? "ok" : selectedSkillsCount > 0 ? "warn" : "muted";
+                  return <SectionChip label={`${selectedSkillsCount}/${skillsCount} selected`} tone={tone} />;
+                })()}
               </div>
-              <div className="ws-card-actions">
+              <div className="ws-section-actions">
                 <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
                 {skillsLoaded && skillsCount > 0 && (
@@ -846,35 +842,35 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ---- Verify card ---- */}
+          {/* ---- Verify section ---- */}
           {workspaceValid && (
-            <div className="ws-card ws-card-verify" role="region" aria-label="Verification and backups">
-              <div className="ws-card-header">
-                <span className="ws-card-title">VERIFY</span>
+            <div className="ws-section" role="region" aria-label="Verification and backups">
+              <div className="ws-section-header">
+                <span className="ws-section-title">VERIFY</span>
               </div>
-              <div className="ws-card-actions">
+              <div className="ws-section-actions">
                 <button className="btn btn-sm btn-primary" disabled={!canRunReleaseCheck || wsRunning !== null} onClick={onReleaseCheck}>release-check</button>
                 <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
                 <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onOpenBackupsFolder}>open folder</button>
               </div>
-              <div className="ws-card-context">
+              <div className="ws-section-context">
                 {backupCount > 0 ? <span>{backupCount} backup runs</span> : <span>no backups</span>}
               </div>
             </div>
           )}
 
-          {/* ---- Workspace pull/refresh card ---- */}
+          {/* ---- Workspace Git section ---- */}
           {workspaceValid && (
-            <div className="ws-card ws-card-ops" role="region" aria-label="Workspace operations">
-              <div className="ws-card-header">
-                <span className="ws-card-title">WORKSPACE</span>
+            <div className="ws-section" role="region" aria-label="Workspace operations">
+              <div className="ws-section-header">
+                <span className="ws-section-title">WORKSPACE</span>
               </div>
-              <div className="ws-card-actions">
+              <div className="ws-section-actions">
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>pull</button>
                 <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); }}>refresh</button>
               </div>
               {status && (
-                <div className="ws-card-context">
+                <div className="ws-section-context">
                   <span>branch {status.branch} | {status.enabled_rule_target_ids.length} rule targets | {status.enabled_config_target_ids.length} config targets</span>
                 </div>
               )}
