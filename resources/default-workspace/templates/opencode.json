@@ -10,7 +10,9 @@
     "opencode-go": {
       "models": {
         "qwen3.6-plus": {
-          "contextWindow": 1000000
+          "limit": {
+            "context": 1000000
+          }
         }
       }
     }
