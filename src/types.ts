@@ -182,3 +182,33 @@ export interface WorkspaceContractResult {
   errors: string[];
   checks: ContractCheck[];
 }
+
+export interface OpenCodeRuntimeCheck {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+}
+
+export interface OpenCodeAgentMismatch {
+  filename: string;
+  status: string;
+  detail: string;
+}
+
+export interface OpenCodeRuntimeHealth {
+  status: string;
+  template_config_path: string;
+  installed_config_path: string;
+  checks: OpenCodeRuntimeCheck[];
+  default_agent: string | null;
+  model: string | null;
+  small_model: string | null;
+  qwen_context: number | null;
+  qwen_output: number | null;
+  bundled_agent_count: number;
+  installed_bundled_agent_count: number;
+  extra_installed_agent_count: number;
+  agent_mismatches: OpenCodeAgentMismatch[];
+  warnings: string[];
+}

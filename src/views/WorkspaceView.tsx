@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -36,6 +36,9 @@ interface WorkspaceViewProps {
   onSyncConfigs: () => void;
   onReleaseCheck: () => void;
   onRefreshStatus: () => void;
+  // opencode runtime
+  opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
+  onRefreshOpenCodeRuntimeHealth: () => void;
   // skills compact
   skills: SkillSummary[];
   skillsLoaded: boolean;
@@ -139,6 +142,45 @@ function mapNodeStatus(
   return "dim";
 }
 
+// Runtime health status helpers
+function runtimeStatusClass(status: string): string {
+  switch (status) {
+    case "synced": return "ws-runtime-status-synced";
+    case "diverged": return "ws-runtime-status-diverged";
+    case "missing": return "ws-runtime-status-missing";
+    case "invalid": return "ws-runtime-status-invalid";
+    default: return "ws-runtime-status-unknown";
+  }
+}
+
+function runtimeStatusLabel(status: string): string {
+  switch (status) {
+    case "synced": return "Synced";
+    case "diverged": return "Diverged";
+    case "missing": return "Missing";
+    case "invalid": return "Invalid";
+    default: return "Unknown";
+  }
+}
+
+function checkStatusClass(status: string): string {
+  switch (status) {
+    case "pass": return "ws-check-pass";
+    case "warn": return "ws-check-warn";
+    case "fail": return "ws-check-fail";
+    default: return "ws-check-unknown";
+  }
+}
+
+function checkStatusLabel(status: string): string {
+  switch (status) {
+    case "pass": return "PASS";
+    case "warn": return "WARN";
+    case "fail": return "FAIL";
+    default: return "—";
+  }
+}
+
 export function WorkspaceView({
   appSettings,
   onSetWorkspacePath,
@@ -172,6 +214,9 @@ export function WorkspaceView({
   onSyncConfigs,
   onReleaseCheck,
   onRefreshStatus,
+  // opencode runtime
+  opencodeRuntimeHealth,
+  onRefreshOpenCodeRuntimeHealth,
   // skills
   skills,
   skillsLoaded,
@@ -219,9 +264,7 @@ export function WorkspaceView({
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
   const defaultLabel = "~/Agent Workspace";
-  // Show settings path immediately (no stale diagnostic dependency)
   const displayPath = appSettings?.workspace_path ?? defaultLabel;
-  // Diagnostics path for resolved/validated view (may lag behind settings change)
   const diagnosticsPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
   const summary = defaultWorkspaceSummary;
 
@@ -482,7 +525,6 @@ export function WorkspaceView({
                 )}
 
                 <div className="ws-setup-actions">
-                  {/* No plan yet — show dry-run trigger */}
                   {!createPlan && !createResult && (
                     <div className="ws-setup-action-row">
                       <button
@@ -498,7 +540,6 @@ export function WorkspaceView({
                     </div>
                   )}
 
-                  {/* Plan result */}
                   {createPlan && (
                     <div className="ws-setup-plan">
                       <div className={`ws-cmd-row ${createPlan.ok ? "ws-color-ok" : "ws-color-fail"}`}>
@@ -522,7 +563,6 @@ export function WorkspaceView({
                         </div>
                       )}
 
-                      {/* Create button when safe */}
                       {createPlanEligible && (
                         <div className="ws-setup-create-action">
                           <button
@@ -540,7 +580,6 @@ export function WorkspaceView({
                     </div>
                   )}
 
-                  {/* Create result */}
                   {createResult && (
                     <div className="ws-setup-result">
                       <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>
@@ -615,203 +654,298 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ---- Action lanes ---- */}
-          <div className="ws-lanes">
-            {/* ---- Sync lane ---- */}
-            <div className="ws-lane" role="region" aria-label="Sync operations">
-              <div className="ws-lane-label">SYNC</div>
-              <div className="ws-lane-body">
-                <div className="ws-lane-row">
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">workspace</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>pull</button>
-                      <button className="btn btn-sm" disabled={!workspaceValid} onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); }}>refresh</button>
+          {/* ---- OpenCode Runtime card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-runtime" role="region" aria-label="OpenCode Runtime health">
+              <div className="ws-card-header">
+                <span className="ws-card-title">OPENCODE RUNTIME</span>
+                {opencodeRuntimeHealth ? (
+                  <span className={`ws-runtime-chip ${runtimeStatusClass(opencodeRuntimeHealth.status)}`}>
+                    {runtimeStatusLabel(opencodeRuntimeHealth.status)}
+                  </span>
+                ) : (
+                  <span className="ws-runtime-chip ws-runtime-status-unknown">loading</span>
+                )}
+              </div>
+
+              {opencodeRuntimeHealth && (
+                <>
+                  {/* Paths */}
+                  <div className="ws-runtime-paths">
+                    <div className="ws-runtime-path-row">
+                      <span className="ws-runtime-path-label">template</span>
+                      <span className="ws-runtime-path-value" title={opencodeRuntimeHealth.template_config_path}>
+                        {opencodeRuntimeHealth.template_config_path}
+                      </span>
+                    </div>
+                    <div className="ws-runtime-path-row">
+                      <span className="ws-runtime-path-label">installed</span>
+                      <span className="ws-runtime-path-value" title={opencodeRuntimeHealth.installed_config_path}>
+                        {opencodeRuntimeHealth.installed_config_path}
+                      </span>
                     </div>
                   </div>
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">rules</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
-                      <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
-                    </div>
+
+                  {/* Config details */}
+                  <div className="ws-runtime-details">
+                    {opencodeRuntimeHealth.default_agent && (
+                      <div className="ws-runtime-detail-row">
+                        <span className="ws-runtime-detail-key">default agent</span>
+                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.default_agent}</span>
+                      </div>
+                    )}
+                    {opencodeRuntimeHealth.model && (
+                      <div className="ws-runtime-detail-row">
+                        <span className="ws-runtime-detail-key">model</span>
+                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.model}</span>
+                      </div>
+                    )}
+                    {opencodeRuntimeHealth.small_model && (
+                      <div className="ws-runtime-detail-row">
+                        <span className="ws-runtime-detail-key">small model</span>
+                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.small_model}</span>
+                      </div>
+                    )}
+                    {opencodeRuntimeHealth.qwen_context != null && (
+                      <div className="ws-runtime-detail-row">
+                        <span className="ws-runtime-detail-key">qwen3.6-plus context</span>
+                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.qwen_context.toLocaleString()}</span>
+                      </div>
+                    )}
+                    {opencodeRuntimeHealth.qwen_output != null && (
+                      <div className="ws-runtime-detail-row">
+                        <span className="ws-runtime-detail-key">qwen3.6-plus output</span>
+                        <span className="ws-runtime-detail-val">{opencodeRuntimeHealth.qwen_output.toLocaleString()}</span>
+                      </div>
+                    )}
                   </div>
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">configs</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>diff</button>
-                      <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onSyncConfigs}>sync</button>
-                    </div>
-                  </div>
-                </div>
-                <div className="ws-lane-context">
-                  {status ? (
-                    <span className="ws-lane-context-item">
-                      branch {status.branch}{" | "}
-                      {status.enabled_rule_target_ids.length} rule targets{" | "}
-                      {status.enabled_config_target_ids.length} config targets
+
+                  {/* Agent counts */}
+                  <div className="ws-runtime-agents">
+                    <span className="ws-runtime-agent-count">
+                      {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled agents
                     </span>
-                  ) : null}
-                </div>
-              </div>
-            </div>
+                    {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
+                      <span className="ws-runtime-extra-agents">
+                        +{opencodeRuntimeHealth.extra_installed_agent_count} extra
+                      </span>
+                    )}
+                  </div>
 
-            {/* ---- Skills lane ---- */}
-            <div className="ws-lane" role="region" aria-label="Skills install">
-              <div className="ws-lane-label">
-                SKILLS
-                {skillsCount > 0 && (
-                  <span className="ws-lane-label-meta">{selectedSkillsCount}/{skillsCount} selected</span>
-                )}
-              </div>
-              <div className="ws-lane-body">
-                <div className="ws-lane-row">
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">install</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
-                      <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
-                      {skillsLoaded && skillsCount > 0 && (
-                        <button
-                          className="btn btn-sm"
-                          onClick={() => setShowSkillSelector(prev => !prev)}
-                          aria-expanded={showSkillSelector}
-                        >
-                          {showSkillSelector ? "hide selector" : "select skills"}
-                        </button>
-                      )}
-                      <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
-                    </div>
-                  </div>
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">target</span>
-                    <div className="ws-lane-actions">
-                      {INSTALL_AGENTS.map(a => (
-                        <button
-                          key={a}
-                          className={`btn btn-sm ${installAgents.includes(a) ? "btn-active" : ""}`}
-                          onClick={() => onToggleInstallAgent(a)}
-                          aria-pressed={installAgents.includes(a)}
-                        >{a}</button>
-                      ))}
-                      <span className="ws-lane-sep">|</span>
-                      {(["global", "project"] as const).map(s => (
-                        <button
-                          key={s}
-                          className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`}
-                          onClick={() => onSetInstallScope(s)}
-                          aria-pressed={installScope === s}
-                        >{s}</button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                {installScope === "project" && (
-                  <div className="ws-lane-context">
-                    <span className="ws-lane-group-label">target</span>
-                    <input
-                      className="install-target-input"
-                      type="text"
-                      placeholder="/path/to/project"
-                      value={installTarget}
-                      onChange={e => onSetInstallTarget(e.target.value)}
-                      aria-label="Project install target path"
-                    />
-                  </div>
-                )}
-                {workspaceValid && !skillsLoaded && !wsRunning && (
-                  <div className="ws-lane-warn">Loading skills...</div>
-                )}
-                {workspaceValid && skillsLoaded && !skillsCanInstall && !wsRunning && (
-                  <div className="ws-lane-warn">
-                    {skills.length === 0
-                      ? "No skills found in workspace."
-                      : selectedSkillsCount === 0
-                        ? "No skills selected."
-                        : installAgents.length === 0
-                          ? "No agents selected."
-                          : installScope === "project" && !installTarget.trim()
-                            ? "Project scope needs a target path."
-                            : null}
-                  </div>
-                )}
-                {!workspaceValid && (
-                  <div className="ws-lane-warn">No valid workspace. Create one below.</div>
-                )}
-
-                {/* Expandable skills selector */}
-                {showSkillSelector && (
-                  <div className="ws-skill-selector" role="region" aria-label="Skill selection">
-                    <div className="ws-skill-selector-controls">
-                      <input
-                        className="skills-search"
-                        type="text"
-                        placeholder="search skills..."
-                        value={skillSearch}
-                        onChange={e => onSetSkillSearch(e.target.value)}
-                        aria-label="Search workspace skills"
-                      />
-                      {skillSearch && (
-                        <button className="btn btn-sm btn-clear-search" onClick={() => onSetSkillSearch("")} aria-label="Clear workspace skills search">clear</button>
-                      )}
-                      <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
-                      <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
-                    </div>
-                    <div className="ws-skill-selector-list">
-                      {filteredSkills.length === 0 ? (
-                        <div className="ws-skill-selector-empty">
-                          {skillSearch ? "No matching skills" : "No skills found"}
+                  {/* Agent mismatches */}
+                  {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
+                    <div className="ws-runtime-mismatches">
+                      {opencodeRuntimeHealth.agent_mismatches.map((m, i) => (
+                        <div key={i} className="ws-runtime-mismatch-row">
+                          <span className={`ws-runtime-mismatch-status ${checkStatusClass(m.status)}`}>
+                            {checkStatusLabel(m.status)}
+                          </span>
+                          <span className="ws-runtime-mismatch-detail">{m.detail}</span>
                         </div>
-                      ) : (
-                        filteredSkills.map(s => {
-                          const isSelected = selectedSkills.has(s.name);
-                          return (
-                            <div key={s.id} className={`ws-skill-selector-row ${isSelected ? "ws-skill-selector-row-on" : ""}`}>
-                              <button
-                                className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
-                                onClick={() => onToggleSkill(s.name)}
-                                aria-pressed={isSelected}
-                                aria-label={`${isSelected ? "Deselect" : "Select"} skill ${s.name}`}
-                              >
-                                {isSelected ? "x" : ""}
-                              </button>
-                              <span className="ws-skill-selector-name">{s.name}</span>
-                              <span className="ws-skill-selector-desc">{s.description}</span>
-                            </div>
-                          );
-                        })
-                      )}
+                      ))}
                     </div>
+                  )}
+
+                  {/* Warnings */}
+                  {opencodeRuntimeHealth.warnings.length > 0 && (
+                    <div className="ws-runtime-warnings">
+                      {opencodeRuntimeHealth.warnings.map((w, i) => (
+                        <div key={i} className="ws-runtime-warning">{w}</div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="ws-runtime-actions">
+                    <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
+                      refresh
+                    </button>
+                    <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>
+                      diff
+                    </button>
+                    <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onSyncConfigs}>
+                      sync
+                    </button>
                   </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ---- Rules card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-rules" role="region" aria-label="Rules sync">
+              <div className="ws-card-header">
+                <span className="ws-card-title">RULES</span>
+                {diag && (
+                  <span className={`ws-inv-chip ${diag.enabled_rule_targets === diag.total_rule_targets && diag.total_rule_targets > 0 ? "ws-inv-chip-ok" : diag.enabled_rule_targets > 0 ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
+                    {diag.enabled_rule_targets}/{diag.total_rule_targets} enabled
+                  </span>
                 )}
               </div>
-            </div>
-
-            {/* ---- Verify lane ---- */}
-            <div className="ws-lane" role="region" aria-label="Verification and backups">
-              <div className="ws-lane-label">VERIFY</div>
-              <div className="ws-lane-body">
-                <div className="ws-lane-row">
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">release</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm btn-primary" disabled={!canRunReleaseCheck || wsRunning !== null} onClick={onReleaseCheck}>release-check</button>
-                    </div>
-                  </div>
-                  <div className="ws-lane-group">
-                    <span className="ws-lane-group-label">backups</span>
-                    <div className="ws-lane-actions">
-                      <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
-                      <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onOpenBackupsFolder}>open folder</button>
-                    </div>
-                  </div>
-                </div>
-                <div className="ws-lane-context">
-                  {backupCount > 0 ? <span className="ws-lane-context-item">{backupCount} backup runs</span> : <span className="ws-lane-context-item">no backups</span>}
-                </div>
+              <div className="ws-card-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
               </div>
             </div>
-          </div>
+          )}
+
+          {/* ---- Skills card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-skills" role="region" aria-label="Skills install">
+              <div className="ws-card-header">
+                <span className="ws-card-title">SKILLS</span>
+                {skillsCount > 0 && (
+                  <span className="ws-card-meta">{selectedSkillsCount}/{skillsCount} selected</span>
+                )}
+              </div>
+              <div className="ws-card-actions">
+                <button className="btn btn-sm" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onDryRunSkills}>dry run</button>
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !skillsCanInstall || wsRunning !== null} onClick={onInstallSkills}>install</button>
+                {skillsLoaded && skillsCount > 0 && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={() => setShowSkillSelector(prev => !prev)}
+                    aria-expanded={showSkillSelector}
+                  >
+                    {showSkillSelector ? "hide selector" : "select skills"}
+                  </button>
+                )}
+                <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
+              </div>
+              <div className="ws-card-targets">
+                <span className="ws-card-targets-label">target</span>
+                <div className="ws-card-target-buttons">
+                  {INSTALL_AGENTS.map(a => (
+                    <button
+                      key={a}
+                      className={`btn btn-sm ${installAgents.includes(a) ? "btn-active" : ""}`}
+                      onClick={() => onToggleInstallAgent(a)}
+                      aria-pressed={installAgents.includes(a)}
+                    >{a}</button>
+                  ))}
+                  <span className="ws-card-target-sep">|</span>
+                  {(["global", "project"] as const).map(s => (
+                    <button
+                      key={s}
+                      className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`}
+                      onClick={() => onSetInstallScope(s)}
+                      aria-pressed={installScope === s}
+                    >{s}</button>
+                  ))}
+                </div>
+              </div>
+              {installScope === "project" && (
+                <div className="ws-card-project-target">
+                  <input
+                    className="install-target-input"
+                    type="text"
+                    placeholder="/path/to/project"
+                    value={installTarget}
+                    onChange={e => onSetInstallTarget(e.target.value)}
+                    aria-label="Project install target path"
+                  />
+                </div>
+              )}
+              {workspaceValid && !skillsLoaded && !wsRunning && (
+                <div className="ws-card-warn">Loading skills...</div>
+              )}
+              {workspaceValid && skillsLoaded && !skillsCanInstall && !wsRunning && (
+                <div className="ws-card-warn">
+                  {skills.length === 0
+                    ? "No skills found in workspace."
+                    : selectedSkillsCount === 0
+                      ? "No skills selected."
+                      : installAgents.length === 0
+                        ? "No agents selected."
+                        : installScope === "project" && !installTarget.trim()
+                          ? "Project scope needs a target path."
+                          : null}
+                </div>
+              )}
+
+              {/* Expandable skills selector */}
+              {showSkillSelector && (
+                <div className="ws-skill-selector" role="region" aria-label="Skill selection">
+                  <div className="ws-skill-selector-controls">
+                    <input
+                      className="skills-search"
+                      type="text"
+                      placeholder="search skills..."
+                      value={skillSearch}
+                      onChange={e => onSetSkillSearch(e.target.value)}
+                      aria-label="Search workspace skills"
+                    />
+                    {skillSearch && (
+                      <button className="btn btn-sm btn-clear-search" onClick={() => onSetSkillSearch("")} aria-label="Clear workspace skills search">clear</button>
+                    )}
+                    <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
+                    <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
+                  </div>
+                  <div className="ws-skill-selector-list">
+                    {filteredSkills.length === 0 ? (
+                      <div className="ws-skill-selector-empty">
+                        {skillSearch ? "No matching skills" : "No skills found"}
+                      </div>
+                    ) : (
+                      filteredSkills.map(s => {
+                        const isSelected = selectedSkills.has(s.name);
+                        return (
+                          <div key={s.id} className={`ws-skill-selector-row ${isSelected ? "ws-skill-selector-row-on" : ""}`}>
+                            <button
+                              className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
+                              onClick={() => onToggleSkill(s.name)}
+                              aria-pressed={isSelected}
+                              aria-label={`${isSelected ? "Deselect" : "Select"} skill ${s.name}`}
+                            >
+                              {isSelected ? "x" : ""}
+                            </button>
+                            <span className="ws-skill-selector-name">{s.name}</span>
+                            <span className="ws-skill-selector-desc">{s.description}</span>
+                          </div>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* ---- Verify card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-verify" role="region" aria-label="Verification and backups">
+              <div className="ws-card-header">
+                <span className="ws-card-title">VERIFY</span>
+              </div>
+              <div className="ws-card-actions">
+                <button className="btn btn-sm btn-primary" disabled={!canRunReleaseCheck || wsRunning !== null} onClick={onReleaseCheck}>release-check</button>
+                <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onRefreshBackups}>refresh</button>
+                <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onOpenBackupsFolder}>open folder</button>
+              </div>
+              <div className="ws-card-context">
+                {backupCount > 0 ? <span>{backupCount} backup runs</span> : <span>no backups</span>}
+              </div>
+            </div>
+          )}
+
+          {/* ---- Workspace pull/refresh card ---- */}
+          {workspaceValid && (
+            <div className="ws-card ws-card-ops" role="region" aria-label="Workspace operations">
+              <div className="ws-card-header">
+                <span className="ws-card-title">WORKSPACE</span>
+              </div>
+              <div className="ws-card-actions">
+                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>pull</button>
+                <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); }}>refresh</button>
+              </div>
+              {status && (
+                <div className="ws-card-context">
+                  <span>branch {status.branch} | {status.enabled_rule_target_ids.length} rule targets | {status.enabled_config_target_ids.length} config targets</span>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* ---- Secondary: Workspace Inventory (collapsed by default when valid) ---- */}
           {appSettings && (
@@ -1044,7 +1178,6 @@ export function WorkspaceView({
                   <div className="ws-inv-row">
                     <div className="ws-inv-row-label">CREATE</div>
                     <div className="ws-create-body">
-                      {/* No plan */}
                       {!createPlan && (
                         <div className="ws-create-body">
                           <div className="ws-cmd-row">
@@ -1068,7 +1201,6 @@ export function WorkspaceView({
                         </div>
                       )}
 
-                      {/* Plan warning */}
                       {createPlan && !createPlan.ok && (
                         <div className="ws-create-body">
                           <div className="ws-cmd-result">
@@ -1091,7 +1223,6 @@ export function WorkspaceView({
                         </div>
                       )}
 
-                      {/* Plan ok */}
                       {createPlan && createPlan.ok && (
                         <div className="ws-create-body">
                           <div className="ws-cmd-result">
@@ -1149,7 +1280,6 @@ export function WorkspaceView({
                         </div>
                       )}
 
-                      {/* Create result */}
                       {createResult && (
                         <div className="ws-create-body">
                           <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>

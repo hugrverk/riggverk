@@ -3,6 +3,7 @@ mod backups;
 mod content;
 mod contract;
 mod defaults;
+mod opencode_runtime;
 mod process;
 mod settings_commands;
 mod skills;
@@ -19,6 +20,7 @@ pub use content::{
 };
 pub use contract::validate_workspace_contract;
 pub use defaults::get_default_workspace_summary;
+pub use opencode_runtime::get_opencode_runtime_health;
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };

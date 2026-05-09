@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
@@ -105,6 +105,9 @@ function App() {
   // workspace contract validation
   const [contractResult, setContractResult] = useState<WorkspaceContractResult | null>(null);
 
+  // opencode runtime health
+  const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
+
   const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const result = await invoke<WorkspaceContractResult>("validate_workspace_contract");
@@ -113,6 +116,18 @@ function App() {
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setError(`Contract: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
+
+  const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const health = await invoke<OpenCodeRuntimeHealth>("get_opencode_runtime_health");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setOpencodeRuntimeHealth(health);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      // Don't show error for runtime health — it's informational
+      setOpencodeRuntimeHealth(null);
     }
   }, [isWorkspaceLoadCurrent]);
 
@@ -503,8 +518,9 @@ function App() {
       loadAgentSources(generation).catch(() => {}),
       loadContract(generation).catch(() => {}),
       fetchStatus(generation).catch(() => {}),
+      loadOpenCodeRuntimeHealth(generation).catch(() => {}),
     ]);
-  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus]);
+  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus, loadOpenCodeRuntimeHealth]);
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -534,6 +550,7 @@ function App() {
     setStatus(null);
     setWorkspaceDiagnostics(null);
     setContractResult(null);
+    setOpencodeRuntimeHealth(null);
 
     setSkills([]);
     setSkillsLoaded(false);
@@ -1103,6 +1120,9 @@ function App() {
             onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             onRefreshStatus={fetchStatus}
+            // opencode runtime
+            opencodeRuntimeHealth={opencodeRuntimeHealth}
+            onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
             // skills
             skills={skills}
             skillsLoaded={skillsLoaded}

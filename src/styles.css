@@ -4403,3 +4403,311 @@ html, body, #root {
   outline: 2px solid rgba(var(--accent-rgb), 0.5);
   outline-offset: -2px;
 }
+
+/* ── Workspace operational cards ── */
+
+.ws-card {
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  padding: 10px 14px;
+}
+
+.ws-card:last-child { border-bottom: none; }
+
+.ws-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.ws-card-title {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.ws-card-meta {
+  font-size: 10px;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
+.ws-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+
+.ws-card-context {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  line-height: 1.4;
+}
+
+.ws-card-targets {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 4px;
+  flex-wrap: wrap;
+}
+
+.ws-card-targets-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  text-transform: lowercase;
+  flex-shrink: 0;
+}
+
+.ws-card-target-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.ws-card-target-sep {
+  color: var(--border);
+  opacity: 0.6;
+  margin: 0 2px;
+  font-size: 11px;
+}
+
+.ws-card-project-target {
+  margin-top: 4px;
+}
+
+.ws-card-warn {
+  font-size: 10px;
+  color: var(--fail);
+  opacity: 0.7;
+  line-height: 1.3;
+  margin-top: 4px;
+}
+
+/* ── OpenCode Runtime card ── */
+
+.ws-card-runtime {
+  background: var(--bg-inset);
+}
+
+.ws-runtime-chip {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 2px 8px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  font-family: var(--font);
+}
+
+.ws-runtime-status-synced {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: var(--accent-dim);
+}
+
+.ws-runtime-status-diverged {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.ws-runtime-status-missing {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-runtime-status-invalid {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-runtime-status-unknown {
+  color: var(--text-muted);
+  opacity: 0.6;
+  border-color: var(--border);
+}
+
+.ws-runtime-paths {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.ws-runtime-path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.ws-runtime-path-label {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 10px;
+  text-transform: lowercase;
+  flex-shrink: 0;
+  min-width: 56px;
+}
+
+.ws-runtime-path-value {
+  color: var(--text-muted);
+  font-family: var(--font);
+  font-size: 10px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex-shrink: 1;
+}
+
+.ws-runtime-details {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 8px;
+  padding: 4px 6px;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+}
+
+.ws-runtime-detail-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.ws-runtime-detail-key {
+  color: var(--text-muted);
+  opacity: 0.55;
+  font-size: 10px;
+  text-transform: lowercase;
+  flex-shrink: 0;
+  min-width: 110px;
+}
+
+.ws-runtime-detail-val {
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 11px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-runtime-agents {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.ws-runtime-agent-count {
+  font-family: var(--font);
+}
+
+.ws-runtime-extra-agents {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  font-style: italic;
+}
+
+.ws-runtime-mismatches {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+  padding-left: 4px;
+  border-left: 2px solid var(--warn);
+}
+
+.ws-runtime-mismatch-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+}
+
+.ws-runtime-mismatch-status {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 1px 5px;
+  border-radius: 2px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  font-family: var(--font);
+}
+
+.ws-runtime-mismatch-detail {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.ws-runtime-warnings {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-bottom: 6px;
+}
+
+.ws-runtime-warning {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.7;
+  line-height: 1.3;
+}
+
+.ws-runtime-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border);
+}
+
+/* ── Check status helpers ── */
+
+.ws-check-pass {
+  color: var(--accent);
+  border-color: rgba(var(--accent-rgb), 0.25);
+  background: var(--accent-dim);
+}
+
+.ws-check-warn {
+  color: var(--warn);
+  border-color: rgba(251, 191, 36, 0.25);
+  background: rgba(251, 191, 36, 0.08);
+}
+
+.ws-check-fail {
+  color: var(--fail);
+  border-color: rgba(248, 113, 113, 0.25);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.ws-check-unknown {
+  color: var(--text-muted);
+  opacity: 0.5;
+  border-color: var(--border);
+}
