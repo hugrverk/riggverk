@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 
 use crate::agent_targets;
 
+use super::content::safe_canonical_target;
 use super::content::DocumentContent;
 use super::process::{run_cmd, run_cmd_owned, ActionResult};
 use super::workspace::{path_arg, workspace_root};
@@ -240,6 +241,15 @@ fn validate_agent(agent: &str) -> Result<(), String> {
     }
 }
 
+fn workspace_script_arg(root: &Path, script_rel: &str) -> Result<String, String> {
+    let script = root.join(script_rel);
+    let canonical = safe_canonical_target(root, &script)?;
+    if !canonical.is_file() {
+        return Err(format!("workspace script not found: {}", script_rel));
+    }
+    path_arg(&canonical)
+}
+
 #[derive(Deserialize)]
 pub struct InstallSkillsRequest {
     agents: Vec<String>,
@@ -282,8 +292,8 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
 
     let root = workspace_root()?;
-    let script = root.join("scripts/install-skills.sh");
-    let mut args: Vec<String> = vec![script.to_string_lossy().into_owned(), "--quiet".into()];
+    let script = workspace_script_arg(&root, "scripts/install-skills.sh")?;
+    let mut args: Vec<String> = vec![script, "--quiet".into()];
 
     for agent in &request.agents {
         args.push("--agent".into());
@@ -327,8 +337,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
 #[tauri::command]
 pub fn open_install_skills_script() -> Result<ActionResult, String> {
     let root = workspace_root()?;
-    let path = root.join("scripts/install-skills.sh");
-    let path_str = path_arg(&path)?;
+    let path_str = workspace_script_arg(&root, "scripts/install-skills.sh")?;
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
     Ok(ActionResult::new(
         ok,

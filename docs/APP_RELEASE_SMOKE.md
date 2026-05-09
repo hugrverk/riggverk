@@ -172,7 +172,7 @@ Dry-runs only unless testing your own machine:
 - Workspace scripts in the created workspace are copies of the bundled defaults and may not match the repo originals after bundles are updated
 - Clean git status should be confirmed — residual dev artifacts in `dist/` or `target/` could be bundled unintentionally
 
-## 13. Pass / Fail Report Template
+## 15. Pass / Fail Report Template
 
 Copy this template and fill in results.
 

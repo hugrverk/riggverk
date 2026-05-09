@@ -191,7 +191,23 @@ if ! grep -q '"snapshot": true' resources/default-workspace/templates/opencode.j
   printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
   exit 1
 fi
-printf '  opencode.json: default_agent=architect model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+path = Path("resources/default-workspace/templates/opencode.json")
+data = json.loads(path.read_text())
+models = data.get("provider", {}).get("opencode-go", {}).get("models", {})
+qwen = models.get("qwen3.6-plus", {})
+limit = qwen.get("limit", {})
+if limit.get("context") != 1000000:
+    raise SystemExit("FAIL: bundled opencode.json qwen3.6-plus limit.context must be 1000000")
+if limit.get("output") != 65536:
+    raise SystemExit("FAIL: bundled opencode.json qwen3.6-plus limit.output must be 65536")
+if "contextWindow" in qwen:
+    raise SystemExit("FAIL: bundled opencode.json qwen3.6-plus must not use contextWindow")
+PY
+printf '  opencode.json: default_agent=architect model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true qwen3.6-plus limits ok\n'
 
 step "bundled default agents exist and non-empty"
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do

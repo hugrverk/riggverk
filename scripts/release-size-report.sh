@@ -60,7 +60,7 @@ if [ -d "$BUNDLE_DIR" ]; then
     [ -d "$d" ] || continue
     name="$(basename "$d")"
     echo "  app: $name  $(du -sh "$d" | cut -f1)"
-    exe=$(find "$d/Contents/MacOS" -type f -executable 2>/dev/null | head -1)
+    exe=$(find "$d/Contents/MacOS" -type f -executable 2>/dev/null | head -1 || true)
     if [ -n "$exe" ]; then
       echo "    executable: $(basename "$exe")  $(du -sh "$exe" | cut -f1)"
     fi

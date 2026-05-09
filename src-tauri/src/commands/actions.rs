@@ -1,6 +1,7 @@
 use crate::agent_targets;
 use crate::settings;
 
+use super::content::safe_canonical_target;
 use super::process::{run_cmd, ActionResult};
 use super::status::file_eq;
 use super::workspace::{path_arg, workspace_root};
@@ -69,6 +70,15 @@ fn git_available(root: &std::path::Path) -> bool {
     ok && out.trim() == "true"
 }
 
+fn workspace_script_arg(root: &std::path::Path, script_rel: &str) -> Result<String, String> {
+    let script = root.join(script_rel);
+    let canonical = safe_canonical_target(root, &script)?;
+    if !canonical.is_file() {
+        return Err(format!("workspace script not found: {}", script_rel));
+    }
+    path_arg(&canonical)
+}
+
 #[tauri::command]
 pub fn run_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
@@ -90,9 +100,8 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
         }
 
         "bootstrap_preview" => {
-            let script = root.join("scripts/bootstrap.sh");
             let rule_args = bootstrap_rule_args();
-            let script_str = path_arg(&script)?;
+            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--skip-skills"];
             all_args.extend(&rule_args);
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
@@ -100,9 +109,8 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
         }
 
         "bootstrap_diff" => {
-            let script = root.join("scripts/bootstrap.sh");
             let rule_args = bootstrap_rule_args();
-            let script_str = path_arg(&script)?;
+            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff", "--skip-skills"];
             all_args.extend(&rule_args);
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
@@ -110,9 +118,8 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
         }
 
         "bootstrap_apply" => {
-            let script = root.join("scripts/bootstrap.sh");
             let rule_args = bootstrap_rule_args();
-            let script_str = path_arg(&script)?;
+            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply", "--skip-skills"];
             all_args.extend(&rule_args);
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
@@ -176,8 +183,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 ));
             }
 
-            let script = root.join("scripts/install-agent-rules.sh");
-            let script_str = path_arg(&script)?;
+            let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff"];
             all_args.extend(&rule_flags);
 
@@ -198,8 +204,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 ));
             }
 
-            let script = root.join("scripts/install-agent-rules.sh");
-            let script_str = path_arg(&script)?;
+            let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply"];
             all_args.extend(&rule_flags);
 
@@ -219,8 +224,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let mut last_code = Some(0);
 
             for r in &runs {
-                let script = root.join(r.script_rel);
-                let script_str = path_arg(&script)?;
+                let script_str = workspace_script_arg(&root, r.script_rel)?;
                 let mut all_args: Vec<&str> = vec![&script_str];
                 all_args.extend(r.args.iter().copied());
                 let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
@@ -253,8 +257,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let mut last_code = Some(0);
 
             for r in &runs {
-                let script = root.join(r.script_rel);
-                let script_str = path_arg(&script)?;
+                let script_str = workspace_script_arg(&root, r.script_rel)?;
                 let mut all_args: Vec<&str> = vec![&script_str];
                 all_args.extend(r.args.iter().copied());
                 let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
@@ -276,8 +279,19 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
         }
 
         "release_check" => {
-            let script = root.join("scripts/release-check.sh");
-            if !script.is_file() {
+            let script_str = match workspace_script_arg(&root, "scripts/release-check.sh") {
+                Ok(path) => path,
+                Err(_) => {
+                    return Ok(ActionResult::new(
+                        false,
+                        "release_check",
+                        String::new(),
+                        "Release check is only available in an app development checkout. This starter workspace does not include scripts/release-check.sh.\n".into(),
+                        Some(1),
+                    ));
+                }
+            };
+            if !std::path::Path::new(&script_str).is_file() {
                 return Ok(ActionResult::new(
                     false,
                     "release_check",
@@ -286,12 +300,70 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                     Some(1),
                 ));
             }
-            let script_str = path_arg(&script)?;
             let all_args: Vec<&str> = vec![&script_str];
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
             Ok(ActionResult::new(ok, "release_check", out, err, code))
         }
 
         _ => Err(format!("unknown action: {}", action)),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::workspace_script_arg;
+    use std::fs;
+    use std::path::{Path, PathBuf};
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_root(name: &str) -> PathBuf {
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("system clock before unix epoch")
+            .as_nanos();
+        std::env::temp_dir().join(format!("agent-workspace-actions-{name}-{nonce}"))
+    }
+
+    #[cfg(unix)]
+    fn symlink_file(src: &Path, dst: &Path) {
+        std::os::unix::fs::symlink(src, dst).expect("create symlink");
+    }
+
+    #[test]
+    fn workspace_script_arg_accepts_workspace_script() {
+        let root = temp_root("script-ok");
+        let script = root.join("scripts/bootstrap.sh");
+        fs::create_dir_all(script.parent().unwrap()).expect("create scripts dir");
+        fs::write(&script, "#!/usr/bin/env bash\n").expect("write script");
+
+        let result = workspace_script_arg(&root, "scripts/bootstrap.sh").expect("script accepted");
+        assert_eq!(
+            result,
+            script
+                .canonicalize()
+                .expect("canonical script")
+                .to_string_lossy()
+        );
+
+        let _ = fs::remove_dir_all(root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn workspace_script_arg_rejects_symlink_escape() {
+        let root = temp_root("script-symlink");
+        let outside = temp_root("script-outside").join("bootstrap.sh");
+        let script = root.join("scripts/bootstrap.sh");
+        fs::create_dir_all(script.parent().unwrap()).expect("create scripts dir");
+        fs::create_dir_all(outside.parent().unwrap()).expect("create outside dir");
+        fs::write(&outside, "#!/usr/bin/env bash\n").expect("write outside script");
+        symlink_file(&outside, &script);
+
+        let err = workspace_script_arg(&root, "scripts/bootstrap.sh")
+            .expect_err("symlink escape rejected");
+        assert!(err.contains("outside workspace"), "{err}");
+
+        let _ = fs::remove_dir_all(root);
+        let _ = fs::remove_dir_all(outside.parent().unwrap());
     }
 }
