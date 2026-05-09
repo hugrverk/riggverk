@@ -465,7 +465,7 @@ export function WorkspaceView({
               </div>
             )}
             <div className="ws-action-row">
-              <button className="btn btn-sm" onClick={onRefreshDiagnostics}>
+              <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); }}>
                 refresh
               </button>
               {diag && !diag.valid ? (
@@ -483,6 +483,17 @@ export function WorkspaceView({
               <button className="btn btn-sm" onClick={() => onApplyWorkspacePath(null)}>
                 use default
               </button>
+            </div>
+            {/* Git action + context row */}
+            <div className="ws-panel-meta-row">
+              <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>
+                pull
+              </button>
+              {status && (
+                <span className="ws-panel-meta-context">
+                  branch {status.branch} | {status.enabled_rule_target_ids.length} rule targets | {status.enabled_config_target_ids.length} config targets
+                </span>
+              )}
             </div>
             <div className="ws-path-trust-note">
               Trust boundary: sync/install/release actions run scripts from the selected workspace. Use workspaces you control.
@@ -856,24 +867,6 @@ export function WorkspaceView({
               <div className="ws-section-context">
                 {backupCount > 0 ? <span>{backupCount} backup runs</span> : <span>no backups</span>}
               </div>
-            </div>
-          )}
-
-          {/* ---- Workspace Git section ---- */}
-          {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="Workspace operations">
-              <div className="ws-section-header">
-                <span className="ws-section-title">WORKSPACE</span>
-              </div>
-              <div className="ws-section-actions">
-                <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !gitAvailable || wsRunning !== null} onClick={onPull}>pull</button>
-                <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); }}>refresh</button>
-              </div>
-              {status && (
-                <div className="ws-section-context">
-                  <span>branch {status.branch} | {status.enabled_rule_target_ids.length} rule targets | {status.enabled_config_target_ids.length} config targets</span>
-                </div>
-              )}
             </div>
           )}
 

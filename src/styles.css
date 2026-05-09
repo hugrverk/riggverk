@@ -2539,6 +2539,27 @@ html, body, #root {
   padding: 0 14px 10px;
 }
 
+/* compact git action + context row inside ws-panel */
+.ws-panel-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 8px;
+  min-width: 0;
+}
+
+.ws-panel-meta-context {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+
 .ws-path-trust-note {
   padding: 0 14px 10px;
   color: var(--text-muted);
