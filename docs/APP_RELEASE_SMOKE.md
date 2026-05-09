@@ -111,7 +111,25 @@ Dry-runs only unless testing your own machine:
 - [ ] Dry-run and install actions behave identically to previous behavior
 - [ ] "open script" button opens install-skills.sh in system editor
 
-## 8. Settings Smoke
+## 8. Brain Setup Smoke
+
+- [ ] Brain Setup page renders the generated prompt block with skill routing, model recommendations, security rules, and verification discipline
+- [ ] "copy brain setup" button copies the prompt block to clipboard
+- [ ] Pasted block is well-formed and ready for AI assistant custom instructions
+
+## 9. Backup Smoke
+
+- [ ] "open backup folder" opens the backup directory in Finder
+- [ ] Backup folder opens even with an invalid/empty workspace (backups are app-level, not workspace-dependent)
+- [ ] Backup listing shows timestamped backup directories
+
+## 10. Terminal Redaction Smoke
+
+- [ ] Run a safe action (dry-run sync, diff, or contract check) and confirm terminal output appears
+- [ ] Check that terminal output does not contain raw file content, secrets, or private paths if any fixture data would include them
+- [ ] Terminal shows action label, OK/FAILED status, exit code, and relative timestamp
+
+## 11. Settings Smoke
 
 - [ ] Settings view shows Appearance (dark/light/system) and Accent color picker with hex input
 - [ ] Changing accent via color picker updates the hex input and applies accent immediately
@@ -125,7 +143,7 @@ Dry-runs only unless testing your own machine:
 - [ ] Rule targets and config targets can be toggled individually
 - [ ] Target profiles can be applied and show matched profile name
 
-## 9. Known Limitations
+## 12. Known Limitations
 
 - Workspace marker naming is `.agent-workspace/workspace.json` (established contract marker)
 - Create flow has no rollback on rare I/O/race failure after preflight
@@ -135,7 +153,7 @@ Dry-runs only unless testing your own machine:
 - Workspace scripts in the created workspace are copies of the bundled defaults and may not match the repo originals after bundles are updated
 - Clean git status should be confirmed — residual dev artifacts in `dist/` or `target/` could be bundled unintentionally
 
-## 10. Pass / Fail Report Template
+## 13. Pass / Fail Report Template
 
 Copy this template and fill in results.
 
@@ -154,6 +172,9 @@ Copy this template and fill in results.
 - [ ] Workspace setup (folder picker, save, diagnostics, idle terminal, result timestamp)
 - [ ] Create workspace (dry-run, create, files, validation, no-overwrite, no-execute, rejection of unsafe targets)
 - [ ] Library (source rail nav, sidebar items, edit/save docs, agents, configs, skills)
+- [ ] Brain Setup (copy block, clipboard, well-formed output)
+- [ ] Backup (open folder, listing, works with invalid workspace)
+- [ ] Terminal redaction (safe fixture output, no raw secrets)
 - [ ] Settings (appearance, accent picker, hex input, save, reset)
 - [ ] Sync dry-runs (rules diff, config diff, skills dry-run, bootstrap diff)
 

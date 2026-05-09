@@ -233,15 +233,25 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   ├── lib/
 │   │   ├── brainSetup.ts  Brain Setup copy block builder
 │   │   ├── editorGuards.ts  Dirty editor guard helpers
+│   │   ├── libraryDirtyGuards.ts  Library source type dirty-state checker
+│   │   ├── redactTerminalOutput.ts  Terminal output redaction helpers
 │   │   ├── settingsDraft.ts  Settings defaults and comparison
 │   │   ├── status.ts     Status count and class-name helpers
 │   │   ├── timing.ts     Small timing helpers
-│   │   └── useBackups.ts  Backup state hook
+│   │   ├── useBackups.ts  Backup state hook
+│   │   ├── useWorkspaceActions.ts  Workspace operation action dispatcher
+│   │   └── useWorkspaceGeneration.ts  Workspace generation hook
 │   ├── views/
 │   │   ├── WorkspaceView.tsx    Workspace operations cockpit and skills install selector
 │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
 │   │   ├── RoutingView.tsx      Brain Setup copy-paste surface
-│   │   └── SettingsView.tsx     Settings view
+│   │   ├── SettingsView.tsx     Settings view
+│   │   └── library/
+│   │       ├── DocContent.tsx   Docs browser/editor content pane
+│   │       ├── RulesContent.tsx Rules template content pane
+│   │       ├── SkillsContent.tsx Skills browser content pane
+│   │       ├── AgentContent.tsx Agent source editor content pane
+│   │       └── ConfigContent.tsx Config template content pane
 │   ├── types.ts          Shared frontend data types
 │   └── styles.css        Dark macOS utility styles
 └── src-tauri/

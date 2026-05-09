@@ -522,6 +522,9 @@ scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
 scan_forbidden '\.agents/skills' '.agents/skills'
 
+step "routing profile bloat guard"
+scan_forbidden 'RoutingProfile|routing/profiles|get_routing_profiles|save_routing_profiles|read_routing_profiles_file|buildProfileHeader|copyMetadataBlock|profileStatus|RoutingMatrix|routingCompatibility|routingTemplates' 'routing profile bloat (removed profiles must not be reintroduced)'
+
 step "app checks"
 npm run build
 

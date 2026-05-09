@@ -15,15 +15,3 @@ export function isLibrarySourceTypeDirty(
     case "skills": return false;
   }
 }
-
-export function guardedSwitchSourceType(
-  nextType: LibrarySourceType,
-  currentType: LibrarySourceType,
-  isCurrentDirty: boolean,
-  onSetType: (t: LibrarySourceType) => void,
-): boolean {
-  if (nextType === currentType) return true; // no-op, not blocked
-  if (isCurrentDirty && !window.confirm("Leave with unsaved changes?")) return false;
-  onSetType(nextType);
-  return true;
-}
