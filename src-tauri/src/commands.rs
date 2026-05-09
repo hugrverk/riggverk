@@ -22,8 +22,8 @@ pub use content::{
 pub use contract::validate_workspace_contract;
 pub use defaults::get_default_workspace_summary;
 pub use design_md::{
-    get_design_md_catalog_status, list_design_md_entries, read_design_md_entry,
-    sync_design_md_catalog,
+    get_design_md_catalog_status, install_design_md, list_design_md_entries,
+    plan_install_design_md, read_design_md_entry, sync_design_md_catalog,
 };
 pub use opencode_runtime::get_opencode_runtime_health;
 pub use settings_commands::{

@@ -4,6 +4,12 @@ import type {
   AgentMetadataResponse,
   AgentSourceContent,
   AgentTargetMeta,
+  DesignMdCatalogStatus,
+  DesignMdContent,
+  DesignMdEntry,
+  DesignMdInstallPlan,
+  DesignMdInstallResult,
+  DesignMdSyncResult,
   DocSummary,
   DocumentContent,
   SkillSummary,
@@ -13,8 +19,9 @@ import { RulesContent } from "./library/RulesContent";
 import { SkillsContent } from "./library/SkillsContent";
 import { AgentContent } from "./library/AgentContent";
 import { ConfigContent } from "./library/ConfigContent";
+import { DesignMdContent as DesignMdContentPanel } from "./library/DesignMdContent";
 
-export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
+export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "designMd";
 
 const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "docs", label: "Docs" },
@@ -22,6 +29,7 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "skills", label: "Skills" },
   { id: "agents", label: "Agents" },
   { id: "configs", label: "Configs" },
+  { id: "designMd", label: "Design MD" },
 ];
 
 interface LibraryViewProps {
@@ -109,6 +117,25 @@ interface LibraryViewProps {
 
   // Common
   workspaceValid: boolean;
+
+  // Design MD
+  designMdCatalogStatus: DesignMdCatalogStatus | null;
+  designMdEntries: DesignMdEntry[];
+  activeDesignMdSlug: string | null;
+  activeDesignMdContent: DesignMdContent | null;
+  designMdSearch: string;
+  onSetDesignMdSearch: (value: string) => void;
+  designMdSyncResult: DesignMdSyncResult | null;
+  designMdSyncRunning: boolean;
+  onSyncDesignMdCatalog: () => void;
+  onSelectDesignMdEntry: (slug: string) => void;
+  designMdInstallTarget: string;
+  designMdInstallPlan: DesignMdInstallPlan | null;
+  designMdInstallResult: DesignMdInstallResult | null;
+  designMdInstallRunning: boolean;
+  onChooseDesignMdInstallTarget: () => void;
+  onPlanDesignMdInstall: () => void;
+  onInstallDesignMd: () => void;
 }
 
 // ── sidebar item list components ──
@@ -383,6 +410,102 @@ function ConfigItemList({
   );
 }
 
+// ── Design MD sidebar ──
+
+function DesignMdSidebarInner({
+  catalogStatus,
+  entries,
+  activeSlug,
+  onSelect,
+  search,
+  onSearch,
+  syncRunning,
+  onSync,
+}: {
+  catalogStatus: DesignMdCatalogStatus | null;
+  entries: DesignMdEntry[];
+  activeSlug: string | null;
+  onSelect: (slug: string) => void;
+  search: string;
+  onSearch: (v: string) => void;
+  syncRunning: boolean;
+  onSync: () => void;
+}) {
+  const filtered = useMemo(() => {
+    const q = search.toLowerCase().trim();
+    if (!q) return entries;
+    return entries.filter(
+      (e) =>
+        e.title.toLowerCase().includes(q) ||
+        e.slug.toLowerCase().includes(q) ||
+        e.description.toLowerCase().includes(q),
+    );
+  }, [entries, search]);
+
+  const notSynced = !catalogStatus || !catalogStatus.exists;
+
+  return (
+    <div className="lib-sidebar-body">
+      <div className="lib-sidebar-search">
+        {notSynced ? (
+          <button
+            className="btn btn-primary btn-sm"
+            onClick={onSync}
+            disabled={syncRunning}
+            style={{ width: "100%" }}
+          >
+            {syncRunning ? "syncing..." : "sync catalog"}
+          </button>
+        ) : (
+          <>
+            <input
+              className="lib-search-input"
+              type="text"
+              placeholder="search entries..."
+              value={search}
+              onChange={(e) => onSearch(e.target.value)}
+              aria-label="Search Design MD entries"
+            />
+            {search && (
+              <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear search">clear</button>
+            )}
+            <button
+              className="btn btn-sm"
+              onClick={onSync}
+              disabled={syncRunning}
+              title="Re-sync catalog"
+              aria-label="Re-sync catalog"
+            >
+              {syncRunning ? "..." : "sync"}
+            </button>
+          </>
+        )}
+      </div>
+      {notSynced ? (
+        <div className="lib-sidebar-empty">Catalog not synced</div>
+      ) : filtered.length === 0 ? (
+        <div className="lib-sidebar-empty">
+          {search ? "No matches" : "No Design MD entries found"}
+        </div>
+      ) : (
+        <div className="lib-sidebar-list">
+          {filtered.map((e) => (
+            <button
+              key={e.slug}
+              className={`lib-sidebar-item ${activeSlug === e.slug ? "lib-sidebar-item-active" : ""}`}
+              onClick={() => onSelect(e.slug)}
+              aria-current={activeSlug === e.slug ? "true" : undefined}
+            >
+              <span className="lib-sidebar-item-title">{e.title}</span>
+              <span className="lib-sidebar-item-desc">{e.description || e.slug}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── type helpers ──
 
 function sourceTypeLabel(type: LibrarySourceType): string {
@@ -392,6 +515,7 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "skills": return "Skills";
     case "agents": return "Agents";
     case "configs": return "Configs";
+    case "designMd": return "Design MD";
   }
 }
 
@@ -471,6 +595,23 @@ export function LibraryView(props: LibraryViewProps) {
     onSaveConfig,
     onResetConfig,
     workspaceValid,
+    designMdCatalogStatus,
+    designMdEntries,
+    activeDesignMdSlug,
+    activeDesignMdContent,
+    designMdSearch,
+    onSetDesignMdSearch,
+    designMdSyncResult: _designMdSyncResult,
+    designMdSyncRunning,
+    onSyncDesignMdCatalog,
+    onSelectDesignMdEntry,
+    designMdInstallTarget,
+    designMdInstallPlan,
+    designMdInstallResult,
+    designMdInstallRunning,
+    onChooseDesignMdInstallTarget,
+    onPlanDesignMdInstall,
+    onInstallDesignMd,
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
@@ -564,6 +705,33 @@ export function LibraryView(props: LibraryViewProps) {
         agentSources={agentSources}
       />
     );
+  } else if (sourceType === "designMd" && activeDesignMdContent) {
+    mainContent = (
+      <DesignMdContentPanel
+        activeContent={activeDesignMdContent}
+        installTarget={designMdInstallTarget}
+        installPlan={designMdInstallPlan}
+        installResult={designMdInstallResult}
+        installRunning={designMdInstallRunning}
+        onChooseTarget={onChooseDesignMdInstallTarget}
+        onPlanInstall={onPlanDesignMdInstall}
+        onInstall={onInstallDesignMd}
+      />
+    );
+  } else if (sourceType === "designMd" && !designMdCatalogStatus?.exists) {
+    // Catalog not synced — show prompt
+    mainContent = (
+      <div className="lib-main-empty" style={{ flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
+        <span><span className="log-prompt">$</span> Design MD catalog not synced</span>
+        <button
+          className="btn btn-primary btn-sm"
+          onClick={onSyncDesignMdCatalog}
+          disabled={designMdSyncRunning}
+        >
+          {designMdSyncRunning ? "syncing..." : "sync catalog"}
+        </button>
+      </div>
+    );
   }
 
   const sourceTypeTitle = sourceTypeLabel(sourceType);
@@ -605,6 +773,21 @@ export function LibraryView(props: LibraryViewProps) {
             bundledAgentCount={agentSources.length}
           />
         );
+      case "designMd":
+        return (
+          <DesignMdSidebarInner
+            catalogStatus={designMdCatalogStatus}
+            entries={designMdEntries}
+            activeSlug={activeDesignMdSlug}
+            onSelect={onSelectDesignMdEntry}
+            search={designMdSearch}
+            onSearch={onSetDesignMdSearch}
+            syncRunning={designMdSyncRunning}
+            onSync={onSyncDesignMdCatalog}
+          />
+        );
+      default:
+        return null;
     }
   };
 
@@ -620,6 +803,7 @@ export function LibraryView(props: LibraryViewProps) {
       case "skills": return skillsCount > 0 ? String(skillsCount) : null;
       case "agents": return agentsCount > 0 ? String(agentsCount) : null;
       case "configs": return configCount > 0 ? String(configCount) : null;
+      case "designMd": return designMdEntries.length > 0 ? String(designMdEntries.length) : null;
       default: return null;
     }
   }

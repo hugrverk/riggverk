@@ -247,3 +247,27 @@ export interface DesignMdSyncResult {
   stdout: string;
   stderr: string;
 }
+
+export interface DesignMdInstallPlan {
+  ok: boolean;
+  slug: string;
+  title: string;
+  target_dir: string;
+  target_file: string;
+  existing: boolean;
+  existing_size: number | null;
+  backup_path: string | null;
+  action: "create" | "replace_with_backup" | "blocked";
+  reason: string;
+  warnings: string[];
+}
+
+export interface DesignMdInstallResult {
+  success: boolean;
+  slug: string;
+  target_file: string;
+  backup_path: string | null;
+  action: string;
+  message: string;
+  warnings: string[];
+}

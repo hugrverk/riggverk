@@ -6,13 +6,14 @@ mod settings;
 use commands::{
     create_doc, create_workspace_from_defaults, get_agent_targets, get_backup_details,
     get_default_workspace_summary, get_design_md_catalog_status, get_opencode_runtime_health,
-    get_settings, get_status, get_target_profiles, get_workspace_diagnostics, install_skills,
-    list_agent_metadata, list_agent_sources, list_backups, list_design_md_entries, list_docs,
-    list_skills, open_agent_source, open_agent_template, open_backups_folder, open_config_template,
-    open_doc, open_install_skills_script, open_skill, plan_create_workspace, read_agent_source,
-    read_agent_template, read_config_template, read_design_md_entry, read_doc, read_skill,
-    run_action, save_agent_source, save_agent_template, save_config_template, save_doc,
-    sync_design_md_catalog, update_settings, validate_workspace_contract,
+    get_settings, get_status, get_target_profiles, get_workspace_diagnostics, install_design_md,
+    install_skills, list_agent_metadata, list_agent_sources, list_backups, list_design_md_entries,
+    list_docs, list_skills, open_agent_source, open_agent_template, open_backups_folder,
+    open_config_template, open_doc, open_install_skills_script, open_skill, plan_create_workspace,
+    plan_install_design_md, read_agent_source, read_agent_template, read_config_template,
+    read_design_md_entry, read_doc, read_skill, run_action, save_agent_source, save_agent_template,
+    save_config_template, save_doc, sync_design_md_catalog, update_settings,
+    validate_workspace_contract,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -60,6 +61,8 @@ pub fn run() {
             sync_design_md_catalog,
             list_design_md_entries,
             read_design_md_entry,
+            plan_install_design_md,
+            install_design_md,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -50,6 +50,32 @@ pub struct DesignMdSyncResult {
     pub stderr: String,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub struct DesignMdInstallPlan {
+    pub ok: bool,
+    pub slug: String,
+    pub title: String,
+    pub target_dir: String,
+    pub target_file: String,
+    pub existing: bool,
+    pub existing_size: Option<u64>,
+    pub backup_path: Option<String>,
+    pub action: String,
+    pub reason: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct DesignMdInstallResult {
+    pub success: bool,
+    pub slug: String,
+    pub target_file: String,
+    pub backup_path: Option<String>,
+    pub action: String,
+    pub message: String,
+    pub warnings: Vec<String>,
+}
+
 // ── cache path ──
 
 fn design_md_cache_root() -> Result<PathBuf, String> {
@@ -96,6 +122,47 @@ fn git_current_commit(repo_path: &Path) -> Option<String> {
     }
 }
 
+// ── cache validation ──
+
+/// Validates that an existing cache directory is a git repo with the expected origin URL.
+fn validate_cache_repo(cache: &Path, expected_url: &str) -> Result<bool, String> {
+    let git_dir = cache.join(".git");
+    if !git_dir.exists() {
+        return Ok(false);
+    }
+    let (ok, stdout, _stderr, _code) = run_git(&["remote", "get-url", "origin"], Some(cache));
+    if !ok {
+        return Ok(false);
+    }
+    let origin_url = stdout.trim();
+    let normalized_expected = normalize_git_url(expected_url);
+    let normalized_origin = normalize_git_url(origin_url);
+    if normalized_origin != normalized_expected {
+        return Ok(false);
+    }
+    Ok(true)
+}
+
+fn normalize_git_url(url: &str) -> String {
+    let mut s = url.trim().to_string();
+    if let Some(stripped) = s.strip_prefix("https://") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_prefix("http://") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_prefix("git@") {
+        s = stripped.to_string();
+    } else if let Some(stripped) = s.strip_prefix("ssh://") {
+        s = stripped.to_string();
+    }
+    if s.ends_with(".git") {
+        s = s[..s.len() - 4].to_string();
+    }
+    if s.ends_with('/') {
+        s.pop();
+    }
+    s.to_lowercase()
+}
+
 // ── Tauri commands ──
 
 #[tauri::command]
@@ -134,7 +201,6 @@ pub fn sync_design_md_catalog() -> Result<DesignMdSyncResult, String> {
     let cache_str = cache.to_string_lossy().into_owned();
 
     if !cache.exists() {
-        // Clone for the first time
         if let Some(parent) = cache.parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("cannot create cache parent: {}", e))?;
@@ -183,7 +249,19 @@ pub fn sync_design_md_catalog() -> Result<DesignMdSyncResult, String> {
         });
     }
 
-    // Cache exists — fetch and update
+    // Cache exists — validate it before fetch/reset
+    if !validate_cache_repo(&cache, REPO_URL)? {
+        return Ok(DesignMdSyncResult {
+            success: false,
+            action: "validate".to_string(),
+            cache_path: cache_str,
+            current_commit: None,
+            entry_count: 0,
+            stdout: String::new(),
+            stderr: "Cache path exists but is not the expected repository. Remove it manually if needed.".to_string(),
+        });
+    }
+
     let (fetch_ok, fetch_stdout, fetch_stderr, _fetch_code) =
         run_git(&["fetch", "--depth", "1", "origin", BRANCH], Some(&cache));
 
@@ -297,9 +375,12 @@ pub fn read_design_md_entry(slug: String) -> Result<DesignMdContent, String> {
         return Err("Design MD catalog is not cached. Sync it first.".to_string());
     }
 
-    let resolved_path = resolve_design_md_entry_path(&cache, &slug)?;
+    read_design_md_entry_impl(&cache, &slug)
+}
 
-    // Security: verify the resolved path stays inside the cache
+fn read_design_md_entry_impl(cache: &Path, slug: &str) -> Result<DesignMdContent, String> {
+    let resolved_path = resolve_design_md_entry_path(cache, slug)?;
+
     let canonical_cache = cache
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize cache: {}", e))?;
@@ -314,15 +395,329 @@ pub fn read_design_md_entry(slug: String) -> Result<DesignMdContent, String> {
     let content =
         std::fs::read_to_string(&canonical_resolved).map_err(|e| format!("read error: {}", e))?;
 
-    let (title, description) = parse_design_md_frontmatter(&content, &slug);
+    let (title, description) = parse_design_md_frontmatter(&content, slug);
     let rel_path = format!("{}/{}/{}", DESIGN_MD_DIR, slug, DESIGN_MD_FILE);
 
     Ok(DesignMdContent {
-        slug,
+        slug: slug.to_string(),
         title,
         description,
         path: rel_path,
         content,
+    })
+}
+
+// ── install helpers ──
+
+/// System-sensitive directory prefixes that should be rejected as install targets.
+const UNSAFE_DIR_PREFIXES: &[&str] = &[
+    "/System",
+    "/Library",
+    "/bin",
+    "/usr",
+    "/etc",
+    "/sbin",
+    "/opt",
+    "/private/etc",
+    "/dev",
+    "/Volumes",
+];
+
+fn is_target_dir_safe(target_dir: &str) -> Result<(), String> {
+    if target_dir.is_empty() {
+        return Err("target_dir is empty".to_string());
+    }
+
+    let path = Path::new(target_dir);
+    if !path.is_absolute() {
+        return Err("target_dir must be an absolute path".to_string());
+    }
+
+    if !path.exists() {
+        return Err(format!("target_dir does not exist: {}", target_dir));
+    }
+
+    if !path.is_dir() {
+        return Err(format!("target_dir is not a directory: {}", target_dir));
+    }
+
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve target_dir: {}", e))?;
+
+    if canonical.parent().is_none() {
+        return Err("cannot install to root directory".to_string());
+    }
+
+    if let Ok(home) = std::env::var("HOME") {
+        if !home.is_empty() {
+            let home_path = Path::new(&home);
+            if let Ok(canonical_home) = home_path.canonicalize() {
+                if canonical == canonical_home {
+                    return Err("cannot install to HOME directory".to_string());
+                }
+            }
+        }
+    }
+
+    let canonical_str = canonical.to_string_lossy();
+    for prefix in UNSAFE_DIR_PREFIXES {
+        if canonical_str.starts_with(prefix) {
+            return Err(format!(
+                "cannot install to system directory: {}",
+                target_dir
+            ));
+        }
+    }
+
+    Ok(())
+}
+
+fn create_backup_path(target_file: &Path) -> PathBuf {
+    use std::time::{SystemTime, UNIX_EPOCH};
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_secs();
+    let dt = chrono_lite(ts);
+    let suffix = format!("backup-{}", dt);
+    target_file.with_extension(format!("md.{}", suffix))
+}
+
+fn chrono_lite(ts: u64) -> String {
+    let secs_in_day: u64 = 86400;
+    let days = ts / secs_in_day;
+    let rem = ts % secs_in_day;
+    let hours = rem / 3600;
+    let minutes = (rem % 3600) / 60;
+    let seconds = rem % 60;
+
+    let mut y = 1970u64;
+    let mut d = days;
+    loop {
+        let days_in_year = if is_leap_year(y) { 366 } else { 365 };
+        if d < days_in_year {
+            break;
+        }
+        d -= days_in_year;
+        y += 1;
+    }
+    let month_days = if is_leap_year(y) {
+        [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    } else {
+        [31, 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+    };
+    let mut m = 0usize;
+    while m < 12 && d >= month_days[m] {
+        d -= month_days[m];
+        m += 1;
+    }
+    let month = m + 1;
+    let day = d + 1;
+
+    format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}",
+        y, month, day, hours, minutes, seconds
+    )
+}
+
+fn is_leap_year(y: u64) -> bool {
+    (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)
+}
+
+// ── install commands ──
+
+#[tauri::command]
+pub fn plan_install_design_md(
+    slug: String,
+    target_dir: String,
+) -> Result<DesignMdInstallPlan, String> {
+    let cache = design_md_cache_root()?;
+    plan_install_design_md_impl(&cache, &slug, &target_dir)
+}
+
+fn plan_install_design_md_impl(
+    cache: &Path,
+    slug: &str,
+    target_dir: &str,
+) -> Result<DesignMdInstallPlan, String> {
+    if !is_valid_design_md_slug(slug) {
+        return Err(format!("invalid slug: {}", slug));
+    }
+
+    if let Err(e) = is_target_dir_safe(target_dir) {
+        return Ok(DesignMdInstallPlan {
+            ok: false,
+            slug: slug.to_string(),
+            title: slug.to_string(),
+            target_dir: target_dir.to_string(),
+            target_file: format!("{}/{}", target_dir, DESIGN_MD_FILE),
+            existing: false,
+            existing_size: None,
+            backup_path: None,
+            action: "blocked".to_string(),
+            reason: e,
+            warnings: vec![],
+        });
+    }
+
+    if !cache.exists() {
+        return Err("Design MD catalog is not cached. Sync it first.".to_string());
+    }
+
+    let source_path = resolve_design_md_entry_path(cache, slug)?;
+
+    let content = match std::fs::read_to_string(&source_path) {
+        Ok(c) => c,
+        Err(e) => {
+            return Ok(DesignMdInstallPlan {
+                ok: false,
+                slug: slug.to_string(),
+                title: slug.to_string(),
+                target_dir: target_dir.to_string(),
+                target_file: format!("{}/{}", target_dir, DESIGN_MD_FILE),
+                existing: false,
+                existing_size: None,
+                backup_path: None,
+                action: "blocked".to_string(),
+                reason: format!("cannot read source DESIGN.md: {}", e),
+                warnings: vec![],
+            });
+        }
+    };
+
+    let (title, _desc) = parse_design_md_frontmatter(&content, slug);
+    let target_file_path = Path::new(target_dir).join(DESIGN_MD_FILE);
+    let target_file_str = target_file_path.to_string_lossy().into_owned();
+
+    let mut warnings: Vec<String> = Vec::new();
+
+    if target_file_path.exists() {
+        let existing_size = match std::fs::metadata(&target_file_path) {
+            Ok(m) => Some(m.len()),
+            Err(_) => None,
+        };
+        let backup_path = create_backup_path(&target_file_path);
+        let backup_str = backup_path.to_string_lossy().into_owned();
+
+        if backup_path.exists() {
+            warnings.push("backup target already exists (may be overwritten)".to_string());
+        }
+
+        Ok(DesignMdInstallPlan {
+            ok: true,
+            slug: slug.to_string(),
+            title,
+            target_dir: target_dir.to_string(),
+            target_file: target_file_str,
+            existing: true,
+            existing_size,
+            backup_path: Some(backup_str),
+            action: "replace_with_backup".to_string(),
+            reason: "DESIGN.md already exists; will replace after backup".to_string(),
+            warnings,
+        })
+    } else {
+        Ok(DesignMdInstallPlan {
+            ok: true,
+            slug: slug.to_string(),
+            title,
+            target_dir: target_dir.to_string(),
+            target_file: target_file_str,
+            existing: false,
+            existing_size: None,
+            backup_path: None,
+            action: "create".to_string(),
+            reason: "DESIGN.md does not exist; will create new file".to_string(),
+            warnings,
+        })
+    }
+}
+
+#[tauri::command]
+pub fn install_design_md(
+    slug: String,
+    target_dir: String,
+) -> Result<DesignMdInstallResult, String> {
+    let cache = design_md_cache_root()?;
+    install_design_md_impl(&cache, &slug, &target_dir)
+}
+
+fn install_design_md_impl(
+    cache: &Path,
+    slug: &str,
+    target_dir: &str,
+) -> Result<DesignMdInstallResult, String> {
+    if !is_valid_design_md_slug(slug) {
+        return Err(format!("invalid slug: {}", slug));
+    }
+
+    if let Err(e) = is_target_dir_safe(target_dir) {
+        return Err(format!("unsafe target directory: {}", e));
+    }
+
+    if !cache.exists() {
+        return Err("Design MD catalog is not cached. Sync it first.".to_string());
+    }
+
+    let source_path = resolve_design_md_entry_path(cache, slug)?;
+
+    let canonical_cache = cache
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize cache: {}", e))?;
+    let canonical_source = source_path
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize source path: {}", e))?;
+
+    if !canonical_source.starts_with(&canonical_cache) {
+        return Err("source path is outside cache".to_string());
+    }
+
+    let content = std::fs::read_to_string(&canonical_source)
+        .map_err(|e| format!("cannot read source DESIGN.md: {}", e))?;
+
+    let target_file_path = Path::new(target_dir).join(DESIGN_MD_FILE);
+    let target_file_str = target_file_path.to_string_lossy().into_owned();
+
+    let mut warnings: Vec<String> = Vec::new();
+    let mut backup_path: Option<String> = None;
+    let action: String;
+
+    if target_file_path.exists() {
+        let bp = create_backup_path(&target_file_path);
+        if let Err(e) = std::fs::copy(&target_file_path, &bp) {
+            return Err(format!("failed to create backup: {}", e));
+        }
+        backup_path = Some(bp.to_string_lossy().into_owned());
+        action = "replace_with_backup".to_string();
+        warnings.push(format!(
+            "existing DESIGN.md backed up to {}",
+            backup_path.as_ref().unwrap()
+        ));
+    } else {
+        action = "create".to_string();
+    }
+
+    if let Err(e) = std::fs::write(&target_file_path, &content) {
+        if backup_path.is_some() {
+            warnings.push(format!(
+                "backup created but install failed: {} (backup at {})",
+                e,
+                backup_path.as_ref().unwrap()
+            ));
+        }
+        return Err(format!("failed to write DESIGN.md: {}", e));
+    }
+
+    let msg = format!("DESIGN.md {}d successfully", action);
+    Ok(DesignMdInstallResult {
+        success: true,
+        slug: slug.to_string(),
+        target_file: target_file_str,
+        backup_path,
+        action,
+        message: msg,
+        warnings,
     })
 }
 
@@ -332,25 +727,21 @@ fn is_valid_design_md_slug(slug: &str) -> bool {
     if slug.is_empty() {
         return false;
     }
-    // Reject slugs containing path traversal or separators
     if slug.contains("..") {
         return false;
     }
     if slug.contains('/') || slug.contains('\\') {
         return false;
     }
-    // Reject absolute path patterns
     if slug.starts_with('/') || slug.starts_with('\\') {
         return false;
     }
-    // Allow letters, digits, dots, hyphens — common in tool/project slugs
     for c in slug.chars() {
         match c {
             'a'..='z' | 'A'..='Z' | '0'..='9' | '.' | '-' | '_' => {}
             _ => return false,
         }
     }
-    // Reject slugs that are just dots
     if slug.chars().all(|c| c == '.') {
         return false;
     }
@@ -363,7 +754,6 @@ fn resolve_design_md_entry_path(cache: &Path, slug: &str) -> Result<PathBuf, Str
     let rel = format!("{}/{}/{}", DESIGN_MD_DIR, slug, DESIGN_MD_FILE);
     let rel_path = Path::new(&rel);
 
-    // Defensive: ensure the relative path does not contain traversal
     if rel.contains("..") || rel_path.is_absolute() {
         return Err("invalid slug: traversal detected".to_string());
     }
@@ -375,12 +765,9 @@ fn resolve_design_md_entry_path(cache: &Path, slug: &str) -> Result<PathBuf, Str
 
 /// Parses minimal YAML frontmatter from DESIGN.md content.
 ///
-/// Expects frontmatter delimited by `---` lines:
-///   ---
-///   name: Some Name
-///   description: Some description
-///   ---
+/// Expects frontmatter delimited by `---` lines.
 ///
+/// Supports YAML block scalars (`description: |`), quoted values, and plain values.
 /// Returns (title, description). Falls back to slug for title if name is missing.
 fn parse_design_md_frontmatter(content: &str, slug: &str) -> (String, String) {
     let trimmed = content.trim_start();
@@ -392,17 +779,13 @@ fn parse_design_md_frontmatter(content: &str, slug: &str) -> (String, String) {
     let after_newline = match after_opening.strip_prefix('\n') {
         Some(rest) => rest,
         None => {
-            // "---" followed by nothing or whitespace on the same line
-            // Try without newline
             if after_opening.trim().is_empty() {
-                // "---" and then nothing useful
                 return (slug.to_string(), String::new());
             }
             after_opening
         }
     };
 
-    // Find the closing "---"
     let fm_body = match after_newline.split("\n---").next() {
         Some(body) => body,
         None => return (slug.to_string(), String::new()),
@@ -410,22 +793,71 @@ fn parse_design_md_frontmatter(content: &str, slug: &str) -> (String, String) {
 
     let mut name = String::new();
     let mut description = String::new();
+    let mut in_block_scalar: Option<String> = None;
+    let mut block_scalar_lines: Vec<String> = Vec::new();
 
     for line in fm_body.lines() {
         let trimmed_line = line.trim();
+
+        if let Some(ref field_name) = in_block_scalar {
+            if trimmed_line.is_empty() {
+                if field_name == "description" {
+                    description = collapse_description_lines(&block_scalar_lines);
+                }
+                in_block_scalar = None;
+                block_scalar_lines.clear();
+                continue;
+            }
+            if !line.starts_with(' ') && !line.starts_with('\t') && trimmed_line.contains(':') {
+                if is_frontmatter_key(trimmed_line) {
+                    if field_name == "description" {
+                        description = collapse_description_lines(&block_scalar_lines);
+                    }
+                    in_block_scalar = None;
+                    block_scalar_lines.clear();
+                    // fall through to process this new key
+                } else {
+                    if field_name == "description" {
+                        description = collapse_description_lines(&block_scalar_lines);
+                    }
+                    in_block_scalar = None;
+                    block_scalar_lines.clear();
+                    continue;
+                }
+            } else {
+                let content_str = line.trim();
+                block_scalar_lines.push(content_str.to_string());
+                continue;
+            }
+        }
+
         if trimmed_line.is_empty() {
             continue;
         }
 
         if let Some(value) = trimmed_line.strip_prefix("name:") {
             name = value.trim().to_string();
-        } else if let Some(value) = trimmed_line.strip_prefix("description:") {
-            // The description might span multiple lines (indented continuation).
-            // Take the first line value and optionally append continuation lines.
-            let first = value.trim().to_string();
-            description = first;
-            // We don't support multi-line descriptions in this minimal parser
-            // to keep it simple. Multi-line would need indent tracking.
+            continue;
+        }
+
+        if let Some(value) = trimmed_line.strip_prefix("description:") {
+            let remaining = value.trim();
+            if remaining == "|" || remaining == "|-" || remaining == ">" || remaining == ">-" {
+                in_block_scalar = Some("description".to_string());
+                block_scalar_lines.clear();
+                continue;
+            }
+            let desc_value = strip_yaml_quotes(remaining);
+            if !desc_value.is_empty() {
+                description = truncate_description(&desc_value);
+            }
+            continue;
+        }
+    }
+
+    if let Some(ref field_name) = in_block_scalar {
+        if field_name == "description" && !block_scalar_lines.is_empty() {
+            description = collapse_description_lines(&block_scalar_lines);
         }
     }
 
@@ -436,6 +868,58 @@ fn parse_design_md_frontmatter(content: &str, slug: &str) -> (String, String) {
     };
 
     (title, description)
+}
+
+fn is_frontmatter_key(line: &str) -> bool {
+    let trimmed = line.trim();
+    if let Some(colon_pos) = trimmed.find(':') {
+        let key = &trimmed[..colon_pos];
+        key.chars().all(|c| c.is_alphanumeric() || c == '_')
+    } else {
+        false
+    }
+}
+
+fn strip_yaml_quotes(s: &str) -> String {
+    let trimmed = s.trim();
+    if trimmed.len() >= 2 {
+        let chars: Vec<char> = trimmed.chars().collect();
+        let first = chars[0];
+        let last = chars[chars.len() - 1];
+        if (first == '"' && last == '"') || (first == '\'' && last == '\'') {
+            return chars[1..chars.len() - 1].iter().collect();
+        }
+    }
+    trimmed.to_string()
+}
+
+const MAX_DESC_LEN: usize = 220;
+
+fn collapse_description_lines(lines: &[String]) -> String {
+    let joined = lines.join(" ");
+    truncate_description(&joined)
+}
+
+fn truncate_description(raw: &str) -> String {
+    let cleaned = raw.trim();
+    if cleaned.len() <= MAX_DESC_LEN {
+        cleaned.to_string()
+    } else {
+        let ellipsis_len = "…".len();
+        let limit = if MAX_DESC_LEN > ellipsis_len {
+            MAX_DESC_LEN - ellipsis_len
+        } else {
+            MAX_DESC_LEN
+        };
+        let mut end = limit;
+        while end > 0 && cleaned.as_bytes().get(end).map_or(false, |b| *b != b' ') {
+            end -= 1;
+        }
+        if end == 0 {
+            end = limit;
+        }
+        format!("{}…", &cleaned[..end])
+    }
 }
 
 // ── tests ──
@@ -457,7 +941,6 @@ mod tests {
 
     fn setup_cache_with_entries(name: &str) -> PathBuf {
         let root = temp_root(name);
-        // Create a fake cache with design-md/ dirs
         for (slug, content) in &[
             ("opencode.ai", "---\nname: OpenCode.ai\ndescription: AI coding agent configuration\n---\n\n# OpenCode.ai\n"),
             ("supabase", "---\nname: Supabase\ndescription: Backend platform\n---\n\n# Supabase\n"),
@@ -474,7 +957,6 @@ mod tests {
         let root = temp_root(name);
         let dir = root.join(DESIGN_MD_DIR).join("empty-slug");
         fs::create_dir_all(&dir).expect("create slug dir");
-        // No DESIGN.md file
         root
     }
 
@@ -583,10 +1065,65 @@ mod tests {
     fn frontmatter_with_no_newline_after_opening() {
         let content = "---name: Test\n---\n\n# Content\n";
         let (title, desc) = parse_design_md_frontmatter(content, "test");
-        // Compact YAML format (no newline after opening ---) is valid;
-        // the parser correctly extracts the name
         assert_eq!(title, "Test");
         assert_eq!(desc, "");
+    }
+
+    #[test]
+    fn frontmatter_handles_block_scalar_description() {
+        let content = "---\nname: OpenCode\ndescription: |\n  AI coding agent\n  configuration tool\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "opencode");
+        assert_eq!(title, "OpenCode");
+        assert_eq!(desc, "AI coding agent configuration tool");
+    }
+
+    #[test]
+    fn frontmatter_handles_block_scalar_with_folded_style() {
+        let content = "---\nname: Tool\ndescription: >\n  AI coding\n  agent\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "tool");
+        assert_eq!(title, "Tool");
+        assert_eq!(desc, "AI coding agent");
+    }
+
+    #[test]
+    fn frontmatter_handles_quoted_description() {
+        let content =
+            "---\nname: My Tool\ndescription: \"A fancy description\"\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "my-tool");
+        assert_eq!(title, "My Tool");
+        assert_eq!(desc, "A fancy description");
+    }
+
+    #[test]
+    fn frontmatter_handles_single_quoted_description() {
+        let content = "---\nname: Tool\ndescription: 'simple description'\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "tool");
+        assert_eq!(title, "Tool");
+        assert_eq!(desc, "simple description");
+    }
+
+    #[test]
+    fn frontmatter_truncates_long_description() {
+        let long = "a ".repeat(200);
+        let content = format!("---\nname: Tool\ndescription: {}\n---\n\n# Content\n", long);
+        let (_title, desc) = parse_design_md_frontmatter(&content, "tool");
+        assert!(desc.len() <= 220);
+    }
+
+    #[test]
+    fn frontmatter_block_scalar_until_next_key() {
+        let content = "---\nname: Tool\ndescription: |\n  line one\n  line two\nother_key: value\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "tool");
+        assert_eq!(title, "Tool");
+        assert_eq!(desc, "line one line two");
+    }
+
+    #[test]
+    fn frontmatter_block_scalar_until_empty_line() {
+        let content = "---\nname: Tool\ndescription: |\n  line one\n  line two\n\nother_key: value\n---\n\n# Content\n";
+        let (title, desc) = parse_design_md_frontmatter(content, "tool");
+        assert_eq!(title, "Tool");
+        assert_eq!(desc, "line one line two");
     }
 
     // ── entry discovery tests ──
@@ -620,7 +1157,6 @@ mod tests {
         cleanup(&root);
 
         let titles: Vec<&str> = entries.iter().map(|e| e.title.as_str()).collect();
-        // Sorted by lowercase title
         assert!(titles
             .windows(2)
             .all(|w| w[0].to_lowercase() <= w[1].to_lowercase()));
@@ -687,6 +1223,218 @@ mod tests {
         assert!(content.content.contains("# OpenCode.ai"));
     }
 
+    // ── cache validation tests ──
+
+    #[test]
+    fn normalize_git_url_strips_prefixes() {
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md.git"),
+            "github.com/voltagent/awesome-design-md"
+        );
+        assert_eq!(
+            normalize_git_url("git@github.com:VoltAgent/awesome-design-md.git"),
+            "github.com:voltagent/awesome-design-md"
+        );
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md"),
+            "github.com/voltagent/awesome-design-md"
+        );
+    }
+
+    #[test]
+    fn chrono_lite_produces_valid_format() {
+        let result = chrono_lite(0);
+        assert_eq!(result.len(), 15);
+        assert_eq!(&result[8..9], "-");
+    }
+
+    // ── install plan tests ──
+
+    #[test]
+    fn install_plan_create_when_no_design_md_exists() {
+        let root = setup_cache_with_entries("install-plan-create");
+        let plan =
+            plan_install_design_md_impl(&root, "opencode.ai", root.to_string_lossy().as_ref())
+                .expect("plan should succeed");
+        cleanup(&root);
+        assert!(plan.ok);
+        assert_eq!(plan.action, "create");
+        assert!(!plan.existing);
+        assert!(plan.existing_size.is_none());
+        assert!(plan.backup_path.is_none());
+    }
+
+    #[test]
+    fn install_plan_replace_with_backup_when_design_md_exists() {
+        let root = setup_cache_with_entries("install-plan-replace");
+        let existing = root.join(DESIGN_MD_FILE);
+        std::fs::write(&existing, "# Old content\n").expect("write existing");
+        let plan =
+            plan_install_design_md_impl(&root, "opencode.ai", root.to_string_lossy().as_ref())
+                .expect("plan should succeed");
+        cleanup(&root);
+        assert!(plan.ok);
+        assert_eq!(plan.action, "replace_with_backup");
+        assert!(plan.existing);
+        assert!(plan.existing_size.is_some());
+        assert!(plan.backup_path.is_some());
+    }
+
+    #[test]
+    fn install_plan_rejects_invalid_slug() {
+        let root = temp_root("plan-invalid-slug");
+        std::fs::create_dir_all(&root).expect("create test dir");
+        let result = plan_install_design_md_impl(&root, "../etc", "/tmp");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid slug"));
+    }
+
+    #[test]
+    fn install_plan_rejects_empty_target_dir() {
+        let root = temp_root("plan-empty-target");
+        std::fs::create_dir_all(&root).expect("create test dir");
+        let result = plan_install_design_md_impl(&root, "opencode.ai", "");
+        cleanup(&root);
+        if let Ok(plan) = result {
+            assert!(!plan.ok);
+            assert_eq!(plan.action, "blocked");
+        }
+    }
+
+    #[test]
+    fn install_plan_rejects_nonexistent_target_dir() {
+        let root = setup_cache_with_entries("plan-noexist");
+        let plan = plan_install_design_md_impl(
+            &root,
+            "opencode.ai",
+            "/nonexistent/path/that/does/not/exist",
+        )
+        .expect("plan should handle nonexistent target");
+        cleanup(&root);
+        assert!(!plan.ok);
+        assert_eq!(plan.action, "blocked");
+    }
+
+    #[test]
+    fn install_plan_returns_blocked_for_root() {
+        let root = temp_root("plan-root");
+        std::fs::create_dir_all(&root).expect("create test dir");
+        let plan = plan_install_design_md_impl(&root, "opencode.ai", "/")
+            .expect("plan should handle root");
+        cleanup(&root);
+        assert!(!plan.ok);
+        assert_eq!(plan.action, "blocked");
+    }
+
+    // ── install execution tests ──
+
+    #[test]
+    fn install_creates_design_md() {
+        let cache_root = setup_cache_with_entries("install-create");
+        let target_dir = temp_root("install-create-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+
+        let result = install_design_md_impl(
+            &cache_root,
+            "opencode.ai",
+            target_dir.to_string_lossy().as_ref(),
+        )
+        .expect("install should succeed");
+
+        assert!(result.success);
+        assert_eq!(result.action, "create");
+        assert!(result.backup_path.is_none());
+
+        let target_file = Path::new(&result.target_file);
+        assert!(target_file.exists());
+
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+    }
+
+    #[test]
+    fn install_backs_up_existing_before_replace() {
+        let cache_root = setup_cache_with_entries("install-replace");
+        let target_dir = temp_root("install-replace-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let existing = target_dir.join(DESIGN_MD_FILE);
+        std::fs::write(&existing, "# Old content\n").expect("write existing");
+
+        let result = install_design_md_impl(
+            &cache_root,
+            "opencode.ai",
+            target_dir.to_string_lossy().as_ref(),
+        )
+        .expect("install should succeed");
+
+        assert!(result.success);
+        assert_eq!(result.action, "replace_with_backup");
+        assert!(result.backup_path.is_some());
+
+        if let Some(ref bp) = result.backup_path {
+            let backup_path = Path::new(bp);
+            assert!(backup_path.exists(), "backup file should exist at {}", bp);
+        }
+
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+    }
+
+    #[test]
+    fn install_rejects_invalid_slug() {
+        let target_dir = temp_root("install-bad-slug-target");
+        std::fs::create_dir_all(&target_dir).expect("create dir");
+        let result =
+            install_design_md_impl(&target_dir, "../etc", target_dir.to_string_lossy().as_ref());
+        cleanup(&target_dir);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid slug"));
+    }
+
+    #[test]
+    fn install_rejects_root_target() {
+        let root = temp_root("install-root-target");
+        std::fs::create_dir_all(&root).expect("create dir");
+        let result = install_design_md_impl(&root, "opencode.ai", "/");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe target"));
+    }
+
+    #[test]
+    fn install_rejects_home_target() {
+        let root = temp_root("install-home-target");
+        std::fs::create_dir_all(&root).expect("create dir");
+        let home = std::env::var("HOME").unwrap_or_else(|_| "/nonexistent".to_string());
+        if home.is_empty() || home == "/" {
+            cleanup(&root);
+            return;
+        }
+        let result = install_design_md_impl(&root, "opencode.ai", &home);
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unsafe target"));
+    }
+
+    #[test]
+    fn install_rejects_system_dir() {
+        let cache_root = temp_root("install-system-cache");
+        std::fs::create_dir_all(&cache_root).expect("create dir");
+        for dir in &["/System", "/bin", "/usr", "/etc"] {
+            let result = install_design_md_impl(&cache_root, "opencode.ai", dir);
+            assert!(result.is_err(), "should reject {}", dir);
+            let err = result.unwrap_err();
+            assert!(
+                err.contains("unsafe target") || err.contains("does not exist"),
+                "expected unsafe or nonexistent error for {}, got: {}",
+                dir,
+                err
+            );
+        }
+        cleanup(&cache_root);
+    }
+
     // ── helper for testing read_design_md_entry without command wrapper ──
 
     fn read_design_md_entry_from_cache(
@@ -696,32 +1444,6 @@ mod tests {
         if !is_valid_design_md_slug(slug) {
             return Err(format!("invalid slug: {}", slug));
         }
-
-        let resolved_path = resolve_design_md_entry_path(cache, slug)?;
-
-        let canonical_cache = cache
-            .canonicalize()
-            .map_err(|e| format!("cannot canonicalize cache: {}", e))?;
-        let canonical_resolved = resolved_path
-            .canonicalize()
-            .map_err(|e| format!("cannot canonicalize resolved path: {}", e))?;
-
-        if !canonical_resolved.starts_with(&canonical_cache) {
-            return Err("resolved path is outside cache".to_string());
-        }
-
-        let content = std::fs::read_to_string(&canonical_resolved)
-            .map_err(|e| format!("read error: {}", e))?;
-
-        let (title, description) = parse_design_md_frontmatter(&content, slug);
-        let rel_path = format!("{}/{}/{}", DESIGN_MD_DIR, slug, DESIGN_MD_FILE);
-
-        Ok(DesignMdContent {
-            slug: slug.to_string(),
-            title,
-            description,
-            path: rel_path,
-            content,
-        })
+        read_design_md_entry_impl(cache, slug)
     }
 }
