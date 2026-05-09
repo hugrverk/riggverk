@@ -87,6 +87,12 @@ export function DesignMdContent(props: DesignMdContentProps) {
               {installRunning ? "installing..." : "install DESIGN.md"}
             </button>
           </div>
+          {!installPlan && installTarget && activeContent.slug && (
+            <span className="design-md-install-hint">dry run required</span>
+          )}
+          {!installPlan && !installTarget && (
+            <span className="design-md-install-hint">choose a project and run dry run</span>
+          )}
 
           {/* Install plan */}
           {installPlan && (

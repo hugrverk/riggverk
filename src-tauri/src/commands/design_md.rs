@@ -145,21 +145,46 @@ fn validate_cache_repo(cache: &Path, expected_url: &str) -> Result<bool, String>
 
 fn normalize_git_url(url: &str) -> String {
     let mut s = url.trim().to_string();
+
+    // Strip protocol and auth prefixes
     if let Some(stripped) = s.strip_prefix("https://") {
         s = stripped.to_string();
     } else if let Some(stripped) = s.strip_prefix("http://") {
         s = stripped.to_string();
-    } else if let Some(stripped) = s.strip_prefix("git@") {
-        s = stripped.to_string();
     } else if let Some(stripped) = s.strip_prefix("ssh://") {
         s = stripped.to_string();
+        // ssh:// may have user@host; strip user@ portion if present
+        if let Some(at_pos) = s.find('@') {
+            s = s[at_pos + 1..].to_string();
+        }
+    } else if let Some(stripped) = s.strip_prefix("git@") {
+        s = stripped.to_string();
     }
-    if s.ends_with(".git") {
-        s = s[..s.len() - 4].to_string();
+
+    // Normalize the colon separator in scp-like syntax (git@github.com:org/repo)
+    // Replace the first ':' after a non-slash segment with '/'
+    if let Some(colon_pos) = s.find(':') {
+        let before_colon = &s[..colon_pos];
+        if !before_colon.contains("://") && !before_colon.contains('/') {
+            s.replace_range(colon_pos..=colon_pos, "/");
+        }
     }
+
+    // Strip trailing slash before .git to handle `repo.git/`
     if s.ends_with('/') {
         s.pop();
     }
+
+    // Strip trailing .git
+    if s.ends_with(".git") {
+        s = s[..s.len() - 4].to_string();
+    }
+
+    // Strip trailing slash again (after .git removal)
+    if s.ends_with('/') {
+        s.pop();
+    }
+
     s.to_lowercase()
 }
 
@@ -480,8 +505,34 @@ fn create_backup_path(target_file: &Path) -> PathBuf {
         .unwrap_or_default()
         .as_secs();
     let dt = chrono_lite(ts);
-    let suffix = format!("backup-{}", dt);
-    target_file.with_extension(format!("md.{}", suffix))
+    let base_suffix = format!("backup-{}", dt);
+    let base_dir = target_file.parent().unwrap_or(Path::new("."));
+    let stem = target_file
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or("DESIGN");
+    let ext = target_file
+        .extension()
+        .and_then(|s| s.to_str())
+        .unwrap_or("md");
+
+    // Build: DESIGN.md.backup-YYYYMMDD-HHMMSS
+    let mut candidate = base_dir.join(format!("{}.{}.{}", stem, ext, base_suffix));
+    let mut n: u32 = 1;
+    while candidate.exists() {
+        candidate = base_dir.join(format!("{}.{}.{}-{}", stem, ext, base_suffix, n));
+        n += 1;
+        if n > 99 {
+            // Give up after 99 attempts; extremely unlikely
+            let fallback_ts = SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            candidate = base_dir.join(format!("{}.{}.{}-{}", stem, ext, base_suffix, fallback_ts));
+            break;
+        }
+    }
+    candidate
 }
 
 fn chrono_lite(ts: u64) -> String {
@@ -709,7 +760,11 @@ fn install_design_md_impl(
         return Err(format!("failed to write DESIGN.md: {}", e));
     }
 
-    let msg = format!("DESIGN.md {}d successfully", action);
+    let msg = match action.as_str() {
+        "create" => "DESIGN.md installed".to_string(),
+        "replace_with_backup" => "DESIGN.md replaced after backup".to_string(),
+        other => format!("DESIGN.md installed ({})", other),
+    };
     Ok(DesignMdInstallResult {
         success: true,
         slug: slug.to_string(),
@@ -903,23 +958,49 @@ fn collapse_description_lines(lines: &[String]) -> String {
 fn truncate_description(raw: &str) -> String {
     let cleaned = raw.trim();
     if cleaned.len() <= MAX_DESC_LEN {
-        cleaned.to_string()
-    } else {
-        let ellipsis_len = "…".len();
-        let limit = if MAX_DESC_LEN > ellipsis_len {
-            MAX_DESC_LEN - ellipsis_len
-        } else {
-            MAX_DESC_LEN
-        };
-        let mut end = limit;
-        while end > 0 && cleaned.as_bytes().get(end).map_or(false, |b| *b != b' ') {
-            end -= 1;
-        }
-        if end == 0 {
-            end = limit;
-        }
-        format!("{}…", &cleaned[..end])
+        return cleaned.to_string();
     }
+
+    // Truncate by chars, not bytes, to stay UTF-8 safe
+    let ellipsis = "…";
+    let ellipsis_len = ellipsis.len();
+    let char_limit = if MAX_DESC_LEN > ellipsis_len {
+        MAX_DESC_LEN - ellipsis_len
+    } else {
+        MAX_DESC_LEN
+    };
+
+    // Find a safe char boundary at or below the byte limit
+    let mut byte_end = char_limit;
+    if byte_end > cleaned.len() {
+        byte_end = cleaned.len();
+    }
+    // Walk back to a char boundary if we landed in the middle of a multi-byte char
+    while byte_end > 0 && !cleaned.is_char_boundary(byte_end) {
+        byte_end -= 1;
+    }
+
+    // Try to break at whitespace before the limit
+    let snippet = &cleaned[..byte_end];
+    let last_space = snippet.rfind(' ');
+    if let Some(pos) = last_space {
+        if pos > 0 {
+            byte_end = pos;
+        }
+    }
+
+    // Re-validate char boundary after whitespace adjustment
+    while byte_end > 0 && !cleaned.is_char_boundary(byte_end) {
+        byte_end -= 1;
+    }
+    if byte_end == 0 {
+        byte_end = char_limit;
+        while byte_end > 0 && !cleaned.is_char_boundary(byte_end) {
+            byte_end -= 1;
+        }
+    }
+
+    format!("{}{}", &cleaned[..byte_end], ellipsis)
 }
 
 // ── tests ──
@@ -1233,7 +1314,7 @@ mod tests {
         );
         assert_eq!(
             normalize_git_url("git@github.com:VoltAgent/awesome-design-md.git"),
-            "github.com:voltagent/awesome-design-md"
+            "github.com/voltagent/awesome-design-md"
         );
         assert_eq!(
             normalize_git_url("https://github.com/VoltAgent/awesome-design-md"),
@@ -1433,6 +1514,172 @@ mod tests {
             );
         }
         cleanup(&cache_root);
+    }
+
+    // ── install message tests ──
+
+    #[test]
+    fn install_message_create_is_readable() {
+        let cache_root = setup_cache_with_entries("msg-create");
+        let target_dir = temp_root("msg-create-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let result = install_design_md_impl(
+            &cache_root,
+            "opencode.ai",
+            target_dir.to_string_lossy().as_ref(),
+        )
+        .expect("install should succeed");
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+        assert_eq!(result.action, "create");
+        assert!(
+            result.message.contains("installed"),
+            "expected 'installed' in message, got: {}",
+            result.message
+        );
+        assert!(
+            !result.message.contains("created"),
+            "message should not contain raw action name"
+        );
+    }
+
+    #[test]
+    fn install_message_replace_is_readable() {
+        let cache_root = setup_cache_with_entries("msg-replace");
+        let target_dir = temp_root("msg-replace-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let existing = target_dir.join(DESIGN_MD_FILE);
+        std::fs::write(&existing, "# Old\n").expect("write existing");
+        let result = install_design_md_impl(
+            &cache_root,
+            "opencode.ai",
+            target_dir.to_string_lossy().as_ref(),
+        )
+        .expect("install should succeed");
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+        assert_eq!(result.action, "replace_with_backup");
+        assert!(
+            result.message.contains("replaced"),
+            "expected 'replaced' in message, got: {}",
+            result.message
+        );
+        assert!(
+            result.message.contains("backup"),
+            "expected 'backup' in message, got: {}",
+            result.message
+        );
+    }
+
+    // ── backup collision tests ──
+
+    #[test]
+    fn backup_path_avoids_collision_when_exists() {
+        // Create a fake existing backup to trigger collision avoidance
+        let target_dir = temp_root("backup-collision");
+        let target_file = target_dir.join(DESIGN_MD_FILE);
+
+        // Create a fake backup file that would match the timestamp
+        let bp1 = create_backup_path(&target_file);
+        std::fs::create_dir_all(&target_dir).expect("create dir");
+        std::fs::write(&bp1, "fake backup").expect("write fake backup");
+        assert!(bp1.exists());
+
+        // Create another backup — should get a different path
+        let bp2 = create_backup_path(&target_file);
+        assert_ne!(bp1, bp2, "backup paths should differ when first exists");
+
+        cleanup(&target_dir);
+    }
+
+    // ── UTF-8 truncation tests ──
+
+    #[test]
+    fn truncation_utf8_safe_with_multibyte() {
+        // Swedish letters with a and ring (å = 2 bytes)
+        let swedish = "å".repeat(300); // 600 bytes, 300 chars
+        let result = truncate_description(&swedish);
+        assert!(result.len() <= 220);
+        // Should not panic regardless of where the byte boundary falls
+        assert!(!result.is_empty());
+    }
+
+    #[test]
+    fn truncation_utf8_safe_with_em_dash() {
+        // Em dash (—) is 3 bytes in UTF-8 — embed it in a long string to force truncation
+        let prefix = "a".repeat(250);
+        let dash = "—";
+        let input = format!("{} {} rest", prefix, dash);
+        let result = truncate_description(&input);
+        assert!(result.len() <= 220);
+        // The result should end with ellipsis or be the short string
+        if result.len() < input.len() {
+            assert!(
+                result.ends_with('…'),
+                "truncated result should end with ellipsis, got: {:?}",
+                result
+            );
+        }
+    }
+
+    #[test]
+    fn truncation_short_string_unchanged() {
+        let short = "Hello world";
+        let result = truncate_description(short);
+        assert_eq!(result, short);
+    }
+
+    // ── URL normalization tests ──
+
+    #[test]
+    fn url_normalization_accepts_https() {
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md.git"),
+            "github.com/voltagent/awesome-design-md"
+        );
+    }
+
+    #[test]
+    fn url_normalization_accepts_https_no_dot_git() {
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md"),
+            "github.com/voltagent/awesome-design-md"
+        );
+    }
+
+    #[test]
+    fn url_normalization_accepts_git_at() {
+        assert_eq!(
+            normalize_git_url("git@github.com:VoltAgent/awesome-design-md.git"),
+            "github.com/voltagent/awesome-design-md"
+        );
+    }
+
+    #[test]
+    fn url_normalization_accepts_ssh() {
+        assert_eq!(
+            normalize_git_url("ssh://git@github.com/VoltAgent/awesome-design-md.git"),
+            "github.com/voltagent/awesome-design-md"
+        );
+    }
+
+    #[test]
+    fn url_normalization_rejects_unrelated() {
+        let other = normalize_git_url("https://github.com/other/repo.git");
+        let expected = normalize_git_url(REPO_URL);
+        assert_ne!(other, expected, "unrelated repo should not match");
+    }
+
+    #[test]
+    fn url_normalization_handles_trailing_slash() {
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md/"),
+            "github.com/voltagent/awesome-design-md"
+        );
+        assert_eq!(
+            normalize_git_url("https://github.com/VoltAgent/awesome-design-md.git/"),
+            "github.com/voltagent/awesome-design-md"
+        );
     }
 
     // ── helper for testing read_design_md_entry without command wrapper ──

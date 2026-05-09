@@ -710,37 +710,6 @@ function App() {
     } catch (e) { setError(`Design MD status: ${e}`); }
   }, []);
 
-  const syncDesignMdCatalog = useCallback(async () => {
-    setDesignMdSyncRunning(true);
-    setDesignMdSyncResult(null);
-    try {
-      const result = await invoke<DesignMdSyncResult>("sync_design_md_catalog");
-      setDesignMdSyncResult(result);
-      if (result.success) {
-        // Reload status and entries
-        const status = await invoke<DesignMdCatalogStatus>("get_design_md_catalog_status");
-        setDesignMdCatalogStatus(status);
-        const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
-        setDesignMdEntries(entries);
-        // Auto-select first entry if none selected
-        if (entries.length > 0 && !activeDesignMdSlug) {
-          selectDesignMdEntry(entries[0].slug).catch(() => {});
-        }
-      }
-    } catch (e) { setError(`Sync catalog: ${e}`); }
-    finally { setDesignMdSyncRunning(false); }
-  }, [activeDesignMdSlug]);
-
-  const loadDesignMdEntries = useCallback(async () => {
-    try {
-      const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
-      setDesignMdEntries(entries);
-      if (entries.length > 0 && !activeDesignMdSlug) {
-        selectDesignMdEntry(entries[0].slug).catch(() => {});
-      }
-    } catch (e) { setError(`Design MD entries: ${e}`); }
-  }, [activeDesignMdSlug]);
-
   const selectDesignMdEntry = useCallback(async (slug: string) => {
     setActiveDesignMdSlug(slug);
     // Clear install plan/result when selection changes
@@ -751,6 +720,38 @@ function App() {
       setActiveDesignMdContent(content);
     } catch (e) { setError(`Read entry: ${e}`); }
   }, []);
+
+  const syncDesignMdCatalog = useCallback(async () => {
+    setDesignMdSyncRunning(true);
+    setDesignMdSyncResult(null);
+    // Clear install state on re-sync (entries may change)
+    setDesignMdInstallPlan(null);
+    setDesignMdInstallResult(null);
+    try {
+      const result = await invoke<DesignMdSyncResult>("sync_design_md_catalog");
+      setDesignMdSyncResult(result);
+      if (result.success) {
+        const status = await invoke<DesignMdCatalogStatus>("get_design_md_catalog_status");
+        setDesignMdCatalogStatus(status);
+        const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
+        setDesignMdEntries(entries);
+        if (entries.length > 0 && !activeDesignMdSlug) {
+          selectDesignMdEntry(entries[0].slug).catch(() => {});
+        }
+      }
+    } catch (e) { setError(`Sync catalog: ${e}`); }
+    finally { setDesignMdSyncRunning(false); }
+  }, [activeDesignMdSlug, selectDesignMdEntry]);
+
+  const loadDesignMdEntries = useCallback(async () => {
+    try {
+      const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
+      setDesignMdEntries(entries);
+      if (entries.length > 0 && !activeDesignMdSlug) {
+        selectDesignMdEntry(entries[0].slug).catch(() => {});
+      }
+    } catch (e) { setError(`Design MD entries: ${e}`); }
+  }, [activeDesignMdSlug, selectDesignMdEntry]);
 
   const chooseDesignMdInstallTarget = useCallback(async () => {
     try {

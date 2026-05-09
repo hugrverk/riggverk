@@ -421,6 +421,7 @@ function DesignMdSidebarInner({
   onSearch,
   syncRunning,
   onSync,
+  syncResult,
 }: {
   catalogStatus: DesignMdCatalogStatus | null;
   entries: DesignMdEntry[];
@@ -430,6 +431,7 @@ function DesignMdSidebarInner({
   onSearch: (v: string) => void;
   syncRunning: boolean;
   onSync: () => void;
+  syncResult: DesignMdSyncResult | null;
 }) {
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
@@ -449,10 +451,9 @@ function DesignMdSidebarInner({
       <div className="lib-sidebar-search">
         {notSynced ? (
           <button
-            className="btn btn-primary btn-sm"
+            className="btn btn-primary btn-sm design-md-sync-wide"
             onClick={onSync}
             disabled={syncRunning}
-            style={{ width: "100%" }}
           >
             {syncRunning ? "syncing..." : "sync catalog"}
           </button>
@@ -481,6 +482,25 @@ function DesignMdSidebarInner({
           </>
         )}
       </div>
+      {syncResult && (
+        <div className={`design-md-sync-result ${syncResult.success ? "design-md-sync-result-ok" : "design-md-sync-result-fail"}`}>
+          <span className="design-md-sync-result-key">sync</span>
+          <span className="design-md-sync-result-val">{syncResult.action}</span>
+          <span className="design-md-sync-result-key">entries</span>
+          <span className="design-md-sync-result-val">{syncResult.entry_count}</span>
+          {syncResult.current_commit && (
+            <>
+              <span className="design-md-sync-result-key">commit</span>
+              <span className="design-md-sync-result-val">{syncResult.current_commit.slice(0, 7)}</span>
+            </>
+          )}
+          {!syncResult.success && syncResult.stderr && (
+            <span className="design-md-sync-stderr">
+              {syncResult.stderr.slice(0, 120)}
+            </span>
+          )}
+        </div>
+      )}
       {notSynced ? (
         <div className="lib-sidebar-empty">Catalog not synced</div>
       ) : filtered.length === 0 ? (
@@ -601,7 +621,7 @@ export function LibraryView(props: LibraryViewProps) {
     activeDesignMdContent,
     designMdSearch,
     onSetDesignMdSearch,
-    designMdSyncResult: _designMdSyncResult,
+    designMdSyncResult,
     designMdSyncRunning,
     onSyncDesignMdCatalog,
     onSelectDesignMdEntry,
@@ -721,7 +741,7 @@ export function LibraryView(props: LibraryViewProps) {
   } else if (sourceType === "designMd" && !designMdCatalogStatus?.exists) {
     // Catalog not synced — show prompt
     mainContent = (
-      <div className="lib-main-empty" style={{ flexDirection: "column", gap: "10px", alignItems: "flex-start" }}>
+      <div className="lib-main-empty design-md-empty-stack">
         <span><span className="log-prompt">$</span> Design MD catalog not synced</span>
         <button
           className="btn btn-primary btn-sm"
@@ -784,6 +804,7 @@ export function LibraryView(props: LibraryViewProps) {
             onSearch={onSetDesignMdSearch}
             syncRunning={designMdSyncRunning}
             onSync={onSyncDesignMdCatalog}
+            syncResult={designMdSyncResult}
           />
         );
       default:

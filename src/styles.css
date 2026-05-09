@@ -4878,3 +4878,69 @@ html, body, #root {
 .design-md-install-result-fail {
   border-color: rgba(248, 113, 113, 0.25);
 }
+
+/* ── Design MD sidebar extras ── */
+
+.design-md-sync-wide {
+  width: 100%;
+}
+
+.design-md-empty-stack {
+  flex-direction: column;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.design-md-sync-result {
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+  font-size: 10px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: baseline;
+}
+
+.design-md-sync-result-ok {
+  color: var(--accent);
+}
+
+.design-md-sync-result-fail {
+  color: var(--fail);
+}
+
+.design-md-sync-result-key {
+  color: var(--text-muted);
+  opacity: 0.55;
+  flex-shrink: 0;
+}
+
+.design-md-sync-result-val {
+  color: var(--text);
+  font-family: var(--font);
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-md-sync-stderr {
+  width: 100%;
+  font-size: 9px;
+  color: var(--fail);
+  opacity: 0.75;
+  line-height: 1.3;
+  font-family: var(--font);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Design MD install UX extras ── */
+
+.design-md-install-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.5;
+  padding-top: 2px;
+}
