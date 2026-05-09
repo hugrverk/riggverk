@@ -3,6 +3,7 @@ mod backups;
 mod content;
 mod contract;
 mod defaults;
+mod design_md;
 mod opencode_runtime;
 mod process;
 mod settings_commands;
@@ -20,6 +21,10 @@ pub use content::{
 };
 pub use contract::validate_workspace_contract;
 pub use defaults::get_default_workspace_summary;
+pub use design_md::{
+    get_design_md_catalog_status, list_design_md_entries, read_design_md_entry,
+    sync_design_md_catalog,
+};
 pub use opencode_runtime::get_opencode_runtime_health;
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,

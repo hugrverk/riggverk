@@ -212,3 +212,38 @@ export interface OpenCodeRuntimeHealth {
   agent_mismatches: OpenCodeAgentMismatch[];
   warnings: string[];
 }
+
+export interface DesignMdCatalogStatus {
+  exists: boolean;
+  repo_url: string;
+  branch: string;
+  cache_path: string;
+  current_commit: string | null;
+  entry_count: number;
+  last_error: string | null;
+}
+
+export interface DesignMdEntry {
+  slug: string;
+  title: string;
+  description: string;
+  path: string;
+}
+
+export interface DesignMdContent {
+  slug: string;
+  title: string;
+  description: string;
+  path: string;
+  content: string;
+}
+
+export interface DesignMdSyncResult {
+  success: boolean;
+  action: string;
+  cache_path: string;
+  current_commit: string | null;
+  entry_count: number;
+  stdout: string;
+  stderr: string;
+}
