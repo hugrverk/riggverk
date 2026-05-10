@@ -57,9 +57,10 @@ export function DesignMdGeneratedPreview({ activeContent }: Props) {
   );
 
   return (
-    <div className="design-md-generated">
-      {/* Header */}
-      <div className="design-md-generated-header">
+      <div className="design-md-generated">
+        <div className="design-md-generated-note">Generated from DESIGN.md</div>
+        {/* Header */}
+        <div className="design-md-generated-header">
         <h2 className="design-md-gen-title">{model.title || model.slug}</h2>
         {model.description && (
           <p className="design-md-gen-desc">{model.description}</p>

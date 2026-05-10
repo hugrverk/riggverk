@@ -5277,6 +5277,20 @@ html, body, #root {
 
 /* ── Design MD generated preview ── */
 
+.design-md-preview-body {
+  flex: 1;
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.design-md-generated-note {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.35;
+  text-align: right;
+  margin-bottom: 12px;
+}
+
 .design-md-generated {
   padding: 16px;
   overflow-y: auto;

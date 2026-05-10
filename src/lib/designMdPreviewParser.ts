@@ -26,70 +26,153 @@ export interface DesignMdPreviewModel {
   guardrailDonts: string[];
 }
 
-/** Parse a raw YAML value: strip quotes, trim. */
-function parseYamlValue(raw: string): string {
-  let v = raw.trim();
-  if ((v.startsWith('"') && v.endsWith('"')) || (v.startsWith("'") && v.endsWith("'"))) {
-    v = v.slice(1, -1);
+type YValue = string | YMap;
+type YMap = Map<string, YValue>;
+
+// ── nested YAML parser ──
+
+function stripQuotes(s: string): string {
+  const t = s.trim();
+  if ((t.startsWith('"') && t.endsWith('"')) || (t.startsWith("'") && t.endsWith("'"))) {
+    return t.slice(1, -1);
   }
-  return v;
+  return t;
 }
 
-/** Parse the YAML frontmatter from DESIGN.md content into a flat key-value map. */
-export function parseFlatFrontmatter(content: string): Map<string, string> {
-  const map = new Map<string, string>();
-  const trimmed = content.trimStart();
-  if (!trimmed.startsWith("---")) return map;
+const BLOCK_INDICATORS = new Set(["|", "|-", ">", ">-"]);
 
-  const afterOpen = trimmed.slice(3).trimStart().replace(/^\n+/, "");
-  const closingIdx = afterOpen.indexOf("\n---");
-  const fmBody = closingIdx === -1 ? afterOpen : afterOpen.slice(0, closingIdx);
-
-  let currentKey: string | null = null;
+/**
+ * Parse a simple subset of YAML frontmatter into a nested Map.
+ * Handles scalars, nested objects, block scalars, quoted values.
+ * No arrays, no anchors, no tags. Never throws.
+ */
+function parseYamlBody(lines: string[]): YMap {
+  const root: YMap = new Map();
+  const stack: { prefix: string[]; map: YMap }[] = [{ prefix: [], map: root }];
+  let blockKey: string | null = null;
   let blockLines: string[] = [];
+  let blockIndent = 0;
 
-  for (const line of fmBody.split("\n")) {
-    const trimmedLine = line.trim();
-    if (trimmedLine.length === 0) {
-      if (currentKey !== null && blockLines.length > 0) {
-        map.set(currentKey, blockLines.join(" "));
+  for (const rawLine of lines) {
+    const content = rawLine.trimEnd();
+    if (content.trim().length === 0) {
+      if (blockKey !== null && blockLines.length > 0) {
+        setAt(root, stack, blockKey, blockLines.join(" "));
       }
-      currentKey = null;
+      blockKey = null;
       blockLines = [];
       continue;
     }
 
-    // Check for block scalar indicator (value is | or >)
-    const colonIdx = trimmedLine.indexOf(":");
-    if (colonIdx !== -1 && !line.startsWith(" ") && !line.startsWith("\t")) {
-      // New key-value pair
-      if (currentKey !== null && blockLines.length > 0) {
-        map.set(currentKey, blockLines.join(" "));
+    if (blockKey !== null) {
+      const indent = rawLine.length - rawLine.trimStart().length;
+      if (indent >= blockIndent) {
+        blockLines.push(content.trim());
+        continue;
       }
-      const key = trimmedLine.slice(0, colonIdx).trim();
-      const rawVal = trimmedLine.slice(colonIdx + 1).trim();
-      if (rawVal === "|" || rawVal === "|-" || rawVal === ">" || rawVal === ">-") {
-        currentKey = key;
+      // Indent decreased — end block scalar
+      setAt(root, stack, blockKey, blockLines.join(" "));
+      blockKey = null;
+      blockLines = [];
+    }
+
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const trimmed = content.trim();
+    const commentIdx = trimmed.indexOf(" #");
+    const cleanLine = commentIdx !== -1 ? trimmed.slice(0, commentIdx).trimEnd() : trimmed;
+    if (cleanLine.length === 0) continue;
+
+    const colonIdx = cleanLine.indexOf(":");
+    if (colonIdx === -1) continue;
+
+    const key = cleanLine.slice(0, colonIdx).trim();
+    const rawVal = cleanLine.slice(colonIdx + 1).trim();
+
+    // Pop stack to correct indentation level
+    while (stack.length > 1 && indent <= stack[stack.length - 1].prefix.length * 2) {
+      stack.pop();
+    }
+
+    if (rawVal.length === 0 || BLOCK_INDICATORS.has(rawVal)) {
+      // Nested object or block scalar
+      if (BLOCK_INDICATORS.has(rawVal)) {
+        blockKey = key;
         blockLines = [];
+        blockIndent = indent + 2;
       } else {
-        map.set(key, parseYamlValue(rawVal));
-        currentKey = null;
-        blockLines = [];
+        // Nested object — push stack and recurse on subsequent indented lines
+        const childMap: YMap = new Map();
+        setAt(root, stack, key, childMap);
+        stack.push({ prefix: [...stack[stack.length - 1].prefix, key], map: childMap });
       }
-    } else if (currentKey !== null) {
-      // Continuation of block scalar
-      blockLines.push(trimmedLine);
+    } else {
+      setAt(root, stack, key, stripQuotes(rawVal));
     }
   }
 
-  if (currentKey !== null && blockLines.length > 0) {
-    map.set(currentKey, blockLines.join(" "));
+  if (blockKey !== null && blockLines.length > 0) {
+    setAt(root, stack, blockKey, blockLines.join(" "));
   }
 
-  return map;
+  return root;
 }
 
-/** Extract nested keys like colors.primary, typography.font-size-base from a flat map. */
+function setAt(root: YMap, stack: { prefix: string[]; map: YMap }[], key: string, value: YValue) {
+  let current = root;
+  // Walk the prefix path to the right nesting level
+  for (const frame of stack) {
+    if (frame === stack[0]) continue; // skip root frame
+    for (const seg of frame.prefix) {
+      const next = current.get(seg);
+      if (next instanceof Map) {
+        current = next;
+      } else {
+        const m = new Map();
+        current.set(seg, m);
+        current = m;
+      }
+    }
+  }
+  // Now at the stack top's map
+  const top = stack[stack.length - 1].map;
+  top.set(key, value);
+}
+
+// ── flatten nested YAML to dot-path map ──
+
+function flattenMap(map: YMap, prefix = ""): Map<string, string> {
+  const result = new Map<string, string>();
+  for (const [key, value] of map) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (value instanceof Map) {
+      const sub = flattenMap(value, path);
+      for (const [k, v] of sub) result.set(k, v);
+    } else {
+      result.set(path, value);
+    }
+  }
+  return result;
+}
+
+/** Parse the YAML frontmatter from DESIGN.md into a flat dot-path key-value map. */
+function parseNestedFrontmatter(content: string): Map<string, string> {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("---")) return new Map();
+
+  const afterOpen = trimmed.slice(3).trimStart().replace(/^\n+/, "");
+  const closingIdx = afterOpen.indexOf("\n---");
+  const fmStr = closingIdx === -1 ? afterOpen : afterOpen.slice(0, closingIdx);
+
+  const lines = fmStr.split("\n");
+  const yaml = parseYamlBody(lines);
+  return flattenMap(yaml);
+}
+
+// legacy alias for GeneratedPreview
+export const parseFlatFrontmatter = parseNestedFrontmatter;
+
+// ── token extraction (dot-path aware) ──
+
 function extractNested(map: Map<string, string>, prefix: string): DesignMdColorToken[] {
   const tokens: DesignMdColorToken[] = [];
   const dot = prefix + ".";
@@ -101,29 +184,23 @@ function extractNested(map: Map<string, string>, prefix: string): DesignMdColorT
   return tokens;
 }
 
-function extractTypoTokens(map: Map<string, string>, prefix: string): DesignMdTypographyToken[] {
-  const tokens: DesignMdTypographyToken[] = [];
-  const dot = prefix + ".";
-  for (const [key, value] of map) {
-    if (key.startsWith(dot)) {
-      tokens.push({ key: key.slice(dot.length), value });
-    }
-  }
-  return tokens;
+// ── token reference resolution ──
+
+/** Resolve {token.path} references against the flat map. Returns resolved string or original. */
+function resolveRefs(value: string, map: Map<string, string>): string {
+  return value.replace(/\{([^}]+)\}/g, (_, key: string) => {
+    const resolved = map.get(key.trim());
+    return resolved ?? `{${key}}`;
+  });
 }
 
-function extractComponentTokens(map: Map<string, string>, prefix: string): DesignMdComponentToken[] {
-  const tokens: DesignMdComponentToken[] = [];
-  const dot = prefix + ".";
-  for (const [key, value] of map) {
-    if (key.startsWith(dot)) {
-      tokens.push({ key: key.slice(dot.length), value });
-    }
-  }
-  return tokens;
+/** Resolve all token values' references. */
+function resolveTokens(tokens: { key: string; value: string }[], map: Map<string, string>): { key: string; value: string }[] {
+  return tokens.map(t => ({ ...t, value: resolveRefs(t.value, map) }));
 }
 
-/** Extract the first meaningful paragraph from markdown body after a heading match. */
+// ── markdown body extraction ──
+
 function extractSection(body: string, heading: string): string | null {
   const re = new RegExp(`^#{1,3}\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im");
   const match = body.match(re);
@@ -146,6 +223,8 @@ function extractListItems(body: string, heading: string): string[] {
     .slice(0, 10);
 }
 
+// ── main parse entry ──
+
 export function parseDesignMdForPreview(
   slug: string,
   title: string,
@@ -155,11 +234,11 @@ export function parseDesignMdForPreview(
   const fmBodyStart = content.indexOf("---", 3);
   const body = fmBodyStart === -1 ? "" : content.slice(fmBodyStart + 3);
 
-  const fm = parseFlatFrontmatter(content);
+  const fm = parseNestedFrontmatter(content);
 
-  const colors = extractNested(fm, "colors");
-  const typography = extractTypoTokens(fm, "typography");
-  const components = extractComponentTokens(fm, "components");
+  const colors = resolveTokens(extractNested(fm, "colors"), fm);
+  const typography = resolveTokens(extractNested(fm, "typography"), fm);
+  const components = resolveTokens(extractNested(fm, "components"), fm);
   const overviewText = extractSection(body, "Overview");
   const layoutText = extractSection(body, "Layout");
   const guardrailDos = extractListItems(body, "Do");
@@ -179,7 +258,8 @@ export function parseDesignMdForPreview(
   };
 }
 
-/** Return true if a color value is a valid hex or rgb/rgba string. */
+// ── sanitization helpers ──
+
 function isSafeColor(val: string): boolean {
   return /^#[0-9a-fA-F]{3,8}$/.test(val) || /^rgba?\s*\([^)]+\)$/.test(val) || /^hsl/.test(val);
 }
@@ -194,13 +274,11 @@ function isSafeFontFamily(val: string): string | null {
   return clean;
 }
 
-/** Build sanitized style object for a color value. Returns null if unsafe. */
 export function safeColorStyle(val: string): Record<string, string> | null {
   if (isSafeColor(val)) return { backgroundColor: val };
   return null;
 }
 
-/** Build sanitized style object for typography values. */
 export function safeTypoStyle(
   fontSize: string | undefined,
   fontWeight: string | undefined,
@@ -220,26 +298,21 @@ export function safeTypoStyle(
 
 export function safeButtonStyle(fm: Map<string, string>): Record<string, string> {
   const style: Record<string, string> = {};
-  const bg = fm.get("components.button-background");
-  const color = fm.get("components.button-text-color");
-  const radius = fm.get("components.button-border-radius");
-  const padding = fm.get("components.button-padding");
-  const fs = fm.get("components.button-font-size");
+  const bg = fm.get("components.button-primary.backgroundColor");
+  const color = fm.get("components.button-primary.textColor");
+  const radius = fm.get("components.button-primary.rounded");
   if (bg && isSafeColor(bg)) { style.backgroundColor = bg; style.borderColor = bg; }
   if (color && isSafeColor(color)) style.color = color;
   if (radius && isSafeSize(radius)) style.borderRadius = radius;
-  if (fs && isSafeSize(fs)) style.fontSize = fs;
-  if (padding) style.padding = padding;
   return style;
 }
 
 export function safeCardStyle(fm: Map<string, string>): Record<string, string> {
   const style: Record<string, string> = {};
-  const bg = fm.get("components.card-background");
-  const radius = fm.get("components.card-border-radius");
-  const pad = fm.get("components.card-padding");
+  const bg = fm.get("components.card.backgroundColor") || fm.get("components.card.background");
+  const radius = fm.get("components.card.borderRadius") || fm.get("components.card.rounded");
   if (bg && isSafeColor(bg)) style.backgroundColor = bg;
   if (radius && isSafeSize(radius)) style.borderRadius = radius;
-  if (pad) style.padding = pad;
   return style;
 }
+
