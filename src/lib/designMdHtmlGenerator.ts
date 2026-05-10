@@ -30,6 +30,7 @@ function boardFontContext(board: DesignMdBoard, raw: Record<string, string> = {}
     board.title,
     board.description,
     board.archetype,
+    board.fontSubstitutes,
     ...board.visualLanguage.phrases,
     ...board.visualLanguage.keywords,
     ...Object.values(raw),
@@ -103,6 +104,11 @@ function prioritizedComponentGroups(board: DesignMdBoard): DesignMdBoardComponen
     developer_docs: ["top-nav", "docs", "code", "command", "terminal", "link", "button", "input", "card"],
     collaboration_saas: ["hero", "mesh", "pill", "button", "input", "pricing", "feature", "card", "nav", "link"],
     editorial: ["campaign", "album", "playlist", "product", "hero", "article", "story", "quote", "card", "search", "button", "link", "nav"],
+    ai_product: ["prompt-input", "model-status", "output-panel", "agent-card", "code-panel", "stat", "button", "input", "nav", "card"],
+    creative_tool: ["canvas", "editor", "component-panel", "property-panel", "toolbar", "frame", "button", "input", "card", "nav"],
+    payment_finance: ["payment-card", "transaction-row", "spend-summary", "brand-strip", "card", "button", "stat", "badge", "nav"],
+    music_campaign: ["campaign-tile", "playlist-card", "album-card", "hero", "now-playing", "search", "button", "card", "nav"],
+    terminal_tool: ["terminal-panel", "code-panel", "command-palette", "split-pane", "command-chip", "button", "input", "nav"],
     generic_system: ["nav", "button", "card", "tile", "input", "chip", "link"],
   };
   const rank = (group: DesignMdBoardComponentGroup) => {
@@ -276,6 +282,7 @@ export function generateSpecimenHtml(spec: DesignMdSpecimen): string {
     archetype: "generic_system",
     overview: spec.overview,
     layout: null,
+    fontSubstitutes: "",
   }, { variant: "light" });
 }
 
@@ -308,6 +315,16 @@ function heroPattern(board: DesignMdBoard, colors: ReturnType<typeof deriveToken
       return dataHero(board, colors);
     case "editorial":
       return editorialHero(board, colors);
+    case "ai_product":
+      return aiProductHero(board, colors);
+    case "creative_tool":
+      return creativeToolHero(board, colors);
+    case "payment_finance":
+      return paymentFinanceHero(board, colors);
+    case "music_campaign":
+      return musicCampaignHero(board, colors);
+    case "terminal_tool":
+      return terminalToolHero(board, colors);
     default:
       return genericHero(board, colors);
   }
@@ -422,6 +439,96 @@ function genericHero(board: DesignMdBoard, colors: ReturnType<typeof deriveToken
     '</div></section>';
 }
 
+function aiProductHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const promptGroup = component(board, ["prompt-input", "ai-input", "model-input", "search-input", "input"]);
+  const outputGroup = component(board, ["output-panel", "generated-panel", "code-panel", "result-panel", "card"]);
+  const modelGroup = component(board, ["model-status-card", "model-card", "agent-card", "stat-card", "card"]);
+  const cta = component(board, ["button-primary", "button", "pill"]);
+  const promptStyle = componentColors(promptGroup, colors.surface, colors.text, colors);
+  const outputStyle = componentColors(outputGroup, colors.variant === "dark" ? colors.darkSurface : colors.canvas, colors.variant === "dark" ? colors.onDark : colors.text, colors);
+  const modelStyle = componentColors(modelGroup, colors.surface, colors.text, colors);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  const modelNames = board.componentGroups.filter((g) => /model|agent|status/i.test(g.name)).slice(0, 3);
+  return '<section class="hero hero-ai"><div class="ai-header"><div><span class="ai-kicker">AI Product</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Generate") + '</button></div>' +
+    '<div class="ai-interface"><div class="ai-prompt" style="background:' + promptStyle.bg + ';color:' + promptStyle.fg + ';border-radius:' + promptStyle.radius + '"><div class="ai-prompt-label">' + esc(promptGroup?.name ?? "Prompt") + '</div><div class="ai-prompt-bar">Describe what you want to create...</div></div>' +
+    '<div class="ai-outputs">' +
+    '<div class="ai-output-panel" style="background:' + outputStyle.bg + ';color:' + outputStyle.fg + ';border-radius:' + colors.radius + '"><div class="ai-output-placeholder">' + esc(outputGroup?.name ?? "Output Panel") + '</div><code>const result = await generate(input);</code></div>' +
+    '<div class="ai-model-cards">' +
+    (modelNames.length > 0
+      ? modelNames.map((group) => {
+          const ms = componentColors(group, colors.surface, colors.text, colors);
+          const active = board.componentGroups.indexOf(group) === 0;
+          return '<article class="ai-model-card" style="background:' + (active ? colors.primary : ms.bg) + ';color:' + (active ? colors.onPrimary : ms.fg) + ';border-radius:' + colors.radius + '"><b>' + esc(group.name) + '</b><span>' + (active ? 'Active' : 'Available') + '</span></article>';
+        }).join("")
+      : '<article class="ai-model-card" style="background:' + modelStyle.bg + ';color:' + modelStyle.fg + ';border-radius:' + colors.radius + '"><b>' + esc(modelGroup?.name ?? "Model Status") + '</b><span>Ready</span></article>') +
+    '</div></div></div></section>';
+}
+
+function creativeToolHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const canvasGroup = component(board, ["canvas", "editor", "workspace", "design-surface"]);
+  const panelGroups = ["component-panel", "property-panel", "toolbar", "inspector-panel"].map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
+  const frameGroup = component(board, ["frame", "artboard", "page"]);
+  const cta = component(board, ["button-primary", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  const canvasStyle = componentColors(canvasGroup ?? component(board, ["card"]), colors.canvas, colors.text, colors);
+  return '<section class="hero hero-creative"><div class="creative-toolbar" style="background:' + colors.surface + ';color:' + colors.text + '"><b>' + esc(board.title) + '</b><span>' + esc(component(board, ["toolbar", "tools"])?.name ?? "Toolbar") + '</span><button style="background:' + button.bg + ';color:' + button.fg + '">' + esc(cta?.name ?? "Publish") + '</button></div>' +
+    '<div class="creative-workspace"><div class="creative-sidebar" style="background:' + colors.surface + ';color:' + colors.muted + '"><b>Layers</b>' +
+    panelGroups.map((group) => '<span style="color:' + colors.text + '">' + esc(group.name) + '</span>').join("") +
+    '</div><div class="creative-canvas" style="background:' + canvasStyle.bg + ';color:' + canvasStyle.fg + ';border-radius:' + colors.radius + '"><div class="creative-frame" style="border:1px dashed ' + colors.border + '">' + esc(frameGroup?.name ?? "Canvas frame") + '</div></div><div class="creative-inspector" style="background:' + colors.surface + '">' +
+    (panelGroups.length > 0
+      ? panelGroups.map((group) => '<div><small style="color:' + colors.muted + '">Property</small><span style="color:' + colors.text + '">' + esc(group.name) + '</span></div>').join("")
+      : '<div><small style="color:' + colors.muted + '">Inspector</small><span style="color:' + colors.text + '">Select an element</span></div>') +
+    '</div></div></section>';
+}
+
+function paymentFinanceHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const cardGroup = component(board, ["payment-card", "credit-card", "card", "card-dark"]);
+  const rowGroups = ["transaction-row", "spend-row", "statement-row", "balance-row"].map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
+  const cta = component(board, ["button-primary", "button", "pill"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  const cardStyle = componentColors(cardGroup, colors.variant === "dark" ? colors.darkSurface : colors.surface, colors.variant === "dark" ? colors.onDark : colors.text, colors);
+  return '<section class="hero hero-payment"><div class="payment-brand" style="background:linear-gradient(135deg,' + colors.primary + ',' + mixHexColor(colors.primary, colors.darkSurface, 0.3) + ');color:' + colors.onPrimary + '"><div><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div><button style="background:' + colors.onPrimary + ';color:' + colors.primary + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Get Started") + '</button></div>' +
+    '<div class="payment-grid"><article class="payment-card" style="background:linear-gradient(135deg,' + colors.darkSurface + ',' + colors.primary + ');color:' + colors.onDark + ';border-radius:' + colors.radius + '"><small>' + esc(board.title) + '</small><b>•••• •••• •••• 4242</b><div><span>' + esc(cardGroup?.name ?? "Payment Card") + '</span><span>12/28</span></div></article>' +
+    '<div class="payment-transactions" style="background:' + cardStyle.bg + ';color:' + cardStyle.fg + ';border-radius:' + colors.radius + '"><b>Recent</b>' +
+    (rowGroups.length > 0
+      ? rowGroups.map((group, i) => '<div class="payment-row"><span>' + esc(group.name) + '</span><strong>' + ["$42.50", "$128.00", "$9.99"][i] + '</strong></div>').join("")
+      : ['<div class="payment-row"><span>Coffee Shop</span><strong>$4.50</strong></div>', '<div class="payment-row"><span>Subscription</span><strong>$12.99</strong></div>', '<div class="payment-row"><span>Transfer</span><strong>$250.00</strong></div>'].join("")) +
+    '</div></div></section>';
+}
+
+function musicCampaignHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const campaignBg = isDark ? colors.darkCanvas : colors.canvas;
+  const tileBg = isDark ? colors.darkSurface : colors.surface;
+  const tileFg = isDark ? colors.onDark : colors.text;
+  const campaignGroups = ["campaign-tile", "hero-band", "playlist-card", "album-card", "card"].map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
+  const card = componentColors(campaignGroups[0] ?? component(board, ["card"]), tileBg, tileFg, colors);
+  const cta = component(board, ["button-primary", "pill-button", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  const musicKeywords = board.visualLanguage.keywords.filter((k) => /music|playlist|album|track|audio|sound|player/.test(k)).slice(0, 2);
+  return '<section class="hero hero-music" style="background:' + campaignBg + '"><div class="music-copy"><span class="music-kicker">' + (musicKeywords[0] ?? "Music Campaign") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Listen Now") + '</button></div>' +
+    '<div class="music-grid">' +
+    [0, 1, 2].map((i) => {
+      const tileColors = i === 0 ? { bg: colors.primary, fg: colors.onPrimary } : card;
+      return '<article class="music-tile" style="background:' + tileColors.bg + ';color:' + tileColors.fg + ';border-radius:' + colors.radius + '"><div class="music-art m' + i + '"></div><b>' + esc(campaignGroups[i]?.name ?? ["Campaign Tile", "Playlist", "Album"][i]) + '</b><span>' + (i === 0 ? 'Featured' : 'New release') + '</span></article>';
+    }).join("") +
+    '</div></section>';
+}
+
+function terminalToolHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const terminalBg = colors.variant === "dark" ? "#0a0a0a" : colors.darkCanvas;
+  const terminalFg = colors.onDark;
+  const terminalGroup = component(board, ["terminal-panel", "terminal", "command-palette", "code-panel"]);
+  const chipGroup = component(board, ["command-chip", "chip", "badge"]);
+  const chipStyle = componentColors(chipGroup, colors.surface, colors.text, colors);
+  return '<section class="hero hero-terminal"><div class="terminal-header" style="background:' + colors.surface + ';color:' + colors.text + '"><b>' + esc(board.title) + '</b><span>' + esc(board.visualLanguage.keywords[0] ?? "Terminal") + '</span></div>' +
+    '<div class="terminal-body" style="background:' + terminalBg + ';color:' + terminalFg + '"><div class="terminal-prompt"><span class="terminal-prefix">❯</span><span>' + esc(terminalGroup?.name ?? "terminal") + '</span></div>' +
+    '<div class="terminal-output"><pre>status:  ready\nversion: 2.4.1\nmode:    ' + esc(board.archetype) + '</pre></div>' +
+    '<div class="terminal-chips">' +
+    [0, 1, 2].map((i) => '<span style="background:' + chipStyle.bg + ';color:' + chipStyle.fg + ';border-color:' + chipStyle.border + '">' + esc(["⌘K", "⌘P", "⌘⇧P"][i]) + '</span>').join("") +
+    '</div></div></section>';
+}
+
 function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "light") {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
   const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
@@ -431,15 +538,38 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
   const lightCanvas = tokenColor(allColors, ["canvas-light", "white", "background-light", "background", "canvas", "surface-light"], paletteLight);
   const darkCanvas = tokenColor(allColors, ["canvas-dark", "background-dark", "surface-black", "black", "darkSurface", "dark-surface"], fallbackDarkCanvas);
   const lightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "white", "surface-card", "surface-soft", "surface", "card"], "#f5f5f5");
-  const darkSurfaceMatches = board.archetype === "collaboration_saas"
-    ? ["surface-aubergine", "aubergine", "surface-dark", "surface-card-dark", "elevated-dark", "surface-black", "black"]
-    : ["surface-dark", "surface-card-dark", "surface-black", "black", "surface-aubergine", "darkSurface", "dark-surface", "elevated-dark", "card-dark"];
-  const darkSurface = tokenColor(allColors, darkSurfaceMatches, fallbackDarkSurface);
+
+  // Dark surface preferences vary by archetype for intentional dark feels
+  const darkSurfaceMatches: Record<DesignMdBoard["archetype"] | "default", string[]> = {
+    marketplace: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    product_gallery: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    finance_dashboard: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    developer_docs: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    data_product: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    generic_system: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark", "surface-aubergine"],
+    collaboration_saas: ["surface-aubergine", "aubergine", "surface-dark", "surface-card-dark", "elevated-dark", "surface-black", "black"],
+    ai_product: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
+    terminal_tool: ["surface-black", "black", "surface-dark", "surface-card-dark", "elevated-dark"],
+    music_campaign: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark", "surface-aubergine"],
+    payment_finance: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    luxury_automotive: ["surface-black", "black", "surface-dark", "surface-card-dark", "elevated-dark"],
+    editorial: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
+    creative_tool: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    default: ["surface-dark", "surface-card-dark", "surface-black", "black", "surface-aubergine", "darkSurface", "dark-surface", "elevated-dark", "card-dark"],
+  };
+  const darkSurface = tokenColor(allColors, darkSurfaceMatches[board.archetype] ?? darkSurfaceMatches.default, fallbackDarkSurface);
+
   const lightText = ensureReadable(tokenColor(allColors, ["ink", "body-on-light", "text-on-light", "text", "body", "black"], "#181818"), lightCanvas, "#181818");
   const muted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#6f7480"), lightCanvas, "#6f7480");
-  const darkMuted = ensureReadable(tokenColor(allColors, ["on-dark-muted", "on-aubergine-muted", "on-aubergine-mute", "muted-on-dark", "body-on-dark-muted", "muted"], "#a7adb8"), darkCanvas, "#a7adb8");
+
+  // Dark muted with better fallback for code/terminal archetypes
+  const darkMutedFallback = board.archetype === "terminal_tool" || board.archetype === "ai_product"
+    ? "#8b949e"
+    : "#a7adb8";
+  const darkMuted = ensureReadable(tokenColor(allColors, ["on-dark-muted", "on-aubergine-muted", "on-aubergine-mute", "muted-on-dark", "body-on-dark-muted", "muted"], darkMutedFallback), darkCanvas, darkMutedFallback);
+
   const lightBorder = tokenColor(allColors, ["hairline", "border", "divider"], "#e5e5e5");
-  const darkBorder = tokenColor(allColors, ["hairline-dark", "border-dark", "divider-dark", "surface-border-dark", "hairline", "border"], mixHexColor(darkSurface, "#ffffff", 0.16) ?? "#30363d");
+  const darkBorder = tokenColor(allColors, ["hairline-dark", "border-dark", "divider-dark", "surface-border-dark", "hairline", "border"], mixHexColor(darkSurface, "#ffffff", 0.12) ?? "#30363d");
   const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "yellow"], "#0066cc");
   const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
   const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "on-black", "on-aubergine", "body-on-dark"], "#f8fafc"), darkCanvas, "#f8fafc");
@@ -464,6 +594,7 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
       return '<button class="sample sample-button" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + ';padding:' + style.padding + '">' + name + '</button>';
     case "search":
     case "input":
+    case "prompt-input":
       return '<div class="sample sample-input" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><span>' + name + '</span><i></i></div>';
     case "chip":
     case "badge":
@@ -479,6 +610,20 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
       return '<div class="sample sample-gradient" style="background:linear-gradient(135deg,' + style.bg + ',' + colors.primary + ');color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>hero surface</span></div>';
     case "mockup":
       return '<div class="sample sample-mockup" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>const preview = local;</code><span></span><span></span></div>';
+    case "code-panel":
+      return '<div class="sample sample-code" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>export function Example() {}</code></div>';
+    case "terminal-panel":
+      return '<div class="sample sample-terminal" style="background:' + colors.darkCanvas + ';color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>❯ npm run build</code></div>';
+    case "workflow-step":
+      return '<div class="sample sample-workflow" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>→</span></div>';
+    case "editorial-card":
+    case "article-card":
+    case "media-card":
+      return '<div class="sample sample-editorial" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><div class="sample-editorial-img"></div><b>' + name + '</b><small>By Author · 5 min read</small></div>';
+    case "payment-card":
+      return '<div class="sample sample-payment" style="background:linear-gradient(135deg,' + colors.darkSurface + ',' + colors.primary + ');color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>•••• 4242</span></div>';
+    case "market-table":
+      return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>BTC</i><strong style="color:' + colors.up + '">+2.4%</strong></span><span><i>ETH</i><strong style="color:' + colors.down + '">-0.8%</strong></span></div>';
     case "stat":
     case "stat-card":
       return '<div class="sample sample-stat" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + name + '</small><b>98.7%</b><span style="color:' + colors.primary + '">+12.4%</span></div>';
@@ -489,7 +634,7 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
     case "link":
       return '<a class="sample sample-link" style="color:' + style.fg + '">' + name + '</a>';
     case "quote":
-      return '<blockquote class="sample sample-card" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '">“' + name + '”</blockquote>';
+      return '<blockquote class="sample sample-card" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '">"' + name + '"</blockquote>';
     case "footer":
       return '<div class="sample sample-footer" style="background:' + style.bg + ';color:' + style.fg + '">' + name + '</div>';
     case "card":
@@ -613,10 +758,16 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero-data{display:grid;grid-template-columns:220px 1fr;background:" + colors.darkCanvas + ";color:" + colors.onDark + "}.data-sidebar{display:flex;flex-direction:column;gap:14px;border-right:1px solid " + colors.darkSurface + ";padding:22px}.data-main{display:grid;grid-template-columns:1.3fr .8fr;gap:16px;padding:24px}.chart-card,.data-table{background:" + colors.darkSurface + ";border-radius:" + colors.radius + ";padding:22px}.bars{display:flex;align-items:end;gap:10px;height:160px;margin-top:28px}.bars i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.bars i:nth-child(1){height:32%}.bars i:nth-child(2){height:68%}.bars i:nth-child(3){height:48%}.bars i:nth-child(4){height:86%}.bars i:nth-child(5){height:58%}.data-table div{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid " + colors.border + "}",
     ".hero-editorial{display:grid;grid-template-columns:.85fr 1.15fr;gap:18px;align-items:stretch;background:" + colors.canvas + "}.editorial-copy{display:flex;flex-direction:column;justify-content:center;gap:14px}.editorial-copy span{font-size:" + caption.size + ";letter-spacing:.12em;text-transform:uppercase;color:" + colors.muted + ";font-weight:700}.editorial-copy p{color:" + colors.muted + ";max-width:620px}.editorial-copy div{display:flex;gap:10px;flex-wrap:wrap}.editorial-copy button{padding:12px 20px}.campaign-grid{display:grid;grid-template-columns:1.2fr .8fr;grid-template-rows:1fr 1fr;gap:12px}.campaign-grid article{padding:14px;display:flex;flex-direction:column;gap:8px;min-height:132px;overflow:hidden}.campaign-grid article:first-child{grid-row:span 2}.campaign-grid span{color:" + colors.muted + ";font-size:" + caption.size + "}.campaign-art{flex:1;min-height:72px;background:linear-gradient(135deg," + colors.primary + "," + colors.surface + ");border-radius:inherit}.campaign-art.c1{background:linear-gradient(135deg," + colors.surface + "," + colors.border + ")}.campaign-art.c2{background:linear-gradient(135deg," + colors.darkSurface + "," + colors.primary + ")}",
     ".hero-generic{display:grid;grid-template-columns:.9fr 1.1fr;align-items:center;background:" + colors.surface + "}.hero-generic p{color:" + colors.muted + ";max-width:560px;margin-top:12px}.generic-board{display:grid;grid-template-columns:1fr 1fr;gap:12px}",
+    ".hero-ai{display:flex;flex-direction:column;gap:18px;padding:28px;background:" + colors.canvas + "}.ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.ai-header button{padding:12px 24px}.ai-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";text-transform:uppercase;letter-spacing:.08em;font-weight:700}.ai-interface{display:grid;grid-template-columns:1fr;gap:16px}.ai-prompt{border:1px solid " + colors.border + ";padding:16px}.ai-prompt-label{font-size:" + caption.size + ";color:" + colors.muted + ";margin-bottom:8px}.ai-prompt-bar{font-size:" + body.size + ";opacity:.6}.ai-outputs{display:grid;grid-template-columns:1.3fr .8fr;gap:16px}.ai-output-panel{padding:18px;border:1px solid " + colors.border + "}.ai-output-panel code{display:block;margin-top:12px;padding:10px;border-radius:6px;background:" + colors.darkSurface + ";color:" + colors.onDark + ";white-space:pre-wrap}.ai-output-placeholder{color:" + colors.muted + ";margin-bottom:8px}.ai-model-cards{display:grid;gap:10px}.ai-model-card{padding:14px;display:flex;flex-direction:column;gap:4px}.ai-model-card span{font-size:" + caption.size + ";opacity:.7}",
+    ".hero-creative{display:flex;flex-direction:column;gap:0}.creative-toolbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid " + colors.border + "}.creative-toolbar b{color:" + colors.primary + "}.creative-toolbar button{margin-left:auto;padding:8px 16px}.creative-workspace{display:grid;grid-template-columns:160px 1fr 180px;gap:0;min-height:280px}.creative-sidebar,.creative-inspector{padding:14px;display:flex;flex-direction:column;gap:10px}.creative-sidebar{border-right:1px solid " + colors.border + "}.creative-inspector{border-left:1px solid " + colors.border + "}.creative-inspector small,.creative-inspector span{display:block}.creative-canvas{display:grid;place-items:center;padding:24px}.creative-frame{width:80%;height:70%;display:grid;place-items:center;font-size:" + caption.size + "}",
+    ".hero-payment{display:flex;flex-direction:column;gap:0}.payment-brand{display:flex;align-items:center;justify-content:space-between;padding:32px 28px}.payment-brand button{padding:12px 24px}.payment-brand p{max-width:520px;opacity:.85;margin-top:8px}.payment-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;padding:24px}.payment-card{padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 12px 40px rgba(0,0,0,.18)}.payment-card b{font-size:22px;letter-spacing:.06em;margin-top:auto}.payment-card div{display:flex;justify-content:space-between;font-size:" + caption.size + "}.payment-transactions{padding:18px;display:flex;flex-direction:column;gap:10px}.payment-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid " + colors.border + "}.payment-row:last-child{border-bottom:0}",
+    ".hero-music{display:grid;grid-template-columns:.8fr 1.2fr;align-items:center;gap:20px;padding:28px;min-height:320px}.music-copy{display:flex;flex-direction:column;gap:12px}.music-kicker{font-size:" + caption.size + ";text-transform:uppercase;letter-spacing:.12em;font-weight:700}.music-copy p{color:" + colors.muted + ";max-width:480px}.music-copy button{padding:12px 20px;align-self:flex-start}.music-grid{display:grid;grid-template-columns:1.3fr .8fr;grid-template-rows:1fr 1fr;gap:12px}.music-tile{padding:14px;display:flex;flex-direction:column;gap:6px;min-height:122px;overflow:hidden}.music-tile:first-child{grid-row:span 2}.music-tile span{font-size:" + caption.size + ";opacity:.65}.music-art{flex:1;min-height:56px;border-radius:8px;background:linear-gradient(135deg," + colors.primary + "," + colors.surface + ")}.music-art.m1{background:linear-gradient(135deg," + colors.surface + "," + colors.border + ")}.music-art.m2{background:linear-gradient(135deg," + colors.darkSurface + "," + colors.primary + ")}",
+    ".hero-terminal{display:flex;flex-direction:column;gap:0;min-height:280px}.terminal-header{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid " + colors.border + "}.terminal-body{padding:20px;flex:1;display:flex;flex-direction:column;gap:14px}.terminal-prompt{display:flex;gap:10px;align-items:center}.terminal-prefix{color:" + colors.primary + ";font-weight:700}.terminal-output pre{margin:0;font-family:monospace;opacity:.8;line-height:1.5}.terminal-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}.terminal-chips span{display:inline-flex;padding:5px 10px;border:1px solid rgba(255,255,255,.18);font-size:" + caption.size + "}",
+    ".sample-code,.sample-terminal,.sample-workflow,.sample-editorial,.sample-payment{padding:14px;border:1px solid " + colors.border + ";overflow:hidden}.sample-code code,.sample-terminal code{display:block;margin-top:8px;padding:8px;border-radius:5px;background:rgba(0,0,0,.15);font-family:monospace;font-size:" + caption.size + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-workflow{display:flex;justify-content:space-between;align-items:center}.sample-workflow span{font-size:20px;opacity:.4}.sample-editorial{display:flex;flex-direction:column;gap:8px}.sample-editorial-img{height:64px;border-radius:6px;background:linear-gradient(135deg," + colors.surface + "," + colors.primary + ")}.sample-editorial small{color:" + colors.muted + ";font-size:10px}.sample-payment{display:flex;flex-direction:column;gap:6px}.sample-payment span{font-size:" + caption.size + ";opacity:.7;letter-spacing:.04em}",
     ".overview-deck{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.6fr);gap:14px;padding:16px 20px 20px;border-top:1px solid " + colors.border + ";background:" + colors.canvas + "}.overview-card{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";background:" + colors.canvas + ";padding:12px;overflow:hidden}.overview-card header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}.overview-card header span{font-size:" + caption.size + ";color:" + colors.muted + "}.overview-side{display:grid;gap:14px}.overview-component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.overview-component-grid article{min-height:94px}.overview-component-grid label{display:block;color:" + colors.muted + ";font-size:10px;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-swatch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.overview-swatch-grid i{display:block;height:28px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}.overview-swatch-grid span{display:block;margin-top:5px;color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-type{display:grid;gap:8px}.overview-type small{display:block;color:" + colors.muted + ";font-size:10px}.overview-type span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".strip{padding:20px;border-top:1px solid " + colors.border + "}.strip header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}.strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}.palette-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.canvas + ";overflow:hidden}.swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(0,0,0,.08)}.swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swatch small{color:" + colors.muted + ";font-size:10px}.more{display:grid;place-items:center}",
     ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.type-row{border-bottom:1px solid " + colors.border + ";padding:8px 0}.type-row small{display:block;color:" + colors.muted + ";margin-bottom:4px}.component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.component-grid article{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:10px;min-height:112px;overflow:hidden}.component-grid label{display:block;color:" + colors.muted + ";font-size:11px;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample{max-width:100%}.sample-button{border:1px solid transparent}.sample-input{display:flex;justify-content:space-between;align-items:center;border:1px solid " + colors.border + ";padding:12px}.sample-input i{width:14px;height:14px;border-radius:50%;background:" + colors.primary + "}.sample-chip{display:inline-flex;padding:7px 12px}.sample-nav{display:flex;gap:12px;padding:11px}.sample-card{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid " + colors.border + "}.sample-stat{display:grid;gap:5px;padding:14px;border:1px solid " + colors.border + "}.sample-stat b{font-size:28px}.sample-chart{display:grid;gap:12px;padding:14px;border:1px solid " + colors.border + "}.sample-chart div{height:58px;display:flex;align-items:end;gap:8px}.sample-chart i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.sample-chart i:nth-child(1){height:35%}.sample-chart i:nth-child(2){height:70%}.sample-chart i:nth-child(3){height:48%}.sample-chart i:nth-child(4){height:88%}.sample-gradient{min-height:92px;padding:16px;display:flex;flex-direction:column;justify-content:space-between}.sample-mockup{display:grid;gap:7px;padding:13px}.sample-mockup code{display:block;padding:7px;border-radius:6px;background:rgba(0,0,0,.22);color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-mockup span{height:8px;border-radius:99px;background:rgba(127,127,127,.28)}.sample-table{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid " + colors.border + "}.sample-table span{display:flex;justify-content:space-between;gap:12px;border-top:1px solid rgba(127,127,127,.25);padding-top:6px}.sample-table i{font-style:normal}.sample-tile{padding:14px}.sample-tile div{height:56px;background:rgba(127,127,127,.18);margin-bottom:10px}.sample-link{text-decoration:underline}.sample-footer{padding:14px}.rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.radius-grid{display:flex;flex-wrap:wrap;gap:8px}.radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}.space-row{display:flex;align-items:center;gap:10px;margin:7px 0}.space-row span{width:70px}.space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px}.notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px;padding-left:18px;color:" + colors.muted + "}",
-    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.overview-deck,.listing-grid,.product-tiles,.finance-grid,.auto-grid,.component-grid,.type-grid,.rhythm-grid,.hero-docs,.hero-docs main,.hero-data,.data-main,.hero-generic,.hero-collab,.hero-editorial,.campaign-grid{grid-template-columns:1fr}.overview-component-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-swatch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-search{grid-template-columns:1fr;gap:8px;border-radius:" + colors.radius + "}.market-search span{border-right:0;border-bottom:1px solid " + colors.border + ";padding-bottom:8px}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.notes-strip ul{grid-template-columns:1fr}.hero{min-height:auto}.auto-band{grid-template-columns:1fr}.product-tile{min-height:260px}.campaign-grid article:first-child{grid-row:auto}}",
+    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.overview-deck,.listing-grid,.product-tiles,.finance-grid,.auto-grid,.component-grid,.type-grid,.rhythm-grid,.hero-docs,.hero-docs main,.hero-data,.data-main,.hero-generic,.hero-collab,.hero-editorial,.campaign-grid,.hero-ai .ai-outputs,.hero-creative .creative-workspace,.hero-music,.music-grid,.hero-payment .payment-grid{grid-template-columns:1fr}.hero-ai .ai-header{flex-direction:column}.hero-creative .creative-workspace{grid-template-columns:1fr}.hero-creative .creative-sidebar,.hero-creative .creative-inspector{border:0;border-top:1px solid " + colors.border + "}.overview-component-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-swatch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-search{grid-template-columns:1fr;gap:8px;border-radius:" + colors.radius + "}.market-search span{border-right:0;border-bottom:1px solid " + colors.border + ";padding-bottom:8px}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.notes-strip ul{grid-template-columns:1fr}.hero{min-height:auto}.auto-band{grid-template-columns:1fr}.product-tile{min-height:260px}.campaign-grid article:first-child{grid-row:auto}.music-tile:first-child{grid-row:auto}}",
   ].join("\n");
 
   const keywords = board.visualLanguage.keywords.slice(0, 5).map((keyword) => '<i>' + esc(keyword) + '</i>').join("");

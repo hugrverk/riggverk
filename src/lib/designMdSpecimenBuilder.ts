@@ -452,6 +452,7 @@ export interface DesignMdBoard {
   archetype: DesignMdArchetype;
   overview: string | null;
   layout: string | null;
+  fontSubstitutes: string;
 }
 
 export function buildBoard(
@@ -486,5 +487,6 @@ export function buildBoard(
     archetype: model.archetype,
     overview: model.overviewText,
     layout: model.layoutText,
+    fontSubstitutes: model.fontSubstitutes,
   };
 }

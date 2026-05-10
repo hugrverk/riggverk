@@ -7,6 +7,11 @@ export type DesignMdArchetype =
   | "developer_docs"
   | "luxury_automotive"
   | "data_product"
+  | "ai_product"
+  | "creative_tool"
+  | "payment_finance"
+  | "music_campaign"
+  | "terminal_tool"
   | "generic_system";
 
 export type DesignMdComponentKind =
@@ -16,6 +21,15 @@ export type DesignMdComponentKind =
   | "stat-card"
   | "tile"
   | "product-tile"
+  | "editorial-card"
+  | "article-card"
+  | "media-card"
+  | "payment-card"
+  | "market-table"
+  | "workflow-step"
+  | "prompt-input"
+  | "terminal-panel"
+  | "code-panel"
   | "search"
   | "input"
   | "chip"
@@ -94,6 +108,7 @@ export interface DesignMdPreviewModel {
   archetype: DesignMdArchetype;
   overviewText: string | null;
   layoutText: string | null;
+  fontSubstitutes: string;
   guardrailDos: string[];
   guardrailDonts: string[];
 }
@@ -318,18 +333,49 @@ export function resolveGeneratedFontFamily(value: string | undefined, context = 
     fallback = ["Geist", "Inter", "system-ui", "sans-serif"];
   } else if (/ibm plex/.test(source)) {
     fallback = ["\"IBM Plex Sans\"", "Inter", "system-ui", "sans-serif"];
-  } else if (/inter/.test(source)) {
+  } else if (/\binter\b/.test(source)) {
     fallback = ["Inter", "system-ui", "sans-serif"];
-  } else if (/helvetica neue|helvetica|neue haas|haas/.test(source)) {
+  } else if (/helvetica neue|helvetica|neue haas|haas grotesk|haas display/.test(source)) {
     fallback = ["\"Helvetica Neue\"", "Arial", "sans-serif"];
-  } else if (/mono|monospace|code|terminal|console|sf mono|menlo|consolas/.test(source)) {
-    fallback = ["\"SF Mono\"", "Menlo", "Monaco", "Consolas", "monospace"];
-  } else if (/serif|editorial|magazine|publication|luxury|fashion/.test(source)) {
-    fallback = ["Georgia", "\"Times New Roman\"", "serif"];
+  } else if (/gt america|gt walsheim|gt/.test(source)) {
+    fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/montserrat/.test(source)) {
+    fallback = ["Montserrat", "Inter", "system-ui", "sans-serif"];
+  } else if (/roboto/.test(source)) {
+    fallback = ["Roboto", "Inter", "system-ui", "sans-serif"];
   } else if (/lato/.test(source)) {
     fallback = ["Lato", "Inter", "system-ui", "sans-serif"];
+  } else if (/poppins/.test(source)) {
+    fallback = ["Poppins", "Inter", "system-ui", "sans-serif"];
+  } else if (/national|nationale|national-.+font/.test(source)) {
+    fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/ll circular|soehne|untitled sans|graphik/.test(source)) {
+    fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/mono|monospace|code|terminal|console|sf mono|jetbrains|fira code|source code/.test(source)) {
+    fallback = ["\"SF Mono\"", "\"JetBrains Mono\"", "Menlo", "Monaco", "Consolas", "monospace"];
+  } else if (/serif|editorial|magazine|publication|luxury|fashion|playfair|garamond|georgia/.test(source)) {
+    fallback = ["Georgia", "\"Times New Roman\"", "serif"];
   } else {
     fallback = ["Inter", "-apple-system", "BlinkMacSystemFont", "\"Segoe UI\"", "system-ui", "sans-serif"];
+  }
+
+  // If font substitutes are available, insert them between original names and fallback
+  if (context.length > 0) {
+    const substituteMatch = context.match(/font substitutes?:?\s*([^#]{0,400})/i);
+    if (substituteMatch) {
+      const substitute = substituteMatch[1]
+        .replace(/use\s+/gi, "")
+        .replace(/as\s+(a\s+)?(local\s+)?substitute/gi, "")
+        .replace(/prefer\s+/gi, "")
+        .trim();
+      const substituteFonts = substitute
+        .split(/[,;\n]/)
+        .map((s) => normalizeFontName(s.trim()))
+        .filter((f): f is string => !!f && !/(?:substitute|use|local|system|default|fallback|available|proprietary)/i.test(f));
+      if (substituteFonts.length > 0 && !substituteFonts[0]?.startsWith("-")) {
+        fallback = [...substituteFonts, ...fallback];
+      }
+    }
   }
 
   return uniqFonts([...original, ...fallback]).join(", ");
@@ -356,8 +402,15 @@ function extractSection(body: string, heading: string): string | null {
   const after = body.slice(match.index + match[0].length);
   const nextHeading = after.match(/\n#{1,3}\s/);
   const section = nextHeading && nextHeading.index !== undefined ? after.slice(0, nextHeading.index).trim() : after.trim();
-  const lines = section.split("\n").map((line) => line.trim()).filter(Boolean);
-  return lines.length > 0 ? lines.slice(0, 8).join(" ") : null;
+  return section || null;
+}
+
+function extractFontSubstitutes(body: string): string {
+  for (const heading of ["Font Substitutes", "Font Substitute", "Note on Font Substitutes", "Font Notes"]) {
+    const section = extractSection(body, heading);
+    if (section) return section;
+  }
+  return "";
 }
 
 function extractListItems(body: string, heading: string): string[] {
@@ -407,9 +460,9 @@ function keywordMatches(text: string): string[] {
   const t = text.toLowerCase();
   const keywords = [
     ["photography-first", /photography|photo-first|product photography|product render/],
-    ["marketplace", /marketplace|property|listing|guest|booking|homes|experiences/],
+    ["marketplace", /marketplace|property|listing|guest|booking|homes|experiences|mobility|ride/],
     ["dashboard", /dashboard|trading|finance|financial platform|markets table|balance|deposit|buy crypto/],
-    ["editorial", /editorial|magazine|publication|story|article/],
+    ["editorial", /editorial|magazine|publication|story|article|news|journalism|media/],
     ["dark", /dark|near-black|black canvas|dark theme|dark mode/],
     ["luxury", /luxury|automotive|vehicle|model|gallery|museum|premium|corporate-automotive/],
     ["utility", /utility|configuration|configurator|workflow|tool|command/],
@@ -421,7 +474,11 @@ function keywordMatches(text: string): string[] {
     ["developer", /docs|developer|code|api|terminal|command|cli/],
     ["data", /data product|chart|analytics|metrics|database|query/],
     ["commerce", /commerce|retail|product card|campaign|pricing|sale/],
-    ["music", /music|playlist|album|player|listening|podcast/],
+    ["music", /music|playlist|album|player|listening|podcast|audio|track/],
+    ["ai product", /ai product|ai agent|ai platform|machine learning|artificial intelligence|llm|language model|prompt/],
+    ["creative", /creative tool|web design|visual development|no-code|canvas|design tool|builder/],
+    ["payment", /payment|card network|transaction|spend|banking|financial services|credit card/],
+    ["telecom", /telecom|mobile network|service provider|broadband|connectivity|carrier/],
   ] as const;
   return keywords.filter(([, re]) => re.test(t)).map(([keyword]) => keyword);
 }
@@ -540,14 +597,18 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
 function componentKind(name: string): DesignMdComponentKind {
   const n = name.toLowerCase();
   if (/gradient|mesh/.test(n)) return "gradient";
-  if (/mockup|code-window|code block|code-block|terminal|console/.test(n)) return "mockup";
+  if (/mockup|code-window|code block|code-block|code panel|code-panel/.test(n)) return "code-panel";
+  if (/terminal|console|shell/.test(n)) return "terminal-panel";
   if (/hero|band/.test(n)) return "hero";
   if (/chart|graph|sparkline|bar/.test(n)) return "chart";
+  if (/market.*table|markets.*table|asset.*table|price.*table/.test(n)) return "market-table";
   if (/table|row|cell/.test(n)) return "table";
   if (/pricing/.test(n)) return "pricing-card";
-  if (/stat|metric|balance|price/.test(n)) return "stat-card";
-  if (/stat|metric|balance|price/.test(n)) return "stat";
+  if (/stat|metric|balance/.test(n)) return "stat-card";
+  if (/stat|metric|balance/.test(n)) return "stat";
   if (/product.*tile|tile.*product/.test(n)) return "product-tile";
+  if (/workflow.*step|step.*card|workflow|automation|pipeline/.test(n)) return "workflow-step";
+  if (/prompt.*input|ai.*input|model.*input/.test(n)) return "prompt-input";
   if (/search/.test(n)) return "search";
   if (/button|cta/.test(n)) return "button";
   if (/input|field|amount/.test(n)) return "input";
@@ -557,7 +618,10 @@ function componentKind(name: string): DesignMdComponentKind {
   if (/quote/.test(n)) return "quote";
   if (/footer|legal/.test(n)) return "footer";
   if (/badge/.test(n)) return "badge";
-  if (/chip|tag|pill|(^|[-_.])tab($|[-_.])/.test(n)) return "chip";
+  if (/chip|tag|pill/.test(n)) return "chip";
+  if (/editorial.*card|article.*card|story.*card|news.*card/.test(n)) return "editorial-card";
+  if (/media.*card|image.*card|photo.*card/.test(n)) return "media-card";
+  if (/payment.*card|transaction.*card|payment.*tile/.test(n)) return "payment-card";
   if (/tile/.test(n)) return "tile";
   if (/card|panel|callout/.test(n)) return "card";
   if (/utility|option|configurator|filter/.test(n)) return "utility";
@@ -629,35 +693,60 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   const text = [slug, ...phrases, ...keywords, ...componentNames].join(" ").toLowerCase();
   const score = (patterns: RegExp[]) => patterns.reduce((sum, re) => sum + (re.test(text) ? 1 : 0), 0);
   const scores: Record<DesignMdArchetype, number> = {
-    marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/]),
-    product_gallery: score([/photography-first/, /product tile/, /product-tile/, /gallery/, /sparse/, /museum/, /apple/]),
-    finance_dashboard: score([/finance/, /trading/, /markets/, /crypto/, /balance/, /deposit/, /price/, /asset-row/, /coinbase|binance|kraken/]),
-    developer_docs: score([/docs/, /developer/, /api/, /code-window/, /terminal/, /cli/, /infrastructure/, /database platform/, /supabase|vercel|opencode/]),
-    luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /inventory-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/]),
-    data_product: score([/data product/, /data/, /table/, /chart/, /analytics/, /database/, /query/, /metrics/, /stat-card/, /clickhouse|cohere/]),
+    marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/, /ride/, /mobility/, /uber/]),
+    product_gallery: score([/photography-first/, /product tile/, /product-tile/, /sparse/, /museum/, /apple/]),
+    finance_dashboard: score([/trading/, /markets/, /crypto/, /balance/, /deposit/, /asset-row/, /coinbase|binance/]),
+    developer_docs: score([/docs/, /api/, /code-window/, /cli/, /infrastructure/, /supabase/]),
+    luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /inventory-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/, /performance/]),
+    data_product: score([/data product/, /analytics/, /database/, /query/, /metrics/, /clickhouse|cohere|sanity/]),
     collaboration_saas: score([/messaging/, /workplace/, /collaboration/, /aubergine/, /pastel-mesh/, /slack|slacc/]),
-    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/, /campaign/, /commerce/, /retail/, /music/, /playlist/, /album/, /player/, /spotify|nike|shopify/]),
+    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/, /news/, /journalism/, /theverge|wired/]),
+    ai_product: score([/ai/, /artificial intelligence/, /model/, /prompt/, /agent/, /ai product/, /ai agent/, /generated/, /runway|together\.ai|voltagent|lovable|x\.ai/]),
+    creative_tool: score([/creative tool/, /no-code/, /visual development/, /design tool/, /canvas/, /web design/, /webflow|framer/]),
+    payment_finance: score([/payment/, /card network/, /financial/, /spend/, /transaction/, /mastercard|wise/]),
+    music_campaign: score([/music/, /playlist/, /album/, /player/, /listening/, /podcast/, /spotify/, /audio/]),
+    terminal_tool: score([/terminal/, /command line/, /warp/, /shell/, /developer tool/]),
     generic_system: 0,
   };
 
-  if (/(slack|slacc)/.test(text)) {
-    scores.collaboration_saas += 4;
+  // Slug-specific hints as tiebreakers — used only to boost, never to override zero scores
+  const slugLower = slug.toLowerCase();
+  if (/(slack|slacc)/.test(text)) scores.collaboration_saas += 4;
+  if (/(supabase|vercel|opencode)/.test(text)) scores.developer_docs += 4;
+  if (/(runwayml|runway)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+  if (/(together\.ai|together\.dev)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+  if (/(voltagent)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+  if (/(lovable)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 3;
+  if (/(x\.ai)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 3;
+  if (/(webflow)/.test(slugLower) && scores.creative_tool > 0) scores.creative_tool += 4;
+  if (/(warp)/.test(slugLower) && scores.terminal_tool > 0) scores.terminal_tool += 4;
+  if (/(spotify)/.test(slugLower) && scores.music_campaign > 0) scores.music_campaign += 4;
+  if (/(mastercard)/.test(slugLower) && scores.payment_finance > 0) scores.payment_finance += 4;
+  if (/(wise)/.test(slugLower) && scores.payment_finance > 0) scores.payment_finance += 3;
+  if (/(theverge|wired)/.test(slugLower) && scores.editorial > 0) scores.editorial += 4;
+  if (/(starbucks)/.test(slugLower) && scores.editorial > 0) scores.editorial += 3;
+  if (/(uber)/.test(slugLower) && scores.marketplace > 0) scores.marketplace += 3;
+  if (/(vodafone)/.test(slugLower) && scores.marketplace > 0) scores.marketplace += 2;
+  if (/(zapier)/.test(slugLower) && scores.data_product > 0) scores.data_product += 3;
+  if (/(kraken)/.test(slugLower) && scores.finance_dashboard > 0) scores.finance_dashboard += 4;
+  if (/(clickhouse|cohere|mongodb|posthog)/.test(slugLower)) scores.data_product += 5;
+  if (/(binance|coinbase|kraken|revolut)/.test(text) && scores.finance_dashboard > 0) scores.finance_dashboard += 3;
+  if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(slugLower) && scores.luxury_automotive > 0) scores.luxury_automotive += 3;
+  if (/(nike|shopify|pinterest)/.test(slugLower) && scores.editorial > 0) scores.editorial += 3;
+  if (/(sanity)/.test(slugLower) && scores.data_product > 0) scores.data_product += 3;
+
+  // Boost payment_finance for finance slugs that don't look like trading platforms
+  if (/mastercard|wise|stripe|visa|paypal/.test(slugLower) && scores.payment_finance > 0) {
+    scores.payment_finance += 3;
   }
-  if (/(supabase|vercel|opencode)/.test(text)) {
-    scores.developer_docs += 4;
+
+  // If text mentions music/campaign and slug is spotify, prefer music_campaign over editorial
+  if (/(spotify)/.test(slugLower)) {
+    if (scores.music_campaign > 0) scores.music_campaign += 5;
   }
-  if (/(clickhouse|cohere|mongodb|posthog)/.test(text) && scores.data_product > 0) {
-    scores.data_product += 3;
-  }
-  if (/(binance|coinbase|kraken|revolut|wise)/.test(text) && scores.finance_dashboard > 0) {
-    scores.finance_dashboard += 3;
-  }
-  if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(text) && scores.luxury_automotive > 0) {
-    scores.luxury_automotive += 3;
-  }
-  if (/(spotify|nike|shopify|pinterest|starbucks)/.test(text) && scores.editorial > 0) {
-    scores.editorial += 3;
-  }
+
+  // If text mentions AI heavily but also matches developer_docs, prefer ai_product
+  if (scores.ai_product >= 3 && scores.developer_docs > 0) scores.ai_product += 2;
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
   return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
@@ -687,6 +776,7 @@ export function parseDesignMdForPreview(
     archetype: inferArchetype(slug, phrases, keywords, components.map((component) => component.name)),
     overviewText: extractSection(body, "Overview"),
     layoutText: extractSection(body, "Layout"),
+    fontSubstitutes: extractFontSubstitutes(body),
     guardrailDos: extractListItems(body, "Do"),
     guardrailDonts: extractListItems(body, "Don't"),
   };

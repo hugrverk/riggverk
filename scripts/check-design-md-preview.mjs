@@ -80,7 +80,7 @@ assert.deepEqual(model.components.map((component) => component.name), [
   "property-card",
   "markets-table-card",
 ]);
-assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "table");
+assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "market-table");
 
 const nestedComponents = parseDesignMdForPreview(
   "nested",
@@ -174,7 +174,7 @@ const markdownOnly = parseDesignMdForPreview(
   "Dark immersive music player with album cards and playback controls.",
   "# Design System Inspired by Spotify\n\nAlbum art, playlist cards, search input, now-playing bar, and dark player surfaces.",
 );
-assert.equal(markdownOnly.archetype, "editorial");
+assert.equal(markdownOnly.archetype, "music_campaign");
 assert(markdownOnly.components.some((component) => component.name.startsWith("playlist-card")));
 assert(markdownOnly.components.some((component) => component.name === "now-playing-bar"));
 
