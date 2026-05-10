@@ -135,9 +135,7 @@ export function DesignMdContent(props: DesignMdContentProps) {
 
       <div className="lib-editor-body">
         {previewMode === "preview" && (
-          <div className="design-md-preview-body">
-            <DesignMdGeneratedPreview key={currentHash} activeContent={activeContent} />
-          </div>
+          <DesignMdGeneratedPreview key={currentHash} activeContent={activeContent} />
         )}
 
         {previewMode === "markdown" && (
