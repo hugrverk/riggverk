@@ -460,6 +460,7 @@ export interface DesignMdBoard {
   componentGroups: DesignMdBoardComponentGroup[];
   visualLanguage: DesignMdVisualLanguage;
   archetype: DesignMdArchetype;
+  archetypeEvidence: DesignMdSourceEvidence;
   overview: string | null;
   layout: string | null;
   fontSubstitutes: string;
@@ -500,6 +501,7 @@ export function buildBoard(
     })),
     visualLanguage: model.visualLanguage,
     archetype: model.archetype,
+    archetypeEvidence: model.archetypeEvidence,
     overview: model.overviewText,
     layout: model.layoutText,
     fontSubstitutes: model.fontSubstitutes,

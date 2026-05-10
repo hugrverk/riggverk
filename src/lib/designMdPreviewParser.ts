@@ -1,3 +1,5 @@
+import { sourceEvidence } from "./designMdSourceEvidence";
+
 export type DesignMdArchetype =
   | "product_gallery"
   | "marketplace"
@@ -69,6 +71,7 @@ export interface DesignMdSourceEvidence {
   sourceType: DesignMdSourceType;
   sourcePath: string;
   confidence: DesignMdSourceConfidence;
+  text?: string;
 }
 
 export interface DesignMdToken {
@@ -147,6 +150,8 @@ export interface DesignMdPreviewCoverage {
   markdownSections: string[];
   darkTokenCount: number;
   darkComponentCount: number;
+  componentGroupsWithEvidenceCount: number;
+  fontSubstituteHintsCount: number;
 }
 
 export interface DesignMdPreviewConfidence {
@@ -169,6 +174,7 @@ export interface DesignMdPreviewModel {
   components: DesignMdComponentGroup[];
   visualLanguage: DesignMdVisualLanguage;
   archetype: DesignMdArchetype;
+  archetypeEvidence: DesignMdSourceEvidence;
   coverage: DesignMdPreviewCoverage;
   confidence: DesignMdPreviewConfidence;
   warnings: DesignMdPreviewWarning[];
@@ -543,14 +549,6 @@ function normalizeTokenLabel(text: string, fallback: string): string {
     .slice(0, 52) || fallback;
 }
 
-function sourceEvidence(
-  sourceType: DesignMdSourceType,
-  sourcePath: string,
-  confidence: DesignMdSourceConfidence,
-): DesignMdSourceEvidence {
-  return { sourceType, sourcePath, confidence };
-}
-
 function extractPhrases(body: string, description: string): string[] {
   const phrases: string[] = [];
   if (description) phrases.push(cleanPhrase(description));
@@ -626,7 +624,7 @@ function tokensForPrefix(fm: Map<string, string>, prefix: string): DesignMdToken
       rawValue,
       resolvedValue: resolveTokenRef(rawValue, fm),
       source: "structured",
-      sourceEvidence: sourceEvidence("frontmatter", `${prefix}.${key.slice(dot.length)}`, "high"),
+      sourceEvidence: sourceEvidence("frontmatter", `${prefix}.${key.slice(dot.length)}`, "high", rawValue),
     });
   }
   return tokens;
@@ -663,7 +661,7 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       resolvedValue: value,
       group: paletteGroupFor(label),
       source: "markdown",
-      sourceEvidence: sourceEvidence(evidenceType, `markdown.Colors.${label}`, evidenceType === "markdown-table" ? "medium" : "low"),
+      sourceEvidence: sourceEvidence(evidenceType, `markdown.Colors.${label}`, evidenceType === "markdown-table" ? "medium" : "low", `${labelText} ${value}`),
     };
     groups.get(token.group)!.push(token);
   };
@@ -720,7 +718,7 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
       letterSpacing: safeTextStyleValue(pick("letterSpacing", "letter-spacing")),
       raw,
       source: "structured",
-      sourceEvidence: sourceEvidence("frontmatter", `typography.${name}`, "high"),
+      sourceEvidence: sourceEvidence("frontmatter", `typography.${name}`, "high", Object.entries(raw).map(([key, value]) => `${key}: ${value}`).join("; ")),
     };
   });
 }
@@ -818,7 +816,7 @@ function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
         letterSpacing,
         raw,
         source: "markdown",
-        sourceEvidence: sourceEvidence("markdown-table", `markdown.Typography.${name}`, "medium"),
+        sourceEvidence: sourceEvidence("markdown-table", `markdown.Typography.${name}`, "medium", row),
       });
     }
     if (tokens.length >= 12) break;
@@ -839,7 +837,7 @@ function buildMarkdownTypography(body: string): DesignMdTypographyToken[] {
         lineHeight: "1.05",
         raw: { fontFamily },
         source: "markdown",
-        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.display", "low"),
+        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.display", "low", fontFamily),
       },
       {
         key: "body",
@@ -849,7 +847,7 @@ function buildMarkdownTypography(body: string): DesignMdTypographyToken[] {
         lineHeight: "1.45",
         raw: { fontFamily },
         source: "markdown",
-        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.body", "low"),
+        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.body", "low", fontFamily),
       },
     ];
   }
@@ -922,7 +920,7 @@ function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
         raw: {},
         styles: {},
         source: "structured",
-        sourceEvidence: sourceEvidence("frontmatter", `components.${groupName}`, "high"),
+        sourceEvidence: sourceEvidence("frontmatter", `components.${groupName}`, "high", token.key),
       });
     }
     const group = groups.get(groupName)!;
@@ -1042,12 +1040,18 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
     raw: {},
     styles: {},
     source: "markdown",
-    sourceEvidence: sourceEvidence("markdown-heading", `markdown.Components.${name}`, "medium"),
+    sourceEvidence: sourceEvidence("markdown-heading", `markdown.Components.${name}`, "medium", name),
   }));
 }
 
-function inferArchetype(slug: string, phrases: string[], keywords: string[], componentNames: string[]): DesignMdArchetype {
-  const text = [slug, ...phrases, ...keywords, ...componentNames].join(" ").toLowerCase();
+function inferArchetypeWithEvidence(
+  slug: string,
+  phrases: string[],
+  keywords: string[],
+  componentNames: string[],
+): { archetype: DesignMdArchetype; evidence: DesignMdSourceEvidence } {
+  const sourceText = [...phrases, ...keywords, ...componentNames].join(" ");
+  const text = [slug, sourceText].join(" ").toLowerCase();
   const score = (patterns: RegExp[]) => patterns.reduce((sum, re) => sum + (re.test(text) ? 1 : 0), 0);
   const scores: Record<DesignMdArchetype, number> = {
     marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/, /ride/, /mobility/]),
@@ -1135,7 +1139,20 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   if (/developer platform|deployment platform|serverless|edge function/.test(text)) scores.developer_product = Math.max(scores.developer_product, 1) + 3;
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
-  return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
+  const archetype = ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
+  const componentHit = componentNames.find((name) => new RegExp(archetype.replace(/_/g, "|"), "i").test(name));
+  const keywordHit = keywords.find((keyword) => text.includes(keyword.toLowerCase()));
+  const phraseHit = phrases.find((phrase) => keywordMatches(phrase).some((keyword) => keywordHit ? keyword === keywordHit : true));
+  const slugOnly = ordered[0][1] > 0 && !sourceText.trim();
+  return {
+    archetype,
+    evidence: sourceEvidence(
+      slugOnly ? "derived-fallback" : componentHit ? "frontmatter" : keywordHit ? "markdown-paragraph" : "markdown-paragraph",
+      slugOnly ? "slug.weak-hint" : componentHit ? `components.${componentHit}` : keywordHit ? `markdown.keyword.${keywordHit}` : "markdown.visual-language",
+      archetype === "generic_system" ? "fallback" : slugOnly ? "low" : ordered[0][1] >= 6 ? "high" : "medium",
+      componentHit ?? keywordHit ?? phraseHit ?? slug,
+    ),
+  };
 }
 
 function markdownSectionNames(body: string): string[] {
@@ -1207,6 +1224,7 @@ function buildCoverage(
   spacing: DesignMdToken[],
   components: DesignMdComponentGroup[],
   body: string,
+  fontSubstitutes = "",
 ): DesignMdPreviewCoverage {
   const colorTokens = palette.flatMap((group) => group.tokens);
   const componentKinds = {} as Record<DesignMdComponentKind, number>;
@@ -1231,6 +1249,8 @@ function buildCoverage(
     markdownSections: markdownSectionNames(body),
     darkTokenCount: colorTokens.filter((token) => hasDarkSignal(`${token.key} ${token.rawValue}`)).length,
     darkComponentCount: components.filter((component) => hasDarkSignal(component.name)).length,
+    componentGroupsWithEvidenceCount: components.filter((component) => !!component.sourceEvidence).length,
+    fontSubstituteHintsCount: fontSubstitutes ? fontSubstitutes.split(/\n|;|,/).filter((item) => item.trim()).length : 0,
   };
 }
 
@@ -1318,8 +1338,10 @@ export function parseDesignMdForPreview(
   const allComponents = components.length > 0 ? components.concat(mergedMdComponents.slice(0, Math.max(0, 12 - components.length))) : mdComponents;
   const radius = tokensForPrefix(fm, "rounded").concat(tokensForPrefix(fm, "radius"));
   const spacing = tokensForPrefix(fm, "spacing");
-  const archetype = inferArchetype(slug, phrases, keywords, allComponents.map((component) => component.name));
-  const coverage = buildCoverage(palette, allTypography, radius, spacing, allComponents, body || content);
+  const archetypeResult = inferArchetypeWithEvidence(slug, phrases, keywords, allComponents.map((component) => component.name));
+  const archetype = archetypeResult.archetype;
+  const fontSubstitutes = extractFontSubstitutes(body);
+  const coverage = buildCoverage(palette, allTypography, radius, spacing, allComponents, body || content, fontSubstitutes);
   const structuredCounts = { colors: structuredPalette.reduce((sum, group) => sum + group.tokens.length, 0), typography: structuredTypo.length, components: components.length };
   const confidence = buildConfidence(archetype, coverage, structuredCounts, phrases);
   const warnings = buildWarnings(archetype, coverage, structuredCounts, palette);
@@ -1333,12 +1355,13 @@ export function parseDesignMdForPreview(
     components: allComponents,
     visualLanguage: { phrases, keywords, phraseEvidence },
     archetype,
+    archetypeEvidence: archetypeResult.evidence,
     coverage,
     confidence,
     warnings,
     overviewText: extractSection(body, "Overview"),
     layoutText: extractSection(body, "Layout"),
-    fontSubstitutes: extractFontSubstitutes(body),
+    fontSubstitutes,
     guardrailDos: extractListItems(body, "Do"),
     guardrailDonts: extractListItems(body, "Don't"),
   };
