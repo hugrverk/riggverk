@@ -22,6 +22,7 @@ import {
   isStateVariantColor,
   type DesignMdColorSemantics,
 } from "./designMdColorSemantics";
+import { sourceIntentSummary } from "./designMdSourceIntent";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
 
@@ -99,6 +100,10 @@ function mixHexColor(a: string, b: string, amount: number): string | null {
   return rgbToHex(ca.r + (cb.r - ca.r) * t, ca.g + (cb.g - ca.g) * t, ca.b + (cb.b - ca.b) * t);
 }
 
+function isSolidHexColor(value: string | undefined): boolean {
+  return !!value && /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
+}
+
 function relativeLuminance(value: string): number | null {
   const rgb = hexToRgb(value);
   if (!rgb) return null;
@@ -142,9 +147,54 @@ function isLightColor(value: string | undefined): boolean {
   return lum !== null && lum > 0.70;
 }
 
+function isNearLightColor(value: string | undefined): boolean {
+  const lum = value ? relativeLuminance(value) : null;
+  return lum !== null && lum > 0.55;
+}
+
 function isDarkColor(value: string | undefined): boolean {
   const lum = value ? relativeLuminance(value) : null;
   return lum !== null && lum < 0.20;
+}
+
+function isHarshDarkColor(value: string | undefined): boolean {
+  const lum = value ? relativeLuminance(value) : null;
+  return lum !== null && lum < 0.02;
+}
+
+function isLightFirstIntent(board: DesignMdBoard): boolean {
+  const intent = board.sourceIntent;
+  return intent.darkModeIntent === "lightFirstDerived"
+    || intent.mood.includes("lightFirst")
+    || intent.canvasIntent === "cream"
+    || intent.canvasIntent === "offWhite"
+    || intent.canvasIntent === "warmLight";
+}
+
+function isSoftWarmIntent(board: DesignMdBoard): boolean {
+  return board.sourceIntent.mood.includes("warm")
+    || board.sourceIntent.mood.includes("soft")
+    || board.sourceIntent.mood.includes("editorial")
+    || board.sourceIntent.contrastIntent === "soft";
+}
+
+function isDarkNativeIntent(board: DesignMdBoard): boolean {
+  return board.sourceIntent.darkModeIntent === "darkNative"
+    || board.sourceIntent.mood.includes("darkNative")
+    || board.sourceIntent.canvasIntent === "dark"
+    || board.sourceIntent.canvasIntent === "black"
+    || board.sourceIntent.mood.includes("highContrast");
+}
+
+function isSparseAccentIntent(board: DesignMdBoard): boolean {
+  return board.sourceIntent.accentIntent.some((intent) =>
+    intent === "sparse"
+    || intent === "ctaOnly"
+    || intent === "wordmarkOnly"
+    || intent === "semanticOnly"
+    || intent === "timelineOnly"
+    || intent === "decorativeOnly"
+  );
 }
 
 function darkestPaletteColor(tokens: { resolvedValue: string }[], fallback: string): string {
@@ -335,6 +385,7 @@ function resolveDarkToken(
     if (filterForbiddenCanvas && isForbiddenThemeCandidate(t)) return false;
     for (const match of explicitMatches) {
       if (tokenKeyMatches(t.key, match) && isSafeColorValue(t.resolvedValue)) {
+        if (filterForbiddenCanvas && !isDarkColor(t.resolvedValue)) return false;
         return true;
       }
     }
@@ -364,26 +415,55 @@ interface DarkThemeSelection {
 
 function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
   const allColors = board.colorGroups.flatMap((group) => group.tokens);
+  const lightFirst = isLightFirstIntent(board) && !isDarkNativeIntent(board);
+  const softWarm = isSoftWarmIntent(board);
+  const explicitCanvasKeys = [
+    "body-dark",
+    "canvas-dark",
+    "background-dark",
+    "page-dark",
+    "app-dark",
+    "canvas-night",
+    "background-night",
+    "inverse-canvas",
+    "dark-body",
+    "dark-canvas",
+    "dark-background",
+  ];
+
+  const deriveSoftDarkFromInk = () => {
+    const textDarkTokens = board.colorGroups
+      .filter((g) => g.prefix === "text/ink")
+      .flatMap((g) => g.tokens)
+      .filter((t) => !isContextualTextToken(t.key) && !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue) && isDarkColor(t.resolvedValue));
+    const ink = darkestPaletteColor(textDarkTokens, "");
+    const warmLight = lightestPaletteColor(
+      board.colorGroups
+        .filter((g) => g.prefix === "canvas/surface")
+        .flatMap((g) => g.tokens)
+        .filter((t) => isSolidHexColor(t.resolvedValue) && isNearLightColor(t.resolvedValue) && !isForbiddenThemeCandidate(t)),
+      "#f5f0e8",
+    );
+    if (ink && isDarkColor(ink)) {
+      const mixed = mixHexColor(ink, warmLight, softWarm ? 0.12 : 0.08);
+      if (mixed && isSafeColorValue(mixed) && !isHarshDarkColor(mixed)) return mixed;
+      return ink;
+    }
+    return softWarm ? "#2f2d28" : "#262a2f";
+  };
 
   // ── Canvas (body/page background) ──
   // Priority: explicit body/canvas/background-dark tokens.
   // DO NOT match plain "black" or "surface-black" early — those are fallback-only.
   // Only "black" tokens that belong to canvas/surface palette groups are considered
   // via the darkest-palette-color fallback.
-  const canvasExplicit = [
-    "body-dark",
-    "canvas-dark",
-    "background-dark",
-    "page-dark",
-    "app-dark",
-    "dark-body",
-    "dark-canvas",
-    "dark-background",
-  ];
+  const canvasExplicit = explicitCanvasKeys;
   const canvasResolve = resolveDarkToken(
     allColors,
     canvasExplicit,
     () => {
+      if (lightFirst) return deriveSoftDarkFromInk();
+
       // Prefer neutral text/ink darks before colored surfaces. Many systems have
       // brand-colored panels but no full dark canvas token.
       const textDarkTokens = board.colorGroups
@@ -412,13 +492,13 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
       if (darkestNeutral && isDarkColor(darkestNeutral)) return darkestNeutral;
 
       // Last resort: darkest in all tokens (still filter forbidden)
-      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t));
+      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue));
       const darkestSafe = darkestPaletteColor(safeAll, "");
       if (darkestSafe && isDarkColor(darkestSafe)) return darkestSafe;
 
-      return "#0b0e11";
+      return softWarm ? "#24231f" : "#0b0e11";
     },
-    "#0b0e11",
+    softWarm ? "#24231f" : "#0b0e11",
     true, // filterForbiddenCanvas: exclude primary/accent/semantic/timeline
   );
 
@@ -431,20 +511,25 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     "elevated-dark",
     "card-dark",
     "panel-dark",
+    "surface-night",
+    "card-night",
+    "inverse-surface",
+    "inverse-surface-1",
+    "inverse-surface-2",
     "dark-surface",
     "dark-card",
     "dark-panel",
   ];
   const surfaceResolve = resolveDarkToken(
     allColors,
-    surfaceExplicit,
+    lightFirst && canvasResolve.source !== "source" ? [] : surfaceExplicit,
     () => {
       // Derived: canvas mixed slightly lighter
-      const mixed = mixHexColor(darkCanvas, "#ffffff", 0.06);
+      const mixed = mixHexColor(darkCanvas, "#ffffff", lightFirst ? 0.08 : 0.06);
       if (mixed && isSafeColorValue(mixed)) return mixed;
-      return mixHexColor(darkCanvas, "#ffffff", 0.06) ?? "#1a1e24";
+      return mixHexColor(darkCanvas, "#ffffff", lightFirst ? 0.08 : 0.06) ?? (softWarm ? "#35332e" : "#1a1e24");
     },
-    "#1a1e24",
+    softWarm ? "#35332e" : "#1a1e24",
     true, // filterForbiddenCanvas: exclude primary/accent/semantic/timeline from surface
   );
 
@@ -458,6 +543,8 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     "foreground-dark",
     "on-canvas-dark",
     "ink-on-dark",
+    "inverse-ink",
+    "on-night",
   ];
   // Use a white/off-white as readable fallback
   const textResolve = resolveDarkToken(
@@ -475,12 +562,12 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
           return lightestText;
         }
       }
-      return "#f0f2f5";
+      return softWarm ? "#f6f1e8" : "#f0f2f5";
     },
-    "#f0f2f5",
+    softWarm ? "#f6f1e8" : "#f0f2f5",
   );
 
-  const darkText = ensureReadable(textResolve.value, darkCanvas, "#f0f2f5");
+  const darkText = ensureReadable(textResolve.value, darkCanvas, softWarm ? "#f6f1e8" : "#f0f2f5");
 
   // ── Muted text on dark ──
   const mutedExplicit = [
@@ -494,13 +581,13 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     mutedExplicit,
     () => {
       // Derived: mix text toward canvas
-      const mixed = mixHexColor(darkText, darkCanvas, 0.55);
+      const mixed = mixHexColor(darkText, darkCanvas, lightFirst ? 0.60 : 0.55);
       if (mixed && isSafeColorValue(mixed)) return mixed;
-      return "#8b909a";
+      return softWarm ? "#aaa59c" : "#8b909a";
     },
-    "#8b909a",
+    softWarm ? "#aaa59c" : "#8b909a",
   );
-  const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, "#8b909a");
+  const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, softWarm ? "#aaa59c" : "#8b909a");
 
   // ── Border (hairlines, dividers) ──
   // CRITICAL: do NOT mix toward white. Mix toward text at low ratio for subtle separation.
@@ -519,11 +606,11 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     () => {
       // Derived: mix surface toward text at 8-12% for a subtle readable border
       // that does NOT look like a white outline.
-      const mixed = mixHexColor(darkSurface, darkText, 0.10);
+      const mixed = mixHexColor(darkSurface, darkText, lightFirst ? 0.07 : softWarm ? 0.08 : 0.10);
       if (mixed && isSafeColorValue(mixed)) return mixed;
-      return "#2a2e35";
+      return softWarm ? "#46433d" : "#2a2e35";
     },
-    "#2a2e35",
+    softWarm ? "#46433d" : "#2a2e35",
   );
 
   return {
@@ -542,13 +629,16 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
   // ── Light theme (source-first, role-aware) ──
   // Canvas candidates: explicit light canvas tokens first, then neutral base
   const lightCanvasCandidates = [
+    ...(board.sourceIntent.canvasIntent === "cream" || board.sourceIntent.canvasIntent === "warmLight" || board.sourceIntent.canvasIntent === "offWhite"
+      ? ["canvas-cream", "cream", "parchment", "off-white", "offwhite", "canvas-parchment", "canvas-soft"]
+      : []),
     "canvas-light", "background-light",
     "canvas", "background", "page",
     // body-light only if source uses body as canvas (no separate canvas)
     "body-light",
   ];
   let pickedLightCanvas = tokenColorByPolicy(allColors, lightCanvasCandidates, "", (semantics, token) =>
-    canUseAsCanvas(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key))
+    isSolidHexColor(token.resolvedValue) && (canUseAsCanvas(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key)))
   );
   // If picked canvas is a dark color (from a misclassified token), fall back
   if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
@@ -562,7 +652,7 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
       // Lightest neutral fallback (filter out forbidden tokens)
       const safeLightTokens = allColors.filter((t) =>
-        !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue)
+        !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue)
       );
       const lightest = lightestPaletteColor(safeLightTokens, "");
       pickedLightCanvas = (lightest && isLightColor(lightest)) ? lightest : paletteLight;
@@ -576,7 +666,7 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     "surface-card", "surface", "card", "panel",
   ];
   const pickedLightSurface = tokenColorByPolicy(allColors, lightSurfaceCandidates, "", (semantics, token) =>
-    canUseAsSurface(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key))
+    isSolidHexColor(token.resolvedValue) && (canUseAsSurface(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key)))
   );
   const lightSurface = (pickedLightSurface && !isDarkColor(pickedLightSurface))
     ? pickedLightSurface
@@ -802,7 +892,7 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
         const hasBorder = isSafeColorValue(r.group.borderColor);
         return (hasBg && hasFg) || (hasBorder && hasFg);
       })
-      .slice(0, 2);
+      .slice(0, isSparseAccentIntent(board) ? 1 : 2);
     if (eligible.length > 0) {
       buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(board, group)).join("") + '</div>';
     }
@@ -812,9 +902,17 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
   const paletteSwatches = board.colorGroups.flatMap(g => g.tokens)
     .filter((token) => {
       const semantics = tokenSemantics(token);
-      return !isScopedOnlyColor(semantics) && !isStateVariantColor(semantics);
+      if (isScopedOnlyColor(semantics) || isStateVariantColor(semantics)) return false;
+      if (isSparseAccentIntent(board) && (semantics?.semanticRole === "primaryAction" || semantics?.semanticRole === "brandAccent")) {
+        return token.usageScope === "primaryButton" && token.key === "primary";
+      }
+      return true;
     })
-    .slice(0, conservative ? 4 : 6)
+    .sort((a, b) => {
+      const order = ["canvas", "surface", "text", "border", "primaryAction", "brandAccent", "unknown"];
+      return order.indexOf(a.semanticRole ?? "unknown") - order.indexOf(b.semanticRole ?? "unknown");
+    })
+    .slice(0, conservative || isSparseAccentIntent(board) ? 4 : 6)
     .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
   const paletteStrip = paletteSwatches ? '<div class="hero-palette-strip">' + paletteSwatches + '</div>' : '';
 
@@ -842,14 +940,16 @@ function renderPalette(board: DesignMdBoard): string {
     const bi = roleOrder.indexOf(b.semanticRole ?? "unknown");
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   }).slice(0, 24);
+  const moodRoles = new Set(["canvas", "surface", "text", "border", "primaryAction", "brandAccent"]);
   return '<section class="strip" id="palette">' +
     '<header><h3>Palette</h3><span>' + tokens.length + ' colors</span></header>' +
     '<div class="palette-grid">' +
     visible.map((token) => {
       const semantics = tokenSemantics(token);
       const scoped = isScopedOnlyColor(semantics) || isStateVariantColor(semantics);
+      const utility = !moodRoles.has(token.semanticRole ?? "unknown");
       const note = token.semanticWarnings?.[0] ?? token.semanticEvidence?.[0] ?? token.group;
-      return '<div class="swatch' + (scoped ? ' swatch-scoped' : '') + '">' +
+      return '<div class="swatch' + (scoped ? ' swatch-scoped' : '') + (utility ? ' swatch-utility' : '') + '">' +
       '<i style="background:' + cssColor(token.resolvedValue, "#d8d8d8") + '"></i>' +
       '<b>' + esc(token.key) + '</b>' +
       '<small>' + esc((token.semanticRole ?? "unknown") + ' · ' + (token.usageScope ?? token.group)) + '</small>' +
@@ -921,6 +1021,15 @@ function renderLayout(board: DesignMdBoard): string {
 
 function renderSourceNotes(board: DesignMdBoard): string {
   const sections: string[] = [];
+
+  const intent = board.sourceIntent;
+  const intentEvidence = intent.sourceEvidence.slice(0, 4);
+  sections.push('<div class="src-section"><h4>Source intent</h4>' +
+    '<div class="src-intent-summary">' + esc(sourceIntentSummary(intent)) + '</div>' +
+    (intentEvidence.length > 0
+      ? '<ul class="src-phrases">' + intentEvidence.map((item) => '<li><b>' + esc(item.section) + '</b>: ' + esc(item.excerpt) + '</li>').join("") + '</ul>'
+      : '') +
+    '</div>');
 
   // Visual language notes
   const phrases = board.visualLanguage.phrases.slice(0, 4);
@@ -1000,9 +1109,14 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
   // Derived subtle border for swatch wrappers — color-derived, not hardcoded gray
   const subtleSwatchBorder = mixHexColor(colors.surface, colors.text, 0.15) ?? colors.border;
   const conservative = board.qualityWarnings.sourceSparse || board.previewQuality.lightScore < 55;
-  const accentBarColor = conservative || board.qualityWarnings.accentOveruseRisk || board.qualityWarnings.primaryOveruseRisk
+  const sparseAccent = isSparseAccentIntent(board);
+  const softWarm = isSoftWarmIntent(board);
+  const accentBarColor = conservative || sparseAccent || board.qualityWarnings.accentOveruseRisk || board.qualityWarnings.primaryOveruseRisk
     ? colors.border
     : colors.primary;
+  const heroBackground = softWarm && colors.variant === "dark"
+    ? (mixHexColor(colors.canvas, colors.surface, 0.42) ?? colors.surface)
+    : colors.surface;
 
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
@@ -1011,7 +1125,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".board{min-height:100%;background:" + colors.canvas + ";color:" + colors.text + "}",
 
     // ── Hero ──
-    ".hero{padding:clamp(24px,4vw," + colors.spacing + ") clamp(16px,4vw," + colors.spacing + ");background:" + colors.surface + "}",
+    ".hero{padding:clamp(24px,4vw," + colors.spacing + ") clamp(16px,4vw," + colors.spacing + ");background:" + heroBackground + "}",
     ".hero:not(:last-child){border-bottom:1px solid " + colors.border + "}",
     ".hero-inner{display:flex;gap:28px;align-items:flex-start;max-width:960px;margin:0 auto}",
     ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}",
@@ -1045,6 +1159,8 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".swatch em{display:block;color:" + colors.muted + ";font-size:9px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.62}",
     ".swatch-scoped{opacity:.72}",
     ".swatch-scoped i{height:14px}",
+    ".swatch-utility{opacity:.66}",
+    ".swatch-utility i{height:12px}",
 
     // ── Typography ──
     ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}",
@@ -1069,6 +1185,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".src-section h4{font-size:10px;font-weight:600;color:" + colors.muted + ";margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;opacity:0.7}",
     ".src-keywords{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}",
     ".src-keywords span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:2px 8px;color:" + colors.muted + ";font-size:10px}",
+    ".src-intent-summary{color:" + colors.text + ";font-size:" + caption.size + ";line-height:1.4;margin-bottom:6px}",
     ".src-phrases{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.4}",
     ".src-phrases li{margin-bottom:3px}",
     ".do-dont{display:grid;grid-template-columns:1fr 1fr;gap:12px}",

@@ -8,6 +8,7 @@
 import { buildBoard } from "./designMdSpecimenBuilder";
 import { generateBoardHtml, deriveDarkThemeTokens, deriveLightThemeTokens } from "./designMdHtmlGenerator";
 import { relativeLuminance } from "./designMdContrast";
+import { analyzeDesignMdSourceIntent } from "./designMdSourceIntent";
 
 let passed = 0;
 let failed = 0;
@@ -134,6 +135,34 @@ function colorIsNotWhite(hex: string): boolean {
 
 function allColorTokens(board: ReturnType<typeof buildBoard>) {
   return board.colorGroups.flatMap((group) => group.tokens);
+}
+
+function luma(hex: string): number {
+  return relativeLuminance(hex) ?? 0;
+}
+
+// ── Source intent tests ──
+
+{
+  const intent = analyzeDesignMdSourceIntent(
+    "---\ndescription: Warm cream editorial canvas. Orange is reserved for primary CTA and wordmark. Not a dark IDE.\n---",
+    "Cursor",
+    "Warm cream editorial canvas. Orange is reserved for primary CTA and wordmark. Not a dark IDE.",
+  );
+  assert(intent.canvasIntent === "cream" || intent.canvasIntent === "warmLight", "source intent detects warm cream canvas");
+  assert(intent.darkModeIntent === "lightFirstDerived", "source intent detects light-first derived dark mode");
+  assert(intent.accentIntent.includes("sparse") && intent.accentIntent.includes("ctaOnly"), "source intent detects sparse CTA accent");
+}
+
+{
+  const intent = analyzeDesignMdSourceIntent(
+    "## Overview\nDark native terminal interface on a black canvas with high contrast.",
+    "Terminal",
+    "",
+  );
+  assert(intent.darkModeIntent === "darkNative", "source intent detects dark-native terminal designs");
+  assert(intent.canvasIntent === "black" || intent.canvasIntent === "dark", "source intent detects black/dark canvas");
+  assert(intent.contrastIntent === "high", "source intent detects high contrast");
 }
 
 // Test: dark variant uses explicit dark canvas token over fallback
@@ -358,6 +387,33 @@ function allColorTokens(board: ReturnType<typeof buildBoard>) {
   // Dark canvas source should be derived (no explicit dark tokens)
   assert(colors.darkThemeSource?.canvas.source !== "fallback",
     "Cursor dark canvas should be derived from palette, not hardcoded fallback");
+}
+
+// Test: Cursor-like prose prevents harsh fake IDE black and keeps orange sparse
+{
+  const cursorContent = "---\ncolors:\n  canvas: '#f7f7f4'\n  primary: '#f54e00'\n  primary-active: '#d04200'\n  ink: '#26251e'\n  surface-card: '#ffffff'\n  hairline: '#e6e5e0'\n  timeline-read: '#9fbbe0'\ncomponents:\n  button-primary:\n    backgroundColor: '#f54e00'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n  button-primary-active:\n    backgroundColor: '#d04200'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n---\n## Overview\nAn AI-first code editor with a warm-cream editorial canvas instead of the typical dark IDE atmosphere. Cursor Orange is reserved for primary CTAs and the wordmark. Timeline colors are only inside in-product timeline visualizations.";
+  const board = buildBoard("cursor-intent", "Cursor", "Warm cream editorial canvas; orange reserved for CTA; not a dark IDE.", cursorContent);
+  const light = deriveLightThemeTokens(board);
+  const dark = deriveDarkThemeTokens(board);
+  assert(light.canvas === "#f7f7f4", "Cursor intent light canvas uses warm cream");
+  assert(dark.canvas !== "#f54e00" && dark.canvas !== "#d04200" && dark.canvas !== "#9fbbe0", "Cursor intent dark canvas excludes primary, state, and timeline colors");
+  assert(luma(dark.canvas) > 0.02, `Cursor intent dark canvas must not be harsh black (got ${dark.canvas})`);
+  assert(board.sourceIntent.darkModeIntent === "lightFirstDerived", "Cursor intent is light-first derived");
+  const html = generateBoardHtml(board, { variant: "light" });
+  const heroButtons = html.match(/<button class="hero-btn[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  assert(heroButtons.length <= 1, "sparse Cursor accent renders at most one primary-like hero button");
+  assert(!heroButtons.some((button) => button.includes("button-primary-active")), "Cursor primary-active remains state-only");
+}
+
+// Test: Claude-like warm editorial source gets a softer derived dark fallback
+{
+  const claudeContent = "---\ncolors:\n  primary: '#cc785c'\n  primary-active: '#a9583e'\n  ink: '#141413'\n  body: '#3d3d3a'\n  canvas: '#faf9f5'\n  surface-soft: '#f5f0e8'\n  surface-card: '#efe9de'\n  surface-dark: '#181715'\n  on-dark: '#faf9f5'\n  hairline: '#e6dfd8'\n---\n## Overview\nA warm-canvas editorial interface anchored on a tinted cream canvas with serif display headlines, warm coral CTAs, and dark navy product surfaces used for code editor mockups and model showcase cards.";
+  const board = buildBoard("claude-intent", "Claude", "Warm-canvas editorial interface with tinted cream canvas and warm coral CTAs.", claudeContent);
+  const dark = deriveDarkThemeTokens(board);
+  assert(board.sourceIntent.darkModeIntent === "lightFirstDerived", "Claude warm editorial intent is light-first derived");
+  assert(luma(dark.canvas) > luma("#141413"), `Claude derived dark canvas must be softer than raw ink (got ${dark.canvas})`);
+  assert(luma(dark.canvas) > 0.02, `Claude derived dark canvas must not be overly black (got ${dark.canvas})`);
+  assert(luma(dark.border) < 0.18, "Claude warm/editorial dark border stays subtle");
 }
 
 // Test: Cursor-like semantics classify sparse primary, state variant, and timeline-only colors

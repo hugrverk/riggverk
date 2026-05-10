@@ -13,6 +13,7 @@ import {
 } from "./designMdPreviewParser";
 import type { ColorSemanticRole, ColorUsageIntensity, ColorUsageScope } from "./designMdColorSemantics";
 import { analyzeDesignMdPreviewQuality, type DesignMdPreviewQualityScores, type DesignMdPreviewQualityWarnings } from "./designMdPreviewQuality";
+import { analyzeDesignMdSourceIntent, type DesignMdSourceIntent } from "./designMdSourceIntent";
 
 // ═══════════════════════════════════════════════
 // Design-system board model (rich, token-grouped)
@@ -83,6 +84,7 @@ export interface DesignMdBoard {
   coverage: DesignMdPreviewCoverage;
   confidence: DesignMdPreviewConfidence;
   warnings: DesignMdPreviewWarning[];
+  sourceIntent: DesignMdSourceIntent;
   previewQuality: DesignMdPreviewQualityScores;
   qualityWarnings: DesignMdPreviewQualityWarnings;
 }
@@ -127,6 +129,7 @@ export function buildBoard(
     coverage: model.coverage,
     confidence: model.confidence,
     warnings: model.warnings,
+    sourceIntent: analyzeDesignMdSourceIntent(content, model.meta.title, model.meta.description),
     previewQuality: {
       lightScore: 0,
       darkScore: 0,
