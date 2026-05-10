@@ -605,12 +605,18 @@ function keywordMatches(text: string): string[] {
 
 function paletteGroupFor(key: string): DesignMdPaletteGroupName {
   const k = key.toLowerCase();
+  // Primary/brand/accent colors
   if (/(primary|brand|accent|blue|yellow|rausch|luxe|plus|m-red|m-blue)/.test(k)) return "brand/accent";
-  if (/(canvas|surface|background|card|tile|black|white|parchment|elevated)/.test(k)) return "canvas/surface";
+  // Text/ink colors — check before canvas/surface so ink-black stays in text/ink
   if (/(text|ink|body|foreground|on-primary|on-dark)/.test(k)) return "text/ink";
+  // Muted/disabled/soft/secondary
   if (/(muted|disabled|soft|secondary)/.test(k)) return "muted";
+  // Borders/hairlines
   if (/(border|hairline|divider|stroke|line)/.test(k)) return "borders/hairlines";
+  // Semantic/status
   if (/(success|warning|error|danger|info|trading|up|down|status)/.test(k)) return "semantic/status";
+  // Canvas/surface — only black/white when not already caught by text/ink
+  if (/(canvas|surface|background|card|tile|black|white|parchment|elevated)/.test(k)) return "canvas/surface";
   return "brand/accent";
 }
 

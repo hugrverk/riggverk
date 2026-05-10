@@ -127,13 +127,13 @@ function colorLuma(value: string): number | null {
 }
 
 function isLightColor(value: string | undefined): boolean {
-  const luma = value ? colorLuma(value) : null;
-  return luma !== null && luma > 0.72;
+  const lum = value ? relativeLuminance(value) : null;
+  return lum !== null && lum > 0.70;
 }
 
 function isDarkColor(value: string | undefined): boolean {
-  const luma = value ? colorLuma(value) : null;
-  return luma !== null && luma < 0.36;
+  const lum = value ? relativeLuminance(value) : null;
+  return lum !== null && lum < 0.20;
 }
 
 function darkestPaletteColor(tokens: { resolvedValue: string }[], fallback: string): string {
@@ -156,29 +156,98 @@ function lightestPaletteColor(tokens: { resolvedValue: string }[], fallback: str
   return sorted[0]?.value ?? fallback;
 }
 
+// ── Token role classification ──
+// These helpers identify the semantic role of a token key so that
+// canvas/surface/text/border/primary/semantic/timeline resolution is
+// explicit and not accidentally dragged into wrong roles.
+//
+// Rules:
+//  - primary/brand/accent must NOT be selected for canvas/surface
+//    unless the key also clearly says canvas/background/body/page/surface.
+//  - semantic/timeline/status colors must NOT be selected for canvas/surface.
+//  - body is ambiguous: if value is dark and source has canvas, treat body as text.
+
+function keyParts(key: string): string[] {
+  return key.toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .split("-")
+    .filter(Boolean);
+}
+
+function isCanvasToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(canvas|body|background|page|app|floor|root)$/.test(p));
+}
+
+function isSurfaceToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(surface|card|panel|elevated|sheet|tile)$/.test(p));
+}
+
+function isTextToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(ink|text|body|foreground)$/.test(p));
+}
+
+function isPrimaryToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(primary|brand|accent|cta)$/.test(p));
+}
+
+function isSemanticToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(semantic|success|error|warning|danger|info)$/.test(p));
+}
+
+function isTimelineToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(timeline|stage|status)$/.test(p));
+}
+
+function isDarkToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(dark|black|inverse|night|aubergine)$/.test(p));
+}
+
+function isLightToken(key: string): boolean {
+  const parts = keyParts(key);
+  return parts.some((p) => /^(light|white)$/.test(p));
+}
+
+/**
+ * True when the token's semantic role forbids using it as canvas/background.
+ * Primary, accent, semantic, and timeline colors must NOT become page canvas
+ * unless the key itself explicitly names canvas/background/body/page/surface.
+ */
+function isForbiddenCanvasCandidate(key: string): boolean {
+  if (isCanvasToken(key) || isSurfaceToken(key)) return false;
+  return isPrimaryToken(key) || isSemanticToken(key) || isTimelineToken(key);
+}
+
 function tokenKeyMatches(key: string, match: string): boolean {
   const normalized = key.toLowerCase();
   const target = match.toLowerCase();
-  const compact = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const compactTarget = target.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
-  const keyParts = compact.split("-").filter(Boolean);
-  const targetParts = compactTarget.split("-").filter(Boolean);
-  const keyTheme = keyParts.some((part) => /^(dark|black|inverse|night|aubergine)$/.test(part)) ? "dark"
-    : keyParts.some((part) => /^(light|white)$/.test(part)) ? "light"
+  const compact = keyParts(key).join("-");
+  const compactTarget = keyParts(match).join("-");
+  const kp = keyParts(key);
+  const tp = keyParts(match);
+  const keyTheme = isDarkToken(key) ? "dark"
+    : isLightToken(key) ? "light"
       : null;
-  const targetTheme = targetParts.some((part) => /^(dark|black|inverse|night|aubergine)$/.test(part)) ? "dark"
-    : targetParts.some((part) => /^(light|white)$/.test(part)) ? "light"
+  const targetTheme = isDarkToken(match) ? "dark"
+    : isLightToken(match) ? "light"
       : null;
-  const targetIsBaseSurface = targetParts.some((part) => /^(canvas|surface|background|card|text|ink|body|foreground)$/.test(part));
+  const targetIsBaseSurface = tp.some((p) => /^(canvas|surface|background|card|text|ink|body|foreground)$/.test(p));
   if (keyTheme && !targetTheme && targetIsBaseSurface) return false;
   if (keyTheme && targetTheme && keyTheme !== targetTheme) return false;
   if (compact === compactTarget || normalized === target) return true;
   // When the target is a single theme indicator (dark/light/black/white/etc.),
   // only match if the token's first part is that theme — prevents text tokens
   // like "on-dark" or "text-light" from matching as canvas/surface colors.
-  const singleThemeTarget = targetParts.length === 1 && targetTheme !== null;
-  if (singleThemeTarget) return keyParts[0] === compactTarget;
-  return keyParts.includes(compactTarget);
+  const singleThemeTarget = tp.length === 1 && targetTheme !== null;
+  if (singleThemeTarget) return kp[0] === compactTarget;
+  return kp.includes(compactTarget);
 }
 
 function tokenColor(tokens: { key: string; resolvedValue: string }[], matches: string[], fallback: string): string {
@@ -213,9 +282,11 @@ function resolveDarkToken(
   explicitMatches: string[],
   fallbackDerive: () => string,
   fallbackHard: string,
+  filterForbiddenCanvas = false,
 ): DarkThemeResolve {
   // Phase 1: try explicit source dark tokens
   const found = tokens.find((t) => {
+    if (filterForbiddenCanvas && isForbiddenCanvasCandidate(t.key)) return false;
     for (const match of explicitMatches) {
       if (tokenKeyMatches(t.key, match) && isSafeColorValue(t.resolvedValue)) {
         return true;
@@ -248,9 +319,6 @@ interface DarkThemeSelection {
 function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
   const allColors = board.colorGroups.flatMap((group) => group.tokens);
 
-  // Palette-derived anchors
-  const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
-
   // ── Canvas (body/page background) ──
   // Priority: explicit body/canvas/background-dark tokens.
   // DO NOT match plain "black" or "surface-black" early — those are fallback-only.
@@ -270,17 +338,32 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     allColors,
     canvasExplicit,
     () => {
-      // Derived: use the darkest color from canvas/surface palette groups
+      // Derived: use darkest color from canvas/surface-only palette group.
+      // CRITICAL: do NOT include brand/accent or semantic/status —
+      // primary/accent colors must not become full-page canvas background.
       const canvasGroupTokens = board.colorGroups
-        .filter((g) => g.prefix === "canvas/surface" || g.prefix === "brand/accent")
+        .filter((g) => g.prefix === "canvas/surface")
         .flatMap((g) => g.tokens);
       const darkestCanvas = darkestPaletteColor(canvasGroupTokens, "");
       if (darkestCanvas && isDarkColor(darkestCanvas)) return darkestCanvas;
-      // Broader: darkest in all tokens
-      if (isDarkColor(paletteDark)) return paletteDark;
+
+      // Broader: darkest neutral token that is not forbidden as canvas.
+      // Filter out primary/accent/semantic/timeline tokens explicitly.
+      const neutralDarkTokens = allColors.filter((t) =>
+        !isForbiddenCanvasCandidate(t.key) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue)
+      );
+      const darkestNeutral = darkestPaletteColor(neutralDarkTokens, "");
+      if (darkestNeutral && isDarkColor(darkestNeutral)) return darkestNeutral;
+
+      // Last resort: darkest in all tokens (still filter forbidden)
+      const safeAll = allColors.filter((t) => !isForbiddenCanvasCandidate(t.key));
+      const darkestSafe = darkestPaletteColor(safeAll, "");
+      if (darkestSafe && isDarkColor(darkestSafe)) return darkestSafe;
+
       return "#0b0e11";
     },
     "#0b0e11",
+    true, // filterForbiddenCanvas: exclude primary/accent/semantic/timeline
   );
 
   const darkCanvas = canvasResolve.value;
@@ -306,6 +389,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
       return mixHexColor(darkCanvas, "#ffffff", 0.06) ?? "#1a1e24";
     },
     "#1a1e24",
+    true, // filterForbiddenCanvas: exclude primary/accent/semantic/timeline from surface
   );
 
   const darkSurface = surfaceResolve.value;
@@ -398,14 +482,56 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
   const allColors = board.colorGroups.flatMap((group) => group.tokens);
   const paletteLight = lightestPaletteColor(allColors, "#ffffff");
 
-  // ── Light theme ──
-  const pickedLightCanvas = tokenColor(allColors, ["canvas-light", "background-light", "white", "background", "canvas", "surface-light"], paletteLight);
-  const lightCanvas = isDarkColor(pickedLightCanvas) ? (isDarkColor(paletteLight) ? "#ffffff" : paletteLight) : pickedLightCanvas;
-  const pickedLightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "white", "surface-card", "surface", "card"], isLightColor(lightCanvas) ? "#f6f7f9" : mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9");
-  const lightSurface = isDarkColor(pickedLightSurface) ? (mixHexColor(lightCanvas, "#000000", 0.04) ?? "#f6f7f9") : pickedLightSurface;
-  const lightText = ensureReadable(tokenColor(allColors, ["ink", "text-on-light", "body-on-light", "text", "body", "foreground", "black"], "#111111"), lightCanvas, "#111111");
+  // ── Light theme (source-first, role-aware) ──
+  // Canvas candidates: explicit light canvas tokens first, then neutral base
+  const lightCanvasCandidates = [
+    "canvas-light", "background-light",
+    "canvas", "background", "page",
+    // body-light only if source uses body as canvas (no separate canvas)
+    "body-light",
+  ];
+  let pickedLightCanvas = tokenColor(allColors, lightCanvasCandidates, "");
+  // If picked canvas is a dark color (from a misclassified token), fall back
+  if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
+    // Try body only if it's light and no canvas/background exists
+    const bodyToken = tokenColor(allColors, ["body"], "");
+    if (bodyToken && !isDarkColor(bodyToken) && isTextToken("body") && allColors.some((t) => isCanvasToken(t.key))) {
+      // body should be text, not canvas — skip
+    } else if (bodyToken && !isDarkColor(bodyToken)) {
+      pickedLightCanvas = bodyToken;
+    }
+    if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
+      // Lightest neutral fallback (filter out forbidden tokens)
+      const safeLightTokens = allColors.filter((t) =>
+        !isForbiddenCanvasCandidate(t.key) && isSafeColorValue(t.resolvedValue)
+      );
+      const lightest = lightestPaletteColor(safeLightTokens, "");
+      pickedLightCanvas = (lightest && isLightColor(lightest)) ? lightest : paletteLight;
+    }
+  }
+  const lightCanvas = isDarkColor(pickedLightCanvas) ? "#ffffff" : pickedLightCanvas;
+
+  // Surface: explicit surface-light first, then card, panel, derived
+  const lightSurfaceCandidates = [
+    "surface-light", "surface-card-light", "card-light", "panel-light",
+    "surface-card", "surface", "card", "panel",
+  ];
+  const pickedLightSurface = tokenColor(allColors, lightSurfaceCandidates, "");
+  const lightSurface = (pickedLightSurface && !isDarkColor(pickedLightSurface))
+    ? pickedLightSurface
+    : (isLightColor(lightCanvas) ? "#f6f7f9" : (mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9"));
+
+  // Text: ink first, then text, body-strong, foreground
+  const lightTextCandidates = ["ink", "text", "body-strong", "foreground", "body"];
+  const lightText = ensureReadable(tokenColor(allColors, lightTextCandidates, "#111111"), lightCanvas, "#111111");
+
+  // Muted
   const lightMuted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#667085"), lightCanvas, "#667085");
-  const lightBorder = tokenColor(allColors, ["hairline", "border", "divider"], "#d7dce2");
+
+  // Border: hairline first, then border, divider, stroke, derived subtle
+  const lightBorderCandidates = ["hairline", "border", "divider", "stroke"];
+  const lightBorder = tokenColor(allColors, lightBorderCandidates,
+    mixHexColor(lightSurface, lightText, 0.12) ?? "#d7dce2");
 
   // ── Dark theme (source-first resolver) ──
   const darkTheme = selectDarkTheme(board);
@@ -418,7 +544,8 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
   const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "text-on-dark", "on-black", "white"], darkText), darkCanvas, darkText);
 
   // ── Shared tokens ──
-  const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "red", "yellow"], "#2563eb");
+  // Primary: strictly from primary/brand/accent role tokens, not green/blue/red/yellow
+  const primary = tokenColor(allColors, ["primary", "brand", "accent"], "#2563eb");
   const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
 
   // ── Per-variant selection ──
@@ -773,14 +900,14 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero-btn{padding:8px 18px;border:none;cursor:default;font-family:" + body.family + ";font-size:" + caption.size + ";font-weight:600;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}",
     ".hero-btn-outline{background:transparent !important}",
     ".hero-visual{flex-shrink:0;display:flex;align-items:flex-start;gap:4px;padding-top:2px}",
-    ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:4px;max-width:160px}",
-    ".hero-swatch{display:block;width:24px;height:24px;border-radius:5px;border:1px solid " + subtleSwatchBorder + ";flex-shrink:0}",
+    ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:3px;max-width:112px}",
+    ".hero-swatch{display:block;width:18px;height:18px;border-radius:4px;border:1px solid " + subtleSwatchBorder + ";flex-shrink:0}",
 
     // ── Section strips ──
     ".strip{padding:clamp(18px,3vw," + colors.spacing + ") clamp(16px,4vw," + colors.spacing + ");border-top:1px solid " + colors.border + ";max-width:960px;margin:0 auto}",
     ".strip header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}",
     ".strip h3{font-family:" + display.family + ";font-size:15px;font-weight:" + display.weight + ";color:" + colors.text + "}",
-    ".strip header span{font-size:10px;color:" + colors.muted + ";opacity:0.65}",
+    ".strip header span{font-size:10px;color:" + colors.muted + ";opacity:0.55}",
     ".strip-note{font-size:" + caption.size + ";color:" + colors.muted + ";margin-top:8px;padding-top:6px;border-top:1px solid " + colors.border + ";line-height:1.35}",
 
     // ── Palette ──
@@ -791,10 +918,10 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".swatch small{display:block;color:" + colors.muted + ";font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
 
     // ── Typography ──
-    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}",
-    ".type-row{border-bottom:1px solid " + colors.border + ";padding:7px 0}",
-    ".type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:2px;font-size:9px;font-style:normal}",
-    ".type-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}",
+    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}",
+    ".type-row{border-bottom:1px solid " + colors.border + ";padding:6px 0}",
+    ".type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:1px;font-size:9px;font-style:normal;opacity:0.75}",
+    ".type-row span{display:block;overflow:hidden;text-overflow:ellipsis;line-height:1.3;overflow-wrap:anywhere}",
 
     // ── Radius & Spacing ──
     ".rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}",

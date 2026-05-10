@@ -299,8 +299,126 @@ function colorIsNotWhite(hex: string): boolean {
   // dark-named tokens (background-dark, canvas-dark) must NOT be used for light canvas
   assert(lightCanvas !== "#111827", "light canvas must not use background-dark token");
   assert(lightCanvas !== "#0d1117", "light canvas must not use canvas-dark token");
-  // When no light canvas tokens exist, fallback should be safe (brand or white)
-  assert(lightCanvas === "#2563eb" || lightCanvas === "#ffffff", "light canvas fallback must be brand color or white, not a dark background token");
+  // When no light canvas tokens exist, fallback should be safe (not a dark background token)
+  const luma = relativeLuminance(lightCanvas);
+  assert(luma !== null && luma > 0.5, `light canvas must be light (got ${lightCanvas}, luma ${luma?.toFixed(2)})`);
+}
+
+// ── Cursor-like regression tests (Pass 6) ──
+
+// Simulated Cursor DESIGN.md token structure:
+//   canvas: #f7f7f4 (warm cream, canvas/surface group)
+//   primary: #f54e00 (Cursor Orange, brand/accent group)
+//   ink: #26251e (warm near-black, text/ink group)
+//   surface-card: #ffffff (text/ink group — body = black is ambiguous)
+//   No explicit dark tokens.
+
+// Test: Cursor-like — dark canvas does NOT become primary orange
+{
+  const cursorContent = "---\ncolors:\n  canvas: '#f7f7f4'\n  primary: '#f54e00'\n  primary-active: '#d44400'\n  ink: '#26251e'\n  surface-card: '#ffffff'\n  hairline: '#e5e5e0'\n  surface: '#fafaf8'\n---\n## Overview\nCursor design system. Warm cream canvas, orange CTA only.";
+  const board = buildBoard("cursor", "Cursor", "AI code editor", cursorContent);
+  const colors = deriveDarkThemeTokens(board);
+
+  // CRITICAL: dark canvas must NOT be primary orange #f54e00
+  assert(colors.canvas !== "#f54e00",
+    "Cursor dark canvas must NOT be primary orange #f54e00");
+  assert(colors.canvas !== "#d44400",
+    "Cursor dark canvas must NOT be primary-active #d44400");
+
+  // Dark canvas should be derived from neutral dark tones, not brand/accent
+  const canvasLuma = relativeLuminance(colors.canvas);
+  assert(canvasLuma !== null && canvasLuma < 0.4,
+    `Cursor dark canvas must be dark (got ${colors.canvas}, luma ${canvasLuma?.toFixed(3)})`);
+
+  // Dark canvas source should be derived (no explicit dark tokens)
+  assert(colors.darkThemeSource?.canvas.source !== "fallback",
+    "Cursor dark canvas should be derived from palette, not hardcoded fallback");
+}
+
+// Test: Cursor-like — light canvas resolves to warm cream
+{
+  const cursorContent = "---\ncolors:\n  canvas: '#f7f7f4'\n  primary: '#f54e00'\n  primary-active: '#d44400'\n  ink: '#26251e'\n  surface-card: '#ffffff'\n  hairline: '#e5e5e0'\n  surface: '#fafaf8'\n---\n## Overview\nCursor design system";
+  const board = buildBoard("cursor-light", "Cursor Light", "AI code editor", cursorContent);
+  const colors = deriveLightThemeTokens(board);
+  assert(colors.canvas === "#f7f7f4", `Cursor light canvas must be warm cream #f7f7f4 (got ${colors.canvas})`);
+  assert(colors.text === "#26251e", `Cursor light text must be ink near-black #26251e (got ${colors.text})`);
+}
+
+// Test: primary does not appear as canvas when only primary tokens exist in source
+{
+  const content = "---\ncolors:\n  primary: '#ff6b00'\n  secondary: '#334455'\n---\n## Overview\nNo canvas defined — only primary and secondary";
+  const board = buildBoard("no-canvas-primary", "No Canvas", "Only primary", content);
+  const colors = deriveDarkThemeTokens(board);
+  // Dark canvas must NOT be primary #ff6b00 (brand/accent is forbidden for canvas)
+  assert(colors.canvas !== "#ff6b00", "dark canvas must NOT be primary when no canvas token exists");
+  // Secondary/muted is neutral enough to be acceptable as derived dark canvas
+  // — it is NOT in brand/accent or semantic/status groups.
+}
+
+// Test: dark fallback excludes semantic/timeline colors
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  success: '#22c55e'\n  error: '#ef4444'\n  warning: '#f59e0b'\n  canvas: '#ffffff'\n  text: '#111111'\n---\n## Overview\nSemantic colors must not become canvas";
+  const board = buildBoard("no-canvas-semantic", "Semantic Test", "Semantic colors", content);
+  const colors = deriveDarkThemeTokens(board);
+  // Dark canvas must NOT be any semantic color
+  assert(colors.canvas !== "#22c55e", "dark canvas must NOT be semantic success green");
+  assert(colors.canvas !== "#ef4444", "dark canvas must NOT be semantic error red");
+  assert(colors.canvas !== "#f59e0b", "dark canvas must NOT be semantic warning yellow");
+}
+
+// Test: dark surface derivation excludes brand/accent tokens
+{
+  const content = "---\ncolors:\n  primary: '#ff6600'\n  canvas: '#ffffff'\n  text: '#111111'\n  canvas-dark: '#18181b'\n  on-dark: '#f4f4f5'\n---\n## Overview\nTest surface derivation filtering";
+  const board = buildBoard("surface-filter", "Surface Filter", "Surface filtering", content);
+  const colors = deriveDarkThemeTokens(board);
+  // surface should be derived from canvas-dark, not primary
+  assert(colors.surface !== "#ff6600", "dark surface must NOT be primary orange");
+  const surfaceLuma = relativeLuminance(colors.surface);
+  const canvasLuma = relativeLuminance(colors.canvas);
+  assert(surfaceLuma !== null && canvasLuma !== null,
+    "surface and canvas must have valid luma values");
+  // Surface should be slightly lighter than canvas (not wildly different)
+  assert(Math.abs(surfaceLuma! - canvasLuma!) < 0.3,
+    `dark surface (${colors.surface}) luma should be close to canvas (${colors.canvas}) luma`);
+}
+
+// Test: dark canvas uses neutral ink before primary as fallback
+{
+  const content = "---\ncolors:\n  ink: '#1a1a1a'\n  primary: '#ff4500'\n---\n## Overview\nInk should beat primary as dark canvas base";
+  const board = buildBoard("ink-vs-primary", "Ink vs Primary", "Ink beats primary", content);
+  const colors = deriveDarkThemeTokens(board);
+  // ink #1a1a1a is a neutral dark, primary #ff4500 is forbidden for canvas
+  assert(colors.canvas !== "#ff4500", "dark canvas must NOT be primary when ink exists");
+  // The canvas should be derived from the darkest neutral safe token
+  const canvasLuma = relativeLuminance(colors.canvas);
+  assert(canvasLuma !== null && canvasLuma < 0.3, "dark canvas must be dark");
+}
+
+// Test: dark border fallback is not pure white
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  canvas-dark: '#0d1117'\n  on-dark: '#f0f2f5'\n---\n## Overview\nNo border tokens — derived border should not be white";
+  const board = buildBoard("border-not-white", "Border Not White", "Derived border is subtle", content);
+  const colors = deriveDarkThemeTokens(board);
+  const borderLuma = relativeLuminance(colors.border);
+  assert(borderLuma !== null && borderLuma < 0.5,
+    `derived dark border must not be white/light (got ${colors.border}, luma ${borderLuma?.toFixed(3)})`);
+}
+
+// Test: explicit canvas-dark wins over black token
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  black: '#000000'\n  canvas-dark: '#111827'\n  on-dark: '#f3f4f6'\n---\n## Overview\nCanvas-dark should beat black";
+  const board = buildBoard("canvas-vs-black", "Canvas vs Black", "Source priority", content);
+  const colors = deriveDarkThemeTokens(board);
+  assert(colors.canvas === "#111827", `canvas-dark must win over black token (got ${colors.canvas})`);
+}
+
+// Test: dark canvas must NOT use plain black when canvas-dark exists
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  text: '#111111'\n  black: '#000000'\n  canvas-dark: '#111827'\n  on-dark: '#f3f4f6'\n---\n## Overview\nBlack should lose to canvas-dark";
+  const board = buildBoard("test-black-vs-canvas-2", "Black vs Canvas 2", "Source priority test", content);
+  const colors = deriveDarkThemeTokens(board);
+  assert(colors.canvas !== "#000000", "dark canvas must NOT be plain black when canvas-dark token exists");
+  assert(colors.canvas === "#111827", "dark canvas must use explicit canvas-dark over black token");
 }
 
 // Test: source dark border wins over derived fallback
