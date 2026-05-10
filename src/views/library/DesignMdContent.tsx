@@ -7,7 +7,6 @@ type PreviewMode = "markdown" | "visual" | "visual-dark";
 
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`;
 
-/** Always inject the strict CSP meta tag before any existing CSP or head content. */
 function injectCsp(html: string): string {
   const headClose = html.indexOf("</head>");
   if (headClose !== -1) {
@@ -36,11 +35,19 @@ export function DesignMdContent(props: DesignMdContentProps) {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // Clear stale preview state when design entry changes
+  // When design entry changes, clear stale state and reset to available mode
   useEffect(() => {
     setPreviewHtml(null);
     setPreviewError(null);
     setPreviewLoading(false);
+    if (activeContent) {
+      // Reset to markdown if current visual mode's preview file is unavailable
+      if (previewMode === "visual" && !activeContent.has_preview) {
+        setPreviewMode("markdown");
+      } else if (previewMode === "visual-dark" && !activeContent.has_preview_dark) {
+        setPreviewMode("markdown");
+      }
+    }
   }, [activeContent?.slug]);
 
   const loadPreview = useCallback(async (slug: string, variant: "light" | "dark") => {
@@ -94,22 +101,34 @@ export function DesignMdContent(props: DesignMdContentProps) {
         >
           markdown
         </button>
-        <button
-          className={`btn btn-sm ${previewMode === "visual" ? "btn-active" : ""}`}
-          onClick={() => handleModeChange("visual")}
-          role="tab"
-          aria-selected={previewMode === "visual"}
-        >
-          visual
-        </button>
-        <button
-          className={`btn btn-sm ${previewMode === "visual-dark" ? "btn-active" : ""}`}
-          onClick={() => handleModeChange("visual-dark")}
-          role="tab"
-          aria-selected={previewMode === "visual-dark"}
-        >
-          visual dark
-        </button>
+        {activeContent.has_preview ? (
+          <button
+            className={`btn btn-sm ${previewMode === "visual" ? "btn-active" : ""}`}
+            onClick={() => handleModeChange("visual")}
+            role="tab"
+            aria-selected={previewMode === "visual"}
+          >
+            visual
+          </button>
+        ) : (
+          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No light preview available">
+            visual
+          </span>
+        )}
+        {activeContent.has_preview_dark ? (
+          <button
+            className={`btn btn-sm ${previewMode === "visual-dark" ? "btn-active" : ""}`}
+            onClick={() => handleModeChange("visual-dark")}
+            role="tab"
+            aria-selected={previewMode === "visual-dark"}
+          >
+            visual dark
+          </button>
+        ) : (
+          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No dark preview available">
+            visual dark
+          </span>
+        )}
       </div>
 
       <div className="lib-editor-body">
@@ -125,8 +144,10 @@ export function DesignMdContent(props: DesignMdContentProps) {
               <div className="design-md-preview-loading">loading preview...</div>
             )}
             {previewError && (
-              <div className="design-md-preview-error">
-                <span>{previewError}</span>
+              <div className="design-md-preview-unavailable">
+                {previewMode === "visual"
+                  ? "No visual preview available for this design"
+                  : "No dark preview available for this design"}
               </div>
             )}
             {previewHtml && !previewLoading && (

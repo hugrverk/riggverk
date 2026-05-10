@@ -786,7 +786,9 @@ function App() {
       toActionResult: (plan) => ({
         success: plan.ok,
         action: "dry run",
-        stdout: plan.ok ? `${plan.action}: ${plan.target_file}${plan.backup_path ? ` (backup: ${plan.backup_path})` : ""}` : `blocked: ${plan.reason}`,
+        stdout: plan.ok
+          ? `Design MD dry run\naction: ${plan.action}\ntarget: ${plan.target_file}${plan.backup_path ? `\nbackup: ${plan.backup_path}` : ""}`
+          : `blocked: ${plan.reason}`,
         stderr: plan.warnings.join("; "),
         exit_code: plan.ok ? 0 : 1,
       }),
@@ -811,7 +813,9 @@ function App() {
       toActionResult: (r) => ({
         success: r.success,
         action: "install_design_md",
-        stdout: r.message + (r.backup_path ? ` (backup: ${r.backup_path})` : ""),
+        stdout: r.success
+          ? `DESIGN.md installed\ntarget: ${r.target_file}${r.backup_path ? `\nbackup: ${r.backup_path}` : ""}`
+          : `install failed: ${r.message}`,
         stderr: r.warnings.join("; "),
         exit_code: r.success ? 0 : 1,
       }),
@@ -826,7 +830,10 @@ function App() {
       task: async () => {
         return await invoke<ActionResult>("open_design_md_target_folder", { targetDir: designMdInstallTarget });
       },
-      toActionResult: (r) => r,
+      toActionResult: (r) => ({
+        ...r,
+        stdout: r.success ? `opened project folder\ntarget: ${designMdInstallTarget}` : r.stdout || "",
+      }),
     });
   }, [runWsTask, designMdInstallTarget]);
 
@@ -838,7 +845,10 @@ function App() {
       task: async () => {
         return await invoke<ActionResult>("open_installed_design_md", { targetDir: designMdInstallTarget });
       },
-      toActionResult: (r) => r,
+      toActionResult: (r) => ({
+        ...r,
+        stdout: r.success ? "opened DESIGN.md" : r.stdout || "",
+      }),
     });
   }, [runWsTask, designMdInstallTarget]);
 
@@ -868,8 +878,10 @@ function App() {
       toActionResult: (r) => ({
         success: r.success,
         action: "sync_design_md_catalog",
-        stdout: r.success ? `synced ${r.entry_count} entries` : "",
-        stderr: r.stderr.slice(0, 200),
+        stdout: r.success
+          ? `Design MD catalog synced\naction: ${r.action}\nentries: ${r.entry_count}${r.current_commit ? `\ncommit: ${r.current_commit.slice(0, 7)}` : ""}`
+          : "",
+        stderr: !r.success ? `Design MD sync failed\naction: ${r.action}\n${r.stderr.slice(0, 200)}` : r.stderr.slice(0, 200),
         exit_code: r.success ? 0 : 1,
       }),
     });

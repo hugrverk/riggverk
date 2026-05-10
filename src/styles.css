@@ -5260,3 +5260,17 @@ html, body, #root {
   opacity: 0.45;
   border-top: 1px solid var(--border);
 }
+
+.design-md-preview-tab-unavailable {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.design-md-preview-unavailable {
+  padding: 18px 14px;
+  font-size: 11px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  flex: 1;
+}

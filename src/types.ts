@@ -228,6 +228,8 @@ export interface DesignMdEntry {
   title: string;
   description: string;
   path: string;
+  has_preview: boolean;
+  has_preview_dark: boolean;
 }
 
 export interface DesignMdContent {
@@ -236,6 +238,8 @@ export interface DesignMdContent {
   description: string;
   path: string;
   content: string;
+  has_preview: boolean;
+  has_preview_dark: boolean;
 }
 
 export interface DesignMdSyncResult {

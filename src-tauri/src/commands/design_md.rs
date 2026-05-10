@@ -31,6 +31,8 @@ pub struct DesignMdEntry {
     pub title: String,
     pub description: String,
     pub path: String,
+    pub has_preview: bool,
+    pub has_preview_dark: bool,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -40,6 +42,8 @@ pub struct DesignMdContent {
     pub description: String,
     pub path: String,
     pub content: String,
+    pub has_preview: bool,
+    pub has_preview_dark: bool,
 }
 
 #[derive(Serialize, Debug, Clone)]
@@ -399,12 +403,17 @@ fn list_design_md_entries_impl(cache: &Path) -> Result<Vec<DesignMdEntry>, Strin
 
         let (title, description) = parse_design_md_frontmatter(&content, &slug);
 
+        let has_preview = path.join("preview.html").is_file();
+        let has_preview_dark = path.join("preview-dark.html").is_file();
+
         let rel_path = format!("{}/{}/{}", DESIGN_MD_DIR, slug, DESIGN_MD_FILE);
         entries.push(DesignMdEntry {
             slug,
             title,
             description,
             path: rel_path,
+            has_preview,
+            has_preview_dark,
         });
     }
 
@@ -446,12 +455,18 @@ fn read_design_md_entry_impl(cache: &Path, slug: &str) -> Result<DesignMdContent
     let (title, description) = parse_design_md_frontmatter(&content, slug);
     let rel_path = format!("{}/{}/{}", DESIGN_MD_DIR, slug, DESIGN_MD_FILE);
 
+    let entry_dir = canonical_resolved.parent().unwrap_or(Path::new("."));
+    let has_preview = entry_dir.join("preview.html").is_file();
+    let has_preview_dark = entry_dir.join("preview-dark.html").is_file();
+
     Ok(DesignMdContent {
         slug: slug.to_string(),
         title,
         description,
         path: rel_path,
         content,
+        has_preview,
+        has_preview_dark,
     })
 }
 
