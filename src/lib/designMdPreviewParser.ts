@@ -1119,6 +1119,10 @@ function inferArchetypeWithEvidence(
     scores.ai_product = Math.max(scores.ai_product, 1) + 7;
     scores.creative_tool = Math.max(scores.creative_tool, 1) + 3;
   }
+  if (/(cursor)/.test(slugLower)) {
+    scores.developer_product = Math.max(scores.developer_product, 1) + 7;
+    scores.ai_product = Math.max(scores.ai_product, 1) + 5;
+  }
   if (/(together\.ai|together\.dev)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
   if (/(voltagent)/.test(slugLower)) {
     scores.ai_agent_product = Math.max(scores.ai_agent_product, 1) + 8;

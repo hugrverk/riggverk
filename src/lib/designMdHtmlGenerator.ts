@@ -775,7 +775,8 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
   const title = esc(board.title);
   const slug = esc(board.slug);
   const archetype = esc(board.archetype.replace(/_/g, " "));
-  const state = board.confidence.lightPreview === "low" || board.coverage.colorsCount < 3 ? "source-limited" : "source-backed";
+  const conservative = board.qualityWarnings.sourceSparse || board.previewQuality.lightScore < 55;
+  const state = conservative ? "source-limited" : "source-backed";
   const note = board.overview ?? board.visualLanguage.phrases[0] ?? board.description;
   const description = note ? '<p class="hero-desc">' + esc(note.length > 280 ? note.slice(0, 277) + "..." : note) + '</p>' : '';
 
@@ -813,7 +814,7 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
       const semantics = tokenSemantics(token);
       return !isScopedOnlyColor(semantics) && !isStateVariantColor(semantics);
     })
-    .slice(0, 6)
+    .slice(0, conservative ? 4 : 6)
     .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
   const paletteStrip = paletteSwatches ? '<div class="hero-palette-strip">' + paletteSwatches + '</div>' : '';
 
@@ -908,7 +909,7 @@ function renderLayout(board: DesignMdBoard): string {
     board.layout,
     board.overview,
     ...board.visualLanguage.phrases,
-  ].filter((note): note is string => !!note && note.length > 20).slice(0, 5);
+  ].filter((note): note is string => !!note && note.length > 20).slice(0, board.qualityWarnings.weakLayout ? 3 : 5);
   if (notes.length === 0) return "";
   return '<section class="strip notes-strip" id="layout">' +
     '<header><h3>Layout</h3><span>source-derived</span></header>' +
@@ -968,10 +969,15 @@ function renderSourceNotes(board: DesignMdBoard): string {
   }
 
   // Source limitations / warnings
-  if (board.warnings.length > 0) {
+  const qualityWarnings = Object.entries(board.qualityWarnings)
+    .filter(([, enabled]) => enabled)
+    .map(([key]) => key.replace(/[A-Z]/g, (letter) => " " + letter.toLowerCase()))
+    .slice(0, 6);
+  if (board.warnings.length > 0 || qualityWarnings.length > 0) {
     let warnHtml = '<div class="src-section"><h4>Source limitations</h4>' +
       '<ul class="src-warnings">' +
       board.warnings.map((w) => '<li>' + esc(w) + '</li>').join("") +
+      qualityWarnings.map((w) => '<li>' + esc(w) + '</li>').join("") +
       '</ul></div>';
     sections.push(warnHtml);
   }
@@ -993,6 +999,10 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
 
   // Derived subtle border for swatch wrappers — color-derived, not hardcoded gray
   const subtleSwatchBorder = mixHexColor(colors.surface, colors.text, 0.15) ?? colors.border;
+  const conservative = board.qualityWarnings.sourceSparse || board.previewQuality.lightScore < 55;
+  const accentBarColor = conservative || board.qualityWarnings.accentOveruseRisk || board.qualityWarnings.primaryOveruseRisk
+    ? colors.border
+    : colors.primary;
 
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
@@ -1005,7 +1015,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero:not(:last-child){border-bottom:1px solid " + colors.border + "}",
     ".hero-inner{display:flex;gap:28px;align-items:flex-start;max-width:960px;margin:0 auto}",
     ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}",
-    ".hero-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
+    ".hero-kicker{color:" + (conservative ? colors.muted : colors.primary) + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
     ".hero-title{color:" + colors.text + "}",
     ".hero-meta{color:" + colors.muted + ";font-size:" + caption.size + "}",
     ".hero-desc{color:" + colors.muted + ";max-width:540px;line-height:1.5;font-size:" + caption.size + "}",
@@ -1048,7 +1058,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".radius-cell{width:48px;height:48px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:9px;color:" + colors.muted + ";border-radius:var(--cell-radius,0)}",
     ".space-row{display:flex;align-items:center;gap:8px;margin:4px 0}",
     ".space-row span{width:60px;font-size:" + caption.size + ";color:" + colors.muted + "}",
-    ".space-row i{display:block;height:6px;background:" + colors.primary + ";border-radius:999px;min-width:4px}",
+    ".space-row i{display:block;height:6px;background:" + accentBarColor + ";border-radius:999px;min-width:4px}",
     ".space-row small{font-size:9px;color:" + colors.muted + "}",
 
     // ── Layout notes ──

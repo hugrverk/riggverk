@@ -50,6 +50,17 @@ function assertNoForbiddenStrings(html: string): void {
   assert(scriptMatches.length === 0, "generated HTML must have no script tags");
 }
 
+// ── Test: generated light and dark variants both include local sandbox-safe output ──
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  ink: '#111111'\n  primary: '#2563eb'\n---\n## Overview\nLocal deterministic preview.";
+  const board = buildBoard("variants", "Variants", "Variant generation", content);
+  const lightHtml = generateBoardHtml(board, { variant: "light" });
+  const darkHtml = generateBoardHtml(board, { variant: "dark" });
+  assert(lightHtml.includes("<!DOCTYPE html>") && darkHtml.includes("<!DOCTYPE html>"), "light/dark variants must be complete HTML documents");
+  assert(!/@import|@font-face|url\(|https?:\/\//i.test(lightHtml), "light HTML must not include external assets or font loading");
+  assert(!/@import|@font-face|url\(|https?:\/\//i.test(darkHtml), "dark HTML must not include external assets or font loading");
+}
+
 // ── Test: generated HTML is deterministic (same input -> same output) ──
 {
   const content = "---\ncolors:\n  primary: '#0066cc'\n  background: '#ffffff'\n  text: '#111111'\n---\n# Overview\nTest overview";
@@ -64,6 +75,16 @@ function assertNoForbiddenStrings(html: string): void {
   const board = buildBoard("test", "Test", "Test description", "---\ncolors:\n  primary: '#0066cc'\n---");
   const html = generateBoardHtml(board, { variant: "light" });
   assertNoForbiddenStrings(html);
+}
+
+// ── Test: preview quality metadata exists and drives source-limited rendering ──
+{
+  const content = "## Overview\nOnly one sentence and one color.\n\n- Accent `#ff6600`";
+  const board = buildBoard("sparse-quality", "Sparse Quality", "Sparse", content);
+  assert(typeof board.previewQuality.lightScore === "number", "board must expose preview quality scores");
+  assert(board.qualityWarnings.sourceSparse, "sparse sources must be marked sourceSparse");
+  const html = generateBoardHtml(board, { variant: "light" });
+  assert(html.includes("source-limited"), "source-limited boards must disclose conservative preview state");
 }
 
 // ── Test: weak generic component appears in source notes inventory, not as visual block ──
@@ -370,6 +391,16 @@ function allColorTokens(board: ReturnType<typeof buildBoard>) {
   const board = buildBoard("state-buttons", "State Buttons", "State variants", content);
   const html = generateBoardHtml(board, { variant: "light" });
   assert(!html.includes('<button class="hero-btn"'), "state variant components must not render hero buttons");
+}
+
+// Test: sparse/restricted accent stays sparse and state CTA variants are omitted
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf4'\n  ink: '#171511'\n  primary: '#ff5a00'\n  surface: '#ffffff'\ncomponents:\n  button-primary-active:\n    backgroundColor: '#cc4400'\n    textColor: '#ffffff'\n---\n## Overview\nPrimary is reserved for wordmark and only for rare CTA use. Use it scarcely.";
+  const board = buildBoard("sparse-accent", "Sparse Accent", "Sparse accent", content);
+  const html = generateBoardHtml(board, { variant: "light" });
+  const heroButtons = html.match(/<button class="hero-btn[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  assert(heroButtons.length === 0, "state-only sparse accent button variants must not render as hero buttons");
+  assert(board.qualityWarnings.stateColorOveruseRisk, "state color risk must be exposed in quality warnings");
 }
 
 // Test: semantic and timeline tokens do not become theme canvas/surface/dark fallback

@@ -16,11 +16,12 @@ const requireFromRuntime = createRequire(path.join(runtimeNodeModules, "package.
 const { chromium } = requireFromRuntime("playwright");
 
 const slugs = [
+  "cursor",
   "runwayml", "sanity", "spotify", "starbucks", "tesla", "theverge",
   "together.ai", "uber", "vercel", "vodafone", "voltagent", "warp",
   "webflow", "wired", "wise", "x.ai", "zapier", "kraken",
   "lamborghini", "lovable", "mastercard",
-  "airbnb", "apple", "binance", "slack", "shopify", "bmw", "clickhouse", "supabase",
+  "airbnb", "apple", "binance", "slack", "shopify", "bmw", "bmw-m", "clickhouse", "coinbase", "supabase",
 ];
 
 const tsOutDir = path.join(outDir, "_compiled");
@@ -42,18 +43,26 @@ execFileSync(
     "src/lib/designMdPreviewParser.ts",
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
+    "src/lib/designMdColorSemantics.ts",
+    "src/lib/designMdRenderEligibility.ts",
+    "src/lib/designMdContrast.ts",
     "src/lib/designMdDisplay.ts",
     "src/lib/designMdSourceEvidence.ts",
+    "src/lib/designMdPreviewQuality.ts",
   ],
   { cwd: repo, stdio: "pipe" },
 );
 
-for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdSourceEvidence.js"]) {
+for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdColorSemantics.js", "designMdRenderEligibility.js", "designMdContrast.js", "designMdSourceEvidence.js", "designMdPreviewQuality.js"]) {
   const fullPath = path.join(tsOutDir, file);
   const content = fs.readFileSync(fullPath, "utf8")
     .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
     .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
-    .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"');
+    .replaceAll('from "./designMdColorSemantics"', 'from "./designMdColorSemantics.js"')
+    .replaceAll('from "./designMdRenderEligibility"', 'from "./designMdRenderEligibility.js"')
+    .replaceAll('from "./designMdContrast"', 'from "./designMdContrast.js"')
+    .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"')
+    .replaceAll('from "./designMdPreviewQuality"', 'from "./designMdPreviewQuality.js"');
   fs.writeFileSync(fullPath, content);
 }
 

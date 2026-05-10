@@ -12,6 +12,7 @@ import {
   type DesignMdVisualLanguage,
 } from "./designMdPreviewParser";
 import type { ColorSemanticRole, ColorUsageIntensity, ColorUsageScope } from "./designMdColorSemantics";
+import { analyzeDesignMdPreviewQuality, type DesignMdPreviewQualityScores, type DesignMdPreviewQualityWarnings } from "./designMdPreviewQuality";
 
 // ═══════════════════════════════════════════════
 // Design-system board model (rich, token-grouped)
@@ -82,6 +83,8 @@ export interface DesignMdBoard {
   coverage: DesignMdPreviewCoverage;
   confidence: DesignMdPreviewConfidence;
   warnings: DesignMdPreviewWarning[];
+  previewQuality: DesignMdPreviewQualityScores;
+  qualityWarnings: DesignMdPreviewQualityWarnings;
 }
 
 export function buildBoard(
@@ -91,8 +94,7 @@ export function buildBoard(
   content: string,
 ): DesignMdBoard {
   const model = parseDesignMdForPreview(slug, title, description, content);
-
-  return {
+  const board: DesignMdBoard = {
     slug: model.meta.slug,
     title: model.meta.title,
     description: model.meta.description,
@@ -125,5 +127,31 @@ export function buildBoard(
     coverage: model.coverage,
     confidence: model.confidence,
     warnings: model.warnings,
+    previewQuality: {
+      lightScore: 0,
+      darkScore: 0,
+      colorScore: 0,
+      typographyScore: 0,
+      layoutScore: 0,
+      sourceScore: 0,
+    },
+    qualityWarnings: {
+      primaryOveruseRisk: false,
+      accentOveruseRisk: false,
+      stateColorOveruseRisk: false,
+      semanticOveruseRisk: false,
+      timelineOveruseRisk: false,
+      darkDerived: false,
+      darkFallback: false,
+      weakTypography: false,
+      weakLayout: false,
+      sourceSparse: false,
+      contrastRisk: false,
+      overflowRisk: false,
+    },
   };
+  const quality = analyzeDesignMdPreviewQuality(board);
+  board.previewQuality = quality.scores;
+  board.qualityWarnings = quality.warnings;
+  return board;
 }
