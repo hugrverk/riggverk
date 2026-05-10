@@ -1,36 +1,78 @@
 #!/usr/bin/env node
+
 /**
- * audit-design-md-previews.mjs
+ * Audit script for Design MD preview quality.
  *
- * Audit all Design MD entries for render eligibility, source coverage,
- * and broken-rendering risk without generating HTML or mutating the catalog.
+ * Reads DESIGN.md files from the Tauri cache and reports:
+ * - token counts (colors, dark, typography, radius, spacing, components)
+ * - section presence (palette, typography, radius/spacing, layout, source notes)
+ * - dark mode source/derived status
+ * - risk flags
  *
- * Usage: node scripts/audit-design-md-previews.mjs [--json] [--slug <slug>]
+ * Usage:
+ *   node scripts/audit-design-md-previews.mjs
+ *   node scripts/audit-design-md-previews.mjs --slug bmw-m
+ *   node scripts/audit-design-md-previews.mjs --json
  */
 
-import { readFileSync, existsSync } from "node:fs";
-import { join, dirname } from "node:path";
-import { fileURLToPath } from "node:url";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { join, resolve } from "node:path";
+import { homedir } from "node:os";
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const projectRoot = join(__dirname, "..");
+const CACHE_ROOT = resolve(
+  homedir(),
+  "Library/Application Support/ai.agentworkspace.app/design-catalogs/awesome-design-md/design-md"
+);
 
-// ── Lightweight reimplementations (no TS/React dependency) ──
+const args = process.argv.slice(2);
+const filterSlug = args.includes("--slug") ? args[args.indexOf("--slug") + 1] : null;
+const outputJson = args.includes("--json");
 
-function parseFrontmatter(content) {
+// ── Parsing helpers ──
+
+function parseFlatFrontmatter(content) {
   const trimmed = content.trimStart();
   if (!trimmed.startsWith("---")) return new Map();
+
   const afterOpen = trimmed.slice(3).replace(/^\s*\n/, "");
   const closing = afterOpen.match(/\n---\s*(\n|$)/);
   const fmStr = closing && closing.index !== undefined ? afterOpen.slice(0, closing.index) : afterOpen;
+
   const map = new Map();
-  for (const line of fmStr.split("\n")) {
-    const colonIdx = line.indexOf(":");
+  const lines = fmStr.split("\n");
+  let currentPath = [];
+
+  for (const rawLine of lines) {
+    const trimmed = rawLine.trimEnd();
+    const indent = rawLine.length - rawLine.trimStart().length;
+    const content = trimmed.trim();
+    if (!content || content.startsWith("#")) continue;
+
+    // Adjust nesting stack
+    while (currentPath.length > 0 && indent <= currentPath[currentPath.length - 1].indent) {
+      currentPath.pop();
+    }
+
+    const colonIdx = content.indexOf(":");
     if (colonIdx === -1) continue;
-    const key = line.slice(0, colonIdx).trim();
-    const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "");
-    if (key && value) map.set(key, value);
+
+    const key = content.slice(0, colonIdx).trim();
+    const rawVal = content.slice(colonIdx + 1).trim();
+
+    if (rawVal === "|" || rawVal === "|-" || rawVal === ">" || rawVal === ">-") {
+      currentPath.push({ indent, key });
+      continue;
+    }
+
+    if (!rawVal) {
+      currentPath.push({ indent, key });
+      continue;
+    }
+
+    const path = [...currentPath.map((f) => f.key), key].join(".");
+    map.set(path, rawVal.replace(/^["']|["']$/g, ""));
   }
+
   return map;
 }
 
@@ -43,299 +85,349 @@ function getFrontmatterBody(content) {
   return afterOpen.slice(closing.index + closing[0].length);
 }
 
-function isSafeColor(value) {
-  if (!value) return false;
-  return /^#[0-9a-fA-F]{3,8}$/.test(value.trim())
-    || /^rgba?\(\s*[\d.\s,%]+\)$/.test(value.trim())
-    || /^hsla?\(\s*[\d.\s,%]+\)$/.test(value.trim())
-    || value.trim() === "transparent";
-}
-
-function isSafeSize(value) {
-  if (!value) return false;
-  return /^-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?$/.test(value.trim());
-}
-
-function countComponents(fm) {
-  const groups = new Set();
-  for (const key of fm.keys()) {
-    if (!key.startsWith("components.")) continue;
-    const rest = key.slice("components.".length);
-    const dotIdx = rest.indexOf(".");
-    if (dotIdx === -1) continue;
-    const name = rest.slice(0, dotIdx);
-    if (name) groups.add(name);
-  }
-  return groups.size;
-}
-
-function countStructuredColors(fm) {
+function countSafeColors(map) {
   let count = 0;
-  for (const [key, value] of fm) {
-    if (!key.startsWith("colors.")) continue;
-    if (isSafeColor(value)) count += 1;
+  for (const [key, value] of map) {
+    if (key.startsWith("colors.") && /^#[0-9a-fA-F]{3,8}$/.test(value.trim())) {
+      count++;
+    }
   }
   return count;
 }
 
-function countStructuredTypography(fm) {
-  const names = new Set();
-  for (const key of fm.keys()) {
+function countDarkTokens(map) {
+  let count = 0;
+  for (const [key, value] of map) {
+    if (!key.startsWith("colors.")) continue;
+    const k = key.toLowerCase();
+    if (/dark|black|night|inverse|charcoal|slate|on-dark|on-black|aubergine|canvas-dark|background-dark|surface-dark/.test(k)) {
+      count++;
+    }
+  }
+  return count;
+}
+
+function countTypographyTokens(map) {
+  let count = 0;
+  const seen = new Set();
+  for (const key of map.keys()) {
     if (!key.startsWith("typography.")) continue;
     const rest = key.slice("typography.".length);
     const parts = rest.split(".");
-    names.add(parts.length > 1 ? parts.slice(0, -1).join(".") : rest);
-  }
-  return names.size;
-}
-
-function countRadiusTokens(fm) {
-  let count = 0;
-  for (const [key] of fm) {
-    if (key.startsWith("rounded.") || key.startsWith("radius.")) count += 1;
-  }
-  return count;
-}
-
-function countSpacingTokens(fm) {
-  let count = 0;
-  for (const [key] of fm) {
-    if (key.startsWith("spacing.")) count += 1;
-  }
-  return count;
-}
-
-function countMarkdownColors(body) {
-  const seen = new Set();
-  for (const line of body.split("\n")) {
-    const match = line.match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/);
-    if (match && !seen.has(match[1].toLowerCase())) {
-      seen.add(match[1].toLowerCase());
+    const base = parts[0];
+    if (!seen.has(base)) {
+      seen.add(base);
+      count++;
     }
   }
-  return seen.size;
+  return count;
 }
 
-function hasDarkTokens(fm, body) {
-  const darkRe = /dark|black|night|inverse|charcoal|slate|on-dark|on-black|terminal|code panel|cinematic|aubergine/i;
-  for (const key of fm.keys()) {
-    if (darkRe.test(key)) return true;
+function countRadiusTokens(map) {
+  let count = 0;
+  for (const key of map.keys()) {
+    if (key.startsWith("rounded.") || key.startsWith("radius.")) {
+      count++;
+    }
   }
-  return darkRe.test(body.slice(0, 5000));
+  return count;
 }
 
-function inferArchetype(slug, fm, body) {
-  const text = [slug, body.slice(0, 2000)].join(" ").toLowerCase();
-  if (/bmw|bugatti|ferrari|lamborghini|tesla|automotive|vehicle|model-card/.test(text)) return "luxury_automotive";
-  if (/spotify|music|playlist|album|audio|track|listening/.test(text)) return "music_campaign";
-  if (/starbucks|coffee|beverage|cafe|drink|food|menu/.test(text)) return "retail_food";
-  if (/airbnb|marketplace|property|listing|guest|booking|home/.test(text)) return "marketplace";
-  if (/binance|coinbase|kraken|trading|crypto|finance|balance|deposit/.test(text)) return "finance_dashboard";
-  if (/vercel|supabase|sanity|developer|docs|api|cli|infrastructure/.test(text)) return "developer_product";
-  if (/runway|together\.ai|x\.ai|ai|prompt|llm|language model/.test(text)) return "ai_product";
-  if (/the.?verge|wired|editorial|magazine|news|publication/.test(text)) return "media_editorial";
-  if (/webflow|framer|creative|no-code|visual development|design tool/.test(text)) return "creative_tool";
-  if (/mastercard|wise|stripe|payment|card network|finance/.test(text)) return "payment_finance";
-  if (/uber|mobility|ride/.test(text)) return "marketplace";
-  if (/zapier|automation|workflow|zap|pipeline/.test(text)) return "automation_workflow";
-  if (/warp|terminal|command line/.test(text)) return "terminal_tool";
-  if (/clickhouse|cohere|mongodb|analytics|database|data product/.test(text)) return "data_product";
-  if (/slack|messaging|collaboration/.test(text)) return "collaboration_saas";
-  if (/vodafone|telecom|mobile network|service provider/.test(text)) return "telecom_service";
-  if (/shopify|nike|retail brand/.test(text)) return "retail_brand";
-  if (/lovable|voltagent/.test(text)) return "ai_agent_product";
-  if (/apple/.test(slug)) return "product_gallery";
-  return "generic_system";
-}
-
-function componentSourceQuality(fm) {
-  const count = countComponents(fm);
-  const structured = count > 0;
-  // Check if components have style properties
-  let styleProps = 0;
-  for (const key of fm.keys()) {
-    if (!key.startsWith("components.")) continue;
-    const prop = key.split(".").pop();
-    if (/(background|color|rounded|border|padding|margin|height|width)/i.test(prop)) styleProps += 1;
+function countSpacingTokens(map) {
+  let count = 0;
+  for (const key of map.keys()) {
+    if (key.startsWith("spacing.") || key.startsWith("space.")) {
+      count++;
+    }
   }
-  return { count, structured, styleProps };
+  return count;
 }
 
-function auditEntry(slug, entry) {
-  const fm = parseFrontmatter(entry.content);
-  const body = getFrontmatterBody(entry.content);
-
-  const structuredColors = countStructuredColors(fm);
-  const mdColors = countMarkdownColors(body);
-  const totalColors = Math.max(structuredColors, mdColors);
-  const structuredTypo = countStructuredTypography(fm);
-  const radiusCount = countRadiusTokens(fm);
-  const spacingCount = countSpacingTokens(fm);
-  const comp = componentSourceQuality(fm);
-  const darkSignal = hasDarkTokens(fm, body);
-  const archetype = inferArchetype(entry.slug, fm, body);
-
-  // Render eligibility estimation
-  let graphicalEligible = 0;
-  let compactOnly = 0;
-  const componentNames = new Set();
-  for (const key of fm.keys()) {
+function countComponentTokens(map) {
+  let count = 0;
+  const seen = new Set();
+  for (const key of map.keys()) {
     if (!key.startsWith("components.")) continue;
     const rest = key.slice("components.".length);
-    const dotIdx = rest.indexOf(".");
-    if (dotIdx === -1) continue;
-    componentNames.add(rest.slice(0, dotIdx));
-  }
-  for (const name of componentNames) {
-    const prefix = `components.${name}.`;
-    let hasBg = false, hasBorder = false, hasText = false;
-    for (const [key, value] of fm) {
-      if (!key.startsWith(prefix)) continue;
-      const prop = key.slice(prefix.length).toLowerCase();
-      if (/(background|background-color|backgroundcolor)/.test(prop) && isSafeColor(value)) hasBg = true;
-      if (/(border|bordercolor|border-color)/.test(prop) && (isSafeColor(value) || isSafeSize(value))) hasBorder = true;
-      if (/(color|textcolor|text-color)/.test(prop) && isSafeColor(value)) hasText = true;
+    const parts = rest.split(".");
+    const base = parts[0];
+    if (!seen.has(base)) {
+      seen.add(base);
+      count++;
     }
-    const canGraphic = (hasBg || hasBorder) && hasText;
-    if (canGraphic) graphicalEligible += 1;
-    else compactOnly += 1;
   }
-
-  // Broken render risk scoring
-  let riskScore = 0;
-  const failures = [];
-  if (graphicalEligible === 0 && comp.count > 0) { riskScore += 3; failures.push("no-graphical-components-eligible"); }
-  if (compactOnly > 3) { riskScore += 2; failures.push("too-many-compact-only"); }
-  if (structuredColors === 0 && mdColors === 0) { riskScore += 2; failures.push("no-structured-colors"); }
-  if (structuredTypo === 0) { riskScore += 1; failures.push("no-typography"); }
-  if (!darkSignal) { riskScore += 1; failures.push("dark-only-derived"); }
-  if (archetype === "generic_system") { riskScore += 1; failures.push("generic-archetype"); }
-  if (comp.count === 0 && structuredColors === 0 && structuredTypo === 0) { riskScore += 3; failures.push("low-source-evidence"); }
-  // Simple contrast risk: light bg + light text
-  if (structuredColors >= 2 && mdColors <= 2) { riskScore += 1; failures.push("likely-contrast-risk"); }
-  if (componentNames.size > 0 && graphicalEligible === 0 && structuredColors < 2) { riskScore += 1; failures.push("invented-content-risk"); }
-
-  // Source-derived score (0-10)
-  const sourceScore = Math.min(10,
-    (structuredColors >= 4 ? 3 : structuredColors >= 2 ? 2 : structuredColors >= 1 ? 1 : 0)
-    + (structuredTypo >= 2 ? 2 : structuredTypo >= 1 ? 1 : 0)
-    + (graphicalEligible >= 3 ? 3 : graphicalEligible >= 1 ? 2 : 0)
-    + (radiusCount >= 2 ? 1 : 0)
-    + (spacingCount >= 2 ? 1 : 0)
-  );
-
-  return {
-    slug: entry.slug,
-    title: entry.title,
-    archetype,
-    archetypeConfidence: structuredColors + structuredTypo > 0 ? "medium" : "low",
-    componentCount: comp.count,
-    graphicalEligibleCount: graphicalEligible,
-    compactOnlyCount: compactOnly,
-    skippedCount: componentNames.size - graphicalEligible - compactOnly,
-    colorTokenCount: totalColors,
-    typographyTokenCount: structuredTypo,
-    darkTokenCount: darkSignal ? 1 : 0,
-    darkComponentCount: 0,
-    lightPreviewConfidence: graphicalEligible >= 2 ? "medium" : structuredColors >= 2 ? "medium" : "low",
-    darkPreviewConfidence: darkSignal ? "medium" : "low",
-    sourceDerivedScore: sourceScore,
-    brokenRenderRiskScore: riskScore,
-    failures,
-    structuredColorCount: structuredColors,
-    markdownColorCount: mdColors,
-    radiusCount,
-    spacingCount,
-  };
+  return count;
 }
 
-// ── Main ──
-
-function loadCatalog() {
-  // Try common cache locations
-  const cacheFile = join(projectRoot, "src-tauri", "design-md-cache.json");
-  if (existsSync(cacheFile)) {
-    try {
-      const raw = readFileSync(cacheFile, "utf-8");
-      const catalog = JSON.parse(raw);
-      if (Array.isArray(catalog)) return catalog;
-      if (catalog.entries && Array.isArray(catalog.entries)) return catalog.entries;
-    } catch (e) {
-      console.error("Failed to parse cache file:", e.message);
+function extractSection(body, heading) {
+  const escaped = heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const patterns = [
+    new RegExp(`^#{1,3}\\s+${escaped}:?\\s*$`, "im"),
+    new RegExp(`^#{1,3}\\s+\\d+\\.?\\s*${escaped}:?\\s*$`, "im"),
+    new RegExp(`^#{1,3}\\s+[^#\\n]*\\b${escaped}\\b[^#\\n]*:?\\s*$`, "im"),
+  ];
+  for (const re of patterns) {
+    const match = body.match(re);
+    if (match && match.index !== undefined) {
+      const after = body.slice(match.index + match[0].length);
+      const nextHeading = after.match(/\n#{1,3}\s/);
+      return (nextHeading && nextHeading.index !== undefined ? after.slice(0, nextHeading.index) : after).trim();
     }
   }
   return null;
 }
 
+function hasLayoutSection(body) {
+  return extractSection(body, "Layout") !== null || extractSection(body, "Overview") !== null;
+}
+
+function extractDoDontItems(body) {
+  const doSection = extractSection(body, "Do");
+  const dontSection = extractSection(body, "Don't") || extractSection(body, "Don\\'t") || extractSection(body, "Don't");
+  const dos = doSection ? doSection.split(/\n\s*-\s*/).filter(Boolean).slice(0, 8) : [];
+  const donts = dontSection ? dontSection.split(/\n\s*-\s*/).filter(Boolean).slice(0, 8) : [];
+  return { dos, donts };
+}
+
+function findFontSubstitutes(body) {
+  for (const heading of ["Font Substitutes", "Font Substitute", "Note on Font Substitutes", "Font Notes"]) {
+    const section = extractSection(body, heading);
+    if (section) return section;
+  }
+  return null;
+}
+
+function countMarkdownColors(body) {
+  const matches = body.match(/#[0-9a-fA-F]{3,8}/g);
+  return matches ? new Set(matches.map((m) => m.toLowerCase())).size : 0;
+}
+
+function countMarkdownComponents(body) {
+  const componentSectionRe = /^#{1,4}\s+[^#\n]*(?:components?\s+stylings?|components?\s+library|key\s+components)[^#\n]*$/im;
+  const match = body.match(componentSectionRe);
+  if (!match || match.index === undefined) return 0;
+  const after = body.slice(match.index + match[0].length);
+  const nextSection = after.match(/\n#{1,2}\s/);
+  const section = nextSection && nextSection.index !== undefined ? after.slice(0, nextSection.index) : after;
+  // Count bold or ### headings as component names
+  const subHeadings = section.matchAll(/(?:^#{3,4}\s+|\*\*)([^*#\n]{2,40})(?:\*\*|\s*$)/gm);
+  return Array.from(subHeadings).length;
+}
+
+function hasButtonTokens(map) {
+  for (const key of map.keys()) {
+    if (key.startsWith("components.") && /button/i.test(key)) return true;
+  }
+  return false;
+}
+
+// ── Forbidden string check ──
+
+const FORBIDDEN_STRINGS = [
+  "Homes", "Experiences", "Services", "Features", "Docs", "Pricing", "Store",
+  "Mac", "iPhone", "Buy", "Get started", "Deposit", "Explore models", "Read docs",
+  "Sign up", "Total Balance", "BTC", "ETH", "BNB", "Guest favorite", "Add dates",
+  "Add guests", "2 nights", "npm install design-system", "local preview ready",
+  "Feature One", "Feature Two", "Feature Three",
+];
+
+function scanForbiddenStrings(html) {
+  const found = [];
+  for (const str of FORBIDDEN_STRINGS) {
+    if (html.includes(str)) found.push(str);
+  }
+  return found;
+}
+
+// ── Main audit ──
+
+function auditDesignMd(slug) {
+  const dir = join(CACHE_ROOT, slug);
+  const file = join(dir, "DESIGN.md");
+  if (!existsSync(file)) return null;
+
+  const content = readFileSync(file, "utf-8");
+  const fm = parseFlatFrontmatter(content);
+  const body = getFrontmatterBody(content);
+
+  const colorsCount = countSafeColors(fm);
+  const darkTokenCount = countDarkTokens(fm);
+  const typographyCount = countTypographyTokens(fm);
+  const radiusCount = countRadiusTokens(fm);
+  const spacingCount = countSpacingTokens(fm);
+  const componentCount = countComponentTokens(fm);
+  const mdColorsCount = countMarkdownColors(body);
+  const mdComponentCount = countMarkdownComponents(body);
+  const totalColors = Math.max(colorsCount, mdColorsCount);
+  const totalComponents = Math.max(componentCount, mdComponentCount);
+
+  const layoutPresent = hasLayoutSection(body);
+  const { dos, donts } = extractDoDontItems(body);
+  const doDontPresent = dos.length > 0 || donts.length > 0;
+  const fontSubstitutes = findFontSubstitutes(body);
+  const hasFontSubstitutes = fontSubstitutes !== null;
+  const hasButtonTokensFlag = hasButtonTokens(fm);
+
+  // Dark mode analysis
+  const darkHasExplicitTokens = darkTokenCount > 0;
+  const darkDerived = !darkHasExplicitTokens;
+
+  // Preview completeness
+  let previewScore = 0;
+  if (totalColors >= 4) previewScore += 3;
+  else if (totalColors >= 2) previewScore += 1;
+  if (typographyCount >= 2) previewScore += 2;
+  else if (typographyCount >= 1) previewScore += 1;
+  if (radiusCount >= 1 || spacingCount >= 1) previewScore += 1;
+  if (layoutPresent) previewScore += 1;
+  if (doDontPresent) previewScore += 1;
+  if (totalComponents >= 3) previewScore += 1;
+  if (!darkDerived) previewScore += 1;
+  const completeness = previewScore >= 7 ? "high" : previewScore >= 4 ? "medium" : "low";
+
+  // Missing sections
+  const missingSections = [];
+  if (totalColors === 0) missingSections.push("palette");
+  if (typographyCount === 0) missingSections.push("typography");
+  if (radiusCount === 0 && spacingCount === 0) missingSections.push("radius/spacing");
+  if (!layoutPresent) missingSections.push("layout notes");
+  if (!doDontPresent && componentCount === 0 && !fontSubstitutes) missingSections.push("source notes");
+  if (darkDerived) missingSections.push("dark colors (derived)");
+
+  // Risk flags
+  const risks = [];
+  if (totalColors < 2 && typographyCount < 1) risks.push("source too sparse");
+  if (darkDerived) risks.push("dark derived");
+  if (!hasFontSubstitutes) risks.push("no font substitutes");
+  if (typographyCount === 0) risks.push("likely overflow risk (no structured typography)");
+
+  return {
+    slug,
+    colorsCount: totalColors,
+    structuredColors: colorsCount,
+    markdownColors: mdColorsCount,
+    darkTokenCount,
+    darkDerived,
+    typographyCount,
+    radiusCount,
+    spacingCount,
+    componentCount: totalComponents,
+    structuredComponents: componentCount,
+    layoutPresent,
+    doDontPresent,
+    hasFontSubstitutes,
+    hasButtonTokens: hasButtonTokensFlag,
+    fontSubstitutes: fontSubstitutes ? fontSubstitutes.slice(0, 120) : null,
+    completeness,
+    previewScore,
+    missingSections,
+    risks,
+  };
+}
+
 function main() {
-  const args = process.argv.slice(2);
-  const jsonOutput = args.includes("--json");
-  const slugFilter = args.includes("--slug") ? args[args.indexOf("--slug") + 1] : null;
+  const entries = readdirSync(CACHE_ROOT, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name);
 
-  const entries = loadCatalog();
-  if (!entries) {
-    console.error("No Design MD catalog found. Run Design MD sync first.");
-    process.exit(1);
+  const slugs = filterSlug ? [filterSlug] : entries.sort();
+
+  const results = [];
+  for (const slug of slugs) {
+    const result = auditDesignMd(slug);
+    if (result) results.push(result);
   }
 
-  const filtered = slugFilter ? entries.filter(e => e.slug === slugFilter) : entries;
-  if (filtered.length === 0) {
-    console.error("No entries match filter:", slugFilter || "all");
-    process.exit(1);
-  }
-
-  const results = filtered.map(e => auditEntry(e.slug, e));
-
-  if (jsonOutput) {
+  if (outputJson) {
     console.log(JSON.stringify(results, null, 2));
     return;
   }
 
-  // Console summary
-  const byFailures = {};
-  for (const r of results) {
-    for (const f of r.failures) {
-      if (!byFailures[f]) byFailures[f] = [];
-      byFailures[f].push(r.slug);
-    }
-  }
+  // Summary
+  const total = results.length;
+  const high = results.filter((r) => r.completeness === "high").length;
+  const medium = results.filter((r) => r.completeness === "medium").length;
+  const low = results.filter((r) => r.completeness === "low").length;
+  const darkDerivedCount = results.filter((r) => r.darkDerived).length;
+  const withPalette = results.filter((r) => r.colorsCount >= 2).length;
+  const withTypography = results.filter((r) => r.typographyCount >= 1).length;
+  const withRadiusSpacing = results.filter((r) => r.radiusCount >= 1 || r.spacingCount >= 1).length;
+  const withLayout = results.filter((r) => r.layoutPresent).length;
+  const withSourceNotes = results.filter((r) => r.doDontPresent).length;
 
-  console.log(`\n╔══════════════════════════════════════════════╗`);
-  console.log(`║  Design MD Preview Audit                    ║`);
-  console.log(`║  ${results.length} entries                         ${" ".repeat(Math.max(0, 22 - String(results.length).length))}║`);
-  console.log(`╚══════════════════════════════════════════════╝\n`);
-
-  console.log("── Failure breakdown ──");
-  for (const [failure, slugs] of Object.entries(byFailures).sort((a, b) => b[1].length - a[1].length)) {
-    console.log(`  ${failure.padEnd(32)} ${slugs.length} entries`);
-    if (slugs.length <= 10) {
-      console.log(`    ${slugs.join(", ")}`);
-    }
-  }
-
-  console.log("\n── Top 10 by broken-render risk ──");
-  const byRisk = [...results].sort((a, b) => b.brokenRenderRiskScore - a.brokenRenderRiskScore).slice(0, 10);
-  for (const r of byRisk) {
-    console.log(`  ${r.slug.padEnd(22)} risk=${r.brokenRenderRiskScore}  score=${r.sourceDerivedScore}/10  gfx=${r.graphicalEligibleCount}  compact=${r.compactOnlyCount}  failures=[${r.failures.join(", ")}]`);
-  }
-
-  console.log("\n── Bottom 10 by source-derived score ──");
-  const byScore = [...results].sort((a, b) => a.sourceDerivedScore - b.sourceDerivedScore).slice(0, 10);
-  for (const r of byScore) {
-    console.log(`  ${r.slug.padEnd(22)} score=${r.sourceDerivedScore}/10  risk=${r.brokenRenderRiskScore}  colors=${r.structuredColorCount}+${r.markdownColorCount}md  typo=${r.typographyTokenCount}  comps=${r.componentCount}/${r.graphicalEligibleCount}gfx`);
-  }
-
-  console.log("\n── Overall stats ──");
-  const avgScore = (results.reduce((s, r) => s + r.sourceDerivedScore, 0) / results.length).toFixed(1);
-  const avgRisk = (results.reduce((s, r) => s + r.brokenRenderRiskScore, 0) / results.length).toFixed(1);
-  const totalGfx = results.reduce((s, r) => s + r.graphicalEligibleCount, 0);
-  const totalComps = results.reduce((s, r) => s + r.componentCount, 0);
-  console.log(`  Average source score: ${avgScore}/10`);
-  console.log(`  Average risk score:   ${avgRisk}`);
-  console.log(`  Total graphics-eligible: ${totalGfx}/${totalComps}`);
-  console.log(`  Generic archetypes:   ${results.filter(r => r.archetype === "generic_system").length}`);
-  console.log(`  Dark-signaled:        ${results.filter(r => r.darkTokenCount > 0).length}`);
+  console.log("Design MD Preview Audit");
+  console.log("=".repeat(60));
+  console.log(`Total entries: ${total}`);
+  console.log(`Completeness: high=${high} medium=${medium} low=${low}`);
+  console.log(`Dark derived: ${darkDerivedCount} (${darkDerivedCount > 0 ? Math.round((darkDerivedCount / total) * 100) : 0}%)`);
   console.log();
+  console.log(`Section coverage:`);
+  console.log(`  Palette (>=2 colors): ${withPalette}/${total}`);
+  console.log(`  Typography (>=1):     ${withTypography}/${total}`);
+  console.log(`  Radius/Spacing:       ${withRadiusSpacing}/${total}`);
+  console.log(`  Layout:               ${withLayout}/${total}`);
+  console.log(`  Source notes:         ${withSourceNotes}/${total}`);
+  console.log();
+
+  // Low completeness entries
+  if (low > 0) {
+    console.log("Source-limited entries:");
+    for (const r of results.filter((r) => r.completeness === "low")) {
+      console.log(`  ${r.slug}: colors=${r.colorsCount} type=${r.typographyCount} radius=${r.radiusCount} spacing=${r.spacingCount} components=${r.componentCount} risks=[${r.risks.join(", ")}]`);
+    }
+    console.log();
+  }
+
+  // Entries without dark tokens
+  if (darkDerivedCount > 0) {
+    console.log("Entries with derived dark mode:");
+    for (const r of results.filter((r) => r.darkDerived)) {
+      console.log(`  ${r.slug}: darkTokens=${r.darkTokenCount} colors=${r.colorsCount}`);
+    }
+    console.log();
+  }
+
+  // Entries with no font substitutes
+  const noFont = results.filter((r) => !r.hasFontSubstitutes);
+  if (noFont.length > 0) {
+    console.log(`Entries without font substitutes: ${noFont.length}`);
+    if (noFont.length <= 15) {
+      for (const r of noFont) console.log(`  ${r.slug}`);
+    }
+    console.log();
+  }
+
+  // Per-entry detail for priority entries
+  const prioritySlugs = new Set([
+    "airbnb", "apple", "binance", "bmw-m", "bugatti", "clickhouse", "coinbase",
+    "kraken", "lamborghini", "lovable", "mastercard", "runwayml", "sanity",
+    "shopify", "slack", "spotify", "starbucks", "supabase", "tesla", "theverge",
+    "together.ai", "uber", "vercel", "vodafone", "voltagent", "warp", "webflow",
+    "wired", "wise", "x.ai", "zapier",
+  ]);
+
+  const priority = results.filter((r) => prioritySlugs.has(r.slug));
+  if (priority.length > 0) {
+    console.log("Priority entries detail:");
+    console.log("-".repeat(80));
+    console.log("slug          | colors | dark | type | rad | spc | comp | layout | notes | score | risks");
+    console.log("-".repeat(80));
+    for (const r of priority) {
+      const s = r.slug.padEnd(13);
+      const c = String(r.colorsCount).padStart(6);
+      const d = String(r.darkTokenCount).padStart(4);
+      const t = String(r.typographyCount).padStart(4);
+      const rad = String(r.radiusCount).padStart(3);
+      const spc = String(r.spacingCount).padStart(3);
+      const comp = String(r.componentCount).padStart(4);
+      const lay = r.layoutPresent ? "  yes" : "   no";
+      const notes = r.doDontPresent ? "  yes" : "   no";
+      const score = String(r.previewScore).padStart(5);
+      const riskStr = r.risks.slice(0, 3).join(", ") || "none";
+      console.log(`${s} |${c} |${d} |${t} |${rad} |${spc} |${comp} |${lay} |${notes} |${score} | ${riskStr}`);
+    }
+    console.log();
+  }
 }
 
 main();

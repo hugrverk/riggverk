@@ -62,23 +62,26 @@ function assertNoForbiddenStrings(html: string): void {
   assertNoForbiddenStrings(html);
 }
 
-// ── Test: weak generic component renders compact row, not visual block ──
+// ── Test: weak generic component appears in source notes inventory, not as visual block ──
 {
   // Create a board with a markdown-derived component (no styles)
   const content = "## Overview\nTest overview.\n\n## Components\n\n**empty-card**\n\nA weak component reference.";
   const board = buildBoard("test-no-styles", "Test", "Test desc", content);
   const html = generateBoardHtml(board, { variant: "light" });
-  // Should contain compact-row elements for the weak component
-  assert(html.includes("compact-row") || html.includes("compact-inventory"), "weak component should render compact row");
+  // Should contain source notes section with component inventory (inv-item), not visual component blocks
+  assert(html.includes("inv-item") || html.includes("src-inventory"), "weak component should appear in source notes inventory as text reference");
+  // Must NOT contain component-grid or sample-* patterns
+  assert(!html.includes("component-grid"), "weak component must not render as component grid");
 }
 
-// ── Test: board with good frontmatter component styles renders visual samples ──
+// ── Test: board with good button token renders hero button ──
 {
   const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  surface: '#f8fafc'\n  text: '#111111'\n  border: '#e2e8f0'\ncomponents:\n  button-primary:\n    backgroundColor: '#2563eb'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '12px 24px'\n---\n## Overview\nA test design system";
   const board = buildBoard("test-styled", "Test Styled", "Styled system", content);
   const html = generateBoardHtml(board, { variant: "light" });
-  // Should contain sample-button or sample-card for the component
-  assert(html.includes("sample-button"), "styled button should render as visual sample");
+  // Button tokens should render as hero button, not as component-library samples
+  assert(html.includes("hero-btn"), "styled button should render as hero button");
+  assert(!html.includes("component-grid"), "must not render component grid for button tokens");
 }
 
 // ── Test: light and dark variants both generate ──

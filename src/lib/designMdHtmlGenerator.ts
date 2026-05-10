@@ -10,9 +10,6 @@ import {
 import { evidenceLabel } from "./designMdSourceEvidence";
 import {
   checkRenderEligibility,
-  graphicalComponents,
-  compactComponents,
-  type ComponentRenderEligibility,
 } from "./designMdRenderEligibility";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
@@ -237,208 +234,246 @@ function typographyCss(board: DesignMdBoard, matches: string[], fallbackSize: st
   };
 }
 
-function componentColors(group: DesignMdBoardComponentGroup | undefined, colors: ReturnType<typeof deriveTokens>) {
-  let bg = cssColor(group?.backgroundColor, colors.surface);
-  let fg = cssColor(group?.textColor, colors.text);
-  if (colors.variant === "dark" && (!group?.backgroundColor || isLightColor(bg))) bg = colors.surface;
-  if (colors.variant === "dark" && (!group?.textColor || (isDarkColor(fg) && isDarkColor(bg)))) fg = colors.text;
-  fg = ensureReadable(fg, bg, readableTextColor(bg));
-  return {
-    bg,
-    fg,
-    border: cssColor(group?.borderColor, colors.border),
-    radius: cssSize(group?.rounded, colors.radius),
-    padding: cssSpacing(group?.padding, "12px 16px"),
-  };
+function componentsOfKind(board: DesignMdBoard, kind: string): DesignMdBoardComponentGroup[] {
+  return board.componentGroups.filter((g) =>
+    g.kind === kind &&
+    g.sourceEvidence &&
+    g.sourceEvidence.confidence !== "fallback"
+  );
 }
 
-function prioritizedComponentGroups(board: DesignMdBoard): DesignMdBoardComponentGroup[] {
-  const meaningful = board.componentGroups.filter((group) => group.sourceEvidence && group.sourceEvidence.confidence !== "fallback");
-  return [...meaningful].sort((a, b) => a.name.localeCompare(b.name));
+function hasButtonTokens(board: DesignMdBoard): boolean {
+  const buttons = componentsOfKind(board, "button");
+  return buttons.some((g) => {
+    const eligibility = checkRenderEligibility(g);
+    return eligibility.canRenderGraphic && eligibility.safeStyleCount >= 2;
+  });
+}
+
+function renderButtonLabel(group: DesignMdBoardComponentGroup): string {
+  // Prefer actual component/token name
+  const name = group.name;
+  if (/button/.test(name.toLowerCase())) return esc(name);
+  // Neutral label as token-label chrome only
+  return esc(name || "Button");
+}
+
+/**
+ * Render a single button sample for the hero. Only used for button-kinded components
+ * that pass render eligibility and have actual source-backed style tokens.
+ */
+function renderHeroButton(group: DesignMdBoardComponentGroup, colors: ReturnType<typeof deriveTokens>): string {
+  const eligibility = checkRenderEligibility(group);
+  if (!eligibility.canRenderGraphic) return "";
+  const bg = cssColor(group.backgroundColor, colors.primary);
+  const fg = ensureReadable(
+    cssColor(group.textColor, colors.onPrimary),
+    bg,
+    colors.onPrimary
+  );
+  const radius = cssSize(group.rounded, colors.radius);
+  const padding = cssSpacing(group.padding, "10px 20px");
+  const label = renderButtonLabel(group);
+  return '<button class="hero-btn" style="background:' + bg + ';color:' + fg + ';border-radius:' + radius + ';padding:' + padding + '">' + label + '</button>';
 }
 
 function neutralKind(kind: string): string {
   return kind.replace(/-/g, " ");
 }
 
-/**
- * Render a compact source-derived token row for a component that does not qualify for graphical rendering.
- */
-function componentCompactRowHtml(group: DesignMdBoardComponentGroup, eligibility: ComponentRenderEligibility): string {
-  const name = esc(group.name);
-  const kind = esc(neutralKind(group.kind));
-  const evidence = esc(evidenceLabel(group.sourceEvidence));
-  const styleCount = eligibility.safeStyleCount;
-  const props: string[] = [];
-  if (group.backgroundColor) props.push("bg:" + esc(group.backgroundColor.slice(0, 7)));
-  if (group.textColor) props.push("fg:" + esc(group.textColor.slice(0, 7)));
-  if (group.rounded) props.push("r:" + esc(group.rounded));
-  if (group.padding) props.push("p:" + esc(group.padding));
-  const propsStr = props.length > 0 ? props.join(" ") : "no source styles";
-  return '<div class="compact-row"><b>' + name + '</b><span>' + kind + '</span><code>' + propsStr + '</code><small>' + evidence + ' · ' + styleCount + ' styles · ' + esc(eligibility.reason) + '</small></div>';
-}
+// ── Section renderers ──
 
-/**
- * Render a graphical sample for a component. Only call after checking render eligibility.
- */
-function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnType<typeof deriveTokens>): string {
-  const eligibility = checkRenderEligibility(group);
-  if (!eligibility.canRenderGraphic) {
-    return componentCompactRowHtml(group, eligibility);
-  }
-  const style = componentColors(group, colors);
-  const name = esc(group.name);
-  const meta = esc(neutralKind(group.kind));
-  if (group.kind === "button") {
-    return '<button class="sample sample-button" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + ';padding:' + style.padding + '">' + name + '</button>';
-  }
-  if (group.kind === "search" || group.kind === "input" || group.kind === "prompt-input") {
-    return '<div class="sample sample-input" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><span>' + name + '</span><i></i></div>';
-  }
-  if (group.kind === "chip" || group.kind === "badge") {
-    return '<span class="sample sample-chip" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + colors.pill + '">' + name + '</span>';
-  }
-  if (group.kind === "terminal-panel" || group.kind === "code-panel") {
-    return '<div class="sample sample-code" style="background:' + (group.kind === "terminal-panel" ? colors.darkCanvas : style.bg) + ';color:' + (group.kind === "terminal-panel" ? colors.onDark : style.fg) + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>' + esc(Object.keys(group.raw).slice(0, 2).join(" · ") || meta) + '</code></div>';
-  }
-  if (group.kind === "workflow-step") {
-    return '<div class="sample sample-workflow" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>' + meta + '</span></div>';
-  }
-  if (group.kind === "market-table" || group.kind === "table") {
-    return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>' + meta + '</i><strong>' + esc(evidenceLabel(group.sourceEvidence)) + '</strong></span></div>';
-  }
-  if (group.kind === "chart") {
-    return '<div class="sample sample-chart" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><div><i></i><i></i><i></i><i></i></div></div>';
-  }
-  if (group.kind === "nav" || group.kind === "subnav") {
-    return '<div class="sample sample-nav" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>' + meta + '</span></div>';
-  }
-  return '<div class="sample sample-card" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><small>' + meta + '</small></div>';
-}
+function renderHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>, display: ReturnType<typeof typographyCss>): string {
+  const title = esc(board.title);
+  const slug = esc(board.slug);
+  const archetype = esc(board.archetype.replace(/_/g, " "));
+  const state = board.confidence.lightPreview === "low" || board.coverage.colorsCount < 3 ? "source-limited" : "source-backed";
+  const note = board.overview ?? board.visualLanguage.phrases[0] ?? board.description;
+  const description = note ? '<p class="hero-desc">' + esc(note.length > 280 ? note.slice(0, 277) + "..." : note) + '</p>' : '';
 
-function renderSourceHeader(board: DesignMdBoard): string {
-  const keywords = board.visualLanguage.keywords.slice(0, 5).map((keyword) => '<i>' + esc(keyword) + '</i>').join("");
-  const state = board.confidence.lightPreview === "low" || board.coverage.componentCount === 0 ? "source-limited" : "source-backed";
-  return '<div class="board-meta"><div><strong>' + esc(board.title) + '</strong><span> · ' + esc(board.slug) + ' · ' + esc(board.archetype) + ' · ' + state + '</span></div><div class="keywords">' + keywords + '</div></div>';
-}
-
-function renderSourcePatternBoard(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const allGroups = prioritizedComponentGroups(board).slice(0, 16);
-  const eligible = graphicalComponents(allGroups);
-  const note = board.overview ?? board.layout ?? board.visualLanguage.phrases[0] ?? board.description;
   const evidence = [
-    `${board.coverage.colorsCount} colors`,
-    `${board.coverage.typographyCount} type`,
-    `${board.coverage.componentCount} components`,
+    board.coverage.colorsCount + ' colors',
+    board.coverage.typographyCount + ' type',
+    board.coverage.componentCount + ' components',
     evidenceLabel(board.archetypeEvidence),
   ].map((item) => '<span>' + esc(item) + '</span>').join("");
 
-  // No graphical components eligible - render a clean source-derived board
-  if (eligible.length === 0) {
-    const paletteStrip = board.colorGroups.flatMap(g => g.tokens).slice(0, 8)
-      .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
-    const typeSample = board.typographyTokens.slice(0, 2)
-      .map(t => '<span class="hero-type" style="font-family:' + cssPreviewFont(t.fontFamily, board, t.raw) + ';font-size:' + cssFontSize(t.fontSize, "22px", 32) + '">' + esc(t.key) + '</span>').join("");
-    const compactAll = compactComponents(allGroups);
-    const compactRows = compactAll.length > 0
-      ? '<div class="compact-inventory">' + compactAll.map(({ component, eligibility }) => componentCompactRowHtml(component, eligibility)).join("") + '</div>'
-      : '';
-    return '<section class="hero hero-board"><div class="source-copy"><span class="source-kicker">' + esc(board.archetype.replace(/_/g, " ")) + '</span><h2>' + esc(board.title) + '</h2>' + (note ? '<p>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</p>' : '') + '<div class="source-evidence">' + evidence + '</div></div>' +
-      '<div class="board-strips">' +
-      (paletteStrip ? '<div class="board-strip"><b>Palette</b><div class="hero-palette">' + paletteStrip + '</div></div>' : '') +
-      (typeSample ? '<div class="board-strip"><b>Typography</b><div class="hero-type-row">' + typeSample + '</div></div>' : '') +
-      (compactRows ? '<div class="board-strip"><b>Component inventory</b>' + compactRows + '</div>' : '') +
-      '</div></section>';
+  // Button rendering: only when DESIGN.md contains actual button tokens
+  let buttonHtml = '';
+  if (hasButtonTokens(board)) {
+    const buttons = componentsOfKind(board, "button");
+    const eligible = buttons
+      .map((g) => ({ group: g, eligibility: checkRenderEligibility(g) }))
+      .filter((r) => r.eligibility.canRenderGraphic && r.eligibility.safeStyleCount >= 2)
+      .slice(0, 2);
+    if (eligible.length > 0) {
+      buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(group, colors)).join("") + '</div>';
+    }
   }
 
-  // At least one graphical component - use the existing hero layout
-  const lead = eligible[0].component;
-  const leadStyle = componentColors(lead, colors);
-  const leadHtml = '<article class="source-lead" style="background:' + leadStyle.bg + ';color:' + leadStyle.fg + ';border-color:' + leadStyle.border + ';border-radius:' + leadStyle.radius + '"><small>' + esc(neutralKind(lead.kind)) + '</small><b>' + esc(lead.name) + '</b>' + componentSampleHtml(lead, colors) + '</article>';
+  // Small palette preview strip
+  const paletteSwatches = board.colorGroups.flatMap(g => g.tokens).slice(0, 6)
+    .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
+  const paletteStrip = paletteSwatches ? '<div class="hero-palette-strip">' + paletteSwatches + '</div>' : '';
 
-  const restEligible = eligible.slice(1, 5);
-  let restHtml = restEligible.map(({ component }) => {
-    const style = componentColors(component, colors);
-    return '<article style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + esc(neutralKind(component.kind)) + '</small><b>' + esc(component.name) + '</b></article>';
-  }).join("");
-
-  return '<section class="hero hero-source hero-source-' + esc(board.archetype) + '"><div class="source-copy"><span class="source-kicker">' + esc(board.archetype.replace(/_/g, " ")) + '</span><h2>' + esc(board.title) + '</h2>' + (note ? '<p>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</p>' : '') + '<div class="source-evidence">' + evidence + '</div></div><div class="source-components">' + leadHtml + restHtml + '</div></section>';
+  return '<section class="hero">' +
+    '<div class="hero-inner">' +
+    '<div class="hero-text">' +
+    '<span class="hero-kicker">' + archetype + ' · ' + state + '</span>' +
+    '<h1 class="hero-title" style="font-family:' + display.family + ';font-size:clamp(28px,' + display.size + ',52px);font-weight:' + display.weight + ';line-height:' + display.lineHeight + ';letter-spacing:0">' + title + '</h1>' +
+    '<span class="hero-meta">' + slug + '</span>' +
+    description +
+    '<div class="hero-evidence">' + evidence + '</div>' +
+    buttonHtml +
+    '</div>' +
+    (paletteStrip ? '<div class="hero-visual">' + paletteStrip + '</div>' : '') +
+    '</div>' +
+    '</section>';
 }
 
-function renderSourcePalette(board: DesignMdBoard): string {
+function renderPalette(board: DesignMdBoard): string {
   const tokens = board.colorGroups.flatMap((group) => group.tokens.map((token) => ({ ...token, group: group.prefix })));
   if (tokens.length === 0) return "";
-  const visible = tokens.slice(0, 20);
-  return '<section class="strip"><header><b>Palette</b><span>' + tokens.length + ' colors</span></header><div class="palette-grid">' + visible.map((token) => '<div class="swatch"><i style="background:' + cssColor(token.resolvedValue, "#d8d8d8") + '"></i><b>' + esc(token.key) + '</b><small>' + esc(token.group) + '</small></div>').join("") + '</div></section>';
-}
-
-function renderSourceTypography(board: DesignMdBoard): string {
-  const tokens = board.typographyTokens.slice(0, 10);
-  if (tokens.length === 0) return "";
-  return '<section class="strip"><header><b>Typography</b><span>source tokens</span></header><div class="type-grid">' + tokens.map((token) => {
-    const style = [
-      "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
-      "font-size:" + cssFontSize(token.fontSize, "18px", 32),
-      "font-weight:" + cssText(token.fontWeight, "500"),
-      "line-height:" + cssText(token.lineHeight, "1.25"),
-      "letter-spacing:0",
-    ].join(";");
-    return '<div class="type-row"><small>' + esc(token.key) + '</small><span style="' + style + '">' + esc(token.key) + '</span><em>' + esc(evidenceLabel(token.sourceEvidence)) + '</em></div>';
-  }).join("") + '</div></section>';
-}
-
-function renderSourceRadiusSpacing(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const radius = board.radiusTokens.slice(0, 8).map((token) => '<div class="radius-cell" style="border-radius:' + cssSize(token.resolvedValue, "0px") + '">' + esc(token.key) + '</div>').join("");
-  const spacing = board.spacingTokens.slice(0, 8).map((token) => '<div class="space-row"><span>' + esc(token.key) + '</span><i style="width:' + cssSize(token.resolvedValue, "8px") + '"></i><small>' + esc(token.resolvedValue) + '</small></div>').join("");
-  if (!radius && !spacing) return "";
-  return '<section class="strip"><header><b>Radius & spacing</b><span>source tokens</span></header><div class="rhythm-grid"><div class="radius-grid">' + radius + '</div><div style="color:' + colors.text + '">' + spacing + '</div></div></section>';
-}
-
-function renderSourceComponentGallery(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const allGroups = prioritizedComponentGroups(board).slice(0, 18);
-  if (allGroups.length === 0) return "";
-
-  const gfx = graphicalComponents(allGroups.map(g => g));
-  const compact = compactComponents(allGroups.map(g => g));
-
-  let html = '<section class="strip"><header><b>Components</b><span>' + allGroups.length + ' source-backed groups</span></header>';
-
-  // Graphical component samples
-  if (gfx.length > 0) {
-    html += '<div class="component-grid">' + gfx.map(({ component }) => {
-      return '<article><label>' + esc(component.name) + '</label>' + componentSampleHtml(component, colors) + '</article>';
-    }).join("") + '</div>';
-  }
-
-  // Compact rows for non-graphical components
-  if (compact.length > 0) {
-    html += '<div class="compact-inventory" style="margin-top:' + (gfx.length > 0 ? '14px' : '0') + '"><div class="compact-section-label" style="color:' + colors.muted + ';font-size:10px;text-transform:uppercase;margin-bottom:6px">compact source rows</div>' + compact.map(({ component, eligibility }) => componentCompactRowHtml(component, eligibility)).join("") + '</div>';
-  }
-
-  // If no eligible graphical components but we have compact ones, note why
-  if (gfx.length === 0 && compact.length > 0) {
-    // compact inventory is already shown above
-  }
-
-  html += '</section>';
-  return html;
-}
-
-function renderSourceLayoutNotes(board: DesignMdBoard): string {
-  const notes = [board.layout, board.overview, ...board.visualLanguage.phrases].filter((note): note is string => !!note).slice(0, 5);
-  if (notes.length === 0) return "";
-  return '<section class="strip notes-strip"><header><b>Layout</b><span>source notes</span></header><ul>' + notes.map((note) => '<li>' + esc(note.length > 220 ? note.slice(0, 217) + "..." : note) + '</li>').join("") + '</ul></section>';
-}
-
-function renderSourceDoDont(board: DesignMdBoard): string {
-  const dos = board.guardrailDos.slice(0, 5);
-  const donts = board.guardrailDonts.slice(0, 5);
-  if (dos.length === 0 && donts.length === 0) return "";
-  return '<section class="strip notes-strip"><header><b>Source notes</b><span>do/don&apos;t</span></header><div class="do-dont">' +
-    '<ul>' + dos.map((item) => '<li>' + esc(item) + '</li>').join("") + '</ul>' +
-    '<ul>' + donts.map((item) => '<li>' + esc(item) + '</li>').join("") + '</ul>' +
+  const visible = tokens.slice(0, 24);
+  return '<section class="strip" id="palette">' +
+    '<header><h3>Palette</h3><span>' + tokens.length + ' colors</span></header>' +
+    '<div class="palette-grid">' +
+    visible.map((token) =>
+      '<div class="swatch">' +
+      '<i style="background:' + cssColor(token.resolvedValue, "#d8d8d8") + '"></i>' +
+      '<b>' + esc(token.key) + '</b>' +
+      '<small>' + esc(token.group) + '</small>' +
+      '</div>'
+    ).join("") +
     '</div></section>';
 }
+
+function renderTypography(board: DesignMdBoard): string {
+  const tokens = board.typographyTokens.slice(0, 10);
+  if (tokens.length === 0) return "";
+  return '<section class="strip" id="typography">' +
+    '<header><h3>Typography</h3><span>' + tokens.length + ' tokens</span></header>' +
+    '<div class="type-grid">' +
+    tokens.map((token) => {
+      const style = [
+        "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
+        "font-size:" + cssFontSize(token.fontSize, "18px", 32),
+        "font-weight:" + cssText(token.fontWeight, "500"),
+        "line-height:" + cssText(token.lineHeight, "1.25"),
+        "letter-spacing:0",
+      ].join(";");
+      return '<div class="type-row">' +
+        '<small>' + esc(token.key) + '</small>' +
+        '<span style="' + style + '">' + esc(token.key) + '</span>' +
+        '<em>' + esc(evidenceLabel(token.sourceEvidence)) + '</em>' +
+        '</div>';
+    }).join("") +
+    '</div>' +
+    (board.fontSubstitutes ? '<div class="strip-note">Font substitutes: ' + esc(board.fontSubstitutes.slice(0, 200)) + '</div>' : '') +
+    '</section>';
+}
+
+function renderRadiusSpacing(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const radius = board.radiusTokens.slice(0, 8).map((token) =>
+    '<div class="radius-cell" style="border-radius:' + cssSize(token.resolvedValue, "0px") + '">' + esc(token.key) + '</div>'
+  ).join("");
+  const spacing = board.spacingTokens.slice(0, 8).map((token) =>
+    '<div class="space-row">' +
+    '<span>' + esc(token.key) + '</span>' +
+    '<i style="width:' + cssSize(token.resolvedValue, "8px") + '"></i>' +
+    '<small>' + esc(token.resolvedValue) + '</small>' +
+    '</div>'
+  ).join("");
+  if (!radius && !spacing) return "";
+  return '<section class="strip" id="radius-spacing">' +
+    '<header><h3>Radius &amp; Spacing</h3><span>source tokens</span></header>' +
+    '<div class="rhythm-grid">' +
+    '<div class="radius-grid">' + radius + '</div>' +
+    '<div style="color:' + colors.text + '">' + spacing + '</div>' +
+    '</div></section>';
+}
+
+function renderLayout(board: DesignMdBoard): string {
+  const notes = [
+    board.layout,
+    board.overview,
+    ...board.visualLanguage.phrases,
+  ].filter((note): note is string => !!note && note.length > 20).slice(0, 5);
+  if (notes.length === 0) return "";
+  return '<section class="strip notes-strip" id="layout">' +
+    '<header><h3>Layout</h3><span>source-derived</span></header>' +
+    '<ul>' + notes.map((note) =>
+      '<li>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</li>'
+    ).join("") + '</ul>' +
+    '</section>';
+}
+
+function renderSourceNotes(board: DesignMdBoard): string {
+  const sections: string[] = [];
+
+  // Visual language notes
+  const phrases = board.visualLanguage.phrases.slice(0, 4);
+  const keywords = board.visualLanguage.keywords.slice(0, 8);
+  if (phrases.length > 0 || keywords.length > 0) {
+    let langHtml = '<div class="src-section"><h4>Visual language</h4>';
+    if (keywords.length > 0) {
+      langHtml += '<div class="src-keywords">' + keywords.map((k) => '<span>' + esc(k) + '</span>').join("") + '</div>';
+    }
+    if (phrases.length > 0) {
+      langHtml += '<ul class="src-phrases">' + phrases.map((p) => '<li>' + esc(p.length > 180 ? p.slice(0, 177) + "..." : p) + '</li>').join("") + '</ul>';
+    }
+    langHtml += '</div>';
+    sections.push(langHtml);
+  }
+
+  // Do / Don't
+  const dos = board.guardrailDos.slice(0, 5);
+  const donts = board.guardrailDonts.slice(0, 5);
+  if (dos.length > 0 || donts.length > 0) {
+    let ddHtml = '<div class="src-section"><h4>Do / Don&apos;t</h4><div class="do-dont">';
+    if (dos.length > 0) {
+      ddHtml += '<ul class="do-list">' + dos.map((item) => '<li>' + esc(item) + '</li>').join("") + '</ul>';
+    }
+    if (donts.length > 0) {
+      ddHtml += '<ul class="dont-list">' + donts.map((item) => '<li>' + esc(item) + '</li>').join("") + '</ul>';
+    }
+    ddHtml += '</div></div>';
+    sections.push(ddHtml);
+  }
+
+  // Component inventory (names only, not rendered library)
+  const meaningful = board.componentGroups.filter((g) => g.sourceEvidence && g.sourceEvidence.confidence !== "fallback");
+  if (meaningful.length > 0) {
+    const sorted = [...meaningful].sort((a, b) => a.name.localeCompare(b.name));
+    let invHtml = '<div class="src-section"><h4>Component inventory</h4>' +
+      '<div class="src-inventory">' +
+      sorted.slice(0, 20).map((g) => {
+        const name = esc(g.name);
+        const kind = esc(neutralKind(g.kind));
+        const evidence = esc(evidenceLabel(g.sourceEvidence));
+        return '<div class="inv-item"><b>' + name + '</b><span>' + kind + '</span><em>' + evidence + '</em></div>';
+      }).join("") +
+      '</div></div>';
+    sections.push(invHtml);
+  }
+
+  // Source limitations / warnings
+  if (board.warnings.length > 0) {
+    let warnHtml = '<div class="src-section"><h4>Source limitations</h4>' +
+      '<ul class="src-warnings">' +
+      board.warnings.map((w) => '<li>' + esc(w) + '</li>').join("") +
+      '</ul></div>';
+    sections.push(warnHtml);
+  }
+
+  if (sections.length === 0) return "";
+  return '<section class="strip notes-strip" id="source-notes">' +
+    '<header><h3>Source notes</h3><span>' + sections.length + ' sections</span></header>' +
+    '<div class="src-body">' + sections.join("") + '</div>' +
+    '</section>';
+}
+
+// ── Main generator ──
 
 export function generateSpecimenHtml(spec: DesignMdSpecimen): string {
   return generateBoardHtml({
@@ -489,36 +524,96 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
   const display = typographyCss(board, ["hero", "display-xl", "display-lg", "display"], "38px");
   const body = typographyCss(board, ["body", "text"], "15px");
   const caption = typographyCss(board, ["caption", "label", "small"], "12px");
+
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
     "html,body{width:100%;height:100%;min-height:100%;overflow:auto}",
-    "body{font-family:" + body.family + ";font-size:" + body.size + ";font-weight:" + body.weight + ";line-height:1.45;letter-spacing:0;background:" + colors.canvas + ";color:" + colors.text + ";-webkit-font-smoothing:antialiased}",
+    "body{font-family:" + body.family + ";font-size:" + body.size + ";font-weight:" + body.weight + ";line-height:1.5;letter-spacing:0;background:" + colors.canvas + ";color:" + colors.text + ";-webkit-font-smoothing:antialiased}",
     ".board{min-height:100%;background:" + colors.canvas + ";color:" + colors.text + "}",
-    ".board-meta{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px;border-bottom:1px solid " + colors.border + ";background:" + colors.canvas + ";position:sticky;top:0;z-index:2}",
-    ".board-meta strong{font-size:13px}.board-meta span{font-size:" + caption.size + ";color:" + colors.muted + "}.keywords{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}.keywords i{font-style:normal;border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:3px 8px;color:" + colors.muted + "}",
-    ".hero-source{min-height:300px;display:grid;grid-template-columns:minmax(0,.86fr) minmax(320px,1.14fr);gap:18px;align-items:stretch;padding:" + colors.spacing + ";background:" + colors.canvas + "}.source-copy{display:flex;flex-direction:column;justify-content:center;gap:12px;min-width:0}.source-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase}.source-copy h2{font-family:" + display.family + ";font-size:clamp(28px," + display.size + ",56px);font-weight:" + display.weight + ";line-height:" + display.lineHeight + ";letter-spacing:0}.source-copy p{color:" + colors.muted + ";max-width:660px}.source-evidence{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}.source-evidence span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:4px 8px;color:" + colors.muted + ";font-size:" + caption.size + "}",
-    ".source-components{display:grid;grid-template-columns:1.15fr .85fr;grid-auto-rows:minmax(92px,auto);gap:10px}.source-components article{border:1px solid " + colors.border + ";padding:13px;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:7px}.source-components article small{color:" + colors.muted + ";font-size:10px;text-transform:uppercase}.source-components article b,.source-components article span{overflow-wrap:anywhere}.source-lead{grid-row:span 3}.source-limited-card span{color:" + colors.muted + "}",
-    ".strip{padding:20px;border-top:1px solid " + colors.border + "}.strip header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}.strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}",
-    ".palette-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.surface + ";overflow:hidden}.swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(127,127,127,.25)}.swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swatch small{color:" + colors.muted + ";font-size:10px}",
-    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.type-row{border-bottom:1px solid " + colors.border + ";padding:8px 0}.type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:4px;font-size:10px;font-style:normal}.type-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.component-grid article{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:10px;min-height:112px;overflow:hidden}.component-grid label{display:block;color:" + colors.muted + ";font-size:11px;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".sample{max-width:100%}.sample-button{border:1px solid transparent}.sample-input{display:flex;justify-content:space-between;align-items:center;border:1px solid;padding:12px}.sample-input i{width:14px;height:14px;border-radius:50%;background:" + colors.primary + "}.sample-chip{display:inline-flex;padding:7px 12px;border:1px solid}.sample-nav{display:flex;gap:12px;padding:11px;border:1px solid}.sample-card{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid}.sample-code{display:grid;gap:8px;padding:14px;border:1px solid;overflow:hidden}.sample-code code{display:block;padding:8px;border-radius:5px;background:rgba(0,0,0,.15);font-family:monospace;font-size:" + caption.size + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-workflow{display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid}.sample-workflow span{color:" + colors.muted + "}.sample-table{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid}.sample-table span{display:flex;justify-content:space-between;gap:12px;border-top:1px solid rgba(127,127,127,.25);padding-top:6px}.sample-table i{font-style:normal}.sample-table strong{font-weight:400;color:" + colors.muted + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-chart{display:grid;gap:12px;padding:14px;border:1px solid}.sample-chart div{height:58px;display:flex;align-items:end;gap:8px}.sample-chart i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.sample-chart i:nth-child(1){height:35%}.sample-chart i:nth-child(2){height:70%}.sample-chart i:nth-child(3){height:48%}.sample-chart i:nth-child(4){height:88%}",
-    ".rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.radius-grid{display:flex;flex-wrap:wrap;gap:8px}.radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}.space-row{display:flex;align-items:center;gap:10px;margin:7px 0}.space-row span{width:70px}.space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px}.notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px;padding-left:18px;color:" + colors.muted + "}.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:16px}",
-    ".compact-inventory{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";overflow:hidden;margin-bottom:0}.compact-row{display:grid;grid-template-columns:140px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid " + colors.border + ";font-size:12px}.compact-row:last-child{border-bottom:none}.compact-row b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.compact-row span{color:" + colors.muted + "}.compact-row code{font-family:monospace;color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-row small{color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:1/-1}.compact-section-label{padding:6px 12px 4px;border-bottom:1px solid " + colors.border + ";font-size:10px;text-transform:uppercase}",
-    ".hero-board{padding:" + colors.spacing + ";background:" + colors.canvas + "}.hero-board .source-copy{margin-bottom:18px}.board-strips{display:flex;flex-direction:column;gap:14px}.board-strip b{display:block;font-size:10px;text-transform:uppercase;color:" + colors.muted + ";margin-bottom:8px;letter-spacing:.05em}.hero-palette{display:flex;flex-wrap:wrap;gap:6px}.hero-swatch{display:block;width:36px;height:36px;border-radius:6px;border:1px solid rgba(127,127,127,.25);flex-shrink:0}.hero-type-row{display:flex;flex-wrap:wrap;gap:16px}.hero-type{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}",
-    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.hero-source,.source-components,.palette-grid,.type-grid,.component-grid,.rhythm-grid,.notes-strip ul,.do-dont{grid-template-columns:1fr}.source-lead{grid-row:auto}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.compact-row{grid-template-columns:1fr 1fr;gap:4px}}",
+
+    // ── Hero ──
+    ".hero{padding:" + colors.spacing + " " + colors.spacing + ";background:" + colors.surface + "}",
+    ".hero-inner{display:flex;gap:24px;align-items:flex-start;max-width:960px;margin:0 auto}",
+    ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}",
+    ".hero-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
+    ".hero-title{color:" + colors.text + "}",
+    ".hero-meta{color:" + colors.muted + ";font-size:" + caption.size + "}",
+    ".hero-desc{color:" + colors.muted + ";max-width:560px;line-height:1.55}",
+    ".hero-evidence{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}",
+    ".hero-evidence span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:3px 8px;color:" + colors.muted + ";font-size:" + caption.size + "}",
+    ".hero-buttons{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}",
+    ".hero-btn{border:none;cursor:default;font-family:" + body.family + ";font-size:" + body.size + ";font-weight:600;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".hero-visual{flex-shrink:0;display:flex;align-items:flex-start;gap:6px;padding-top:4px}",
+    ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:4px;max-width:180px}",
+    ".hero-swatch{display:block;width:28px;height:28px;border-radius:6px;border:1px solid rgba(127,127,127,.25);flex-shrink:0}",
+
+    // ── Section strips ──
+    ".strip{padding:" + colors.spacing + ";border-top:1px solid " + colors.border + ";max-width:960px;margin:0 auto}",
+    ".strip header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}",
+    ".strip h3{font-family:" + display.family + ";font-size:18px;font-weight:" + display.weight + "}",
+    ".strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}",
+    ".strip-note{font-size:" + caption.size + ";color:" + colors.muted + ";margin-top:10px;padding-top:8px;border-top:1px solid " + colors.border + ";line-height:1.4}",
+
+    // ── Palette ──
+    ".palette-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}",
+    ".swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.surface + ";overflow:hidden}",
+    ".swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(127,127,127,.25)}",
+    ".swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".swatch small{color:" + colors.muted + ";font-size:10px}",
+
+    // ── Typography ──
+    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}",
+    ".type-row{border-bottom:1px solid " + colors.border + ";padding:10px 0}",
+    ".type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:4px;font-size:10px;font-style:normal}",
+    ".type-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+
+    // ── Radius & Spacing ──
+    ".rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}",
+    ".radius-grid{display:flex;flex-wrap:wrap;gap:8px}",
+    ".radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}",
+    ".space-row{display:flex;align-items:center;gap:10px;margin:7px 0}",
+    ".space-row span{width:70px;font-size:" + caption.size + "}",
+    ".space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px;min-width:4px}",
+    ".space-row small{font-size:10px;color:" + colors.muted + "}",
+
+    // ── Layout notes ──
+    ".notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px;padding-left:18px;color:" + colors.muted + ";font-size:" + body.size + ";line-height:1.45}",
+
+    // ── Source notes ──
+    ".src-body{display:flex;flex-direction:column;gap:16px}",
+    ".src-section h4{font-size:12px;font-weight:600;color:" + colors.text + ";margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}",
+    ".src-keywords{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}",
+    ".src-keywords span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:2px 8px;color:" + colors.muted + ";font-size:10px}",
+    ".src-phrases{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.45}",
+    ".src-phrases li{margin-bottom:4px}",
+    ".do-dont{display:grid;grid-template-columns:1fr 1fr;gap:16px}",
+    ".do-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.45}",
+    ".do-list li{margin-bottom:3px}",
+    ".dont-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.45}",
+    ".dont-list li{margin-bottom:3px}",
+    ".src-inventory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}",
+    ".inv-item{display:flex;align-items:baseline;gap:8px;padding:5px 8px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";font-size:" + caption.size + "}",
+    ".inv-item b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}",
+    ".inv-item span{color:" + colors.muted + ";flex-shrink:0}",
+    ".inv-item em{color:" + colors.muted + ";font-size:9px;margin-left:auto;flex-shrink:0}",
+    ".src-warnings{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.4}",
+    ".src-warnings li{margin-bottom:3px}",
+
+    // ── Responsive ──
+    "@media(max-width:760px){.hero-inner{flex-direction:column}.hero-visual{width:100%}.hero-palette-strip{max-width:100%}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.type-grid,.rhythm-grid,.notes-strip ul,.do-dont,.src-inventory{grid-template-columns:1fr}}",
+    "@media(max-width:960px){.strip{padding-left:16px;padding-right:16px}}",
   ].join("\n");
+
   const html = [
     '<div class="board">',
-    renderSourceHeader(board),
-    renderSourcePatternBoard(board, colors),
-    renderSourceComponentGallery(board, colors),
-    renderSourcePalette(board),
-    renderSourceTypography(board),
-    renderSourceRadiusSpacing(board, colors),
-    renderSourceLayoutNotes(board),
-    renderSourceDoDont(board),
+    renderHero(board, colors, display),
+    renderPalette(board),
+    renderTypography(board),
+    renderRadiusSpacing(board, colors),
+    renderLayout(board),
+    renderSourceNotes(board),
     '</div>',
   ].join("\n");
+
   return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n' + CSP + '\n<style>' + css + '</style>\n</head>\n<body>\n' + html + '\n</body>\n</html>';
 }
