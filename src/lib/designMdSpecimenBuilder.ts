@@ -464,6 +464,8 @@ export interface DesignMdBoard {
   overview: string | null;
   layout: string | null;
   fontSubstitutes: string;
+  guardrailDos: string[];
+  guardrailDonts: string[];
   coverage: DesignMdPreviewCoverage;
   confidence: DesignMdPreviewConfidence;
   warnings: DesignMdPreviewWarning[];
@@ -505,6 +507,8 @@ export function buildBoard(
     overview: model.overviewText,
     layout: model.layoutText,
     fontSubstitutes: model.fontSubstitutes,
+    guardrailDos: model.guardrailDos,
+    guardrailDonts: model.guardrailDonts,
     coverage: model.coverage,
     confidence: model.confidence,
     warnings: model.warnings,

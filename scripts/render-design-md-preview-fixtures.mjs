@@ -43,15 +43,17 @@ execFileSync(
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
     "src/lib/designMdDisplay.ts",
+    "src/lib/designMdSourceEvidence.ts",
   ],
   { cwd: repo, stdio: "pipe" },
 );
 
-for (const file of ["designMdSpecimenBuilder.js", "designMdHtmlGenerator.js"]) {
+for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdSourceEvidence.js"]) {
   const fullPath = path.join(tsOutDir, file);
   const content = fs.readFileSync(fullPath, "utf8")
     .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
-    .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"');
+    .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
+    .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"');
   fs.writeFileSync(fullPath, content);
 }
 

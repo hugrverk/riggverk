@@ -158,8 +158,19 @@ function tokenKeyMatches(key: string, match: string): boolean {
   const target = match.toLowerCase();
   const compact = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const compactTarget = target.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const keyParts = compact.split("-").filter(Boolean);
+  const targetParts = compactTarget.split("-").filter(Boolean);
+  const keyTheme = keyParts.some((part) => /^(dark|black|inverse|night|aubergine)$/.test(part)) ? "dark"
+    : keyParts.some((part) => /^(light|white)$/.test(part)) ? "light"
+      : null;
+  const targetTheme = targetParts.some((part) => /^(dark|black|inverse|night|aubergine)$/.test(part)) ? "dark"
+    : targetParts.some((part) => /^(light|white)$/.test(part)) ? "light"
+      : null;
+  const targetIsBaseSurface = targetParts.some((part) => /^(canvas|surface|background|card|text|ink|body|foreground)$/.test(part));
+  if (keyTheme && !targetTheme && targetIsBaseSurface) return false;
+  if (keyTheme && targetTheme && keyTheme !== targetTheme) return false;
   if (compact === compactTarget || normalized === target) return true;
-  return compact.split("-").includes(compactTarget);
+  return keyParts.includes(compactTarget);
 }
 
 function tokenColor(tokens: { key: string; resolvedValue: string }[], matches: string[], fallback: string): string {
@@ -184,8 +195,10 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
   const paletteLight = lightestPaletteColor(allColors, "#ffffff");
   const fallbackDarkCanvas = isDarkColor(paletteDark) ? paletteDark : "#0b0e11";
   const fallbackDarkSurface = mixHexColor(fallbackDarkCanvas, "#ffffff", 0.1) ?? "#1f2329";
-  const lightCanvas = tokenColor(allColors, ["canvas-light", "background-light", "background", "canvas", "white", "surface-light"], paletteLight);
-  const lightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "surface-card", "surface", "card", "white"], isLightColor(lightCanvas) ? "#f6f7f9" : mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9");
+  const pickedLightCanvas = tokenColor(allColors, ["canvas-light", "background-light", "white", "background", "canvas", "surface-light"], paletteLight);
+  const lightCanvas = isDarkColor(pickedLightCanvas) ? paletteLight : pickedLightCanvas;
+  const pickedLightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "white", "surface-card", "surface", "card"], isLightColor(lightCanvas) ? "#f6f7f9" : mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9");
+  const lightSurface = isDarkColor(pickedLightSurface) ? (mixHexColor(lightCanvas, "#000000", 0.04) ?? "#f6f7f9") : pickedLightSurface;
   const darkCanvas = tokenColor(allColors, ["canvas-dark", "background-dark", "surface-black", "black", "dark-surface", "dark"], fallbackDarkCanvas);
   const darkSurface = tokenColor(allColors, ["surface-dark", "surface-card-dark", "elevated-dark", "card-dark", "surface-black", "black"], fallbackDarkSurface);
   const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "red", "yellow"], "#2563eb");
@@ -268,7 +281,7 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
   return '<div class="sample sample-card" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><small>' + meta + '</small></div>';
 }
 
-function renderSourceHeader(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+function renderSourceHeader(board: DesignMdBoard): string {
   const keywords = board.visualLanguage.keywords.slice(0, 5).map((keyword) => '<i>' + esc(keyword) + '</i>').join("");
   const state = board.confidence.lightPreview === "low" || board.coverage.componentCount === 0 ? "source-limited" : "source-backed";
   return '<div class="board-meta"><div><strong>' + esc(board.title) + '</strong><span> · ' + esc(board.slug) + ' · ' + esc(board.archetype) + ' · ' + state + '</span></div><div class="keywords">' + keywords + '</div></div>';
@@ -414,7 +427,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
   ].join("\n");
   const html = [
     '<div class="board">',
-    renderSourceHeader(board, colors),
+    renderSourceHeader(board),
     renderSourcePatternBoard(board, colors),
     renderSourceComponentGallery(board, colors),
     renderSourcePalette(board),

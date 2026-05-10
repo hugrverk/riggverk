@@ -31,16 +31,18 @@ execFileSync(
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
     "src/lib/designMdDisplay.ts",
+    "src/lib/designMdSourceEvidence.ts",
   ],
   { cwd: repo, stdio: "pipe" },
 );
 
-for (const file of ["designMdSpecimenBuilder.js", "designMdHtmlGenerator.js"]) {
+for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdSourceEvidence.js"]) {
   const full = path.join(outDir, file);
   let content = fs.readFileSync(full, "utf8");
   content = content
     .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
-    .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"');
+    .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
+    .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"');
   fs.writeFileSync(full, content);
 }
 
@@ -330,8 +332,8 @@ for (const slug of testEntries) {
     darkHasCSP: darkHtml.includes("Content-Security-Policy"),
     darkNoScript: !/<script/i.test(darkHtml),
     darkDifferentBg: (() => {
-      const lb = lightHtml.match(/body\{[^}]+background:([^;]+)/);
-      const db = darkHtml.match(/body\{[^}]+background:([^;]+)/);
+      const lb = lightHtml.match(/(?:^|\n)body\{[^}]+background:([^;]+)/);
+      const db = darkHtml.match(/(?:^|\n)body\{[^}]+background:([^;]+)/);
       return lb?.[1] !== db?.[1];
     })(),
   };
