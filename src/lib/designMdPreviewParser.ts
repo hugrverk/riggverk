@@ -428,13 +428,13 @@ function componentKind(name: string): DesignMdComponentKind {
   if (/search/.test(n)) return "search";
   if (/button|cta/.test(n)) return "button";
   if (/input|field|amount/.test(n)) return "input";
-  if (/chip|badge|tag|pill|tab/.test(n)) return "chip";
   if (/sub-nav|subnav|sticky/.test(n)) return "subnav";
   if (/nav|header/.test(n)) return "nav";
   if (/link/.test(n)) return "link";
   if (/quote/.test(n)) return "quote";
   if (/footer|legal/.test(n)) return "footer";
-  if (/card|panel|callout|band|hero/.test(n)) return "card";
+  if (/card|panel|callout|band|hero|table/.test(n)) return "card";
+  if (/chip|badge|tag|pill|(^|[-_.])tab($|[-_.])/.test(n)) return "chip";
   if (/tile|cell|row/.test(n)) return "tile";
   if (/utility|option|configurator|filter/.test(n)) return "utility";
   return "generic";
@@ -471,13 +471,23 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   const scores: Record<DesignMdArchetype, number> = {
     marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/]),
     product_gallery: score([/photography-first/, /product tile/, /product-tile/, /gallery/, /sparse/, /museum/, /apple/]),
-    finance_dashboard: score([/finance/, /trading/, /markets/, /crypto/, /balance/, /deposit/, /price/, /coinbase|binance|kraken/]),
-    developer_docs: score([/docs/, /developer/, /api/, /code/, /terminal/, /cli/]),
-    luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/]),
-    data_product: score([/data/, /table/, /chart/, /analytics/, /database/, /query/, /clickhouse|cohere/]),
+    finance_dashboard: score([/finance/, /trading/, /markets/, /crypto/, /balance/, /deposit/, /price/, /asset-row/, /coinbase|binance|kraken/]),
+    developer_docs: score([/docs/, /developer/, /api/, /code-window/, /terminal/, /cli/]),
+    luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /inventory-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/]),
+    data_product: score([/data product/, /data/, /table/, /chart/, /analytics/, /database/, /query/, /metrics/, /stat-card/, /clickhouse|cohere/]),
     editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/]),
     generic_system: 0,
   };
+
+  if (/(clickhouse|cohere|mongodb|posthog)/.test(text) && scores.data_product > 0) {
+    scores.data_product += 3;
+  }
+  if (/(binance|coinbase|kraken|revolut|wise)/.test(text) && scores.finance_dashboard > 0) {
+    scores.finance_dashboard += 3;
+  }
+  if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(text) && scores.luxury_automotive > 0) {
+    scores.luxury_automotive += 3;
+  }
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
   return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
