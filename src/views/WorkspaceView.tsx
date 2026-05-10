@@ -73,13 +73,11 @@ interface WorkspaceViewProps {
   designMdSearch: string;
   onSetDesignMdSearch: (value: string) => void;
   designMdSyncResult: DesignMdSyncResult | null;
-  designMdSyncRunning: boolean;
   onSyncDesignMdCatalog: () => void;
   onSelectDesignMdEntry: (slug: string) => void;
   designMdInstallTarget: string;
   designMdInstallPlan: DesignMdInstallPlan | null;
   designMdInstallResult: DesignMdInstallResult | null;
-  designMdInstallRunning: boolean;
   designMdInstallStatus: DesignMdInstallStatus | null;
   onChooseDesignMdInstallTarget: () => void;
   onPlanDesignMdInstall: () => void;
@@ -258,13 +256,11 @@ export function WorkspaceView({
     designMdSearch,
     onSetDesignMdSearch,
     designMdSyncResult: _designMdSyncResult,
-    designMdSyncRunning,
     onSyncDesignMdCatalog,
     onSelectDesignMdEntry,
     designMdInstallTarget,
     designMdInstallPlan,
     designMdInstallResult,
-    designMdInstallRunning,
     designMdInstallStatus,
     onChooseDesignMdInstallTarget,
     onPlanDesignMdInstall,
@@ -913,8 +909,8 @@ export function WorkspaceView({
               {/* Catalog status and sync */}
               {!designMdCatalogStatus?.exists ? (
                 <div className="ws-section-actions">
-                  <button className="btn btn-sm btn-primary" onClick={onSyncDesignMdCatalog} disabled={designMdSyncRunning}>
-                    {designMdSyncRunning ? "syncing..." : "sync catalog"}
+                  <button className="btn btn-sm btn-primary" onClick={onSyncDesignMdCatalog} disabled={wsRunning !== null}>
+                    {wsRunning === "sync design-md" ? "syncing..." : "sync catalog"}
                   </button>
                 </div>
               ) : (
@@ -1002,14 +998,14 @@ export function WorkspaceView({
 
                   {/* Actions */}
                   <div className="ws-section-actions">
-                    <button className="btn btn-sm" onClick={onSyncDesignMdCatalog} disabled={designMdSyncRunning} title="Re-sync catalog">
+                    <button className="btn btn-sm" onClick={onSyncDesignMdCatalog} disabled={wsRunning !== null} title="Re-sync catalog">
                       sync
                     </button>
                     <button className="btn btn-sm" onClick={onPlanDesignMdInstall} disabled={!activeDesignMdSlug || !designMdInstallTarget}>
                       dry run
                     </button>
-                    <button className="btn btn-sm btn-primary" onClick={onInstallDesignMd} disabled={!(designMdInstallPlan?.ok) || designMdInstallRunning}>
-                      {designMdInstallRunning ? "installing..." : "install"}
+                    <button className="btn btn-sm btn-primary" onClick={onInstallDesignMd} disabled={!(designMdInstallPlan?.ok) || wsRunning !== null}>
+                      {wsRunning === "install design.md" ? "installing..." : "install"}
                     </button>
                     {designMdInstallStatus?.exists && (
                       <button className="btn btn-sm" onClick={onOpenInstalledDesignMd} title="Open installed DESIGN.md" aria-label="Open installed DESIGN.md">

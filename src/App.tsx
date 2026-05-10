@@ -1380,13 +1380,11 @@ function App() {
             designMdSearch={designMdSearch}
             onSetDesignMdSearch={setDesignMdSearch}
             designMdSyncResult={designMdSyncResult}
-            designMdSyncRunning={designMdSyncRunning}
             onSyncDesignMdCatalog={syncDesignMdCatalogWs}
             onSelectDesignMdEntry={selectDesignMdEntry}
             designMdInstallTarget={designMdInstallTarget}
             designMdInstallPlan={designMdInstallPlan}
             designMdInstallResult={designMdInstallResult}
-            designMdInstallRunning={wsRunning !== null}
             designMdInstallStatus={designMdInstallStatus}
             onChooseDesignMdInstallTarget={chooseDesignMdInstallTarget}
             onPlanDesignMdInstall={planDesignMdInstallWs}

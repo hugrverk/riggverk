@@ -1,16 +1,14 @@
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DesignMdContent as DesignMdContentType, DesignMdPreviewContent } from "../../types";
 import { Markdown } from "../../components/Markdown";
 
 type PreviewMode = "markdown" | "visual" | "visual-dark";
 
-const SANDBOX_FLAGS = "allow-same-origin" as const;
-
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`;
 
+/** Always inject the strict CSP meta tag before any existing CSP or head content. */
 function injectCsp(html: string): string {
-  if (/<meta\s+http-equiv=["']Content-Security-Policy/i.test(html)) return html;
   const headClose = html.indexOf("</head>");
   if (headClose !== -1) {
     return html.slice(0, headClose) + CSP_META + html.slice(headClose);
@@ -37,6 +35,13 @@ export function DesignMdContent(props: DesignMdContentProps) {
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
+
+  // Clear stale preview state when design entry changes
+  useEffect(() => {
+    setPreviewHtml(null);
+    setPreviewError(null);
+    setPreviewLoading(false);
+  }, [activeContent?.slug]);
 
   const loadPreview = useCallback(async (slug: string, variant: "light" | "dark") => {
     setPreviewLoading(true);
@@ -128,7 +133,7 @@ export function DesignMdContent(props: DesignMdContentProps) {
               <iframe
                 className="design-md-preview-frame"
                 srcDoc={previewHtml}
-                sandbox={SANDBOX_FLAGS}
+                sandbox=""
                 title="Design MD visual preview"
               />
             )}
