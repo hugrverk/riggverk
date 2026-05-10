@@ -1312,6 +1312,27 @@ function App() {
             // contract
             contractResult={contractResult}
             onRefreshContract={loadContract}
+            // Design MD
+            designMdCatalogStatus={designMdCatalogStatus}
+            designMdEntries={designMdEntries}
+            activeDesignMdSlug={activeDesignMdSlug}
+            activeDesignMdContent={activeDesignMdContent}
+            designMdSearch={designMdSearch}
+            onSetDesignMdSearch={setDesignMdSearch}
+            designMdSyncResult={designMdSyncResult}
+            designMdSyncRunning={designMdSyncRunning}
+            onSyncDesignMdCatalog={syncDesignMdCatalog}
+            onSelectDesignMdEntry={selectDesignMdEntry}
+            designMdInstallTarget={designMdInstallTarget}
+            designMdInstallPlan={designMdInstallPlan}
+            designMdInstallResult={designMdInstallResult}
+            designMdInstallRunning={designMdInstallRunning}
+            designMdInstallStatus={designMdInstallStatus}
+            onChooseDesignMdInstallTarget={chooseDesignMdInstallTarget}
+            onPlanDesignMdInstall={planDesignMdInstall}
+            onInstallDesignMd={installDesignMd}
+            onOpenDesignMdTargetFolder={openDesignMdTargetFolder}
+            onOpenInstalledDesignMd={openInstalledDesignMd}
           />
         )}
 
@@ -1407,16 +1428,6 @@ function App() {
             designMdSyncRunning={designMdSyncRunning}
             onSyncDesignMdCatalog={syncDesignMdCatalog}
             onSelectDesignMdEntry={selectDesignMdEntry}
-            designMdInstallTarget={designMdInstallTarget}
-            designMdInstallPlan={designMdInstallPlan}
-            designMdInstallResult={designMdInstallResult}
-            designMdInstallRunning={designMdInstallRunning}
-            onChooseDesignMdInstallTarget={chooseDesignMdInstallTarget}
-            onPlanDesignMdInstall={planDesignMdInstall}
-            onInstallDesignMd={installDesignMd}
-            designMdInstallStatus={designMdInstallStatus}
-            onOpenDesignMdTargetFolder={openDesignMdTargetFolder}
-            onOpenInstalledDesignMd={openInstalledDesignMd}
           />
           </Suspense>
         )}

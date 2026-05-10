@@ -7,9 +7,6 @@ import type {
   DesignMdCatalogStatus,
   DesignMdContent,
   DesignMdEntry,
-  DesignMdInstallPlan,
-  DesignMdInstallResult,
-  DesignMdInstallStatus,
   DesignMdSyncResult,
   DocSummary,
   DocumentContent,
@@ -130,16 +127,6 @@ interface LibraryViewProps {
   designMdSyncRunning: boolean;
   onSyncDesignMdCatalog: () => void;
   onSelectDesignMdEntry: (slug: string) => void;
-  designMdInstallTarget: string;
-  designMdInstallPlan: DesignMdInstallPlan | null;
-  designMdInstallResult: DesignMdInstallResult | null;
-  designMdInstallRunning: boolean;
-  onChooseDesignMdInstallTarget: () => void;
-  onPlanDesignMdInstall: () => void;
-  onInstallDesignMd: () => void;
-  designMdInstallStatus: DesignMdInstallStatus | null;
-  onOpenDesignMdTargetFolder: () => void;
-  onOpenInstalledDesignMd: () => void;
 }
 
 // ── sidebar item list components ──
@@ -629,16 +616,6 @@ export function LibraryView(props: LibraryViewProps) {
     designMdSyncRunning,
     onSyncDesignMdCatalog,
     onSelectDesignMdEntry,
-    designMdInstallTarget,
-    designMdInstallPlan,
-    designMdInstallResult,
-    designMdInstallRunning,
-    onChooseDesignMdInstallTarget,
-    onPlanDesignMdInstall,
-    onInstallDesignMd,
-    designMdInstallStatus,
-    onOpenDesignMdTargetFolder,
-    onOpenInstalledDesignMd,
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
@@ -736,16 +713,6 @@ export function LibraryView(props: LibraryViewProps) {
     mainContent = (
       <DesignMdContentPanel
         activeContent={activeDesignMdContent}
-        installTarget={designMdInstallTarget}
-        installPlan={designMdInstallPlan}
-        installResult={designMdInstallResult}
-        installRunning={designMdInstallRunning}
-        onChooseTarget={onChooseDesignMdInstallTarget}
-        onPlanInstall={onPlanDesignMdInstall}
-        onInstall={onInstallDesignMd}
-        installStatus={designMdInstallStatus}
-        onOpenTargetFolder={onOpenDesignMdTargetFolder}
-        onOpenInstalledDesignMd={onOpenInstalledDesignMd}
       />
     );
   } else if (sourceType === "designMd" && !designMdCatalogStatus?.exists) {

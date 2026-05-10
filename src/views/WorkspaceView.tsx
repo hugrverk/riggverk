@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -65,6 +65,27 @@ interface WorkspaceViewProps {
   // contract
   contractResult: WorkspaceContractResult | null;
   onRefreshContract: () => void;
+  // Design MD
+  designMdCatalogStatus: DesignMdCatalogStatus | null;
+  designMdEntries: DesignMdEntry[];
+  activeDesignMdSlug: string | null;
+  activeDesignMdContent: DesignMdContent | null;
+  designMdSearch: string;
+  onSetDesignMdSearch: (value: string) => void;
+  designMdSyncResult: DesignMdSyncResult | null;
+  designMdSyncRunning: boolean;
+  onSyncDesignMdCatalog: () => void;
+  onSelectDesignMdEntry: (slug: string) => void;
+  designMdInstallTarget: string;
+  designMdInstallPlan: DesignMdInstallPlan | null;
+  designMdInstallResult: DesignMdInstallResult | null;
+  designMdInstallRunning: boolean;
+  designMdInstallStatus: DesignMdInstallStatus | null;
+  onChooseDesignMdInstallTarget: () => void;
+  onPlanDesignMdInstall: () => void;
+  onInstallDesignMd: () => void;
+  onOpenDesignMdTargetFolder: () => void;
+  onOpenInstalledDesignMd: () => void;
 }
 
 const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
@@ -227,11 +248,33 @@ export function WorkspaceView({
   onRefreshBackups,
   onOpenBackupsFolder,
   // contract
-  contractResult,
-  onRefreshContract,
-}: WorkspaceViewProps) {
+    contractResult,
+    onRefreshContract,
+    // Design MD
+    designMdCatalogStatus,
+    designMdEntries,
+    activeDesignMdSlug,
+    activeDesignMdContent: _activeDesignMdContent,
+    designMdSearch,
+    onSetDesignMdSearch,
+    designMdSyncResult: _designMdSyncResult,
+    designMdSyncRunning,
+    onSyncDesignMdCatalog,
+    onSelectDesignMdEntry,
+    designMdInstallTarget,
+    designMdInstallPlan,
+    designMdInstallResult,
+    designMdInstallRunning,
+    designMdInstallStatus,
+    onChooseDesignMdInstallTarget,
+    onPlanDesignMdInstall,
+    onInstallDesignMd,
+    onOpenDesignMdTargetFolder,
+    onOpenInstalledDesignMd,
+  }: WorkspaceViewProps) {
   const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [showSkillSelector, setShowSkillSelector] = useState(false);
+  const [showDesignPicker, setShowDesignPicker] = useState(false);
   const [showInventory, setShowInventory] = useState(false);
 
   const skillsCount = skills.length;
@@ -849,6 +892,165 @@ export function WorkspaceView({
                     )}
                   </div>
                 </div>
+              )}
+            </div>
+          )}
+
+          {/* ---- Design MD section ---- */}
+          {workspaceValid && (
+            <div className="ws-section" role="region" aria-label="Design MD install">
+              <div className="ws-section-header">
+                <span className="ws-section-title">DESIGN MD</span>
+                {designMdCatalogStatus?.exists ? (
+                  <span className="ws-section-chip ws-section-chip-ok">
+                    {designMdCatalogStatus.entry_count} entries
+                  </span>
+                ) : (
+                  <span className="ws-section-chip ws-section-chip-muted">not synced</span>
+                )}
+              </div>
+
+              {/* Catalog status and sync */}
+              {!designMdCatalogStatus?.exists ? (
+                <div className="ws-section-actions">
+                  <button className="btn btn-sm btn-primary" onClick={onSyncDesignMdCatalog} disabled={designMdSyncRunning}>
+                    {designMdSyncRunning ? "syncing..." : "sync catalog"}
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {/* Selected design */}
+                  <div className="design-md-ws-row">
+                    <span className="design-md-ws-label">Design</span>
+                    <span className="design-md-ws-value design-md-ws-path">
+                      {activeDesignMdSlug ? activeDesignMdSlug : "none selected"}
+                    </span>
+                    <button className="btn btn-sm" onClick={() => setShowDesignPicker(prev => !prev)}>
+                      {showDesignPicker ? "hide" : "select design"}
+                    </button>
+                  </div>
+
+                  {/* Design picker */}
+                  {showDesignPicker && (
+                    <div className="design-md-ws-picker">
+                      <div className="design-md-ws-picker-search">
+                        <input
+                          className="skills-search"
+                          type="text"
+                          placeholder="search entries..."
+                          value={designMdSearch}
+                          onChange={(e) => onSetDesignMdSearch(e.target.value)}
+                          aria-label="Search Design MD entries"
+                        />
+                        {designMdSearch && (
+                          <button className="btn btn-sm btn-clear-search" onClick={() => onSetDesignMdSearch("")} aria-label="Clear search">clear</button>
+                        )}
+                      </div>
+                      <div className="design-md-ws-picker-list">
+                        {designMdEntries.length === 0 ? (
+                          <div className="ws-card-warn">No entries found</div>
+                        ) : (() => {
+                          const q = designMdSearch.toLowerCase().trim();
+                          const filtered = q
+                            ? designMdEntries.filter(e => e.title.toLowerCase().includes(q) || e.slug.toLowerCase().includes(q) || e.description.toLowerCase().includes(q))
+                            : designMdEntries;
+                          if (filtered.length === 0) {
+                            return <div className="ws-card-warn">No matches</div>;
+                          }
+                          return filtered.map(e => (
+                            <button
+                              key={e.slug}
+                              className={`design-md-ws-entry ${activeDesignMdSlug === e.slug ? "design-md-ws-entry-active" : ""}`}
+                              onClick={() => { onSelectDesignMdEntry(e.slug); }}
+                              aria-current={activeDesignMdSlug === e.slug ? "true" : undefined}
+                            >
+                              <span className="design-md-ws-entry-title">{e.title}</span>
+                              <span className="design-md-ws-entry-desc">{e.description || e.slug}</span>
+                            </button>
+                          ));
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Target project */}
+                  <div className="design-md-ws-row">
+                    <span className="design-md-ws-label">Project</span>
+                    <span className={`design-md-ws-value design-md-ws-path ${!designMdInstallTarget ? "design-md-ws-path-empty" : ""}`} title={designMdInstallTarget || undefined}>
+                      {designMdInstallTarget || "not selected"}
+                    </span>
+                    <button className="btn btn-sm" onClick={onChooseDesignMdInstallTarget} aria-label="Choose project folder">choose</button>
+                    {designMdInstallTarget && (
+                      <button className="btn btn-sm" onClick={onOpenDesignMdTargetFolder} title="Open project folder" aria-label="Open project folder">open</button>
+                    )}
+                  </div>
+
+                  {/* Install status */}
+                  {designMdInstallStatus && (
+                    <div className="design-md-ws-row">
+                      <span className="design-md-ws-label">Status</span>
+                      <span className={`design-md-ws-status design-md-ws-status-${designMdInstallStatus.status}`}>
+                        {designMdInstallStatus.status === "no_target" ? "no project"
+                         : designMdInstallStatus.status === "missing" ? "not installed"
+                         : designMdInstallStatus.status === "installed" ? "installed"
+                         : designMdInstallStatus.status === "different" ? "different"
+                         : designMdInstallStatus.status === "blocked" ? "blocked"
+                         : designMdInstallStatus.status}
+                      </span>
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="ws-section-actions">
+                    <button className="btn btn-sm" onClick={onSyncDesignMdCatalog} disabled={designMdSyncRunning} title="Re-sync catalog">
+                      sync
+                    </button>
+                    <button className="btn btn-sm" onClick={onPlanDesignMdInstall} disabled={!activeDesignMdSlug || !designMdInstallTarget}>
+                      dry run
+                    </button>
+                    <button className="btn btn-sm btn-primary" onClick={onInstallDesignMd} disabled={!(designMdInstallPlan?.ok) || designMdInstallRunning}>
+                      {designMdInstallRunning ? "installing..." : "install"}
+                    </button>
+                    {designMdInstallStatus?.exists && (
+                      <button className="btn btn-sm" onClick={onOpenInstalledDesignMd} title="Open installed DESIGN.md" aria-label="Open installed DESIGN.md">
+                        open
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Plan summary */}
+                  {designMdInstallPlan && (
+                    <div className={`design-md-ws-plan ${designMdInstallPlan.ok ? "design-md-ws-plan-ok" : "design-md-ws-plan-blocked"}`}>
+                      <span className={`design-md-ws-plan-action design-md-ws-plan-action-${designMdInstallPlan.action}`}>
+                        {designMdInstallPlan.action === "create" ? "create"
+                         : designMdInstallPlan.action === "replace_with_backup" ? "backup + replace"
+                         : "blocked"}
+                      </span>
+                      <span className="design-md-ws-plan-path">{designMdInstallPlan.target_file}</span>
+                      {designMdInstallPlan.backup_path && (
+                        <span className="design-md-ws-plan-backup">backup: {designMdInstallPlan.backup_path}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Install result */}
+                  {designMdInstallResult && (
+                    <div className={`design-md-ws-result ${designMdInstallResult.success ? "design-md-ws-result-ok" : "design-md-ws-result-fail"}`}>
+                      <span>{designMdInstallResult.message}</span>
+                      {designMdInstallResult.backup_path && (
+                        <span className="design-md-ws-result-backup">backup: {designMdInstallResult.backup_path}</span>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Hints */}
+                  {!designMdInstallPlan && designMdInstallTarget && activeDesignMdSlug && (
+                    <div className="design-md-ws-hint">dry run required</div>
+                  )}
+                  {!designMdInstallTarget && (
+                    <div className="design-md-ws-hint">choose a project and run dry run</div>
+                  )}
+                </>
               )}
             </div>
           )}

@@ -859,9 +859,8 @@ fn get_design_md_install_status_impl(
     }
 
     let source_path = resolve_design_md_entry_path(cache, slug)?;
-    let source_content = std::fs::read_to_string(&source_path).map_err(|e| {
-        format!("cannot read source DESIGN.md for {}: {}", slug, e)
-    })?;
+    let source_content = std::fs::read_to_string(&source_path)
+        .map_err(|e| format!("cannot read source DESIGN.md for {}: {}", slug, e))?;
 
     let target_file_path = Path::new(target_dir).join(DESIGN_MD_FILE);
     let target_file_str = target_file_path.to_string_lossy().into_owned();
@@ -1913,7 +1912,10 @@ mod tests {
         let cache_root = setup_cache_with_entries("status-installed");
         let target_dir = temp_root("status-installed-target");
         std::fs::create_dir_all(&target_dir).expect("create target dir");
-        let source_path = cache_root.join(DESIGN_MD_DIR).join("opencode.ai").join(DESIGN_MD_FILE);
+        let source_path = cache_root
+            .join(DESIGN_MD_DIR)
+            .join("opencode.ai")
+            .join(DESIGN_MD_FILE);
         let source_content = std::fs::read_to_string(&source_path).expect("read source");
         let target_file = target_dir.join(DESIGN_MD_FILE);
         std::fs::write(&target_file, &source_content).expect("write target");
@@ -1921,7 +1923,8 @@ mod tests {
             &cache_root,
             "opencode.ai",
             target_dir.to_string_lossy().as_ref(),
-        ).expect("should succeed");
+        )
+        .expect("should succeed");
         cleanup(&cache_root);
         cleanup(&target_dir);
         assert_eq!(result.status, "installed");
