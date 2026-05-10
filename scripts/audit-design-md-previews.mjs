@@ -1,345 +1,341 @@
-import fs from "node:fs";
-import path from "node:path";
+#!/usr/bin/env node
+/**
+ * audit-design-md-previews.mjs
+ *
+ * Audit all Design MD entries for render eligibility, source coverage,
+ * and broken-rendering risk without generating HTML or mutating the catalog.
+ *
+ * Usage: node scripts/audit-design-md-previews.mjs [--json] [--slug <slug>]
+ */
+
+import { readFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { execFileSync } from "node:child_process";
 
-const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const cacheRoot = path.join(
-  process.env.HOME,
-  "Library/Application Support/ai.agentworkspace.app/design-catalogs/awesome-design-md/design-md",
-);
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const projectRoot = join(__dirname, "..");
 
-// Compile TS modules on-the-fly via tsc
-const outDir = "/tmp/audit-design-md";
+// ── Lightweight reimplementations (no TS/React dependency) ──
 
-fs.rmSync(outDir, { recursive: true, force: true });
-fs.mkdirSync(outDir, { recursive: true });
-
-execFileSync(
-  path.join(repo, "node_modules/.bin/tsc"),
-  [
-    "--outDir",
-    outDir,
-    "--module",
-    "ES2022",
-    "--target",
-    "ES2022",
-    "--moduleResolution",
-    "Bundler",
-    "--skipLibCheck",
-    "src/lib/designMdPreviewParser.ts",
-    "src/lib/designMdSpecimenBuilder.ts",
-    "src/lib/designMdHtmlGenerator.ts",
-    "src/lib/designMdDisplay.ts",
-    "src/lib/designMdSourceEvidence.ts",
-  ],
-  { cwd: repo, stdio: "pipe" },
-);
-
-for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdSourceEvidence.js"]) {
-  const full = path.join(outDir, file);
-  let content = fs.readFileSync(full, "utf8");
-  content = content
-    .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
-    .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
-    .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"');
-  fs.writeFileSync(full, content);
+function parseFrontmatter(content) {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("---")) return new Map();
+  const afterOpen = trimmed.slice(3).replace(/^\s*\n/, "");
+  const closing = afterOpen.match(/\n---\s*(\n|$)/);
+  const fmStr = closing && closing.index !== undefined ? afterOpen.slice(0, closing.index) : afterOpen;
+  const map = new Map();
+  for (const line of fmStr.split("\n")) {
+    const colonIdx = line.indexOf(":");
+    if (colonIdx === -1) continue;
+    const key = line.slice(0, colonIdx).trim();
+    const value = line.slice(colonIdx + 1).trim().replace(/^["']|["']$/g, "");
+    if (key && value) map.set(key, value);
+  }
+  return map;
 }
 
-const { parseDesignMdForPreview } = await import(
-  path.join(outDir, "designMdPreviewParser.js")
-);
-const { buildBoard } = await import(path.join(outDir, "designMdSpecimenBuilder.js"));
-const { generateBoardHtml } = await import(path.join(outDir, "designMdHtmlGenerator.js"));
-const { designMdDisplayTitle } = await import(path.join(outDir, "designMdDisplay.js"));
-
-const prioritySlugs = new Set([
-  "runwayml", "sanity", "spotify", "starbucks", "tesla", "theverge",
-  "together.ai", "uber", "vercel", "vodafone", "voltagent", "warp",
-  "webflow", "wired", "wise", "x.ai", "zapier", "kraken",
-  "lamborghini", "lovable", "mastercard",
-]);
-
-const forbiddenPrimaryLabels = [
-  "Homes",
-  "Experiences",
-  "Services",
-  "Store",
-  "Mac",
-  "iPhone",
-  "Buy Crypto",
-  "Markets",
-  "Deposit",
-  "Sell",
-  "Convert",
-  "Explore models",
-  "Read docs",
-  "Sign Up",
-  "Total Balance",
-  "$42,918.80",
-  "BTC",
-  "ETH",
-  "BNB",
-  "Guest favorite",
-  "Add dates",
-  "Add guests",
-  "2 nights",
-  "npm install design-system",
-  "local preview ready",
-  "Feature One",
-  "Feature Two",
-  "Feature Three",
-];
-
-function escapeRegExp(value) {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+function getFrontmatterBody(content) {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("---")) return content;
+  const afterOpen = trimmed.slice(3);
+  const closing = afterOpen.match(/\n---\s*(\n|$)/);
+  if (!closing || closing.index === undefined) return "";
+  return afterOpen.slice(closing.index + closing[0].length);
 }
 
-function forbiddenHits(html, content) {
-  const source = content.toLowerCase();
-  return forbiddenPrimaryLabels.filter((label) => {
-    const labelLower = label.toLowerCase();
-    if (source.includes(labelLower)) return false;
-    return new RegExp(`(^|[^a-z0-9])${escapeRegExp(labelLower)}([^a-z0-9]|$)`, "i").test(html);
-  });
+function isSafeColor(value) {
+  if (!value) return false;
+  return /^#[0-9a-fA-F]{3,8}$/.test(value.trim())
+    || /^rgba?\(\s*[\d.\s,%]+\)$/.test(value.trim())
+    || /^hsla?\(\s*[\d.\s,%]+\)$/.test(value.trim())
+    || value.trim() === "transparent";
 }
 
-function auditEntry(slug, dirPath) {
-  const mdPath = path.join(dirPath, "DESIGN.md");
-  if (!fs.existsSync(mdPath)) return null;
+function isSafeSize(value) {
+  if (!value) return false;
+  return /^-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?$/.test(value.trim());
+}
 
-  const content = fs.readFileSync(mdPath, "utf8");
-  const title = designMdDisplayTitle(slug);
-  const description = content.split("\n").slice(0, 3).join(" ").slice(0, 200);
+function countComponents(fm) {
+  const groups = new Set();
+  for (const key of fm.keys()) {
+    if (!key.startsWith("components.")) continue;
+    const rest = key.slice("components.".length);
+    const dotIdx = rest.indexOf(".");
+    if (dotIdx === -1) continue;
+    const name = rest.slice(0, dotIdx);
+    if (name) groups.add(name);
+  }
+  return groups.size;
+}
 
-  let model;
-  try {
-    model = parseDesignMdForPreview(slug, title, description, content);
-  } catch (e) {
-    return { slug, title, error: String(e) };
+function countStructuredColors(fm) {
+  let count = 0;
+  for (const [key, value] of fm) {
+    if (!key.startsWith("colors.")) continue;
+    if (isSafeColor(value)) count += 1;
+  }
+  return count;
+}
+
+function countStructuredTypography(fm) {
+  const names = new Set();
+  for (const key of fm.keys()) {
+    if (!key.startsWith("typography.")) continue;
+    const rest = key.slice("typography.".length);
+    const parts = rest.split(".");
+    names.add(parts.length > 1 ? parts.slice(0, -1).join(".") : rest);
+  }
+  return names.size;
+}
+
+function countRadiusTokens(fm) {
+  let count = 0;
+  for (const [key] of fm) {
+    if (key.startsWith("rounded.") || key.startsWith("radius.")) count += 1;
+  }
+  return count;
+}
+
+function countSpacingTokens(fm) {
+  let count = 0;
+  for (const [key] of fm) {
+    if (key.startsWith("spacing.")) count += 1;
+  }
+  return count;
+}
+
+function countMarkdownColors(body) {
+  const seen = new Set();
+  for (const line of body.split("\n")) {
+    const match = line.match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/);
+    if (match && !seen.has(match[1].toLowerCase())) {
+      seen.add(match[1].toLowerCase());
+    }
+  }
+  return seen.size;
+}
+
+function hasDarkTokens(fm, body) {
+  const darkRe = /dark|black|night|inverse|charcoal|slate|on-dark|on-black|terminal|code panel|cinematic|aubergine/i;
+  for (const key of fm.keys()) {
+    if (darkRe.test(key)) return true;
+  }
+  return darkRe.test(body.slice(0, 5000));
+}
+
+function inferArchetype(slug, fm, body) {
+  const text = [slug, body.slice(0, 2000)].join(" ").toLowerCase();
+  if (/bmw|bugatti|ferrari|lamborghini|tesla|automotive|vehicle|model-card/.test(text)) return "luxury_automotive";
+  if (/spotify|music|playlist|album|audio|track|listening/.test(text)) return "music_campaign";
+  if (/starbucks|coffee|beverage|cafe|drink|food|menu/.test(text)) return "retail_food";
+  if (/airbnb|marketplace|property|listing|guest|booking|home/.test(text)) return "marketplace";
+  if (/binance|coinbase|kraken|trading|crypto|finance|balance|deposit/.test(text)) return "finance_dashboard";
+  if (/vercel|supabase|sanity|developer|docs|api|cli|infrastructure/.test(text)) return "developer_product";
+  if (/runway|together\.ai|x\.ai|ai|prompt|llm|language model/.test(text)) return "ai_product";
+  if (/the.?verge|wired|editorial|magazine|news|publication/.test(text)) return "media_editorial";
+  if (/webflow|framer|creative|no-code|visual development|design tool/.test(text)) return "creative_tool";
+  if (/mastercard|wise|stripe|payment|card network|finance/.test(text)) return "payment_finance";
+  if (/uber|mobility|ride/.test(text)) return "marketplace";
+  if (/zapier|automation|workflow|zap|pipeline/.test(text)) return "automation_workflow";
+  if (/warp|terminal|command line/.test(text)) return "terminal_tool";
+  if (/clickhouse|cohere|mongodb|analytics|database|data product/.test(text)) return "data_product";
+  if (/slack|messaging|collaboration/.test(text)) return "collaboration_saas";
+  if (/vodafone|telecom|mobile network|service provider/.test(text)) return "telecom_service";
+  if (/shopify|nike|retail brand/.test(text)) return "retail_brand";
+  if (/lovable|voltagent/.test(text)) return "ai_agent_product";
+  if (/apple/.test(slug)) return "product_gallery";
+  return "generic_system";
+}
+
+function componentSourceQuality(fm) {
+  const count = countComponents(fm);
+  const structured = count > 0;
+  // Check if components have style properties
+  let styleProps = 0;
+  for (const key of fm.keys()) {
+    if (!key.startsWith("components.")) continue;
+    const prop = key.split(".").pop();
+    if (/(background|color|rounded|border|padding|margin|height|width)/i.test(prop)) styleProps += 1;
+  }
+  return { count, structured, styleProps };
+}
+
+function auditEntry(slug, entry) {
+  const fm = parseFrontmatter(entry.content);
+  const body = getFrontmatterBody(entry.content);
+
+  const structuredColors = countStructuredColors(fm);
+  const mdColors = countMarkdownColors(body);
+  const totalColors = Math.max(structuredColors, mdColors);
+  const structuredTypo = countStructuredTypography(fm);
+  const radiusCount = countRadiusTokens(fm);
+  const spacingCount = countSpacingTokens(fm);
+  const comp = componentSourceQuality(fm);
+  const darkSignal = hasDarkTokens(fm, body);
+  const archetype = inferArchetype(entry.slug, fm, body);
+
+  // Render eligibility estimation
+  let graphicalEligible = 0;
+  let compactOnly = 0;
+  const componentNames = new Set();
+  for (const key of fm.keys()) {
+    if (!key.startsWith("components.")) continue;
+    const rest = key.slice("components.".length);
+    const dotIdx = rest.indexOf(".");
+    if (dotIdx === -1) continue;
+    componentNames.add(rest.slice(0, dotIdx));
+  }
+  for (const name of componentNames) {
+    const prefix = `components.${name}.`;
+    let hasBg = false, hasBorder = false, hasText = false;
+    for (const [key, value] of fm) {
+      if (!key.startsWith(prefix)) continue;
+      const prop = key.slice(prefix.length).toLowerCase();
+      if (/(background|background-color|backgroundcolor)/.test(prop) && isSafeColor(value)) hasBg = true;
+      if (/(border|bordercolor|border-color)/.test(prop) && (isSafeColor(value) || isSafeSize(value))) hasBorder = true;
+      if (/(color|textcolor|text-color)/.test(prop) && isSafeColor(value)) hasText = true;
+    }
+    const canGraphic = (hasBg || hasBorder) && hasText;
+    if (canGraphic) graphicalEligible += 1;
+    else compactOnly += 1;
   }
 
-  const board = buildBoard(slug, title, description, content);
-  const lightHtml = generateBoardHtml(board, { variant: "light" });
-  const darkHtml = generateBoardHtml(board, { variant: "dark" });
-  const fakeLabelHits = Array.from(new Set([
-    ...forbiddenHits(lightHtml, content),
-    ...forbiddenHits(darkHtml, content),
-  ]));
+  // Broken render risk scoring
+  let riskScore = 0;
+  const failures = [];
+  if (graphicalEligible === 0 && comp.count > 0) { riskScore += 3; failures.push("no-graphical-components-eligible"); }
+  if (compactOnly > 3) { riskScore += 2; failures.push("too-many-compact-only"); }
+  if (structuredColors === 0 && mdColors === 0) { riskScore += 2; failures.push("no-structured-colors"); }
+  if (structuredTypo === 0) { riskScore += 1; failures.push("no-typography"); }
+  if (!darkSignal) { riskScore += 1; failures.push("dark-only-derived"); }
+  if (archetype === "generic_system") { riskScore += 1; failures.push("generic-archetype"); }
+  if (comp.count === 0 && structuredColors === 0 && structuredTypo === 0) { riskScore += 3; failures.push("low-source-evidence"); }
+  // Simple contrast risk: light bg + light text
+  if (structuredColors >= 2 && mdColors <= 2) { riskScore += 1; failures.push("likely-contrast-risk"); }
+  if (componentNames.size > 0 && graphicalEligible === 0 && structuredColors < 2) { riskScore += 1; failures.push("invented-content-risk"); }
+
+  // Source-derived score (0-10)
+  const sourceScore = Math.min(10,
+    (structuredColors >= 4 ? 3 : structuredColors >= 2 ? 2 : structuredColors >= 1 ? 1 : 0)
+    + (structuredTypo >= 2 ? 2 : structuredTypo >= 1 ? 1 : 0)
+    + (graphicalEligible >= 3 ? 3 : graphicalEligible >= 1 ? 2 : 0)
+    + (radiusCount >= 2 ? 1 : 0)
+    + (spacingCount >= 2 ? 1 : 0)
+  );
 
   return {
-    slug,
-    title,
-    originalTitle: content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null,
-    archetype: model.archetype,
-    archetypeConfidence: model.confidence.archetype,
-    rendererPath: model.archetype,
-    colorCount: model.coverage.colorsCount,
-    markdownColorCount: model.coverage.markdownColorsCount,
-    typoCount: model.coverage.typographyCount,
-    radiusCount: model.coverage.radiusCount,
-    spacingCount: model.coverage.spacingCount,
-    componentCount: model.coverage.componentCount,
-    componentKinds: model.coverage.componentKinds,
-    fontFamilies: model.coverage.fontFamilies,
-    markdownSections: model.coverage.markdownSections,
-    darkTokenCount: model.coverage.darkTokenCount,
-    darkComponentCount: model.coverage.darkComponentCount,
-    lightConfidence: model.confidence.lightPreview,
-    darkConfidence: model.confidence.darkPreview,
-    componentConfidence: model.confidence.components,
-    warnings: model.warnings,
-    overviewLength: model.overviewText?.length ?? 0,
-    visualLanguageKeywords: model.visualLanguage.keywords.length,
-    visualLanguagePhrases: model.visualLanguage.phrases.length,
-    fontSubstitutesLength: model.fontSubstitutes.length,
-    componentEvidence: model.components.map((component) => ({
-      name: component.name,
-      kind: component.kind,
-      evidence: component.sourceEvidence ?? null,
-    })),
-    sourceDerivedScore: sourceDerivedScore(model),
-    inventedContentRiskScore: inventedContentRiskScore(model, fakeLabelHits),
-    fakeLabelHits,
+    slug: entry.slug,
+    title: entry.title,
+    archetype,
+    archetypeConfidence: structuredColors + structuredTypo > 0 ? "medium" : "low",
+    componentCount: comp.count,
+    graphicalEligibleCount: graphicalEligible,
+    compactOnlyCount: compactOnly,
+    skippedCount: componentNames.size - graphicalEligible - compactOnly,
+    colorTokenCount: totalColors,
+    typographyTokenCount: structuredTypo,
+    darkTokenCount: darkSignal ? 1 : 0,
+    darkComponentCount: 0,
+    lightPreviewConfidence: graphicalEligible >= 2 ? "medium" : structuredColors >= 2 ? "medium" : "low",
+    darkPreviewConfidence: darkSignal ? "medium" : "low",
+    sourceDerivedScore: sourceScore,
+    brokenRenderRiskScore: riskScore,
+    failures,
+    structuredColorCount: structuredColors,
+    markdownColorCount: mdColors,
+    radiusCount,
+    spacingCount,
   };
 }
 
-function confidenceValue(confidence) {
-  return confidence === "high" ? 2 : confidence === "medium" ? 1 : 0;
+// ── Main ──
+
+function loadCatalog() {
+  // Try common cache locations
+  const cacheFile = join(projectRoot, "src-tauri", "design-md-cache.json");
+  if (existsSync(cacheFile)) {
+    try {
+      const raw = readFileSync(cacheFile, "utf-8");
+      const catalog = JSON.parse(raw);
+      if (Array.isArray(catalog)) return catalog;
+      if (catalog.entries && Array.isArray(catalog.entries)) return catalog.entries;
+    } catch (e) {
+      console.error("Failed to parse cache file:", e.message);
+    }
+  }
+  return null;
 }
 
-function sourceDerivedScore(model) {
-  const objects = [
-    ...model.palette.flatMap((group) => group.tokens),
-    ...model.typography,
-    ...model.radius,
-    ...model.spacing,
-    ...model.components,
-  ];
-  if (objects.length === 0) return 0;
-  const weights = { high: 1, medium: 0.72, low: 0.38, fallback: 0 };
-  const total = objects.reduce((sum, item) => {
-    const confidence = item.sourceEvidence?.confidence ?? (item.source === "structured" ? "high" : item.source === "markdown" ? "medium" : "fallback");
-    return sum + (weights[confidence] ?? 0);
-  }, 0);
-  return Math.round((total / objects.length) * 100);
+function main() {
+  const args = process.argv.slice(2);
+  const jsonOutput = args.includes("--json");
+  const slugFilter = args.includes("--slug") ? args[args.indexOf("--slug") + 1] : null;
+
+  const entries = loadCatalog();
+  if (!entries) {
+    console.error("No Design MD catalog found. Run Design MD sync first.");
+    process.exit(1);
+  }
+
+  const filtered = slugFilter ? entries.filter(e => e.slug === slugFilter) : entries;
+  if (filtered.length === 0) {
+    console.error("No entries match filter:", slugFilter || "all");
+    process.exit(1);
+  }
+
+  const results = filtered.map(e => auditEntry(e.slug, e));
+
+  if (jsonOutput) {
+    console.log(JSON.stringify(results, null, 2));
+    return;
+  }
+
+  // Console summary
+  const byFailures = {};
+  for (const r of results) {
+    for (const f of r.failures) {
+      if (!byFailures[f]) byFailures[f] = [];
+      byFailures[f].push(r.slug);
+    }
+  }
+
+  console.log(`\n╔══════════════════════════════════════════════╗`);
+  console.log(`║  Design MD Preview Audit                    ║`);
+  console.log(`║  ${results.length} entries                         ${" ".repeat(Math.max(0, 22 - String(results.length).length))}║`);
+  console.log(`╚══════════════════════════════════════════════╝\n`);
+
+  console.log("── Failure breakdown ──");
+  for (const [failure, slugs] of Object.entries(byFailures).sort((a, b) => b[1].length - a[1].length)) {
+    console.log(`  ${failure.padEnd(32)} ${slugs.length} entries`);
+    if (slugs.length <= 10) {
+      console.log(`    ${slugs.join(", ")}`);
+    }
+  }
+
+  console.log("\n── Top 10 by broken-render risk ──");
+  const byRisk = [...results].sort((a, b) => b.brokenRenderRiskScore - a.brokenRenderRiskScore).slice(0, 10);
+  for (const r of byRisk) {
+    console.log(`  ${r.slug.padEnd(22)} risk=${r.brokenRenderRiskScore}  score=${r.sourceDerivedScore}/10  gfx=${r.graphicalEligibleCount}  compact=${r.compactOnlyCount}  failures=[${r.failures.join(", ")}]`);
+  }
+
+  console.log("\n── Bottom 10 by source-derived score ──");
+  const byScore = [...results].sort((a, b) => a.sourceDerivedScore - b.sourceDerivedScore).slice(0, 10);
+  for (const r of byScore) {
+    console.log(`  ${r.slug.padEnd(22)} score=${r.sourceDerivedScore}/10  risk=${r.brokenRenderRiskScore}  colors=${r.structuredColorCount}+${r.markdownColorCount}md  typo=${r.typographyTokenCount}  comps=${r.componentCount}/${r.graphicalEligibleCount}gfx`);
+  }
+
+  console.log("\n── Overall stats ──");
+  const avgScore = (results.reduce((s, r) => s + r.sourceDerivedScore, 0) / results.length).toFixed(1);
+  const avgRisk = (results.reduce((s, r) => s + r.brokenRenderRiskScore, 0) / results.length).toFixed(1);
+  const totalGfx = results.reduce((s, r) => s + r.graphicalEligibleCount, 0);
+  const totalComps = results.reduce((s, r) => s + r.componentCount, 0);
+  console.log(`  Average source score: ${avgScore}/10`);
+  console.log(`  Average risk score:   ${avgRisk}`);
+  console.log(`  Total graphics-eligible: ${totalGfx}/${totalComps}`);
+  console.log(`  Generic archetypes:   ${results.filter(r => r.archetype === "generic_system").length}`);
+  console.log(`  Dark-signaled:        ${results.filter(r => r.darkTokenCount > 0).length}`);
+  console.log();
 }
 
-function inventedContentRiskScore(model, fakeLabelHits = []) {
-  let risk = 0;
-  if (fakeLabelHits.length > 0) risk += 80;
-  if (model.components.length === 0) risk += 20;
-  if (model.typography.length === 0) risk += 10;
-  if (model.archetype === "generic_system") risk += 10;
-  if (model.visualLanguage.phrases.length < 2 && model.components.length === 0) risk += 10;
-  return Math.min(100, risk);
-}
-
-const entries = fs.readdirSync(cacheRoot, { withFileTypes: true })
-  .filter((d) => d.isDirectory())
-  .map((d) => d.name);
-
-const results = [];
-for (const slug of entries) {
-  const dirPath = path.join(cacheRoot, slug);
-  const result = auditEntry(slug, dirPath);
-  if (result) results.push(result);
-}
-
-function priorityRank(confidence) {
-  return confidence === "low" ? 0 : confidence === "medium" ? 1 : 2;
-}
-
-function failureFlags(r) {
-  const flags = [];
-  if (r.warnings.includes("no structured colors")) flags.push("no structured colors");
-  if (r.markdownColorCount === 0) flags.push("no markdown-derived colors");
-  if (r.typoCount === 0) flags.push("no typography");
-  if (r.componentCount === 0) flags.push("no components");
-  if (r.archetype === "generic_system") flags.push("generic archetype");
-  if (r.archetypeConfidence === "low") flags.push("weak archetype confidence");
-  if (r.darkTokenCount === 0) flags.push("dark tokens missing");
-  if (r.warnings.includes("dark tokens derived")) flags.push("dark only derived");
-  if (r.warnings.includes("font fallback only")) flags.push("font fallback only");
-  if (r.componentConfidence === "low") flags.push("no real component samples");
-  if (r.warnings.includes("likely contrast risk")) flags.push("likely contrast risk");
-  if (r.componentCount > 24) flags.push("likely overflow risk");
-  if (r.visualLanguagePhrases > 8 && r.componentCount < 3) flags.push("too text-heavy");
-  if (r.lightConfidence === "low" || r.archetype === "generic_system") flags.push("too generic");
-  if (r.fakeLabelHits?.length > 0) flags.push("renderer may invent unsupported content");
-  return flags;
-}
-
-for (const r of results) {
-  r.failureFlags = failureFlags(r);
-}
-
-console.log(`Total entries: ${entries.length}\n`);
-console.log("=".repeat(80));
-console.log("PRIORITY BROKEN ENTRIES");
-console.log("=".repeat(80) + "\n");
-
-for (const r of results) {
-  if (!prioritySlugs.has(r.slug)) continue;
-  console.log(`- ${r.slug} (${r.title})`);
-  if (r.originalTitle) console.log(`  Upstream title: ${r.originalTitle}`);
-  console.log(`  Archetype: ${r.archetype} (${r.archetypeConfidence}) | renderer=${r.rendererPath}`);
-  console.log(`  Colors: ${r.colorCount} (md ${r.markdownColorCount}) | Typography: ${r.typoCount} | Radius: ${r.radiusCount} | Spacing: ${r.spacingCount} | Components: ${r.componentCount}`);
-  console.log(`  Component kinds: ${Object.entries(r.componentKinds).map(([kind, count]) => `${kind}:${count}`).join(", ") || "none"}`);
-  console.log(`  Fonts: ${r.fontFamilies.join(", ") || "fallback only"}`);
-  console.log(`  Dark tokens: ${r.darkTokenCount} | Dark components: ${r.darkComponentCount}`);
-  console.log(`  Light confidence: ${r.lightConfidence} | Dark confidence: ${r.darkConfidence}`);
-  console.log(`  Source-derived score: ${r.sourceDerivedScore} | Invented-content risk: ${r.inventedContentRiskScore}`);
-  console.log(`  Forbidden generated labels: ${r.fakeLabelHits.join(", ") || "none"}`);
-  console.log(`  Component evidence: ${r.componentEvidence.slice(0, 6).map((c) => `${c.name}:${c.evidence?.sourceType ?? "unknown"}/${c.evidence?.confidence ?? "unknown"}`).join(", ") || "none"}`);
-  console.log(`  Failure flags: ${r.failureFlags.join(", ") || "none"}`);
-  console.log(`  MD sections: ${r.markdownSections.join(", ")}`);
-  console.log("");
-}
-
-// Summary
-const genericArchetype = results.filter((r) => r.archetype === "generic_system").length;
-const noColors = results.filter((r) => r.colorCount === 0).length;
-const noTypo = results.filter((r) => r.typoCount === 0).length;
-const noComponents = results.filter((r) => r.componentCount === 0).length;
-
-console.log("=".repeat(80));
-console.log("OVERALL SUMMARY");
-console.log("=".repeat(80) + "\n");
-console.log(`Total entries audited: ${results.length}`);
-console.log(`Generic archetype fallback: ${genericArchetype}`);
-console.log(`No colors: ${noColors}`);
-console.log(`No typography: ${noTypo}`);
-console.log(`No components: ${noComponents}`);
-console.log(`Average source-derived score: ${Math.round(results.reduce((sum, r) => sum + r.sourceDerivedScore, 0) / Math.max(1, results.length))}`);
-console.log(`Entries with high invented-content risk: ${results.filter((r) => r.inventedContentRiskScore >= 35).length}`);
-
-console.log("\nFailure summary:");
-const failures = new Map();
-for (const r of results) {
-  for (const flag of r.failureFlags) failures.set(flag, (failures.get(flag) ?? 0) + 1);
-}
-for (const [flag, count] of [...failures.entries()].sort((a, b) => b[1] - a[1])) {
-  console.log(`  ${String(flag).padEnd(28)} ${count}`);
-}
-
-console.log("\nLowest source-derived / confidence priority list:");
-for (const r of [...results].sort((a, b) => {
-  const confDiff = confidenceValue(a.lightConfidence) + confidenceValue(a.darkConfidence) - confidenceValue(b.lightConfidence) - confidenceValue(b.darkConfidence);
-  return a.sourceDerivedScore - b.sourceDerivedScore || b.inventedContentRiskScore - a.inventedContentRiskScore || confDiff || b.failureFlags.length - a.failureFlags.length || a.slug.localeCompare(b.slug);
-}).slice(0, 24)) {
-  console.log(`  ${r.slug.padEnd(18)} source=${String(r.sourceDerivedScore).padStart(3)} risk=${String(r.inventedContentRiskScore).padStart(3)} light=${r.lightConfidence.padEnd(6)} dark=${r.darkConfidence.padEnd(6)} arch=${r.archetype.padEnd(20)} flags=${r.failureFlags.slice(0, 4).join(", ") || "none"}`);
-}
-
-console.log("\nPriority entries grouped by shared failure:");
-for (const [flag] of [...failures.entries()].sort((a, b) => b[1] - a[1])) {
-  const matching = results.filter((r) => prioritySlugs.has(r.slug) && r.failureFlags.includes(flag)).map((r) => r.slug);
-  if (matching.length > 0) console.log(`  ${flag}: ${matching.join(", ")}`);
-}
-
-// Archetype distribution for priority entries
-console.log("\nPriority archetype distribution:");
-for (const r of results.filter((r) => prioritySlugs.has(r.slug))) {
-  console.log(`  ${r.slug.padEnd(16)} → ${r.archetype}`);
-}
-
-// All entries without frontmatter
-// Generate safety check
-console.log("\n" + "=".repeat(80));
-console.log("GENERATOR SAFETY CHECK (sample entries)");
-console.log("=".repeat(80) + "\n");
-
-const testEntries = ["airbnb", "spotify", "runwayml", "tesla", "warp", "webflow", "zapier", "mastercard", "lovable"];
-for (const slug of testEntries) {
-  const dirPath = path.join(cacheRoot, slug);
-  if (!fs.existsSync(dirPath)) continue;
-  const content = fs.readFileSync(path.join(dirPath, "DESIGN.md"), "utf8");
-  const title = designMdDisplayTitle(slug);
-  const board = buildBoard(slug, title, "", content);
-  const lightHtml = generateBoardHtml(board, { variant: "light" });
-  const darkHtml = generateBoardHtml(board, { variant: "dark" });
-  const fakeLabelHits = Array.from(new Set([
-    ...forbiddenHits(lightHtml, content),
-    ...forbiddenHits(darkHtml, content),
-  ]));
-
-  const checks = {
-    hasCSP: lightHtml.includes("Content-Security-Policy"),
-    noScript: !/<script/i.test(lightHtml),
-    noExternalFonts: !/@font-face|@import|url\(https?:/i.test(lightHtml),
-    noForbiddenLabels: fakeLabelHits.length === 0,
-    hasCanvas: lightHtml.includes("background"),
-    darkHasCSP: darkHtml.includes("Content-Security-Policy"),
-    darkNoScript: !/<script/i.test(darkHtml),
-    darkDifferentBg: (() => {
-      const lb = lightHtml.match(/(?:^|\n)body\{[^}]+background:([^;]+)/);
-      const db = darkHtml.match(/(?:^|\n)body\{[^}]+background:([^;]+)/);
-      return lb?.[1] !== db?.[1];
-    })(),
-  };
-
-  const allPass = Object.values(checks).every(Boolean);
-  console.log(`${allPass ? "OK" : "FAIL"} ${slug.padEnd(16)} CSP=${checks.hasCSP} NoScript=${checks.noScript} NoExtFonts=${checks.noExternalFonts} NoFakeLabels=${checks.noForbiddenLabels} DarkCSP=${checks.darkHasCSP} DarkNoScript=${checks.darkNoScript} DarkDiffBg=${checks.darkDifferentBg}${fakeLabelHits.length ? ` Fake=${fakeLabelHits.join(",")}` : ""}`);
-}
-
-console.log("\nAudit complete.");
+main();

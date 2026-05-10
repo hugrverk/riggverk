@@ -8,6 +8,12 @@ import {
   resolveGeneratedFontFamily,
 } from "./designMdPreviewParser";
 import { evidenceLabel } from "./designMdSourceEvidence";
+import {
+  checkRenderEligibility,
+  graphicalComponents,
+  compactComponents,
+  type ComponentRenderEligibility,
+} from "./designMdRenderEligibility";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
 
@@ -255,7 +261,31 @@ function neutralKind(kind: string): string {
   return kind.replace(/-/g, " ");
 }
 
+/**
+ * Render a compact source-derived token row for a component that does not qualify for graphical rendering.
+ */
+function componentCompactRowHtml(group: DesignMdBoardComponentGroup, eligibility: ComponentRenderEligibility): string {
+  const name = esc(group.name);
+  const kind = esc(neutralKind(group.kind));
+  const evidence = esc(evidenceLabel(group.sourceEvidence));
+  const styleCount = eligibility.safeStyleCount;
+  const props: string[] = [];
+  if (group.backgroundColor) props.push("bg:" + esc(group.backgroundColor.slice(0, 7)));
+  if (group.textColor) props.push("fg:" + esc(group.textColor.slice(0, 7)));
+  if (group.rounded) props.push("r:" + esc(group.rounded));
+  if (group.padding) props.push("p:" + esc(group.padding));
+  const propsStr = props.length > 0 ? props.join(" ") : "no source styles";
+  return '<div class="compact-row"><b>' + name + '</b><span>' + kind + '</span><code>' + propsStr + '</code><small>' + evidence + ' · ' + styleCount + ' styles · ' + esc(eligibility.reason) + '</small></div>';
+}
+
+/**
+ * Render a graphical sample for a component. Only call after checking render eligibility.
+ */
 function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnType<typeof deriveTokens>): string {
+  const eligibility = checkRenderEligibility(group);
+  if (!eligibility.canRenderGraphic) {
+    return componentCompactRowHtml(group, eligibility);
+  }
   const style = componentColors(group, colors);
   const name = esc(group.name);
   const meta = esc(neutralKind(group.kind));
@@ -293,24 +323,46 @@ function renderSourceHeader(board: DesignMdBoard): string {
 }
 
 function renderSourcePatternBoard(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const groups = prioritizedComponentGroups(board).slice(0, 6);
+  const allGroups = prioritizedComponentGroups(board).slice(0, 16);
+  const eligible = graphicalComponents(allGroups);
   const note = board.overview ?? board.layout ?? board.visualLanguage.phrases[0] ?? board.description;
-  const lead = groups[0];
-  const leadStyle = componentColors(lead, colors);
   const evidence = [
     `${board.coverage.colorsCount} colors`,
     `${board.coverage.typographyCount} type`,
     `${board.coverage.componentCount} components`,
     evidenceLabel(board.archetypeEvidence),
   ].map((item) => '<span>' + esc(item) + '</span>').join("");
-  const leadHtml = lead
-    ? '<article class="source-lead" style="background:' + leadStyle.bg + ';color:' + leadStyle.fg + ';border-color:' + leadStyle.border + ';border-radius:' + leadStyle.radius + '"><small>' + esc(neutralKind(lead.kind)) + '</small><b>' + esc(lead.name) + '</b>' + componentSampleHtml(lead, colors) + '</article>'
-    : '<article class="source-lead source-limited-card" style="background:' + colors.surface + ';color:' + colors.text + ';border-color:' + colors.border + ';border-radius:' + colors.radius + '"><small>source-limited</small><b>Component data missing</b><span>Preview is limited to DESIGN.md tokens and notes.</span></article>';
-  const rest = groups.slice(1).map((group) => {
-    const style = componentColors(group, colors);
-    return '<article style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + esc(neutralKind(group.kind)) + '</small><b>' + esc(group.name) + '</b></article>';
+
+  // No graphical components eligible - render a clean source-derived board
+  if (eligible.length === 0) {
+    const paletteStrip = board.colorGroups.flatMap(g => g.tokens).slice(0, 8)
+      .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
+    const typeSample = board.typographyTokens.slice(0, 2)
+      .map(t => '<span class="hero-type" style="font-family:' + cssPreviewFont(t.fontFamily, board, t.raw) + ';font-size:' + cssFontSize(t.fontSize, "22px", 32) + '">' + esc(t.key) + '</span>').join("");
+    const compactAll = compactComponents(allGroups);
+    const compactRows = compactAll.length > 0
+      ? '<div class="compact-inventory">' + compactAll.map(({ component, eligibility }) => componentCompactRowHtml(component, eligibility)).join("") + '</div>'
+      : '';
+    return '<section class="hero hero-board"><div class="source-copy"><span class="source-kicker">' + esc(board.archetype.replace(/_/g, " ")) + '</span><h2>' + esc(board.title) + '</h2>' + (note ? '<p>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</p>' : '') + '<div class="source-evidence">' + evidence + '</div></div>' +
+      '<div class="board-strips">' +
+      (paletteStrip ? '<div class="board-strip"><b>Palette</b><div class="hero-palette">' + paletteStrip + '</div></div>' : '') +
+      (typeSample ? '<div class="board-strip"><b>Typography</b><div class="hero-type-row">' + typeSample + '</div></div>' : '') +
+      (compactRows ? '<div class="board-strip"><b>Component inventory</b>' + compactRows + '</div>' : '') +
+      '</div></section>';
+  }
+
+  // At least one graphical component - use the existing hero layout
+  const lead = eligible[0].component;
+  const leadStyle = componentColors(lead, colors);
+  const leadHtml = '<article class="source-lead" style="background:' + leadStyle.bg + ';color:' + leadStyle.fg + ';border-color:' + leadStyle.border + ';border-radius:' + leadStyle.radius + '"><small>' + esc(neutralKind(lead.kind)) + '</small><b>' + esc(lead.name) + '</b>' + componentSampleHtml(lead, colors) + '</article>';
+
+  const restEligible = eligible.slice(1, 5);
+  let restHtml = restEligible.map(({ component }) => {
+    const style = componentColors(component, colors);
+    return '<article style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + esc(neutralKind(component.kind)) + '</small><b>' + esc(component.name) + '</b></article>';
   }).join("");
-  return '<section class="hero hero-source hero-source-' + esc(board.archetype) + '"><div class="source-copy"><span class="source-kicker">' + esc(board.archetype.replace(/_/g, " ")) + '</span><h2>' + esc(board.title) + '</h2>' + (note ? '<p>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</p>' : '') + '<div class="source-evidence">' + evidence + '</div></div><div class="source-components">' + leadHtml + rest + '</div></section>';
+
+  return '<section class="hero hero-source hero-source-' + esc(board.archetype) + '"><div class="source-copy"><span class="source-kicker">' + esc(board.archetype.replace(/_/g, " ")) + '</span><h2>' + esc(board.title) + '</h2>' + (note ? '<p>' + esc(note.length > 240 ? note.slice(0, 237) + "..." : note) + '</p>' : '') + '<div class="source-evidence">' + evidence + '</div></div><div class="source-components">' + leadHtml + restHtml + '</div></section>';
 }
 
 function renderSourcePalette(board: DesignMdBoard): string {
@@ -343,9 +395,33 @@ function renderSourceRadiusSpacing(board: DesignMdBoard, colors: ReturnType<type
 }
 
 function renderSourceComponentGallery(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const groups = prioritizedComponentGroups(board).slice(0, 18);
-  if (groups.length === 0) return "";
-  return '<section class="strip"><header><b>Components</b><span>' + groups.length + ' source-backed groups</span></header><div class="component-grid">' + groups.map((group) => '<article><label>' + esc(group.name) + '</label>' + componentSampleHtml(group, colors) + '</article>').join("") + '</div></section>';
+  const allGroups = prioritizedComponentGroups(board).slice(0, 18);
+  if (allGroups.length === 0) return "";
+
+  const gfx = graphicalComponents(allGroups.map(g => g));
+  const compact = compactComponents(allGroups.map(g => g));
+
+  let html = '<section class="strip"><header><b>Components</b><span>' + allGroups.length + ' source-backed groups</span></header>';
+
+  // Graphical component samples
+  if (gfx.length > 0) {
+    html += '<div class="component-grid">' + gfx.map(({ component }) => {
+      return '<article><label>' + esc(component.name) + '</label>' + componentSampleHtml(component, colors) + '</article>';
+    }).join("") + '</div>';
+  }
+
+  // Compact rows for non-graphical components
+  if (compact.length > 0) {
+    html += '<div class="compact-inventory" style="margin-top:' + (gfx.length > 0 ? '14px' : '0') + '"><div class="compact-section-label" style="color:' + colors.muted + ';font-size:10px;text-transform:uppercase;margin-bottom:6px">compact source rows</div>' + compact.map(({ component, eligibility }) => componentCompactRowHtml(component, eligibility)).join("") + '</div>';
+  }
+
+  // If no eligible graphical components but we have compact ones, note why
+  if (gfx.length === 0 && compact.length > 0) {
+    // compact inventory is already shown above
+  }
+
+  html += '</section>';
+  return html;
 }
 
 function renderSourceLayoutNotes(board: DesignMdBoard): string {
@@ -428,7 +504,9 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.component-grid article{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:10px;min-height:112px;overflow:hidden}.component-grid label{display:block;color:" + colors.muted + ";font-size:11px;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".sample{max-width:100%}.sample-button{border:1px solid transparent}.sample-input{display:flex;justify-content:space-between;align-items:center;border:1px solid;padding:12px}.sample-input i{width:14px;height:14px;border-radius:50%;background:" + colors.primary + "}.sample-chip{display:inline-flex;padding:7px 12px;border:1px solid}.sample-nav{display:flex;gap:12px;padding:11px;border:1px solid}.sample-card{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid}.sample-code{display:grid;gap:8px;padding:14px;border:1px solid;overflow:hidden}.sample-code code{display:block;padding:8px;border-radius:5px;background:rgba(0,0,0,.15);font-family:monospace;font-size:" + caption.size + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-workflow{display:flex;justify-content:space-between;align-items:center;padding:14px;border:1px solid}.sample-workflow span{color:" + colors.muted + "}.sample-table{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid}.sample-table span{display:flex;justify-content:space-between;gap:12px;border-top:1px solid rgba(127,127,127,.25);padding-top:6px}.sample-table i{font-style:normal}.sample-table strong{font-weight:400;color:" + colors.muted + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-chart{display:grid;gap:12px;padding:14px;border:1px solid}.sample-chart div{height:58px;display:flex;align-items:end;gap:8px}.sample-chart i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.sample-chart i:nth-child(1){height:35%}.sample-chart i:nth-child(2){height:70%}.sample-chart i:nth-child(3){height:48%}.sample-chart i:nth-child(4){height:88%}",
     ".rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.radius-grid{display:flex;flex-wrap:wrap;gap:8px}.radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}.space-row{display:flex;align-items:center;gap:10px;margin:7px 0}.space-row span{width:70px}.space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px}.notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px;padding-left:18px;color:" + colors.muted + "}.do-dont{display:grid;grid-template-columns:1fr 1fr;gap:16px}",
-    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.hero-source,.source-components,.palette-grid,.type-grid,.component-grid,.rhythm-grid,.notes-strip ul,.do-dont{grid-template-columns:1fr}.source-lead{grid-row:auto}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}",
+    ".compact-inventory{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";overflow:hidden;margin-bottom:0}.compact-row{display:grid;grid-template-columns:140px minmax(0,1fr) auto;gap:10px;align-items:center;padding:8px 12px;border-bottom:1px solid " + colors.border + ";font-size:12px}.compact-row:last-child{border-bottom:none}.compact-row b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}.compact-row span{color:" + colors.muted + "}.compact-row code{font-family:monospace;color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.compact-row small{color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;grid-column:1/-1}.compact-section-label{padding:6px 12px 4px;border-bottom:1px solid " + colors.border + ";font-size:10px;text-transform:uppercase}",
+    ".hero-board{padding:" + colors.spacing + ";background:" + colors.canvas + "}.hero-board .source-copy{margin-bottom:18px}.board-strips{display:flex;flex-direction:column;gap:14px}.board-strip b{display:block;font-size:10px;text-transform:uppercase;color:" + colors.muted + ";margin-bottom:8px;letter-spacing:.05em}.hero-palette{display:flex;flex-wrap:wrap;gap:6px}.hero-swatch{display:block;width:36px;height:36px;border-radius:6px;border:1px solid rgba(127,127,127,.25);flex-shrink:0}.hero-type-row{display:flex;flex-wrap:wrap;gap:16px}.hero-type{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:260px}",
+    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.hero-source,.source-components,.palette-grid,.type-grid,.component-grid,.rhythm-grid,.notes-strip ul,.do-dont{grid-template-columns:1fr}.source-lead{grid-row:auto}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.compact-row{grid-template-columns:1fr 1fr;gap:4px}}",
   ].join("\n");
   const html = [
     '<div class="board">',
