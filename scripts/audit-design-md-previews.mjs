@@ -1,7 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { createRequire } from "node:module";
+import { execFileSync } from "node:child_process";
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const cacheRoot = path.join(
@@ -15,20 +15,23 @@ const outDir = "/tmp/audit-design-md";
 fs.rmSync(outDir, { recursive: true, force: true });
 fs.mkdirSync(outDir, { recursive: true });
 
-const { execSync } = await import("node:child_process");
-execSync(
+execFileSync(
+  path.join(repo, "node_modules/.bin/tsc"),
   [
-    path.join(repo, "node_modules/.bin/tsc"),
-    "--outDir", outDir,
-    "--module", "ES2022",
-    "--target", "ES2022",
-    "--moduleResolution", "Bundler",
+    "--outDir",
+    outDir,
+    "--module",
+    "ES2022",
+    "--target",
+    "ES2022",
+    "--moduleResolution",
+    "Bundler",
     "--skipLibCheck",
     "src/lib/designMdPreviewParser.ts",
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
     "src/lib/designMdDisplay.ts",
-  ].join(" "),
+  ],
   { cwd: repo, stdio: "pipe" },
 );
 
@@ -41,7 +44,7 @@ for (const file of ["designMdSpecimenBuilder.js", "designMdHtmlGenerator.js"]) {
   fs.writeFileSync(full, content);
 }
 
-const { parseDesignMdForPreview, resolveGeneratedFontFamily, isSafeColorValue } = await import(
+const { parseDesignMdForPreview } = await import(
   path.join(outDir, "designMdPreviewParser.js")
 );
 const { buildBoard } = await import(path.join(outDir, "designMdSpecimenBuilder.js"));
@@ -54,10 +57,6 @@ const prioritySlugs = new Set([
   "webflow", "wired", "wise", "x.ai", "zapier", "kraken",
   "lamborghini", "lovable", "mastercard",
 ]);
-
-function hasYaml(content) {
-  return content.trimStart().startsWith("---");
-}
 
 function auditEntry(slug, dirPath) {
   const mdPath = path.join(dirPath, "DESIGN.md");
@@ -74,56 +73,28 @@ function auditEntry(slug, dirPath) {
     return { slug, title, error: String(e) };
   }
 
-  const hasFrontmatter = hasYaml(content);
-  const colorCount = model.palette.reduce((sum, g) => sum + g.tokens.length, 0);
-  const typoCount = model.typography.length;
-  const componentCount = model.components.length;
-  const fontFamilies = new Set();
-  for (const t of model.typography) if (t.fontFamily) fontFamilies.add(t.fontFamily);
-
-  const componentKinds = new Set(model.components.map((c) => c.kind));
-  const markdownSections = [];
-  for (const h of ["Overview", "Key Characteristics", "Layout", "Components", "Shapes", "Typography", "Colors", "Font Substitutes"]) {
-    if (content.match(new RegExp(`^#{1,3}\\s+${h}`, "im"))) markdownSections.push(h);
-  }
-
-  // Confidence scores
-  let lightConfidence = "low";
-  let darkConfidence = "low";
-  if (colorCount >= 5 && typoCount >= 3 && componentCount >= 3) {
-    lightConfidence = "high";
-  } else if (colorCount >= 3 || typoCount >= 1 || componentCount >= 2) {
-    lightConfidence = "medium";
-  }
-  if (lightConfidence === "high") darkConfidence = "high";
-  else if (colorCount >= 2 || hasFrontmatter) darkConfidence = "medium";
-
-  const warnings = [];
-  if (colorCount === 0) warnings.push("no-structured-colors");
-  if (typoCount === 0) warnings.push("no-structured-typography");
-  if (componentCount === 0) warnings.push("no-structured-components");
-  if (!hasFrontmatter) warnings.push("no-frontmatter");
-  if (model.archetype === "generic_system") warnings.push("generic-archetype");
-  if (typoCount === 0 && componentCount === 0 && colorCount === 0) warnings.push("markdown-derived-only");
-
-  // Markdown-derived counts
-  const mdComponents = model.components.filter((c) => Object.keys(c.raw).length === 0);
-
   return {
     slug,
     title,
+    originalTitle: content.match(/^#\s+(.+)$/m)?.[1]?.trim() ?? null,
     archetype: model.archetype,
-    hasFrontmatter,
-    colorCount,
-    typoCount,
-    componentCount,
-    componentKinds: [...componentKinds],
-    fontFamilies: [...fontFamilies],
-    markdownSections,
-    lightConfidence,
-    darkConfidence,
-    markdownDerivedComponents: mdComponents.length,
-    warnings,
+    archetypeConfidence: model.confidence.archetype,
+    rendererPath: model.archetype,
+    colorCount: model.coverage.colorsCount,
+    markdownColorCount: model.coverage.markdownColorsCount,
+    typoCount: model.coverage.typographyCount,
+    radiusCount: model.coverage.radiusCount,
+    spacingCount: model.coverage.spacingCount,
+    componentCount: model.coverage.componentCount,
+    componentKinds: model.coverage.componentKinds,
+    fontFamilies: model.coverage.fontFamilies,
+    markdownSections: model.coverage.markdownSections,
+    darkTokenCount: model.coverage.darkTokenCount,
+    darkComponentCount: model.coverage.darkComponentCount,
+    lightConfidence: model.confidence.lightPreview,
+    darkConfidence: model.confidence.darkPreview,
+    componentConfidence: model.confidence.components,
+    warnings: model.warnings,
     overviewLength: model.overviewText?.length ?? 0,
     visualLanguageKeywords: model.visualLanguage.keywords.length,
     visualLanguagePhrases: model.visualLanguage.phrases.length,
@@ -135,11 +106,6 @@ const entries = fs.readdirSync(cacheRoot, { withFileTypes: true })
   .filter((d) => d.isDirectory())
   .map((d) => d.name);
 
-console.log(`Total entries: ${entries.length}\n`);
-console.log("=".repeat(80));
-console.log("PRIORITY BROKEN ENTRIES");
-console.log("=".repeat(80) + "\n");
-
 const results = [];
 for (const slug of entries) {
   const dirPath = path.join(cacheRoot, slug);
@@ -147,25 +113,54 @@ for (const slug of entries) {
   if (result) results.push(result);
 }
 
-// Print priority entries
+function priorityRank(confidence) {
+  return confidence === "low" ? 0 : confidence === "medium" ? 1 : 2;
+}
+
+function failureFlags(r) {
+  const flags = [];
+  if (r.warnings.includes("no structured colors")) flags.push("no structured colors");
+  if (r.markdownColorCount === 0) flags.push("no markdown-derived colors");
+  if (r.typoCount === 0) flags.push("no typography");
+  if (r.componentCount === 0) flags.push("no components");
+  if (r.archetype === "generic_system") flags.push("generic archetype");
+  if (r.archetypeConfidence === "low") flags.push("weak archetype confidence");
+  if (r.darkTokenCount === 0) flags.push("dark tokens missing");
+  if (r.warnings.includes("dark tokens derived")) flags.push("dark only derived");
+  if (r.warnings.includes("font fallback only")) flags.push("font fallback only");
+  if (r.componentConfidence === "low") flags.push("no real component samples");
+  if (r.warnings.includes("likely contrast risk")) flags.push("likely contrast risk");
+  if (r.componentCount > 24) flags.push("likely overflow risk");
+  if (r.visualLanguagePhrases > 8 && r.componentCount < 3) flags.push("too text-heavy");
+  if (r.lightConfidence === "low" || r.archetype === "generic_system") flags.push("too generic");
+  return flags;
+}
+
+for (const r of results) {
+  r.failureFlags = failureFlags(r);
+}
+
+console.log(`Total entries: ${entries.length}\n`);
+console.log("=".repeat(80));
+console.log("PRIORITY BROKEN ENTRIES");
+console.log("=".repeat(80) + "\n");
+
 for (const r of results) {
   if (!prioritySlugs.has(r.slug)) continue;
-  const priority = "🔴";
-  console.log(`${priority} ${r.slug} (${r.title})`);
-  console.log(`  Archetype: ${r.archetype}`);
-  console.log(`  Frontmatter: ${r.hasFrontmatter ? "YES" : "NO"}`);
-  console.log(`  Colors: ${r.colorCount} | Typography: ${r.typoCount} | Components: ${r.componentCount}`);
-  console.log(`  Component kinds: ${r.componentKinds.join(", ") || "none"}`);
+  console.log(`- ${r.slug} (${r.title})`);
+  if (r.originalTitle) console.log(`  Upstream title: ${r.originalTitle}`);
+  console.log(`  Archetype: ${r.archetype} (${r.archetypeConfidence}) | renderer=${r.rendererPath}`);
+  console.log(`  Colors: ${r.colorCount} (md ${r.markdownColorCount}) | Typography: ${r.typoCount} | Radius: ${r.radiusCount} | Spacing: ${r.spacingCount} | Components: ${r.componentCount}`);
+  console.log(`  Component kinds: ${Object.entries(r.componentKinds).map(([kind, count]) => `${kind}:${count}`).join(", ") || "none"}`);
+  console.log(`  Fonts: ${r.fontFamilies.join(", ") || "fallback only"}`);
+  console.log(`  Dark tokens: ${r.darkTokenCount} | Dark components: ${r.darkComponentCount}`);
   console.log(`  Light confidence: ${r.lightConfidence} | Dark confidence: ${r.darkConfidence}`);
-  console.log(`  Warnings: ${r.warnings.join(", ") || "none"}`);
+  console.log(`  Failure flags: ${r.failureFlags.join(", ") || "none"}`);
   console.log(`  MD sections: ${r.markdownSections.join(", ")}`);
-  console.log(`  MD-derived components: ${r.markdownDerivedComponents}/${r.componentCount}`);
   console.log("");
 }
 
 // Summary
-const withFm = results.filter((r) => r.hasFrontmatter).length;
-const withoutFm = results.filter((r) => !r.hasFrontmatter).length;
 const genericArchetype = results.filter((r) => r.archetype === "generic_system").length;
 const noColors = results.filter((r) => r.colorCount === 0).length;
 const noTypo = results.filter((r) => r.typoCount === 0).length;
@@ -175,12 +170,27 @@ console.log("=".repeat(80));
 console.log("OVERALL SUMMARY");
 console.log("=".repeat(80) + "\n");
 console.log(`Total entries audited: ${results.length}`);
-console.log(`With YAML frontmatter: ${withFm}`);
-console.log(`Without YAML frontmatter: ${withoutFm}`);
 console.log(`Generic archetype fallback: ${genericArchetype}`);
-console.log(`No structured colors: ${noColors}`);
-console.log(`No structured typography: ${noTypo}`);
-console.log(`No structured components: ${noComponents}`);
+console.log(`No colors: ${noColors}`);
+console.log(`No typography: ${noTypo}`);
+console.log(`No components: ${noComponents}`);
+
+console.log("\nFailure summary:");
+const failures = new Map();
+for (const r of results) {
+  for (const flag of r.failureFlags) failures.set(flag, (failures.get(flag) ?? 0) + 1);
+}
+for (const [flag, count] of [...failures.entries()].sort((a, b) => b[1] - a[1])) {
+  console.log(`  ${String(flag).padEnd(28)} ${count}`);
+}
+
+console.log("\nLowest confidence priority list:");
+for (const r of [...results].sort((a, b) => {
+  const diff = priorityRank(a.lightConfidence) + priorityRank(a.darkConfidence) - priorityRank(b.lightConfidence) - priorityRank(b.darkConfidence);
+  return diff || b.failureFlags.length - a.failureFlags.length || a.slug.localeCompare(b.slug);
+}).slice(0, 24)) {
+  console.log(`  ${r.slug.padEnd(18)} light=${r.lightConfidence.padEnd(6)} dark=${r.darkConfidence.padEnd(6)} arch=${r.archetype.padEnd(20)} flags=${r.failureFlags.slice(0, 4).join(", ") || "none"}`);
+}
 
 // Archetype distribution for priority entries
 console.log("\nPriority archetype distribution:");
@@ -189,11 +199,6 @@ for (const r of results.filter((r) => prioritySlugs.has(r.slug))) {
 }
 
 // All entries without frontmatter
-console.log("\nEntries WITHOUT frontmatter:");
-for (const r of results.filter((r) => !r.hasFrontmatter)) {
-  console.log(`  ${r.slug.padEnd(20)} arch=${r.archetype.padEnd(20)} colors=${r.colorCount} typo=${r.typoCount} comps=${r.componentCount} light=${r.lightConfidence.padEnd(6)} dark=${r.darkConfidence}`);
-}
-
 // Generate safety check
 console.log("\n" + "=".repeat(80));
 console.log("GENERATOR SAFETY CHECK (sample entries)");

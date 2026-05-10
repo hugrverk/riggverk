@@ -81,6 +81,11 @@ assert.deepEqual(model.components.map((component) => component.name), [
   "markets-table-card",
 ]);
 assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "market-table");
+assert.equal(model.coverage.colorsCount, 3);
+assert.equal(model.coverage.markdownColorsCount, 0);
+assert.equal(model.coverage.componentKinds["market-table"], 1);
+assert.equal(model.confidence.lightPreview, "medium");
+assert(model.warnings.includes("dark tokens derived"));
 
 const nestedComponents = parseDesignMdForPreview(
   "nested",
@@ -177,6 +182,8 @@ const markdownOnly = parseDesignMdForPreview(
 assert.equal(markdownOnly.archetype, "music_campaign");
 assert(markdownOnly.components.some((component) => component.name.startsWith("playlist-card")));
 assert(markdownOnly.components.some((component) => component.name === "now-playing-bar"));
+assert(markdownOnly.coverage.markdownColorsCount === 0);
+assert(markdownOnly.warnings.includes("no structured colors"));
 
 // ── Markdown typography extraction ──
 const typographyFixture = `## 3. Typography Rules
@@ -194,6 +201,7 @@ const typographyFixture = `## 3. Typography Rules
 const typeModel = parseDesignMdForPreview("type-test", "Type Test", "test", typographyFixture);
 assert(typeModel.typography.length >= 2, `Expected ≥2 typography tokens, got ${typeModel.typography.length}`);
 assert(typeModel.typography.some((t) => t.key.includes("display")), "Expected display typography token");
+assert(typeModel.coverage.fontFamilies.includes("abcNormal"), "Expected markdown font family in coverage");
 
 // ── New archetypes ──
 const retailFixture = `# Design System Inspired by Starbucks
@@ -252,6 +260,20 @@ const compModel = parseDesignMdForPreview("comp-test", "Comp Test", "test", comp
 assert(compModel.components.length >= 2, `Expected ≥2 components, got ${compModel.components.length}`);
 assert(compModel.components.some((c) => c.name.includes("button")), "Expected button component");
 assert(compModel.components.some((c) => c.name.includes("nav")), "Expected nav component");
+assert.equal(compModel.confidence.components, "high");
+
+const markdownColorFixture = `## Colors
+| Token | Value | Use |
+|---|---|---|
+| Brand Red | #e60000 | primary |
+| Surface Dark | #101820 | dark card |
+
+Components include \`payment-card\`, \`conversion-widget\`, and a market table.
+`;
+const colorModel = parseDesignMdForPreview("markdown-color", "Markdown Color", "payment card", markdownColorFixture);
+assert(colorModel.coverage.markdownColorsCount >= 2, "Expected markdown-derived colors");
+assert(colorModel.components.some((c) => c.name === "payment-card"), "Expected backticked component extraction");
+assert(colorModel.coverage.darkTokenCount >= 1, "Expected dark token coverage");
 
 // ── Font fallback for new fonts ──
 assert.match(resolveGeneratedFontFamily("abcNormal", "cinematic film"), /Inter|DM Sans/);

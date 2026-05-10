@@ -59,6 +59,7 @@ export interface DesignMdToken {
   key: string;
   rawValue: string;
   resolvedValue: string;
+  source?: "structured" | "markdown" | "derived";
 }
 
 export interface DesignMdColorToken extends DesignMdToken {
@@ -73,6 +74,7 @@ export interface DesignMdTypographyToken {
   lineHeight?: string;
   letterSpacing?: string;
   raw: Record<string, string>;
+  source?: "structured" | "markdown" | "derived";
 }
 
 export interface DesignMdComponentGroup {
@@ -80,6 +82,7 @@ export interface DesignMdComponentGroup {
   kind: DesignMdComponentKind;
   raw: Record<string, string>;
   styles: Record<string, string>;
+  source?: "structured" | "markdown" | "derived";
 }
 
 export type DesignMdPaletteGroupName =
@@ -100,6 +103,39 @@ export interface DesignMdVisualLanguage {
   keywords: string[];
 }
 
+export type DesignMdConfidence = "low" | "medium" | "high";
+
+export type DesignMdPreviewWarning =
+  | "no structured colors"
+  | "no structured typography"
+  | "no structured components"
+  | "markdown-derived-only"
+  | "dark tokens derived"
+  | "generic archetype fallback"
+  | "font fallback only"
+  | "likely contrast risk";
+
+export interface DesignMdPreviewCoverage {
+  colorsCount: number;
+  markdownColorsCount: number;
+  typographyCount: number;
+  radiusCount: number;
+  spacingCount: number;
+  componentCount: number;
+  componentKinds: Partial<Record<DesignMdComponentKind, number>>;
+  fontFamilies: string[];
+  markdownSections: string[];
+  darkTokenCount: number;
+  darkComponentCount: number;
+}
+
+export interface DesignMdPreviewConfidence {
+  archetype: DesignMdConfidence;
+  lightPreview: DesignMdConfidence;
+  darkPreview: DesignMdConfidence;
+  components: DesignMdConfidence;
+}
+
 export interface DesignMdPreviewModel {
   meta: {
     slug: string;
@@ -113,6 +149,9 @@ export interface DesignMdPreviewModel {
   components: DesignMdComponentGroup[];
   visualLanguage: DesignMdVisualLanguage;
   archetype: DesignMdArchetype;
+  coverage: DesignMdPreviewCoverage;
+  confidence: DesignMdPreviewConfidence;
+  warnings: DesignMdPreviewWarning[];
   overviewText: string | null;
   layoutText: string | null;
   fontSubstitutes: string;
@@ -137,9 +176,15 @@ const SECTION_HEADINGS = [
   "Key Characteristics",
   "Layout",
   "Components",
+  "Component Stylings",
+  "Component Library",
+  "Key Components",
   "Shapes",
   "Typography",
+  "Typography Rules",
   "Colors",
+  "Color Palette",
+  "Color Palette & Roles",
   "Fonts",
   "Font Substitutes",
   "Font Substitute",
@@ -470,6 +515,14 @@ function cleanPhrase(text: string): string {
     .trim();
 }
 
+function normalizeTokenLabel(text: string, fallback: string): string {
+  return cleanPhrase(text || fallback)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
+    .slice(0, 52) || fallback;
+}
+
 function extractPhrases(body: string, description: string): string[] {
   const phrases: string[] = [];
   if (description) phrases.push(cleanPhrase(description));
@@ -478,9 +531,9 @@ function extractPhrases(body: string, description: string): string[] {
     const section = extractSection(body, heading);
     if (!section) continue;
     const candidates = section
-      .split(/(?<=[.!?])\s+|;\s+|\s+-\s+/)
+      .split(/(?<=[.!?])\s+|;\s+|\s+-\s+|\n[-*]\s+/)
       .map(cleanPhrase)
-      .filter((phrase) => phrase.length > 24);
+      .filter((phrase) => phrase.length > 16 && phrase.length < 220);
     phrases.push(...candidates);
   }
 
@@ -502,7 +555,7 @@ function keywordMatches(text: string): string[] {
     ["marketplace", /marketplace|property|listing|guest|booking|homes|experiences|mobility|ride/],
     ["dashboard", /dashboard|trading|finance|financial platform|markets table|balance|deposit|buy crypto/],
     ["editorial", /editorial|magazine|publication|story|article|news|journalism|media/],
-    ["dark", /dark|near-black|black canvas|dark theme|dark mode/],
+    ["dark", /dark|near-black|black canvas|dark theme|dark mode|night|inverse|on-dark|on-black|charcoal|slate|terminal|code panel|cinematic|aubergine/],
     ["luxury", /luxury|automotive|vehicle|model|gallery|museum|premium|corporate-automotive/],
     ["utility", /utility|configuration|configurator|workflow|tool|command/],
     ["product tile", /product tile|product-tile|tile sections|tile/],
@@ -544,6 +597,7 @@ function tokensForPrefix(fm: Map<string, string>, prefix: string): DesignMdToken
       key: key.slice(dot.length),
       rawValue,
       resolvedValue: resolveTokenRef(rawValue, fm),
+      source: "structured",
     });
   }
   return tokens;
@@ -579,6 +633,7 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       rawValue: value,
       resolvedValue: value,
       group: paletteGroupFor(label),
+      source: "markdown",
     };
     groups.get(token.group)!.push(token);
   };
@@ -586,8 +641,11 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
   for (const line of body.split("\n")) {
     const value = line.match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/)?.[1];
     if (!value) continue;
+    const tableCells = line.trim().startsWith("|") ? line.split("|").map((cell) => cell.trim()).filter(Boolean) : [];
     const label = line.match(/\*\*([^*\n]+)\*\*/)?.[1]
       ?? line.match(/--([a-z0-9-]+)/i)?.[1]
+      ?? line.match(/`([^`\n]*color[^`\n]*)`/i)?.[1]
+      ?? tableCells.find((cell) => !/(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()/i.test(cell))
       ?? line.match(/^\s*[-*]\s*([^(:`]+?)\s*(?:\(|`|:)/)?.[1]
       ?? "";
     addToken(label, value);
@@ -631,6 +689,7 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
       lineHeight: safeTextStyleValue(pick("lineHeight", "line-height")),
       letterSpacing: safeTextStyleValue(pick("letterSpacing", "letter-spacing")),
       raw,
+      source: "structured",
     };
   });
 }
@@ -654,7 +713,9 @@ function extractFontFromMarkdown(body: string): string | undefined {
         .replace(/with\s+fallback.+/i, "")
         .replace(/,?\s*-apple-system.*$/i, "")
         .trim();
-      if (font && font.length > 0 && font.length < 80 && !/^(?:serif|sans-serif|monospace|system-ui|[A-Z][a-z]+ Sans)$/i.test(font)) {
+      const wordCount = font.split(/\s+/).filter(Boolean).length;
+      const proseLike = /\b(?:is|are|the|a|an|and|or|creates|create|confident|crown|jewel|design|system|typography|fallback|substitute|use|local|available)\b/i.test(font);
+      if (font && font.length > 0 && font.length < 80 && wordCount <= 4 && !proseLike && !/^(?:serif|sans-serif|monospace|system-ui|[A-Z][a-z]+ Sans)$/i.test(font)) {
         return font;
       }
     }
@@ -663,8 +724,8 @@ function extractFontFromMarkdown(body: string): string | undefined {
 }
 
 function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
-  // Find typography tables (Role | Size | Weight | Line Height | ...)
-  const headerRe = /\|\s*Role\s*\|\s*(?:Font\s*\|)?\s*Size\s*\|[\s\w|]*Weight[\s\w|]*/i;
+  // Find typography tables (Role/Token/Name | Size | Weight | Line Height | ...)
+  const headerRe = /\|\s*(?:Role|Token|Name|Style|Type)\s*\|\s*(?:Font\s*\|)?\s*Size\s*\|[\s\w|/-]*Weight[\s\w|/-]*/i;
   const headerMatch = body.match(headerRe);
   if (!headerMatch || headerMatch.index === undefined) return [];
 
@@ -718,7 +779,7 @@ function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
       if (fontWeight) raw["fontWeight"] = fontWeight;
       if (lineHeight) raw["lineHeight"] = lineHeight;
       if (letterSpacing) raw["letterSpacing"] = letterSpacing;
-      tokens.push({ key: name, fontSize, fontWeight, lineHeight, letterSpacing, raw });
+      tokens.push({ key: name, fontSize, fontWeight, lineHeight, letterSpacing, raw, source: "markdown" });
     }
     if (tokens.length >= 12) break;
   }
@@ -728,6 +789,12 @@ function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
 function buildMarkdownTypography(body: string): DesignMdTypographyToken[] {
   const tokens = parseMarkdownTypeTable(body);
   const fontFamily = extractFontFromMarkdown(body);
+  if (tokens.length === 0 && fontFamily && isSafeFontFamilyValue(fontFamily)) {
+    return [
+      { key: "display", fontFamily, fontSize: "40px", fontWeight: "700", lineHeight: "1.05", raw: { fontFamily }, source: "markdown" },
+      { key: "body", fontFamily, fontSize: "16px", fontWeight: "400", lineHeight: "1.45", raw: { fontFamily }, source: "markdown" },
+    ];
+  }
   if (fontFamily && isSafeFontFamilyValue(fontFamily)) {
     for (const t of tokens) {
       if (!t.fontFamily) t.fontFamily = fontFamily;
@@ -790,7 +857,7 @@ function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
     const nestedComponent = propParts.length > 1 && !propLooksLikeStyle;
     const groupName = nestedComponent ? `${name}-${firstProp}` : name;
     const prop = (nestedComponent ? propParts.slice(1) : propParts).join(".");
-    if (!groups.has(groupName)) groups.set(groupName, { name: groupName, kind: componentKind(groupName), raw: {}, styles: {} });
+    if (!groups.has(groupName)) groups.set(groupName, { name: groupName, kind: componentKind(groupName), raw: {}, styles: {}, source: "structured" });
     const group = groups.get(groupName)!;
     group.raw[prop] = token.resolvedValue;
     const safe = safeStyleProp(prop, token.resolvedValue);
@@ -833,6 +900,8 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
   const patterns = [
     /\b(search(?:\s+bar|\s+input)?)\b/ig,
     /\b((?:pricing|feature|stat|metric|product|market|model|code|terminal|hero|photo|workflow|dashboard|property|listing|album|playlist|campaign|trust|logo|pipeline|menu|store|plan|coverage|device)\s+(?:card|cards|tile|tiles|panel|panels|table|tables|row|rows|band|bands|mockup|mockups|block|blocks|grid|bar|module))\b/ig,
+    /\b((?:editorial|article|story|news|media|payment|conversion|vehicle|spec|prompt|agent|tool|action)\s+(?:card|cards|tile|tiles|panel|panels|table|tables|row|rows|input|graph|flow|module|widget))\b/ig,
+    /\b((?:vehicle|market|payment|conversion|workflow|prompt|terminal|code|editorial|playlist|property|product)\s+(?:spec\s+)?(?:card|table|widget|panel|input|tile))\b/ig,
     /\b((?:pill|status|workflow|guest-favorite)\s+badge)\b/ig,
     /\b((?:top|sub|global|main|side)\s+nav)\b/ig,
     /\b((?:primary|secondary|outline|pill|cta|ghost)\s+button)\b/ig,
@@ -874,11 +943,38 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
     }
   }
 
-  return Array.from(names).map((name) => ({
+  const tableRows = body.matchAll(/^\|(.+)\|$/gm);
+  for (const row of tableRows) {
+    const cells = row[1].split("|").map((cell) => cleanPhrase(cell).trim()).filter(Boolean);
+    const candidate = cells.find((cell) => /button|card|tile|panel|table|nav|input|search|badge|chip|hero|workflow|terminal|code|prompt|payment|article|playlist|menu|plan|device/i.test(cell));
+    if (candidate && !/^(component|token|name|description|usage|role)$/i.test(candidate)) {
+      names.add(normalizeTokenLabel(candidate, `component-${names.size + 1}`));
+    }
+    if (names.size >= 18) break;
+  }
+
+  for (const match of body.matchAll(/`([^`\n]{3,44})`/g)) {
+    const candidate = match[1];
+    if (!/button|card|tile|panel|table|nav|input|search|badge|chip|hero|workflow|terminal|code|prompt|payment|article|playlist|menu|plan|device/i.test(candidate)) continue;
+    names.add(normalizeTokenLabel(candidate, `component-${names.size + 1}`));
+    if (names.size >= 18) break;
+  }
+
+  const weighted = Array.from(names).sort((a, b) => {
+    const rank = (name: string) => {
+      if (/prompt|terminal|code|workflow|payment|market|article|editorial|playlist|menu|plan|vehicle|product|property|search/.test(name)) return 0;
+      if (/button|card|tile|panel|nav|input|badge|chip|hero/.test(name)) return 1;
+      return 2;
+    };
+    return rank(a) - rank(b) || a.localeCompare(b);
+  }).slice(0, 18);
+
+  return weighted.map((name) => ({
     name,
     kind: componentKind(name),
     raw: {},
     styles: {},
+    source: "markdown",
   }));
 }
 
@@ -961,6 +1057,7 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   }
   if (/(supabase|opencode)/.test(text)) scores.developer_docs = Math.max(scores.developer_docs, 1) + 4;
   if (/(clickhouse|cohere|mongodb|posthog)/.test(slugLower)) scores.data_product = Math.max(scores.data_product, 1) + 5;
+  if (/(shopify|nike)/.test(slugLower)) scores.retail_brand = Math.max(scores.retail_brand, 1) + 5;
 
   // Content-based boosts
   if (/coffee|beverage|drink|menu item|store card|loyalty/.test(text)) scores.retail_food = Math.max(scores.retail_food, 1) + 3;
@@ -971,6 +1068,150 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
   return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
+}
+
+function markdownSectionNames(body: string): string[] {
+  const found = new Set<string>();
+  for (const heading of SECTION_HEADINGS) {
+    if (extractSection(body, heading)) found.add(heading);
+  }
+  return Array.from(found);
+}
+
+function hasDarkSignal(value: string): boolean {
+  return /dark|black|night|inverse|charcoal|slate|on-dark|on-black|surface-dark|dark card|terminal|code panel|cinematic|aubergine/i.test(value);
+}
+
+function hexToRgb(value: string): { r: number; g: number; b: number } | null {
+  const hex = value.trim();
+  if (!/^#[0-9a-fA-F]{3,8}$/.test(hex)) return null;
+  const raw = hex.slice(1);
+  const full = raw.length === 3 || raw.length === 4
+    ? raw.slice(0, 3).split("").map((c) => c + c).join("")
+    : raw.slice(0, 6);
+  const int = Number.parseInt(full, 16);
+  if (Number.isNaN(int)) return null;
+  return { r: (int >> 16) & 255, g: (int >> 8) & 255, b: int & 255 };
+}
+
+function relativeLuminance(value: string): number | null {
+  const rgb = hexToRgb(value);
+  if (!rgb) return null;
+  const channel = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+function contrastRatio(a: string | undefined, b: string | undefined): number | null {
+  if (!a || !b) return null;
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return null;
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function likelyContrastRisk(palette: DesignMdPaletteGroup[]): boolean {
+  const tokens = palette.flatMap((group) => group.tokens);
+  const pick = (re: RegExp) => tokens.find((token) => re.test(token.key) && isSafeColorValue(token.resolvedValue))?.resolvedValue;
+  const lightCanvas = pick(/canvas|background|surface|white/i);
+  const text = pick(/text|ink|foreground|black|body/i);
+  const darkCanvas = pick(/dark|black|night|aubergine/i);
+  const onDark = pick(/on-dark|on-black|body-on-dark|text-dark|white/i);
+  const lightRatio = contrastRatio(text, lightCanvas);
+  const darkRatio = contrastRatio(onDark, darkCanvas);
+  return (lightRatio !== null && lightRatio < 3) || (darkRatio !== null && darkRatio < 3);
+}
+
+function confidenceFromScore(score: number): DesignMdConfidence {
+  if (score >= 6) return "high";
+  if (score >= 3) return "medium";
+  return "low";
+}
+
+function buildCoverage(
+  palette: DesignMdPaletteGroup[],
+  typography: DesignMdTypographyToken[],
+  radius: DesignMdToken[],
+  spacing: DesignMdToken[],
+  components: DesignMdComponentGroup[],
+  body: string,
+): DesignMdPreviewCoverage {
+  const colorTokens = palette.flatMap((group) => group.tokens);
+  const componentKinds = {} as Record<DesignMdComponentKind, number>;
+  for (const component of components) {
+    componentKinds[component.kind] = (componentKinds[component.kind] ?? 0) + 1;
+  }
+  const fonts = new Set<string>();
+  for (const token of typography) {
+    if (token.fontFamily) {
+      for (const font of splitFontFamily(token.fontFamily)) fonts.add(stripQuotes(font));
+    }
+  }
+  return {
+    colorsCount: colorTokens.length,
+    markdownColorsCount: colorTokens.filter((token) => token.source === "markdown").length,
+    typographyCount: typography.length,
+    radiusCount: radius.length,
+    spacingCount: spacing.length,
+    componentCount: components.length,
+    componentKinds,
+    fontFamilies: Array.from(fonts),
+    markdownSections: markdownSectionNames(body),
+    darkTokenCount: colorTokens.filter((token) => hasDarkSignal(`${token.key} ${token.rawValue}`)).length,
+    darkComponentCount: components.filter((component) => hasDarkSignal(component.name)).length,
+  };
+}
+
+function buildConfidence(
+  archetype: DesignMdArchetype,
+  coverage: DesignMdPreviewCoverage,
+  structuredCounts: { colors: number; typography: number; components: number },
+  phrases: string[],
+): DesignMdPreviewConfidence {
+  const archetypeScore = (archetype === "generic_system" ? 0 : 2)
+    + (phrases.length >= 2 ? 1 : 0)
+    + (coverage.componentCount >= 3 ? 1 : 0)
+    + (coverage.colorsCount >= 4 ? 1 : 0)
+    + (structuredCounts.components > 0 || structuredCounts.colors > 0 ? 1 : 0);
+  const lightScore = (coverage.colorsCount >= 4 ? 2 : coverage.colorsCount >= 2 ? 1 : 0)
+    + (coverage.typographyCount >= 2 ? 1 : 0)
+    + (coverage.componentCount >= 3 ? 2 : coverage.componentCount >= 1 ? 1 : 0)
+    + (archetype !== "generic_system" ? 1 : 0);
+  const darkScore = lightScore
+    + (coverage.darkTokenCount >= 2 ? 2 : coverage.darkTokenCount >= 1 ? 1 : 0)
+    + (coverage.darkComponentCount > 0 ? 1 : 0)
+    - (coverage.darkTokenCount === 0 ? 1 : 0);
+  const componentScore = (coverage.componentCount >= 6 ? 6 : coverage.componentCount >= 3 ? 4 : coverage.componentCount >= 1 ? 2 : 0)
+    + (Object.keys(coverage.componentKinds).length >= 3 ? 1 : 0)
+    + (structuredCounts.components > 0 ? 1 : 0);
+  return {
+    archetype: confidenceFromScore(archetypeScore),
+    lightPreview: confidenceFromScore(lightScore),
+    darkPreview: confidenceFromScore(darkScore),
+    components: confidenceFromScore(componentScore),
+  };
+}
+
+function buildWarnings(
+  archetype: DesignMdArchetype,
+  coverage: DesignMdPreviewCoverage,
+  structuredCounts: { colors: number; typography: number; components: number },
+  palette: DesignMdPaletteGroup[],
+): DesignMdPreviewWarning[] {
+  const warnings: DesignMdPreviewWarning[] = [];
+  if (structuredCounts.colors === 0) warnings.push("no structured colors");
+  if (structuredCounts.typography === 0) warnings.push("no structured typography");
+  if (structuredCounts.components === 0) warnings.push("no structured components");
+  if (structuredCounts.colors === 0 && structuredCounts.typography === 0 && structuredCounts.components === 0) warnings.push("markdown-derived-only");
+  if (coverage.darkTokenCount === 0) warnings.push("dark tokens derived");
+  if (archetype === "generic_system") warnings.push("generic archetype fallback");
+  if (coverage.fontFamilies.length === 0) warnings.push("font fallback only");
+  if (likelyContrastRisk(palette)) warnings.push("likely contrast risk");
+  return warnings;
 }
 
 export function parseDesignMdForPreview(
@@ -984,22 +1225,44 @@ export function parseDesignMdForPreview(
   const phrases = extractPhrases(body, description);
   const keywords = Array.from(new Set(keywordMatches([description, ...phrases].join(" "))));
   const components = buildComponents(fm);
-  const palette = buildPalette(fm);
+  const structuredPalette = buildPalette(fm);
+  const markdownPalette = buildMarkdownPalette(body || content);
+  const palette = structuredPalette.length > 0
+    ? structuredPalette.map((group) => {
+        const mdGroup = markdownPalette.find((candidate) => candidate.name === group.name);
+        return mdGroup ? { name: group.name, tokens: group.tokens.concat(mdGroup.tokens.slice(0, Math.max(0, 4 - group.tokens.length))) } : group;
+      }).concat(markdownPalette.filter((group) => !structuredPalette.some((structured) => structured.name === group.name)).slice(0, 2))
+    : markdownPalette;
 
   const structuredTypo = buildTypography(fm);
-  const mdTypo = structuredTypo.length === 0 ? buildMarkdownTypography(body) : [];
-  const allTypography = structuredTypo.length > 0 ? structuredTypo : mdTypo;
-  const allComponents = components.length > 0 ? components : buildMarkdownComponents(body || content);
+  const mdTypo = buildMarkdownTypography(body);
+  const allTypography = structuredTypo.length > 0 ? structuredTypo.concat(mdTypo.slice(0, Math.max(0, 3 - structuredTypo.length))) : mdTypo;
+  const mdComponents = buildMarkdownComponents(body || content);
+  const structuredComponentNames = components.map((component) => component.name);
+  const mergedMdComponents = mdComponents.filter((component) => {
+    return !structuredComponentNames.some((name) => name === component.name || name.startsWith(`${component.name}-`) || component.name.startsWith(`${name}-`));
+  });
+  const allComponents = components.length > 0 ? components.concat(mergedMdComponents.slice(0, Math.max(0, 12 - components.length))) : mdComponents;
+  const radius = tokensForPrefix(fm, "rounded").concat(tokensForPrefix(fm, "radius"));
+  const spacing = tokensForPrefix(fm, "spacing");
+  const archetype = inferArchetype(slug, phrases, keywords, allComponents.map((component) => component.name));
+  const coverage = buildCoverage(palette, allTypography, radius, spacing, allComponents, body || content);
+  const structuredCounts = { colors: structuredPalette.reduce((sum, group) => sum + group.tokens.length, 0), typography: structuredTypo.length, components: components.length };
+  const confidence = buildConfidence(archetype, coverage, structuredCounts, phrases);
+  const warnings = buildWarnings(archetype, coverage, structuredCounts, palette);
 
   return {
     meta: { slug, title, description },
     palette: palette.length > 0 ? palette : buildMarkdownPalette(body || content),
     typography: allTypography,
-    radius: tokensForPrefix(fm, "rounded").concat(tokensForPrefix(fm, "radius")),
-    spacing: tokensForPrefix(fm, "spacing"),
+    radius,
+    spacing,
     components: allComponents,
     visualLanguage: { phrases, keywords },
-    archetype: inferArchetype(slug, phrases, keywords, allComponents.map((component) => component.name)),
+    archetype,
+    coverage,
+    confidence,
+    warnings,
     overviewText: extractSection(body, "Overview"),
     layoutText: extractSection(body, "Layout"),
     fontSubstitutes: extractFontSubstitutes(body),

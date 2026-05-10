@@ -5,6 +5,9 @@ import {
   resolveTokenRef,
   type DesignMdArchetype,
   type DesignMdComponentKind,
+  type DesignMdPreviewConfidence,
+  type DesignMdPreviewCoverage,
+  type DesignMdPreviewWarning,
   type DesignMdPaletteGroup,
   type DesignMdToken,
   type DesignMdTypographyToken,
@@ -453,6 +456,9 @@ export interface DesignMdBoard {
   overview: string | null;
   layout: string | null;
   fontSubstitutes: string;
+  coverage: DesignMdPreviewCoverage;
+  confidence: DesignMdPreviewConfidence;
+  warnings: DesignMdPreviewWarning[];
 }
 
 export function buildBoard(
@@ -488,5 +494,8 @@ export function buildBoard(
     overview: model.overviewText,
     layout: model.layoutText,
     fontSubstitutes: model.fontSubstitutes,
+    coverage: model.coverage,
+    confidence: model.confidence,
+    warnings: model.warnings,
   };
 }

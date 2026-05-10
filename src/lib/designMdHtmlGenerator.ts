@@ -21,6 +21,17 @@ function cssSize(value: string | undefined, fallback: string): string {
   return isSafeSizeValue(value) ? value.trim() : fallback;
 }
 
+function cssFontSize(value: string | undefined, fallback: string, maxPx = 44): string {
+  const safe = cssSize(value, fallback);
+  const match = safe.match(/^(\d+(?:\.\d+)?)(px|rem|em|pt)?$/);
+  if (!match) return safe;
+  const unit = match[2] ?? "px";
+  const numeric = Number.parseFloat(match[1]);
+  const px = unit === "rem" || unit === "em" ? numeric * 16 : unit === "pt" ? numeric * 1.333 : numeric;
+  if (px <= maxPx) return safe;
+  return `${maxPx}px`;
+}
+
 function cssSpacing(value: string | undefined, fallback: string): string {
   return isSafeSpacingValue(value) ? value.trim() : fallback;
 }
@@ -290,6 +301,26 @@ export function generateSpecimenHtml(spec: DesignMdSpecimen): string {
     overview: spec.overview,
     layout: null,
     fontSubstitutes: "",
+    coverage: {
+      colorsCount: 6,
+      markdownColorsCount: 0,
+      typographyCount: 0,
+      radiusCount: 4,
+      spacingCount: 3,
+      componentCount: 0,
+      componentKinds: {},
+      fontFamilies: [],
+      markdownSections: [],
+      darkTokenCount: 0,
+      darkComponentCount: 0,
+    },
+    confidence: {
+      archetype: "low",
+      lightPreview: "medium",
+      darkPreview: "low",
+      components: "low",
+    },
+    warnings: ["generic archetype fallback", "dark tokens derived"],
   }, { variant: "light" });
 }
 
@@ -297,11 +328,38 @@ function typographyCss(board: DesignMdBoard, matches: string[], fallbackSize: st
   const token = board.typographyTokens.find((t) => matches.some((match) => t.key.toLowerCase().includes(match))) ?? board.typographyTokens[0];
   return {
     family: cssPreviewFont(token?.fontFamily, board, token?.raw),
-    size: cssSize(token?.fontSize, fallbackSize),
+    size: cssFontSize(token?.fontSize, fallbackSize, 44),
     weight: cssText(token?.fontWeight, "600"),
     lineHeight: cssText(token?.lineHeight, "1.15"),
-    letterSpacing: cssText(token?.letterSpacing, "0"),
+    letterSpacing: "0",
   };
+}
+
+function archetypeLabel(board: DesignMdBoard): string {
+  const labels: Record<DesignMdBoard["archetype"], string> = {
+    marketplace: "Marketplace",
+    product_gallery: "Product Gallery",
+    finance_dashboard: "Finance Dashboard",
+    editorial: "Editorial",
+    media_editorial: "Media Editorial",
+    collaboration_saas: "Collaboration",
+    developer_docs: "Developer Docs",
+    developer_product: "Developer Product",
+    luxury_automotive: "Automotive",
+    data_product: "Data Product",
+    ai_product: "AI Product",
+    ai_agent_product: "Agent Product",
+    creative_tool: "Creative Tool",
+    payment_finance: "Payment Finance",
+    retail_food: "Retail Food",
+    retail_brand: "Retail Brand",
+    telecom_service: "Telecom Service",
+    automation_workflow: "Automation",
+    music_campaign: "Music Campaign",
+    terminal_tool: "Terminal Tool",
+    generic_system: "Design System",
+  };
+  return labels[board.archetype];
 }
 
 function heroPattern(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
@@ -527,7 +585,7 @@ function musicCampaignHero(board: DesignMdBoard, colors: ReturnType<typeof deriv
   const cta = component(board, ["button-primary", "pill-button", "button"]);
   const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
   const musicKeywords = board.visualLanguage.keywords.filter((k) => /music|playlist|album|track|audio|sound|player/.test(k)).slice(0, 2);
-  return '<section class="hero hero-music" style="background:' + campaignBg + '"><div class="music-copy"><span class="music-kicker">' + (musicKeywords[0] ?? "Music Campaign") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Listen Now") + '</button></div>' +
+  return '<section class="hero hero-music" style="background:' + campaignBg + '"><div class="music-copy"><span class="music-kicker">' + esc(musicKeywords[0] ?? archetypeLabel(board)) + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Listen Now") + '</button></div>' +
     '<div class="music-grid">' +
     [0, 1, 2].map((i) => {
       const tileColors = i === 0 ? { bg: colors.primary, fg: colors.onPrimary } : card;
@@ -557,7 +615,7 @@ function mediaEditorialHero(board: DesignMdBoard, colors: ReturnType<typeof deri
   const edFg = isDark ? colors.onDark : colors.text;
   const headlineGroup = component(board, ["headline", "hero", "article-card", "card"]);
   const card = componentColors(headlineGroup ?? component(board, ["card"]), edSurface, edFg, colors);
-  return '<section class="hero hero-editorial" style="background:' + edBg + '"><div class="editorial-copy"><span class="editorial-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Media Editorial") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div>' +
+  return '<section class="hero hero-editorial" style="background:' + edBg + '"><div class="editorial-copy"><span class="editorial-kicker">' + esc(archetypeLabel(board)) + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div>' +
     '<div class="campaign-grid">' +
     '<article class="editorial-lead" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + colors.radius + '"><div class="editorial-img e0"></div><b>' + esc(board.componentGroups[0]?.name ?? "Lead Story") + '</b><span class="muted">By Author · 8 min read</span></article>' +
     [1, 2].map((i) => '<article style="background:' + edSurface + ';color:' + edFg + ';border-radius:' + colors.radius + '"><b>' + esc(board.componentGroups[i]?.name ?? ["Opinion", "Latest"][i - 1]) + '</b><span class="muted">By Author · ' + [5, 3][i - 1] + ' min read</span></article>').join("") +
@@ -573,7 +631,7 @@ function retailFoodHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTo
   const card = componentColors(cardGroups[0] ?? component(board, ["card"]), foodSurface, foodFg, colors);
   const cta = component(board, ["button-primary", "order-button", "button"]);
   const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
-  return '<section class="hero hero-music" style="background:' + foodBg + '"><div class="music-copy"><span class="music-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Menu") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Order Now") + '</button></div>' +
+  return '<section class="hero hero-music" style="background:' + foodBg + '"><div class="music-copy"><span class="music-kicker">' + esc(archetypeLabel(board)) + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Order Now") + '</button></div>' +
     '<div class="music-grid">' +
     [0, 1, 2].map((i) => {
       const tileColors = i === 0 ? { bg: colors.primary, fg: colors.onPrimary } : card;
@@ -607,7 +665,7 @@ function automationWorkflowHero(board: DesignMdBoard, colors: ReturnType<typeof 
   const card = componentColors(stepGroup ?? component(board, ["card"]), autoSurface, autoFg, colors);
   const cta = component(board, ["button-primary", "button"]);
   const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
-  return '<section class="hero hero-collab" style="background:radial-gradient(circle at 25% 30%,' + colors.surface + ',transparent 30%),linear-gradient(135deg,' + autoBg + ',' + autoSurface + ')"><div class="collab-copy"><span class="collab-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Automation") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Create Zap") + '</button></div>' +
+  return '<section class="hero hero-collab" style="background:radial-gradient(circle at 25% 30%,' + colors.surface + ',transparent 30%),linear-gradient(135deg,' + autoBg + ',' + autoSurface + ')"><div class="collab-copy"><span class="collab-kicker">' + esc(archetypeLabel(board)) + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Create Zap") + '</button></div>' +
     '<div class="collab-mesh"><div class="workflow-chain">' +
     [0, 1, 2].map((i) => '<div class="workflow-node" style="background:' + card.bg + ';color:' + card.fg + ';border-color:' + colors.primary + ';border-radius:' + colors.radius + '"><b>' + esc(board.componentGroups[i]?.name ?? ["Trigger", "Action", "Filter"][i]) + '</b><span>' + ["New Email", "Create Task", "Check"][i] + '</span></div>' + (i < 2 ? '<span class="workflow-arrow">→</span>' : '')).join("") +
     '</div></div></section>';
@@ -805,10 +863,10 @@ function generateTypography(board: DesignMdBoard): string {
     tokens.map((token) => {
       const style = [
         "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
-        "font-size:" + cssSize(token.fontSize, "18px"),
+        "font-size:" + cssFontSize(token.fontSize, "18px", 32),
         "font-weight:" + cssText(token.fontWeight, "500"),
         "line-height:" + cssText(token.lineHeight, "1.25"),
-        "letter-spacing:" + cssText(token.letterSpacing, "0"),
+        "letter-spacing:0",
       ].join(";");
       return '<div class="type-row"><small>' + esc(token.key) + '</small><span style="' + style + '">' + esc(token.key) + ' speaks in this system</span></div>';
     }).join("") + '</div></section>';
@@ -850,7 +908,7 @@ function generateOverviewDeck(board: DesignMdBoard, colors: ReturnType<typeof de
       typeTokens.map((token) => {
         const style = [
           "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
-          "font-size:" + cssSize(token.fontSize, "16px"),
+          "font-size:" + cssFontSize(token.fontSize, "16px", 28),
           "font-weight:" + cssText(token.fontWeight, "500"),
           "line-height:" + cssText(token.lineHeight, "1.2"),
         ].join(";");
