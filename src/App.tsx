@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
@@ -184,6 +184,7 @@ function App() {
   const [designMdInstallPlan, setDesignMdInstallPlan] = useState<DesignMdInstallPlan | null>(null);
   const [designMdInstallResult, setDesignMdInstallResult] = useState<DesignMdInstallResult | null>(null);
   const [designMdInstallRunning, setDesignMdInstallRunning] = useState(false);
+  const [designMdInstallStatus, setDesignMdInstallStatus] = useState<DesignMdInstallStatus | null>(null);
 
   // agent source state
   const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
@@ -796,6 +797,49 @@ function App() {
     finally { setDesignMdInstallRunning(false); }
   }, [activeDesignMdSlug, designMdInstallTarget]);
 
+  const loadDesignMdInstallStatus = useCallback(async () => {
+    if (!activeDesignMdSlug || !designMdInstallTarget) return;
+    try {
+      const status = await invoke<DesignMdInstallStatus>("get_design_md_install_status", {
+        slug: activeDesignMdSlug,
+        targetDir: designMdInstallTarget,
+      });
+      setDesignMdInstallStatus(status);
+    } catch (e) { setError(`Install status: ${e}`); }
+  }, [activeDesignMdSlug, designMdInstallTarget]);
+
+  const openDesignMdTargetFolder = useCallback(async () => {
+    if (!designMdInstallTarget) return;
+    try {
+      await invoke<ActionResult>("open_design_md_target_folder", {
+        targetDir: designMdInstallTarget,
+      });
+    } catch (e) { setError(`Open folder: ${e}`); }
+  }, [designMdInstallTarget]);
+
+  const openInstalledDesignMd = useCallback(async () => {
+    if (!designMdInstallTarget) return;
+    try {
+      await invoke<ActionResult>("open_installed_design_md", {
+        targetDir: designMdInstallTarget,
+      });
+    } catch (e) { setError(`Open DESIGN.md: ${e}`); }
+  }, [designMdInstallTarget]);
+
+  // Refresh install status when slug, target, plan, or install result changes
+  useEffect(() => {
+    if (activeDesignMdSlug && designMdInstallTarget) {
+      loadDesignMdInstallStatus();
+    }
+  }, [activeDesignMdSlug, designMdInstallTarget, designMdInstallPlan, designMdInstallResult, loadDesignMdInstallStatus]);
+
+  // Clear stale install status when target changes to empty
+  useEffect(() => {
+    if (!designMdInstallTarget) {
+      setDesignMdInstallStatus(null);
+    }
+  }, [designMdInstallTarget]);
+
   // Load Design MD status when source switches to it
   useEffect(() => {
     if (view === "library" && librarySourceType === "designMd" && !designMdCatalogStatus) {
@@ -1370,6 +1414,9 @@ function App() {
             onChooseDesignMdInstallTarget={chooseDesignMdInstallTarget}
             onPlanDesignMdInstall={planDesignMdInstall}
             onInstallDesignMd={installDesignMd}
+            designMdInstallStatus={designMdInstallStatus}
+            onOpenDesignMdTargetFolder={openDesignMdTargetFolder}
+            onOpenInstalledDesignMd={openInstalledDesignMd}
           />
           </Suspense>
         )}

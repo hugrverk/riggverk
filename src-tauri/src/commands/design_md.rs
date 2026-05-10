@@ -2,6 +2,9 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+use super::process::{run_cmd, ActionResult};
+use super::workspace::path_arg;
+
 // ── constants ──
 
 const REPO_URL: &str = "https://github.com/VoltAgent/awesome-design-md.git";
@@ -73,6 +76,18 @@ pub struct DesignMdInstallResult {
     pub backup_path: Option<String>,
     pub action: String,
     pub message: String,
+    pub warnings: Vec<String>,
+}
+
+#[derive(Serialize, Debug, Clone)]
+pub struct DesignMdInstallStatus {
+    pub target_dir: String,
+    pub target_file: String,
+    pub exists: bool,
+    pub matches_selected: bool,
+    pub status: String,
+    pub reason: String,
+    pub size: Option<u64>,
     pub warnings: Vec<String>,
 }
 
@@ -774,6 +789,189 @@ fn install_design_md_impl(
         message: msg,
         warnings,
     })
+}
+
+// ── install status command ──
+
+#[tauri::command]
+pub fn get_design_md_install_status(
+    slug: String,
+    target_dir: String,
+) -> Result<DesignMdInstallStatus, String> {
+    let cache = design_md_cache_root()?;
+    get_design_md_install_status_impl(&cache, &slug, &target_dir)
+}
+
+fn get_design_md_install_status_impl(
+    cache: &Path,
+    slug: &str,
+    target_dir: &str,
+) -> Result<DesignMdInstallStatus, String> {
+    if target_dir.is_empty() {
+        let target_file = format!("{}/{}", target_dir, DESIGN_MD_FILE);
+        return Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file,
+            exists: false,
+            matches_selected: false,
+            status: "no_target".to_string(),
+            reason: "no project selected".to_string(),
+            size: None,
+            warnings: vec![],
+        });
+    }
+
+    // Validate target_dir
+    if let Err(e) = is_target_dir_safe(target_dir) {
+        let target_file = format!("{}/{}", target_dir, DESIGN_MD_FILE);
+        return Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file,
+            exists: false,
+            matches_selected: false,
+            status: "blocked".to_string(),
+            reason: e,
+            size: None,
+            warnings: vec![],
+        });
+    }
+
+    // Validate slug and load source content from cache
+    if !is_valid_design_md_slug(slug) {
+        return Err(format!("invalid slug: {}", slug));
+    }
+
+    if !cache.exists() {
+        let target_file = Path::new(target_dir)
+            .join(DESIGN_MD_FILE)
+            .to_string_lossy()
+            .into_owned();
+        return Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file,
+            exists: false,
+            matches_selected: false,
+            status: "blocked".to_string(),
+            reason: "Design MD catalog is not cached. Sync it first.".to_string(),
+            size: None,
+            warnings: vec![],
+        });
+    }
+
+    let source_path = resolve_design_md_entry_path(cache, slug)?;
+    let source_content = std::fs::read_to_string(&source_path).map_err(|e| {
+        format!("cannot read source DESIGN.md for {}: {}", slug, e)
+    })?;
+
+    let target_file_path = Path::new(target_dir).join(DESIGN_MD_FILE);
+    let target_file_str = target_file_path.to_string_lossy().into_owned();
+
+    if !target_file_path.exists() {
+        return Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file: target_file_str,
+            exists: false,
+            matches_selected: false,
+            status: "missing".to_string(),
+            reason: "DESIGN.md not installed in target folder".to_string(),
+            size: None,
+            warnings: vec![],
+        });
+    }
+
+    // Target DESIGN.md exists — compare content (safe binary compare)
+    let target_content = std::fs::read_to_string(&target_file_path)
+        .map_err(|e| format!("cannot read target DESIGN.md: {}", e))?;
+    let target_size = target_content.len() as u64;
+    let matches = source_content == target_content;
+
+    if matches {
+        Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file: target_file_str,
+            exists: true,
+            matches_selected: true,
+            status: "installed".to_string(),
+            reason: "DESIGN.md matches selected entry".to_string(),
+            size: Some(target_size),
+            warnings: vec![],
+        })
+    } else {
+        Ok(DesignMdInstallStatus {
+            target_dir: target_dir.to_string(),
+            target_file: target_file_str,
+            exists: true,
+            matches_selected: false,
+            status: "different".to_string(),
+            reason: "a different DESIGN.md exists in target folder".to_string(),
+            size: Some(target_size),
+            warnings: vec![],
+        })
+    }
+}
+
+// ── open commands ──
+
+#[tauri::command]
+pub fn open_design_md_target_folder(target_dir: String) -> Result<ActionResult, String> {
+    if let Err(e) = is_target_dir_safe(&target_dir) {
+        return Err(format!("unsafe target directory: {}", e));
+    }
+
+    let path = Path::new(&target_dir);
+    // Re-validate after canonicalization for safety
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve target_dir: {}", e))?;
+
+    // Verify the canonical path passes safety again (defense in depth)
+    if let Err(e) = is_target_dir_safe(canonical.to_string_lossy().as_ref()) {
+        return Err(format!("unsafe target directory: {}", e));
+    }
+
+    let path_str = path_arg(&canonical)?;
+    let (ok, out, err, code) = run_cmd("open", &[&path_str], &canonical);
+    Ok(ActionResult::new(
+        ok,
+        format!("open_design_md_target_folder"),
+        out,
+        err,
+        code,
+    ))
+}
+
+#[tauri::command]
+pub fn open_installed_design_md(target_dir: String) -> Result<ActionResult, String> {
+    if let Err(e) = is_target_dir_safe(&target_dir) {
+        return Err(format!("unsafe target directory: {}", e));
+    }
+
+    let path = Path::new(&target_dir);
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve target_dir: {}", e))?;
+
+    if let Err(e) = is_target_dir_safe(canonical.to_string_lossy().as_ref()) {
+        return Err(format!("unsafe target directory: {}", e));
+    }
+
+    let target_file = canonical.join(DESIGN_MD_FILE);
+    if !target_file.exists() {
+        return Err("DESIGN.md not found in target folder".to_string());
+    }
+    if !target_file.is_file() {
+        return Err("DESIGN.md path is not a file".to_string());
+    }
+
+    let file_str = path_arg(&target_file)?;
+    let (ok, out, err, code) = run_cmd("open", &[&file_str], &canonical);
+    Ok(ActionResult::new(
+        ok,
+        format!("open_installed_design_md"),
+        out,
+        err,
+        code,
+    ))
 }
 
 // ── validation ──
@@ -1680,6 +1878,102 @@ mod tests {
             normalize_git_url("https://github.com/VoltAgent/awesome-design-md.git/"),
             "github.com/voltagent/awesome-design-md"
         );
+    }
+
+    // ── install status tests ──
+
+    #[test]
+    fn install_status_no_target_for_empty_dir() {
+        let result = get_design_md_install_status("opencode.ai".to_string(), "".to_string())
+            .expect("should succeed");
+        assert_eq!(result.status, "no_target");
+        assert!(!result.exists);
+        assert!(!result.matches_selected);
+    }
+
+    #[test]
+    fn install_status_missing_when_no_design_md() {
+        let cache_root = setup_cache_with_entries("status-missing");
+        let target_dir = temp_root("status-missing-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let result = get_design_md_install_status(
+            "opencode.ai".to_string(),
+            target_dir.to_string_lossy().into_owned(),
+        )
+        .expect("should succeed");
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+        assert_eq!(result.status, "missing");
+        assert!(!result.exists);
+        assert!(!result.matches_selected);
+    }
+
+    #[test]
+    fn install_status_installed_when_content_matches() {
+        let cache_root = setup_cache_with_entries("status-installed");
+        let target_dir = temp_root("status-installed-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let source_path = cache_root.join(DESIGN_MD_DIR).join("opencode.ai").join(DESIGN_MD_FILE);
+        let source_content = std::fs::read_to_string(&source_path).expect("read source");
+        let target_file = target_dir.join(DESIGN_MD_FILE);
+        std::fs::write(&target_file, &source_content).expect("write target");
+        let result = get_design_md_install_status_impl(
+            &cache_root,
+            "opencode.ai",
+            target_dir.to_string_lossy().as_ref(),
+        ).expect("should succeed");
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+        assert_eq!(result.status, "installed");
+        assert!(result.exists);
+        assert!(result.matches_selected);
+        assert!(result.size.is_some());
+    }
+
+    #[test]
+    fn install_status_different_when_content_differs() {
+        let cache_root = setup_cache_with_entries("status-different");
+        let target_dir = temp_root("status-different-target");
+        std::fs::create_dir_all(&target_dir).expect("create target dir");
+        let target_file = target_dir.join(DESIGN_MD_FILE);
+        std::fs::write(&target_file, "# Different content\n").expect("write target");
+        let result = get_design_md_install_status(
+            "opencode.ai".to_string(),
+            target_dir.to_string_lossy().into_owned(),
+        )
+        .expect("should succeed");
+        cleanup(&cache_root);
+        cleanup(&target_dir);
+        assert_eq!(result.status, "different");
+        assert!(result.exists);
+        assert!(!result.matches_selected);
+    }
+
+    #[test]
+    fn install_status_blocked_for_unsafe_target() {
+        let result = get_design_md_install_status("opencode.ai".to_string(), "/System".to_string())
+            .expect("should handle blocked");
+        assert_eq!(result.status, "blocked");
+    }
+
+    // ── open command tests ──
+
+    #[test]
+    fn open_installed_design_md_rejects_missing_file() {
+        let target_dir = temp_root("open-missing-target");
+        std::fs::create_dir_all(&target_dir).expect("create temp dir");
+        let result = open_installed_design_md(target_dir.to_string_lossy().into_owned());
+        cleanup(&target_dir);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
+    }
+
+    #[test]
+    fn open_commands_reject_unsafe_target() {
+        let result = open_design_md_target_folder("/".to_string());
+        assert!(result.is_err());
+        let result2 = open_installed_design_md("/System".to_string());
+        assert!(result2.is_err());
     }
 
     // ── helper for testing read_design_md_entry without command wrapper ──

@@ -1,4 +1,4 @@
-import type { DesignMdContent as DesignMdContentType, DesignMdInstallPlan, DesignMdInstallResult } from "../../types";
+import type { DesignMdContent as DesignMdContentType, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus } from "../../types";
 import { Markdown } from "../../components/Markdown";
 
 interface DesignMdContentProps {
@@ -10,6 +10,30 @@ interface DesignMdContentProps {
   onChooseTarget: () => void;
   onPlanInstall: () => void;
   onInstall: () => void;
+  installStatus: DesignMdInstallStatus | null;
+  onOpenTargetFolder: () => void;
+  onOpenInstalledDesignMd: () => void;
+}
+
+function statusLabel(status: string): string {
+  switch (status) {
+    case "no_target": return "no project selected";
+    case "missing": return "not installed";
+    case "installed": return "installed";
+    case "different": return "different DESIGN.md";
+    case "blocked": return "blocked";
+    default: return status;
+  }
+}
+
+function statusClass(status: string): string {
+  switch (status) {
+    case "installed": return "design-md-status-installed";
+    case "different": return "design-md-status-different";
+    case "missing": return "design-md-status-missing";
+    case "blocked": return "design-md-status-blocked";
+    default: return "";
+  }
 }
 
 export function DesignMdContent(props: DesignMdContentProps) {
@@ -22,6 +46,9 @@ export function DesignMdContent(props: DesignMdContentProps) {
     onChooseTarget,
     onPlanInstall,
     onInstall,
+    installStatus,
+    onOpenTargetFolder,
+    onOpenInstalledDesignMd,
   } = props;
 
   if (!activeContent) {
@@ -34,7 +61,19 @@ export function DesignMdContent(props: DesignMdContentProps) {
 
   const canPlan = activeContent.slug && installTarget.trim() !== "";
   const canInstall = installPlan?.ok === true && !installRunning;
-  const installDisabled = !canInstall;
+  const targetExists = installStatus?.exists === true;
+  const hasTarget = installTarget.trim() !== "";
+
+  let disabledHint: string | null = null;
+  if (!installTarget) {
+    disabledHint = "choose a project";
+  } else if (!installPlan && canPlan) {
+    if (installStatus?.status === "different") {
+      disabledHint = "dry run will plan backup + replace";
+    } else {
+      disabledHint = "dry run required";
+    }
+  }
 
   return (
     <>
@@ -61,20 +100,46 @@ export function DesignMdContent(props: DesignMdContentProps) {
         </div>
 
         <div className="design-md-install-body">
-          {/* Target folder */}
+          {/* Target folder row */}
           <div className="design-md-install-row">
             <span className="design-md-install-label">Project</span>
             <div className="design-md-install-target">
-              <span className={`design-md-install-path ${!installTarget ? "design-md-install-path-empty" : ""}`}>
+              <span
+                className={`design-md-install-path ${!installTarget ? "design-md-install-path-empty" : ""}`}
+                title={installTarget || undefined}
+              >
                 {installTarget || "not selected"}
               </span>
-              <button className="btn btn-sm" onClick={onChooseTarget}>
+              <button className="btn btn-sm" onClick={onChooseTarget} aria-label="Choose project folder">
                 choose project
               </button>
+              {hasTarget && (
+                <button
+                  className="btn btn-sm"
+                  onClick={onOpenTargetFolder}
+                  title="Open project folder"
+                  aria-label="Open project folder"
+                >
+                  open folder
+                </button>
+              )}
             </div>
           </div>
 
-          {/* Actions */}
+          {/* Install status row */}
+          {installStatus && (
+            <div className="design-md-install-row">
+              <span className="design-md-install-label">Status</span>
+              <span className={`design-md-install-status ${statusClass(installStatus.status)}`}>
+                {statusLabel(installStatus.status)}
+              </span>
+              {installStatus.exists && installStatus.size != null && (
+                <span className="design-md-install-status-meta">{installStatus.size} bytes</span>
+              )}
+            </div>
+          )}
+
+          {/* Actions row */}
           <div className="design-md-install-actions">
             <button className="btn btn-sm" onClick={onPlanInstall} disabled={!canPlan}>
               dry run
@@ -82,16 +147,24 @@ export function DesignMdContent(props: DesignMdContentProps) {
             <button
               className="btn btn-primary btn-sm"
               onClick={onInstall}
-              disabled={installDisabled}
+              disabled={!canInstall}
             >
               {installRunning ? "installing..." : "install DESIGN.md"}
             </button>
+            {targetExists && (
+              <button
+                className="btn btn-sm"
+                onClick={onOpenInstalledDesignMd}
+                title="Open installed DESIGN.md"
+                aria-label="Open installed DESIGN.md"
+              >
+                open DESIGN.md
+              </button>
+            )}
           </div>
-          {!installPlan && installTarget && activeContent.slug && (
-            <span className="design-md-install-hint">dry run required</span>
-          )}
-          {!installPlan && !installTarget && (
-            <span className="design-md-install-hint">choose a project and run dry run</span>
+
+          {disabledHint && (
+            <span className="design-md-install-hint">{disabledHint}</span>
           )}
 
           {/* Install plan */}

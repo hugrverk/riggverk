@@ -9,6 +9,7 @@ import type {
   DesignMdEntry,
   DesignMdInstallPlan,
   DesignMdInstallResult,
+  DesignMdInstallStatus,
   DesignMdSyncResult,
   DocSummary,
   DocumentContent,
@@ -136,6 +137,9 @@ interface LibraryViewProps {
   onChooseDesignMdInstallTarget: () => void;
   onPlanDesignMdInstall: () => void;
   onInstallDesignMd: () => void;
+  designMdInstallStatus: DesignMdInstallStatus | null;
+  onOpenDesignMdTargetFolder: () => void;
+  onOpenInstalledDesignMd: () => void;
 }
 
 // ── sidebar item list components ──
@@ -632,6 +636,9 @@ export function LibraryView(props: LibraryViewProps) {
     onChooseDesignMdInstallTarget,
     onPlanDesignMdInstall,
     onInstallDesignMd,
+    designMdInstallStatus,
+    onOpenDesignMdTargetFolder,
+    onOpenInstalledDesignMd,
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
@@ -736,6 +743,9 @@ export function LibraryView(props: LibraryViewProps) {
         onChooseTarget={onChooseDesignMdInstallTarget}
         onPlanInstall={onPlanDesignMdInstall}
         onInstall={onInstallDesignMd}
+        installStatus={designMdInstallStatus}
+        onOpenTargetFolder={onOpenDesignMdTargetFolder}
+        onOpenInstalledDesignMd={onOpenInstalledDesignMd}
       />
     );
   } else if (sourceType === "designMd" && !designMdCatalogStatus?.exists) {

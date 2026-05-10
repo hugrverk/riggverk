@@ -271,3 +271,14 @@ export interface DesignMdInstallResult {
   message: string;
   warnings: string[];
 }
+
+export interface DesignMdInstallStatus {
+  target_dir: string;
+  target_file: string;
+  exists: boolean;
+  matches_selected: boolean;
+  status: "no_target" | "missing" | "installed" | "different" | "blocked";
+  reason: string;
+  size: number | null;
+  warnings: string[];
+}

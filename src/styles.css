@@ -4951,3 +4951,35 @@ html, body, #root {
   opacity: 0.5;
   padding-top: 2px;
 }
+
+/* ── Design MD install status ── */
+
+.design-md-install-status {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.design-md-install-status-meta {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.55;
+  white-space: nowrap;
+}
+
+.design-md-status-installed {
+  color: var(--accent);
+}
+
+.design-md-status-different {
+  color: var(--warn);
+}
+
+.design-md-status-missing {
+  color: var(--text-muted);
+  opacity: 0.6;
+}
+
+.design-md-status-blocked {
+  color: var(--fail);
+}
