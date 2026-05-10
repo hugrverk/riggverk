@@ -1,4 +1,4 @@
-import type { DesignMdSpecimen, DesignMdBoard, DesignMdBoardComponentGroup } from "./designMdSpecimenBuilder";
+import type { DesignMdBoard, DesignMdBoardComponentGroup } from "./designMdSpecimenBuilder";
 import {
   isSafeColorValue,
   isSafeFontFamilyValue,
@@ -197,31 +197,264 @@ function tokenValue(tokens: { key: string; resolvedValue: string }[], matches: s
   return fallback;
 }
 
+/**
+ * Resolve a single dark theme value from source tokens with explicit priority.
+ * Returns the resolved value and metadata about the selection source.
+ */
+interface DarkThemeResolve {
+  value: string;
+  source: "source" | "derived" | "fallback";
+  matchedKey?: string;
+  note: string;
+}
+
+function resolveDarkToken(
+  tokens: { key: string; resolvedValue: string }[],
+  explicitMatches: string[],
+  fallbackDerive: () => string,
+  fallbackHard: string,
+): DarkThemeResolve {
+  // Phase 1: try explicit source dark tokens
+  const found = tokens.find((t) => {
+    for (const match of explicitMatches) {
+      if (tokenKeyMatches(t.key, match) && isSafeColorValue(t.resolvedValue)) {
+        return true;
+      }
+    }
+    return false;
+  });
+  if (found) {
+    return { value: found.resolvedValue.trim(), source: "source", matchedKey: found.key, note: `explicit ${found.key}` };
+  }
+
+  // Phase 2: derived from palette
+  const derived = fallbackDerive();
+  if (isSafeColorValue(derived)) {
+    return { value: derived.trim(), source: "derived", note: "derived from palette" };
+  }
+
+  // Phase 3: hard fallback
+  return { value: fallbackHard, source: "fallback", note: "system fallback" };
+}
+
+interface DarkThemeSelection {
+  canvas: DarkThemeResolve;
+  surface: DarkThemeResolve;
+  text: DarkThemeResolve;
+  border: DarkThemeResolve;
+  muted: DarkThemeResolve;
+}
+
+function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
+  const allColors = board.colorGroups.flatMap((group) => group.tokens);
+
+  // Palette-derived anchors
+  const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
+
+  // ── Canvas (body/page background) ──
+  // Priority: explicit body/canvas/background-dark tokens.
+  // DO NOT match plain "black" or "surface-black" early — those are fallback-only.
+  // Only "black" tokens that belong to canvas/surface palette groups are considered
+  // via the darkest-palette-color fallback.
+  const canvasExplicit = [
+    "body-dark",
+    "canvas-dark",
+    "background-dark",
+    "page-dark",
+    "app-dark",
+    "dark-body",
+    "dark-canvas",
+    "dark-background",
+  ];
+  const canvasResolve = resolveDarkToken(
+    allColors,
+    canvasExplicit,
+    () => {
+      // Derived: use the darkest color from canvas/surface palette groups
+      const canvasGroupTokens = board.colorGroups
+        .filter((g) => g.prefix === "canvas/surface" || g.prefix === "brand/accent")
+        .flatMap((g) => g.tokens);
+      const darkestCanvas = darkestPaletteColor(canvasGroupTokens, "");
+      if (darkestCanvas && isDarkColor(darkestCanvas)) return darkestCanvas;
+      // Broader: darkest in all tokens
+      if (isDarkColor(paletteDark)) return paletteDark;
+      return "#0b0e11";
+    },
+    "#0b0e11",
+  );
+
+  const darkCanvas = canvasResolve.value;
+
+  // ── Surface (card/section background) ──
+  const surfaceExplicit = [
+    "surface-dark",
+    "surface-card-dark",
+    "elevated-dark",
+    "card-dark",
+    "panel-dark",
+    "dark-surface",
+    "dark-card",
+    "dark-panel",
+  ];
+  const surfaceResolve = resolveDarkToken(
+    allColors,
+    surfaceExplicit,
+    () => {
+      // Derived: canvas mixed slightly lighter
+      const mixed = mixHexColor(darkCanvas, "#ffffff", 0.06);
+      if (mixed && isSafeColorValue(mixed)) return mixed;
+      return mixHexColor(darkCanvas, "#ffffff", 0.06) ?? "#1a1e24";
+    },
+    "#1a1e24",
+  );
+
+  const darkSurface = surfaceResolve.value;
+
+  // ── Text (foreground on dark) ──
+  const textExplicit = [
+    "on-dark",
+    "text-on-dark",
+    "body-on-dark",
+    "foreground-dark",
+    "on-canvas-dark",
+    "ink-on-dark",
+  ];
+  // Use a white/off-white as readable fallback
+  const textResolve = resolveDarkToken(
+    allColors,
+    textExplicit,
+    () => {
+      // Derived: use the lightest text/ink token that's readable on dark canvas
+      const textGroupTokens = board.colorGroups
+        .filter((g) => g.prefix === "text/ink")
+        .flatMap((g) => g.tokens);
+      const lightestText = lightestPaletteColor(textGroupTokens, "");
+      if (lightestText && !isDarkColor(lightestText)) {
+        if (ensureReadable(lightestText, darkCanvas, "") === lightestText) {
+          return lightestText;
+        }
+      }
+      return "#f0f2f5";
+    },
+    "#f0f2f5",
+  );
+
+  const darkText = ensureReadable(textResolve.value, darkCanvas, "#f0f2f5");
+
+  // ── Muted text on dark ──
+  const mutedExplicit = [
+    "muted-on-dark",
+    "on-dark-muted",
+    "text-muted-dark",
+    "muted-dark",
+  ];
+  const mutedResolve = resolveDarkToken(
+    allColors,
+    mutedExplicit,
+    () => {
+      // Derived: mix text toward canvas
+      const mixed = mixHexColor(darkText, darkCanvas, 0.55);
+      if (mixed && isSafeColorValue(mixed)) return mixed;
+      return "#8b909a";
+    },
+    "#8b909a",
+  );
+  const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, "#8b909a");
+
+  // ── Border (hairlines, dividers) ──
+  // CRITICAL: do NOT mix toward white. Mix toward text at low ratio for subtle separation.
+  const borderExplicit = [
+    "border-dark",
+    "hairline-dark",
+    "divider-dark",
+    "stroke-dark",
+    "dark-border",
+    "dark-hairline",
+    "dark-divider",
+  ];
+  const borderResolve = resolveDarkToken(
+    allColors,
+    borderExplicit,
+    () => {
+      // Derived: mix surface toward text at 8-12% for a subtle readable border
+      // that does NOT look like a white outline.
+      const mixed = mixHexColor(darkSurface, darkText, 0.10);
+      if (mixed && isSafeColorValue(mixed)) return mixed;
+      return "#2a2e35";
+    },
+    "#2a2e35",
+  );
+
+  return {
+    canvas: canvasResolve,
+    surface: surfaceResolve,
+    text: { value: darkText, source: textResolve.source, matchedKey: textResolve.matchedKey, note: textResolve.note },
+    border: borderResolve,
+    muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
+  };
+}
+
 function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "light") {
   const allColors = board.colorGroups.flatMap((group) => group.tokens);
-  const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
   const paletteLight = lightestPaletteColor(allColors, "#ffffff");
-  const fallbackDarkCanvas = isDarkColor(paletteDark) ? paletteDark : "#0b0e11";
-  const fallbackDarkSurface = mixHexColor(fallbackDarkCanvas, "#ffffff", 0.1) ?? "#1f2329";
+
+  // ── Light theme ──
   const pickedLightCanvas = tokenColor(allColors, ["canvas-light", "background-light", "white", "background", "canvas", "surface-light"], paletteLight);
-  const lightCanvas = isDarkColor(pickedLightCanvas) ? paletteLight : pickedLightCanvas;
+  const lightCanvas = isDarkColor(pickedLightCanvas) ? (isDarkColor(paletteLight) ? "#ffffff" : paletteLight) : pickedLightCanvas;
   const pickedLightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "white", "surface-card", "surface", "card"], isLightColor(lightCanvas) ? "#f6f7f9" : mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9");
   const lightSurface = isDarkColor(pickedLightSurface) ? (mixHexColor(lightCanvas, "#000000", 0.04) ?? "#f6f7f9") : pickedLightSurface;
-  const darkCanvas = tokenColor(allColors, ["canvas-dark", "background-dark", "surface-black", "black", "dark-surface", "dark"], fallbackDarkCanvas);
-  const darkSurface = tokenColor(allColors, ["surface-dark", "surface-card-dark", "elevated-dark", "card-dark", "surface-black", "black"], fallbackDarkSurface);
-  const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "red", "yellow"], "#2563eb");
   const lightText = ensureReadable(tokenColor(allColors, ["ink", "text-on-light", "body-on-light", "text", "body", "foreground", "black"], "#111111"), lightCanvas, "#111111");
-  const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "text-on-dark", "on-black", "white"], "#f8fafc"), darkCanvas, "#f8fafc");
+  const lightMuted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#667085"), lightCanvas, "#667085");
+  const lightBorder = tokenColor(allColors, ["hairline", "border", "divider"], "#d7dce2");
+
+  // ── Dark theme (source-first resolver) ──
+  const darkTheme = selectDarkTheme(board);
+  const darkCanvas = darkTheme.canvas.value;
+  const darkSurface = darkTheme.surface.value;
+  const darkText = darkTheme.text.value;
+  const darkBorder = darkTheme.border.value;
+  const darkMuted = darkTheme.muted.value;
+  // Also try source on-dark for use as primary-on-dark etc.
+  const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "text-on-dark", "on-black", "white"], darkText), darkCanvas, darkText);
+
+  // ── Shared tokens ──
+  const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "red", "yellow"], "#2563eb");
+  const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
+
+  // ── Per-variant selection ──
   const canvas = variant === "dark" ? darkCanvas : lightCanvas;
   const surface = variant === "dark" ? darkSurface : lightSurface;
-  const text = ensureReadable(variant === "dark" ? onDark : lightText, canvas, variant === "dark" ? "#f8fafc" : "#111111");
-  const muted = ensureReadable(tokenColor(allColors, variant === "dark" ? ["muted-on-dark", "on-dark-muted", "muted"] : ["muted", "secondary", "soft"], variant === "dark" ? "#a7adb8" : "#667085"), canvas, variant === "dark" ? "#a7adb8" : "#667085");
-  const border = tokenColor(allColors, variant === "dark" ? ["hairline-dark", "border-dark", "divider-dark", "hairline", "border"] : ["hairline", "border", "divider"], variant === "dark" ? mixHexColor(surface, "#ffffff", 0.16) ?? "#30363d" : "#d7dce2");
-  const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
+  const text = variant === "dark" ? darkText : lightText;
+  const muted = variant === "dark" ? darkMuted : lightMuted;
+  const border = variant === "dark" ? darkBorder : lightBorder;
   const radius = cssSize(tokenValue(board.radiusTokens, ["md", "lg", "sm"], "10px"), "10px");
   const pill = cssSize(tokenValue(board.radiusTokens, ["pill", "full"], "9999px"), "9999px");
   const spacing = cssSpacing(tokenValue(board.spacingTokens, ["lg", "md", "base"], "24px"), "24px");
-  return { variant, canvas, surface, text, muted, border, primary, onPrimary, onDark, darkCanvas, darkSurface, radius, pill, spacing };
+
+  // ── Diagnostics (Pass 2) ──
+  const darkThemeSource = variant === "dark" ? {
+    canvas: { source: darkTheme.canvas.source, matchedKey: darkTheme.canvas.matchedKey, note: darkTheme.canvas.note },
+    surface: { source: darkTheme.surface.source, matchedKey: darkTheme.surface.matchedKey, note: darkTheme.surface.note },
+    text: { source: darkTheme.text.source, matchedKey: darkTheme.text.matchedKey, note: darkTheme.text.note },
+    border: { source: darkTheme.border.source, matchedKey: darkTheme.border.matchedKey, note: darkTheme.border.note },
+    muted: { source: darkTheme.muted.source, matchedKey: darkTheme.muted.matchedKey, note: darkTheme.muted.note },
+    warnings: ([] as string[]).concat(
+      darkTheme.canvas.source === "derived" ? "no explicit dark canvas" : [],
+      darkTheme.surface.source === "derived" ? "no explicit dark surface" : [],
+      darkTheme.text.source === "derived" ? "text derived" : [],
+      darkTheme.border.source === "derived" ? "border derived" : [],
+      darkTheme.muted.source === "derived" ? "muted derived" : [],
+    ),
+  } : undefined;
+
+  return {
+    variant,
+    canvas, surface, text, muted, border,
+    primary, onPrimary, onDark,
+    darkCanvas, darkSurface,
+    radius, pill, spacing,
+    darkThemeSource,
+  };
 }
 
 function typographyCss(board: DesignMdBoard, matches: string[], fallbackSize: string) {
@@ -242,11 +475,20 @@ function componentsOfKind(board: DesignMdBoard, kind: string): DesignMdBoardComp
   );
 }
 
+/**
+ * Determine if any button-kinded component has source-backed colors sufficient
+ * to render a hero button. Only filled (bg + fg) or outline (border + fg) buttons
+ * pass. Fallback to global primary/onPrimary is NOT allowed.
+ */
 function hasButtonTokens(board: DesignMdBoard): boolean {
   const buttons = componentsOfKind(board, "button");
   return buttons.some((g) => {
     const eligibility = checkRenderEligibility(g);
-    return eligibility.canRenderGraphic && eligibility.safeStyleCount >= 2;
+    if (!eligibility.canRenderGraphic) return false;
+    const hasBg = isSafeColorValue(g.backgroundColor);
+    const hasFg = isSafeColorValue(g.textColor);
+    const hasBorder = isSafeColorValue(g.borderColor);
+    return (hasBg && hasFg) || (hasBorder && hasFg);
   });
 }
 
@@ -259,22 +501,41 @@ function renderButtonLabel(group: DesignMdBoardComponentGroup): string {
 }
 
 /**
- * Render a single button sample for the hero. Only used for button-kinded components
- * that pass render eligibility and have actual source-backed style tokens.
+ * Render a single button sample for the hero. Only renders when source-backed
+ * colors are present on the component itself. Does NOT fall back to global
+ * primary/onPrimary tokens.
+ *
+ * Filled button: requires source backgroundColor + textColor.
+ * Outline button: requires source borderColor + textColor (no bg fill).
+ * Returns empty string if source-backed colors are insufficient.
  */
-function renderHeroButton(group: DesignMdBoardComponentGroup, colors: ReturnType<typeof deriveTokens>): string {
+function renderHeroButton(group: DesignMdBoardComponentGroup): string {
   const eligibility = checkRenderEligibility(group);
   if (!eligibility.canRenderGraphic) return "";
-  const bg = cssColor(group.backgroundColor, colors.primary);
-  const fg = ensureReadable(
-    cssColor(group.textColor, colors.onPrimary),
-    bg,
-    colors.onPrimary
-  );
-  const radius = cssSize(group.rounded, colors.radius);
+
+  const hasBg = isSafeColorValue(group.backgroundColor);
+  const hasFg = isSafeColorValue(group.textColor);
+  const hasBorder = isSafeColorValue(group.borderColor);
+  const radius = cssSize(group.rounded, "8px");
   const padding = cssSpacing(group.padding, "10px 20px");
   const label = renderButtonLabel(group);
-  return '<button class="hero-btn" style="background:' + bg + ';color:' + fg + ';border-radius:' + radius + ';padding:' + padding + '">' + label + '</button>';
+
+  // Filled button: requires bg + fg, both source-backed
+  if (hasBg && hasFg) {
+    const bg = group.backgroundColor!.trim();
+    const fg = ensureReadable(group.textColor!.trim(), bg);
+    return '<button class="hero-btn" style="background:' + bg + ';color:' + fg + ';border-radius:' + radius + ';padding:' + padding + '">' + label + '</button>';
+  }
+
+  // Outline button: requires border + fg source-backed, background transparent
+  if (hasBorder && hasFg) {
+    const border = group.borderColor!.trim();
+    const fg = group.textColor!.trim();
+    return '<button class="hero-btn hero-btn-outline" style="background:transparent;color:' + fg + ';border-color:' + border + ';border-style:solid;border-width:1px;border-radius:' + radius + ';padding:' + padding + '">' + label + '</button>';
+  }
+
+  // Insufficient source-backed colors: no button rendered
+  return "";
 }
 
 function neutralKind(kind: string): string {
@@ -283,7 +544,7 @@ function neutralKind(kind: string): string {
 
 // ── Section renderers ──
 
-function renderHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>, display: ReturnType<typeof typographyCss>): string {
+function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveTokens>, display: ReturnType<typeof typographyCss>): string {
   const title = esc(board.title);
   const slug = esc(board.slug);
   const archetype = esc(board.archetype.replace(/_/g, " "));
@@ -304,10 +565,16 @@ function renderHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens
     const buttons = componentsOfKind(board, "button");
     const eligible = buttons
       .map((g) => ({ group: g, eligibility: checkRenderEligibility(g) }))
-      .filter((r) => r.eligibility.canRenderGraphic && r.eligibility.safeStyleCount >= 2)
+      .filter((r) => {
+        if (!r.eligibility.canRenderGraphic) return false;
+        const hasBg = isSafeColorValue(r.group.backgroundColor);
+        const hasFg = isSafeColorValue(r.group.textColor);
+        const hasBorder = isSafeColorValue(r.group.borderColor);
+        return (hasBg && hasFg) || (hasBorder && hasFg);
+      })
       .slice(0, 2);
     if (eligible.length > 0) {
-      buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(group, colors)).join("") + '</div>';
+      buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(group)).join("") + '</div>';
     }
   }
 
@@ -475,55 +742,14 @@ function renderSourceNotes(board: DesignMdBoard): string {
 
 // ── Main generator ──
 
-export function generateSpecimenHtml(spec: DesignMdSpecimen): string {
-  return generateBoardHtml({
-    slug: spec.slug,
-    title: spec.title,
-    description: spec.description,
-    colorGroups: [{ prefix: "palette", tokens: [
-      { key: "primary", rawValue: spec.primaryColor, resolvedValue: spec.primaryColor },
-      { key: "surface", rawValue: spec.surfaceColor, resolvedValue: spec.surfaceColor },
-      { key: "canvas", rawValue: spec.canvasColor, resolvedValue: spec.canvasColor },
-      { key: "text", rawValue: spec.textColor, resolvedValue: spec.textColor },
-    ]}],
-    palette: [],
-    typographyTokens: [],
-    radiusTokens: [],
-    spacingTokens: [],
-    componentGroups: [],
-    visualLanguage: { phrases: spec.overview ? [spec.overview] : [], keywords: [] },
-    archetype: "generic_system",
-    archetypeEvidence: { sourceType: "derived-fallback", sourcePath: "legacy-specimen", confidence: "fallback", text: "legacy specimen fallback" },
-    overview: spec.overview,
-    layout: null,
-    fontSubstitutes: "",
-    guardrailDos: [],
-    guardrailDonts: [],
-    coverage: {
-      colorsCount: 4,
-      markdownColorsCount: 0,
-      typographyCount: 0,
-      radiusCount: 0,
-      spacingCount: 0,
-      componentCount: 0,
-      componentKinds: {},
-      fontFamilies: [],
-      markdownSections: [],
-      darkTokenCount: 0,
-      darkComponentCount: 0,
-      componentGroupsWithEvidenceCount: 0,
-      fontSubstituteHintsCount: 0,
-    },
-    confidence: { archetype: "low", lightPreview: "low", darkPreview: "low", components: "low" },
-    warnings: ["generic archetype fallback", "dark tokens derived"],
-  }, { variant: "light" });
-}
-
 export function generateBoardHtml(board: DesignMdBoard, options: { variant?: GeneratedPreviewVariant } = {}): string {
   const colors = deriveTokens(board, options.variant ?? "light");
   const display = typographyCss(board, ["hero", "display-xl", "display-lg", "display"], "38px");
   const body = typographyCss(board, ["body", "text"], "15px");
   const caption = typographyCss(board, ["caption", "label", "small"], "12px");
+
+  // Derived subtle border for swatch wrappers — color-derived, not hardcoded gray
+  const subtleSwatchBorder = mixHexColor(colors.surface, colors.text, 0.15) ?? colors.border;
 
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
@@ -532,77 +758,98 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".board{min-height:100%;background:" + colors.canvas + ";color:" + colors.text + "}",
 
     // ── Hero ──
-    ".hero{padding:" + colors.spacing + " " + colors.spacing + ";background:" + colors.surface + "}",
-    ".hero-inner{display:flex;gap:24px;align-items:flex-start;max-width:960px;margin:0 auto}",
-    ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:10px}",
+    ".hero{padding:clamp(24px,4vw," + colors.spacing + ") clamp(16px,4vw," + colors.spacing + ");background:" + colors.surface + "}",
+    ".hero:not(:last-child){border-bottom:1px solid " + colors.border + "}",
+    ".hero-inner{display:flex;gap:28px;align-items:flex-start;max-width:960px;margin:0 auto}",
+    ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}",
     ".hero-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
     ".hero-title{color:" + colors.text + "}",
     ".hero-meta{color:" + colors.muted + ";font-size:" + caption.size + "}",
-    ".hero-desc{color:" + colors.muted + ";max-width:560px;line-height:1.55}",
-    ".hero-evidence{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}",
-    ".hero-evidence span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:3px 8px;color:" + colors.muted + ";font-size:" + caption.size + "}",
-    ".hero-buttons{display:flex;gap:8px;margin-top:4px;flex-wrap:wrap}",
-    ".hero-btn{border:none;cursor:default;font-family:" + body.family + ";font-size:" + body.size + ";font-weight:600;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".hero-visual{flex-shrink:0;display:flex;align-items:flex-start;gap:6px;padding-top:4px}",
-    ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:4px;max-width:180px}",
-    ".hero-swatch{display:block;width:28px;height:28px;border-radius:6px;border:1px solid rgba(127,127,127,.25);flex-shrink:0}",
+    ".hero-desc{color:" + colors.muted + ";max-width:540px;line-height:1.5;font-size:" + caption.size + "}",
+    ".hero-evidence{display:flex;flex-wrap:wrap;gap:0;margin-top:2px;color:" + colors.muted + ";font-size:" + caption.size + ";line-height:1.6}",
+    ".hero-evidence span{display:inline}",
+    ".hero-evidence span+span::before{content:' · ';opacity:0.4}",
+    ".hero-buttons{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}",
+    ".hero-btn{padding:8px 18px;border:none;cursor:default;font-family:" + body.family + ";font-size:" + caption.size + ";font-weight:600;border:1px solid transparent;max-width:100%;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}",
+    ".hero-btn-outline{background:transparent !important}",
+    ".hero-visual{flex-shrink:0;display:flex;align-items:flex-start;gap:4px;padding-top:2px}",
+    ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:4px;max-width:160px}",
+    ".hero-swatch{display:block;width:24px;height:24px;border-radius:5px;border:1px solid " + subtleSwatchBorder + ";flex-shrink:0}",
 
     // ── Section strips ──
-    ".strip{padding:" + colors.spacing + ";border-top:1px solid " + colors.border + ";max-width:960px;margin:0 auto}",
-    ".strip header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:14px}",
-    ".strip h3{font-family:" + display.family + ";font-size:18px;font-weight:" + display.weight + "}",
-    ".strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}",
-    ".strip-note{font-size:" + caption.size + ";color:" + colors.muted + ";margin-top:10px;padding-top:8px;border-top:1px solid " + colors.border + ";line-height:1.4}",
+    ".strip{padding:clamp(18px,3vw," + colors.spacing + ") clamp(16px,4vw," + colors.spacing + ");border-top:1px solid " + colors.border + ";max-width:960px;margin:0 auto}",
+    ".strip header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:12px}",
+    ".strip h3{font-family:" + display.family + ";font-size:15px;font-weight:" + display.weight + ";color:" + colors.text + "}",
+    ".strip header span{font-size:10px;color:" + colors.muted + ";opacity:0.65}",
+    ".strip-note{font-size:" + caption.size + ";color:" + colors.muted + ";margin-top:8px;padding-top:6px;border-top:1px solid " + colors.border + ";line-height:1.35}",
 
     // ── Palette ──
     ".palette-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px}",
-    ".swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.surface + ";overflow:hidden}",
-    ".swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(127,127,127,.25)}",
-    ".swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".swatch small{color:" + colors.muted + ";font-size:10px}",
+    ".swatch{min-height:68px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:6px 8px;background:" + colors.surface + ";overflow:hidden}",
+    ".swatch i{display:block;height:24px;border-radius:5px;margin-bottom:5px;border:1px solid " + subtleSwatchBorder + "}",
+    ".swatch b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:" + caption.size + "}",
+    ".swatch small{display:block;color:" + colors.muted + ";font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
 
     // ── Typography ──
-    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}",
-    ".type-row{border-bottom:1px solid " + colors.border + ";padding:10px 0}",
-    ".type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:4px;font-size:10px;font-style:normal}",
-    ".type-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 14px}",
+    ".type-row{border-bottom:1px solid " + colors.border + ";padding:7px 0}",
+    ".type-row small,.type-row em{display:block;color:" + colors.muted + ";margin-bottom:2px;font-size:9px;font-style:normal}",
+    ".type-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.3}",
 
     // ── Radius & Spacing ──
     ".rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:20px}",
-    ".radius-grid{display:flex;flex-wrap:wrap;gap:8px}",
-    ".radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}",
-    ".space-row{display:flex;align-items:center;gap:10px;margin:7px 0}",
-    ".space-row span{width:70px;font-size:" + caption.size + "}",
-    ".space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px;min-width:4px}",
-    ".space-row small{font-size:10px;color:" + colors.muted + "}",
+    ".radius-grid{display:flex;flex-wrap:wrap;gap:6px}",
+    ".radius-cell{width:48px;height:48px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:9px;color:" + colors.muted + ";border-radius:var(--cell-radius,0)}",
+    ".space-row{display:flex;align-items:center;gap:8px;margin:4px 0}",
+    ".space-row span{width:60px;font-size:" + caption.size + ";color:" + colors.muted + "}",
+    ".space-row i{display:block;height:6px;background:" + colors.primary + ";border-radius:999px;min-width:4px}",
+    ".space-row small{font-size:9px;color:" + colors.muted + "}",
 
     // ── Layout notes ──
-    ".notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 20px;padding-left:18px;color:" + colors.muted + ";font-size:" + body.size + ";line-height:1.45}",
+    ".notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;padding-left:16px;color:" + colors.muted + ";font-size:" + caption.size + ";line-height:1.45;opacity:0.75}",
 
     // ── Source notes ──
-    ".src-body{display:flex;flex-direction:column;gap:16px}",
-    ".src-section h4{font-size:12px;font-weight:600;color:" + colors.text + ";margin-bottom:6px;text-transform:uppercase;letter-spacing:.04em}",
-    ".src-keywords{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:8px}",
+    ".src-body{display:flex;flex-direction:column;gap:12px}",
+    ".src-section h4{font-size:10px;font-weight:600;color:" + colors.muted + ";margin-bottom:4px;text-transform:uppercase;letter-spacing:.04em;opacity:0.7}",
+    ".src-keywords{display:flex;flex-wrap:wrap;gap:4px;margin-bottom:6px}",
     ".src-keywords span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:2px 8px;color:" + colors.muted + ";font-size:10px}",
-    ".src-phrases{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.45}",
-    ".src-phrases li{margin-bottom:4px}",
-    ".do-dont{display:grid;grid-template-columns:1fr 1fr;gap:16px}",
-    ".do-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.45}",
-    ".do-list li{margin-bottom:3px}",
-    ".dont-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.45}",
-    ".dont-list li{margin-bottom:3px}",
+    ".src-phrases{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.4}",
+    ".src-phrases li{margin-bottom:3px}",
+    ".do-dont{display:grid;grid-template-columns:1fr 1fr;gap:12px}",
+    ".do-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.4}",
+    ".do-list li{margin-bottom:2px}",
+    ".dont-list{color:" + colors.muted + ";padding-left:16px;font-size:" + caption.size + ";line-height:1.4}",
+    ".dont-list li{margin-bottom:2px}",
     ".src-inventory{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px}",
-    ".inv-item{display:flex;align-items:baseline;gap:8px;padding:5px 8px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";font-size:" + caption.size + "}",
-    ".inv-item b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600}",
+    ".inv-item{display:flex;align-items:baseline;gap:8px;padding:4px 8px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";font-size:" + caption.size + "}",
+    ".inv-item b{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;color:" + colors.text + "}",
     ".inv-item span{color:" + colors.muted + ";flex-shrink:0}",
     ".inv-item em{color:" + colors.muted + ";font-size:9px;margin-left:auto;flex-shrink:0}",
-    ".src-warnings{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.4}",
-    ".src-warnings li{margin-bottom:3px}",
+    ".src-warnings{color:" + colors.muted + ";font-size:" + caption.size + ";padding-left:16px;line-height:1.35}",
+    ".src-warnings li{margin-bottom:2px}",
 
     // ── Responsive ──
     "@media(max-width:760px){.hero-inner{flex-direction:column}.hero-visual{width:100%}.hero-palette-strip{max-width:100%}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.type-grid,.rhythm-grid,.notes-strip ul,.do-dont,.src-inventory{grid-template-columns:1fr}}",
     "@media(max-width:960px){.strip{padding-left:16px;padding-right:16px}}",
   ].join("\n");
+
+  // Dark theme diagnostics (Pass 2) — shown as HTML comment for dev inspection
+  let diagnosticsHtml = '';
+  if (colors.darkThemeSource) {
+    const dt = colors.darkThemeSource;
+    const lines = [
+      '── Design MD dark theme source ──',
+      `canvas: ${dt.canvas.note} (source: ${dt.canvas.source}${dt.canvas.matchedKey ? ', key: ' + dt.canvas.matchedKey : ''})`,
+      `surface: ${dt.surface.note} (source: ${dt.surface.source}${dt.surface.matchedKey ? ', key: ' + dt.surface.matchedKey : ''})`,
+      `text:    ${dt.text.note} (source: ${dt.text.source}${dt.text.matchedKey ? ', key: ' + dt.text.matchedKey : ''})`,
+      `border:  ${dt.border.note} (source: ${dt.border.source}${dt.border.matchedKey ? ', key: ' + dt.border.matchedKey : ''})`,
+      `muted:   ${dt.muted.note} (source: ${dt.muted.source}${dt.muted.matchedKey ? ', key: ' + dt.muted.matchedKey : ''})`,
+    ];
+    if (dt.warnings.length > 0) {
+      lines.push(`warnings: ${dt.warnings.join(', ')}`);
+    }
+    diagnosticsHtml = '\n<!--\n' + lines.join('\n') + '\n-->';
+  }
 
   const html = [
     '<div class="board">',
@@ -613,7 +860,24 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     renderLayout(board),
     renderSourceNotes(board),
     '</div>',
+    diagnosticsHtml,
   ].join("\n");
 
   return '<!DOCTYPE html>\n<html lang="en">\n<head>\n<meta charset="UTF-8">\n<meta name="viewport" content="width=device-width,initial-scale=1">\n' + CSP + '\n<style>' + css + '</style>\n</head>\n<body>\n' + html + '\n</body>\n</html>';
+}
+
+/**
+ * Test helper: return the derived dark theme tokens for a board.
+ * Exported for test verification of dark token selection priority.
+ */
+export function deriveDarkThemeTokens(board: DesignMdBoard) {
+  return deriveTokens(board, "dark");
+}
+
+/**
+ * Test helper: return the derived light theme tokens for a board.
+ * Exported for test verification of light token selection.
+ */
+export function deriveLightThemeTokens(board: DesignMdBoard) {
+  return deriveTokens(board, "light");
 }
