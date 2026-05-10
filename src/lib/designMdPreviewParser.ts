@@ -1,4 +1,10 @@
 import { sourceEvidence } from "./designMdSourceEvidence";
+import {
+  inferColorSemantics,
+  type ColorSemanticRole,
+  type ColorUsageIntensity,
+  type ColorUsageScope,
+} from "./designMdColorSemantics";
 
 export type DesignMdArchetype =
   | "product_gallery"
@@ -84,6 +90,11 @@ export interface DesignMdToken {
 
 export interface DesignMdColorToken extends DesignMdToken {
   group: DesignMdPaletteGroupName;
+  semanticRole?: ColorSemanticRole;
+  usageScope?: ColorUsageScope;
+  usageIntensity?: ColorUsageIntensity;
+  semanticEvidence?: string[];
+  semanticWarnings?: string[];
 }
 
 export interface DesignMdTypographyToken {
@@ -636,19 +647,37 @@ function tokensForPrefix(fm: Map<string, string>, prefix: string): DesignMdToken
   return tokens;
 }
 
-function buildPalette(fm: Map<string, string>): DesignMdPaletteGroup[] {
+function attachColorSemantics(token: DesignMdColorToken, prose: string): DesignMdColorToken {
+  const semantics = inferColorSemantics({
+    key: token.key,
+    value: token.resolvedValue,
+    group: token.group,
+    prose,
+    sourceEvidence: token.sourceEvidence,
+  });
+  return {
+    ...token,
+    semanticRole: semantics.semanticRole,
+    usageScope: semantics.usageScope,
+    usageIntensity: semantics.usageIntensity,
+    semanticEvidence: semantics.evidence,
+    semanticWarnings: semantics.warnings,
+  };
+}
+
+function buildPalette(fm: Map<string, string>, prose = ""): DesignMdPaletteGroup[] {
   const groups = new Map<DesignMdPaletteGroupName, DesignMdColorToken[]>();
   for (const name of PALETTE_GROUPS) groups.set(name, []);
 
   for (const token of tokensForPrefix(fm, "colors")) {
     const group = paletteGroupFor(token.key);
-    groups.get(group)!.push({ ...token, group });
+    groups.get(group)!.push(attachColorSemantics({ ...token, group }, prose));
   }
 
   return PALETTE_GROUPS.map((name) => ({ name, tokens: groups.get(name)! })).filter((group) => group.tokens.length > 0);
 }
 
-function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
+function buildMarkdownPalette(body: string, prose = body): DesignMdPaletteGroup[] {
   const groups = new Map<DesignMdPaletteGroupName, DesignMdColorToken[]>();
   for (const name of PALETTE_GROUPS) groups.set(name, []);
 
@@ -669,7 +698,7 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       source: "markdown",
       sourceEvidence: sourceEvidence(evidenceType, `markdown.Colors.${label}`, evidenceType === "markdown-table" ? "medium" : "low", `${labelText} ${value}`),
     };
-    groups.get(token.group)!.push(token);
+    groups.get(token.group)!.push(attachColorSemantics(token, prose));
   };
 
   for (const line of body.split("\n")) {
@@ -1324,8 +1353,9 @@ export function parseDesignMdForPreview(
   ));
   const keywords = Array.from(new Set(keywordMatches([description, ...phrases].join(" "))));
   const components = buildComponents(fm);
-  const structuredPalette = buildPalette(fm);
-  const markdownPalette = buildMarkdownPalette(body || content);
+  const semanticProse = [description, body || content].join("\n");
+  const structuredPalette = buildPalette(fm, semanticProse);
+  const markdownPalette = buildMarkdownPalette(body || content, semanticProse);
   const palette = structuredPalette.length > 0
     ? structuredPalette.map((group) => {
         const mdGroup = markdownPalette.find((candidate) => candidate.name === group.name);
@@ -1354,7 +1384,7 @@ export function parseDesignMdForPreview(
 
   return {
     meta: { slug, title, description },
-    palette: palette.length > 0 ? palette : buildMarkdownPalette(body || content),
+    palette: palette.length > 0 ? palette : buildMarkdownPalette(body || content, semanticProse),
     typography: allTypography,
     radius,
     spacing,

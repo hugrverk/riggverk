@@ -24,17 +24,23 @@ execFileSync(
     "src/lib/designMdPreviewParser.ts",
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
+    "src/lib/designMdColorSemantics.ts",
+    "src/lib/designMdRenderEligibility.ts",
+    "src/lib/designMdContrast.ts",
     "src/lib/designMdDisplay.ts",
     "src/lib/designMdSourceEvidence.ts",
   ],
   { cwd: repo, stdio: "pipe" },
 );
 
-for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdSourceEvidence.js"]) {
+for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdColorSemantics.js", "designMdRenderEligibility.js", "designMdContrast.js", "designMdSourceEvidence.js"]) {
   const fullPath = path.join(outDir, file);
   const content = fs.readFileSync(fullPath, "utf8")
     .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
     .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
+    .replaceAll('from "./designMdColorSemantics"', 'from "./designMdColorSemantics.js"')
+    .replaceAll('from "./designMdRenderEligibility"', 'from "./designMdRenderEligibility.js"')
+    .replaceAll('from "./designMdContrast"', 'from "./designMdContrast.js"')
     .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"');
   fs.writeFileSync(fullPath, content);
 }

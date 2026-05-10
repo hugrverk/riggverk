@@ -111,6 +111,10 @@ function colorIsNotWhite(hex: string): boolean {
   return luma !== null && luma < 0.85;
 }
 
+function allColorTokens(board: ReturnType<typeof buildBoard>) {
+  return board.colorGroups.flatMap((group) => group.tokens);
+}
+
 // Test: dark variant uses explicit dark canvas token over fallback
 {
   const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  text: '#111111'\n  background-dark: '#0d1117'\n  on-dark: '#f0f2f5'\n---\n## Overview\nTest with explicit dark canvas";
@@ -333,6 +337,56 @@ function colorIsNotWhite(hex: string): boolean {
   // Dark canvas source should be derived (no explicit dark tokens)
   assert(colors.darkThemeSource?.canvas.source !== "fallback",
     "Cursor dark canvas should be derived from palette, not hardcoded fallback");
+}
+
+// Test: Cursor-like semantics classify sparse primary, state variant, and timeline-only colors
+{
+  const cursorContent = "---\ncolors:\n  canvas: '#f7f7f4'\n  primary: '#f54e00'\n  primary-active: '#d04200'\n  ink: '#26251e'\n  timeline-blue: '#4f8cff'\n  timeline-green: '#2fa866'\ncomponents:\n  button-primary:\n    backgroundColor: '#f54e00'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n  button-primary-active:\n    backgroundColor: '#d04200'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n---\n## Overview\nCursor Orange is reserved for primary CTAs and wordmark. Use it scarcely. The page canvas is warm cream and ink is warm near-black. Timeline colors are only inside in-product timeline visualizations.";
+  const board = buildBoard("cursor-semantics", "Cursor", "AI code editor", cursorContent);
+  const tokens = allColorTokens(board);
+  const canvas = tokens.find((token) => token.key === "canvas");
+  const primary = tokens.find((token) => token.key === "primary");
+  const active = tokens.find((token) => token.key === "primary-active");
+  const timeline = tokens.find((token) => token.key === "timeline-blue");
+  assert(canvas?.usageScope === "globalCanvas" && canvas?.usageIntensity === "dominant", "Cursor canvas must be global dominant canvas");
+  assert(primary?.semanticRole === "primaryAction" && primary?.usageIntensity === "sparse", "Cursor primary must be sparse primary action");
+  assert(active?.semanticRole === "state" && active?.usageScope === "stateOnly", "Cursor primary-active must be stateOnly");
+  assert(timeline?.semanticRole === "timeline" && timeline?.usageScope === "timelineOnly", "Cursor timeline color must be timelineOnly");
+  const colors = deriveLightThemeTokens(board);
+  assert(colors.canvas === "#f7f7f4", "Cursor semantic light canvas must stay cream");
+  assert(colors.surface !== "#f54e00" && colors.surface !== "#d04200", "Cursor semantic light surface must not be orange");
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.canvas !== "#f54e00" && dark.canvas !== "#d04200", "Cursor semantic dark canvas must not use primary/state orange");
+  assert(dark.surface !== "#f54e00" && dark.surface !== "#d04200", "Cursor semantic dark surface must not use primary/state orange");
+  const html = generateBoardHtml(board, { variant: "light" });
+  assert(html.includes("button-primary"), "Cursor base primary button may render");
+  const heroButtons = html.match(/<button class="hero-btn[^>]*>[\s\S]*?<\/button>/g) ?? [];
+  assert(!heroButtons.some((button) => button.includes("button-primary-active")), "Cursor primary-active must not render as standalone hero button");
+}
+
+// Test: state variants do not render as standalone hero buttons
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  text: '#111111'\n  primary: '#2563eb'\n  primary-hover: '#1d4ed8'\ncomponents:\n  button-primary-hover:\n    backgroundColor: '#1d4ed8'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n  button-disabled:\n    backgroundColor: '#94a3b8'\n    textColor: '#ffffff'\n    rounded: '8px'\n    padding: '10px 18px'\n---\n## Overview\nHover and disabled colors are state variants only.";
+  const board = buildBoard("state-buttons", "State Buttons", "State variants", content);
+  const html = generateBoardHtml(board, { variant: "light" });
+  assert(!html.includes('<button class="hero-btn"'), "state variant components must not render hero buttons");
+}
+
+// Test: semantic and timeline tokens do not become theme canvas/surface/dark fallback
+{
+  const content = "---\ncolors:\n  success: '#008a45'\n  error: '#d93025'\n  timeline-red: '#b91c1c'\n  text: '#111111'\n---\n## Overview\nSuccess and error are semantic validation colors. Timeline red is only for timeline visualizations.";
+  const board = buildBoard("semantic-exclusion", "Semantic Exclusion", "Scoped colors", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.canvas !== "#008a45" && dark.canvas !== "#d93025" && dark.canvas !== "#b91c1c", "dark canvas must exclude semantic/timeline colors");
+  assert(dark.surface !== "#008a45" && dark.surface !== "#d93025" && dark.surface !== "#b91c1c", "dark surface must exclude semantic/timeline colors");
+}
+
+// Test: explicit brand canvas is allowed when source names it as canvas/background
+{
+  const content = "---\ncolors:\n  brand-background: '#ffcc00'\n  text: '#111111'\n---\n## Overview\nBrand background is the global page background.";
+  const board = buildBoard("brand-canvas", "Brand Canvas", "Brand canvas", content);
+  const light = deriveLightThemeTokens(board);
+  assert(light.canvas === "#ffcc00", "explicit brand-background may be used as canvas");
 }
 
 // Test: Cursor-like — light canvas resolves to warm cream

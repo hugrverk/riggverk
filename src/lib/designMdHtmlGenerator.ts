@@ -11,6 +11,17 @@ import { evidenceLabel } from "./designMdSourceEvidence";
 import {
   checkRenderEligibility,
 } from "./designMdRenderEligibility";
+import {
+  canUseAsButtonFill,
+  canUseAsCanvas,
+  canUseAsDarkCanvasCandidate,
+  canUseAsHeroAccent,
+  canUseAsSurface,
+  isAccentSparse,
+  isScopedOnlyColor,
+  isStateVariantColor,
+  type DesignMdColorSemantics,
+} from "./designMdColorSemantics";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
 
@@ -215,6 +226,17 @@ function isLightToken(key: string): boolean {
   return parts.some((p) => /^(light|white)$/.test(p));
 }
 
+function tokenSemantics(token: { semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] } | undefined): DesignMdColorSemantics | undefined {
+  if (!token?.semanticRole || !token.usageScope || !token.usageIntensity) return undefined;
+  return {
+    semanticRole: token.semanticRole,
+    usageScope: token.usageScope,
+    usageIntensity: token.usageIntensity,
+    evidence: [],
+    warnings: [],
+  };
+}
+
 /**
  * True when the token's semantic role forbids using it as canvas/background.
  * Primary, accent, semantic, and timeline colors must NOT become page canvas
@@ -223,6 +245,17 @@ function isLightToken(key: string): boolean {
 function isForbiddenCanvasCandidate(key: string): boolean {
   if (isCanvasToken(key) || isSurfaceToken(key)) return false;
   return isPrimaryToken(key) || isSemanticToken(key) || isTimelineToken(key);
+}
+
+function isForbiddenThemeCandidate(token: { key: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] }): boolean {
+  const semantics = tokenSemantics(token);
+  if (semantics && !canUseAsDarkCanvasCandidate(semantics)) return true;
+  if (semantics && (isScopedOnlyColor(semantics) || semantics.semanticRole === "primaryAction" || semantics.semanticRole === "brandAccent")) return true;
+  return isForbiddenCanvasCandidate(token.key);
+}
+
+function isContextualTextToken(key: string): boolean {
+  return /(?:link|badge|selection|preview|console|white-text|focus|hover|active|muted|secondary)/i.test(key);
 }
 
 function tokenKeyMatches(key: string, match: string): boolean {
@@ -258,6 +291,19 @@ function tokenColor(tokens: { key: string; resolvedValue: string }[], matches: s
   return fallback;
 }
 
+function tokenColorByPolicy(
+  tokens: { key: string; resolvedValue: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] }[],
+  matches: string[],
+  fallback: string,
+  allowed: (semantics: DesignMdColorSemantics | undefined, token: { key: string; resolvedValue: string }) => boolean,
+): string {
+  for (const match of matches) {
+    const found = tokens.find((token) => tokenKeyMatches(token.key, match) && allowed(tokenSemantics(token), token));
+    if (isSafeColorValue(found?.resolvedValue)) return found.resolvedValue.trim();
+  }
+  return fallback;
+}
+
 function tokenValue(tokens: { key: string; resolvedValue: string }[], matches: string[], fallback: string): string {
   for (const match of matches) {
     const found = tokens.find((token) => tokenKeyMatches(token.key, match));
@@ -278,7 +324,7 @@ interface DarkThemeResolve {
 }
 
 function resolveDarkToken(
-  tokens: { key: string; resolvedValue: string }[],
+  tokens: { key: string; resolvedValue: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] }[],
   explicitMatches: string[],
   fallbackDerive: () => string,
   fallbackHard: string,
@@ -286,7 +332,7 @@ function resolveDarkToken(
 ): DarkThemeResolve {
   // Phase 1: try explicit source dark tokens
   const found = tokens.find((t) => {
-    if (filterForbiddenCanvas && isForbiddenCanvasCandidate(t.key)) return false;
+    if (filterForbiddenCanvas && isForbiddenThemeCandidate(t)) return false;
     for (const match of explicitMatches) {
       if (tokenKeyMatches(t.key, match) && isSafeColorValue(t.resolvedValue)) {
         return true;
@@ -338,25 +384,35 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     allColors,
     canvasExplicit,
     () => {
+      // Prefer neutral text/ink darks before colored surfaces. Many systems have
+      // brand-colored panels but no full dark canvas token.
+      const textDarkTokens = board.colorGroups
+        .filter((g) => g.prefix === "text/ink")
+        .flatMap((g) => g.tokens)
+        .filter((t) => !isContextualTextToken(t.key) && !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue));
+      const darkestText = darkestPaletteColor(textDarkTokens, "");
+      if (darkestText && isDarkColor(darkestText)) return darkestText;
+
       // Derived: use darkest color from canvas/surface-only palette group.
       // CRITICAL: do NOT include brand/accent or semantic/status —
       // primary/accent colors must not become full-page canvas background.
       const canvasGroupTokens = board.colorGroups
         .filter((g) => g.prefix === "canvas/surface")
-        .flatMap((g) => g.tokens);
+        .flatMap((g) => g.tokens)
+        .filter((t) => !isForbiddenThemeCandidate(t));
       const darkestCanvas = darkestPaletteColor(canvasGroupTokens, "");
       if (darkestCanvas && isDarkColor(darkestCanvas)) return darkestCanvas;
 
       // Broader: darkest neutral token that is not forbidden as canvas.
       // Filter out primary/accent/semantic/timeline tokens explicitly.
       const neutralDarkTokens = allColors.filter((t) =>
-        !isForbiddenCanvasCandidate(t.key) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue)
+        !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue)
       );
       const darkestNeutral = darkestPaletteColor(neutralDarkTokens, "");
       if (darkestNeutral && isDarkColor(darkestNeutral)) return darkestNeutral;
 
       // Last resort: darkest in all tokens (still filter forbidden)
-      const safeAll = allColors.filter((t) => !isForbiddenCanvasCandidate(t.key));
+      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t));
       const darkestSafe = darkestPaletteColor(safeAll, "");
       if (darkestSafe && isDarkColor(darkestSafe)) return darkestSafe;
 
@@ -411,7 +467,8 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
       // Derived: use the lightest text/ink token that's readable on dark canvas
       const textGroupTokens = board.colorGroups
         .filter((g) => g.prefix === "text/ink")
-        .flatMap((g) => g.tokens);
+        .flatMap((g) => g.tokens)
+        .filter((t) => !isContextualTextToken(t.key) && tokenSemantics(t)?.semanticRole === "text");
       const lightestText = lightestPaletteColor(textGroupTokens, "");
       if (lightestText && !isDarkColor(lightestText)) {
         if (ensureReadable(lightestText, darkCanvas, "") === lightestText) {
@@ -490,7 +547,9 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     // body-light only if source uses body as canvas (no separate canvas)
     "body-light",
   ];
-  let pickedLightCanvas = tokenColor(allColors, lightCanvasCandidates, "");
+  let pickedLightCanvas = tokenColorByPolicy(allColors, lightCanvasCandidates, "", (semantics, token) =>
+    canUseAsCanvas(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key))
+  );
   // If picked canvas is a dark color (from a misclassified token), fall back
   if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
     // Try body only if it's light and no canvas/background exists
@@ -503,7 +562,7 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
       // Lightest neutral fallback (filter out forbidden tokens)
       const safeLightTokens = allColors.filter((t) =>
-        !isForbiddenCanvasCandidate(t.key) && isSafeColorValue(t.resolvedValue)
+        !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue)
       );
       const lightest = lightestPaletteColor(safeLightTokens, "");
       pickedLightCanvas = (lightest && isLightColor(lightest)) ? lightest : paletteLight;
@@ -516,14 +575,18 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     "surface-light", "surface-card-light", "card-light", "panel-light",
     "surface-card", "surface", "card", "panel",
   ];
-  const pickedLightSurface = tokenColor(allColors, lightSurfaceCandidates, "");
+  const pickedLightSurface = tokenColorByPolicy(allColors, lightSurfaceCandidates, "", (semantics, token) =>
+    canUseAsSurface(semantics) || (semantics === undefined && !isForbiddenCanvasCandidate(token.key))
+  );
   const lightSurface = (pickedLightSurface && !isDarkColor(pickedLightSurface))
     ? pickedLightSurface
     : (isLightColor(lightCanvas) ? "#f6f7f9" : (mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9"));
 
   // Text: ink first, then text, body-strong, foreground
   const lightTextCandidates = ["ink", "text", "body-strong", "foreground", "body"];
-  const lightText = ensureReadable(tokenColor(allColors, lightTextCandidates, "#111111"), lightCanvas, "#111111");
+  const lightText = ensureReadable(tokenColorByPolicy(allColors, lightTextCandidates, "#111111", (semantics, token) =>
+    semantics?.semanticRole === "text" && !isContextualTextToken(token.key)
+  ), lightCanvas, "#111111");
 
   // Muted
   const lightMuted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#667085"), lightCanvas, "#667085");
@@ -545,7 +608,9 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
 
   // ── Shared tokens ──
   // Primary: strictly from primary/brand/accent role tokens, not green/blue/red/yellow
-  const primary = tokenColor(allColors, ["primary", "brand", "accent"], "#2563eb");
+  const primary = tokenColorByPolicy(allColors, ["primary", "brand", "accent"], "#2563eb", (semantics) =>
+    canUseAsHeroAccent(semantics)
+  );
   const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
 
   // ── Per-variant selection ──
@@ -619,6 +684,40 @@ function hasButtonTokens(board: DesignMdBoard): boolean {
   });
 }
 
+function isStateVariantComponentName(name: string): boolean {
+  return /(?:^|[-_\s])(active|hover|pressed|focus|focused|disabled|selected|loading|visited|checked)(?:$|[-_\s])/i.test(name);
+}
+
+function isBaseHeroButtonName(name: string): boolean {
+  const normalized = name.toLowerCase();
+  return /button-(primary|secondary|download|cta|outline)$/.test(normalized)
+    || /^(primary|secondary|download|cta|outline)-button$/.test(normalized)
+    || /^(button|cta)$/.test(normalized);
+}
+
+function colorTokenForValue(board: DesignMdBoard, value: string | undefined) {
+  if (!isSafeColorValue(value)) return undefined;
+  const normalized = value!.trim().toLowerCase();
+  return board.colorGroups.flatMap((group) => group.tokens).find((token) => token.resolvedValue.trim().toLowerCase() === normalized);
+}
+
+function buttonFillAllowed(board: DesignMdBoard, group: DesignMdBoardComponentGroup): boolean {
+  if (isStateVariantComponentName(group.name)) return false;
+  const bgToken = colorTokenForValue(board, group.backgroundColor);
+  const borderToken = colorTokenForValue(board, group.borderColor);
+  const bgSemantics = tokenSemantics(bgToken);
+  const borderSemantics = tokenSemantics(borderToken);
+  if (isStateVariantColor(bgSemantics) || isScopedOnlyColor(bgSemantics)) return false;
+  if (isStateVariantColor(borderSemantics) || isScopedOnlyColor(borderSemantics)) return false;
+  if (isSafeColorValue(group.backgroundColor)) {
+    if (!bgToken) return true;
+    if (!canUseAsButtonFill(bgSemantics)) return false;
+    if (isAccentSparse(bgSemantics) && !/primary|cta/i.test(group.name)) return false;
+  }
+  if (isSafeColorValue(group.borderColor) && borderToken && !canUseAsHeroAccent(borderSemantics)) return false;
+  return true;
+}
+
 function renderButtonLabel(group: DesignMdBoardComponentGroup): string {
   // Prefer actual component/token name
   const name = group.name;
@@ -636,9 +735,10 @@ function renderButtonLabel(group: DesignMdBoardComponentGroup): string {
  * Outline button: requires source borderColor + textColor (no bg fill).
  * Returns empty string if source-backed colors are insufficient.
  */
-function renderHeroButton(group: DesignMdBoardComponentGroup): string {
+function renderHeroButton(board: DesignMdBoard, group: DesignMdBoardComponentGroup): string {
   const eligibility = checkRenderEligibility(group);
   if (!eligibility.canRenderGraphic) return "";
+  if (!buttonFillAllowed(board, group)) return "";
 
   const hasBg = isSafeColorValue(group.backgroundColor);
   const hasFg = isSafeColorValue(group.textColor);
@@ -694,6 +794,8 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
       .map((g) => ({ group: g, eligibility: checkRenderEligibility(g) }))
       .filter((r) => {
         if (!r.eligibility.canRenderGraphic) return false;
+        if (!isBaseHeroButtonName(r.group.name)) return false;
+        if (!buttonFillAllowed(board, r.group)) return false;
         const hasBg = isSafeColorValue(r.group.backgroundColor);
         const hasFg = isSafeColorValue(r.group.textColor);
         const hasBorder = isSafeColorValue(r.group.borderColor);
@@ -701,12 +803,17 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
       })
       .slice(0, 2);
     if (eligible.length > 0) {
-      buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(group)).join("") + '</div>';
+      buttonHtml = '<div class="hero-buttons">' + eligible.map(({ group }) => renderHeroButton(board, group)).join("") + '</div>';
     }
   }
 
   // Small palette preview strip
-  const paletteSwatches = board.colorGroups.flatMap(g => g.tokens).slice(0, 6)
+  const paletteSwatches = board.colorGroups.flatMap(g => g.tokens)
+    .filter((token) => {
+      const semantics = tokenSemantics(token);
+      return !isScopedOnlyColor(semantics) && !isStateVariantColor(semantics);
+    })
+    .slice(0, 6)
     .map(t => '<i class="hero-swatch" style="background:' + cssColor(t.resolvedValue, "#d8d8d8") + '"></i>').join("");
   const paletteStrip = paletteSwatches ? '<div class="hero-palette-strip">' + paletteSwatches + '</div>' : '';
 
@@ -728,17 +835,26 @@ function renderHero(board: DesignMdBoard, _colors: ReturnType<typeof deriveToken
 function renderPalette(board: DesignMdBoard): string {
   const tokens = board.colorGroups.flatMap((group) => group.tokens.map((token) => ({ ...token, group: group.prefix })));
   if (tokens.length === 0) return "";
-  const visible = tokens.slice(0, 24);
+  const roleOrder = ["canvas", "surface", "text", "border", "primaryAction", "brandAccent", "semantic", "status", "timeline", "state", "decorative", "unknown"];
+  const visible = [...tokens].sort((a, b) => {
+    const ai = roleOrder.indexOf(a.semanticRole ?? "unknown");
+    const bi = roleOrder.indexOf(b.semanticRole ?? "unknown");
+    return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+  }).slice(0, 24);
   return '<section class="strip" id="palette">' +
     '<header><h3>Palette</h3><span>' + tokens.length + ' colors</span></header>' +
     '<div class="palette-grid">' +
-    visible.map((token) =>
-      '<div class="swatch">' +
+    visible.map((token) => {
+      const semantics = tokenSemantics(token);
+      const scoped = isScopedOnlyColor(semantics) || isStateVariantColor(semantics);
+      const note = token.semanticWarnings?.[0] ?? token.semanticEvidence?.[0] ?? token.group;
+      return '<div class="swatch' + (scoped ? ' swatch-scoped' : '') + '">' +
       '<i style="background:' + cssColor(token.resolvedValue, "#d8d8d8") + '"></i>' +
       '<b>' + esc(token.key) + '</b>' +
-      '<small>' + esc(token.group) + '</small>' +
-      '</div>'
-    ).join("") +
+      '<small>' + esc((token.semanticRole ?? "unknown") + ' · ' + (token.usageScope ?? token.group)) + '</small>' +
+      '<em>' + esc(note) + '</em>' +
+      '</div>';
+    }).join("") +
     '</div></section>';
 }
 
@@ -916,6 +1032,9 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".swatch i{display:block;height:24px;border-radius:5px;margin-bottom:5px;border:1px solid " + subtleSwatchBorder + "}",
     ".swatch b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:" + caption.size + "}",
     ".swatch small{display:block;color:" + colors.muted + ";font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".swatch em{display:block;color:" + colors.muted + ";font-size:9px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.62}",
+    ".swatch-scoped{opacity:.72}",
+    ".swatch-scoped i{height:14px}",
 
     // ── Typography ──
     ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 12px}",

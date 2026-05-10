@@ -11,6 +11,7 @@ import {
   type DesignMdTypographyToken,
   type DesignMdVisualLanguage,
 } from "./designMdPreviewParser";
+import type { ColorSemanticRole, ColorUsageIntensity, ColorUsageScope } from "./designMdColorSemantics";
 
 // ═══════════════════════════════════════════════
 // Design-system board model (rich, token-grouped)
@@ -22,6 +23,11 @@ export interface DesignMdBoardToken {
   resolvedValue: string;
   source?: "structured" | "markdown" | "derived";
   sourceEvidence?: DesignMdSourceEvidence;
+  semanticRole?: ColorSemanticRole;
+  usageScope?: ColorUsageScope;
+  usageIntensity?: ColorUsageIntensity;
+  semanticEvidence?: string[];
+  semanticWarnings?: string[];
 }
 
 export interface DesignMdBoardColorGroup {
