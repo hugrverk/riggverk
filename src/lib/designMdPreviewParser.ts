@@ -3,13 +3,20 @@ export type DesignMdArchetype =
   | "marketplace"
   | "finance_dashboard"
   | "editorial"
+  | "media_editorial"
   | "collaboration_saas"
   | "developer_docs"
+  | "developer_product"
   | "luxury_automotive"
   | "data_product"
   | "ai_product"
+  | "ai_agent_product"
   | "creative_tool"
   | "payment_finance"
+  | "retail_food"
+  | "retail_brand"
+  | "telecom_service"
+  | "automation_workflow"
   | "music_campaign"
   | "terminal_tool"
   | "generic_system";
@@ -351,7 +358,21 @@ export function resolveGeneratedFontFamily(value: string | undefined, context = 
     fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
   } else if (/ll circular|soehne|untitled sans|graphik/.test(source)) {
     fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
-  } else if (/mono|monospace|code|terminal|console|sf mono|jetbrains|fira code|source code/.test(source)) {
+  } else if (/abcnormal|abc\s*normal/.test(source)) {
+    fallback = ["Inter", "DM Sans", "system-ui", "sans-serif"];
+  } else if (/spotifymix|spotify\s*mix|circularsp|circular\s*sp/.test(source)) {
+    fallback = ["\"Helvetica Neue\"", "Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/universal\s*sans/.test(source)) {
+    fallback = ["-apple-system", "BlinkMacSystemFont", "\"Segoe UI\"", "Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/matter\b/.test(source)) {
+    fallback = ["Inter", "-apple-system", "BlinkMacSystemFont", "system-ui", "sans-serif"];
+  } else if (/degular|gt\s*alpina/.test(source)) {
+    fallback = ["Inter", "\"Helvetica Neue\"", "Arial", "system-ui", "sans-serif"];
+  } else if (/waldenburg/.test(source)) {
+    fallback = ["Inter", "\"Helvetica Neue\"", "Arial", "system-ui", "sans-serif"];
+  } else if (/wf\s*visual\s*sans/.test(source)) {
+    fallback = ["Inter", "Arial", "system-ui", "sans-serif"];
+  } else if (/mono|monospace|code|terminal|console|sf mono|jetbrains|fira code|source code/i.test(source)) {
     fallback = ["\"SF Mono\"", "\"JetBrains Mono\"", "Menlo", "Monaco", "Consolas", "monospace"];
   } else if (/serif|editorial|magazine|publication|luxury|fashion|playfair|garamond|georgia/.test(source)) {
     fallback = ["Georgia", "\"Times New Roman\"", "serif"];
@@ -395,12 +416,30 @@ function getFrontmatterBody(content: string): string {
   return afterOpen.slice(closing.index + closing[0].length);
 }
 
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
 function extractSection(body: string, heading: string): string | null {
-  const re = new RegExp(`^#{1,3}\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:?\\s*$`, "im");
-  const match = body.match(re);
+  const escaped = escapeRegex(heading);
+  // Match headings where this keyword appears: "## Overview", "## 1. Overview", "### Colors", etc
+  const patterns = [
+    new RegExp(`^#{1,3}\\s+${escaped}:?\\s*$`, "im"),
+    new RegExp(`^#{1,3}\\s+\\d+\\.?\\s*${escaped}:?\\s*$`, "im"),
+    new RegExp(`^#{1,3}\\s+[^#\\n]*\\b${escaped}\\b[^#\\n]*:?\\s*$`, "im"),
+  ];
+  let match: RegExpMatchArray | null = null;
+  for (const re of patterns) {
+    match = body.match(re);
+    if (match) break;
+  }
+  // Fallback: bold text like **Key Characteristics:**
+  if (!match) {
+    match = body.match(new RegExp(`\\*\\*${escaped}:?\\*\\*\\s*\\n?`, "i"));
+  }
   if (!match || match.index === undefined) return null;
   const after = body.slice(match.index + match[0].length);
-  const nextHeading = after.match(/\n#{1,3}\s/);
+  const nextHeading = after.match(/\n#{1,3}\s|\n\*\*[A-Z][^*]{2,30}\*\*/);
   const section = nextHeading && nextHeading.index !== undefined ? after.slice(0, nextHeading.index).trim() : after.trim();
   return section || null;
 }
@@ -479,6 +518,8 @@ function keywordMatches(text: string): string[] {
     ["creative", /creative tool|web design|visual development|no-code|canvas|design tool|builder/],
     ["payment", /payment|card network|transaction|spend|banking|financial services|credit card/],
     ["telecom", /telecom|mobile network|service provider|broadband|connectivity|carrier/],
+    ["food", /coffee|beverage|cafe|menu|drink|restaurant|food/],
+    ["automation", /automation|workflow|zap|pipeline|integration|trigger|connect app/],
   ] as const;
   return keywords.filter(([, re]) => re.test(t)).map(([keyword]) => keyword);
 }
@@ -594,6 +635,107 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
   });
 }
 
+function extractFontFromMarkdown(body: string): string | undefined {
+  // Match font family declarations in markdown: "Font: `abcNormal`", "Font Family: abcNormal", "**Universal**: \`abcNormal\`"
+  const patterns = [
+    /\*\*Universal\*\*:\s*(?:`([^`]+)`|([^\n,.]+))/i,
+    /\*\*Display\*\*:\s*(?:`([^`]+)`|([^\n,;]+))/i,
+    /\*\*Title\*\*:\s*(?:`([^`]+)`|([^\n,;]+))/i,
+    /\*\*UI\s*\/?\s*Body\*\*:\s*(?:`([^`]+)`|([^\n,;]+))/i,
+    /Font(?:\s*Family)?:?\s*(?:`([^`]+)`|([^\n,.]+))/i,
+    /###\s*Font\s*Famil(?:y|ies)\s*\n+\s*(?:-|•|\*)?\s*(?:`([^`]+)`|([^\n,;]+))/i,
+    /###\s*Font\s*(?:Family|Families)\s*\n(?:.|\n)*?\*\*[\w\s]+\*\*:\s*(?:`([^`]+)`|([^\n,;]+))/i,
+  ];
+  for (const re of patterns) {
+    const m = body.match(re);
+    if (m) {
+      const font = (m[1] || m[2] || "").trim()
+        .replace(/fallback\s*:\s*.+/i, "")
+        .replace(/with\s+fallback.+/i, "")
+        .replace(/,?\s*-apple-system.*$/i, "")
+        .trim();
+      if (font && font.length > 0 && font.length < 80 && !/^(?:serif|sans-serif|monospace|system-ui|[A-Z][a-z]+ Sans)$/i.test(font)) {
+        return font;
+      }
+    }
+  }
+  return undefined;
+}
+
+function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
+  // Find typography tables (Role | Size | Weight | Line Height | ...)
+  const headerRe = /\|\s*Role\s*\|\s*(?:Font\s*\|)?\s*Size\s*\|[\s\w|]*Weight[\s\w|]*/i;
+  const headerMatch = body.match(headerRe);
+  if (!headerMatch || headerMatch.index === undefined) return [];
+
+  const afterHeader = body.slice(headerMatch.index);
+  // Skip header + separator line
+  const rows = afterHeader.split("\n").slice(2);
+  const tokens: DesignMdTypographyToken[] = [];
+
+  for (const row of rows) {
+    if (!row.trim().startsWith("|")) break;
+    const cells = row.split("|").map((c) => c.trim()).filter(Boolean);
+    if (cells.length < 3) continue;
+
+    // First cell is role/name, rest are values
+    const name = cleanPhrase(cells[0] || "")
+      .toLowerCase()
+      .replace(/[^a-z0-9]+(?:[a-z0-9]+)?/g, (m) => m.length > 1 ? "-" : "")
+      .replace(/^-|-$/g, "")
+      .slice(0, 30) || `type-${tokens.length + 1}`;
+
+    // Parse size from cell that looks like "48px" or "48px (3rem)"
+    let fontSize: string | undefined;
+    let fontWeight: string | undefined;
+    let lineHeight: string | undefined;
+    let letterSpacing: string | undefined;
+
+    for (const cell of cells.slice(1)) {
+      const sizeMatch = cell.match(/(\d+(?:\.\d+)?)\s*(?:px|rem|em)/);
+      if (sizeMatch && !fontSize) {
+        fontSize = sizeMatch[0];
+      }
+      const weightMatch = cell.match(/\b(\d{3}|bold|normal|regular|lighter|bolder|medium|semibold)\b/i);
+      if (weightMatch && !fontWeight) {
+        const w = weightMatch[1].toLowerCase();
+        const weightMap: Record<string, string> = { regular: "400", medium: "500", semibold: "600", bold: "700", normal: "400" };
+        fontWeight = weightMap[w] ?? w;
+      }
+      const lhMatch = cell.match(/(\d+(?:\.\d+))\s*(?:\(tight\))?/);
+      if (lhMatch && lhMatch[1] && !lineHeight && Number.parseFloat(lhMatch[1]) < 3) {
+        lineHeight = lhMatch[1];
+      }
+      const lsMatch = cell.match(/(-?\d+(?:\.\d+))\s*(?:px)?/);
+      if (lsMatch && lsMatch[1] && !letterSpacing && Number.parseFloat(lsMatch[1]) <= 5 && Number.parseFloat(lsMatch[1]) >= -10) {
+        letterSpacing = lsMatch[0];
+      }
+    }
+
+    if (fontSize || fontWeight) {
+      const raw: Record<string, string> = {};
+      if (fontSize) raw["fontSize"] = fontSize;
+      if (fontWeight) raw["fontWeight"] = fontWeight;
+      if (lineHeight) raw["lineHeight"] = lineHeight;
+      if (letterSpacing) raw["letterSpacing"] = letterSpacing;
+      tokens.push({ key: name, fontSize, fontWeight, lineHeight, letterSpacing, raw });
+    }
+    if (tokens.length >= 12) break;
+  }
+  return tokens;
+}
+
+function buildMarkdownTypography(body: string): DesignMdTypographyToken[] {
+  const tokens = parseMarkdownTypeTable(body);
+  const fontFamily = extractFontFromMarkdown(body);
+  if (fontFamily && isSafeFontFamilyValue(fontFamily)) {
+    for (const t of tokens) {
+      if (!t.fontFamily) t.fontFamily = fontFamily;
+    }
+  }
+  return tokens;
+}
+
 function componentKind(name: string): DesignMdComponentKind {
   const n = name.toLowerCase();
   if (/gradient|mesh/.test(n)) return "gradient";
@@ -659,17 +801,49 @@ function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
 
 function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
   const names = new Set<string>();
+
+  // Extract from markdown sub-headings inside component sections
+  const componentSections = [
+    /components?\s+stylings?/i,
+    /components?\s+library/i,
+    /key\s+components/i,
+  ];
+  for (const sectionRe of componentSections) {
+    const sectionMatch = body.match(new RegExp(`^#{1,4}\\s+[^#\\n]*${sectionRe.source}[^#\\n]*$`, "im"));
+    if (sectionMatch && sectionMatch.index !== undefined) {
+      const after = body.slice(sectionMatch.index + sectionMatch[0].length);
+      const nextSection = after.match(/\n#{1,2}\s/);
+      const section = nextSection && nextSection.index !== undefined ? after.slice(0, nextSection.index) : after.slice(0, 1000);
+
+      // Extract ### or **Bold** sub-heading names
+      const subHeadings = section.matchAll(/(?:^#{3,4}\s+|\*\*)([^*#\n]{2,40})(?:\*\*|\s*$)/gm);
+      for (const m of subHeadings) {
+        const name = cleanPhrase(m[1])
+          .toLowerCase()
+          .replace(/[^a-z0-9]+/g, "-")
+          .replace(/^-|-$/g, "");
+        if (name && name.length > 1 && !/^(?:the|and|for|with|from|are|has|not|its)$/.test(name)) {
+          names.add(name);
+        }
+      }
+    }
+  }
+
+  // Existing patterns for specific component names
   const patterns = [
     /\b(search(?:\s+bar|\s+input)?)\b/ig,
-    /\b((?:pricing|feature|stat|metric|product|market|model|code|terminal|hero|photo|workflow|dashboard|property|listing|album|playlist|campaign|trust|logo|pipeline)\s+(?:card|cards|tile|tiles|panel|panels|table|tables|row|rows|band|bands|mockup|mockups|block|blocks|grid|bar))\b/ig,
+    /\b((?:pricing|feature|stat|metric|product|market|model|code|terminal|hero|photo|workflow|dashboard|property|listing|album|playlist|campaign|trust|logo|pipeline|menu|store|plan|coverage|device)\s+(?:card|cards|tile|tiles|panel|panels|table|tables|row|rows|band|bands|mockup|mockups|block|blocks|grid|bar|module))\b/ig,
     /\b((?:pill|status|workflow|guest-favorite)\s+badge)\b/ig,
-    /\b((?:top|sub|global)\s+nav)\b/ig,
-    /\b((?:primary|secondary|outline|pill)\s+button)\b/ig,
-    /\b((?:market|metrics?|asset|track|playlist)\s+table)\b/ig,
+    /\b((?:top|sub|global|main|side)\s+nav)\b/ig,
+    /\b((?:primary|secondary|outline|pill|cta|ghost)\s+button)\b/ig,
+    /\b((?:market|metrics?|asset|track|playlist|transaction|spend)\s+table)\b/ig,
     /\b((?:bar|line|price|usage|analytics?)\s+chart)\b/ig,
     /\b((?:code|terminal|console)\s+(?:block|window|panel))\b/ig,
-    /\b((?:workflow|deployment)\s+pipeline)\b/ig,
+    /\b((?:workflow|deployment|automation)\s+pipeline)\b/ig,
     /\b((?:now-playing|playback|player)\s+bar)\b/ig,
+    /\b((?:prompt|ai)\s+input)\b/ig,
+    /\b((?:hero|photo)\s+band)\b/ig,
+    /\b((?:order|buy|cancel|submit)\s+button)\b/ig,
   ];
   for (const re of patterns) {
     for (const match of body.matchAll(re)) {
@@ -681,6 +855,25 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
       if (names.size >= 18) break;
     }
   }
+
+  // Fallback: extract any bold phrases in a Components section as potential component names
+  if (names.size < 3) {
+    const compSection = extractSection(body, "Components");
+    const compSection2 = extractSection(body, "Component Stylings");
+    const section = compSection || compSection2 || "";
+    const boldNames = section.matchAll(/\*\*([^*\n]{3,40})\*\*/g);
+    for (const m of boldNames) {
+      const name = cleanPhrase(m[1])
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .replace(/^-|-$/g, "");
+      if (name && name.length > 1 && !/^(?:and|for|with|from|are|has|not|its|styled|style)$/.test(name)) {
+        names.add(name);
+      }
+      if (names.size >= 12) break;
+    }
+  }
+
   return Array.from(names).map((name) => ({
     name,
     kind: componentKind(name),
@@ -693,60 +886,88 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   const text = [slug, ...phrases, ...keywords, ...componentNames].join(" ").toLowerCase();
   const score = (patterns: RegExp[]) => patterns.reduce((sum, re) => sum + (re.test(text) ? 1 : 0), 0);
   const scores: Record<DesignMdArchetype, number> = {
-    marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/, /ride/, /mobility/, /uber/]),
+    marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/, /ride/, /mobility/]),
     product_gallery: score([/photography-first/, /product tile/, /product-tile/, /sparse/, /museum/, /apple/]),
     finance_dashboard: score([/trading/, /markets/, /crypto/, /balance/, /deposit/, /asset-row/, /coinbase|binance/]),
     developer_docs: score([/docs/, /api/, /code-window/, /cli/, /infrastructure/, /supabase/]),
+    developer_product: score([/developer product/, /developer platform/, /developer tool/, /deployment/, /infrastructure/]),
     luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /inventory-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/, /performance/]),
-    data_product: score([/data product/, /analytics/, /database/, /query/, /metrics/, /clickhouse|cohere|sanity/]),
+    data_product: score([/data product/, /analytics/, /database/, /query/, /metrics/, /clickhouse|cohere/]),
     collaboration_saas: score([/messaging/, /workplace/, /collaboration/, /aubergine/, /pastel-mesh/, /slack|slacc/]),
-    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/, /news/, /journalism/, /theverge|wired/]),
-    ai_product: score([/ai/, /artificial intelligence/, /model/, /prompt/, /agent/, /ai product/, /ai agent/, /generated/, /runway|together\.ai|voltagent|lovable|x\.ai/]),
+    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/, /news/, /journalism/]),
+    media_editorial: score([/media editorial/, /media brand/, /tech news/, /digital publication/, /the.?verge|wired/]),
+    ai_product: score([/ai/, /artificial intelligence/, /model/, /prompt/, /ai product/, /ai platform/, /llm/, /language model/, /generated/]),
+    ai_agent_product: score([/ai agent/, /agent product/, /autonomous agent/, /agent workflow/, /orchestration/]),
     creative_tool: score([/creative tool/, /no-code/, /visual development/, /design tool/, /canvas/, /web design/, /webflow|framer/]),
-    payment_finance: score([/payment/, /card network/, /financial/, /spend/, /transaction/, /mastercard|wise/]),
+    payment_finance: score([/payment/, /card network/, /financial/, /spend/, /transaction/, /mastercard|wise|stripe/]),
+    retail_food: score([/coffee/, /beverage/, /cafe/, /restaurant/, /food/, /drink/, /menu/, /starbucks/, /retail food/]),
+    retail_brand: score([/retail brand/, /brand system/, /consumer brand/, /nike/, /shopify/]),
+    telecom_service: score([/telecom/, /mobile network/, /service provider/, /broadband/, /connectivity/, /carrier/, /vodafone/, /plan card/]),
+    automation_workflow: score([/automation/, /workflow/, /zap/, /pipeline/, /integration/, /connect app/, /zapier/]),
     music_campaign: score([/music/, /playlist/, /album/, /player/, /listening/, /podcast/, /spotify/, /audio/]),
-    terminal_tool: score([/terminal/, /command line/, /warp/, /shell/, /developer tool/]),
+    terminal_tool: score([/terminal/, /command line/, /warp/, /shell/]),
     generic_system: 0,
   };
 
-  // Slug-specific hints as tiebreakers — used only to boost, never to override zero scores
   const slugLower = slug.toLowerCase();
-  if (/(slack|slacc)/.test(text)) scores.collaboration_saas += 4;
-  if (/(supabase|vercel|opencode)/.test(text)) scores.developer_docs += 4;
-  if (/(runwayml|runway)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+
+  // Slug-specific hints as tiebreakers
+  if (/(runwayml|runway)/.test(slugLower)) {
+    scores.ai_product = Math.max(scores.ai_product, 1) + 7;
+    scores.creative_tool = Math.max(scores.creative_tool, 1) + 3;
+  }
   if (/(together\.ai|together\.dev)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
-  if (/(voltagent)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
-  if (/(lovable)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 3;
-  if (/(x\.ai)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 3;
-  if (/(webflow)/.test(slugLower) && scores.creative_tool > 0) scores.creative_tool += 4;
-  if (/(warp)/.test(slugLower) && scores.terminal_tool > 0) scores.terminal_tool += 4;
-  if (/(spotify)/.test(slugLower) && scores.music_campaign > 0) scores.music_campaign += 4;
-  if (/(mastercard)/.test(slugLower) && scores.payment_finance > 0) scores.payment_finance += 4;
-  if (/(wise)/.test(slugLower) && scores.payment_finance > 0) scores.payment_finance += 3;
-  if (/(theverge|wired)/.test(slugLower) && scores.editorial > 0) scores.editorial += 4;
-  if (/(starbucks)/.test(slugLower) && scores.editorial > 0) scores.editorial += 3;
-  if (/(uber)/.test(slugLower) && scores.marketplace > 0) scores.marketplace += 3;
-  if (/(vodafone)/.test(slugLower) && scores.marketplace > 0) scores.marketplace += 2;
-  if (/(zapier)/.test(slugLower) && scores.data_product > 0) scores.data_product += 3;
-  if (/(kraken)/.test(slugLower) && scores.finance_dashboard > 0) scores.finance_dashboard += 4;
-  if (/(clickhouse|cohere|mongodb|posthog)/.test(slugLower)) scores.data_product += 5;
-  if (/(binance|coinbase|kraken|revolut)/.test(text) && scores.finance_dashboard > 0) scores.finance_dashboard += 3;
-  if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(slugLower) && scores.luxury_automotive > 0) scores.luxury_automotive += 3;
-  if (/(nike|shopify|pinterest)/.test(slugLower) && scores.editorial > 0) scores.editorial += 3;
-  if (/(sanity)/.test(slugLower) && scores.data_product > 0) scores.data_product += 3;
-
-  // Boost payment_finance for finance slugs that don't look like trading platforms
-  if (/mastercard|wise|stripe|visa|paypal/.test(slugLower) && scores.payment_finance > 0) {
-    scores.payment_finance += 3;
+  if (/(voltagent)/.test(slugLower)) {
+    scores.ai_agent_product = Math.max(scores.ai_agent_product, 1) + 8;
+    scores.ai_product = Math.max(scores.ai_product, 1) + 2;
   }
-
-  // If text mentions music/campaign and slug is spotify, prefer music_campaign over editorial
+  if (/(lovable)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+  if (/(x\.ai)/.test(slugLower) && scores.ai_product > 0) scores.ai_product += 4;
+  if (/(webflow)/.test(slugLower) && scores.creative_tool > 0) scores.creative_tool += 5;
+  if (/(warp)/.test(slugLower) && scores.terminal_tool > 0) scores.terminal_tool += 5;
   if (/(spotify)/.test(slugLower)) {
-    if (scores.music_campaign > 0) scores.music_campaign += 5;
+    if (scores.music_campaign > 0) scores.music_campaign += 6;
   }
+  if (/(starbucks)/.test(slugLower)) {
+    scores.retail_food = Math.max(scores.retail_food, 1) + 6;
+  }
+  if (/(mastercard)/.test(slugLower)) {
+    if (scores.payment_finance > 0) scores.payment_finance += 5;
+    scores.retail_brand = Math.max(scores.retail_brand, 1) + 2;
+  }
+  if (/(wise)/.test(slugLower)) scores.payment_finance = Math.max(scores.payment_finance, 1) + 4;
+  if (/(theverge|wired)/.test(slugLower)) {
+    scores.media_editorial = Math.max(scores.media_editorial, 1) + 8;
+    scores.editorial = Math.max(scores.editorial, 1) + 2;
+  }
+  if (/(uber)/.test(slugLower)) scores.marketplace = Math.max(scores.marketplace, 1) + 4;
+  if (/(vodafone)/.test(slugLower)) {
+    scores.telecom_service = Math.max(scores.telecom_service, 1) + 6;
+  }
+  if (/(zapier)/.test(slugLower)) {
+    scores.automation_workflow = Math.max(scores.automation_workflow, 1) + 6;
+    scores.developer_docs = Math.max(scores.developer_docs, 1) + 2;
+  }
+  if (/(kraken)/.test(slugLower)) scores.finance_dashboard = Math.max(scores.finance_dashboard, 1) + 5;
+  if (/(kraken|binance|coinbase|revolut)/.test(text)) scores.finance_dashboard = Math.max(scores.finance_dashboard, 1) + 2;
+  if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(slugLower)) scores.luxury_automotive = Math.max(scores.luxury_automotive, 1) + 4;
+  if (/(sanity)/.test(slugLower)) {
+    scores.developer_product = Math.max(scores.developer_product, 1) + 5;
+    scores.developer_docs = Math.max(scores.developer_docs, 1) + 3;
+  }
+  if (/(vercel)/.test(slugLower)) {
+    scores.developer_product = Math.max(scores.developer_product, 1) + 5;
+    scores.developer_docs = Math.max(scores.developer_docs, 1) + 4;
+  }
+  if (/(supabase|opencode)/.test(text)) scores.developer_docs = Math.max(scores.developer_docs, 1) + 4;
+  if (/(clickhouse|cohere|mongodb|posthog)/.test(slugLower)) scores.data_product = Math.max(scores.data_product, 1) + 5;
 
-  // If text mentions AI heavily but also matches developer_docs, prefer ai_product
-  if (scores.ai_product >= 3 && scores.developer_docs > 0) scores.ai_product += 2;
+  // Content-based boosts
+  if (/coffee|beverage|drink|menu item|store card|loyalty/.test(text)) scores.retail_food = Math.max(scores.retail_food, 1) + 3;
+  if (/telecom|mobile plan|service plan|coverage|5g|4g|broadband/.test(text)) scores.telecom_service = Math.max(scores.telecom_service, 1) + 3;
+  if (/automation|workflow|zap|trigger|action step|integration/.test(text)) scores.automation_workflow = Math.max(scores.automation_workflow, 1) + 3;
+  if (/ai agent|autonomous agent|agent orchestration|tool call/.test(text)) scores.ai_agent_product = Math.max(scores.ai_agent_product, 1) + 4;
+  if (/developer platform|deployment platform|serverless|edge function/.test(text)) scores.developer_product = Math.max(scores.developer_product, 1) + 3;
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
   return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
@@ -765,15 +986,20 @@ export function parseDesignMdForPreview(
   const components = buildComponents(fm);
   const palette = buildPalette(fm);
 
+  const structuredTypo = buildTypography(fm);
+  const mdTypo = structuredTypo.length === 0 ? buildMarkdownTypography(body) : [];
+  const allTypography = structuredTypo.length > 0 ? structuredTypo : mdTypo;
+  const allComponents = components.length > 0 ? components : buildMarkdownComponents(body || content);
+
   return {
     meta: { slug, title, description },
     palette: palette.length > 0 ? palette : buildMarkdownPalette(body || content),
-    typography: buildTypography(fm),
+    typography: allTypography,
     radius: tokensForPrefix(fm, "rounded").concat(tokensForPrefix(fm, "radius")),
     spacing: tokensForPrefix(fm, "spacing"),
-    components: components.length > 0 ? components : buildMarkdownComponents(body || content),
+    components: allComponents,
     visualLanguage: { phrases, keywords },
-    archetype: inferArchetype(slug, phrases, keywords, components.map((component) => component.name)),
+    archetype: inferArchetype(slug, phrases, keywords, allComponents.map((component) => component.name)),
     overviewText: extractSection(body, "Overview"),
     layoutText: extractSection(body, "Layout"),
     fontSubstitutes: extractFontSubstitutes(body),

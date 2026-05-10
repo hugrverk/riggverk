@@ -178,4 +178,113 @@ assert.equal(markdownOnly.archetype, "music_campaign");
 assert(markdownOnly.components.some((component) => component.name.startsWith("playlist-card")));
 assert(markdownOnly.components.some((component) => component.name === "now-playing-bar"));
 
+// ── Markdown typography extraction ──
+const typographyFixture = `## 3. Typography Rules
+
+### Font Family
+- **Universal**: \`abcNormal\`
+
+| Role | Font | Size | Weight | Line Height | Letter Spacing |
+|------|------|------|--------|-------------|----------------|
+| Display / Hero | abcNormal | 48px | 400 | 1.00 | -1.2px |
+| Section Heading | abcNormal | 40px | 400 | 1.10 | -1px |
+| Body | abcNormal | 16px | 600 | 1.50 | 0px |
+`;
+
+const typeModel = parseDesignMdForPreview("type-test", "Type Test", "test", typographyFixture);
+assert(typeModel.typography.length >= 2, `Expected ≥2 typography tokens, got ${typeModel.typography.length}`);
+assert(typeModel.typography.some((t) => t.key.includes("display")), "Expected display typography token");
+
+// ── New archetypes ──
+const retailFixture = `# Design System Inspired by Starbucks
+
+## 1. Visual Theme
+Coffee, beverages, menu items, store cards, and loyalty program.
+
+### Colors
+- **Starbucks Green** (\`#00754A\`)
+- **White** (\`#FFFFFF\`)
+- **Coffee Brown** (\`#362415\`)
+`;
+const retailModel = parseDesignMdForPreview("starbucks", "Starbucks", "Coffee retail", retailFixture);
+assert.equal(retailModel.archetype, "retail_food");
+
+const telecomFixture = `# Design System Inspired by Vodafone
+
+## 1. Visual Theme
+Telecom service provider with mobile plans, coverage maps, and device tiles.
+
+### Colors
+- **Vodafone Red** (\`#E60000\`)
+- **White** (\`#FFFFFF\`)
+`;
+const telecomModel = parseDesignMdForPreview("vodafone", "Vodafone", "Telecom service", telecomFixture);
+assert.equal(telecomModel.archetype, "telecom_service");
+
+const automationFixture = `# Design System Inspired by Zapier
+
+## 1. Visual Theme
+Automation workflow with zaps, triggers, action steps, and integration apps.
+
+### Colors
+- **Zapier Orange** (\`#FF4F00\`)
+- **Cream White** (\`#FFFEFB\`)
+`;
+const autoModel = parseDesignMdForPreview("zapier", "Zapier", "Workflow automation", automationFixture);
+assert.equal(autoModel.archetype, "automation_workflow");
+
+// ── Markdown component extraction from section headings ──
+const compFixture = `## 4. Component Stylings
+
+### Buttons
+- Primary button with pill shape
+
+### Navigation
+- Global nav with transparent background
+
+### Cards
+- Content cards with subtle borders
+
+### Search Bar
+- Pill-shaped search input
+`;
+const compModel = parseDesignMdForPreview("comp-test", "Comp Test", "test", compFixture);
+assert(compModel.components.length >= 2, `Expected ≥2 components, got ${compModel.components.length}`);
+assert(compModel.components.some((c) => c.name.includes("button")), "Expected button component");
+assert(compModel.components.some((c) => c.name.includes("nav")), "Expected nav component");
+
+// ── Font fallback for new fonts ──
+assert.match(resolveGeneratedFontFamily("abcNormal", "cinematic film"), /Inter|DM Sans/);
+assert.match(resolveGeneratedFontFamily("SpotifyMixUI", "music player"), /Helvetica Neue.*Inter/);
+assert.match(resolveGeneratedFontFamily("Universal Sans Display", "Tesla"), /-apple-system.*Segoe UI/);
+assert.match(resolveGeneratedFontFamily("Matter", "terminal tool"), /Inter.*-apple-system/);
+assert.match(resolveGeneratedFontFamily("waldenburgNormal", "developer platform"), /Inter.*Helvetica Neue/);
+assert.match(resolveGeneratedFontFamily("WF Visual Sans Variable", "web design"), /Inter.*Arial/);
+
+// ── Dark mode with new archetypes ──
+const newArchDarkBoard = buildBoard("zapier", "Zapier", "Automation", automationFixture);
+const newArchDarkHtml = generateBoardHtml(newArchDarkBoard, { variant: "dark" });
+assert.match(newArchDarkHtml, /Content-Security-Policy/);
+assert.doesNotMatch(newArchDarkHtml, /<script/i);
+assert.match(newArchDarkHtml, /#0b0e11|#1f2329|dark|canvas-dark/i);
+
+// ── Section extraction fix ──
+const sectionFixture = `## 1. Design System Overview
+This is the overview of the design system. It describes the visual theme, atmosphere, and key characteristics.
+
+**Key Characteristics:**
+- Minimal design
+- Photography-first
+- Dark canvas with bright accents
+
+## 2. Color Palette & Roles
+### Primary
+- **Blue** (\`#0066CC\`)
+- **White** (\`#FFFFFF\`)
+`;
+const sectionModel = parseDesignMdForPreview("section-test", "Section Test", "test", sectionFixture);
+assert(sectionModel.visualLanguage.phrases.length > 0, `Expected phrases, got ${sectionModel.visualLanguage.phrases.length}`);
+const overviewText = sectionModel.overviewText;
+assert(overviewText !== null && overviewText.length > 0, `Expected overview text, got: ${overviewText}`);
+
 console.log("design-md preview checks passed");

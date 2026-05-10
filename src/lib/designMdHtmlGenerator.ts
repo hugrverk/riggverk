@@ -102,11 +102,18 @@ function prioritizedComponentGroups(board: DesignMdBoard): DesignMdBoardComponen
     luxury_automotive: ["hero", "model", "photo", "inventory", "spec", "configurator", "filter", "m-stripe", "button", "nav"],
     data_product: ["stat", "code", "chart", "table", "query", "badge", "feature", "pricing", "input", "button", "nav"],
     developer_docs: ["top-nav", "docs", "code", "command", "terminal", "link", "button", "input", "card"],
+    developer_product: ["top-nav", "project", "deployment", "status", "code", "terminal", "docs", "button", "card", "nav"],
     collaboration_saas: ["hero", "mesh", "pill", "button", "input", "pricing", "feature", "card", "nav", "link"],
-    editorial: ["campaign", "album", "playlist", "product", "hero", "article", "story", "quote", "card", "search", "button", "link", "nav"],
+    editorial: ["hero", "article", "story", "quote", "card", "search", "button", "link", "nav"],
+    media_editorial: ["headline", "article-card", "story-card", "media-card", "opinion", "sidebar", "search", "nav", "button", "card"],
     ai_product: ["prompt-input", "model-status", "output-panel", "agent-card", "code-panel", "stat", "button", "input", "nav", "card"],
+    ai_agent_product: ["agent-graph", "tool-card", "action-card", "trace-panel", "orchestration", "prompt-input", "button", "card", "nav"],
     creative_tool: ["canvas", "editor", "component-panel", "property-panel", "toolbar", "frame", "button", "input", "card", "nav"],
     payment_finance: ["payment-card", "transaction-row", "spend-summary", "brand-strip", "card", "button", "stat", "badge", "nav"],
+    retail_food: ["menu-card", "product-card", "store-card", "campaign", "loyalty-chip", "order-button", "button", "card", "nav"],
+    retail_brand: ["hero", "product-card", "campaign", "badge", "store-card", "pricing", "button", "nav", "card"],
+    telecom_service: ["plan-card", "coverage-module", "device-tile", "service-card", "brand-cta", "button", "card", "nav"],
+    automation_workflow: ["workflow-step", "app-card", "step-badge", "pipeline", "trigger", "action", "button", "card", "nav"],
     music_campaign: ["campaign-tile", "playlist-card", "album-card", "hero", "now-playing", "search", "button", "card", "nav"],
     terminal_tool: ["terminal-panel", "code-panel", "command-palette", "split-pane", "command-chip", "button", "input", "nav"],
     generic_system: ["nav", "button", "card", "tile", "input", "chip", "link"],
@@ -307,6 +314,8 @@ function heroPattern(board: DesignMdBoard, colors: ReturnType<typeof deriveToken
       return financeHero(board, colors);
     case "developer_docs":
       return docsHero(board, colors);
+    case "developer_product":
+      return developerProductHero(board, colors);
     case "collaboration_saas":
       return collaborationHero(board, colors);
     case "luxury_automotive":
@@ -315,12 +324,24 @@ function heroPattern(board: DesignMdBoard, colors: ReturnType<typeof deriveToken
       return dataHero(board, colors);
     case "editorial":
       return editorialHero(board, colors);
+    case "media_editorial":
+      return mediaEditorialHero(board, colors);
     case "ai_product":
       return aiProductHero(board, colors);
+    case "ai_agent_product":
+      return aiAgentProductHero(board, colors);
     case "creative_tool":
       return creativeToolHero(board, colors);
     case "payment_finance":
       return paymentFinanceHero(board, colors);
+    case "retail_food":
+      return retailFoodHero(board, colors);
+    case "retail_brand":
+      return retailBrandHero(board, colors);
+    case "telecom_service":
+      return telecomServiceHero(board, colors);
+    case "automation_workflow":
+      return automationWorkflowHero(board, colors);
     case "music_campaign":
       return musicCampaignHero(board, colors);
     case "terminal_tool":
@@ -529,6 +550,116 @@ function terminalToolHero(board: DesignMdBoard, colors: ReturnType<typeof derive
     '</div></div></section>';
 }
 
+function mediaEditorialHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const edBg = isDark ? colors.darkCanvas : colors.canvas;
+  const edSurface = isDark ? colors.darkSurface : colors.surface;
+  const edFg = isDark ? colors.onDark : colors.text;
+  const headlineGroup = component(board, ["headline", "hero", "article-card", "card"]);
+  const card = componentColors(headlineGroup ?? component(board, ["card"]), edSurface, edFg, colors);
+  return '<section class="hero hero-editorial" style="background:' + edBg + '"><div class="editorial-copy"><span class="editorial-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Media Editorial") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div>' +
+    '<div class="campaign-grid">' +
+    '<article class="editorial-lead" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + colors.radius + '"><div class="editorial-img e0"></div><b>' + esc(board.componentGroups[0]?.name ?? "Lead Story") + '</b><span class="muted">By Author · 8 min read</span></article>' +
+    [1, 2].map((i) => '<article style="background:' + edSurface + ';color:' + edFg + ';border-radius:' + colors.radius + '"><b>' + esc(board.componentGroups[i]?.name ?? ["Opinion", "Latest"][i - 1]) + '</b><span class="muted">By Author · ' + [5, 3][i - 1] + ' min read</span></article>').join("") +
+    '</div></section>';
+}
+
+function retailFoodHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const foodBg = isDark ? colors.darkCanvas : colors.canvas;
+  const foodSurface = isDark ? colors.darkSurface : colors.surface;
+  const foodFg = isDark ? colors.onDark : colors.text;
+  const cardGroups = ["menu-card", "product-card", "store-card", "card"].map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
+  const card = componentColors(cardGroups[0] ?? component(board, ["card"]), foodSurface, foodFg, colors);
+  const cta = component(board, ["button-primary", "order-button", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-music" style="background:' + foodBg + '"><div class="music-copy"><span class="music-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Menu") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Order Now") + '</button></div>' +
+    '<div class="music-grid">' +
+    [0, 1, 2].map((i) => {
+      const tileColors = i === 0 ? { bg: colors.primary, fg: colors.onPrimary } : card;
+      return '<article class="music-tile" style="background:' + tileColors.bg + ';color:' + tileColors.fg + ';border-radius:' + colors.radius + '"><div class="music-art m' + i + '"></div><b>' + esc(cardGroups[i]?.name ?? ["Menu Item", "Beverage", "Food"][i]) + '</b><span>' + (i === 0 ? 'Featured' : 'Popular') + '</span></article>';
+    }).join("") +
+    '</div></section>';
+}
+
+function telecomServiceHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const telBg = isDark ? colors.darkCanvas : colors.canvas;
+  const telSurface = isDark ? colors.darkSurface : colors.surface;
+  const telFg = isDark ? colors.onDark : colors.text;
+  const planGroup = component(board, ["plan-card", "pricing-card", "card"]);
+  const card = componentColors(planGroup ?? component(board, ["card"]), telSurface, telFg, colors);
+  const cta = component(board, ["button-primary", "brand-cta", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-payment" style="background:' + telBg + '"><div class="payment-brand" style="background:linear-gradient(135deg,' + colors.primary + ',' + mixHexColor(colors.primary, colors.darkSurface, 0.3) + ');color:' + colors.onPrimary + '"><div><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div><button style="background:' + colors.onPrimary + ';color:' + colors.primary + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "View Plans") + '</button></div>' +
+    '<div class="payment-grid"><article class="payment-card" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + colors.radius + '"><small>Unlimited</small><b>$45/mo</b><div><span>Plan Card</span><span>5G · 50GB</span></div></article>' +
+    '<div class="payment-transactions" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + colors.radius + '"><b>Popular plans</b>' +
+    [0, 1, 2].map((i) => '<div class="payment-row"><span>' + ["Basic Plan", "Plus Plan", "Premium Plan"][i] + '</span><strong>' + ["$25", "$45", "$65"][i] + '</strong></div>').join("") +
+    '</div></div></section>';
+}
+
+function automationWorkflowHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const autoBg = isDark ? colors.darkCanvas : colors.canvas;
+  const autoSurface = isDark ? colors.darkSurface : colors.surface;
+  const autoFg = isDark ? colors.onDark : colors.text;
+  const stepGroup = component(board, ["workflow-step", "pipeline", "app-card", "card"]);
+  const card = componentColors(stepGroup ?? component(board, ["card"]), autoSurface, autoFg, colors);
+  const cta = component(board, ["button-primary", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-collab" style="background:radial-gradient(circle at 25% 30%,' + colors.surface + ',transparent 30%),linear-gradient(135deg,' + autoBg + ',' + autoSurface + ')"><div class="collab-copy"><span class="collab-kicker">' + esc(board.visualLanguage.keywords[0] ?? "Automation") + '</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Create Zap") + '</button></div>' +
+    '<div class="collab-mesh"><div class="workflow-chain">' +
+    [0, 1, 2].map((i) => '<div class="workflow-node" style="background:' + card.bg + ';color:' + card.fg + ';border-color:' + colors.primary + ';border-radius:' + colors.radius + '"><b>' + esc(board.componentGroups[i]?.name ?? ["Trigger", "Action", "Filter"][i]) + '</b><span>' + ["New Email", "Create Task", "Check"][i] + '</span></div>' + (i < 2 ? '<span class="workflow-arrow">→</span>' : '')).join("") +
+    '</div></div></section>';
+}
+
+function developerProductHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const dpBg = isDark ? colors.darkCanvas : colors.canvas;
+  const dpSurface = isDark ? colors.darkSurface : colors.surface;
+  const code = component(board, ["code-panel", "code-block", "terminal", "command"]);
+  const feature = component(board, ["card-feature", "docs-card", "project", "card"]);
+  const cta = component(board, ["button-primary", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-docs"><aside style="background:' + dpBg + '"><b>' + esc(board.title) + '</b><span>Overview</span><span>Projects</span><span>Deployments</span><span>Docs</span></aside><main style="background:' + dpSurface + '"><div class="docs-copy"><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Deploy") + '</button></div><div class="docs-panels"><pre>' + esc(code?.name ?? "terminal") + '\n$ vercel deploy\n✓ Production ready</pre><article style="background:' + dpBg + '"><b>' + esc(feature?.name ?? "Project Panel") + '</b><span>Status: Ready</span></article></div></main></section>';
+}
+
+function aiAgentProductHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const agentBg = isDark ? colors.darkCanvas : colors.canvas;
+  const agentSurface = isDark ? colors.darkSurface : colors.surface;
+  const agentFg = isDark ? colors.onDark : colors.text;
+  const promptGroup = component(board, ["prompt-input", "ai-input", "input"]);
+  const promptStyle = componentColors(promptGroup, agentSurface, agentFg, colors);
+  const cta = component(board, ["button-primary", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-ai" style="background:' + agentBg + '"><div class="ai-header"><div><span class="ai-kicker">AI Agent</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Run Agent") + '</button></div>' +
+    '<div class="ai-interface"><div class="ai-prompt" style="background:' + promptStyle.bg + ';color:' + promptStyle.fg + ';border-radius:' + promptStyle.radius + '"><div class="ai-prompt-label">' + esc(promptGroup?.name ?? "Agent Prompt") + '</div><div class="ai-prompt-bar">Describe the task...</div></div>' +
+    '<div class="ai-outputs">' +
+    '<div class="ai-output-panel"><div class="ai-output-placeholder">Agent Trace</div><code>→ tool: read_file("src/app.ts")\n→ tool: write_file("src/app.ts", ...)\n✓ task complete</code></div>' +
+    '<div class="ai-model-cards">' +
+    [0, 1, 2].map((i) => {
+      const ms = componentColors(board.componentGroups[i], agentSurface, agentFg, colors);
+      return '<article class="ai-model-card" style="background:' + (i === 0 ? colors.primary : ms.bg) + ';color:' + (i === 0 ? colors.onPrimary : ms.fg) + ';border-radius:' + colors.radius + '"><b>' + esc(board.componentGroups[i]?.name ?? ["Tool Card", "Action Card", "Trace Panel"][i]) + '</b><span>' + (i === 0 ? 'Running' : 'Available') + '</span></article>';
+    }).join("") +
+    '</div></div></div></section>';
+}
+
+function retailBrandHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const isDark = colors.variant === "dark";
+  const brandSurface = isDark ? colors.darkSurface : colors.surface;
+  const brandFg = isDark ? colors.onDark : colors.text;
+  const cardGroup = component(board, ["payment-card", "product-card", "brand-strip", "card"]);
+  const card = componentColors(cardGroup ?? component(board, ["card"]), brandSurface, brandFg, colors);
+  const cta = component(board, ["button-primary", "button"]);
+  const button = componentColors(cta, colors.primary, colors.onPrimary, colors);
+  return '<section class="hero hero-payment"><div class="payment-brand" style="background:linear-gradient(135deg,' + colors.primary + ',' + mixHexColor(colors.primary, colors.darkSurface, 0.3) + ');color:' + colors.onPrimary + '"><div><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p></div><button style="background:' + colors.onPrimary + ';color:' + colors.primary + ';border-radius:' + button.radius + '">' + esc(cta?.name ?? "Explore") + '</button></div>' +
+    '<div class="payment-grid"><article class="payment-card" style="background:linear-gradient(135deg,' + colors.darkSurface + ',' + colors.primary + ');color:' + colors.onDark + ';border-radius:' + colors.radius + '"><small>' + esc(board.title) + '</small><b>' + esc(cardGroup?.name ?? "Brand Card") + '</b><div><span>Premium</span><span>2026</span></div></article>' +
+    '<div class="payment-transactions" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + colors.radius + '"><b>Products</b>' +
+    [0, 1, 2].map((i) => '<div class="payment-row"><span>' + ["Product Card", "Campaign", "Badge"][i] + '</span><strong>' + esc(board.componentGroups[i]?.name ?? "...") + '</strong></div>').join("") +
+    '</div></div></section>';
+}
+
 function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "light") {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
   const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
@@ -545,15 +676,22 @@ function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "
     product_gallery: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     finance_dashboard: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     developer_docs: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    developer_product: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     data_product: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     generic_system: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark", "surface-aubergine"],
     collaboration_saas: ["surface-aubergine", "aubergine", "surface-dark", "surface-card-dark", "elevated-dark", "surface-black", "black"],
     ai_product: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
+    ai_agent_product: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
     terminal_tool: ["surface-black", "black", "surface-dark", "surface-card-dark", "elevated-dark"],
     music_campaign: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark", "surface-aubergine"],
     payment_finance: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    retail_food: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    retail_brand: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    telecom_service: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
+    automation_workflow: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     luxury_automotive: ["surface-black", "black", "surface-dark", "surface-card-dark", "elevated-dark"],
     editorial: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
+    media_editorial: ["surface-dark", "surface-black", "black", "surface-card-dark", "elevated-dark"],
     creative_tool: ["surface-dark", "surface-card-dark", "surface-black", "black", "elevated-dark"],
     default: ["surface-dark", "surface-card-dark", "surface-black", "black", "surface-aubergine", "darkSurface", "dark-surface", "elevated-dark", "card-dark"],
   };
@@ -763,6 +901,8 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero-payment{display:flex;flex-direction:column;gap:0}.payment-brand{display:flex;align-items:center;justify-content:space-between;padding:32px 28px}.payment-brand button{padding:12px 24px}.payment-brand p{max-width:520px;opacity:.85;margin-top:8px}.payment-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;padding:24px}.payment-card{padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 12px 40px rgba(0,0,0,.18)}.payment-card b{font-size:22px;letter-spacing:.06em;margin-top:auto}.payment-card div{display:flex;justify-content:space-between;font-size:" + caption.size + "}.payment-transactions{padding:18px;display:flex;flex-direction:column;gap:10px}.payment-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid " + colors.border + "}.payment-row:last-child{border-bottom:0}",
     ".hero-music{display:grid;grid-template-columns:.8fr 1.2fr;align-items:center;gap:20px;padding:28px;min-height:320px}.music-copy{display:flex;flex-direction:column;gap:12px}.music-kicker{font-size:" + caption.size + ";text-transform:uppercase;letter-spacing:.12em;font-weight:700}.music-copy p{color:" + colors.muted + ";max-width:480px}.music-copy button{padding:12px 20px;align-self:flex-start}.music-grid{display:grid;grid-template-columns:1.3fr .8fr;grid-template-rows:1fr 1fr;gap:12px}.music-tile{padding:14px;display:flex;flex-direction:column;gap:6px;min-height:122px;overflow:hidden}.music-tile:first-child{grid-row:span 2}.music-tile span{font-size:" + caption.size + ";opacity:.65}.music-art{flex:1;min-height:56px;border-radius:8px;background:linear-gradient(135deg," + colors.primary + "," + colors.surface + ")}.music-art.m1{background:linear-gradient(135deg," + colors.surface + "," + colors.border + ")}.music-art.m2{background:linear-gradient(135deg," + colors.darkSurface + "," + colors.primary + ")}",
     ".hero-terminal{display:flex;flex-direction:column;gap:0;min-height:280px}.terminal-header{display:flex;align-items:center;justify-content:space-between;padding:10px 18px;border-bottom:1px solid " + colors.border + "}.terminal-body{padding:20px;flex:1;display:flex;flex-direction:column;gap:14px}.terminal-prompt{display:flex;gap:10px;align-items:center}.terminal-prefix{color:" + colors.primary + ";font-weight:700}.terminal-output pre{margin:0;font-family:monospace;opacity:.8;line-height:1.5}.terminal-chips{display:flex;gap:8px;flex-wrap:wrap;margin-top:auto}.terminal-chips span{display:inline-flex;padding:5px 10px;border:1px solid rgba(255,255,255,.18);font-size:" + caption.size + "}",
+    ".editorial-kicker{font-size:" + caption.size + ";text-transform:uppercase;letter-spacing:.12em;font-weight:700;color:" + colors.muted + "}.editorial-lead{padding:14px;display:flex;flex-direction:column;gap:8px;overflow:hidden}.editorial-img{flex:1;min-height:72px;border-radius:8px;background:linear-gradient(135deg," + colors.primary + "," + colors.surface + ")}.editorial-img.e0{background:linear-gradient(135deg," + colors.darkSurface + "," + colors.primary + ")}",
+    ".workflow-chain{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:12px 0}.workflow-node{padding:14px 16px;border:2px solid;display:flex;flex-direction:column;gap:4px;min-width:120px}.workflow-node span{font-size:" + caption.size + ";opacity:.65}.workflow-arrow{font-size:24px;color:" + colors.primary + ";opacity:.5}",
     ".sample-code,.sample-terminal,.sample-workflow,.sample-editorial,.sample-payment{padding:14px;border:1px solid " + colors.border + ";overflow:hidden}.sample-code code,.sample-terminal code{display:block;margin-top:8px;padding:8px;border-radius:5px;background:rgba(0,0,0,.15);font-family:monospace;font-size:" + caption.size + ";white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-workflow{display:flex;justify-content:space-between;align-items:center}.sample-workflow span{font-size:20px;opacity:.4}.sample-editorial{display:flex;flex-direction:column;gap:8px}.sample-editorial-img{height:64px;border-radius:6px;background:linear-gradient(135deg," + colors.surface + "," + colors.primary + ")}.sample-editorial small{color:" + colors.muted + ";font-size:10px}.sample-payment{display:flex;flex-direction:column;gap:6px}.sample-payment span{font-size:" + caption.size + ";opacity:.7;letter-spacing:.04em}",
     ".overview-deck{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.6fr);gap:14px;padding:16px 20px 20px;border-top:1px solid " + colors.border + ";background:" + colors.canvas + "}.overview-card{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";background:" + colors.canvas + ";padding:12px;overflow:hidden}.overview-card header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}.overview-card header span{font-size:" + caption.size + ";color:" + colors.muted + "}.overview-side{display:grid;gap:14px}.overview-component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.overview-component-grid article{min-height:94px}.overview-component-grid label{display:block;color:" + colors.muted + ";font-size:10px;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-swatch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.overview-swatch-grid i{display:block;height:28px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}.overview-swatch-grid span{display:block;margin-top:5px;color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-type{display:grid;gap:8px}.overview-type small{display:block;color:" + colors.muted + ";font-size:10px}.overview-type span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".strip{padding:20px;border-top:1px solid " + colors.border + "}.strip header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}.strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}.palette-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.canvas + ";overflow:hidden}.swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(0,0,0,.08)}.swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swatch small{color:" + colors.muted + ";font-size:10px}.more{display:grid;place-items:center}",
