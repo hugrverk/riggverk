@@ -91,6 +91,14 @@ pub struct DesignMdInstallStatus {
     pub warnings: Vec<String>,
 }
 
+#[derive(Serialize, Debug, Clone)]
+pub struct DesignMdPreviewContent {
+    pub slug: String,
+    pub variant: String,
+    pub path: String,
+    pub html: String,
+}
+
 // ── cache path ──
 
 fn design_md_cache_root() -> Result<PathBuf, String> {
@@ -971,6 +979,82 @@ pub fn open_installed_design_md(target_dir: String) -> Result<ActionResult, Stri
         err,
         code,
     ))
+}
+
+// ── preview html command ──
+
+#[tauri::command]
+pub fn read_design_md_preview(
+    slug: String,
+    variant: String,
+) -> Result<DesignMdPreviewContent, String> {
+    let cache = design_md_cache_root()?;
+    read_design_md_preview_impl(&cache, &slug, &variant)
+}
+
+fn read_design_md_preview_impl(
+    cache: &Path,
+    slug: &str,
+    variant: &str,
+) -> Result<DesignMdPreviewContent, String> {
+    let filename = match variant {
+        "light" => "preview.html",
+        "dark" => "preview-dark.html",
+        _ => {
+            return Err(format!(
+                "invalid variant: {}. Use 'light' or 'dark'.",
+                variant
+            ))
+        }
+    };
+
+    if !is_valid_design_md_slug(slug) {
+        return Err(format!("invalid slug: {}", slug));
+    }
+
+    if !cache.exists() {
+        return Err("Design MD catalog is not cached. Sync it first.".to_string());
+    }
+
+    let entry_dir = resolve_entry_dir(cache, slug)?;
+    let preview_path = entry_dir.join(filename);
+
+    let canonical_cache = cache
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize cache: {}", e))?;
+    let canonical_preview = preview_path
+        .canonicalize()
+        .map_err(|_e| format!("preview file not found: {}/{}", slug, filename))?;
+
+    if !canonical_preview.starts_with(&canonical_cache) {
+        return Err("preview path is outside cache".to_string());
+    }
+
+    if !canonical_preview.is_file() {
+        return Err(format!("preview file not found: {}/{}", slug, filename));
+    }
+
+    let html = std::fs::read_to_string(&canonical_preview)
+        .map_err(|e| format!("cannot read preview: {}", e))?;
+
+    let rel_path = format!("{}/{}/{}", DESIGN_MD_DIR, slug, filename);
+
+    Ok(DesignMdPreviewContent {
+        slug: slug.to_string(),
+        variant: variant.to_string(),
+        path: rel_path,
+        html,
+    })
+}
+
+/// Resolves the directory for a DESIGN.md entry (cache/design-md/<slug>).
+fn resolve_entry_dir(cache: &Path, slug: &str) -> Result<PathBuf, String> {
+    let rel = format!("{}/{}", DESIGN_MD_DIR, slug);
+    let rel_path = Path::new(&rel);
+    if rel.contains("..") || rel_path.is_absolute() {
+        return Err("invalid slug: traversal detected".to_string());
+    }
+    Ok(cache.join(rel))
 }
 
 // ── validation ──
@@ -1977,6 +2061,72 @@ mod tests {
         assert!(result.is_err());
         let result2 = open_installed_design_md("/System".to_string());
         assert!(result2.is_err());
+    }
+
+    // ── preview tests ──
+
+    #[test]
+    fn preview_reads_light_variant() {
+        let root = temp_root("preview-light");
+        let entry_dir = root.join(DESIGN_MD_DIR).join("test-slug");
+        std::fs::create_dir_all(&entry_dir).expect("create entry dir");
+        std::fs::write(
+            entry_dir.join("preview.html"),
+            "<html><body>light</body></html>",
+        )
+        .expect("write preview");
+        let result = read_design_md_preview_impl(&root, "test-slug", "light");
+        cleanup(&root);
+        assert!(result.is_ok(), "expected ok, got {:?}", result.err());
+        let content = result.unwrap();
+        assert_eq!(content.slug, "test-slug");
+        assert_eq!(content.variant, "light");
+        assert!(content.html.contains("light"));
+    }
+
+    #[test]
+    fn preview_reads_dark_variant() {
+        let root = temp_root("preview-dark");
+        let entry_dir = root.join(DESIGN_MD_DIR).join("test-slug");
+        std::fs::create_dir_all(&entry_dir).expect("create entry dir");
+        std::fs::write(
+            entry_dir.join("preview-dark.html"),
+            "<html><body>dark</body></html>",
+        )
+        .expect("write preview");
+        let result = read_design_md_preview_impl(&root, "test-slug", "dark");
+        cleanup(&root);
+        assert!(result.is_ok());
+        let content = result.unwrap();
+        assert_eq!(content.variant, "dark");
+    }
+
+    #[test]
+    fn preview_rejects_invalid_variant() {
+        let root = temp_root("preview-bad-var");
+        let result = read_design_md_preview_impl(&root, "test-slug", "red");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("invalid variant"));
+    }
+
+    #[test]
+    fn preview_rejects_unsafe_slug() {
+        let root = temp_root("preview-unsafe");
+        let result = read_design_md_preview_impl(&root, "../etc", "light");
+        cleanup(&root);
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn preview_rejects_missing_file() {
+        let root = temp_root("preview-missing");
+        let entry_dir = root.join(DESIGN_MD_DIR).join("empty-slug");
+        std::fs::create_dir_all(&entry_dir).expect("create entry dir");
+        let result = read_design_md_preview_impl(&root, "empty-slug", "light");
+        cleanup(&root);
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("not found"));
     }
 
     // ── helper for testing read_design_md_entry without command wrapper ──

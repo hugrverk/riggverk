@@ -61,9 +61,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
 
   const runWsAction = useCallback(async (action: string, label: string) => {
     if (workspaceActionLockRef.current) return;
-    workspaceActionLockRef.current = true;
-    const requestId = workspaceActionRequestIdRef.current + 1;
-    workspaceActionRequestIdRef.current = requestId;
+    const requestId = ++workspaceActionRequestIdRef.current;
     const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
     const startedAt = performance.now();
     setWsRunning(label); setError(null);
@@ -72,6 +70,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
         if (isCurrentAction()) {
           setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
         }
+        setWsLogCompletedAt(Date.now());
         return;
       }
       const result = await invoke<ActionResult>("run_action", { action });
@@ -86,14 +85,52 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       } else {
         setError(`${action}: ${e}`);
       }
+      setWsLogCompletedAt(Date.now());
     }
     finally {
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
       if (remaining > 0) await wait(remaining);
       if (isCurrentAction()) setWsRunning(null);
-      workspaceActionLockRef.current = false;
     }
   }, [fetchStatus, workspaceDiagnostics, isInvalidWorkspaceError, setError]);
+
+  /** Generic terminal task runner. Wraps an async task with action lock,
+   *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt. */
+  async function runWsTask<T>(opts: {
+    label: string;
+    action: string;
+    task: () => Promise<T>;
+    toActionResult: (result: T) => ActionResult;
+    refresh?: () => void | Promise<void>;
+  }): Promise<T | null> {
+    if (workspaceActionLockRef.current) return null;
+    workspaceActionLockRef.current = true;
+    const requestId = ++workspaceActionRequestIdRef.current;
+    const isCurrent = () => workspaceActionRequestIdRef.current === requestId;
+    const startedAt = performance.now();
+    setWsRunning(opts.label);
+    setError(null);
+    try {
+      const result = await opts.task();
+      if (!isCurrent()) return null;
+      const actionResult = opts.toActionResult(result);
+      setWsLog(actionResult);
+      setWsLogCompletedAt(Date.now());
+      if (opts.refresh) await opts.refresh();
+      return result;
+    } catch (e: unknown) {
+      if (!isCurrent()) return null;
+      const errStr = String(e);
+      setWsLog({ success: false, action: opts.action, stdout: "", stderr: errStr.slice(0, 500), exit_code: null });
+      setWsLogCompletedAt(Date.now());
+      return null;
+    } finally {
+      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
+      if (remaining > 0) await wait(remaining);
+      if (isCurrent()) setWsRunning(null);
+      workspaceActionLockRef.current = false;
+    }
+  }
 
   const runWsInstall = useCallback(async (dry: boolean) => {
     if (installScope === "project" && installTarget.trim() === "") return;
@@ -139,6 +176,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     activityCellClass,
     runWsAction,
     runWsInstall,
+    runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
   };

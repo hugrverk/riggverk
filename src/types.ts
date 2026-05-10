@@ -282,3 +282,10 @@ export interface DesignMdInstallStatus {
   size: number | null;
   warnings: string[];
 }
+
+export interface DesignMdPreviewContent {
+  slug: string;
+  variant: string;
+  path: string;
+  html: string;
+}
