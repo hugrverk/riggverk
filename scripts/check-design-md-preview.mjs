@@ -24,6 +24,7 @@ execFileSync(
     "src/lib/designMdPreviewParser.ts",
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
+    "src/lib/designMdDisplay.ts",
   ],
   { cwd: repo, stdio: "pipe" },
 );
@@ -39,6 +40,7 @@ for (const file of ["designMdSpecimenBuilder.js", "designMdHtmlGenerator.js"]) {
 const { parseDesignMdForPreview } = await import(path.join(outDir, "designMdPreviewParser.js"));
 const { buildBoard } = await import(path.join(outDir, "designMdSpecimenBuilder.js"));
 const { generateBoardHtml } = await import(path.join(outDir, "designMdHtmlGenerator.js"));
+const { designMdDisplayTitle, designMdSearchText } = await import(path.join(outDir, "designMdDisplay.js"));
 
 const fixture = `---
 colors:
@@ -78,7 +80,7 @@ assert.deepEqual(model.components.map((component) => component.name), [
   "property-card",
   "markets-table-card",
 ]);
-assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "card");
+assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "table");
 
 const clickhouse = parseDesignMdForPreview(
   "clickhouse",
@@ -89,7 +91,8 @@ const clickhouse = parseDesignMdForPreview(
 assert.equal(clickhouse.archetype, "data_product");
 
 const board = buildBoard("airbnb", "Airbnb", "Marketplace", fixture);
-const html = generateBoardHtml(board);
+const html = generateBoardHtml(board, { variant: "light" });
+const darkHtml = generateBoardHtml(board, { variant: "dark" });
 
 assert.match(html, /Content-Security-Policy/);
 assert.doesNotMatch(html, /<script/i);
@@ -97,5 +100,32 @@ assert.doesNotMatch(html, /Features|Docs|Pricing|Feature One|Feature Two|Feature
 assert.match(html, /search-bar-pill/);
 assert.match(html, /property-card/);
 assert.match(html, /markets-table-card/);
+assert.match(darkHtml, /Content-Security-Policy/);
+assert.doesNotMatch(darkHtml, /<script/i);
+assert.match(darkHtml, /#0b0e11|#1f2329|surface-card-dark/);
+assert.match(darkHtml, /markets-table-card/);
+
+assert.equal(designMdDisplayTitle("slack"), "Slack");
+assert.equal(designMdDisplayTitle("shopify"), "Shopify");
+assert.equal(designMdDisplayTitle("runwayml"), "RunwayML");
+assert.equal(designMdDisplayTitle("cal"), "Cal.com");
+assert.match(
+  designMdSearchText({
+    slug: "slack",
+    title: "Slacc Inspired Design System",
+    description: "Aubergine collaboration surface",
+  }),
+  /slacc inspired/,
+);
+
+const markdownOnly = parseDesignMdForPreview(
+  "spotify",
+  "Spotify",
+  "Dark immersive music player with album cards and playback controls.",
+  "# Design System Inspired by Spotify\n\nAlbum art, playlist cards, search input, now-playing bar, and dark player surfaces.",
+);
+assert.equal(markdownOnly.archetype, "editorial");
+assert(markdownOnly.components.some((component) => component.name.startsWith("playlist-card")));
+assert(markdownOnly.components.some((component) => component.name === "now-playing-bar"));
 
 console.log("design-md preview checks passed");

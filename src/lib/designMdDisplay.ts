@@ -1,9 +1,22 @@
 const TITLE_CASE_OVERRIDES: Record<string, string> = {
+  "anthropic": "Anthropic",
   "bmw": "BMW",
   "bmw-m": "BMW M",
+  "cal": "Cal.com",
+  "cal.com": "Cal.com",
   "clickhouse": "ClickHouse",
-  "x.ai": "X.ai",
+  "coinbase": "Coinbase",
+  "openai": "OpenAI",
+  "runwayml": "RunwayML",
+  "sentry": "Sentry",
+  "shopify": "Shopify",
+  "slack": "Slack",
   "spacex": "SpaceX",
+  "stripe": "Stripe",
+  "supabase": "Supabase",
+  "together.ai": "Together.ai",
+  "vercel": "Vercel",
+  "x.ai": "X.ai",
 };
 
 function titleCaseSegment(segment: string): string {

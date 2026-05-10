@@ -12,6 +12,8 @@ export type DesignMdArchetype =
 export type DesignMdComponentKind =
   | "button"
   | "card"
+  | "pricing-card"
+  | "stat-card"
   | "tile"
   | "product-tile"
   | "search"
@@ -25,6 +27,7 @@ export type DesignMdComponentKind =
   | "badge"
   | "stat"
   | "table"
+  | "chart"
   | "hero"
   | "gradient"
   | "mockup"
@@ -357,6 +360,8 @@ function keywordMatches(text: string): string[] {
     ["card grid", /card grid|cards|grid|4-up|5-up/],
     ["developer", /docs|developer|code|api|terminal|command|cli/],
     ["data", /data product|chart|analytics|metrics|database|query/],
+    ["commerce", /commerce|retail|product card|campaign|pricing|sale/],
+    ["music", /music|playlist|album|player|listening|podcast/],
   ] as const;
   return keywords.filter(([, re]) => re.test(t)).map(([keyword]) => keyword);
 }
@@ -403,12 +408,10 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
   for (const name of PALETTE_GROUPS) groups.set(name, []);
 
   const seen = new Set<string>();
-  const matches = body.matchAll(/(?:\*\*([^*\n]+)\*\*|`([^`\n]+)`|--([a-z0-9-]+))?[^#\n]{0,80}(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/g);
-  for (const match of matches) {
-    const value = match[4];
-    if (!isSafeColorValue(value) || seen.has(value.toLowerCase())) continue;
+  const addToken = (labelText: string, value: string) => {
+    if (!isSafeColorValue(value) || seen.has(value.toLowerCase())) return;
     seen.add(value.toLowerCase());
-    const label = cleanPhrase(match[1] || match[2] || match[3] || `color-${seen.size}`)
+    const label = cleanPhrase(labelText || `color-${seen.size}`)
       .toLowerCase()
       .replace(/[^a-z0-9]+/g, "-")
       .replace(/^-|-$/g, "")
@@ -420,6 +423,23 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       group: paletteGroupFor(label),
     };
     groups.get(token.group)!.push(token);
+  };
+
+  for (const line of body.split("\n")) {
+    const value = line.match(/(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/)?.[1];
+    if (!value) continue;
+    const label = line.match(/\*\*([^*\n]+)\*\*/)?.[1]
+      ?? line.match(/--([a-z0-9-]+)/i)?.[1]
+      ?? line.match(/^\s*[-*]\s*([^(:`]+?)\s*(?:\(|`|:)/)?.[1]
+      ?? "";
+    addToken(label, value);
+    if (seen.size >= 28) break;
+  }
+
+  const matches = body.matchAll(/(?:\*\*([^*\n]+)\*\*|`([^`\n]+)`|--([a-z0-9-]+))?[^#\n]{0,80}(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/g);
+  for (const match of matches) {
+    const value = match[4];
+    addToken(match[1] || match[2] || match[3] || `color-${seen.size + 1}`, value);
     if (seen.size >= 28) break;
   }
 
@@ -460,9 +480,12 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
 function componentKind(name: string): DesignMdComponentKind {
   const n = name.toLowerCase();
   if (/gradient|mesh/.test(n)) return "gradient";
-  if (/mockup|code-window|code block|terminal|console/.test(n)) return "mockup";
+  if (/mockup|code-window|code block|code-block|terminal|console/.test(n)) return "mockup";
   if (/hero|band/.test(n)) return "hero";
+  if (/chart|graph|sparkline|bar/.test(n)) return "chart";
   if (/table|row|cell/.test(n)) return "table";
+  if (/pricing/.test(n)) return "pricing-card";
+  if (/stat|metric|balance|price/.test(n)) return "stat-card";
   if (/stat|metric|balance|price/.test(n)) return "stat";
   if (/product.*tile|tile.*product/.test(n)) return "product-tile";
   if (/search/.test(n)) return "search";
@@ -510,10 +533,15 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
   const names = new Set<string>();
   const patterns = [
     /\b(search(?:\s+bar|\s+input)?)\b/ig,
-    /\b((?:pricing|feature|stat|product|market|model|code|terminal|hero|photo|workflow|dashboard|property|listing)\s+(?:card|tile|panel|table|row|band|mockup|block))\b/ig,
+    /\b((?:pricing|feature|stat|metric|product|market|model|code|terminal|hero|photo|workflow|dashboard|property|listing|album|playlist|campaign|trust|logo|pipeline)\s+(?:card|cards|tile|tiles|panel|panels|table|tables|row|rows|band|bands|mockup|mockups|block|blocks|grid|bar))\b/ig,
     /\b((?:pill|status|workflow|guest-favorite)\s+badge)\b/ig,
     /\b((?:top|sub|global)\s+nav)\b/ig,
     /\b((?:primary|secondary|outline|pill)\s+button)\b/ig,
+    /\b((?:market|metrics?|asset|track|playlist)\s+table)\b/ig,
+    /\b((?:bar|line|price|usage|analytics?)\s+chart)\b/ig,
+    /\b((?:code|terminal|console)\s+(?:block|window|panel))\b/ig,
+    /\b((?:workflow|deployment)\s+pipeline)\b/ig,
+    /\b((?:now-playing|playback|player)\s+bar)\b/ig,
   ];
   for (const re of patterns) {
     for (const match of body.matchAll(re)) {
@@ -544,7 +572,7 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
     luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /inventory-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/]),
     data_product: score([/data product/, /data/, /table/, /chart/, /analytics/, /database/, /query/, /metrics/, /stat-card/, /clickhouse|cohere/]),
     collaboration_saas: score([/messaging/, /workplace/, /collaboration/, /aubergine/, /pastel-mesh/, /slack|slacc/]),
-    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/]),
+    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/, /campaign/, /commerce/, /retail/, /music/, /playlist/, /album/, /player/, /spotify|nike|shopify/]),
     generic_system: 0,
   };
 
@@ -562,6 +590,9 @@ function inferArchetype(slug: string, phrases: string[], keywords: string[], com
   }
   if (/(bmw|bugatti|ferrari|lamborghini|tesla)/.test(text) && scores.luxury_automotive > 0) {
     scores.luxury_automotive += 3;
+  }
+  if (/(spotify|nike|shopify|pinterest|starbucks)/.test(text) && scores.editorial > 0) {
+    scores.editorial += 3;
   }
 
   const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];

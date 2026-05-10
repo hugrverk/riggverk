@@ -6,9 +6,10 @@ import { designMdDisplayTitle } from "../../lib/designMdDisplay";
 
 interface Props {
   activeContent: DesignMdContent;
+  variant: "light" | "dark";
 }
 
-export function DesignMdGeneratedPreview({ activeContent }: Props) {
+export function DesignMdGeneratedPreview({ activeContent, variant }: Props) {
   const srcDoc = useMemo(() => {
     const board = buildBoard(
       activeContent.slug,
@@ -16,8 +17,8 @@ export function DesignMdGeneratedPreview({ activeContent }: Props) {
       activeContent.description,
       activeContent.content,
     );
-    return generateBoardHtml(board);
-  }, [activeContent]);
+    return generateBoardHtml(board, { variant });
+  }, [activeContent, variant]);
 
   return (
     <div className="design-md-specimen-frame-wrap">
@@ -25,7 +26,7 @@ export function DesignMdGeneratedPreview({ activeContent }: Props) {
         className="design-md-specimen-frame"
         srcDoc={srcDoc}
         sandbox=""
-        title={`Design system board: ${designMdDisplayTitle(activeContent.slug)}`}
+        title={`Design system board: ${designMdDisplayTitle(activeContent.slug)} (${variant})`}
       />
     </div>
   );

@@ -5,7 +5,7 @@ import { Markdown } from "../../components/Markdown";
 import { DesignMdGeneratedPreview } from "./DesignMdGeneratedPreview";
 import { designMdDisplayTitle, designMdHasInspiredTitle } from "../../lib/designMdDisplay";
 
-type PreviewMode = "preview" | "markdown" | "html" | "html-dark";
+type PreviewMode = "generated-light" | "generated-dark" | "markdown" | "html" | "html-dark";
 
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`;
 
@@ -32,21 +32,21 @@ interface DesignMdContentProps {
 
 export function DesignMdContent(props: DesignMdContentProps) {
   const { activeContent } = props;
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("preview");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("generated-light");
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // When design entry changes, clear stale html state and reset if mode unavailable
+  // When design entry changes, clear stale upstream HTML state and reset only unavailable optional modes.
   useEffect(() => {
     setPreviewHtml(null);
     setPreviewError(null);
     setPreviewLoading(false);
     if (activeContent) {
       if (previewMode === "html" && !activeContent.has_preview) {
-        setPreviewMode("preview");
+        setPreviewMode("generated-light");
       } else if (previewMode === "html-dark" && !activeContent.has_preview_dark) {
-        setPreviewMode("preview");
+        setPreviewMode("generated-light");
       }
     }
   }, [activeContent?.slug]);
@@ -100,12 +100,20 @@ export function DesignMdContent(props: DesignMdContentProps) {
 
       <div className="design-md-preview-tabs" role="tablist" aria-label="Design MD preview mode">
         <button
-          className={`btn btn-sm ${previewMode === "preview" ? "btn-active" : ""}`}
-          onClick={() => handleModeChange("preview")}
+          className={`btn btn-sm ${previewMode === "generated-light" ? "btn-active" : ""}`}
+          onClick={() => handleModeChange("generated-light")}
           role="tab"
-          aria-selected={previewMode === "preview"}
+          aria-selected={previewMode === "generated-light"}
         >
           preview
+        </button>
+        <button
+          className={`btn btn-sm ${previewMode === "generated-dark" ? "btn-active" : ""}`}
+          onClick={() => handleModeChange("generated-dark")}
+          role="tab"
+          aria-selected={previewMode === "generated-dark"}
+        >
+          dark
         </button>
         <button
           className={`btn btn-sm ${previewMode === "markdown" ? "btn-active" : ""}`}
@@ -138,8 +146,12 @@ export function DesignMdContent(props: DesignMdContentProps) {
       </div>
 
       <div className="lib-editor-body">
-        {previewMode === "preview" && (
-          <DesignMdGeneratedPreview key={currentHash} activeContent={activeContent} />
+        {previewMode === "generated-light" && (
+          <DesignMdGeneratedPreview key={`${currentHash}-light`} activeContent={activeContent} variant="light" />
+        )}
+
+        {previewMode === "generated-dark" && (
+          <DesignMdGeneratedPreview key={`${currentHash}-dark`} activeContent={activeContent} variant="dark" />
         )}
 
         {previewMode === "markdown" && (
