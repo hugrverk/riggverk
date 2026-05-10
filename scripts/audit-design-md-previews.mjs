@@ -58,6 +58,50 @@ const prioritySlugs = new Set([
   "lamborghini", "lovable", "mastercard",
 ]);
 
+const forbiddenPrimaryLabels = [
+  "Homes",
+  "Experiences",
+  "Services",
+  "Store",
+  "Mac",
+  "iPhone",
+  "Buy Crypto",
+  "Markets",
+  "Deposit",
+  "Sell",
+  "Convert",
+  "Explore models",
+  "Read docs",
+  "Sign Up",
+  "Total Balance",
+  "$42,918.80",
+  "BTC",
+  "ETH",
+  "BNB",
+  "Guest favorite",
+  "Add dates",
+  "Add guests",
+  "2 nights",
+  "npm install design-system",
+  "local preview ready",
+  "Feature One",
+  "Feature Two",
+  "Feature Three",
+];
+
+function escapeRegExp(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function forbiddenHits(html, content) {
+  const source = content.toLowerCase();
+  return forbiddenPrimaryLabels.filter((label) => {
+    const labelLower = label.toLowerCase();
+    if (source.includes(labelLower)) return false;
+    return new RegExp(`(^|[^a-z0-9])${escapeRegExp(labelLower)}([^a-z0-9]|$)`, "i").test(html);
+  });
+}
+
 function auditEntry(slug, dirPath) {
   const mdPath = path.join(dirPath, "DESIGN.md");
   if (!fs.existsSync(mdPath)) return null;
@@ -72,6 +116,14 @@ function auditEntry(slug, dirPath) {
   } catch (e) {
     return { slug, title, error: String(e) };
   }
+
+  const board = buildBoard(slug, title, description, content);
+  const lightHtml = generateBoardHtml(board, { variant: "light" });
+  const darkHtml = generateBoardHtml(board, { variant: "dark" });
+  const fakeLabelHits = Array.from(new Set([
+    ...forbiddenHits(lightHtml, content),
+    ...forbiddenHits(darkHtml, content),
+  ]));
 
   return {
     slug,
@@ -105,7 +157,8 @@ function auditEntry(slug, dirPath) {
       evidence: component.sourceEvidence ?? null,
     })),
     sourceDerivedScore: sourceDerivedScore(model),
-    inventedContentRiskScore: inventedContentRiskScore(model),
+    inventedContentRiskScore: inventedContentRiskScore(model, fakeLabelHits),
+    fakeLabelHits,
   };
 }
 
@@ -130,15 +183,13 @@ function sourceDerivedScore(model) {
   return Math.round((total / objects.length) * 100);
 }
 
-function inventedContentRiskScore(model) {
+function inventedContentRiskScore(model, fakeLabelHits = []) {
   let risk = 0;
-  if (model.components.length === 0) risk += 35;
-  if (model.components.every((component) => component.source !== "structured")) risk += 15;
-  if (model.palette.flatMap((group) => group.tokens).every((token) => token.source !== "structured")) risk += 10;
-  if (model.typography.length === 0) risk += 15;
-  if (model.coverage.darkTokenCount === 0) risk += 10;
-  if (model.archetype === "generic_system") risk += 15;
-  if (model.visualLanguage.phrases.length < 2) risk += 10;
+  if (fakeLabelHits.length > 0) risk += 80;
+  if (model.components.length === 0) risk += 20;
+  if (model.typography.length === 0) risk += 10;
+  if (model.archetype === "generic_system") risk += 10;
+  if (model.visualLanguage.phrases.length < 2 && model.components.length === 0) risk += 10;
   return Math.min(100, risk);
 }
 
@@ -173,7 +224,7 @@ function failureFlags(r) {
   if (r.componentCount > 24) flags.push("likely overflow risk");
   if (r.visualLanguagePhrases > 8 && r.componentCount < 3) flags.push("too text-heavy");
   if (r.lightConfidence === "low" || r.archetype === "generic_system") flags.push("too generic");
-  if (r.inventedContentRiskScore >= 35) flags.push("renderer may invent unsupported content");
+  if (r.fakeLabelHits?.length > 0) flags.push("renderer may invent unsupported content");
   return flags;
 }
 
@@ -197,6 +248,7 @@ for (const r of results) {
   console.log(`  Dark tokens: ${r.darkTokenCount} | Dark components: ${r.darkComponentCount}`);
   console.log(`  Light confidence: ${r.lightConfidence} | Dark confidence: ${r.darkConfidence}`);
   console.log(`  Source-derived score: ${r.sourceDerivedScore} | Invented-content risk: ${r.inventedContentRiskScore}`);
+  console.log(`  Forbidden generated labels: ${r.fakeLabelHits.join(", ") || "none"}`);
   console.log(`  Component evidence: ${r.componentEvidence.slice(0, 6).map((c) => `${c.name}:${c.evidence?.sourceType ?? "unknown"}/${c.evidence?.confidence ?? "unknown"}`).join(", ") || "none"}`);
   console.log(`  Failure flags: ${r.failureFlags.join(", ") || "none"}`);
   console.log(`  MD sections: ${r.markdownSections.join(", ")}`);
@@ -264,11 +316,16 @@ for (const slug of testEntries) {
   const board = buildBoard(slug, title, "", content);
   const lightHtml = generateBoardHtml(board, { variant: "light" });
   const darkHtml = generateBoardHtml(board, { variant: "dark" });
+  const fakeLabelHits = Array.from(new Set([
+    ...forbiddenHits(lightHtml, content),
+    ...forbiddenHits(darkHtml, content),
+  ]));
 
   const checks = {
     hasCSP: lightHtml.includes("Content-Security-Policy"),
     noScript: !/<script/i.test(lightHtml),
     noExternalFonts: !/@font-face|@import|url\(https?:/i.test(lightHtml),
+    noForbiddenLabels: fakeLabelHits.length === 0,
     hasCanvas: lightHtml.includes("background"),
     darkHasCSP: darkHtml.includes("Content-Security-Policy"),
     darkNoScript: !/<script/i.test(darkHtml),
@@ -280,7 +337,7 @@ for (const slug of testEntries) {
   };
 
   const allPass = Object.values(checks).every(Boolean);
-  console.log(`${allPass ? "✅" : "❌"} ${slug.padEnd(16)} CSP=${checks.hasCSP} NoScript=${checks.noScript} NoExtFonts=${checks.noExternalFonts} DarkCSP=${checks.darkHasCSP} DarkNoScript=${checks.darkNoScript} DarkDiffBg=${checks.darkDifferentBg}`);
+  console.log(`${allPass ? "OK" : "FAIL"} ${slug.padEnd(16)} CSP=${checks.hasCSP} NoScript=${checks.noScript} NoExtFonts=${checks.noExternalFonts} NoFakeLabels=${checks.noForbiddenLabels} DarkCSP=${checks.darkHasCSP} DarkNoScript=${checks.darkNoScript} DarkDiffBg=${checks.darkDifferentBg}${fakeLabelHits.length ? ` Fake=${fakeLabelHits.join(",")}` : ""}`);
 }
 
 console.log("\nAudit complete.");
