@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { DesignMdContent } from "../../types";
-import { buildSpecimen } from "../../lib/designMdSpecimenBuilder";
-import { generateSpecimenHtml } from "../../lib/designMdHtmlGenerator";
+import { buildBoard } from "../../lib/designMdSpecimenBuilder";
+import { generateBoardHtml } from "../../lib/designMdHtmlGenerator";
 
 interface Props {
   activeContent: DesignMdContent;
@@ -9,13 +9,13 @@ interface Props {
 
 export function DesignMdGeneratedPreview({ activeContent }: Props) {
   const srcDoc = useMemo(() => {
-    const spec = buildSpecimen(
+    const board = buildBoard(
       activeContent.slug,
       activeContent.title,
       activeContent.description,
       activeContent.content,
     );
-    return generateSpecimenHtml(spec);
+    return generateBoardHtml(board);
   }, [activeContent]);
 
   return (
@@ -24,7 +24,7 @@ export function DesignMdGeneratedPreview({ activeContent }: Props) {
         className="design-md-specimen-frame"
         srcDoc={srcDoc}
         sandbox=""
-        title={`Design MD specimen: ${activeContent.title}`}
+        title={`Design system board: ${activeContent.title}`}
       />
       <div className="design-md-specimen-note">
         Generated from DESIGN.md
