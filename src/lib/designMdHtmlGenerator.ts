@@ -170,6 +170,11 @@ function tokenKeyMatches(key: string, match: string): boolean {
   if (keyTheme && !targetTheme && targetIsBaseSurface) return false;
   if (keyTheme && targetTheme && keyTheme !== targetTheme) return false;
   if (compact === compactTarget || normalized === target) return true;
+  // When the target is a single theme indicator (dark/light/black/white/etc.),
+  // only match if the token's first part is that theme — prevents text tokens
+  // like "on-dark" or "text-light" from matching as canvas/surface colors.
+  const singleThemeTarget = targetParts.length === 1 && targetTheme !== null;
+  if (singleThemeTarget) return keyParts[0] === compactTarget;
   return keyParts.includes(compactTarget);
 }
 
