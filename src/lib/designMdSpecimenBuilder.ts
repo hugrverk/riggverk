@@ -1,12 +1,19 @@
-import { parseFlatFrontmatter, parseDesignMdForPreview } from "./designMdPreviewParser";
+import {
+  isSafeColorValue,
+  parseFlatFrontmatter,
+  parseDesignMdForPreview,
+  resolveTokenRef,
+  type DesignMdArchetype,
+  type DesignMdComponentKind,
+  type DesignMdPaletteGroup,
+  type DesignMdToken,
+  type DesignMdTypographyToken,
+  type DesignMdVisualLanguage,
+} from "./designMdPreviewParser";
 // ── sanitization ──
 
 function isSafeColor(val: string): string | null {
-  const t = val.trim();
-  if (/^#[0-9a-fA-F]{3,8}$/.test(t)) return t;
-  if (/^rgba?\s*\([^)]+\)$/.test(t)) return t;
-  if (/^hsl/.test(t)) return t;
-  return null;
+  return isSafeColorValue(val) ? val.trim() : null;
 }
 
 function isUnsafe(val: string): boolean {
@@ -35,16 +42,7 @@ function pickColor(map: Map<string, string>, keys: string[]): string | undefined
 }
 
 function resolveRef(value: string, map: Map<string, string>): string {
-  let result = value;
-  let prev = "";
-  for (let i = 0; i < 3 && prev !== result; i++) {
-    prev = result;
-    result = result.replace(/\{([^}]+)\}/g, (_, k: string) => {
-      const r = map.get(k.trim());
-      return r ?? `{${k}}`;
-    });
-  }
-  return result;
+  return resolveTokenRef(value, map);
 }
 
 // ── specimen model ──
@@ -430,12 +428,13 @@ export interface DesignMdBoardTypoToken {
 
 export interface DesignMdBoardComponentGroup {
   name: string;
-  kind: "button" | "card" | "tile" | "input" | "chip" | "nav" | "link" | "quote" | "footer" | "surface" | "generic";
+  kind: DesignMdComponentKind;
   backgroundColor?: string;
   textColor?: string;
   borderColor?: string;
   rounded?: string;
   padding?: string;
+  styles: Record<string, string>;
   raw: Record<string, string>;
 }
 
@@ -444,47 +443,15 @@ export interface DesignMdBoard {
   title: string;
   description: string;
   colorGroups: DesignMdBoardColorGroup[];
+  palette: DesignMdPaletteGroup[];
   typographyTokens: DesignMdBoardTypoToken[];
   radiusTokens: DesignMdBoardToken[];
   spacingTokens: DesignMdBoardToken[];
   componentGroups: DesignMdBoardComponentGroup[];
+  visualLanguage: DesignMdVisualLanguage;
+  archetype: DesignMdArchetype;
   overview: string | null;
   layout: string | null;
-}
-
-function groupTokens(fm: Map<string, string>, prefix: string): DesignMdBoardToken[] {
-  const tokens: DesignMdBoardToken[] = [];
-  const dot = prefix + ".";
-  for (const [key, value] of fm) {
-    if (key.startsWith(dot)) {
-      const resolved = resolveRef(value, fm);
-      tokens.push({ key: key.slice(dot.length), rawValue: value, resolvedValue: resolved });
-    }
-  }
-  return tokens;
-}
-
-function getFirstValue(fm: Map<string, string>, keys: string[]): string | undefined {
-  for (const k of keys) {
-    const v = fm.get(k);
-    if (v && v.trim()) return resolveRef(v.trim(), fm);
-  }
-  return undefined;
-}
-
-function inferComponentKind(name: string): DesignMdBoardComponentGroup["kind"] {
-  const n = name.toLowerCase();
-  if (n.includes("button") || n.includes("cta")) return "button";
-  if (n.includes("card")) return "card";
-  if (n.includes("tile")) return "tile";
-  if (n.includes("input") || n.includes("field") || n.includes("search")) return "input";
-  if (n.includes("chip") || n.includes("badge") || n.includes("tag") || n.includes("pill")) return "chip";
-  if (n.includes("nav") || n.includes("header")) return "nav";
-  if (n.includes("link")) return "link";
-  if (n.includes("quote")) return "quote";
-  if (n.includes("footer")) return "footer";
-  if (n.includes("surface") || n.includes("sheet")) return "surface";
-  return "generic";
 }
 
 export function buildBoard(
@@ -493,71 +460,30 @@ export function buildBoard(
   description: string,
   content: string,
 ): DesignMdBoard {
-  const fm = parseFlatFrontmatter(content);
   const model = parseDesignMdForPreview(slug, title, description, content);
 
-  const colorTokens = groupTokens(fm, "colors");
-  // Group colors with smart sub-grouping
-  const colorGroups: DesignMdBoardColorGroup[] = colorTokens.length > 0
-    ? [{ prefix: "all", tokens: colorTokens }]
-    : [];
-
-  const typographyTokens: DesignMdBoardTypoToken[] = [];
-  const typoRaw = groupTokens(fm, "typography");
-  const seenTypo = new Set<string>();
-  for (const t of typoRaw) {
-    const parts = t.key.split(".");
-    const base = parts.slice(0, -1).join(".");
-    if (seenTypo.has(base)) continue;
-    seenTypo.add(base);
-    typographyTokens.push({
-      key: base || t.key,
-      fontFamily: getFirstValue(fm, [`${"typography"}.${base}.fontFamily`, `${"typography"}.${base}.font-family`]),
-      fontSize: getFirstValue(fm, [`${"typography"}.${base}.fontSize`, `${"typography"}.${base}.font-size`]),
-      fontWeight: getFirstValue(fm, [`${"typography"}.${base}.fontWeight`, `${"typography"}.${base}.font-weight`]),
-      lineHeight: getFirstValue(fm, [`${"typography"}.${base}.lineHeight`, `${"typography"}.${base}.line-height`]),
-      letterSpacing: getFirstValue(fm, [`${"typography"}.${base}.letterSpacing`, `${"typography"}.${base}.letter-spacing`]),
-      raw: {},
-    });
-  }
-
-  const radiusTokens = groupTokens(fm, "rounded").length > 0
-    ? groupTokens(fm, "rounded")
-    : groupTokens(fm, "radius");
-  const spacingTokens = groupTokens(fm, "spacing");
-
-  // Component groups
-  const compRaw = groupTokens(fm, "components");
-  const compGroups = new Map<string, DesignMdBoardComponentGroup>();
-  for (const c of compRaw) {
-    const name = c.key.split(".")[0];
-    if (!compGroups.has(name)) {
-      compGroups.set(name, {
-        name,
-        kind: inferComponentKind(name),
-        raw: {},
-      });
-    }
-    const g = compGroups.get(name)!;
-    const prop = c.key.slice(name.length + 1);
-    g.raw[prop] = c.resolvedValue;
-    if (prop.includes("backgroundColor") || prop.includes("background-color") || prop.includes("background")) g.backgroundColor = c.resolvedValue;
-    if (prop.includes("textColor") || prop.includes("text-color") || prop.includes("color")) g.textColor = c.resolvedValue;
-    if (prop.includes("borderColor") || prop.includes("border-color")) g.borderColor = c.resolvedValue;
-    if (prop.includes("rounded") || prop.includes("borderRadius") || prop.includes("border-radius")) g.rounded = c.resolvedValue;
-    if (prop.includes("padding")) g.padding = c.resolvedValue;
-  }
-  const componentGroups = Array.from(compGroups.values());
-
   return {
-    slug,
-    title,
-    description,
-    colorGroups,
-    typographyTokens,
-    radiusTokens,
-    spacingTokens,
-    componentGroups,
+    slug: model.meta.slug,
+    title: model.meta.title,
+    description: model.meta.description,
+    colorGroups: model.palette.map((group) => ({ prefix: group.name, tokens: group.tokens })),
+    palette: model.palette,
+    typographyTokens: model.typography as DesignMdTypographyToken[],
+    radiusTokens: model.radius as DesignMdToken[],
+    spacingTokens: model.spacing as DesignMdToken[],
+    componentGroups: model.components.map((component) => ({
+      name: component.name,
+      kind: component.kind,
+      backgroundColor: component.styles.backgroundColor ?? component.styles.background ?? component.styles["background-color"],
+      textColor: component.styles.textColor ?? component.styles.color ?? component.styles["text-color"],
+      borderColor: component.styles.borderColor ?? component.styles["border-color"],
+      rounded: component.styles.rounded ?? component.styles.borderRadius ?? component.styles["border-radius"],
+      padding: component.styles.padding,
+      styles: component.styles,
+      raw: component.raw,
+    })),
+    visualLanguage: model.visualLanguage,
+    archetype: model.archetype,
     overview: model.overviewText,
     layout: model.layoutText,
   };

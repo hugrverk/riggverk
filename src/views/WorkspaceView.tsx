@@ -977,7 +977,7 @@ export function WorkspaceView({
                     </span>
                     <button className="btn btn-sm" onClick={onChooseDesignMdInstallTarget} aria-label="Choose project folder">choose</button>
                     {designMdInstallTarget && (
-                      <button className="btn btn-sm" onClick={onOpenDesignMdTargetFolder} title="Open project folder" aria-label="Open project folder">open</button>
+                      <button className="btn btn-sm" onClick={onOpenDesignMdTargetFolder} disabled={wsRunning !== null} title="Open project folder" aria-label="Open project folder">open</button>
                     )}
                   </div>
 
@@ -1001,14 +1001,14 @@ export function WorkspaceView({
                     <button className="btn btn-sm" onClick={onSyncDesignMdCatalog} disabled={wsRunning !== null} title="Re-sync catalog">
                       sync
                     </button>
-                    <button className="btn btn-sm" onClick={onPlanDesignMdInstall} disabled={!activeDesignMdSlug || !designMdInstallTarget}>
+                    <button className="btn btn-sm" onClick={onPlanDesignMdInstall} disabled={!activeDesignMdSlug || !designMdInstallTarget || wsRunning !== null}>
                       dry run
                     </button>
                     <button className="btn btn-sm btn-primary" onClick={onInstallDesignMd} disabled={!(designMdInstallPlan?.ok) || wsRunning !== null}>
                       {wsRunning === "install design.md" ? "installing..." : "install"}
                     </button>
                     {designMdInstallStatus?.exists && (
-                      <button className="btn btn-sm" onClick={onOpenInstalledDesignMd} title="Open installed DESIGN.md" aria-label="Open installed DESIGN.md">
+                      <button className="btn btn-sm" onClick={onOpenInstalledDesignMd} disabled={wsRunning !== null} title="Open installed DESIGN.md" aria-label="Open installed DESIGN.md">
                         open
                       </button>
                     )}

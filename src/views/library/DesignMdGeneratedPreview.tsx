@@ -26,9 +26,6 @@ export function DesignMdGeneratedPreview({ activeContent }: Props) {
         sandbox=""
         title={`Design system board: ${activeContent.title}`}
       />
-      <div className="design-md-specimen-note">
-        Generated from DESIGN.md
-      </div>
     </div>
   );
 }

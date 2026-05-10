@@ -4086,6 +4086,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .lib-preview-body {
@@ -4995,6 +4996,14 @@ html, body, #root {
   opacity: 0.5;
 }
 
+.design-md-content-panel {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
 /* ── Design MD Workspace section ── */
 
 .design-md-ws-row {
@@ -5228,6 +5237,7 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
 }
 
 .design-md-preview-frame {
@@ -5235,7 +5245,7 @@ html, body, #root {
   width: 100%;
   border: none;
   background: #ffffff;
-  min-height: 0;
+  min-height: 100%;
 }
 
 .design-md-preview-loading {
@@ -5276,21 +5286,14 @@ html, body, #root {
   display: flex;
   flex-direction: column;
   min-height: 0;
+  overflow: hidden;
+  background: #ffffff;
 }
 
 .design-md-specimen-frame {
   flex: 1;
   width: 100%;
   border: none;
-  min-height: 0;
-}
-
-.design-md-specimen-note {
-  flex-shrink: 0;
-  padding: 4px 14px;
-  font-size: 9px;
-  color: var(--text-muted);
-  opacity: 0.35;
-  text-align: right;
-  border-top: 1px solid var(--border);
+  min-height: 100%;
+  background: #ffffff;
 }

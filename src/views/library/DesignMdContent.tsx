@@ -84,7 +84,7 @@ export function DesignMdContent(props: DesignMdContentProps) {
   const currentHash = activeContent.slug + activeContent.title;
 
   return (
-    <>
+    <div className="design-md-content-panel">
       <div className="lib-editor-meta-strip">
         <div className="lib-editor-meta-left">
           <span className="lib-editor-meta-title">{activeContent.title}</span>
@@ -174,6 +174,6 @@ export function DesignMdContent(props: DesignMdContentProps) {
       <div className="design-md-lib-hint">
         Install from Workspace
       </div>
-    </>
+    </div>
   );
 }

@@ -1,25 +1,87 @@
-export interface DesignMdColorToken {
+export type DesignMdArchetype =
+  | "product_gallery"
+  | "marketplace"
+  | "finance_dashboard"
+  | "editorial"
+  | "developer_docs"
+  | "luxury_automotive"
+  | "data_product"
+  | "generic_system";
+
+export type DesignMdComponentKind =
+  | "button"
+  | "card"
+  | "tile"
+  | "product-tile"
+  | "search"
+  | "input"
+  | "chip"
+  | "nav"
+  | "subnav"
+  | "link"
+  | "quote"
+  | "footer"
+  | "utility"
+  | "generic";
+
+export interface DesignMdToken {
   key: string;
-  value: string;
+  rawValue: string;
+  resolvedValue: string;
+}
+
+export interface DesignMdColorToken extends DesignMdToken {
+  group: DesignMdPaletteGroupName;
 }
 
 export interface DesignMdTypographyToken {
   key: string;
-  value: string;
+  fontFamily?: string;
+  fontSize?: string;
+  fontWeight?: string;
+  lineHeight?: string;
+  letterSpacing?: string;
+  raw: Record<string, string>;
 }
 
-export interface DesignMdComponentToken {
-  key: string;
-  value: string;
+export interface DesignMdComponentGroup {
+  name: string;
+  kind: DesignMdComponentKind;
+  raw: Record<string, string>;
+  styles: Record<string, string>;
+}
+
+export type DesignMdPaletteGroupName =
+  | "brand/accent"
+  | "canvas/surface"
+  | "text/ink"
+  | "muted"
+  | "borders/hairlines"
+  | "semantic/status";
+
+export interface DesignMdPaletteGroup {
+  name: DesignMdPaletteGroupName;
+  tokens: DesignMdColorToken[];
+}
+
+export interface DesignMdVisualLanguage {
+  phrases: string[];
+  keywords: string[];
 }
 
 export interface DesignMdPreviewModel {
-  slug: string;
-  title: string;
-  description: string;
-  colors: DesignMdColorToken[];
+  meta: {
+    slug: string;
+    title: string;
+    description: string;
+  };
+  palette: DesignMdPaletteGroup[];
   typography: DesignMdTypographyToken[];
-  components: DesignMdComponentToken[];
+  radius: DesignMdToken[];
+  spacing: DesignMdToken[];
+  components: DesignMdComponentGroup[];
+  visualLanguage: DesignMdVisualLanguage;
+  archetype: DesignMdArchetype;
   overviewText: string | null;
   layoutText: string | null;
   guardrailDos: string[];
@@ -29,7 +91,26 @@ export interface DesignMdPreviewModel {
 type YValue = string | YMap;
 type YMap = Map<string, YValue>;
 
-// ── nested YAML parser ──
+const PALETTE_GROUPS: DesignMdPaletteGroupName[] = [
+  "brand/accent",
+  "canvas/surface",
+  "text/ink",
+  "muted",
+  "borders/hairlines",
+  "semantic/status",
+];
+
+const SECTION_HEADINGS = [
+  "Overview",
+  "Key Characteristics",
+  "Layout",
+  "Components",
+  "Shapes",
+  "Typography",
+  "Colors",
+];
+
+const UNSAFE_VALUE_RE = /url\s*\(|expression\s*\(|var\s*\(|calc\s*\(|[;<>]|script|iframe|object|embed/i;
 
 function stripQuotes(s: string): string {
   const t = s.trim();
@@ -41,104 +122,79 @@ function stripQuotes(s: string): string {
 
 const BLOCK_INDICATORS = new Set(["|", "|-", ">", ">-"]);
 
-/**
- * Parse a simple subset of YAML frontmatter into a nested Map.
- * Handles scalars, nested objects, block scalars, quoted values.
- * No arrays, no anchors, no tags. Never throws.
- */
+function setNested(root: YMap, path: string[], key: string, value: YValue) {
+  let current = root;
+  for (const segment of path) {
+    const next = current.get(segment);
+    if (next instanceof Map) {
+      current = next;
+    } else {
+      const child: YMap = new Map();
+      current.set(segment, child);
+      current = child;
+    }
+  }
+  current.set(key, value);
+}
+
 function parseYamlBody(lines: string[]): YMap {
   const root: YMap = new Map();
-  const stack: { prefix: string[]; map: YMap }[] = [{ prefix: [], map: root }];
-  let blockKey: string | null = null;
-  let blockLines: string[] = [];
-  let blockIndent = 0;
+  const stack: { indent: number; key: string }[] = [];
+  let block: { indent: number; path: string[]; key: string; lines: string[] } | null = null;
+
+  const flushBlock = () => {
+    if (!block) return;
+    setNested(root, block.path, block.key, block.lines.join(" ").trim());
+    block = null;
+  };
 
   for (const rawLine of lines) {
     const content = rawLine.trimEnd();
-    if (content.trim().length === 0) {
-      if (blockKey !== null && blockLines.length > 0) {
-        setAt(root, stack, blockKey, blockLines.join(" "));
-      }
-      blockKey = null;
-      blockLines = [];
-      continue;
-    }
+    const indent = rawLine.length - rawLine.trimStart().length;
 
-    if (blockKey !== null) {
-      const indent = rawLine.length - rawLine.trimStart().length;
-      if (indent >= blockIndent) {
-        blockLines.push(content.trim());
+    if (block) {
+      if (content.trim().length === 0) {
+        block.lines.push("");
         continue;
       }
-      // Indent decreased — end block scalar
-      setAt(root, stack, blockKey, blockLines.join(" "));
-      blockKey = null;
-      blockLines = [];
+      if (indent >= block.indent) {
+        block.lines.push(content.trim());
+        continue;
+      }
+      flushBlock();
     }
 
-    const indent = rawLine.length - rawLine.trimStart().length;
     const trimmed = content.trim();
-    const commentIdx = trimmed.indexOf(" #");
-    const cleanLine = commentIdx !== -1 ? trimmed.slice(0, commentIdx).trimEnd() : trimmed;
-    if (cleanLine.length === 0) continue;
+    if (!trimmed || trimmed.startsWith("#")) continue;
 
+    const commentIdx = trimmed.indexOf(" #");
+    const cleanLine = commentIdx === -1 ? trimmed : trimmed.slice(0, commentIdx).trimEnd();
     const colonIdx = cleanLine.indexOf(":");
     if (colonIdx === -1) continue;
 
+    while (stack.length > 0 && indent <= stack[stack.length - 1].indent) stack.pop();
+
     const key = cleanLine.slice(0, colonIdx).trim();
     const rawVal = cleanLine.slice(colonIdx + 1).trim();
+    const path = stack.map((frame) => frame.key);
 
-    // Pop stack to correct indentation level
-    while (stack.length > 1 && indent <= stack[stack.length - 1].prefix.length * 2) {
-      stack.pop();
+    if (BLOCK_INDICATORS.has(rawVal)) {
+      block = { indent: indent + 2, path, key, lines: [] };
+      continue;
     }
 
-    if (rawVal.length === 0 || BLOCK_INDICATORS.has(rawVal)) {
-      // Nested object or block scalar
-      if (BLOCK_INDICATORS.has(rawVal)) {
-        blockKey = key;
-        blockLines = [];
-        blockIndent = indent + 2;
-      } else {
-        // Nested object — push stack and recurse on subsequent indented lines
-        const childMap: YMap = new Map();
-        setAt(root, stack, key, childMap);
-        stack.push({ prefix: [...stack[stack.length - 1].prefix, key], map: childMap });
-      }
-    } else {
-      setAt(root, stack, key, stripQuotes(rawVal));
+    if (!rawVal) {
+      setNested(root, path, key, new Map());
+      stack.push({ indent, key });
+      continue;
     }
+
+    setNested(root, path, key, stripQuotes(rawVal));
   }
 
-  if (blockKey !== null && blockLines.length > 0) {
-    setAt(root, stack, blockKey, blockLines.join(" "));
-  }
-
+  flushBlock();
   return root;
 }
-
-function setAt(root: YMap, stack: { prefix: string[]; map: YMap }[], key: string, value: YValue) {
-  let current = root;
-  // Walk the prefix path to the right nesting level
-  for (const frame of stack) {
-    if (frame === stack[0]) continue; // skip root frame
-    for (const seg of frame.prefix) {
-      const next = current.get(seg);
-      if (next instanceof Map) {
-        current = next;
-      } else {
-        const m = new Map();
-        current.set(seg, m);
-        current = m;
-      }
-    }
-  }
-  // Now at the stack top's map
-  const top = stack[stack.length - 1].map;
-  top.set(key, value);
-}
-
-// ── flatten nested YAML to dot-path map ──
 
 function flattenMap(map: YMap, prefix = ""): Map<string, string> {
   const result = new Map<string, string>();
@@ -154,76 +210,278 @@ function flattenMap(map: YMap, prefix = ""): Map<string, string> {
   return result;
 }
 
-/** Parse the YAML frontmatter from DESIGN.md into a flat dot-path key-value map. */
 function parseNestedFrontmatter(content: string): Map<string, string> {
   const trimmed = content.trimStart();
   if (!trimmed.startsWith("---")) return new Map();
 
-  const afterOpen = trimmed.slice(3).trimStart().replace(/^\n+/, "");
-  const closingIdx = afterOpen.indexOf("\n---");
-  const fmStr = closingIdx === -1 ? afterOpen : afterOpen.slice(0, closingIdx);
+  const afterOpen = trimmed.slice(3).replace(/^\s*\n/, "");
+  const closing = afterOpen.match(/\n---\s*(\n|$)/);
+  const fmStr = closing && closing.index !== undefined ? afterOpen.slice(0, closing.index) : afterOpen;
 
-  const lines = fmStr.split("\n");
-  const yaml = parseYamlBody(lines);
-  return flattenMap(yaml);
+  try {
+    return flattenMap(parseYamlBody(fmStr.split("\n")));
+  } catch {
+    return new Map();
+  }
 }
 
-// legacy alias for GeneratedPreview
 export const parseFlatFrontmatter = parseNestedFrontmatter;
 
-// ── token extraction (dot-path aware) ──
+export function isUnsafeDesignMdStyleValue(value: string): boolean {
+  return UNSAFE_VALUE_RE.test(value);
+}
 
-function extractNested(map: Map<string, string>, prefix: string): DesignMdColorToken[] {
-  const tokens: DesignMdColorToken[] = [];
-  const dot = prefix + ".";
-  for (const [key, value] of map) {
-    if (key.startsWith(dot)) {
-      tokens.push({ key: key.slice(dot.length), value });
-    }
+export function resolveTokenRef(value: string, map: Map<string, string>): string {
+  let result = value.trim();
+  let prev = "";
+  for (let i = 0; i < 4 && prev !== result; i += 1) {
+    prev = result;
+    result = result.replace(/\{([^}]+)\}/g, (_, key: string) => {
+      const resolved = map.get(key.trim());
+      return resolved ?? `{${key}}`;
+    });
   }
-  return tokens;
+  return result;
 }
 
-// ── token reference resolution ──
-
-/** Resolve {token.path} references against the flat map. Returns resolved string or original. */
-function resolveRefs(value: string, map: Map<string, string>): string {
-  return value.replace(/\{([^}]+)\}/g, (_, key: string) => {
-    const resolved = map.get(key.trim());
-    return resolved ?? `{${key}}`;
-  });
+export function isSafeColorValue(value: string | undefined): value is string {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return false;
+  const t = value.trim();
+  return /^#[0-9a-fA-F]{3,8}$/.test(t) || /^rgba?\(\s*[\d.\s,%]+\)$/.test(t) || /^hsla?\(\s*[\d.\s,%]+\)$/.test(t) || t === "transparent";
 }
 
-/** Resolve all token values' references. */
-function resolveTokens(tokens: { key: string; value: string }[], map: Map<string, string>): { key: string; value: string }[] {
-  return tokens.map(t => ({ ...t, value: resolveRefs(t.value, map) }));
+export function isSafeSizeValue(value: string | undefined): value is string {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return false;
+  return /^-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?$/.test(value.trim());
 }
 
-// ── markdown body extraction ──
+export function isSafeSpacingValue(value: string | undefined): value is string {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return false;
+  return /^-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?(\s+-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?){0,3}$/.test(value.trim());
+}
+
+export function isSafeFontFamilyValue(value: string | undefined): value is string {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return false;
+  return /^[\w\s"',.-]+$/.test(value.trim());
+}
+
+function safeTextStyleValue(value: string | undefined): string | undefined {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return undefined;
+  return value.trim();
+}
+
+function getFrontmatterBody(content: string): string {
+  const trimmed = content.trimStart();
+  if (!trimmed.startsWith("---")) return content;
+  const afterOpen = trimmed.slice(3);
+  const closing = afterOpen.match(/\n---\s*(\n|$)/);
+  if (!closing || closing.index === undefined) return "";
+  return afterOpen.slice(closing.index + closing[0].length);
+}
 
 function extractSection(body: string, heading: string): string | null {
-  const re = new RegExp(`^#{1,3}\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\s*$`, "im");
+  const re = new RegExp(`^#{1,3}\\s+${heading.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}:?\\s*$`, "im");
   const match = body.match(re);
   if (!match || match.index === undefined) return null;
   const after = body.slice(match.index + match[0].length);
   const nextHeading = after.match(/\n#{1,3}\s/);
-  const section = nextHeading ? after.slice(0, nextHeading.index).trim() : after.trim();
-  const lines = section.split("\n").filter((l) => l.trim().length > 0);
-  if (lines.length === 0) return null;
-  return lines.slice(0, 6).join(" ").trim();
+  const section = nextHeading && nextHeading.index !== undefined ? after.slice(0, nextHeading.index).trim() : after.trim();
+  const lines = section.split("\n").map((line) => line.trim()).filter(Boolean);
+  return lines.length > 0 ? lines.slice(0, 8).join(" ") : null;
 }
 
 function extractListItems(body: string, heading: string): string[] {
   const section = extractSection(body, heading);
   if (!section) return [];
   return section
-    .split("\n")
-    .filter((l) => /^[-*]\s/.test(l.trim()))
-    .map((l) => l.replace(/^[-*]\s+/, "").trim())
+    .split(/\s+-\s+/)
+    .map((line) => line.replace(/^[-*]\s+/, "").trim())
+    .filter(Boolean)
     .slice(0, 10);
 }
 
-// ── main parse entry ──
+function cleanPhrase(text: string): string {
+  return text
+    .replace(/\{([^}]+)\}/g, "$1")
+    .replace(/[`*_>#|]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractPhrases(body: string, description: string): string[] {
+  const phrases: string[] = [];
+  if (description) phrases.push(cleanPhrase(description));
+
+  for (const heading of SECTION_HEADINGS) {
+    const section = extractSection(body, heading);
+    if (!section) continue;
+    const candidates = section
+      .split(/(?<=[.!?])\s+|;\s+|\s+-\s+/)
+      .map(cleanPhrase)
+      .filter((phrase) => phrase.length > 24);
+    phrases.push(...candidates);
+  }
+
+  const seen = new Set<string>();
+  return phrases
+    .filter((phrase) => {
+      const key = phrase.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 12);
+}
+
+function keywordMatches(text: string): string[] {
+  const t = text.toLowerCase();
+  const keywords = [
+    ["photography-first", /photography|photo-first|product photography|product render/],
+    ["marketplace", /marketplace|property|listing|guest|booking|homes|experiences/],
+    ["dashboard", /dashboard|trading|finance|financial platform|markets table|balance|deposit|buy crypto/],
+    ["editorial", /editorial|magazine|publication|story|article/],
+    ["dark", /dark|near-black|black canvas|dark theme|dark mode/],
+    ["luxury", /luxury|automotive|vehicle|model|gallery|museum|premium|corporate-automotive/],
+    ["utility", /utility|configuration|configurator|workflow|tool|command/],
+    ["product tile", /product tile|product-tile|tile sections|tile/],
+    ["search", /search|search bar|search-input/],
+    ["frosted", /frosted|blur|backdrop/],
+    ["pill", /pill|capsule|rounded\.pill|rounded\.full/],
+    ["card grid", /card grid|cards|grid|4-up|5-up/],
+    ["developer", /docs|developer|code|api|terminal|command|cli/],
+    ["data", /data product|chart|analytics|metrics|database|query/],
+  ] as const;
+  return keywords.filter(([, re]) => re.test(t)).map(([keyword]) => keyword);
+}
+
+function paletteGroupFor(key: string): DesignMdPaletteGroupName {
+  const k = key.toLowerCase();
+  if (/(primary|brand|accent|blue|yellow|rausch|luxe|plus|m-red|m-blue)/.test(k)) return "brand/accent";
+  if (/(canvas|surface|background|card|tile|black|white|parchment|elevated)/.test(k)) return "canvas/surface";
+  if (/(text|ink|body|foreground|on-primary|on-dark)/.test(k)) return "text/ink";
+  if (/(muted|disabled|soft|secondary)/.test(k)) return "muted";
+  if (/(border|hairline|divider|stroke|line)/.test(k)) return "borders/hairlines";
+  if (/(success|warning|error|danger|info|trading|up|down|status)/.test(k)) return "semantic/status";
+  return "brand/accent";
+}
+
+function tokensForPrefix(fm: Map<string, string>, prefix: string): DesignMdToken[] {
+  const dot = `${prefix}.`;
+  const tokens: DesignMdToken[] = [];
+  for (const [key, rawValue] of fm) {
+    if (!key.startsWith(dot)) continue;
+    tokens.push({
+      key: key.slice(dot.length),
+      rawValue,
+      resolvedValue: resolveTokenRef(rawValue, fm),
+    });
+  }
+  return tokens;
+}
+
+function buildPalette(fm: Map<string, string>): DesignMdPaletteGroup[] {
+  const groups = new Map<DesignMdPaletteGroupName, DesignMdColorToken[]>();
+  for (const name of PALETTE_GROUPS) groups.set(name, []);
+
+  for (const token of tokensForPrefix(fm, "colors")) {
+    const group = paletteGroupFor(token.key);
+    groups.get(group)!.push({ ...token, group });
+  }
+
+  return PALETTE_GROUPS.map((name) => ({ name, tokens: groups.get(name)! })).filter((group) => group.tokens.length > 0);
+}
+
+function typographyBaseNames(fm: Map<string, string>): string[] {
+  const names = new Set<string>();
+  for (const key of fm.keys()) {
+    if (!key.startsWith("typography.")) continue;
+    const rest = key.slice("typography.".length);
+    const parts = rest.split(".");
+    names.add(parts.length > 1 ? parts.slice(0, -1).join(".") : rest);
+  }
+  return Array.from(names).filter(Boolean);
+}
+
+function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
+  return typographyBaseNames(fm).map((name) => {
+    const raw: Record<string, string> = {};
+    const prefix = `typography.${name}.`;
+    for (const [key, value] of fm) {
+      if (key.startsWith(prefix)) raw[key.slice(prefix.length)] = resolveTokenRef(value, fm);
+    }
+    const pick = (...keys: string[]) => keys.map((key) => raw[key]).find(Boolean);
+    return {
+      key: name,
+      fontFamily: isSafeFontFamilyValue(pick("fontFamily", "font-family")) ? pick("fontFamily", "font-family") : undefined,
+      fontSize: isSafeSizeValue(pick("fontSize", "font-size")) ? pick("fontSize", "font-size") : undefined,
+      fontWeight: safeTextStyleValue(pick("fontWeight", "font-weight")),
+      lineHeight: safeTextStyleValue(pick("lineHeight", "line-height")),
+      letterSpacing: safeTextStyleValue(pick("letterSpacing", "letter-spacing")),
+      raw,
+    };
+  });
+}
+
+function componentKind(name: string): DesignMdComponentKind {
+  const n = name.toLowerCase();
+  if (/product.*tile|tile.*product/.test(n)) return "product-tile";
+  if (/search/.test(n)) return "search";
+  if (/button|cta/.test(n)) return "button";
+  if (/input|field|amount/.test(n)) return "input";
+  if (/chip|badge|tag|pill|tab/.test(n)) return "chip";
+  if (/sub-nav|subnav|sticky/.test(n)) return "subnav";
+  if (/nav|header/.test(n)) return "nav";
+  if (/link/.test(n)) return "link";
+  if (/quote/.test(n)) return "quote";
+  if (/footer|legal/.test(n)) return "footer";
+  if (/card|panel|callout|band|hero/.test(n)) return "card";
+  if (/tile|cell|row/.test(n)) return "tile";
+  if (/utility|option|configurator|filter/.test(n)) return "utility";
+  return "generic";
+}
+
+function safeStyleProp(prop: string, value: string): string | undefined {
+  const p = prop.toLowerCase();
+  if (isUnsafeDesignMdStyleValue(value)) return undefined;
+  if (/(background|color|bordercolor|border-color)/.test(p)) return isSafeColorValue(value) ? value.trim() : undefined;
+  if (/(rounded|borderradius|border-radius|height|width|size)/.test(p)) return isSafeSizeValue(value) ? value.trim() : undefined;
+  if (/padding|margin|gap/.test(p)) return isSafeSpacingValue(value) ? value.trim() : undefined;
+  if (/typography/.test(p)) return value.trim();
+  return undefined;
+}
+
+function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
+  const groups = new Map<string, DesignMdComponentGroup>();
+  for (const token of tokensForPrefix(fm, "components")) {
+    const [name, ...propParts] = token.key.split(".");
+    if (!name || propParts.length === 0) continue;
+    const prop = propParts.join(".");
+    if (!groups.has(name)) groups.set(name, { name, kind: componentKind(name), raw: {}, styles: {} });
+    const group = groups.get(name)!;
+    group.raw[prop] = token.resolvedValue;
+    const safe = safeStyleProp(prop, token.resolvedValue);
+    if (safe) group.styles[prop] = safe;
+  }
+  return Array.from(groups.values());
+}
+
+function inferArchetype(slug: string, phrases: string[], keywords: string[], componentNames: string[]): DesignMdArchetype {
+  const text = [slug, ...phrases, ...keywords, ...componentNames].join(" ").toLowerCase();
+  const score = (patterns: RegExp[]) => patterns.reduce((sum, re) => sum + (re.test(text) ? 1 : 0), 0);
+  const scores: Record<DesignMdArchetype, number> = {
+    marketplace: score([/marketplace/, /property/, /listing/, /guest/, /booking/, /search-bar/, /homes/]),
+    product_gallery: score([/photography-first/, /product tile/, /product-tile/, /gallery/, /sparse/, /museum/, /apple/]),
+    finance_dashboard: score([/finance/, /trading/, /markets/, /crypto/, /balance/, /deposit/, /price/, /coinbase|binance|kraken/]),
+    developer_docs: score([/docs/, /developer/, /api/, /code/, /terminal/, /cli/]),
+    luxury_automotive: score([/automotive/, /vehicle/, /model-card/, /bmw|bugatti|ferrari|lamborghini|tesla/, /luxury/]),
+    data_product: score([/data/, /table/, /chart/, /analytics/, /database/, /query/, /clickhouse|cohere/]),
+    editorial: score([/editorial/, /magazine/, /story/, /article/, /publication/]),
+    generic_system: 0,
+  };
+
+  const ordered = Object.entries(scores).sort((a, b) => b[1] - a[1]) as [DesignMdArchetype, number][];
+  return ordered[0][1] > 0 ? ordered[0][0] : "generic_system";
+}
 
 export function parseDesignMdForPreview(
   slug: string,
@@ -231,52 +489,30 @@ export function parseDesignMdForPreview(
   description: string,
   content: string,
 ): DesignMdPreviewModel {
-  const fmBodyStart = content.indexOf("---", 3);
-  const body = fmBodyStart === -1 ? "" : content.slice(fmBodyStart + 3);
-
   const fm = parseNestedFrontmatter(content);
-
-  const colors = resolveTokens(extractNested(fm, "colors"), fm);
-  const typography = resolveTokens(extractNested(fm, "typography"), fm);
-  const components = resolveTokens(extractNested(fm, "components"), fm);
-  const overviewText = extractSection(body, "Overview");
-  const layoutText = extractSection(body, "Layout");
-  const guardrailDos = extractListItems(body, "Do");
-  const guardrailDonts = extractListItems(body, "Don't");
+  const body = getFrontmatterBody(content);
+  const phrases = extractPhrases(body, description);
+  const keywords = Array.from(new Set(keywordMatches([description, ...phrases].join(" "))));
+  const components = buildComponents(fm);
 
   return {
-    slug,
-    title,
-    description,
-    colors,
-    typography,
+    meta: { slug, title, description },
+    palette: buildPalette(fm),
+    typography: buildTypography(fm),
+    radius: tokensForPrefix(fm, "rounded").concat(tokensForPrefix(fm, "radius")),
+    spacing: tokensForPrefix(fm, "spacing"),
     components,
-    overviewText,
-    layoutText,
-    guardrailDos,
-    guardrailDonts,
+    visualLanguage: { phrases, keywords },
+    archetype: inferArchetype(slug, phrases, keywords, components.map((component) => component.name)),
+    overviewText: extractSection(body, "Overview"),
+    layoutText: extractSection(body, "Layout"),
+    guardrailDos: extractListItems(body, "Do"),
+    guardrailDonts: extractListItems(body, "Don't"),
   };
 }
 
-// ── sanitization helpers ──
-
-function isSafeColor(val: string): boolean {
-  return /^#[0-9a-fA-F]{3,8}$/.test(val) || /^rgba?\s*\([^)]+\)$/.test(val) || /^hsl/.test(val);
-}
-
-function isSafeSize(val: string): boolean {
-  return /^-?\d+(\.\d+)?(px|rem|em|%|ch|vh|vw|pt)?$/.test(val.trim());
-}
-
-function isSafeFontFamily(val: string): string | null {
-  const clean = val.replace(/['"]/g, "").trim();
-  if (/[<>;{}()]|url\s*\(/i.test(clean)) return null;
-  return clean;
-}
-
 export function safeColorStyle(val: string): Record<string, string> | null {
-  if (isSafeColor(val)) return { backgroundColor: val };
-  return null;
+  return isSafeColorValue(val) ? { backgroundColor: val } : null;
 }
 
 export function safeTypoStyle(
@@ -286,33 +522,29 @@ export function safeTypoStyle(
   fontFamily: string | undefined,
 ): Record<string, string> {
   const style: Record<string, string> = {};
-  if (fontSize && isSafeSize(fontSize)) style.fontSize = fontSize;
-  if (fontWeight && /^\d{3}$|bold|normal|lighter|bolder/.test(fontWeight)) style.fontWeight = fontWeight;
-  if (lineHeight) style.lineHeight = lineHeight;
-  if (fontFamily) {
-    const safe = isSafeFontFamily(fontFamily);
-    if (safe) style.fontFamily = safe;
-  }
+  if (isSafeSizeValue(fontSize)) style.fontSize = fontSize;
+  if (fontWeight && /^(?:\d{3}|bold|normal|lighter|bolder)$/.test(fontWeight)) style.fontWeight = fontWeight;
+  if (lineHeight && !isUnsafeDesignMdStyleValue(lineHeight)) style.lineHeight = lineHeight;
+  if (isSafeFontFamilyValue(fontFamily)) style.fontFamily = fontFamily;
   return style;
 }
 
 export function safeButtonStyle(fm: Map<string, string>): Record<string, string> {
   const style: Record<string, string> = {};
-  const bg = fm.get("components.button-primary.backgroundColor");
-  const color = fm.get("components.button-primary.textColor");
-  const radius = fm.get("components.button-primary.rounded");
-  if (bg && isSafeColor(bg)) { style.backgroundColor = bg; style.borderColor = bg; }
-  if (color && isSafeColor(color)) style.color = color;
-  if (radius && isSafeSize(radius)) style.borderRadius = radius;
+  const bg = resolveTokenRef(fm.get("components.button-primary.backgroundColor") ?? "", fm);
+  const color = resolveTokenRef(fm.get("components.button-primary.textColor") ?? "", fm);
+  const radius = resolveTokenRef(fm.get("components.button-primary.rounded") ?? "", fm);
+  if (isSafeColorValue(bg)) { style.backgroundColor = bg; style.borderColor = bg; }
+  if (isSafeColorValue(color)) style.color = color;
+  if (isSafeSizeValue(radius)) style.borderRadius = radius;
   return style;
 }
 
 export function safeCardStyle(fm: Map<string, string>): Record<string, string> {
   const style: Record<string, string> = {};
-  const bg = fm.get("components.card.backgroundColor") || fm.get("components.card.background");
-  const radius = fm.get("components.card.borderRadius") || fm.get("components.card.rounded");
-  if (bg && isSafeColor(bg)) style.backgroundColor = bg;
-  if (radius && isSafeSize(radius)) style.borderRadius = radius;
+  const bg = resolveTokenRef(fm.get("components.card.backgroundColor") ?? fm.get("components.card.background") ?? "", fm);
+  const radius = resolveTokenRef(fm.get("components.card.borderRadius") ?? fm.get("components.card.rounded") ?? "", fm);
+  if (isSafeColorValue(bg)) style.backgroundColor = bg;
+  if (isSafeSizeValue(radius)) style.borderRadius = radius;
   return style;
 }
-
