@@ -362,51 +362,74 @@ function archetypeLabel(board: DesignMdBoard): string {
   return labels[board.archetype];
 }
 
+function phrase(board: DesignMdBoard, index = 0): string {
+  return board.visualLanguage.phrases[index] ?? board.overview ?? board.layout ?? board.description ?? "";
+}
+
+function kindFallback(kind: string): string {
+  return kind.replace(/-/g, " ") + " component";
+}
+
+function sourceDrivenHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
+  const groups = prioritizedComponentGroups(board).slice(0, 6);
+  const primaryGroup = groups[0];
+  const secondaryGroups = groups.slice(1, 4);
+  const paletteTokens = board.colorGroups.flatMap((group) => group.tokens.map((token) => ({ ...token, group: group.prefix }))).slice(0, 6);
+  const typeTokens = board.typographyTokens.slice(0, 3);
+  const note = phrase(board, 0);
+  const layoutNote = board.layout ?? phrase(board, 1);
+  const primaryStyle = componentColors(primaryGroup, colors.surface, colors.text, colors);
+  const evidence = [
+    `${board.coverage.colorsCount} colors`,
+    `${board.coverage.typographyCount} type`,
+    `${board.coverage.componentCount} components`,
+  ].map((item) => '<span>' + esc(item) + '</span>').join("");
+
+  const componentPanel = groups.length > 0
+    ? '<div class="source-components">' +
+      '<article class="source-lead" style="background:' + primaryStyle.bg + ';color:' + primaryStyle.fg + ';border-radius:' + primaryStyle.radius + '">' +
+      '<small>' + esc(kindFallback(primaryGroup.kind)) + '</small><b>' + esc(primaryGroup.name) + '</b>' +
+      componentSampleHtml(primaryGroup, colors) +
+      '</article>' +
+      secondaryGroups.map((group) => {
+        const style = componentColors(group, colors.surface, colors.text, colors);
+        return '<article style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '">' +
+          '<small>' + esc(kindFallback(group.kind)) + '</small><b>' + esc(group.name || kindFallback(group.kind)) + '</b>' +
+          '<span>' + esc(kindFallback(group.kind)) + '</span></article>';
+      }).join("") +
+      '</div>'
+    : '<div class="source-components source-components-empty"><article style="background:' + colors.surface + ';color:' + colors.text + ';border-radius:' + colors.radius + '"><small>source-limited</small><b>Component data missing</b><span>Showing tokens and notes from DESIGN.md only</span></article></div>';
+
+  const palettePanel = paletteTokens.length > 0
+    ? '<div class="source-palette">' + paletteTokens.map((token) =>
+        '<div><i style="background:' + cssColor(token.resolvedValue, colors.border) + '"></i><span>' + esc(token.key) + '</span><small>' + esc(token.group) + '</small></div>'
+      ).join("") + '</div>'
+    : "";
+
+  const typePanel = typeTokens.length > 0
+    ? '<div class="source-type">' + typeTokens.map((token) => {
+        const style = [
+          "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
+          "font-size:" + cssFontSize(token.fontSize, "18px", 30),
+          "font-weight:" + cssText(token.fontWeight, "500"),
+          "line-height:" + cssText(token.lineHeight, "1.2"),
+        ].join(";");
+        return '<div><small>' + esc(token.key) + '</small><span style="' + style + '">' + esc(token.key) + '</span></div>';
+      }).join("") + '</div>'
+    : "";
+
+  return '<section class="hero hero-source hero-source-' + esc(board.archetype) + '">' +
+    '<div class="source-copy"><span class="source-kicker">' + esc(archetypeLabel(board)) + '</span><h2>' + esc(board.title) + '</h2>' +
+    (note ? '<p>' + esc(note.length > 220 ? note.slice(0, 217) + "..." : note) + '</p>' : '') +
+    '<div class="source-evidence">' + evidence + '</div></div>' +
+    componentPanel +
+    '<div class="source-support">' + palettePanel + typePanel +
+    (layoutNote ? '<div class="source-note"><small>source note</small><span>' + esc(layoutNote.length > 180 ? layoutNote.slice(0, 177) + "..." : layoutNote) + '</span></div>' : '') +
+    '</div></section>';
+}
+
 function heroPattern(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  switch (board.archetype) {
-    case "marketplace":
-      return marketplaceHero(board, colors);
-    case "product_gallery":
-      return productGalleryHero(board, colors);
-    case "finance_dashboard":
-      return financeHero(board, colors);
-    case "developer_docs":
-      return docsHero(board, colors);
-    case "developer_product":
-      return developerProductHero(board, colors);
-    case "collaboration_saas":
-      return collaborationHero(board, colors);
-    case "luxury_automotive":
-      return automotiveHero(board, colors);
-    case "data_product":
-      return dataHero(board, colors);
-    case "editorial":
-      return editorialHero(board, colors);
-    case "media_editorial":
-      return mediaEditorialHero(board, colors);
-    case "ai_product":
-      return aiProductHero(board, colors);
-    case "ai_agent_product":
-      return aiAgentProductHero(board, colors);
-    case "creative_tool":
-      return creativeToolHero(board, colors);
-    case "payment_finance":
-      return paymentFinanceHero(board, colors);
-    case "retail_food":
-      return retailFoodHero(board, colors);
-    case "retail_brand":
-      return retailBrandHero(board, colors);
-    case "telecom_service":
-      return telecomServiceHero(board, colors);
-    case "automation_workflow":
-      return automationWorkflowHero(board, colors);
-    case "music_campaign":
-      return musicCampaignHero(board, colors);
-    case "terminal_tool":
-      return terminalToolHero(board, colors);
-    default:
-      return genericHero(board, colors);
-  }
+  return sourceDrivenHero(board, colors);
 }
 
 function marketplaceHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
@@ -718,6 +741,32 @@ function retailBrandHero(board: DesignMdBoard, colors: ReturnType<typeof deriveT
     '</div></div></section>';
 }
 
+// Legacy category demos are kept temporarily unreachable while source-derived rendering
+// is verified against all cached DESIGN.md entries.
+void [
+  marketplaceHero,
+  productGalleryHero,
+  financeHero,
+  docsHero,
+  collaborationHero,
+  automotiveHero,
+  dataHero,
+  editorialHero,
+  genericHero,
+  aiProductHero,
+  creativeToolHero,
+  paymentFinanceHero,
+  musicCampaignHero,
+  terminalToolHero,
+  mediaEditorialHero,
+  retailFoodHero,
+  telecomServiceHero,
+  automationWorkflowHero,
+  developerProductHero,
+  aiAgentProductHero,
+  retailBrandHero,
+];
+
 function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "light") {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
   const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
@@ -797,7 +846,7 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
       return '<span class="sample sample-chip" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + colors.pill + '">' + name + '</span>';
     case "nav":
     case "subnav":
-      return '<div class="sample sample-nav" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>One</span><span>Two</span></div>';
+      return '<div class="sample sample-nav" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>' + esc(group.kind) + '</span></div>';
     case "product-tile":
     case "tile":
       return '<div class="sample sample-tile" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><div></div><b>' + name + '</b></div>';
@@ -805,26 +854,26 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
     case "gradient":
       return '<div class="sample sample-gradient" style="background:linear-gradient(135deg,' + style.bg + ',' + colors.primary + ');color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>hero surface</span></div>';
     case "mockup":
-      return '<div class="sample sample-mockup" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>const preview = local;</code><span></span><span></span></div>';
+      return '<div class="sample sample-mockup" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>' + esc(Object.keys(group.raw).slice(0, 2).join(" · ") || group.kind) + '</code><span></span><span></span></div>';
     case "code-panel":
-      return '<div class="sample sample-code" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>export function Example() {}</code></div>';
+      return '<div class="sample sample-code" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>' + esc(Object.keys(group.raw).slice(0, 2).join(" · ") || group.kind) + '</code></div>';
     case "terminal-panel":
-      return '<div class="sample sample-terminal" style="background:' + colors.darkCanvas + ';color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>❯ npm run build</code></div>';
+      return '<div class="sample sample-terminal" style="background:' + colors.darkCanvas + ';color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><code>' + esc(Object.keys(group.raw).slice(0, 2).join(" · ") || group.kind) + '</code></div>';
     case "workflow-step":
       return '<div class="sample sample-workflow" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>→</span></div>';
     case "editorial-card":
     case "article-card":
     case "media-card":
-      return '<div class="sample sample-editorial" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><div class="sample-editorial-img"></div><b>' + name + '</b><small>By Author · 5 min read</small></div>';
+      return '<div class="sample sample-editorial" style="background:' + style.bg + ';color:' + style.fg + ';border-radius:' + style.radius + '"><div class="sample-editorial-img"></div><b>' + name + '</b><small>' + esc(kindFallback(group.kind)) + '</small></div>';
     case "payment-card":
-      return '<div class="sample sample-payment" style="background:linear-gradient(135deg,' + colors.darkSurface + ',' + colors.primary + ');color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>•••• 4242</span></div>';
+      return '<div class="sample sample-payment" style="background:linear-gradient(135deg,' + colors.darkSurface + ',' + colors.primary + ');color:' + colors.onDark + ';border-radius:' + style.radius + '"><b>' + name + '</b><span>' + esc(kindFallback(group.kind)) + '</span></div>';
     case "market-table":
-      return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>BTC</i><strong style="color:' + colors.up + '">+2.4%</strong></span><span><i>ETH</i><strong style="color:' + colors.down + '">-0.8%</strong></span></div>';
+      return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>' + esc(group.kind) + '</i><strong>' + esc(kindFallback(group.kind)) + '</strong></span></div>';
     case "stat":
     case "stat-card":
-      return '<div class="sample sample-stat" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + name + '</small><b>98.7%</b><span style="color:' + colors.primary + '">+12.4%</span></div>';
+      return '<div class="sample sample-stat" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><small>' + name + '</small><b>' + esc(group.kind) + '</b><span style="color:' + colors.primary + '">' + esc(kindFallback(group.kind)) + '</span></div>';
     case "table":
-      return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>Alpha</i><strong>Active</strong></span><span><i>Beta</i><strong>Queued</strong></span></div>';
+      return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>' + esc(group.kind) + '</i><strong>' + esc(kindFallback(group.kind)) + '</strong></span></div>';
     case "chart":
       return '<div class="sample sample-chart" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><div><i></i><i></i><i></i><i></i></div></div>';
     case "link":
@@ -836,7 +885,7 @@ function componentSampleHtml(group: DesignMdBoardComponentGroup, colors: ReturnT
     case "card":
     case "pricing-card":
       if (/table|row|price|market|asset/i.test(group.name)) {
-        return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>BTC</i><strong>+2.4%</strong></span><span><i>ETH</i><strong>-0.8%</strong></span></div>';
+        return '<div class="sample sample-table" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><span><i>' + esc(group.kind) + '</i><strong>' + esc(kindFallback(group.kind)) + '</strong></span></div>';
       }
       return '<div class="sample sample-card" style="background:' + style.bg + ';color:' + style.fg + ';border-color:' + style.border + ';border-radius:' + style.radius + '"><b>' + name + '</b><small>' + esc(Object.keys(group.raw).slice(0, 3).join(" · ")) + '</small></div>';
     case "utility":
@@ -868,7 +917,7 @@ function generateTypography(board: DesignMdBoard): string {
         "line-height:" + cssText(token.lineHeight, "1.25"),
         "letter-spacing:0",
       ].join(";");
-      return '<div class="type-row"><small>' + esc(token.key) + '</small><span style="' + style + '">' + esc(token.key) + ' speaks in this system</span></div>';
+      return '<div class="type-row"><small>' + esc(token.key) + '</small><span style="' + style + '">' + esc(token.key) + '</span></div>';
     }).join("") + '</div></section>';
 }
 
@@ -954,6 +1003,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero-data{display:grid;grid-template-columns:220px 1fr;background:" + colors.darkCanvas + ";color:" + colors.onDark + "}.data-sidebar{display:flex;flex-direction:column;gap:14px;border-right:1px solid " + colors.darkSurface + ";padding:22px}.data-main{display:grid;grid-template-columns:1.3fr .8fr;gap:16px;padding:24px}.chart-card,.data-table{background:" + colors.darkSurface + ";border-radius:" + colors.radius + ";padding:22px}.bars{display:flex;align-items:end;gap:10px;height:160px;margin-top:28px}.bars i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.bars i:nth-child(1){height:32%}.bars i:nth-child(2){height:68%}.bars i:nth-child(3){height:48%}.bars i:nth-child(4){height:86%}.bars i:nth-child(5){height:58%}.data-table div{display:flex;justify-content:space-between;padding:14px 0;border-bottom:1px solid " + colors.border + "}",
     ".hero-editorial{display:grid;grid-template-columns:.85fr 1.15fr;gap:18px;align-items:stretch;background:" + colors.canvas + "}.editorial-copy{display:flex;flex-direction:column;justify-content:center;gap:14px}.editorial-copy span{font-size:" + caption.size + ";letter-spacing:.12em;text-transform:uppercase;color:" + colors.muted + ";font-weight:700}.editorial-copy p{color:" + colors.muted + ";max-width:620px}.editorial-copy div{display:flex;gap:10px;flex-wrap:wrap}.editorial-copy button{padding:12px 20px}.campaign-grid{display:grid;grid-template-columns:1.2fr .8fr;grid-template-rows:1fr 1fr;gap:12px}.campaign-grid article{padding:14px;display:flex;flex-direction:column;gap:8px;min-height:132px;overflow:hidden}.campaign-grid article:first-child{grid-row:span 2}.campaign-grid span{color:" + colors.muted + ";font-size:" + caption.size + "}.campaign-art{flex:1;min-height:72px;background:linear-gradient(135deg," + colors.primary + "," + colors.surface + ");border-radius:inherit}.campaign-art.c1{background:linear-gradient(135deg," + colors.surface + "," + colors.border + ")}.campaign-art.c2{background:linear-gradient(135deg," + colors.darkSurface + "," + colors.primary + ")}",
     ".hero-generic{display:grid;grid-template-columns:.9fr 1.1fr;align-items:center;background:" + colors.surface + "}.hero-generic p{color:" + colors.muted + ";max-width:560px;margin-top:12px}.generic-board{display:grid;grid-template-columns:1fr 1fr;gap:12px}",
+    ".hero-source{display:grid;grid-template-columns:minmax(0,.82fr) minmax(320px,1.18fr);gap:18px;align-items:stretch;background:" + colors.canvas + ";padding:24px}.source-copy{display:flex;flex-direction:column;justify-content:center;gap:12px;min-width:0}.source-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase}.source-copy p{color:" + colors.muted + ";max-width:620px}.source-evidence{display:flex;flex-wrap:wrap;gap:7px;margin-top:4px}.source-evidence span{border:1px solid " + colors.border + ";border-radius:" + colors.pill + ";padding:4px 8px;color:" + colors.muted + ";font-size:" + caption.size + "}.source-components{display:grid;grid-template-columns:1.2fr .8fr;grid-auto-rows:minmax(96px,auto);gap:10px}.source-components article{border:1px solid " + colors.border + ";padding:13px;min-width:0;overflow:hidden;display:flex;flex-direction:column;gap:7px}.source-components article small,.source-note small{color:" + colors.muted + ";font-size:10px;text-transform:uppercase}.source-components article b,.source-components article span{overflow-wrap:anywhere}.source-lead{grid-row:span 3}.source-support{grid-column:1 / -1;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,.9fr) minmax(260px,.9fr);gap:12px}.source-palette,.source-type,.source-note{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";background:" + colors.canvas + ";padding:12px;min-width:0}.source-palette{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px}.source-palette i{display:block;height:30px;border-radius:6px;border:1px solid rgba(127,127,127,.24)}.source-palette span,.source-palette small,.source-type small,.source-type span,.source-note span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.source-palette span,.source-type span{margin-top:5px}.source-palette small,.source-type small{color:" + colors.muted + ";font-size:10px}.source-type{display:grid;gap:7px}.source-note{display:flex;flex-direction:column;gap:6px}.source-note span{white-space:normal;color:" + colors.muted + "}.source-components-empty{grid-template-columns:1fr}.hero-source-media_editorial,.hero-source-editorial{grid-template-columns:minmax(0,.72fr) minmax(360px,1.28fr)}.hero-source-terminal_tool,.hero-source-developer_product,.hero-source-developer_docs,.hero-source-data_product{background:" + (colors.variant === "dark" ? colors.darkCanvas : colors.surface) + "}.hero-source-luxury_automotive .source-lead,.hero-source-product_gallery .source-lead{min-height:190px}.hero-source-music_campaign .source-lead,.hero-source-retail_food .source-lead,.hero-source-payment_finance .source-lead{background:" + colors.primary + "!important;color:" + colors.onPrimary + "!important}",
     ".hero-ai{display:flex;flex-direction:column;gap:18px;padding:28px;background:" + colors.canvas + "}.ai-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px}.ai-header button{padding:12px 24px}.ai-kicker{color:" + colors.primary + ";font-size:" + caption.size + ";text-transform:uppercase;letter-spacing:.08em;font-weight:700}.ai-interface{display:grid;grid-template-columns:1fr;gap:16px}.ai-prompt{border:1px solid " + colors.border + ";padding:16px}.ai-prompt-label{font-size:" + caption.size + ";color:" + colors.muted + ";margin-bottom:8px}.ai-prompt-bar{font-size:" + body.size + ";opacity:.6}.ai-outputs{display:grid;grid-template-columns:1.3fr .8fr;gap:16px}.ai-output-panel{padding:18px;border:1px solid " + colors.border + "}.ai-output-panel code{display:block;margin-top:12px;padding:10px;border-radius:6px;background:" + colors.darkSurface + ";color:" + colors.onDark + ";white-space:pre-wrap}.ai-output-placeholder{color:" + colors.muted + ";margin-bottom:8px}.ai-model-cards{display:grid;gap:10px}.ai-model-card{padding:14px;display:flex;flex-direction:column;gap:4px}.ai-model-card span{font-size:" + caption.size + ";opacity:.7}",
     ".hero-creative{display:flex;flex-direction:column;gap:0}.creative-toolbar{display:flex;align-items:center;gap:16px;padding:12px 20px;border-bottom:1px solid " + colors.border + "}.creative-toolbar b{color:" + colors.primary + "}.creative-toolbar button{margin-left:auto;padding:8px 16px}.creative-workspace{display:grid;grid-template-columns:160px 1fr 180px;gap:0;min-height:280px}.creative-sidebar,.creative-inspector{padding:14px;display:flex;flex-direction:column;gap:10px}.creative-sidebar{border-right:1px solid " + colors.border + "}.creative-inspector{border-left:1px solid " + colors.border + "}.creative-inspector small,.creative-inspector span{display:block}.creative-canvas{display:grid;place-items:center;padding:24px}.creative-frame{width:80%;height:70%;display:grid;place-items:center;font-size:" + caption.size + "}",
     ".hero-payment{display:flex;flex-direction:column;gap:0}.payment-brand{display:flex;align-items:center;justify-content:space-between;padding:32px 28px}.payment-brand button{padding:12px 24px}.payment-brand p{max-width:520px;opacity:.85;margin-top:8px}.payment-grid{display:grid;grid-template-columns:1fr 1.2fr;gap:16px;padding:24px}.payment-card{padding:22px;display:flex;flex-direction:column;gap:14px;box-shadow:0 12px 40px rgba(0,0,0,.18)}.payment-card b{font-size:22px;letter-spacing:.06em;margin-top:auto}.payment-card div{display:flex;justify-content:space-between;font-size:" + caption.size + "}.payment-transactions{padding:18px;display:flex;flex-direction:column;gap:10px}.payment-row{display:flex;justify-content:space-between;padding:10px 0;border-bottom:1px solid " + colors.border + "}.payment-row:last-child{border-bottom:0}",
@@ -965,7 +1015,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".overview-deck{display:grid;grid-template-columns:minmax(0,1.4fr) minmax(260px,.6fr);gap:14px;padding:16px 20px 20px;border-top:1px solid " + colors.border + ";background:" + colors.canvas + "}.overview-card{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";background:" + colors.canvas + ";padding:12px;overflow:hidden}.overview-card header{display:flex;align-items:baseline;justify-content:space-between;gap:12px;margin-bottom:10px}.overview-card header span{font-size:" + caption.size + ";color:" + colors.muted + "}.overview-side{display:grid;gap:14px}.overview-component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px}.overview-component-grid article{min-height:94px}.overview-component-grid label{display:block;color:" + colors.muted + ";font-size:10px;margin-bottom:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-swatch-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}.overview-swatch-grid i{display:block;height:28px;border-radius:7px;border:1px solid rgba(0,0,0,.08)}.overview-swatch-grid span{display:block;margin-top:5px;color:" + colors.muted + ";font-size:10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.overview-type{display:grid;gap:8px}.overview-type small{display:block;color:" + colors.muted + ";font-size:10px}.overview-type span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
     ".strip{padding:20px;border-top:1px solid " + colors.border + "}.strip header{display:flex;align-items:baseline;justify-content:space-between;margin-bottom:12px}.strip header span{font-size:" + caption.size + ";color:" + colors.muted + "}.palette-grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:8px}.swatch{min-height:84px;border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:8px;background:" + colors.canvas + ";overflow:hidden}.swatch i{display:block;height:32px;border-radius:6px;margin-bottom:8px;border:1px solid rgba(0,0,0,.08)}.swatch b,.swatch small{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.swatch small{color:" + colors.muted + ";font-size:10px}.more{display:grid;place-items:center}",
     ".type-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.type-row{border-bottom:1px solid " + colors.border + ";padding:8px 0}.type-row small{display:block;color:" + colors.muted + ";margin-bottom:4px}.component-grid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}.component-grid article{border:1px solid " + colors.border + ";border-radius:" + colors.radius + ";padding:10px;min-height:112px;overflow:hidden}.component-grid label{display:block;color:" + colors.muted + ";font-size:11px;margin-bottom:8px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample{max-width:100%}.sample-button{border:1px solid transparent}.sample-input{display:flex;justify-content:space-between;align-items:center;border:1px solid " + colors.border + ";padding:12px}.sample-input i{width:14px;height:14px;border-radius:50%;background:" + colors.primary + "}.sample-chip{display:inline-flex;padding:7px 12px}.sample-nav{display:flex;gap:12px;padding:11px}.sample-card{display:flex;flex-direction:column;gap:8px;padding:16px;border:1px solid " + colors.border + "}.sample-stat{display:grid;gap:5px;padding:14px;border:1px solid " + colors.border + "}.sample-stat b{font-size:28px}.sample-chart{display:grid;gap:12px;padding:14px;border:1px solid " + colors.border + "}.sample-chart div{height:58px;display:flex;align-items:end;gap:8px}.sample-chart i{flex:1;background:" + colors.primary + ";border-radius:4px 4px 0 0}.sample-chart i:nth-child(1){height:35%}.sample-chart i:nth-child(2){height:70%}.sample-chart i:nth-child(3){height:48%}.sample-chart i:nth-child(4){height:88%}.sample-gradient{min-height:92px;padding:16px;display:flex;flex-direction:column;justify-content:space-between}.sample-mockup{display:grid;gap:7px;padding:13px}.sample-mockup code{display:block;padding:7px;border-radius:6px;background:rgba(0,0,0,.22);color:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.sample-mockup span{height:8px;border-radius:99px;background:rgba(127,127,127,.28)}.sample-table{display:flex;flex-direction:column;gap:7px;padding:12px;border:1px solid " + colors.border + "}.sample-table span{display:flex;justify-content:space-between;gap:12px;border-top:1px solid rgba(127,127,127,.25);padding-top:6px}.sample-table i{font-style:normal}.sample-tile{padding:14px}.sample-tile div{height:56px;background:rgba(127,127,127,.18);margin-bottom:10px}.sample-link{text-decoration:underline}.sample-footer{padding:14px}.rhythm-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.radius-grid{display:flex;flex-wrap:wrap;gap:8px}.radius-cell{width:58px;height:58px;display:grid;place-items:center;background:" + colors.surface + ";border:1px solid " + colors.border + ";font-size:10px;color:" + colors.muted + "}.space-row{display:flex;align-items:center;gap:10px;margin:7px 0}.space-row span{width:70px}.space-row i{display:block;height:10px;background:" + colors.primary + ";border-radius:999px}.notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 22px;padding-left:18px;color:" + colors.muted + "}",
-    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.overview-deck,.listing-grid,.product-tiles,.finance-grid,.auto-grid,.component-grid,.type-grid,.rhythm-grid,.hero-docs,.hero-docs main,.hero-data,.data-main,.hero-generic,.hero-collab,.hero-editorial,.campaign-grid,.hero-ai .ai-outputs,.hero-creative .creative-workspace,.hero-music,.music-grid,.hero-payment .payment-grid{grid-template-columns:1fr}.hero-ai .ai-header{flex-direction:column}.hero-creative .creative-workspace{grid-template-columns:1fr}.hero-creative .creative-sidebar,.hero-creative .creative-inspector{border:0;border-top:1px solid " + colors.border + "}.overview-component-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-swatch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-search{grid-template-columns:1fr;gap:8px;border-radius:" + colors.radius + "}.market-search span{border-right:0;border-bottom:1px solid " + colors.border + ";padding-bottom:8px}.palette-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.notes-strip ul{grid-template-columns:1fr}.hero{min-height:auto}.auto-band{grid-template-columns:1fr}.product-tile{min-height:260px}.campaign-grid article:first-child{grid-row:auto}.music-tile:first-child{grid-row:auto}}",
+    "@media(max-width:760px){.board-meta{position:static;align-items:flex-start;flex-direction:column}.overview-deck,.listing-grid,.product-tiles,.finance-grid,.auto-grid,.component-grid,.type-grid,.rhythm-grid,.hero-docs,.hero-docs main,.hero-data,.data-main,.hero-generic,.hero-collab,.hero-editorial,.campaign-grid,.hero-ai .ai-outputs,.hero-creative .creative-workspace,.hero-music,.music-grid,.hero-payment .payment-grid,.hero-source,.source-components,.source-support{grid-template-columns:1fr}.hero-ai .ai-header{flex-direction:column}.hero-creative .creative-workspace{grid-template-columns:1fr}.hero-creative .creative-sidebar,.hero-creative .creative-inspector{border:0;border-top:1px solid " + colors.border + "}.overview-component-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.overview-swatch-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.market-search{grid-template-columns:1fr;gap:8px;border-radius:" + colors.radius + "}.market-search span{border-right:0;border-bottom:1px solid " + colors.border + ";padding-bottom:8px}.palette-grid,.source-palette{grid-template-columns:repeat(2,minmax(0,1fr))}.notes-strip ul{grid-template-columns:1fr}.hero{min-height:auto}.auto-band{grid-template-columns:1fr}.product-tile{min-height:260px}.campaign-grid article:first-child,.music-tile:first-child,.source-lead{grid-row:auto}.source-support{grid-column:auto}}",
   ].join("\n");
 
   const keywords = board.visualLanguage.keywords.slice(0, 5).map((keyword) => '<i>' + esc(keyword) + '</i>').join("");

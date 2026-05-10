@@ -86,6 +86,9 @@ assert.equal(model.coverage.markdownColorsCount, 0);
 assert.equal(model.coverage.componentKinds["market-table"], 1);
 assert.equal(model.confidence.lightPreview, "medium");
 assert(model.warnings.includes("dark tokens derived"));
+assert.equal(model.palette[0].tokens[0].sourceEvidence.sourceType, "frontmatter");
+assert.equal(model.palette[0].tokens[0].sourceEvidence.confidence, "high");
+assert.equal(model.components[0].sourceEvidence.sourcePath, "components.search-bar-pill");
 
 const nestedComponents = parseDesignMdForPreview(
   "nested",
@@ -126,11 +129,13 @@ assert.doesNotMatch(html, /Features|Docs|Pricing|Feature One|Feature Two|Feature
 assert.match(html, /search-bar-pill/);
 assert.match(html, /property-card/);
 assert.match(html, /markets-table-card/);
+assert.doesNotMatch(html, /Homes|Experiences|Services|Buy Crypto|Deposit|\$42,918\.80|BTC|ETH|By Author|Feature One|Get Started|Read docs|Describe what you want|Coffee Shop|Basic Plan|Create Zap/);
 assert.match(darkHtml, /Content-Security-Policy/);
 assert.doesNotMatch(darkHtml, /<script/i);
 assert.doesNotMatch(darkHtml, /@font-face|@import|url\(https?:/i);
 assert.match(darkHtml, /#0b0e11|#1f2329|surface-card-dark/);
 assert.match(darkHtml, /markets-table-card/);
+assert.doesNotMatch(darkHtml, /Homes|Experiences|Services|Buy Crypto|Deposit|\$42,918\.80|BTC|ETH|By Author|Feature One|Get Started|Read docs|Describe what you want|Coffee Shop|Basic Plan|Create Zap/);
 
 const darkOnlyBoard = buildBoard(
   "dark-only",
@@ -274,6 +279,7 @@ const colorModel = parseDesignMdForPreview("markdown-color", "Markdown Color", "
 assert(colorModel.coverage.markdownColorsCount >= 2, "Expected markdown-derived colors");
 assert(colorModel.components.some((c) => c.name === "payment-card"), "Expected backticked component extraction");
 assert(colorModel.coverage.darkTokenCount >= 1, "Expected dark token coverage");
+assert(colorModel.components.find((c) => c.name === "payment-card").sourceEvidence.confidence === "medium");
 
 // ── Font fallback for new fonts ──
 assert.match(resolveGeneratedFontFamily("abcNormal", "cinematic film"), /Inter|DM Sans/);

@@ -99,7 +99,47 @@ function auditEntry(slug, dirPath) {
     visualLanguageKeywords: model.visualLanguage.keywords.length,
     visualLanguagePhrases: model.visualLanguage.phrases.length,
     fontSubstitutesLength: model.fontSubstitutes.length,
+    componentEvidence: model.components.map((component) => ({
+      name: component.name,
+      kind: component.kind,
+      evidence: component.sourceEvidence ?? null,
+    })),
+    sourceDerivedScore: sourceDerivedScore(model),
+    inventedContentRiskScore: inventedContentRiskScore(model),
   };
+}
+
+function confidenceValue(confidence) {
+  return confidence === "high" ? 2 : confidence === "medium" ? 1 : 0;
+}
+
+function sourceDerivedScore(model) {
+  const objects = [
+    ...model.palette.flatMap((group) => group.tokens),
+    ...model.typography,
+    ...model.radius,
+    ...model.spacing,
+    ...model.components,
+  ];
+  if (objects.length === 0) return 0;
+  const weights = { high: 1, medium: 0.72, low: 0.38, fallback: 0 };
+  const total = objects.reduce((sum, item) => {
+    const confidence = item.sourceEvidence?.confidence ?? (item.source === "structured" ? "high" : item.source === "markdown" ? "medium" : "fallback");
+    return sum + (weights[confidence] ?? 0);
+  }, 0);
+  return Math.round((total / objects.length) * 100);
+}
+
+function inventedContentRiskScore(model) {
+  let risk = 0;
+  if (model.components.length === 0) risk += 35;
+  if (model.components.every((component) => component.source !== "structured")) risk += 15;
+  if (model.palette.flatMap((group) => group.tokens).every((token) => token.source !== "structured")) risk += 10;
+  if (model.typography.length === 0) risk += 15;
+  if (model.coverage.darkTokenCount === 0) risk += 10;
+  if (model.archetype === "generic_system") risk += 15;
+  if (model.visualLanguage.phrases.length < 2) risk += 10;
+  return Math.min(100, risk);
 }
 
 const entries = fs.readdirSync(cacheRoot, { withFileTypes: true })
@@ -133,6 +173,7 @@ function failureFlags(r) {
   if (r.componentCount > 24) flags.push("likely overflow risk");
   if (r.visualLanguagePhrases > 8 && r.componentCount < 3) flags.push("too text-heavy");
   if (r.lightConfidence === "low" || r.archetype === "generic_system") flags.push("too generic");
+  if (r.inventedContentRiskScore >= 35) flags.push("renderer may invent unsupported content");
   return flags;
 }
 
@@ -155,6 +196,8 @@ for (const r of results) {
   console.log(`  Fonts: ${r.fontFamilies.join(", ") || "fallback only"}`);
   console.log(`  Dark tokens: ${r.darkTokenCount} | Dark components: ${r.darkComponentCount}`);
   console.log(`  Light confidence: ${r.lightConfidence} | Dark confidence: ${r.darkConfidence}`);
+  console.log(`  Source-derived score: ${r.sourceDerivedScore} | Invented-content risk: ${r.inventedContentRiskScore}`);
+  console.log(`  Component evidence: ${r.componentEvidence.slice(0, 6).map((c) => `${c.name}:${c.evidence?.sourceType ?? "unknown"}/${c.evidence?.confidence ?? "unknown"}`).join(", ") || "none"}`);
   console.log(`  Failure flags: ${r.failureFlags.join(", ") || "none"}`);
   console.log(`  MD sections: ${r.markdownSections.join(", ")}`);
   console.log("");
@@ -174,6 +217,8 @@ console.log(`Generic archetype fallback: ${genericArchetype}`);
 console.log(`No colors: ${noColors}`);
 console.log(`No typography: ${noTypo}`);
 console.log(`No components: ${noComponents}`);
+console.log(`Average source-derived score: ${Math.round(results.reduce((sum, r) => sum + r.sourceDerivedScore, 0) / Math.max(1, results.length))}`);
+console.log(`Entries with high invented-content risk: ${results.filter((r) => r.inventedContentRiskScore >= 35).length}`);
 
 console.log("\nFailure summary:");
 const failures = new Map();
@@ -184,12 +229,18 @@ for (const [flag, count] of [...failures.entries()].sort((a, b) => b[1] - a[1]))
   console.log(`  ${String(flag).padEnd(28)} ${count}`);
 }
 
-console.log("\nLowest confidence priority list:");
+console.log("\nLowest source-derived / confidence priority list:");
 for (const r of [...results].sort((a, b) => {
-  const diff = priorityRank(a.lightConfidence) + priorityRank(a.darkConfidence) - priorityRank(b.lightConfidence) - priorityRank(b.darkConfidence);
-  return diff || b.failureFlags.length - a.failureFlags.length || a.slug.localeCompare(b.slug);
+  const confDiff = confidenceValue(a.lightConfidence) + confidenceValue(a.darkConfidence) - confidenceValue(b.lightConfidence) - confidenceValue(b.darkConfidence);
+  return a.sourceDerivedScore - b.sourceDerivedScore || b.inventedContentRiskScore - a.inventedContentRiskScore || confDiff || b.failureFlags.length - a.failureFlags.length || a.slug.localeCompare(b.slug);
 }).slice(0, 24)) {
-  console.log(`  ${r.slug.padEnd(18)} light=${r.lightConfidence.padEnd(6)} dark=${r.darkConfidence.padEnd(6)} arch=${r.archetype.padEnd(20)} flags=${r.failureFlags.slice(0, 4).join(", ") || "none"}`);
+  console.log(`  ${r.slug.padEnd(18)} source=${String(r.sourceDerivedScore).padStart(3)} risk=${String(r.inventedContentRiskScore).padStart(3)} light=${r.lightConfidence.padEnd(6)} dark=${r.darkConfidence.padEnd(6)} arch=${r.archetype.padEnd(20)} flags=${r.failureFlags.slice(0, 4).join(", ") || "none"}`);
+}
+
+console.log("\nPriority entries grouped by shared failure:");
+for (const [flag] of [...failures.entries()].sort((a, b) => b[1] - a[1])) {
+  const matching = results.filter((r) => prioritySlugs.has(r.slug) && r.failureFlags.includes(flag)).map((r) => r.slug);
+  if (matching.length > 0) console.log(`  ${flag}: ${matching.join(", ")}`);
 }
 
 // Archetype distribution for priority entries

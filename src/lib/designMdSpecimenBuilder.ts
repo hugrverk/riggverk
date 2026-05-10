@@ -9,6 +9,7 @@ import {
   type DesignMdPreviewCoverage,
   type DesignMdPreviewWarning,
   type DesignMdPaletteGroup,
+  type DesignMdSourceEvidence,
   type DesignMdToken,
   type DesignMdTypographyToken,
   type DesignMdVisualLanguage,
@@ -412,6 +413,8 @@ export interface DesignMdBoardToken {
   key: string;
   rawValue: string;
   resolvedValue: string;
+  source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export interface DesignMdBoardColorGroup {
@@ -427,6 +430,8 @@ export interface DesignMdBoardTypoToken {
   lineHeight?: string;
   letterSpacing?: string;
   raw: Record<string, string>;
+  source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export interface DesignMdBoardComponentGroup {
@@ -439,6 +444,8 @@ export interface DesignMdBoardComponentGroup {
   padding?: string;
   styles: Record<string, string>;
   raw: Record<string, string>;
+  source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export interface DesignMdBoard {
@@ -488,6 +495,8 @@ export function buildBoard(
       padding: component.styles.padding,
       styles: component.styles,
       raw: component.raw,
+      source: component.source,
+      sourceEvidence: component.sourceEvidence,
     })),
     visualLanguage: model.visualLanguage,
     archetype: model.archetype,

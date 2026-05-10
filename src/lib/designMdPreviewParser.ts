@@ -55,11 +55,28 @@ export type DesignMdComponentKind =
   | "utility"
   | "generic";
 
+export type DesignMdSourceType =
+  | "frontmatter"
+  | "markdown-heading"
+  | "markdown-table"
+  | "markdown-list"
+  | "markdown-paragraph"
+  | "derived-fallback";
+
+export type DesignMdSourceConfidence = "high" | "medium" | "low" | "fallback";
+
+export interface DesignMdSourceEvidence {
+  sourceType: DesignMdSourceType;
+  sourcePath: string;
+  confidence: DesignMdSourceConfidence;
+}
+
 export interface DesignMdToken {
   key: string;
   rawValue: string;
   resolvedValue: string;
   source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export interface DesignMdColorToken extends DesignMdToken {
@@ -75,6 +92,7 @@ export interface DesignMdTypographyToken {
   letterSpacing?: string;
   raw: Record<string, string>;
   source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export interface DesignMdComponentGroup {
@@ -83,6 +101,7 @@ export interface DesignMdComponentGroup {
   raw: Record<string, string>;
   styles: Record<string, string>;
   source?: "structured" | "markdown" | "derived";
+  sourceEvidence?: DesignMdSourceEvidence;
 }
 
 export type DesignMdPaletteGroupName =
@@ -101,6 +120,7 @@ export interface DesignMdPaletteGroup {
 export interface DesignMdVisualLanguage {
   phrases: string[];
   keywords: string[];
+  phraseEvidence?: DesignMdSourceEvidence[];
 }
 
 export type DesignMdConfidence = "low" | "medium" | "high";
@@ -523,6 +543,14 @@ function normalizeTokenLabel(text: string, fallback: string): string {
     .slice(0, 52) || fallback;
 }
 
+function sourceEvidence(
+  sourceType: DesignMdSourceType,
+  sourcePath: string,
+  confidence: DesignMdSourceConfidence,
+): DesignMdSourceEvidence {
+  return { sourceType, sourcePath, confidence };
+}
+
 function extractPhrases(body: string, description: string): string[] {
   const phrases: string[] = [];
   if (description) phrases.push(cleanPhrase(description));
@@ -598,6 +626,7 @@ function tokensForPrefix(fm: Map<string, string>, prefix: string): DesignMdToken
       rawValue,
       resolvedValue: resolveTokenRef(rawValue, fm),
       source: "structured",
+      sourceEvidence: sourceEvidence("frontmatter", `${prefix}.${key.slice(dot.length)}`, "high"),
     });
   }
   return tokens;
@@ -620,7 +649,7 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
   for (const name of PALETTE_GROUPS) groups.set(name, []);
 
   const seen = new Set<string>();
-  const addToken = (labelText: string, value: string) => {
+  const addToken = (labelText: string, value: string, evidenceType: DesignMdSourceType) => {
     if (!isSafeColorValue(value) || seen.has(value.toLowerCase())) return;
     seen.add(value.toLowerCase());
     const label = cleanPhrase(labelText || `color-${seen.size}`)
@@ -634,6 +663,7 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       resolvedValue: value,
       group: paletteGroupFor(label),
       source: "markdown",
+      sourceEvidence: sourceEvidence(evidenceType, `markdown.Colors.${label}`, evidenceType === "markdown-table" ? "medium" : "low"),
     };
     groups.get(token.group)!.push(token);
   };
@@ -648,14 +678,14 @@ function buildMarkdownPalette(body: string): DesignMdPaletteGroup[] {
       ?? tableCells.find((cell) => !/(#[0-9a-fA-F]{3,8}|rgba?\(|hsla?\()/i.test(cell))
       ?? line.match(/^\s*[-*]\s*([^(:`]+?)\s*(?:\(|`|:)/)?.[1]
       ?? "";
-    addToken(label, value);
+    addToken(label, value, tableCells.length > 0 ? "markdown-table" : line.trim().startsWith("-") || line.trim().startsWith("*") ? "markdown-list" : "markdown-paragraph");
     if (seen.size >= 28) break;
   }
 
   const matches = body.matchAll(/(?:\*\*([^*\n]+)\*\*|`([^`\n]+)`|--([a-z0-9-]+))?[^#\n]{0,80}(#[0-9a-fA-F]{3,8}|rgba?\([^)]+\)|hsla?\([^)]+\))/g);
   for (const match of matches) {
     const value = match[4];
-    addToken(match[1] || match[2] || match[3] || `color-${seen.size + 1}`, value);
+    addToken(match[1] || match[2] || match[3] || `color-${seen.size + 1}`, value, "markdown-paragraph");
     if (seen.size >= 28) break;
   }
 
@@ -690,6 +720,7 @@ function buildTypography(fm: Map<string, string>): DesignMdTypographyToken[] {
       letterSpacing: safeTextStyleValue(pick("letterSpacing", "letter-spacing")),
       raw,
       source: "structured",
+      sourceEvidence: sourceEvidence("frontmatter", `typography.${name}`, "high"),
     };
   });
 }
@@ -779,7 +810,16 @@ function parseMarkdownTypeTable(body: string): DesignMdTypographyToken[] {
       if (fontWeight) raw["fontWeight"] = fontWeight;
       if (lineHeight) raw["lineHeight"] = lineHeight;
       if (letterSpacing) raw["letterSpacing"] = letterSpacing;
-      tokens.push({ key: name, fontSize, fontWeight, lineHeight, letterSpacing, raw, source: "markdown" });
+      tokens.push({
+        key: name,
+        fontSize,
+        fontWeight,
+        lineHeight,
+        letterSpacing,
+        raw,
+        source: "markdown",
+        sourceEvidence: sourceEvidence("markdown-table", `markdown.Typography.${name}`, "medium"),
+      });
     }
     if (tokens.length >= 12) break;
   }
@@ -791,8 +831,26 @@ function buildMarkdownTypography(body: string): DesignMdTypographyToken[] {
   const fontFamily = extractFontFromMarkdown(body);
   if (tokens.length === 0 && fontFamily && isSafeFontFamilyValue(fontFamily)) {
     return [
-      { key: "display", fontFamily, fontSize: "40px", fontWeight: "700", lineHeight: "1.05", raw: { fontFamily }, source: "markdown" },
-      { key: "body", fontFamily, fontSize: "16px", fontWeight: "400", lineHeight: "1.45", raw: { fontFamily }, source: "markdown" },
+      {
+        key: "display",
+        fontFamily,
+        fontSize: "40px",
+        fontWeight: "700",
+        lineHeight: "1.05",
+        raw: { fontFamily },
+        source: "markdown",
+        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.display", "low"),
+      },
+      {
+        key: "body",
+        fontFamily,
+        fontSize: "16px",
+        fontWeight: "400",
+        lineHeight: "1.45",
+        raw: { fontFamily },
+        source: "markdown",
+        sourceEvidence: sourceEvidence("markdown-paragraph", "markdown.Fonts.body", "low"),
+      },
     ];
   }
   if (fontFamily && isSafeFontFamilyValue(fontFamily)) {
@@ -857,7 +915,16 @@ function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
     const nestedComponent = propParts.length > 1 && !propLooksLikeStyle;
     const groupName = nestedComponent ? `${name}-${firstProp}` : name;
     const prop = (nestedComponent ? propParts.slice(1) : propParts).join(".");
-    if (!groups.has(groupName)) groups.set(groupName, { name: groupName, kind: componentKind(groupName), raw: {}, styles: {}, source: "structured" });
+    if (!groups.has(groupName)) {
+      groups.set(groupName, {
+        name: groupName,
+        kind: componentKind(groupName),
+        raw: {},
+        styles: {},
+        source: "structured",
+        sourceEvidence: sourceEvidence("frontmatter", `components.${groupName}`, "high"),
+      });
+    }
     const group = groups.get(groupName)!;
     group.raw[prop] = token.resolvedValue;
     const safe = safeStyleProp(prop, token.resolvedValue);
@@ -975,6 +1042,7 @@ function buildMarkdownComponents(body: string): DesignMdComponentGroup[] {
     raw: {},
     styles: {},
     source: "markdown",
+    sourceEvidence: sourceEvidence("markdown-heading", `markdown.Components.${name}`, "medium"),
   }));
 }
 
@@ -1223,6 +1291,11 @@ export function parseDesignMdForPreview(
   const fm = parseNestedFrontmatter(content);
   const body = getFrontmatterBody(content);
   const phrases = extractPhrases(body, description);
+  const phraseEvidence = phrases.map((_, index) => sourceEvidence(
+    index === 0 && description ? "frontmatter" : "markdown-paragraph",
+    index === 0 && description ? "frontmatter.description" : `markdown.phrases.${index + 1}`,
+    index === 0 && description ? "medium" : "low",
+  ));
   const keywords = Array.from(new Set(keywordMatches([description, ...phrases].join(" "))));
   const components = buildComponents(fm);
   const structuredPalette = buildPalette(fm);
@@ -1258,7 +1331,7 @@ export function parseDesignMdForPreview(
     radius,
     spacing,
     components: allComponents,
-    visualLanguage: { phrases, keywords },
+    visualLanguage: { phrases, keywords, phraseEvidence },
     archetype,
     coverage,
     confidence,
