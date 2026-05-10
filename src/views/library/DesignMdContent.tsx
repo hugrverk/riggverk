@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type { DesignMdContent as DesignMdContentType, DesignMdPreviewContent } from "../../types";
 import { Markdown } from "../../components/Markdown";
 import { DesignMdGeneratedPreview } from "./DesignMdGeneratedPreview";
+import { designMdDisplayTitle, designMdHasInspiredTitle } from "../../lib/designMdDisplay";
 
 type PreviewMode = "preview" | "markdown" | "html" | "html-dark";
 
@@ -82,14 +83,17 @@ export function DesignMdContent(props: DesignMdContentProps) {
   }
 
   const currentHash = activeContent.slug + activeContent.title;
+  const displayTitle = designMdDisplayTitle(activeContent.slug);
+  const inspired = designMdHasInspiredTitle(activeContent.title);
 
   return (
     <div className="design-md-content-panel">
       <div className="lib-editor-meta-strip">
         <div className="lib-editor-meta-left">
-          <span className="lib-editor-meta-title">{activeContent.title}</span>
+          <span className="lib-editor-meta-title">{displayTitle}</span>
           <span className="lib-editor-meta-path">
             {activeContent.slug} &middot; {activeContent.path}
+            {inspired ? " · inspired upstream" : ""}
           </span>
         </div>
       </div>

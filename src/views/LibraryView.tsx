@@ -18,6 +18,7 @@ import { SkillsContent } from "./library/SkillsContent";
 import { AgentContent } from "./library/AgentContent";
 import { ConfigContent } from "./library/ConfigContent";
 import { DesignMdContent as DesignMdContentPanel } from "./library/DesignMdContent";
+import { designMdDisplayTitle, designMdHasInspiredTitle, designMdSearchText } from "../lib/designMdDisplay";
 
 export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "designMd";
 
@@ -427,12 +428,7 @@ function DesignMdSidebarInner({
   const filtered = useMemo(() => {
     const q = search.toLowerCase().trim();
     if (!q) return entries;
-    return entries.filter(
-      (e) =>
-        e.title.toLowerCase().includes(q) ||
-        e.slug.toLowerCase().includes(q) ||
-        e.description.toLowerCase().includes(q),
-    );
+    return entries.filter((e) => designMdSearchText(e).includes(q));
   }, [entries, search]);
 
   const notSynced = !catalogStatus || !catalogStatus.exists;
@@ -501,15 +497,26 @@ function DesignMdSidebarInner({
       ) : (
         <div className="lib-sidebar-list">
           {filtered.map((e) => (
+            (() => {
+              const displayTitle = designMdDisplayTitle(e.slug);
+              const inspired = designMdHasInspiredTitle(e.title);
+              return (
             <button
               key={e.slug}
               className={`lib-sidebar-item ${activeSlug === e.slug ? "lib-sidebar-item-active" : ""}`}
               onClick={() => onSelect(e.slug)}
               aria-current={activeSlug === e.slug ? "true" : undefined}
             >
-              <span className="lib-sidebar-item-title">{e.title}</span>
+              <span className="lib-sidebar-item-title">{displayTitle}</span>
               <span className="lib-sidebar-item-desc">{e.description || e.slug}</span>
+              {inspired && (
+                <span className="lib-sidebar-item-meta-row">
+                  <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">inspired</span>
+                </span>
+              )}
             </button>
+              );
+            })()
           ))}
         </div>
       )}

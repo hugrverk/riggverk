@@ -1,6 +1,7 @@
 import { useState, useMemo } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
 import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
+import { designMdDisplayTitle, designMdSearchText } from "../lib/designMdDisplay";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -948,7 +949,7 @@ export function WorkspaceView({
                         ) : (() => {
                           const q = designMdSearch.toLowerCase().trim();
                           const filtered = q
-                            ? designMdEntries.filter(e => e.title.toLowerCase().includes(q) || e.slug.toLowerCase().includes(q) || e.description.toLowerCase().includes(q))
+                            ? designMdEntries.filter(e => designMdSearchText(e).includes(q))
                             : designMdEntries;
                           if (filtered.length === 0) {
                             return <div className="ws-card-warn">No matches</div>;
@@ -960,7 +961,7 @@ export function WorkspaceView({
                               onClick={() => { onSelectDesignMdEntry(e.slug); }}
                               aria-current={activeDesignMdSlug === e.slug ? "true" : undefined}
                             >
-                              <span className="design-md-ws-entry-title">{e.title}</span>
+                              <span className="design-md-ws-entry-title">{designMdDisplayTitle(e.slug)}</span>
                               <span className="design-md-ws-entry-desc">{e.description || e.slug}</span>
                             </button>
                           ));
