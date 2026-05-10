@@ -5274,3 +5274,262 @@ html, body, #root {
   opacity: 0.55;
   flex: 1;
 }
+
+/* ── Design MD generated preview ── */
+
+.design-md-generated {
+  padding: 16px;
+  overflow-y: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.design-md-generated-header {
+  margin-bottom: 18px;
+}
+
+.design-md-gen-title {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0 0 4px 0;
+}
+
+.design-md-gen-desc {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0;
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.design-md-generated-section {
+  margin-bottom: 18px;
+}
+
+.design-md-gen-section-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.55;
+  margin-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 4px;
+}
+
+.design-md-gen-text {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 6px 0;
+  line-height: 1.6;
+  opacity: 0.85;
+}
+
+.design-md-gen-text-label {
+  font-weight: 500;
+  color: var(--text);
+  opacity: 0.7;
+}
+
+/* Swatches */
+
+.design-md-swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.design-md-swatch {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.design-md-swatch-chip {
+  width: 28px;
+  height: 28px;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.design-md-swatch-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.design-md-swatch-name {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.design-md-swatch-value {
+  font-size: 9px;
+  color: var(--text-muted);
+  font-family: var(--font);
+  opacity: 0.7;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Typography */
+
+.design-md-type-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+  margin-bottom: 10px;
+}
+
+.design-md-type-row {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.design-md-type-name {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.design-md-type-value {
+  color: var(--text);
+  font-family: var(--font);
+}
+
+.design-md-type-sample-label {
+  font-size: 9px;
+  color: var(--text-muted);
+  opacity: 0.45;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+
+.design-md-type-sample {
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  line-height: 1.6;
+}
+
+.design-md-type-sample p {
+  margin: 0 0 6px 0;
+  color: var(--text);
+}
+
+/* Components */
+
+.design-md-component-stage {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.design-md-sample-button {
+  padding: 8px 18px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: var(--font);
+  cursor: default;
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.design-md-sample-card {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  margin-bottom: 10px;
+}
+
+.design-md-sample-card-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+  margin-bottom: 4px;
+}
+
+.design-md-sample-card-body {
+  font-size: 11px;
+  color: var(--text-muted);
+  line-height: 1.5;
+  opacity: 0.8;
+}
+
+.design-md-component-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}
+
+.design-md-component-token {
+  display: flex;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.design-md-component-token-name {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.design-md-component-token-value {
+  color: var(--text);
+  font-family: var(--font);
+}
+
+/* Guardrails */
+
+.design-md-gen-do-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.design-md-gen-dont-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--fail);
+}
+
+.design-md-gen-list {
+  margin: 4px 0 10px 0;
+  padding-left: 18px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.design-md-gen-list-do {
+  color: var(--text-muted);
+  opacity: 0.85;
+}
+
+.design-md-gen-list-dont {
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.design-md-gen-empty {
+  font-size: 12px;
+  color: var(--text-muted);
+  opacity: 0.6;
+  padding: 24px 0;
+  text-align: center;
+}

@@ -2,8 +2,9 @@ import { useState, useCallback, useEffect } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { DesignMdContent as DesignMdContentType, DesignMdPreviewContent } from "../../types";
 import { Markdown } from "../../components/Markdown";
+import { DesignMdGeneratedPreview } from "./DesignMdGeneratedPreview";
 
-type PreviewMode = "markdown" | "visual" | "visual-dark";
+type PreviewMode = "generated" | "markdown" | "html" | "html-dark";
 
 const CSP_META = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; font-src data:;">`;
 
@@ -30,27 +31,26 @@ interface DesignMdContentProps {
 
 export function DesignMdContent(props: DesignMdContentProps) {
   const { activeContent } = props;
-  const [previewMode, setPreviewMode] = useState<PreviewMode>("markdown");
+  const [previewMode, setPreviewMode] = useState<PreviewMode>("generated");
   const [previewHtml, setPreviewHtml] = useState<string | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
 
-  // When design entry changes, clear stale state and reset to available mode
+  // When design entry changes, clear stale html state and reset if mode unavailable
   useEffect(() => {
     setPreviewHtml(null);
     setPreviewError(null);
     setPreviewLoading(false);
     if (activeContent) {
-      // Reset to markdown if current visual mode's preview file is unavailable
-      if (previewMode === "visual" && !activeContent.has_preview) {
-        setPreviewMode("markdown");
-      } else if (previewMode === "visual-dark" && !activeContent.has_preview_dark) {
-        setPreviewMode("markdown");
+      if (previewMode === "html" && !activeContent.has_preview) {
+        setPreviewMode("generated");
+      } else if (previewMode === "html-dark" && !activeContent.has_preview_dark) {
+        setPreviewMode("generated");
       }
     }
   }, [activeContent?.slug]);
 
-  const loadPreview = useCallback(async (slug: string, variant: "light" | "dark") => {
+  const loadHtmlPreview = useCallback(async (slug: string, variant: "light" | "dark") => {
     setPreviewLoading(true);
     setPreviewError(null);
     setPreviewHtml(null);
@@ -66,12 +66,12 @@ export function DesignMdContent(props: DesignMdContentProps) {
 
   const handleModeChange = useCallback((mode: PreviewMode) => {
     setPreviewMode(mode);
-    if (mode === "visual" && activeContent) {
-      loadPreview(activeContent.slug, "light");
-    } else if (mode === "visual-dark" && activeContent) {
-      loadPreview(activeContent.slug, "dark");
+    if (mode === "html" && activeContent) {
+      loadHtmlPreview(activeContent.slug, "light");
+    } else if (mode === "html-dark" && activeContent) {
+      loadHtmlPreview(activeContent.slug, "dark");
     }
-  }, [activeContent, loadPreview]);
+  }, [activeContent, loadHtmlPreview]);
 
   if (!activeContent) {
     return (
@@ -80,6 +80,8 @@ export function DesignMdContent(props: DesignMdContentProps) {
       </div>
     );
   }
+
+  const currentHash = activeContent.slug + activeContent.title;
 
   return (
     <>
@@ -94,6 +96,14 @@ export function DesignMdContent(props: DesignMdContentProps) {
 
       <div className="design-md-preview-tabs" role="tablist" aria-label="Design MD preview mode">
         <button
+          className={`btn btn-sm ${previewMode === "generated" ? "btn-active" : ""}`}
+          onClick={() => handleModeChange("generated")}
+          role="tab"
+          aria-selected={previewMode === "generated"}
+        >
+          generated
+        </button>
+        <button
           className={`btn btn-sm ${previewMode === "markdown" ? "btn-active" : ""}`}
           onClick={() => handleModeChange("markdown")}
           role="tab"
@@ -103,51 +113,53 @@ export function DesignMdContent(props: DesignMdContentProps) {
         </button>
         {activeContent.has_preview ? (
           <button
-            className={`btn btn-sm ${previewMode === "visual" ? "btn-active" : ""}`}
-            onClick={() => handleModeChange("visual")}
+            className={`btn btn-sm ${previewMode === "html" ? "btn-active" : ""}`}
+            onClick={() => handleModeChange("html")}
             role="tab"
-            aria-selected={previewMode === "visual"}
+            aria-selected={previewMode === "html"}
           >
-            visual
+            html
           </button>
         ) : (
-          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No light preview available">
-            visual
-          </span>
+          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No HTML preview available">html</span>
         )}
         {activeContent.has_preview_dark ? (
           <button
-            className={`btn btn-sm ${previewMode === "visual-dark" ? "btn-active" : ""}`}
-            onClick={() => handleModeChange("visual-dark")}
+            className={`btn btn-sm ${previewMode === "html-dark" ? "btn-active" : ""}`}
+            onClick={() => handleModeChange("html-dark")}
             role="tab"
-            aria-selected={previewMode === "visual-dark"}
+            aria-selected={previewMode === "html-dark"}
           >
-            visual dark
+            html dark
           </button>
         ) : (
-          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No dark preview available">
-            visual dark
-          </span>
+          <span className="btn btn-sm design-md-preview-tab-unavailable" title="No dark HTML preview available">html dark</span>
         )}
       </div>
 
       <div className="lib-editor-body">
+        {previewMode === "generated" && (
+          <div className="lib-preview-body" style={{ padding: 0 }}>
+            <DesignMdGeneratedPreview key={currentHash} activeContent={activeContent} />
+          </div>
+        )}
+
         {previewMode === "markdown" && (
           <div className="lib-preview-body">
             <Markdown content={activeContent.content} />
           </div>
         )}
 
-        {(previewMode === "visual" || previewMode === "visual-dark") && (
+        {(previewMode === "html" || previewMode === "html-dark") && (
           <div className="design-md-preview-frame-wrap">
             {previewLoading && (
               <div className="design-md-preview-loading">loading preview...</div>
             )}
             {previewError && (
               <div className="design-md-preview-unavailable">
-                {previewMode === "visual"
-                  ? "No visual preview available for this design"
-                  : "No dark preview available for this design"}
+                {previewMode === "html"
+                  ? "No HTML preview available for this design"
+                  : "No dark HTML preview available for this design"}
               </div>
             )}
             {previewHtml && !previewLoading && (
@@ -155,7 +167,7 @@ export function DesignMdContent(props: DesignMdContentProps) {
                 className="design-md-preview-frame"
                 srcDoc={previewHtml}
                 sandbox=""
-                title="Design MD visual preview"
+                title="Design MD HTML preview"
               />
             )}
             <div className="design-md-preview-warning">
