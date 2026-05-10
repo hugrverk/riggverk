@@ -1,5 +1,5 @@
 import type { DesignMdSpecimen, DesignMdBoard, DesignMdBoardComponentGroup } from "./designMdSpecimenBuilder";
-import { isSafeColorValue, isSafeFontFamilyValue, isSafeSizeValue, isSafeSpacingValue, isUnsafeDesignMdStyleValue } from "./designMdPreviewParser";
+import { isSafeColorValue, isSafeFontFamilyValue, isSafeSizeValue, isSafeSpacingValue, isUnsafeDesignMdStyleValue, resolveGeneratedFontFamily } from "./designMdPreviewParser";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
 type GeneratedPreviewVariant = "light" | "dark";
@@ -25,8 +25,20 @@ function cssSpacing(value: string | undefined, fallback: string): string {
   return isSafeSpacingValue(value) ? value.trim() : fallback;
 }
 
-function cssFont(value: string | undefined, fallback: string): string {
-  return isSafeFontFamilyValue(value) ? value.trim() : fallback;
+function boardFontContext(board: DesignMdBoard, raw: Record<string, string> = {}): string {
+  return [
+    board.title,
+    board.description,
+    board.archetype,
+    ...board.visualLanguage.phrases,
+    ...board.visualLanguage.keywords,
+    ...Object.values(raw),
+  ].join(" ");
+}
+
+function cssPreviewFont(value: string | undefined, board: DesignMdBoard, raw: Record<string, string> = {}): string {
+  const stack = resolveGeneratedFontFamily(value, boardFontContext(board, raw));
+  return isSafeFontFamilyValue(stack) ? stack : '-apple-system,BlinkMacSystemFont,"Segoe UI",system-ui,sans-serif';
 }
 
 function tokenKeyMatches(key: string, match: string): boolean {
@@ -34,6 +46,18 @@ function tokenKeyMatches(key: string, match: string): boolean {
   const normalizedMatch = match.toLowerCase();
   const compact = normalized.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
   const compactMatch = normalizedMatch.replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const keyParts = compact.split("-").filter(Boolean);
+  const matchParts = compactMatch.split("-").filter(Boolean);
+  const themeFor = (parts: string[]) => {
+    if (parts.some((part) => /^(dark|black|inverse|night|aubergine)$/.test(part))) return "dark";
+    if (parts.some((part) => /^(light|white)$/.test(part))) return "light";
+    return null;
+  };
+  const keyedTheme = themeFor(keyParts);
+  const matchTheme = themeFor(matchParts);
+  const themedBase = matchParts.some((part) => /^(canvas|surface|background|card|body|text|ink|foreground)$/.test(part));
+  if (keyedTheme && matchTheme && keyedTheme !== matchTheme) return false;
+  if (keyedTheme && !matchTheme && themedBase && compact !== compactMatch) return false;
   if (normalized === normalizedMatch || compact === compactMatch) return true;
   return normalized.split(/[^a-z0-9]+/).includes(normalizedMatch);
 }
@@ -55,12 +79,15 @@ function tokenColor(tokens: { key: string; resolvedValue: string }[], matches: s
 }
 
 function component(board: DesignMdBoard, matches: string[]): DesignMdBoardComponentGroup | undefined {
+  const normalize = (value: string) => value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  const groups = board.componentGroups.map((group) => ({ group, name: normalize(group.name) }));
   for (const match of matches) {
-    const exact = board.componentGroups.find((group) => group.name.toLowerCase() === match);
+    const needle = normalize(match);
+    const exact = groups.find(({ name }) => name === needle)?.group;
     if (exact) return exact;
-    const prefixed = board.componentGroups.find((group) => group.name.toLowerCase().startsWith(match));
+    const prefixed = groups.find(({ name }) => name.startsWith(needle))?.group;
     if (prefixed) return prefixed;
-    const partial = board.componentGroups.find((group) => group.name.toLowerCase().includes(match));
+    const partial = groups.find(({ name }) => name.includes(needle))?.group;
     if (partial) return partial;
   }
   return undefined;
@@ -104,6 +131,74 @@ function colorLuma(value: string): number | null {
   return (0.2126 * rgb.r + 0.7152 * rgb.g + 0.0722 * rgb.b) / 255;
 }
 
+function rgbToHex(r: number, g: number, b: number): string {
+  return "#" + [r, g, b].map((channel) => Math.max(0, Math.min(255, Math.round(channel))).toString(16).padStart(2, "0")).join("");
+}
+
+function mixHexColor(a: string, b: string, amount: number): string | null {
+  const ca = hexToRgb(a);
+  const cb = hexToRgb(b);
+  if (!ca || !cb) return null;
+  const t = Math.max(0, Math.min(1, amount));
+  return rgbToHex(
+    ca.r + (cb.r - ca.r) * t,
+    ca.g + (cb.g - ca.g) * t,
+    ca.b + (cb.b - ca.b) * t,
+  );
+}
+
+function relativeLuminance(value: string): number | null {
+  const rgb = hexToRgb(value);
+  if (!rgb) return null;
+  const channel = (c: number) => {
+    const v = c / 255;
+    return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+  };
+  return 0.2126 * channel(rgb.r) + 0.7152 * channel(rgb.g) + 0.0722 * channel(rgb.b);
+}
+
+function contrastRatio(a: string | undefined, b: string | undefined): number | null {
+  if (!a || !b) return null;
+  const la = relativeLuminance(a);
+  const lb = relativeLuminance(b);
+  if (la === null || lb === null) return null;
+  const lighter = Math.max(la, lb);
+  const darker = Math.min(la, lb);
+  return (lighter + 0.05) / (darker + 0.05);
+}
+
+function readableTextColor(bg: string, light = "#f8fafc", dark = "#111111"): string {
+  const lightContrast = contrastRatio(bg, light) ?? 0;
+  const darkContrast = contrastRatio(bg, dark) ?? 0;
+  return lightContrast >= darkContrast ? light : dark;
+}
+
+function ensureReadable(fg: string, bg: string, fallback?: string): string {
+  const ratio = contrastRatio(fg, bg);
+  if (ratio === null || ratio >= 4.5) return fg;
+  return fallback ?? readableTextColor(bg);
+}
+
+function darkestPaletteColor(tokens: { resolvedValue: string }[], fallback: string): string {
+  const sorted = tokens
+    .map((token) => token.resolvedValue)
+    .filter(isSafeColorValue)
+    .map((value) => ({ value: value.trim(), luma: colorLuma(value.trim()) }))
+    .filter((item): item is { value: string; luma: number } => item.luma !== null)
+    .sort((a, b) => a.luma - b.luma);
+  return sorted[0]?.value ?? fallback;
+}
+
+function lightestPaletteColor(tokens: { resolvedValue: string }[], fallback: string): string {
+  const sorted = tokens
+    .map((token) => token.resolvedValue)
+    .filter(isSafeColorValue)
+    .map((value) => ({ value: value.trim(), luma: colorLuma(value.trim()) }))
+    .filter((item): item is { value: string; luma: number } => item.luma !== null)
+    .sort((a, b) => b.luma - a.luma);
+  return sorted[0]?.value ?? fallback;
+}
+
 function isLightColor(value: string | undefined): boolean {
   const luma = value ? colorLuma(value) : null;
   return luma !== null && luma > 0.72;
@@ -137,6 +232,8 @@ function componentColors(
       resolvedFg = fg;
     }
   }
+
+  resolvedFg = ensureReadable(resolvedFg, resolvedBg, readableTextColor(resolvedBg));
 
   return {
     bg: resolvedBg,
@@ -185,7 +282,7 @@ export function generateSpecimenHtml(spec: DesignMdSpecimen): string {
 function typographyCss(board: DesignMdBoard, matches: string[], fallbackSize: string) {
   const token = board.typographyTokens.find((t) => matches.some((match) => t.key.toLowerCase().includes(match))) ?? board.typographyTokens[0];
   return {
-    family: cssFont(token?.fontFamily, '-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif'),
+    family: cssPreviewFont(token?.fontFamily, board, token?.raw),
     size: cssSize(token?.fontSize, fallbackSize),
     weight: cssText(token?.fontWeight, "600"),
     lineHeight: cssText(token?.lineHeight, "1.15"),
@@ -248,12 +345,15 @@ function productGalleryHero(board: DesignMdBoard, colors: ReturnType<typeof deri
 }
 
 function financeHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
-  const nav = componentColors(component(board, ["top-nav-dark", "top-nav-on-dark", "top-nav"]), colors.darkCanvas, colors.onDark, colors);
+  const financeBg = colors.variant === "dark" ? colors.darkCanvas : colors.canvas;
+  const financeFg = colors.variant === "dark" ? colors.onDark : colors.text;
+  const financePanel = colors.variant === "dark" ? colors.darkSurface : colors.surface;
+  const nav = componentColors(component(board, colors.variant === "dark" ? ["top-nav-dark", "top-nav-on-dark", "top-nav"] : ["top-nav", "top-nav-light", "nav"]), financeBg, financeFg, colors);
   const tableGroup = component(board, ["markets-table-card", "asset-row", "price", "balance", "product-ui-card"]);
-  const card = componentColors(tableGroup ?? component(board, ["card-dark", "card", "panel"]), colors.darkSurface, colors.onDark, colors);
+  const card = componentColors(tableGroup ?? component(board, colors.variant === "dark" ? ["card-dark", "panel-dark", "card", "panel"] : ["card", "panel", "stat"]), financePanel, financeFg, colors);
   const actionGroup = component(board, ["button-primary", "button-primary-pill"]);
   const action = componentColors(actionGroup, colors.primary, colors.onPrimary, colors);
-  return '<section class="hero hero-finance" style="background:' + colors.darkCanvas + ';color:' + colors.onDark + '">' +
+  return '<section class="hero hero-finance" style="background:' + financeBg + ';color:' + financeFg + '">' +
     '<div class="finance-nav" style="background:' + nav.bg + ';color:' + nav.fg + '"><strong>' + esc(board.title) + '</strong><span>Buy Crypto</span><span>Markets</span><button style="background:' + action.bg + ';color:' + action.fg + ';border-radius:' + action.radius + '">' + esc(actionGroup?.name ?? "Sign Up") + '</button></div>' +
     '<div class="finance-grid"><article class="balance-card" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + card.radius + '"><small>Total Balance</small><h2>$42,918.80</h2><button style="background:' + action.bg + ';color:' + action.fg + ';border-radius:' + action.radius + '">Deposit</button></article>' +
     '<article class="market-table" style="background:' + card.bg + ';color:' + card.fg + ';border-radius:' + card.radius + '"><b>' + esc(tableGroup?.name ?? "market table") + '</b>' +
@@ -272,11 +372,11 @@ function docsHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>)
 function collaborationHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>): string {
   const primary = component(board, ["button-primary-pill", "button-primary", "pill"]);
   const input = component(board, ["text-input", "search-input", "input"]);
-  const cards = ["card-pricing-featured", "card-feature-cream", "card-stat", "card-pricing"].map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
+  const cards = (colors.variant === "dark" ? ["card-pricing-dark", "card-dark", "card-pricing-featured", "card-stat"] : ["card-pricing-featured", "card-feature-cream", "card-stat", "card-pricing"]).map((name) => component(board, [name])).filter(Boolean) as DesignMdBoardComponentGroup[];
   const button = componentColors(primary, colors.primary, colors.onPrimary, colors);
   const inputStyle = componentColors(input, colors.surface, colors.text, colors);
   const card = componentColors(cards[0] ?? component(board, ["card"]), colors.surface, colors.text, colors);
-  return '<section class="hero hero-collab"><div class="collab-copy"><span class="collab-kicker">Team workspace</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><div class="collab-actions"><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(primary?.name ?? "button-primary-pill") + '</button><span style="border-color:' + button.bg + ';color:' + button.bg + '">' + esc(component(board, ["button-secondary", "button-outline"])?.name ?? "outline button") + '</span></div></div><div class="collab-mesh"><div class="collab-input" style="background:' + inputStyle.bg + ';color:' + inputStyle.fg + ';border-radius:' + inputStyle.radius + '"><span>' + esc(input?.name ?? "text-input") + '</span><i></i></div><div class="collab-cards">' +
+  return '<section class="hero hero-collab" style="background:radial-gradient(circle at 75% 20%,' + colors.surface + ',transparent 34%),linear-gradient(135deg,' + colors.canvas + ',' + colors.surface + ')"><div class="collab-copy"><span class="collab-kicker">Team workspace</span><h2>' + esc(board.title) + '</h2><p>' + esc(board.visualLanguage.phrases[0] ?? board.description) + '</p><div class="collab-actions"><button style="background:' + button.bg + ';color:' + button.fg + ';border-radius:' + button.radius + '">' + esc(primary?.name ?? "button-primary-pill") + '</button><span style="border-color:' + button.bg + ';color:' + button.bg + '">' + esc(component(board, ["button-secondary", "button-outline"])?.name ?? "outline button") + '</span></div></div><div class="collab-mesh"><div class="collab-input" style="background:' + inputStyle.bg + ';color:' + inputStyle.fg + ';border-radius:' + inputStyle.radius + '"><span>' + esc(input?.name ?? "text-input") + '</span><i></i></div><div class="collab-cards">' +
     [0, 1, 2].map((i) => '<article style="background:' + (i === 0 ? button.bg : card.bg) + ';color:' + (i === 0 ? button.fg : card.fg) + ';border-radius:' + card.radius + '"><b>' + esc(cards[i]?.name ?? ["card-pricing-featured", "card-feature", "card-stat"][i]) + '</b><span>' + ["Channels", "Automations", "Messages"][i] + '</span></article>').join("") +
     '</div></div></section>';
 }
@@ -294,7 +394,10 @@ function dataHero(board: DesignMdBoard, colors: ReturnType<typeof deriveTokens>)
   const groups = prioritizedComponentGroups(board);
   const chart = groups.find((group) => /chart|stat|code|mockup|card/i.test(group.name));
   const table = groups.find((group) => /table|row|query|pricing/i.test(group.name));
-  return '<section class="hero hero-data"><div class="data-sidebar"><b>' + esc(board.title) + '</b><span>Queries</span><span>Metrics</span><span>Events</span></div><div class="data-main"><div class="chart-card"><h2>' + esc(chart?.name ?? "data panel") + '</h2><div class="bars"><i></i><i></i><i></i><i></i><i></i></div></div><div class="data-table"><b>' + esc(table?.name ?? "metric table") + '</b>' +
+  const dataBg = colors.variant === "dark" ? colors.darkCanvas : colors.canvas;
+  const dataPanel = colors.variant === "dark" ? colors.darkSurface : colors.surface;
+  const dataFg = colors.variant === "dark" ? colors.onDark : colors.text;
+  return '<section class="hero hero-data" style="background:' + dataBg + ';color:' + dataFg + '"><div class="data-sidebar"><b>' + esc(board.title) + '</b><span>Queries</span><span>Metrics</span><span>Events</span></div><div class="data-main"><div class="chart-card" style="background:' + dataPanel + ';color:' + dataFg + '"><h2>' + esc(chart?.name ?? "data panel") + '</h2><div class="bars"><i></i><i></i><i></i><i></i><i></i></div></div><div class="data-table" style="background:' + dataPanel + ';color:' + dataFg + '"><b>' + esc(table?.name ?? "metric table") + '</b>' +
     ["Latency", "Queries", "Errors"].map((label, i) => '<div><span>' + label + '</span><strong style="color:' + (i === 2 ? colors.down : colors.primary) + '">' + ["18ms", "1.2M", "0.01%"][i] + '</strong></div>').join("") +
     '</div></div></section>';
 }
@@ -321,21 +424,28 @@ function genericHero(board: DesignMdBoard, colors: ReturnType<typeof deriveToken
 
 function deriveTokens(board: DesignMdBoard, variant: GeneratedPreviewVariant = "light") {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
-  const lightCanvas = tokenColor(allColors, ["canvas-light", "canvas", "background-light", "background", "white"], "#ffffff");
-  const darkCanvas = tokenColor(allColors, ["canvas-dark", "background-dark", "surface-black", "surface-dark", "black"], "#0b0e11");
-  const lightSurface = tokenColor(allColors, ["surface-card-light", "surface-card", "surface-soft", "surface", "card", "white"], "#f5f5f5");
-  const darkSurface = tokenColor(allColors, ["surface-card-dark", "surface-dark", "surface-black", "surface-tile", "surface-aubergine", "elevated-dark", "black"], "#1f2329");
-  const lightText = tokenColor(allColors, ["ink", "body-on-light", "text-on-light", "text", "body", "black"], "#181818");
-  const muted = tokenColor(allColors, ["muted", "secondary", "soft"], "#6f7480");
-  const darkMuted = tokenColor(allColors, ["on-dark-muted", "on-aubergine-mute", "muted-on-dark", "body-on-dark-muted"], "#a7adb8");
+  const paletteDark = darkestPaletteColor(allColors, "#0b0e11");
+  const paletteLight = lightestPaletteColor(allColors, "#ffffff");
+  const fallbackDarkCanvas = isDarkColor(paletteDark) ? paletteDark : "#0b0e11";
+  const fallbackDarkSurface = mixHexColor(fallbackDarkCanvas, "#ffffff", 0.1) ?? "#1f2329";
+  const lightCanvas = tokenColor(allColors, ["canvas-light", "white", "background-light", "background", "canvas", "surface-light"], paletteLight);
+  const darkCanvas = tokenColor(allColors, ["canvas-dark", "background-dark", "surface-black", "black", "darkSurface", "dark-surface"], fallbackDarkCanvas);
+  const lightSurface = tokenColor(allColors, ["surface-light", "surface-card-light", "white", "surface-card", "surface-soft", "surface", "card"], "#f5f5f5");
+  const darkSurfaceMatches = board.archetype === "collaboration_saas"
+    ? ["surface-aubergine", "aubergine", "surface-dark", "surface-card-dark", "elevated-dark", "surface-black", "black"]
+    : ["surface-dark", "surface-card-dark", "surface-black", "black", "surface-aubergine", "darkSurface", "dark-surface", "elevated-dark", "card-dark"];
+  const darkSurface = tokenColor(allColors, darkSurfaceMatches, fallbackDarkSurface);
+  const lightText = ensureReadable(tokenColor(allColors, ["ink", "body-on-light", "text-on-light", "text", "body", "black"], "#181818"), lightCanvas, "#181818");
+  const muted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#6f7480"), lightCanvas, "#6f7480");
+  const darkMuted = ensureReadable(tokenColor(allColors, ["on-dark-muted", "on-aubergine-muted", "on-aubergine-mute", "muted-on-dark", "body-on-dark-muted", "muted"], "#a7adb8"), darkCanvas, "#a7adb8");
   const lightBorder = tokenColor(allColors, ["hairline", "border", "divider"], "#e5e5e5");
-  const darkBorder = tokenColor(allColors, ["hairline-dark", "border-dark", "divider-dark", "surface-border-dark"], "#30363d");
+  const darkBorder = tokenColor(allColors, ["hairline-dark", "border-dark", "divider-dark", "surface-border-dark", "hairline", "border"], mixHexColor(darkSurface, "#ffffff", 0.16) ?? "#30363d");
   const primary = tokenColor(allColors, ["primary", "brand", "accent", "green", "blue", "yellow"], "#0066cc");
-  const onPrimary = tokenColor(allColors, ["on-primary"], "#ffffff");
-  const onDark = tokenColor(allColors, ["on-dark", "body-on-dark", "on-black", "on-aubergine"], "#f8fafc");
+  const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
+  const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "on-black", "on-aubergine", "body-on-dark"], "#f8fafc"), darkCanvas, "#f8fafc");
   const canvas = variant === "dark" ? darkCanvas : lightCanvas;
   const surface = variant === "dark" ? darkSurface : lightSurface;
-  const text = variant === "dark" ? onDark : lightText;
+  const text = ensureReadable(variant === "dark" ? onDark : lightText, canvas, variant === "dark" ? "#f8fafc" : "#111111");
   const border = variant === "dark" ? darkBorder : lightBorder;
   const actualMuted = variant === "dark" ? darkMuted : muted;
   const up = tokenColor(allColors, ["trading-up", "success"], "#0ecb81");
@@ -411,7 +521,7 @@ function generateTypography(board: DesignMdBoard): string {
   return '<section class="strip type-strip"><header><b>Typography</b><span>token samples</span></header><div class="type-grid">' +
     tokens.map((token) => {
       const style = [
-        "font-family:" + cssFont(token.fontFamily, "inherit"),
+        "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
         "font-size:" + cssSize(token.fontSize, "18px"),
         "font-weight:" + cssText(token.fontWeight, "500"),
         "line-height:" + cssText(token.lineHeight, "1.25"),
@@ -456,7 +566,7 @@ function generateOverviewDeck(board: DesignMdBoard, colors: ReturnType<typeof de
     ? '<section class="overview-card overview-type"><header><b>Type</b><span>' + board.typographyTokens.length + ' tokens</span></header>' +
       typeTokens.map((token) => {
         const style = [
-          "font-family:" + cssFont(token.fontFamily, "inherit"),
+          "font-family:" + cssPreviewFont(token.fontFamily, board, token.raw),
           "font-size:" + cssSize(token.fontSize, "16px"),
           "font-weight:" + cssText(token.fontWeight, "500"),
           "line-height:" + cssText(token.lineHeight, "1.2"),

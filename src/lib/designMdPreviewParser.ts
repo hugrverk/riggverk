@@ -118,9 +118,14 @@ const SECTION_HEADINGS = [
   "Shapes",
   "Typography",
   "Colors",
+  "Fonts",
+  "Font Substitutes",
+  "Font Substitute",
+  "Note on Font Substitutes",
+  "Font Notes",
 ];
 
-const UNSAFE_VALUE_RE = /url\s*\(|expression\s*\(|var\s*\(|calc\s*\(|[;<>]|script|iframe|object|embed/i;
+const UNSAFE_VALUE_RE = /url\s*\(|@import|@font-face|expression\s*\(|var\s*\(|calc\s*\(|[;<>]|script|iframe|object|embed/i;
 
 function stripQuotes(s: string): string {
   const t = s.trim();
@@ -273,6 +278,61 @@ export function isSafeSpacingValue(value: string | undefined): value is string {
 export function isSafeFontFamilyValue(value: string | undefined): value is string {
   if (!value || isUnsafeDesignMdStyleValue(value)) return false;
   return /^[\w\s"',.-]+$/.test(value.trim());
+}
+
+function normalizeFontName(value: string): string | null {
+  const name = stripQuotes(value).trim();
+  if (!name || !isSafeFontFamilyValue(name)) return null;
+  const generic = /^(?:serif|sans-serif|monospace|system-ui|ui-sans-serif|ui-serif|ui-monospace|cursive|fantasy)$/i;
+  if (generic.test(name) || name.startsWith("-")) return name;
+  return /\s/.test(name) ? `"${name}"` : name;
+}
+
+function splitFontFamily(value: string | undefined): string[] {
+  if (!value || isUnsafeDesignMdStyleValue(value)) return [];
+  return value.split(",").map(normalizeFontName).filter((font): font is string => !!font);
+}
+
+function uniqFonts(fonts: string[]): string[] {
+  const seen = new Set<string>();
+  return fonts.filter((font) => {
+    const key = stripQuotes(font).toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+export function resolveGeneratedFontFamily(value: string | undefined, context = ""): string {
+  const source = [value ?? "", context].join(" ").toLowerCase();
+  const original = splitFontFamily(value);
+  let fallback: string[] = [];
+
+  if (/sf pro|san francisco|apple system|-apple-system/.test(source)) {
+    fallback = ["-apple-system", "BlinkMacSystemFont", "\"SF Pro Display\"", "\"SF Pro Text\"", "system-ui", "sans-serif"];
+  } else if (/airbnb cereal|circular/.test(source)) {
+    fallback = ["\"Airbnb Cereal VF\"", "Circular", "\"Avenir Next\"", "\"Helvetica Neue\"", "Arial", "sans-serif"];
+  } else if (/salesforce avant garde|salesforce sans/.test(source)) {
+    fallback = ["\"Salesforce Sans\"", "\"Avenir Next\"", "Inter", "\"Helvetica Neue\"", "Arial", "sans-serif"];
+  } else if (/geist/.test(source)) {
+    fallback = ["Geist", "Inter", "system-ui", "sans-serif"];
+  } else if (/ibm plex/.test(source)) {
+    fallback = ["\"IBM Plex Sans\"", "Inter", "system-ui", "sans-serif"];
+  } else if (/inter/.test(source)) {
+    fallback = ["Inter", "system-ui", "sans-serif"];
+  } else if (/helvetica neue|helvetica|neue haas|haas/.test(source)) {
+    fallback = ["\"Helvetica Neue\"", "Arial", "sans-serif"];
+  } else if (/mono|monospace|code|terminal|console|sf mono|menlo|consolas/.test(source)) {
+    fallback = ["\"SF Mono\"", "Menlo", "Monaco", "Consolas", "monospace"];
+  } else if (/serif|editorial|magazine|publication|luxury|fashion/.test(source)) {
+    fallback = ["Georgia", "\"Times New Roman\"", "serif"];
+  } else if (/lato/.test(source)) {
+    fallback = ["Lato", "Inter", "system-ui", "sans-serif"];
+  } else {
+    fallback = ["Inter", "-apple-system", "BlinkMacSystemFont", "\"Segoe UI\"", "system-ui", "sans-serif"];
+  }
+
+  return uniqFonts([...original, ...fallback]).join(", ");
 }
 
 function safeTextStyleValue(value: string | undefined): string | undefined {
@@ -519,9 +579,13 @@ function buildComponents(fm: Map<string, string>): DesignMdComponentGroup[] {
   for (const token of tokensForPrefix(fm, "components")) {
     const [name, ...propParts] = token.key.split(".");
     if (!name || propParts.length === 0) continue;
-    const prop = propParts.join(".");
-    if (!groups.has(name)) groups.set(name, { name, kind: componentKind(name), raw: {}, styles: {} });
-    const group = groups.get(name)!;
+    const firstProp = propParts[0];
+    const propLooksLikeStyle = /^(background|backgroundColor|background-color|color|textColor|text-color|border|borderColor|border-color|rounded|borderRadius|border-radius|padding|margin|gap|height|width|size)$/i.test(firstProp);
+    const nestedComponent = propParts.length > 1 && !propLooksLikeStyle;
+    const groupName = nestedComponent ? `${name}-${firstProp}` : name;
+    const prop = (nestedComponent ? propParts.slice(1) : propParts).join(".");
+    if (!groups.has(groupName)) groups.set(groupName, { name: groupName, kind: componentKind(groupName), raw: {}, styles: {} });
+    const group = groups.get(groupName)!;
     group.raw[prop] = token.resolvedValue;
     const safe = safeStyleProp(prop, token.resolvedValue);
     if (safe) group.styles[prop] = safe;

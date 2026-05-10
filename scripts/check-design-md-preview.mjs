@@ -37,7 +37,7 @@ for (const file of ["designMdSpecimenBuilder.js", "designMdHtmlGenerator.js"]) {
   fs.writeFileSync(fullPath, content);
 }
 
-const { parseDesignMdForPreview } = await import(path.join(outDir, "designMdPreviewParser.js"));
+const { parseDesignMdForPreview, resolveGeneratedFontFamily } = await import(path.join(outDir, "designMdPreviewParser.js"));
 const { buildBoard } = await import(path.join(outDir, "designMdSpecimenBuilder.js"));
 const { generateBoardHtml } = await import(path.join(outDir, "designMdHtmlGenerator.js"));
 const { designMdDisplayTitle, designMdSearchText } = await import(path.join(outDir, "designMdDisplay.js"));
@@ -82,6 +82,26 @@ assert.deepEqual(model.components.map((component) => component.name), [
 ]);
 assert.equal(model.components.find((component) => component.name === "markets-table-card")?.kind, "table");
 
+const nestedComponents = parseDesignMdForPreview(
+  "nested",
+  "Nested",
+  "Nested component token names",
+  `---
+components:
+  button:
+    primary:
+      backgroundColor: "#111111"
+      textColor: "#ffffff"
+  card:
+    pricing:
+      backgroundColor: "#ffffff"
+      textColor: "#111111"
+---
+`,
+);
+assert(nestedComponents.components.some((component) => component.name === "button-primary"));
+assert(nestedComponents.components.some((component) => component.name === "card-pricing"));
+
 const clickhouse = parseDesignMdForPreview(
   "clickhouse",
   "ClickHouse",
@@ -96,14 +116,44 @@ const darkHtml = generateBoardHtml(board, { variant: "dark" });
 
 assert.match(html, /Content-Security-Policy/);
 assert.doesNotMatch(html, /<script/i);
+assert.doesNotMatch(html, /@font-face|@import|url\(https?:/i);
 assert.doesNotMatch(html, /Features|Docs|Pricing|Feature One|Feature Two|Feature Three/);
 assert.match(html, /search-bar-pill/);
 assert.match(html, /property-card/);
 assert.match(html, /markets-table-card/);
 assert.match(darkHtml, /Content-Security-Policy/);
 assert.doesNotMatch(darkHtml, /<script/i);
+assert.doesNotMatch(darkHtml, /@font-face|@import|url\(https?:/i);
 assert.match(darkHtml, /#0b0e11|#1f2329|surface-card-dark/);
 assert.match(darkHtml, /markets-table-card/);
+
+const darkOnlyBoard = buildBoard(
+  "dark-only",
+  "Dark Only",
+  "Only dark tokens are provided.",
+  `---
+colors:
+  canvas-dark: "#010203"
+  surface-dark: "#101820"
+  on-dark: "#f7f7f7"
+components:
+  card-dark:
+    backgroundColor: "#101820"
+    textColor: "#f7f7f7"
+---
+# Overview
+Dark-only product surface.
+`,
+);
+const darkOnlyLightHtml = generateBoardHtml(darkOnlyBoard, { variant: "light" });
+const darkOnlyDarkHtml = generateBoardHtml(darkOnlyBoard, { variant: "dark" });
+assert.match(darkOnlyLightHtml, /body\{[^}]*background:#f7f7f7/);
+assert.match(darkOnlyDarkHtml, /body\{[^}]*background:#010203/);
+
+assert.match(resolveGeneratedFontFamily("Airbnb Cereal", "Font Substitutes: use Circular"), /"Airbnb Cereal".*Circular.*Avenir Next/);
+assert.match(resolveGeneratedFontFamily("SF Pro Display", "Apple system"), /"SF Pro Display".*-apple-system.*BlinkMacSystemFont/);
+assert.match(resolveGeneratedFontFamily("Geist", "developer docs"), /Geist.*Inter.*system-ui/);
+assert.doesNotMatch(resolveGeneratedFontFamily("Bad; url(https://example.test/font.woff2)", "Inter"), /url|https?:|;/i);
 
 assert.equal(designMdDisplayTitle("slack"), "Slack");
 assert.equal(designMdDisplayTitle("shopify"), "Shopify");
