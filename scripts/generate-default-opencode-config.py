@@ -32,18 +32,6 @@ PERMISSION_KEY_ORDER = [
     "skill", "bash", "edit",
 ]
 
-# Order of key groups within the bash section for deterministic output
-BASH_ORDER = ["default", "allow", "ask", "deny"]
-
-# Order of key groups within edit section for deterministic output
-EDIT_ORDER = ["default", "allow", "ask", "deny", "allow_override"]
-
-# Order of key groups within read section for deterministic output
-READ_ORDER = ["default", "deny", "allow_override"]
-
-# Secret content commands in order (matching original file order)
-SECRET_COMMANDS = ["cat", "head", "tail", "sed", "grep *", "rg *", "git grep *"]
-
 
 def load_json(path, label):
     """Load and validate a strict JSON file."""
