@@ -64,6 +64,14 @@ export interface AgentTargetMeta {
   id: string; label: string; kind: "rules" | "config"; target_rel: string; source_rel: string;
 }
 
+export interface ConfigEditorSourceMeta {
+  id: string;
+  label: string;
+  rel_path: string;
+  editable: boolean;
+  helper: string;
+}
+
 export interface TargetProfileMeta {
   id: string;
   label: string;

@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 
@@ -92,6 +92,12 @@ function App() {
   const [configSaving, setConfigSaving] = useState(false);
   const [configSaveResult, setConfigSaveResult] = useState<ActionResult | null>(null);
   const [configMode, setConfigMode] = useState<"preview" | "edit">("preview");
+
+  // opencode config editor source state
+  const [configEditorSources, setConfigEditorSources] = useState<ConfigEditorSourceMeta[]>([]);
+  const [activeConfigSourceType, setActiveConfigSourceType] = useState<string>("base");
+  const [configEditorSourceContent, setConfigEditorSourceContent] = useState<DocumentContent | null>(null);
+  const [configEditorSourceSaveMessage, setConfigEditorSourceSaveMessage] = useState<string>("");
 
   // backup history state
   const { backups, loadBackups, openBackupsFolder } = useBackups(setError);
@@ -444,10 +450,69 @@ function App() {
     }
   }, [isWorkspaceLoadCurrent]);
 
+  // ── opencode config editor source callbacks ──
+
+  const loadConfigEditorSources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const sources = await invoke<ConfigEditorSourceMeta[]>("list_opencode_config_editor_sources");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setConfigEditorSources(sources);
+    } catch {
+      // non-critical; config editor sources are optional metadata
+    }
+  }, [isWorkspaceLoadCurrent]);
+
+  const loadConfigEditorSourceContent = useCallback(async (sourceType: string, generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const content = await invoke<DocumentContent>("read_opencode_config_source", { sourceType });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setConfigEditorSourceContent(content);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setError(`Config source: ${e}`);
+    }
+  }, [isWorkspaceLoadCurrent]);
+
   const onSaveConfig = useCallback(async () => {
     if (!activeConfigTargetId) return;
     setConfigSaving(true);
     setConfigSaveResult(null);
+    setConfigEditorSourceSaveMessage("");
+
+    // For opencode_config, use the source-aware save command
+    if (activeConfigTargetId === "opencode_config") {
+      try {
+        const result = await invoke<ActionResult>("save_opencode_config_source", {
+          sourceType: activeConfigSourceType,
+          content: configDraft,
+        });
+        setConfigSaveResult(result);
+        if (result.success) {
+          if (result.stdout !== "unchanged") {
+            const reloaded = await invoke<DocumentContent>("read_opencode_config_source", {
+              sourceType: activeConfigSourceType,
+            });
+            setConfigEditorSourceContent(reloaded);
+            setConfigDraft(reloaded.content);
+            setConfigEditorSourceSaveMessage("saved. Run generator to update snapshot.");
+          }
+          setConfigDirty(false);
+        }
+      } catch (e) {
+        setConfigSaveResult({
+          success: false,
+          action: "save_opencode_config_source",
+          stdout: "",
+          stderr: String(e),
+          exit_code: null,
+        });
+      } finally {
+        setConfigSaving(false);
+      }
+      return;
+    }
+
+    // Fallback: use old save_config_template for non-opencode_config targets
     try {
       const result = await invoke<ActionResult>("save_config_template", {
         targetId: activeConfigTargetId,
@@ -473,7 +538,7 @@ function App() {
     } finally {
       setConfigSaving(false);
     }
-  }, [activeConfigTargetId, configDraft]);
+  }, [activeConfigTargetId, activeConfigSourceType, configDraft]);
 
   const onResetConfig = useCallback(() => {
     if (configTemplateContent) {
@@ -970,12 +1035,34 @@ function App() {
     }
   }, [agentTemplate]);
 
-  // load config template when library configs source type is active
+  // load config template and editor sources when library configs view is active
   useEffect(() => {
     if ((view === "library" && librarySourceType === "configs") && activeConfigTargetId) {
       loadConfigTemplate(activeConfigTargetId);
+      if (activeConfigTargetId === "opencode_config") {
+        loadConfigEditorSources();
+        setActiveConfigSourceType("base");
+      }
     }
-  }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate]);
+  }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate, loadConfigEditorSources]);
+
+  // load config editor source content when source type changes for opencode_config
+  useEffect(() => {
+    if (activeConfigTargetId === "opencode_config" && activeConfigSourceType && view === "library" && librarySourceType === "configs") {
+      loadConfigEditorSourceContent(activeConfigSourceType);
+    }
+  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, loadConfigEditorSourceContent]);
+
+  // Sync editor source content into the shared config draft state
+  useEffect(() => {
+    if (activeConfigTargetId === "opencode_config" && configEditorSourceContent) {
+      setConfigDraft(configEditorSourceContent.content);
+      setConfigDirty(false);
+      setConfigSaveResult(null);
+      setConfigEditorSourceSaveMessage("");
+      setConfigMode("preview");
+    }
+  }, [configEditorSourceContent?.id, activeConfigTargetId]);
 
   useEffect(() => {
     if (configTemplateContent) {
@@ -1196,7 +1283,17 @@ function App() {
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
     setActiveConfigTargetId(targetId);
+    setActiveConfigSourceType("base");
+    setConfigEditorSourceContent(null);
+    setConfigEditorSourceSaveMessage("");
   }, [configDirty, activeConfigTargetId]);
+
+  const selectConfigSourceType = useCallback((sourceType: string) => {
+    if (configDirty && sourceType !== activeConfigSourceType && !confirmLeaveDirtyEditor()) return;
+    setActiveConfigSourceType(sourceType);
+    setConfigEditorSourceContent(null);
+    setConfigEditorSourceSaveMessage("");
+  }, [configDirty, activeConfigSourceType]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = useMemo(() => agentTargets.filter(t => t.kind === "config"), [agentTargets]);
@@ -1475,7 +1572,9 @@ function App() {
             activeConfigTargetId={activeConfigTargetId}
             configTargets={configTargets}
             onSelectConfigTarget={selectConfigTarget}
-            onOpenConfig={() => invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`))}
+            onOpenConfig={() => {
+              invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`));
+            }}
             configDraft={configDraft}
             configDirty={configDirty}
             configSaving={configSaving}
@@ -1485,6 +1584,10 @@ function App() {
             onChangeConfigDraft={onChangeConfigDraft}
             onSaveConfig={onSaveConfig}
             onResetConfig={onResetConfig}
+            configEditorSources={configEditorSources}
+            activeConfigSourceType={activeConfigSourceType}
+            onSelectConfigSource={selectConfigSourceType}
+            configEditorSourceSaveMessage={configEditorSourceSaveMessage}
             // Common
             workspaceValid={workspaceValid}
             // Design MD

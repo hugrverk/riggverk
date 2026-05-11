@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
-import type { AgentMetadataResponse, AgentTargetMeta, DocumentContent } from "../../types";
+import type { AgentMetadataResponse, AgentTargetMeta, ConfigEditorSourceMeta, DocumentContent } from "../../types";
 
 function formatJson(content: string): string {
   try {
@@ -26,6 +26,11 @@ interface ConfigContentProps {
   onSaveConfig: () => void;
   onResetConfig: () => void;
   agentSources: AgentMetadataResponse[];
+  // Config editor source props (opencode_config only)
+  configEditorSources: ConfigEditorSourceMeta[];
+  activeConfigSourceType: string;
+  onSelectConfigSource: (sourceType: string) => void;
+  configEditorSourceSaveMessage: string;
 }
 
 export function ConfigContent(props: ConfigContentProps) {
@@ -44,14 +49,28 @@ export function ConfigContent(props: ConfigContentProps) {
     onSaveConfig,
     onResetConfig,
     agentSources,
+    configEditorSources,
+    activeConfigSourceType,
+    onSelectConfigSource,
+    configEditorSourceSaveMessage,
   } = props;
 
   if (!configTemplateContent) return null;
 
   const selectedConfigTarget = configTargets.find((t) => t.id === activeConfigTargetId);
-  const sourcePath = selectedConfigTarget?.source_rel ?? "";
   const targetPath = selectedConfigTarget?.target_rel ?? "";
+
+  const activeSource = configEditorSources.find((s) => s.id === activeConfigSourceType);
+  const sourcePath = activeSource?.rel_path ?? selectedConfigTarget?.source_rel ?? "";
+
+  const isOpenCodeConfig = activeConfigTargetId === "opencode_config";
+  const isSnapshot = isOpenCodeConfig && activeConfigSourceType === "snapshot";
+  const currentSourceIsEditable = activeSource ? activeSource.editable : true;
+
   const formattedJson = useMemo(() => formatJson(configTemplateContent.content), [configTemplateContent.content]);
+
+  // Determine edit mode availability
+  const canEdit = currentSourceIsEditable && configMode === "edit";
 
   return (
     <>
@@ -59,7 +78,7 @@ export function ConfigContent(props: ConfigContentProps) {
         <div className="lib-editor-meta-left">
           <span className="lib-editor-meta-title">{selectedConfigTarget?.label ?? "Config"}</span>
           <span className="lib-editor-meta-path">
-            {sourcePath && <span>template: {sourcePath}</span>}
+            {sourcePath && <span>{sourcePath}</span>}
             {sourcePath && targetPath && <span> &middot; </span>}
             {targetPath && <span>target: {targetPath}</span>}
           </span>
@@ -69,12 +88,44 @@ export function ConfigContent(props: ConfigContentProps) {
           <button className="btn btn-sm" onClick={onOpenConfig}>open</button>
         </div>
       </div>
-      {activeConfigTargetId === "opencode_config" && (
+
+      {/* Source selector for opencode_config */}
+      {isOpenCodeConfig && configEditorSources.length > 0 && (
+        <div className="config-source-selector" role="tablist" aria-label="Config source selector">
+          {configEditorSources.map((src) => {
+            const selected = src.id === activeConfigSourceType;
+            return (
+              <button
+                key={src.id}
+                className={`config-source-tab ${selected ? "config-source-tab-active" : ""} ${!src.editable ? "config-source-tab-readonly" : ""}`}
+                onClick={() => onSelectConfigSource(src.id)}
+                role="tab"
+                aria-selected={selected}
+                title={src.helper}
+              >
+                <span className="config-source-tab-label">{src.label}</span>
+                <span className="config-source-tab-helper">{src.helper}</span>
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Bundle summary for opencode_config */}
+      {isOpenCodeConfig && (
         <div className="configs-bundle-section" role="region" aria-label="OpenCode config + agents bundle">
           <span className="configs-bundle-header">bundle contents</span>
           <span className="configs-bundle-item">
-            <span className="configs-bundle-key">config</span>
+            <span className="configs-bundle-key">source</span>
+            <span className="configs-bundle-val">templates/opencode.base.json + templates/opencode.policy.json</span>
+          </span>
+          <span className="configs-bundle-item">
+            <span className="configs-bundle-key">snapshot</span>
             <span className="configs-bundle-val">templates/opencode.json &rarr; ~/.config/opencode/opencode.json</span>
+          </span>
+          <span className="configs-bundle-item">
+            <span className="configs-bundle-key">tui</span>
+            <span className="configs-bundle-val">templates/tui.json &rarr; ~/.config/opencode/tui.json</span>
           </span>
           <span className="configs-bundle-item">
             <span className="configs-bundle-key">agents</span>
@@ -86,27 +137,42 @@ export function ConfigContent(props: ConfigContentProps) {
               {agentSources.length > 0 ? `${agentSources.length} agents` : "agents bundled"}
             </span>
           </span>
-          <span className="configs-bundle-note">sync writes both config + agent files</span>
         </div>
       )}
+
+      {/* Snapshot helper text */}
+      {isSnapshot && (
+        <div className="config-snapshot-notice">
+          Generated snapshot. Edit Base or Policy instead.
+        </div>
+      )}
+
+      {/* Mode tabs - hide edit for snapshot */}
       <div className="editor-mode-tabs" role="tablist" aria-label="Config view mode">
         <button className={`btn btn-sm ${configMode === "preview" ? "btn-active" : ""}`} onClick={() => onSetConfigMode("preview")} role="tab" aria-selected={configMode === "preview"}>preview</button>
-        <button className={`btn btn-sm ${configMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetConfigMode("edit")} role="tab" aria-selected={configMode === "edit"}>edit</button>
+        {currentSourceIsEditable && (
+          <button className={`btn btn-sm ${configMode === "edit" ? "btn-active" : ""}`} onClick={() => onSetConfigMode("edit")} role="tab" aria-selected={configMode === "edit"}>edit</button>
+        )}
       </div>
+
       <div className="lib-editor-body">
         {configMode === "preview" ? (
           <pre className="configs-code">{formattedJson}</pre>
         ) : (
-          <textarea
-            className="editor-textarea"
-            value={configDraft}
-            onChange={(e) => onChangeConfigDraft(e.target.value)}
-            spellCheck={false}
-            aria-label="Edit config template"
-          />
+          canEdit && (
+            <textarea
+              className="editor-textarea"
+              value={configDraft}
+              onChange={(e) => onChangeConfigDraft(e.target.value)}
+              spellCheck={false}
+              aria-label="Edit config source"
+            />
+          )
         )}
       </div>
-      {configMode === "edit" && (
+
+      {/* Save bar - only show for editable sources */}
+      {currentSourceIsEditable && configMode === "edit" && (
         <div className="editor-save-row">
           <button className="btn btn-primary btn-sm" onClick={onSaveConfig} disabled={configSaving || !configDirty}>
             {configSaving ? "saving..." : "save"}
@@ -119,7 +185,9 @@ export function ConfigContent(props: ConfigContentProps) {
                 : redactTerminalOutput(configSaveResult.stderr) || "save failed"}
             </span>
           )}
-          <span className="editor-save-note">template only</span>
+          {configEditorSourceSaveMessage && (
+            <span className="editor-save-status editor-save-ok">{configEditorSourceSaveMessage}</span>
+          )}
         </div>
       )}
     </>

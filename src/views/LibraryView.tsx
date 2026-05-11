@@ -4,6 +4,7 @@ import type {
   AgentMetadataResponse,
   AgentSourceContent,
   AgentTargetMeta,
+  ConfigEditorSourceMeta,
   DesignMdCatalogStatus,
   DesignMdContent,
   DesignMdEntry,
@@ -113,6 +114,10 @@ interface LibraryViewProps {
   onChangeConfigDraft: (value: string) => void;
   onSaveConfig: () => void;
   onResetConfig: () => void;
+  configEditorSources: ConfigEditorSourceMeta[];
+  activeConfigSourceType: string;
+  onSelectConfigSource: (sourceType: string) => void;
+  configEditorSourceSaveMessage: string;
 
   // Common
   workspaceValid: boolean;
@@ -612,6 +617,10 @@ export function LibraryView(props: LibraryViewProps) {
     onChangeConfigDraft,
     onSaveConfig,
     onResetConfig,
+    configEditorSources,
+    activeConfigSourceType,
+    onSelectConfigSource,
+    configEditorSourceSaveMessage,
     workspaceValid,
     designMdCatalogStatus,
     designMdEntries,
@@ -714,6 +723,10 @@ export function LibraryView(props: LibraryViewProps) {
         onSaveConfig={onSaveConfig}
         onResetConfig={onResetConfig}
         agentSources={agentSources}
+        configEditorSources={configEditorSources}
+        activeConfigSourceType={activeConfigSourceType}
+        onSelectConfigSource={onSelectConfigSource}
+        configEditorSourceSaveMessage={configEditorSourceSaveMessage}
       />
     );
   } else if (sourceType === "designMd" && activeDesignMdContent) {
