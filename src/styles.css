@@ -590,6 +590,15 @@ html, body, #root {
 
 .btn-primary:hover:not(:disabled) { background: rgba(var(--accent-rgb), 0.24); border-color: rgba(var(--accent-rgb), 0.4); }
 
+.btn-warn {
+  background: rgba(255, 183, 74, 0.12);
+  border-color: rgba(255, 183, 74, 0.3);
+  color: rgb(255, 183, 74);
+  font-weight: 600;
+}
+
+.btn-warn:hover:not(:disabled) { background: rgba(255, 183, 74, 0.2); border-color: rgba(255, 183, 74, 0.45); }
+
 /* ---- log ---- */
 
 .panel.log-panel {

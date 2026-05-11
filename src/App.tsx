@@ -494,7 +494,7 @@ function App() {
             });
             setConfigEditorSourceContent(reloaded);
             setConfigDraft(reloaded.content);
-            setConfigEditorSourceSaveMessage("saved. Run generator to update snapshot.");
+            setConfigEditorSourceSaveMessage("saved. Use Workspace → generate to update snapshot.");
           }
           setConfigDirty(false);
         }
@@ -1455,6 +1455,15 @@ function App() {
             // opencode runtime
             opencodeRuntimeHealth={opencodeRuntimeHealth}
             onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
+            onGenerateOpenCodeConfig={() => runWsTask({
+              label: "generate opencode config",
+              action: "generate_opencode_config_snapshot",
+              task: async () => {
+                return await invoke<ActionResult>("generate_opencode_config_snapshot");
+              },
+              toActionResult: (r) => r,
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
             // skills
             skills={skills}
             skillsLoaded={skillsLoaded}

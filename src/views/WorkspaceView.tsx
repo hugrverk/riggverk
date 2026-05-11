@@ -40,6 +40,7 @@ interface WorkspaceViewProps {
   // opencode runtime
   opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
   onRefreshOpenCodeRuntimeHealth: () => void;
+  onGenerateOpenCodeConfig: () => void;
   // skills compact
   skills: SkillSummary[];
   skillsLoaded: boolean;
@@ -146,6 +147,7 @@ export function WorkspaceView({
   // opencode runtime
   opencodeRuntimeHealth,
   onRefreshOpenCodeRuntimeHealth,
+  onGenerateOpenCodeConfig,
   // skills
   skills,
   skillsLoaded,
@@ -569,6 +571,14 @@ export function WorkspaceView({
                     </button>
                     <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>
                       diff
+                    </button>
+                    <button
+                      className={`btn btn-sm ${opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "btn-warn" : ""}`}
+                      disabled={!workspaceValid || !configEnabled || wsRunning !== null}
+                      onClick={onGenerateOpenCodeConfig}
+                      title="Generate opencode.json from Base and Policy."
+                    >
+                      generate
                     </button>
                     <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null || opencodeRuntimeHealth.generated_snapshot_status === "stale"} onClick={onSyncConfigs} title={opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "Regenerate opencode.json snapshot before sync" : undefined}>
                       sync

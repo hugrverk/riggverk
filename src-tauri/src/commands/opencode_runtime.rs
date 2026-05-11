@@ -2,6 +2,8 @@ use serde::Serialize;
 use std::collections::BTreeSet;
 use std::path::Path;
 
+use super::process::ActionResult;
+
 #[derive(Serialize, Clone, Debug)]
 pub struct OpenCodeRuntimeCheck {
     pub id: String,
@@ -812,6 +814,75 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     Ok(compute_health(&workspace_root, &home))
 }
 
+/// Run a known generator's --write under the given workspace root.
+/// Returns an ActionResult with command output.
+/// This is the testable helper; the Tauri command wraps it.
+pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
+    let candidates = [
+        "scripts/generate-opencode-config.py",
+        "scripts/generate-default-opencode-config.py",
+    ];
+
+    for script_rel in &candidates {
+        let script_path = workspace_root.join(script_rel);
+        if !script_path.is_file() {
+            continue;
+        }
+
+        // Ensure the script is within the workspace root (no symlink escape)
+        let _canonical = super::content::safe_canonical_target(workspace_root, &script_path)?;
+
+        let script_str = super::workspace::path_arg(&script_path)?;
+
+        let output = std::process::Command::new("python3")
+            .args([&script_str, "--write"])
+            .current_dir(workspace_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output()
+            .map_err(|e| {
+                if e.kind() == std::io::ErrorKind::NotFound {
+                    "python3 is not available on this system. Install Python 3 to generate config.".to_string()
+                } else {
+                    format!("failed to run generator: {}", e)
+                }
+            })?;
+
+        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
+        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
+        let success = output.status.success();
+        let exit_code = output.status.code();
+
+        return Ok(ActionResult::new(
+            success,
+            "generate_opencode_config_snapshot",
+            if success {
+                "Generated opencode.json snapshot.".to_string()
+            } else {
+                stdout
+            },
+            stderr,
+            exit_code,
+        ));
+    }
+
+    Ok(ActionResult::new(
+        false,
+        "generate_opencode_config_snapshot",
+        String::new(),
+        "No OpenCode config generator found in this workspace. Expected one of: scripts/generate-opencode-config.py, scripts/generate-default-opencode-config.py".to_string(),
+        Some(1),
+    ))
+}
+
+#[tauri::command]
+pub fn generate_opencode_config_snapshot() -> Result<ActionResult, String> {
+    use crate::commands::workspace::workspace_root;
+
+    let root = workspace_root()?;
+    run_generator_write(&root)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1447,5 +1518,161 @@ mod tests {
         cleanup(&home);
 
         assert_eq!(health.tui_status, "synced");
+    }
+
+    // ── Tests for run_generator_write ──
+
+    fn write_generator_script(root: &Path, script_rel: &str, content: &str) {
+        let script_dir = root.join(script_rel).parent().unwrap().to_path_buf();
+        fs::create_dir_all(&script_dir).expect("create scripts dir");
+        fs::write(root.join(script_rel), content).expect("write generator script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(root.join(script_rel), fs::Permissions::from_mode(0o755))
+                .expect("make script executable");
+        }
+    }
+
+    fn write_marker_workspace(root: &Path) {
+        write_file(root, ".agent-workspace/workspace.json", "{}");
+        write_file(root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(root, "scripts/install-agent-rules.sh", "#!/usr/bin/env bash\n");
+        write_file(root, "scripts/install-opencode-config.sh", "#!/usr/bin/env bash\n");
+        write_file(root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(root, "templates/opencode.json", "{}");
+        write_file(root, "README.md", "# readme\n");
+        fs::create_dir_all(root.join("skills")).expect("create skills dir");
+    }
+
+    #[test]
+    fn test_generator_write_success_via_generate_default() {
+        let ws = temp_root("gen-write-def");
+        write_marker_workspace(&ws);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+
+        // Use generate-default-opencode-config.py which exists in the dev checkout
+        // We can't rely on it existing in a temp workspace, so create a custom one
+        // that simply writes a marker file to prove --write was called
+        write_generator_script(
+            &ws,
+            "scripts/generate-default-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nif len(sys.argv) >= 2 and sys.argv[1] == '--write':\n    with open('templates/.generated_marker', 'w') as f:\n        f.write('ok')\n    sys.exit(0)\nsys.exit(1)\n",
+        );
+
+        let result = super::run_generator_write(&ws).expect("generator should succeed");
+        cleanup(&ws);
+
+        assert!(result.success, "generator write should succeed");
+        assert_eq!(result.action, "generate_opencode_config_snapshot");
+        assert!(result.stdout.contains("Generated"), "stdout should indicate generation");
+    }
+
+    #[test]
+    fn test_generator_write_via_opencode_config_script() {
+        let ws = temp_root("gen-write-alt");
+        write_marker_workspace(&ws);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+
+        // Only provide generate-opencode-config.py (the alternative name)
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--write':\n    with open('templates/.generated_marker', 'w') as f:\n        f.write('ok')\n    sys.exit(0)\nsys.exit(1)\n",
+        );
+
+        let result = super::run_generator_write(&ws).expect("generator should succeed");
+        cleanup(&ws);
+
+        assert!(result.success);
+        assert!(result.stdout.contains("Generated"));
+    }
+
+    #[test]
+    fn test_generator_write_first_candidate_used_when_both_exist() {
+        let ws = temp_root("gen-write-first");
+        write_marker_workspace(&ws);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+
+        // Both scripts present. Only the first candidate succeeds.
+        // generate-opencode-config.py returns 0, generate-default-opencode-config.py returns 1.
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--write':\n    sys.exit(0)\nelse:\n    sys.exit(1)\n",
+        );
+        write_generator_script(
+            &ws,
+            "scripts/generate-default-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
+        );
+
+        let result = super::run_generator_write(&ws).expect("should return ActionResult");
+        cleanup(&ws);
+
+        assert!(result.success, "first candidate should be used and succeed");
+    }
+
+    #[test]
+    fn test_generator_write_no_script_returns_error() {
+        let ws = temp_root("gen-write-no");
+        write_marker_workspace(&ws);
+        // No generator scripts at all
+
+        let result = super::run_generator_write(&ws).expect("should return ActionResult (not Err)");
+        cleanup(&ws);
+
+        assert!(!result.success);
+        assert!(result.stderr.contains("No OpenCode config generator found"));
+    }
+
+    #[test]
+    fn test_generator_write_uses_write_not_check_or_apply() {
+        let ws = temp_root("gen-write-flag");
+        write_marker_workspace(&ws);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+
+        // Script that verifies argv[1] is --write, not --check or --apply
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    print(f'UNEXPECTED ARGS: {sys.argv[1:]}', file=sys.stderr)\n    sys.exit(1)\n",
+        );
+
+        let result = super::run_generator_write(&ws).expect("generator should succeed");
+        cleanup(&ws);
+
+        assert!(result.success, "generator must be called with --write");
+    }
+
+    #[test]
+    fn test_generator_write_does_not_target_home_config() {
+        let ws = temp_root("gen-write-safe");
+        write_marker_workspace(&ws);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+
+        // Script that writes to a marker file under the workspace only
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys, os\nif sys.argv[1] == '--write':\n    # Write only under workspace/templates/\n    ws = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n    with open(os.path.join(ws, 'templates', 'opencode.json'), 'w') as f:\n        f.write('{\"generated\":true}')\n    sys.exit(0)\nsys.exit(1)\n",
+        );
+
+        let result = super::run_generator_write(&ws).expect("generator should succeed");
+        assert!(result.success);
+
+        // Verify the generated file exists inside the workspace
+        let snapshot = ws.join("templates/opencode.json");
+        assert!(snapshot.is_file(), "snapshot should be written in workspace templates/");
+        let content = std::fs::read_to_string(&snapshot).unwrap_or_default();
+        assert!(content.contains("generated"), "snapshot should contain generated content");
+
+        cleanup(&ws);
     }
 }
