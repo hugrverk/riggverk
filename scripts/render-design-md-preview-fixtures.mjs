@@ -16,6 +16,7 @@ const requireFromRuntime = createRequire(path.join(runtimeNodeModules, "package.
 const { chromium } = requireFromRuntime("playwright");
 
 const slugs = [
+  "claude",
   "cursor",
   "runwayml", "sanity", "spotify", "starbucks", "tesla", "theverge",
   "together.ai", "uber", "vercel", "vodafone", "voltagent", "warp",
@@ -44,6 +45,9 @@ execFileSync(
     "src/lib/designMdSpecimenBuilder.ts",
     "src/lib/designMdHtmlGenerator.ts",
     "src/lib/designMdColorSemantics.ts",
+    "src/lib/designMdTokenRoleResolver.ts",
+    "src/lib/designMdThemeResolver.ts",
+    "src/lib/designMdSourceIntent.ts",
     "src/lib/designMdRenderEligibility.ts",
     "src/lib/designMdContrast.ts",
     "src/lib/designMdDisplay.ts",
@@ -53,12 +57,15 @@ execFileSync(
   { cwd: repo, stdio: "pipe" },
 );
 
-for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdColorSemantics.js", "designMdRenderEligibility.js", "designMdContrast.js", "designMdSourceEvidence.js", "designMdPreviewQuality.js"]) {
+for (const file of ["designMdPreviewParser.js", "designMdSpecimenBuilder.js", "designMdHtmlGenerator.js", "designMdColorSemantics.js", "designMdTokenRoleResolver.js", "designMdThemeResolver.js", "designMdSourceIntent.js", "designMdRenderEligibility.js", "designMdContrast.js", "designMdSourceEvidence.js", "designMdPreviewQuality.js"]) {
   const fullPath = path.join(tsOutDir, file);
   const content = fs.readFileSync(fullPath, "utf8")
     .replaceAll('from "./designMdPreviewParser"', 'from "./designMdPreviewParser.js"')
     .replaceAll('from "./designMdSpecimenBuilder"', 'from "./designMdSpecimenBuilder.js"')
     .replaceAll('from "./designMdColorSemantics"', 'from "./designMdColorSemantics.js"')
+    .replaceAll('from "./designMdTokenRoleResolver"', 'from "./designMdTokenRoleResolver.js"')
+    .replaceAll('from "./designMdThemeResolver"', 'from "./designMdThemeResolver.js"')
+    .replaceAll('from "./designMdSourceIntent"', 'from "./designMdSourceIntent.js"')
     .replaceAll('from "./designMdRenderEligibility"', 'from "./designMdRenderEligibility.js"')
     .replaceAll('from "./designMdContrast"', 'from "./designMdContrast.js"')
     .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"')

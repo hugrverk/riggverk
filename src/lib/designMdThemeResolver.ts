@@ -1,5 +1,6 @@
 import type { DesignMdBoard } from "./designMdSpecimenBuilder";
 import type { DesignMdColorSemantics } from "./designMdColorSemantics";
+import type { DesignMdTokenRole, DesignMdTokenRoleConfidence } from "./designMdTokenRoleResolver";
 import { isSafeColorValue } from "./designMdPreviewParser";
 import {
   canUseAsCanvas,
@@ -14,6 +15,16 @@ import {
   readableTextColor,
   ensureReadable,
 } from "./designMdContrast";
+
+type ThemeColorCandidate = {
+  key: string;
+  resolvedValue: string;
+  resolvedRole?: DesignMdTokenRole;
+  roleConfidence?: DesignMdTokenRoleConfidence;
+  semanticRole?: DesignMdColorSemantics["semanticRole"];
+  usageScope?: DesignMdColorSemantics["usageScope"];
+  usageIntensity?: DesignMdColorSemantics["usageIntensity"];
+};
 
 // ─── Public types ────────────────────────────────────────────────
 
@@ -144,7 +155,8 @@ function keyParts(key: string): string[] {
 }
 
 function isCanvasToken(key: string): boolean {
-  return keyParts(key).some((p) => /^(canvas|body|background|page|app|floor|root)$/.test(p));
+  return keyParts(key).some((p) => /^(canvas|background|page|app|floor|root)$/.test(p))
+    || /^(body-bg|body-background|body-canvas)$/.test(keyParts(key).join("-"));
 }
 
 function isSurfaceToken(key: string): boolean {
@@ -181,19 +193,61 @@ function isForbiddenCanvasCandidate(key: string): boolean {
 }
 
 function tokenSemantics(
-  token: { semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] } | undefined,
+  token: {
+    resolvedRole?: DesignMdTokenRole;
+    roleConfidence?: DesignMdTokenRoleConfidence;
+    roleEvidence?: string[];
+    roleWarnings?: string[];
+    semanticRole?: DesignMdColorSemantics["semanticRole"];
+    usageScope?: DesignMdColorSemantics["usageScope"];
+    usageIntensity?: DesignMdColorSemantics["usageIntensity"];
+  } | undefined,
 ): DesignMdColorSemantics | undefined {
   if (!token?.semanticRole || !token.usageScope || !token.usageIntensity) return undefined;
-  return { semanticRole: token.semanticRole, usageScope: token.usageScope, usageIntensity: token.usageIntensity, evidence: [], warnings: [] };
+  return {
+    resolvedRole: token.resolvedRole ?? "unknown",
+    roleConfidence: token.roleConfidence ?? "fallback",
+    roleEvidence: token.roleEvidence ?? [],
+    roleWarnings: token.roleWarnings ?? [],
+    semanticRole: token.semanticRole,
+    usageScope: token.usageScope,
+    usageIntensity: token.usageIntensity,
+    evidence: [],
+    warnings: [],
+  };
 }
 
 function isForbiddenThemeCandidate(
-  token: { key: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] },
+  token: { key: string; resolvedRole?: DesignMdTokenRole; roleConfidence?: DesignMdTokenRoleConfidence; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] },
 ): boolean {
   const sem = tokenSemantics(token);
   if (sem && !canUseAsDarkCanvasCandidate(sem)) return true;
   if (sem && (isScopedOnlyColor(sem) || sem.semanticRole === "primaryAction" || sem.semanticRole === "brandAccent")) return true;
   return isForbiddenCanvasCandidate(token.key);
+}
+
+function roleConfidenceAtLeast(token: { roleConfidence?: DesignMdTokenRoleConfidence }, minimum: "medium" | "low" = "medium"): boolean {
+  const order: Record<DesignMdTokenRoleConfidence, number> = { fallback: 0, low: 1, medium: 2, high: 3 };
+  return order[token.roleConfidence ?? "fallback"] >= order[minimum];
+}
+
+function isCanvasRole(token: { resolvedRole?: DesignMdTokenRole; roleConfidence?: DesignMdTokenRoleConfidence }, minimum: "medium" | "low" = "medium"): boolean {
+  return roleConfidenceAtLeast(token, minimum)
+    && (token.resolvedRole === "globalCanvas" || token.resolvedRole === "pageBackground" || token.resolvedRole === "bodyBackground");
+}
+
+function isSectionSurfaceRole(token: { resolvedRole?: DesignMdTokenRole; roleConfidence?: DesignMdTokenRoleConfidence }, minimum: "medium" | "low" = "medium"): boolean {
+  return roleConfidenceAtLeast(token, minimum) && token.resolvedRole === "sectionSurface";
+}
+
+function isComponentSurfaceRole(token: { resolvedRole?: DesignMdTokenRole; roleConfidence?: DesignMdTokenRoleConfidence }, minimum: "medium" | "low" = "medium"): boolean {
+  return roleConfidenceAtLeast(token, minimum)
+    && (token.resolvedRole === "cardSurface" || token.resolvedRole === "panelSurface" || token.resolvedRole === "componentSurface");
+}
+
+function isTextRole(token: { resolvedRole?: DesignMdTokenRole; roleConfidence?: DesignMdTokenRoleConfidence }, minimum: "medium" | "low" = "low"): boolean {
+  return roleConfidenceAtLeast(token, minimum)
+    && (token.resolvedRole === "bodyText" || token.resolvedRole === "headingText" || token.resolvedRole === "foregroundText" || token.resolvedRole === "mutedText");
 }
 
 // ─── Token matching ──────────────────────────────────────────────
@@ -229,10 +283,10 @@ function tokenColor(
 }
 
 function tokenColorByPolicy(
-  tokens: { key: string; resolvedValue: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] }[],
+  tokens: ThemeColorCandidate[],
   matches: string[],
   fallback: string,
-  allowed: (semantics: DesignMdColorSemantics | undefined, token: { key: string; resolvedValue: string }) => boolean,
+  allowed: (semantics: DesignMdColorSemantics | undefined, token: ThemeColorCandidate) => boolean,
 ): string {
   for (const match of matches) {
     const found = tokens.find((t) => tokenKeyMatches(t.key, match) && allowed(tokenSemantics(t), t));
@@ -244,7 +298,7 @@ function tokenColorByPolicy(
 // ─── Dark theme resolution ───────────────────────────────────────
 
 function resolveDarkToken(
-  tokens: { key: string; resolvedValue: string; semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] }[],
+  tokens: ThemeColorCandidate[],
   explicitMatches: string[],
   fallbackDerive: () => string,
   fallbackHard: string,
@@ -255,6 +309,8 @@ function resolveDarkToken(
     for (const match of explicitMatches) {
       if (tokenKeyMatches(t.key, match) && isSafeColorValue(t.resolvedValue)) {
         if (filterForbiddenCanvas && !isDarkColor(t.resolvedValue)) return false;
+        if (filterForbiddenCanvas && keyParts(t.key).includes("body") && !isCanvasRole(t, "medium")) return false;
+        if (filterForbiddenCanvas && isComponentSurfaceRole(t, "medium")) return false;
         return true;
       }
     }
@@ -345,7 +401,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
       const canvasGroupTokens = board.colorGroups
         .filter((g) => g.prefix === "canvas/surface")
         .flatMap((g) => g.tokens)
-        .filter((t) => !isForbiddenThemeCandidate(t));
+        .filter((t) => !isForbiddenThemeCandidate(t) && (isCanvasRole(t, "low") || isSectionSurfaceRole(t, "medium")));
       const darkestCanvas = darkestPaletteColor(canvasGroupTokens, "");
       if (darkestCanvas && isDarkColor(darkestCanvas)) {
         if (!isDarkNativeIntent(board)) {
@@ -355,7 +411,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
         return darkestCanvas;
       }
       const neutralDarkTokens = allColors.filter((t) =>
-        !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue));
+        !isForbiddenThemeCandidate(t) && !isComponentSurfaceRole(t, "medium") && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue));
       const darkestNeutral = darkestPaletteColor(neutralDarkTokens, "");
       if (darkestNeutral && isDarkColor(darkestNeutral)) {
         if (!isDarkNativeIntent(board)) {
@@ -364,7 +420,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
         }
         return darkestNeutral;
       }
-      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue));
+      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t) && !isComponentSurfaceRole(t, "medium") && isSolidHexColor(t.resolvedValue));
       const darkestSafe = darkestPaletteColor(safeAll, "");
       if (darkestSafe && isDarkColor(darkestSafe)) {
         if (!isDarkNativeIntent(board)) {
@@ -410,7 +466,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
       const textGroupTokens = board.colorGroups
         .filter((g) => g.prefix === "text/ink")
         .flatMap((g) => g.tokens)
-        .filter((t) => !isContextualTextToken(t.key) && tokenSemantics(t)?.semanticRole === "text");
+        .filter((t) => !isContextualTextToken(t.key) && isTextRole(t, "low") && tokenSemantics(t)?.semanticRole === "text");
       const lightestText = lightestPaletteColor(textGroupTokens, "");
       if (lightestText && !isDarkColor(lightestText)) {
         if (ensureReadable(lightestText, darkCanvas, "") === lightestText) return lightestText;
@@ -468,8 +524,6 @@ function resolveLightTokensRaw(board: DesignMdBoard): {
   border: string;
 } {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
-  const paletteLight = lightestPaletteColor(allColors, "#ffffff");
-
   const lightCanvasCandidates = [
     ...(board.sourceIntent.canvasIntent === "cream" || board.sourceIntent.canvasIntent === "warmLight" || board.sourceIntent.canvasIntent === "offWhite"
       ? ["canvas-cream", "cream", "parchment", "off-white", "offwhite", "canvas-parchment", "canvas-soft"]
@@ -479,17 +533,17 @@ function resolveLightTokensRaw(board: DesignMdBoard): {
     "body-light",
   ];
   let pickedLightCanvas = tokenColorByPolicy(allColors, lightCanvasCandidates, "", (sem, t) =>
-    isSolidHexColor(t.resolvedValue) && (canUseAsCanvas(sem) || (sem === undefined && !isForbiddenCanvasCandidate(t.key))));
+    isSolidHexColor(t.resolvedValue) && !isComponentSurfaceRole(t, "medium") && (isCanvasRole(t, "medium") || canUseAsCanvas(sem) || (sem === undefined && !isForbiddenCanvasCandidate(t.key))));
   if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
-    const bodyToken = tokenColor(allColors, ["body"], "");
-    if (bodyToken && !isDarkColor(bodyToken) && !allColors.some((t) => isCanvasToken(t.key))) {
-      pickedLightCanvas = bodyToken;
+    const bodyToken = allColors.find((t) => tokenKeyMatches(t.key, "body") && isCanvasRole(t, "low") && isSolidHexColor(t.resolvedValue));
+    if (bodyToken && !isDarkColor(bodyToken.resolvedValue) && !allColors.some((t) => t.key !== bodyToken.key && isCanvasToken(t.key))) {
+      pickedLightCanvas = bodyToken.resolvedValue;
     }
     if (!pickedLightCanvas || isDarkColor(pickedLightCanvas)) {
       const safeLightTokens = allColors.filter((t) =>
-        !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue));
+        !isForbiddenThemeCandidate(t) && !isComponentSurfaceRole(t, "medium") && isSolidHexColor(t.resolvedValue));
       const lightest = lightestPaletteColor(safeLightTokens, "");
-      pickedLightCanvas = (lightest && isLightColor(lightest)) ? lightest : paletteLight;
+      pickedLightCanvas = (lightest && isLightColor(lightest)) ? lightest : "#ffffff";
     }
   }
   const lightCanvas = isDarkColor(pickedLightCanvas) ? "#ffffff" : pickedLightCanvas;
@@ -499,14 +553,14 @@ function resolveLightTokensRaw(board: DesignMdBoard): {
     "surface-card", "surface", "card", "panel",
   ];
   const pickedLightSurface = tokenColorByPolicy(allColors, lightSurfaceCandidates, "", (sem, t) =>
-    isSolidHexColor(t.resolvedValue) && (canUseAsSurface(sem) || (sem === undefined && !isForbiddenCanvasCandidate(t.key))));
+    isSolidHexColor(t.resolvedValue) && (isSectionSurfaceRole(t, "medium") || isComponentSurfaceRole(t, "medium") || canUseAsSurface(sem) || (sem === undefined && !isForbiddenCanvasCandidate(t.key))));
   const lightSurface = (pickedLightSurface && !isDarkColor(pickedLightSurface))
     ? pickedLightSurface
     : (isLightColor(lightCanvas) ? "#f6f7f9" : (mixHexColor(lightCanvas, "#ffffff", 0.08) ?? "#f6f7f9"));
 
   const lightTextCandidates = ["ink", "text", "body-strong", "foreground", "body"];
   const lightText = ensureReadable(tokenColorByPolicy(allColors, lightTextCandidates, "#111111", (sem, _t) =>
-    sem?.semanticRole === "text" && !isContextualTextToken(_t.key)), lightCanvas, "#111111");
+    isTextRole(_t, "low") && sem?.semanticRole === "text" && !isContextualTextToken(_t.key)), lightCanvas, "#111111");
 
   const lightMuted = ensureReadable(tokenColor(allColors, ["muted", "secondary", "soft"], "#667085"), lightCanvas, "#667085");
 

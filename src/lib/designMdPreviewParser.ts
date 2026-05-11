@@ -5,6 +5,7 @@ import {
   type ColorUsageIntensity,
   type ColorUsageScope,
 } from "./designMdColorSemantics";
+import type { DesignMdTokenRole, DesignMdTokenRoleConfidence } from "./designMdTokenRoleResolver";
 
 export type DesignMdArchetype =
   | "product_gallery"
@@ -90,6 +91,10 @@ export interface DesignMdToken {
 
 export interface DesignMdColorToken extends DesignMdToken {
   group: DesignMdPaletteGroupName;
+  resolvedRole?: DesignMdTokenRole;
+  roleConfidence?: DesignMdTokenRoleConfidence;
+  roleEvidence?: string[];
+  roleWarnings?: string[];
   semanticRole?: ColorSemanticRole;
   usageScope?: ColorUsageScope;
   usageIntensity?: ColorUsageIntensity;
@@ -655,6 +660,10 @@ function attachColorSemantics(token: DesignMdColorToken, prose: string): DesignM
   });
   return {
     ...token,
+    resolvedRole: semantics.resolvedRole,
+    roleConfidence: semantics.roleConfidence,
+    roleEvidence: semantics.roleEvidence,
+    roleWarnings: semantics.roleWarnings,
     semanticRole: semantics.semanticRole,
     usageScope: semantics.usageScope,
     usageIntensity: semantics.usageIntensity,
@@ -1404,4 +1413,3 @@ export function parseDesignMdForPreview(
     guardrailDonts: extractListItems(body, "Don't"),
   };
 }
-

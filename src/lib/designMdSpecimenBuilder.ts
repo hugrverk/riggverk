@@ -12,6 +12,7 @@ import {
   type DesignMdVisualLanguage,
 } from "./designMdPreviewParser";
 import type { ColorSemanticRole, ColorUsageIntensity, ColorUsageScope } from "./designMdColorSemantics";
+import type { DesignMdTokenRole, DesignMdTokenRoleConfidence } from "./designMdTokenRoleResolver";
 import { analyzeDesignMdPreviewQuality, type DesignMdPreviewQualityScores, type DesignMdPreviewQualityWarnings } from "./designMdPreviewQuality";
 import { analyzeDesignMdSourceIntent, type DesignMdSourceIntent } from "./designMdSourceIntent";
 
@@ -25,6 +26,10 @@ export interface DesignMdBoardToken {
   resolvedValue: string;
   source?: "structured" | "markdown" | "derived";
   sourceEvidence?: DesignMdSourceEvidence;
+  resolvedRole?: DesignMdTokenRole;
+  roleConfidence?: DesignMdTokenRoleConfidence;
+  roleEvidence?: string[];
+  roleWarnings?: string[];
   semanticRole?: ColorSemanticRole;
   usageScope?: ColorUsageScope;
   usageIntensity?: ColorUsageIntensity;

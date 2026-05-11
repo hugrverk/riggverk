@@ -1,4 +1,12 @@
 import type { DesignMdPaletteGroupName, DesignMdSourceEvidence } from "./designMdPreviewParser";
+import {
+  resolveDesignMdTokenRole,
+  tokenRoleIsCanvas,
+  tokenRoleIsSurface,
+  tokenRoleIsText,
+  type DesignMdTokenRole,
+  type DesignMdTokenRoleConfidence,
+} from "./designMdTokenRoleResolver";
 
 export type ColorSemanticRole =
   | "canvas"
@@ -32,6 +40,10 @@ export type ColorUsageScope =
 export type ColorUsageIntensity = "dominant" | "supporting" | "sparse" | "scopedOnly" | "unknown";
 
 export interface DesignMdColorSemantics {
+  resolvedRole: DesignMdTokenRole;
+  roleConfidence: DesignMdTokenRoleConfidence;
+  roleEvidence: string[];
+  roleWarnings: string[];
   semanticRole: ColorSemanticRole;
   usageScope: ColorUsageScope;
   usageIntensity: ColorUsageIntensity;
@@ -60,6 +72,7 @@ function hasAny(text: string, patterns: RegExp[]): boolean {
 }
 
 export function inferColorSemantics(input: DesignMdSemanticColorInput): DesignMdColorSemantics {
+  const resolved = resolveDesignMdTokenRole(input);
   const key = input.key.toLowerCase();
   const keyParts = parts(input.key);
   const prose = (input.prose ?? "").toLowerCase();
@@ -88,37 +101,37 @@ export function inferColorSemantics(input: DesignMdSemanticColorInput): DesignMd
   let usageScope: ColorUsageScope = "unknown";
   let usageIntensity: ColorUsageIntensity = "unknown";
 
-  if (hasState) {
+  if (hasState || resolved.resolvedRole === "stateOnly") {
     semanticRole = "state";
     usageScope = "stateOnly";
     usageIntensity = "scopedOnly";
     evidence.push("state variant key");
-  } else if (hasTimeline) {
+  } else if (hasTimeline || resolved.resolvedRole === "timelineOnly") {
     semanticRole = "timeline";
     usageScope = "timelineOnly";
     usageIntensity = "scopedOnly";
     evidence.push("timeline key/prose");
-  } else if (hasSemantic) {
+  } else if (hasSemantic || resolved.resolvedRole === "semanticOnly") {
     semanticRole = hasStatus ? "status" : "semantic";
     usageScope = "semanticOnly";
     usageIntensity = "scopedOnly";
     evidence.push("semantic/status key/prose");
-  } else if (keyParts.some((p) => /^(canvas|background|page|body|app|floor|root)$/.test(p))) {
+  } else if (tokenRoleIsCanvas(resolved.resolvedRole) && resolved.roleConfidence !== "low" && resolved.roleConfidence !== "fallback") {
     semanticRole = "canvas";
     usageScope = "globalCanvas";
     usageIntensity = "dominant";
-    evidence.push("canvas/background key");
-  } else if (keyParts.some((p) => /^(surface|card|panel|elevated|sheet|tile)$/.test(p))) {
+    evidence.push("resolved canvas/background role");
+  } else if (tokenRoleIsSurface(resolved.resolvedRole) && resolved.roleConfidence !== "fallback") {
     semanticRole = "surface";
-    usageScope = keyParts.some((p) => /^(card|tile)$/.test(p)) ? "cardSurface" : "sectionSurface";
+    usageScope = resolved.resolvedRole === "sectionSurface" ? "sectionSurface" : "cardSurface";
     usageIntensity = "supporting";
-    evidence.push("surface/card key");
-  } else if (keyParts.some((p) => /^(ink|text|foreground)$/.test(p)) || key === "body" || keyParts.includes("body")) {
+    evidence.push("resolved surface/component role");
+  } else if (tokenRoleIsText(resolved.resolvedRole) && resolved.roleConfidence !== "fallback") {
     semanticRole = "text";
     usageScope = "text";
     usageIntensity = "dominant";
-    evidence.push("text/ink key");
-  } else if (keyParts.some((p) => /^(border|hairline|divider|stroke|line)$/.test(p))) {
+    evidence.push("resolved text/ink role");
+  } else if (resolved.resolvedRole === "border" || resolved.resolvedRole === "hairline" || keyParts.some((p) => /^(border|hairline|divider|stroke|line)$/.test(p))) {
     semanticRole = "border";
     usageScope = "border";
     usageIntensity = "supporting";
@@ -171,15 +184,25 @@ export function inferColorSemantics(input: DesignMdSemanticColorInput): DesignMd
     evidence.push("wordmark prose");
   }
 
-  return { semanticRole, usageScope, usageIntensity, evidence, warnings };
+  return {
+    resolvedRole: resolved.resolvedRole,
+    roleConfidence: resolved.roleConfidence,
+    roleEvidence: resolved.roleEvidence,
+    roleWarnings: resolved.roleWarnings,
+    semanticRole,
+    usageScope,
+    usageIntensity,
+    evidence: [...resolved.roleEvidence, ...evidence],
+    warnings: [...resolved.roleWarnings, ...warnings],
+  };
 }
 
 export function canUseAsCanvas(color: DesignMdColorSemantics | undefined): boolean {
-  return color?.usageScope === "globalCanvas" && color.semanticRole === "canvas";
+  return !!color && color.usageScope === "globalCanvas" && color.semanticRole === "canvas" && color.roleConfidence !== "low" && color.roleConfidence !== "fallback";
 }
 
 export function canUseAsSurface(color: DesignMdColorSemantics | undefined): boolean {
-  return color?.semanticRole === "surface" && (color.usageScope === "sectionSurface" || color.usageScope === "cardSurface");
+  return !!color && color.semanticRole === "surface" && (color.usageScope === "sectionSurface" || color.usageScope === "cardSurface") && color.roleConfidence !== "fallback";
 }
 
 export function canUseAsHeroAccent(color: DesignMdColorSemantics | undefined): boolean {

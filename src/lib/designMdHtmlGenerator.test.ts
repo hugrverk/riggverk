@@ -141,6 +141,84 @@ function luma(hex: string): number {
   return relativeLuminance(hex) ?? 0;
 }
 
+// ── Body/surface token role regression tests ──
+
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf6'\n  body: '#24211d'\n---\n## Overview\nCanvas is the page background. Body is paragraph text.";
+  const board = buildBoard("body-as-text", "Body As Text", "Body token is text", content);
+  const colors = deriveLightThemeTokens(board);
+  const body = allColorTokens(board).find((token) => token.key === "body");
+  assert(colors.canvas === "#fbfaf6", "body text must not override explicit canvas");
+  assert(colors.text === "#24211d", "body text may be selected as readable text");
+  assert(body?.resolvedRole === "bodyText", "body token with prose/text group resolves as bodyText");
+}
+
+{
+  const content = "---\ncolors:\n  body-background: '#f6f1e8'\n  ink: '#181716'\n---\n## Overview\nBody background is the app body background. Ink is foreground text.";
+  const board = buildBoard("body-as-background", "Body As Background", "Body background token", content);
+  const colors = deriveLightThemeTokens(board);
+  assert(colors.canvas === "#f6f1e8", "body-background is eligible as light canvas");
+  assert(colors.text === "#181716", "ink remains text when body-background is canvas");
+}
+
+{
+  const content = "---\ncolors:\n  body: '#f7f4ed'\n  text: '#191919'\n---\n## Overview\nA light page with readable text.";
+  const board = buildBoard("plain-body-ambiguous", "Plain Body", "Ambiguous body", content);
+  const body = allColorTokens(board).find((token) => token.key === "body");
+  assert(body?.roleWarnings?.some((warning) => warning.includes("body token is ambiguous")), "plain body exposes ambiguity warning");
+  assert(body?.roleConfidence === "low" || body?.roleConfidence === "medium", "plain body uses weak confidence, not high confidence");
+}
+
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  surface: '#f4f5f7'\n  text: '#111111'\n---\n## Overview\nCanvas is page background and surface is section surface.";
+  const board = buildBoard("surface-section", "Surface Section", "Surface section", content);
+  const colors = deriveLightThemeTokens(board);
+  assert(colors.canvas === "#ffffff", "surface must not override explicit canvas");
+  assert(colors.surface === "#f4f5f7", "plain surface is selected as section surface");
+}
+
+{
+  const content = "---\ncolors:\n  background: '#faf8f2'\n  card: '#ffffff'\n  text: '#111111'\n---\n## Overview\nBackground is page background. Card is a component surface.";
+  const board = buildBoard("card-not-canvas", "Card Not Canvas", "Card is local", content);
+  const colors = deriveLightThemeTokens(board);
+  assert(colors.canvas === "#faf8f2", "card token must never become page canvas when background exists");
+  assert(colors.surface === "#ffffff", "card may be used as surface fallback");
+}
+
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf6'\n  ink: '#211f1b'\n  surface-dark: '#101010'\n  on-dark: '#f6f1e8'\n---\n## Overview\nLight-first warm editorial canvas. Surface dark is for product cards, not the page canvas.";
+  const board = buildBoard("surface-dark-not-canvas", "Surface Dark", "Surface dark component", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.canvas !== "#101010", "surface-dark must not become dark page canvas for light-first source");
+  assert(dark.surface === "#101010" || dark.darkThemeSource?.surface.source === "derived", "surface-dark may affect dark surface only");
+}
+
+{
+  const content = "---\ncolors:\n  body-dark: '#101820'\n  body-on-dark: '#f8fafc'\n  background: '#ffffff'\n---\n## Overview\nBody dark is the page body background for dark mode.";
+  const board = buildBoard("body-dark-canvas", "Body Dark Canvas", "Body dark background", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.canvas === "#101820", "body-dark with background prose is dark canvas");
+}
+
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  text: '#111111'\n  body-on-dark: '#f8fafc'\n  surface-dark: '#1f2937'\n---\n## Overview\nBody on dark is text on dark surfaces.";
+  const board = buildBoard("body-dark-text", "Body Dark Text", "Body dark text", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.text === "#f8fafc", "body-on-dark is selected as dark text");
+  assert(dark.canvas !== "#f8fafc", "body-on-dark must not become dark canvas");
+}
+
+{
+  const content = "---\ncolors:\n  primary: '#ff6600'\n  accent: '#0066ff'\n  success: '#22c55e'\n  timeline-blue: '#4f8cff'\n  text: '#111111'\n---\n## Overview\nPrimary and accent are for actions. Success is semantic. Timeline blue is only for timeline visualizations.";
+  const board = buildBoard("accent-exclusion", "Accent Exclusion", "No canvas colors", content);
+  const light = deriveLightThemeTokens(board);
+  const dark = deriveDarkThemeTokens(board);
+  for (const forbidden of ["#ff6600", "#0066ff", "#22c55e", "#4f8cff"]) {
+    assert(light.canvas !== forbidden && light.surface !== forbidden, `light theme excludes scoped color ${forbidden}`);
+    assert(dark.canvas !== forbidden && dark.surface !== forbidden, `dark theme excludes scoped color ${forbidden}`);
+  }
+}
+
 // ── Source intent tests ──
 
 {

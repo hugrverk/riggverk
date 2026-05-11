@@ -19,6 +19,7 @@ import {
   isStateVariantColor,
   type DesignMdColorSemantics,
 } from "./designMdColorSemantics";
+import type { DesignMdTokenRole, DesignMdTokenRoleConfidence } from "./designMdTokenRoleResolver";
 import { sourceIntentSummary } from "./designMdSourceIntent";
 import {
   hexToRgb,
@@ -116,10 +117,28 @@ function isSparseAccentIntent(board: DesignMdBoard): boolean {
  * Used by render sections (palette, button fill checks) to gate on token roles.
  */
 function tokenSemantics(
-  token: { semanticRole?: DesignMdColorSemantics["semanticRole"]; usageScope?: DesignMdColorSemantics["usageScope"]; usageIntensity?: DesignMdColorSemantics["usageIntensity"] } | undefined,
+  token: {
+    resolvedRole?: DesignMdTokenRole;
+    roleConfidence?: DesignMdTokenRoleConfidence;
+    roleEvidence?: string[];
+    roleWarnings?: string[];
+    semanticRole?: DesignMdColorSemantics["semanticRole"];
+    usageScope?: DesignMdColorSemantics["usageScope"];
+    usageIntensity?: DesignMdColorSemantics["usageIntensity"];
+  } | undefined,
 ): DesignMdColorSemantics | undefined {
   if (!token?.semanticRole || !token.usageScope || !token.usageIntensity) return undefined;
-  return { semanticRole: token.semanticRole, usageScope: token.usageScope, usageIntensity: token.usageIntensity, evidence: [], warnings: [] };
+  return {
+    resolvedRole: token.resolvedRole ?? "unknown",
+    roleConfidence: token.roleConfidence ?? "fallback",
+    roleEvidence: token.roleEvidence ?? [],
+    roleWarnings: token.roleWarnings ?? [],
+    semanticRole: token.semanticRole,
+    usageScope: token.usageScope,
+    usageIntensity: token.usageIntensity,
+    evidence: [],
+    warnings: [],
+  };
 }
 
 // ── Theme resolution (delegates to designMdThemeResolver) ──
