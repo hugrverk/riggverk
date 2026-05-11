@@ -15,6 +15,10 @@ import {
   readableTextColor,
   ensureReadable,
 } from "./designMdContrast";
+import {
+  determineDarkPreviewMode,
+  type DarkPreviewMode,
+} from "./designMdDarkPreviewPolicy";
 
 type ThemeColorCandidate = {
   key: string;
@@ -57,6 +61,8 @@ export interface ThemeTokens {
   darkCanvas: string;
   darkSurface: string;
   darkThemeSource?: DarkThemeSource;
+  darkPreviewMode?: DarkPreviewMode;
+  darkPreviewNote?: string;
 }
 
 // ─── Private color/metric helpers ────────────────────────────────
@@ -120,28 +126,11 @@ function lightestPaletteColor(tokens: { resolvedValue: string }[], fallback: str
 
 // ─── Source intent helpers ───────────────────────────────────────
 
-function isLightFirstIntent(board: DesignMdBoard): boolean {
-  const intent = board.sourceIntent;
-  return intent.darkModeIntent === "lightFirstDerived"
-    || intent.mood.includes("lightFirst")
-    || intent.canvasIntent === "cream"
-    || intent.canvasIntent === "offWhite"
-    || intent.canvasIntent === "warmLight";
-}
-
 function isSoftWarmIntent(board: DesignMdBoard): boolean {
   return board.sourceIntent.mood.includes("warm")
     || board.sourceIntent.mood.includes("soft")
     || board.sourceIntent.mood.includes("editorial")
     || board.sourceIntent.contrastIntent === "soft";
-}
-
-function isDarkNativeIntent(board: DesignMdBoard): boolean {
-  return board.sourceIntent.darkModeIntent === "darkNative"
-    || board.sourceIntent.mood.includes("darkNative")
-    || board.sourceIntent.canvasIntent === "dark"
-    || board.sourceIntent.canvasIntent === "black"
-    || board.sourceIntent.mood.includes("highContrast");
 }
 
 // ─── Token key classification ────────────────────────────────────
@@ -332,107 +321,97 @@ interface DarkThemeSelection {
   text: ThemeTokenResolve;
   border: ThemeTokenResolve;
   muted: ThemeTokenResolve;
+  darkPreviewMode: DarkPreviewMode;
+  darkPreviewNote: string;
 }
 
-function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
+function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPreviewMode: DarkPreviewMode; darkPreviewNote: string } {
   const allColors = board.colorGroups.flatMap((g) => g.tokens);
-  const lightFirst = isLightFirstIntent(board) && !isDarkNativeIntent(board);
   const softWarm = isSoftWarmIntent(board);
+
+  // ── Consult the dark preview policy ──
+  const darkPolicy = determineDarkPreviewMode(board);
+
   const explicitCanvasKeys = [
     "body-dark", "canvas-dark", "background-dark", "page-dark", "app-dark",
     "canvas-night", "background-night", "inverse-canvas",
     "dark-body", "dark-canvas", "dark-background",
   ];
 
-  const deriveSoftDarkFromInk = () => {
-    const textDarkTokens = board.colorGroups
+  // ── Derive a conservative dark canvas fallback (never from scoped tokens) ──
+  const deriveConservativeDarkCanvas = (): string => {
+    // Only use neutral (text/canvas/surface/border) dark tokens
+    const neutralDarkTokens = allColors.filter((t) =>
+      !isForbiddenThemeCandidate(t)
+      && !isComponentSurfaceRole(t, "medium")
+      && isSafeColorValue(t.resolvedValue)
+      && isDarkColor(t.resolvedValue)
+    );
+    const canvasGroupTokens = board.colorGroups
+      .filter((g) => g.prefix === "canvas/surface")
+      .flatMap((g) => g.tokens)
+      .filter((t) => !isForbiddenThemeCandidate(t) && (isCanvasRole(t, "low") || isSectionSurfaceRole(t, "medium")));
+    const textGroupTokens = board.colorGroups
       .filter((g) => g.prefix === "text/ink")
       .flatMap((g) => g.tokens)
       .filter((t) => !isContextualTextToken(t.key) && !isForbiddenThemeCandidate(t) && isSolidHexColor(t.resolvedValue) && isDarkColor(t.resolvedValue));
-    const ink = darkestPaletteColor(textDarkTokens, "");
-    const warmLight = lightestPaletteColor(
-      board.colorGroups
-        .filter((g) => g.prefix === "canvas/surface")
-        .flatMap((g) => g.tokens)
-        .filter((t) => isSolidHexColor(t.resolvedValue) && isNearLightColor(t.resolvedValue) && !isForbiddenThemeCandidate(t)),
-      "#f5f0e8",
-    );
-    if (ink && isDarkColor(ink)) {
-      // Mix ink toward warm light. Soft/warm/editorial designs get a higher
-      // warm-light ratio to avoid harsh near-black dark canvases.
+
+    const darkCanvas = darkestPaletteColor(canvasGroupTokens, "");
+    if (darkCanvas && isDarkColor(darkCanvas) && !isForbiddenThemeCandidate(allColors.find((t) => isSafeColorValue(t.resolvedValue) && t.resolvedValue.trim() === darkCanvas.trim()) ?? { key: "" } as ThemeColorCandidate)) {
+      return darkCanvas;
+    }
+    const darkInk = darkestPaletteColor(textGroupTokens, "");
+    if (darkInk && isDarkColor(darkInk)) {
+      const warmLight = lightestPaletteColor(
+        board.colorGroups
+          .filter((g) => g.prefix === "canvas/surface")
+          .flatMap((g) => g.tokens)
+          .filter((t) => isSolidHexColor(t.resolvedValue) && isNearLightColor(t.resolvedValue) && !isForbiddenThemeCandidate(t)),
+        "#f5f0e8",
+      );
       const mixRatio = softWarm ? 0.18 : 0.10;
-      const mixed = mixHexColor(ink, warmLight, mixRatio);
+      const mixed = mixHexColor(darkInk, warmLight, mixRatio);
       if (mixed && isSafeColorValue(mixed)) {
-        // For soft/warm designs, enforce a minimum luma threshold so the
-        // dark canvas stays visibly softer than raw ink.
         const mixedLuma = relativeLuminance(mixed);
         if (softWarm && mixedLuma !== null && mixedLuma < 0.04) {
-          const reMixed = mixHexColor(ink, warmLight, 0.22);
+          const reMixed = mixHexColor(darkInk, warmLight, 0.22);
           if (reMixed && isSafeColorValue(reMixed)) return reMixed;
         }
         return mixed;
       }
-      return ink;
+      return darkInk;
     }
+    const darkestNeutral = darkestPaletteColor(neutralDarkTokens, "");
+    if (darkestNeutral && isDarkColor(darkestNeutral)) return darkestNeutral;
     return softWarm ? "#3b3830" : "#2a2d34";
   };
+
+  // ── darkTokenBoard: minimal conservative dark wrapper ──
+  // Do NOT derive a full dark theme. Use a safe neutral dark wrapper.
+  if (darkPolicy.mode === "darkTokenBoard") {
+    const neutralCanvas = deriveConservativeDarkCanvas();
+    const neutralSurface = mixHexColor(neutralCanvas, "#ffffff", 0.08) ?? "#2d3038";
+    return {
+      canvas: { value: neutralCanvas, source: "fallback", note: "conservative neutral wrapper (dark token board)" },
+      surface: { value: neutralSurface, source: "fallback", note: "conservative neutral wrapper (dark token board)" },
+      text: { value: softWarm ? "#e8e4da" : "#e4e6ea", source: "fallback", note: "conservative neutral text (dark token board)" },
+      border: { value: softWarm ? "#46433d" : "#2a2e35", source: "fallback", note: "conservative neutral border (dark token board)" },
+      muted: { value: softWarm ? "#aaa59c" : "#8b909a", source: "fallback", note: "conservative neutral muted (dark token board)" },
+      darkPreviewMode: darkPolicy.mode,
+      darkPreviewNote: darkPolicy.reason,
+    };
+  }
+
+  // ── fullSourceDark / conservativeDerivedDark ──
+
+  const isFullSource = darkPolicy.mode === "fullSourceDark";
 
   const canvasResolve = resolveDarkToken(
     allColors,
     explicitCanvasKeys,
-    () => {
-      if (lightFirst) return deriveSoftDarkFromInk();
-      const textDarkTokens = board.colorGroups
-        .filter((g) => g.prefix === "text/ink")
-        .flatMap((g) => g.tokens)
-        .filter((t) => !isContextualTextToken(t.key) && !isForbiddenThemeCandidate(t) && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue));
-      const darkestText = darkestPaletteColor(textDarkTokens, "");
-      if (darkestText && isDarkColor(darkestText)) {
-        // Reject pure black (#000000) or near-black (luma < 0.005) unless dark-native.
-        // Many designs have a plain "black" token that should not become full canvas.
-        if (!isDarkNativeIntent(board)) {
-          const lum = relativeLuminance(darkestText);
-          if (lum !== null && lum < 0.005) {
-            return "#14181e";
-          }
-        }
-        return darkestText;
-      }
-      const canvasGroupTokens = board.colorGroups
-        .filter((g) => g.prefix === "canvas/surface")
-        .flatMap((g) => g.tokens)
-        .filter((t) => !isForbiddenThemeCandidate(t) && (isCanvasRole(t, "low") || isSectionSurfaceRole(t, "medium")));
-      const darkestCanvas = darkestPaletteColor(canvasGroupTokens, "");
-      if (darkestCanvas && isDarkColor(darkestCanvas)) {
-        if (!isDarkNativeIntent(board)) {
-          const lum = relativeLuminance(darkestCanvas);
-          if (lum !== null && lum < 0.005) return "#14181e";
-        }
-        return darkestCanvas;
-      }
-      const neutralDarkTokens = allColors.filter((t) =>
-        !isForbiddenThemeCandidate(t) && !isComponentSurfaceRole(t, "medium") && isSafeColorValue(t.resolvedValue) && isDarkColor(t.resolvedValue));
-      const darkestNeutral = darkestPaletteColor(neutralDarkTokens, "");
-      if (darkestNeutral && isDarkColor(darkestNeutral)) {
-        if (!isDarkNativeIntent(board)) {
-          const lum = relativeLuminance(darkestNeutral);
-          if (lum !== null && lum < 0.005) return "#14181e";
-        }
-        return darkestNeutral;
-      }
-      const safeAll = allColors.filter((t) => !isForbiddenThemeCandidate(t) && !isComponentSurfaceRole(t, "medium") && isSolidHexColor(t.resolvedValue));
-      const darkestSafe = darkestPaletteColor(safeAll, "");
-      if (darkestSafe && isDarkColor(darkestSafe)) {
-        if (!isDarkNativeIntent(board)) {
-          const lum = relativeLuminance(darkestSafe);
-          if (lum !== null && lum < 0.005) return "#14181e";
-        }
-        return darkestSafe;
-      }
-      return softWarm ? "#3b3830" : "#14181e";
-    },
+    () => deriveConservativeDarkCanvas(),
     softWarm ? "#3b3830" : "#14181e",
-    true,
+    !isFullSource, // for conservativeDerivedDark, filter non-dark/body/component-surface candidates
   );
   const darkCanvas = canvasResolve.value;
 
@@ -443,9 +422,9 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
   ];
   const surfaceResolve = resolveDarkToken(
     allColors,
-    lightFirst && canvasResolve.source !== "source" ? [] : surfaceExplicit,
+    isFullSource ? surfaceExplicit : [], // conservativeDerivedDark: don't look for explicit dark surface
     () => {
-      const lighten = lightFirst ? (softWarm ? 0.11 : 0.08) : 0.06;
+      const lighten = softWarm ? 0.11 : 0.08;
       const mixed = mixHexColor(darkCanvas, "#ffffff", lighten);
       if (mixed && isSafeColorValue(mixed)) return mixed;
       return mixHexColor(darkCanvas, "#ffffff", lighten) ?? (softWarm ? "#4a4740" : "#1f232b");
@@ -482,7 +461,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     allColors,
     mutedExplicit,
     () => {
-      const mixed = mixHexColor(darkText, darkCanvas, lightFirst ? 0.60 : 0.55);
+      const mixed = mixHexColor(darkText, darkCanvas, softWarm ? 0.60 : 0.55);
       if (mixed && isSafeColorValue(mixed)) return mixed;
       return softWarm ? "#aaa59c" : "#8b909a";
     },
@@ -498,7 +477,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     allColors,
     borderExplicit,
     () => {
-      const mixed = mixHexColor(darkSurface, darkText, softWarm ? 0.06 : lightFirst ? 0.07 : 0.10);
+      const mixed = mixHexColor(darkSurface, darkText, softWarm ? 0.06 : 0.10);
       if (mixed && isSafeColorValue(mixed)) return mixed;
       return softWarm ? "#4f4c46" : "#2a2e35";
     },
@@ -511,6 +490,8 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection {
     text: { value: darkText, source: textResolve.source, matchedKey: textResolve.matchedKey, note: textResolve.note },
     border: borderResolve,
     muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
+    darkPreviewMode: darkPolicy.mode,
+    darkPreviewNote: darkPolicy.reason,
   };
 }
 
@@ -609,13 +590,15 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
     canUseAsHeroAccent(sem));
   const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
 
+  const isTokenBoard = darkTheme.darkPreviewMode === "darkTokenBoard";
   const darkThemeSource: DarkThemeSource = {
-    canvas: { source: darkTheme.canvas.source, matchedKey: darkTheme.canvas.matchedKey, note: darkTheme.canvas.note },
-    surface: { source: darkTheme.surface.source, matchedKey: darkTheme.surface.matchedKey, note: darkTheme.surface.note },
-    text: { source: darkTheme.text.source, matchedKey: darkTheme.text.matchedKey, note: darkTheme.text.note },
-    border: { source: darkTheme.border.source, matchedKey: darkTheme.border.matchedKey, note: darkTheme.border.note },
-    muted: { source: darkTheme.muted.source, matchedKey: darkTheme.muted.matchedKey, note: darkTheme.muted.note },
+    canvas: { source: isTokenBoard ? "policy" : darkTheme.canvas.source, matchedKey: darkTheme.canvas.matchedKey, note: darkTheme.canvas.note },
+    surface: { source: isTokenBoard ? "policy" : darkTheme.surface.source, matchedKey: darkTheme.surface.matchedKey, note: darkTheme.surface.note },
+    text: { source: isTokenBoard ? "policy" : darkTheme.text.source, matchedKey: darkTheme.text.matchedKey, note: darkTheme.text.note },
+    border: { source: isTokenBoard ? "policy" : darkTheme.border.source, matchedKey: darkTheme.border.matchedKey, note: darkTheme.border.note },
+    muted: { source: isTokenBoard ? "policy" : darkTheme.muted.source, matchedKey: darkTheme.muted.matchedKey, note: darkTheme.muted.note },
     warnings: ([] as string[]).concat(
+      isTokenBoard ? ["dark token board — no full dark theme derived"] : [],
       darkTheme.canvas.source === "derived" ? "no explicit dark canvas" : [],
       darkTheme.surface.source === "derived" ? "no explicit dark surface" : [],
       darkTheme.text.source === "derived" ? "text derived" : [],
@@ -637,5 +620,7 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
     darkCanvas,
     darkSurface,
     darkThemeSource,
+    darkPreviewMode: darkTheme.darkPreviewMode,
+    darkPreviewNote: darkTheme.darkPreviewNote,
   };
 }

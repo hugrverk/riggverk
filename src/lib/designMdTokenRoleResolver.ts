@@ -75,8 +75,11 @@ export function resolveDesignMdTokenRole(input: DesignMdTokenRoleInput): DesignM
   const compact = keyParts.join("-");
   const prose = (input.prose ?? "").toLowerCase();
   const localEvidence = (input.sourceEvidence?.text ?? "").toLowerCase();
+  // context includes group name for key/group classification
   const context = `${key} ${input.group} ${localEvidence} ${prose}`;
   const tokenContext = `${key} ${input.group} ${localEvidence}`;
+  // proseContext excludes group name to avoid false matches against classifier text (e.g. "text/ink")
+  const proseContext = `${prose}`;
   const evidence: string[] = [];
   const warnings: string[] = [];
   const score = new Map<DesignMdTokenRole, number>();
@@ -119,20 +122,21 @@ export function resolveDesignMdTokenRole(input: DesignMdTokenRoleInput): DesignM
   if (input.group === "semantic/status") add("semanticOnly", 3, "semantic/status group");
   if (input.group === "brand/accent") add("brandAccent", 2, "brand/accent group");
 
+  // Prose-based role inference (uses proseContext to avoid matching classifier group names)
   const textAligned = input.group === "text/ink" || keyParts.some((p) => /^(body|text|ink|foreground|heading|headline|title|muted|secondary)$/.test(p));
   const canvasAligned = input.group === "canvas/surface" || keyParts.some((p) => /^(body|canvas|background|page|app|root|surface)$/.test(p));
   const surfaceAligned = input.group === "canvas/surface" || keyParts.some((p) => /^(surface|card|panel|tile|sheet|elevated)$/.test(p));
-  if (textAligned && hasAny(context, [/\bbody text\b/, /\bbody copy\b/, /\bparagraph\b/, /\bcopy\b/, /\bforeground\b/, /\bink\b/, /\btext\b/])) add("bodyText", keyParts.includes("body") ? 4 : 1, "source prose indicates body text");
-  if (keyParts.includes("body") && hasAny(context, [/\bbody background\b/, /\bpage body\b/, /\bapp body background\b/, /\bbody canvas\b/])) add("bodyBackground", 5, "source prose indicates body background");
-  if (canvasAligned && hasAny(context, [/\bpage background\b/, /\bglobal background\b/, /\bapp background\b/, /\bpage canvas\b/, /\bglobal canvas\b/])) add("pageBackground", 3, "source prose indicates page background");
-  if (surfaceAligned && hasAny(context, [/\bpage surface\b/, /\bglobal surface\b/, /\bsection surface\b/])) add("sectionSurface", 3, "source prose indicates section/global surface");
-  if (surfaceAligned && hasAny(context, [/\bcard\b/, /\bpanel\b/, /\btile\b/, /\bsheet\b/]) && hasAny(context, [/\bsurface\b/, /\bbackground\b/])) add("componentSurface", 2, "component surface prose");
+  if (textAligned && hasAny(proseContext, [/\bbody text\b/, /\bbody copy\b/, /\bparagraph\b/, /\bcopy\b/, /\bforeground\b/, /\bink\b/, /\btext\b/])) add("bodyText", keyParts.includes("body") ? 4 : 1, "source prose indicates body text");
+  if (keyParts.includes("body") && hasAny(proseContext, [/\bbody background\b/, /\bpage body\b/, /\bapp body background\b/, /\bbody canvas\b/])) add("bodyBackground", 5, "source prose indicates body background");
+  if (canvasAligned && hasAny(proseContext, [/\bpage background\b/, /\bglobal background\b/, /\bapp background\b/, /\bpage canvas\b/, /\bglobal canvas\b/])) add("pageBackground", 3, "source prose indicates page background");
+  if (surfaceAligned && hasAny(proseContext, [/\bpage surface\b/, /\bglobal surface\b/, /\bsection surface\b/])) add("sectionSurface", 3, "source prose indicates section/global surface");
+  if (surfaceAligned && hasAny(proseContext, [/\bcard\b/, /\bpanel\b/, /\btile\b/, /\bsheet\b/]) && hasAny(proseContext, [/\bsurface\b/, /\bbackground\b/])) add("componentSurface", 2, "component surface prose");
 
   if (keyParts.includes("body")) {
     warnings.push("body token is ambiguous");
     if (!exact("body-bg", "body-background", "body-canvas", "body-text", "body-copy", "text-body", "body-on-dark")) {
       if (input.group === "text/ink") add("bodyText", 2, "plain body in text/ink group");
-      if (isDark(input.value) && hasAny(context, [/\bcanvas\b/, /\bbackground\b/, /\bpage\b/, /\bsurface\b/])) add("bodyText", 1, "dark body with separate background evidence");
+      if (isDark(input.value) && hasAny(proseContext, [/\bcanvas\b/, /\bbackground\b/, /\bpage\b/, /\bsurface\b/])) add("bodyText", 1, "dark body with separate background evidence");
       if (isLight(input.value) && input.group === "canvas/surface") add("bodyBackground", 1, "light body in canvas/surface group");
     }
   }

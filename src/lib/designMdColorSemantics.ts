@@ -220,7 +220,10 @@ export function canUseAsButtonFill(color: DesignMdColorSemantics | undefined): b
 
 export function canUseAsDarkCanvasCandidate(color: DesignMdColorSemantics | undefined): boolean {
   if (!color) return true;
-  return color.semanticRole === "canvas" || color.semanticRole === "surface" || color.semanticRole === "text" || color.semanticRole === "border" || color.semanticRole === "unknown";
+  // Only canvas-role tokens can serve as dark canvas candidates.
+  // Surface, text, border, unknown, primaryAction, brandAccent, semantic, timeline, state,
+  // decorative are all excluded to prevent over-inference.
+  return color.semanticRole === "canvas";
 }
 
 export function isStateVariantColor(color: DesignMdColorSemantics | undefined): boolean {

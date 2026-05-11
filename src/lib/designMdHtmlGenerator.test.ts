@@ -190,7 +190,7 @@ function luma(hex: string): number {
   const board = buildBoard("surface-dark-not-canvas", "Surface Dark", "Surface dark component", content);
   const dark = deriveDarkThemeTokens(board);
   assert(dark.canvas !== "#101010", "surface-dark must not become dark page canvas for light-first source");
-  assert(dark.surface === "#101010" || dark.darkThemeSource?.surface.source === "derived", "surface-dark may affect dark surface only");
+  assert(dark.surface === "#101010" || dark.darkThemeSource?.surface.source === "derived" || dark.darkThemeSource?.surface.source === "policy", "surface-dark may affect dark surface only or be policy-gated");
 }
 
 {
@@ -664,6 +664,113 @@ function luma(hex: string): number {
   const board = buildBoard("test-light-diag", "Light Diag", "Light no diagnostics", content);
   const html = generateBoardHtml(board, { variant: "light" });
   assert(!html.includes("Design MD dark theme source"), "light HTML must NOT include dark diagnostic comment");
+}
+
+// ── Dark preview policy tests (Pass 6) ──
+
+// Test: darkTokenBoard mode for light-first/warm/cream designs without explicit dark canvas
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf6'\n  ink: '#24211d'\n  primary: '#ff6b00'\n  surface: '#ffffff'\n---\n## Overview\nWarm cream editorial canvas. Orange reserved for primary CTA only.";
+  const board = buildBoard("dark-token-board", "Dark Token Board", "Light-first warm design", content);
+  const dark = deriveDarkThemeTokens(board);
+  // Light-first warm cream design with no explicit dark canvas → darkTokenBoard
+  assert(dark.darkPreviewMode === "darkTokenBoard", `dark preview mode must be darkTokenBoard for light-first warm design (got ${dark.darkPreviewMode})`);
+  // Must have diagnostics with token board note
+  const html = generateBoardHtml(board, { variant: "dark" });
+  assert(html.includes("dark token board"), "dark token board HTML must include diagnostic note");
+  assert(html.includes("Design MD dark theme source"), "dark HTML must include diagnostic comment");
+}
+
+// Test: conservativeDerivedDark when neutral tokens exist but no explicit dark canvas
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  surface: '#f8fafc'\n  text: '#111111'\n  border: '#e2e8f0'\n---\n## Overview\nStandard light design system with neutral palette.";
+  const board = buildBoard("conservative-derived", "Conservative Derived", "Neutral design", content);
+  const dark = deriveDarkThemeTokens(board);
+  // Has neutral tokens but no explicit dark canvas → conservativeDerivedDark
+  assert(dark.darkPreviewMode === "conservativeDerivedDark" || dark.darkPreviewMode === "darkTokenBoard",
+    `dark preview mode should not be fullSourceDark for light-only design (got ${dark.darkPreviewMode})`);
+}
+
+// Test: explicit dark canvas with supporting tokens → fullSourceDark
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  text: '#111111'\n  background-dark: '#0d1117'\n  on-dark: '#f0f2f5'\n  surface-dark: '#161b22'\n  border-dark: '#30363d'\n---\n## Overview\nFull dark theme with explicit canvas and on-dark tokens.";
+  const board = buildBoard("full-dark-design", "Full Dark", "Explicit dark design", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode === "fullSourceDark",
+    `dark preview mode must be fullSourceDark for explicit dark design (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#0d1117", "dark canvas must use explicit background-dark token");
+}
+
+// Test: dark-native terminal design → fullSourceDark (if explicit dark canvas exists)
+{
+  const content = "---\ncolors:\n  canvas: '#0a0a12'\n  surface: '#1a1a2e'\n  ink: '#e8e6f0'\n  accent: '#7c6ff7'\n---\n## Overview\nDark-native terminal interface on a near-black canvas with high contrast.";
+  const board = buildBoard("dark-native-terminal", "Dark Terminal", "Dark-native terminal", content);
+  const dark = deriveDarkThemeTokens(board);
+  // canvas with "canvas" key and dark value → should be recognized
+  assert(dark.darkPreviewMode === "fullSourceDark" || dark.darkPreviewMode === "conservativeDerivedDark",
+    `dark-native terminal should be at least conservativeDerivedDark (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#0a0a12", "dark canvas must use explicit dark canvas token");
+}
+
+// Test: surface-dark without explicit dark canvas does NOT become dark page canvas
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  ink: '#111111'\n  surface-dark: '#1f2937'\n---\n## Overview\nLight-first design. Surface dark is for product cards, not the page canvas.";
+  const board = buildBoard("surface-dark-not-page", "Surface Dark", "Surface dark is component", content);
+  const dark = deriveDarkThemeTokens(board);
+  // surface-dark is card surface, not page canvas
+  assert(dark.canvas !== "#1f2937", "surface-dark must not become dark page canvas when canvas is light");
+  // Should be in darkTokenBoard or conservativeDerivedDark mode
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    `should not be fullSourceDark when only surface-dark exists (got ${dark.darkPreviewMode})`);
+}
+
+// Test: card-dark does NOT become dark page canvas
+{
+  const content = "---\ncolors:\n  background: '#faf8f2'\n  text: '#111111'\n  card-dark: '#1a1a24'\n---\n## Overview\nBackground is page background. Card dark is for elevated cards.";
+  const board = buildBoard("card-dark-not-canvas", "Card Dark", "Card dark is component", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.canvas !== "#1a1a24", "card-dark must not become dark page canvas");
+}
+
+// Test: primary/accent/semantic colors never become dark canvas
+{
+  const content = "---\ncolors:\n  primary: '#ff6600'\n  accent: '#0066ff'\n  success: '#22c55e'\n  warning: '#f59e0b'\n  text: '#111111'\n---\n## Overview\nOnly branded and semantic colors. No canvas tokens.";
+  const board = buildBoard("no-canvas-brand", "No Canvas Brand", "Brand only colors", content);
+  const dark = deriveDarkThemeTokens(board);
+  for (const forbidden of ["#ff6600", "#0066ff", "#22c55e", "#f59e0b"]) {
+    assert(dark.canvas !== forbidden, `dark canvas must NOT be ${forbidden}`);
+    assert(dark.surface !== forbidden, `dark surface must NOT be ${forbidden}`);
+  }
+  // Should be darkTokenBoard since no neutral canvas tokens
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `brand/semantic-only designs must be darkTokenBoard (got ${dark.darkPreviewMode})`);
+}
+
+// Test: generated dark HTML includes dark preview mode in diagnostics
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  background: '#ffffff'\n  text: '#111111'\n  background-dark: '#0d1117'\n  on-dark: '#f0f2f5'\n---\n## Overview\nExplicit dark canvas test";
+  const board = buildBoard("dark-diag-mode", "Diag Mode", "Diagnostics mode test", content);
+  const html = generateBoardHtml(board, { variant: "dark" });
+  assert(html.includes("mode:"), "dark diagnostics must include preview mode");
+  assert(html.includes("fullSourceDark"), "dark diagnostics must indicate fullSourceDark mode");
+}
+
+// Test: dark token board HTML includes user-visible note in source notes
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf6'\n  ink: '#24211d'\n  primary: '#ff6b00'\n---\n## Overview\nWarm cream canvas. Orange for CTA only.";
+  const board = buildBoard("token-board-note", "Token Board Note", "Token board visible note", content);
+  const html = generateBoardHtml(board, { variant: "dark" });
+  assert(html.includes("Dark preview policy"), "dark token board HTML must include policy section in source notes");
+}
+
+// Test: body-on-dark token is correctly recognized as text (not canvas) for fullSourceDark check
+{
+  const content = "---\ncolors:\n  body-dark: '#101820'\n  body-on-dark: '#f8fafc'\n  background: '#ffffff'\n---\n## Overview\nBody dark is the page body background for dark mode.";
+  const board = buildBoard("body-dark-full-dark", "Body Dark Full", "Body-dark full source", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode === "fullSourceDark",
+    `body-dark with body-on-dark should be fullSourceDark (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#101820", "body-dark must be selected as dark canvas");
 }
 
 // ── Summary ──

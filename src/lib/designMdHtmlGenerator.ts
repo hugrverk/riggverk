@@ -25,7 +25,10 @@ import {
   hexToRgb,
   ensureReadable,
 } from "./designMdContrast";
-import { resolveLightTokens, resolveDarkTokens } from "./designMdThemeResolver";
+import {
+  resolveLightTokens,
+  resolveDarkTokens,
+} from "./designMdThemeResolver";
 import type { ThemeTokens } from "./designMdThemeResolver";
 
 const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data: blob:; font-src data:;">';
@@ -413,8 +416,15 @@ function renderLayout(board: DesignMdBoard): string {
     '</section>';
 }
 
-function renderSourceNotes(board: DesignMdBoard): string {
+function renderSourceNotes(board: DesignMdBoard, darkPreviewNote?: string): string {
   const sections: string[] = [];
+
+  // Dark token board note
+  if (darkPreviewNote) {
+    sections.push('<div class="src-section"><h4>Dark preview policy</h4>' +
+      '<div class="src-intent-summary">' + esc(darkPreviewNote) + '</div>' +
+      '</div>');
+  }
 
   const intent = board.sourceIntent;
   const intentEvidence = intent.sourceEvidence.slice(0, 4);
@@ -511,9 +521,10 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
 
   const subtleSwatchBorder = mixHexColor(colors.surface, colors.text, 0.15) ?? colors.border;
   const conservative = board.qualityWarnings.sourceSparse || board.previewQuality.lightScore < 55;
+  const isTokenBoard = colors.darkPreviewMode === "darkTokenBoard";
   const sparseAccent = isSparseAccentIntent(board);
   const softWarm = isSoftWarmIntent(board);
-  const accentBarColor = conservative || sparseAccent || board.qualityWarnings.accentOveruseRisk || board.qualityWarnings.primaryOveruseRisk
+  const accentBarColor = conservative || sparseAccent || isTokenBoard || board.qualityWarnings.accentOveruseRisk || board.qualityWarnings.primaryOveruseRisk
     ? colors.border
     : colors.primary;
   const heroBackground = softWarm && variant === "dark"
@@ -531,7 +542,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero:not(:last-child){border-bottom:1px solid " + colors.border + "}",
     ".hero-inner{display:flex;gap:28px;align-items:flex-start;max-width:960px;margin:0 auto}",
     ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}",
-    ".hero-kicker{color:" + (conservative ? colors.muted : colors.primary) + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
+    ".hero-kicker{color:" + (conservative || isTokenBoard ? colors.muted : colors.primary) + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
     ".hero-title{color:" + colors.text + "}",
     ".hero-meta{color:" + colors.muted + ";font-size:" + caption.size + "}",
     ".hero-desc{color:" + colors.muted + ";max-width:540px;line-height:1.5;font-size:" + caption.size + "}",
@@ -613,6 +624,8 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     const dt = colors.darkThemeSource;
     const lines = [
       '── Design MD dark theme source ──',
+      `mode: ${colors.darkPreviewMode ?? "unknown"}`,
+      `note: ${colors.darkPreviewNote ?? ""}`,
       `canvas: ${dt.canvas.note} (source: ${dt.canvas.source}${dt.canvas.matchedKey ? ', key: ' + dt.canvas.matchedKey : ''})`,
       `surface: ${dt.surface.note} (source: ${dt.surface.source}${dt.surface.matchedKey ? ', key: ' + dt.surface.matchedKey : ''})`,
       `text:    ${dt.text.note} (source: ${dt.text.source}${dt.text.matchedKey ? ', key: ' + dt.text.matchedKey : ''})`,
@@ -621,6 +634,13 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ];
     if (dt.warnings.length > 0) {
       lines.push(`warnings: ${dt.warnings.join(', ')}`);
+    }
+    // For darkTokenBoard, add a clear user-facing note
+    if (colors.darkPreviewMode === "darkTokenBoard") {
+      lines.push("──");
+      lines.push("No explicit dark theme detected in DESIGN.md;");
+      lines.push("this dark preview is conservative and token-based.");
+      lines.push("──");
     }
     diagnosticsHtml = '\n<!--\n' + lines.join('\n') + '\n-->';
   }
@@ -632,7 +652,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     renderTypography(board),
     renderRadiusSpacing(board, colors),
     renderLayout(board),
-    renderSourceNotes(board),
+    renderSourceNotes(board, colors.darkPreviewMode === "darkTokenBoard" ? colors.darkPreviewNote : undefined),
     '</div>',
     diagnosticsHtml,
   ].join("\n");
