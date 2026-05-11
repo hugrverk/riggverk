@@ -21,6 +21,16 @@ else
   fail "default-workspace/templates/tui.json strict JSON"
 fi
 
+# --- tui.json expected keys ---
+tui_keys=('"theme"' '"leader_timeout"' '"scroll_acceleration"' '"diff_style"' '"mouse"')
+for key in "${tui_keys[@]}"; do
+  if grep -qF "$key" "$dw/templates/tui.json"; then
+    pass "default-workspace/templates/tui.json has $key"
+  else
+    fail "default-workspace/templates/tui.json missing $key"
+  fi
+done
+
 # --- opencode.json model keys ---
 for key in '"model"' '"small_model"'; do
   if grep -qF "$key" "$dw/templates/opencode.json"; then

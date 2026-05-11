@@ -209,6 +209,37 @@ if "contextWindow" in qwen:
 PY
 printf '  opencode.json: default_agent=architect model=deepseek-v4-pro small_model=deepseek-v4-flash autoupdate=notify snapshot=true qwen3.6-plus limits ok\n'
 
+step "bundled default tui.json"
+if [ ! -f resources/default-workspace/templates/tui.json ]; then
+  printf 'FAIL: bundled tui.json not found\n' >&2
+  exit 1
+fi
+python3 -m json.tool resources/default-workspace/templates/tui.json >/dev/null
+if ! grep -qF '"theme": "system"' resources/default-workspace/templates/tui.json; then
+  printf 'FAIL: bundled tui.json missing theme system\n' >&2
+  exit 1
+fi
+if ! grep -qF '"diff_style": "auto"' resources/default-workspace/templates/tui.json; then
+  printf 'FAIL: bundled tui.json missing diff_style auto\n' >&2
+  exit 1
+fi
+if ! grep -qF '"mouse": true' resources/default-workspace/templates/tui.json; then
+  printf 'FAIL: bundled tui.json missing mouse true\n' >&2
+  exit 1
+fi
+if ! grep -qF '"leader_timeout": 2000' resources/default-workspace/templates/tui.json; then
+  printf 'FAIL: bundled tui.json missing leader_timeout 2000\n' >&2
+  exit 1
+fi
+python3 - <<'PY'
+import json
+path = "resources/default-workspace/templates/tui.json"
+data = json.load(open(path))
+if not data.get("scroll_acceleration", {}).get("enabled"):
+    raise SystemExit("FAIL: bundled tui.json scroll_acceleration.enabled must be true")
+PY
+printf '  tui.json: theme=system diff_style=auto mouse=true leader_timeout=2000 scroll_acceleration.enabled=true\n'
+
 step "bundled default agents exist and non-empty"
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -s "resources/default-workspace/agents/$agent" ]; then
@@ -323,12 +354,21 @@ fi
 step "bundled default install-opencode-config.sh temp apply smoke"
 tmpdir="$(mktemp -d)"
 OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
+OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
 OPENCODE_AGENTS_DIR="$tmpdir/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
   bash resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
 apply_ok=true
 if [ ! -f "$tmpdir/opencode.json" ]; then
   printf 'FAIL: install-opencode-config.sh --apply did not write opencode.json\n' >&2
+  apply_ok=false
+fi
+if [ ! -f "$tmpdir/tui.json" ]; then
+  printf 'FAIL: install-opencode-config.sh --apply did not write tui.json\n' >&2
+  apply_ok=false
+fi
+if ! python3 -m json.tool "$tmpdir/tui.json" >/dev/null 2>&1; then
+  printf 'FAIL: smoke tui.json is not valid JSON\n' >&2
   apply_ok=false
 fi
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
@@ -367,9 +407,32 @@ for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
     apply_ok=false
   fi
 done
+# TUI config key checks
+if ! grep -qF '"theme": "system"' "$tmpdir/tui.json"; then
+  printf 'FAIL: smoke tui.json missing theme system\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"diff_style": "auto"' "$tmpdir/tui.json"; then
+  printf 'FAIL: smoke tui.json missing diff_style auto\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"mouse": true' "$tmpdir/tui.json"; then
+  printf 'FAIL: smoke tui.json missing mouse true\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"leader_timeout": 2000' "$tmpdir/tui.json"; then
+  printf 'FAIL: smoke tui.json missing leader_timeout 2000\n' >&2
+  apply_ok=false
+fi
+python3 -c "
+import json, sys
+data = json.load(open('$tmpdir/tui.json'))
+if not data.get('scroll_acceleration', {}).get('enabled'):
+    sys.exit('FAIL: smoke tui.json scroll_acceleration.enabled must be true')
+" || { apply_ok=false; }
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
-printf '  install-opencode-config.sh --apply smoke: 1 config + 6 agents written, content checks passed\n'
+printf '  install-opencode-config.sh --apply smoke: 1 config + 1 tui + 6 agents written, content checks passed\n'
 
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
 if OPENCODE_AGENTS_DIR=/ bash resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
@@ -381,6 +444,7 @@ step "bundled default install-opencode-config.sh works with space in workspace p
 tmpdir="$(mktemp -d)"
 space_dir="$tmpdir/Agent Workspace"
 runtime_config="$tmpdir/runtime/opencode.json"
+runtime_tui="$tmpdir/runtime/tui.json"
 runtime_agents="$tmpdir/runtime/agents"
 backup_dir="$tmpdir/runtime/backups"
 
@@ -391,6 +455,7 @@ cp -R resources/default-workspace "$space_dir"
 
 # Run --apply from the copied workspace, targeting separate runtime dirs
 OPENCODE_CONFIG_PATH="$runtime_config" \
+OPENCODE_TUI_CONFIG_PATH="$runtime_tui" \
 OPENCODE_AGENTS_DIR="$runtime_agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$backup_dir" \
   bash "$space_dir/scripts/install-opencode-config.sh" --apply >/dev/null
@@ -398,6 +463,14 @@ AGENT_WORKSPACE_BACKUP_DIR="$backup_dir" \
 apply_ok=true
 if [ ! -f "$runtime_config" ]; then
   printf 'FAIL: space-in-path apply did not create opencode.json\n' >&2
+  apply_ok=false
+fi
+if [ ! -f "$runtime_tui" ]; then
+  printf 'FAIL: space-in-path apply did not create tui.json\n' >&2
+  apply_ok=false
+fi
+if ! python3 -m json.tool "$runtime_tui" >/dev/null 2>&1; then
+  printf 'FAIL: space-in-path tui.json is not valid JSON\n' >&2
   apply_ok=false
 fi
 if ! grep -q '"default_agent": "architect"' "$runtime_config"; then
@@ -418,9 +491,33 @@ if [ "$agent_count" -ne 6 ]; then
   apply_ok=false
 fi
 
+# TUI config key checks
+if ! grep -qF '"theme": "system"' "$runtime_tui"; then
+  printf 'FAIL: space-in-path tui.json missing theme system\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"diff_style": "auto"' "$runtime_tui"; then
+  printf 'FAIL: space-in-path tui.json missing diff_style auto\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"mouse": true' "$runtime_tui"; then
+  printf 'FAIL: space-in-path tui.json missing mouse true\n' >&2
+  apply_ok=false
+fi
+if ! grep -qF '"leader_timeout": 2000' "$runtime_tui"; then
+  printf 'FAIL: space-in-path tui.json missing leader_timeout 2000\n' >&2
+  apply_ok=false
+fi
+python3 -c "
+import json, sys
+data = json.load(open('$runtime_tui'))
+if not data.get('scroll_acceleration', {}).get('enabled'):
+    sys.exit('FAIL: space-in-path tui.json scroll_acceleration.enabled must be true')
+" || { apply_ok=false; }
+
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
-printf '  install-opencode-config.sh handles space-in-path correctly: 6 agents applied from space-containing workspace\n'
+printf '  install-opencode-config.sh handles space-in-path correctly: 1 config + 1 tui + 6 agents applied from space-containing workspace\n'
 
 step "backup schema matches app expectations"
 tmpdir="$(mktemp -d)"
