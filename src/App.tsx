@@ -1299,6 +1299,8 @@ function App() {
     setActiveConfigSourceType(sourceType);
     setConfigEditorSourceContent(null);
     setConfigEditorSourceSaveMessage("");
+    setConfigMode("preview");
+    setConfigSaveResult(null);
   }, [configDirty, activeConfigSourceType]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
