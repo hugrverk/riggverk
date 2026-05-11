@@ -217,23 +217,14 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
-expected_agent_models=(
-  "architect.md:opencode-go/deepseek-v4-pro"
-  "inspector.md:opencode-go/deepseek-v4-pro"
-  "sentinel.md:opencode-go/deepseek-v4-pro"
-  "scout.md:opencode-go/deepseek-v4-flash"
-  "scribe.md:opencode-go/deepseek-v4-flash"
-  "verifier.md:opencode-go/deepseek-v4-flash"
-)
-for mapping in "${expected_agent_models[@]}"; do
-  agent="${mapping%%:*}"
-  expected_model="${mapping#*:}"
-  if ! grep -q "^model: ${expected_model}$" "resources/default-workspace/agents/$agent"; then
-    printf 'FAIL: bundled %s missing model: %s\n' "$agent" "$expected_model" >&2
+# Agents are model-agnostic — model selection is centralized in templates/opencode.json
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  if grep -q "^model:" "resources/default-workspace/agents/$agent"; then
+    printf 'FAIL: bundled %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
     exit 1
   fi
 done
-printf '  6 bundled agents verified expected model frontmatter\n'
+printf '  6 bundled agents verified model-agnostic (no model frontmatter)\n'
 if ! grep -q 'mode: primary' resources/default-workspace/agents/architect.md; then
   printf 'FAIL: bundled architect.md missing mode: primary\n' >&2
   exit 1
@@ -262,8 +253,8 @@ if search_has_match "$old_workspace_pattern" resources/default-workspace src-tau
 fi
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   file="resources/default-workspace/agents/$agent"
-  if ! grep -q '^model:' "$file"; then
-    printf 'FAIL: bundled %s missing model frontmatter\n' "$agent" >&2
+  if grep -q '^model:' "$file"; then
+    printf 'FAIL: bundled %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
     exit 1
   fi
   for deny in 'rm -rf' 'sudo' 'git reset --hard' 'git clean -fdx'; do
@@ -359,11 +350,10 @@ if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.
   printf 'FAIL: smoke opencode.json missing small_model deepseek-v4-flash\n' >&2
   apply_ok=false
 fi
-for mapping in "${expected_agent_models[@]}"; do
-  agent="${mapping%%:*}"
-  expected_model="${mapping#*:}"
-  if ! grep -q "^model: ${expected_model}$" "$tmpdir/agents/$agent"; then
-    printf 'FAIL: smoke %s missing model: %s\n' "$agent" "$expected_model" >&2
+# Model-agnostic agents — no model frontmatter expected
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  if grep -q "^model:" "$tmpdir/agents/$agent"; then
+    printf 'FAIL: smoke %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
     apply_ok=false
   fi
 done

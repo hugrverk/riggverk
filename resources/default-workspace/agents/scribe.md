@@ -1,7 +1,6 @@
 ---
 description: Use automatically when code changes require README, docs, runbook, QA checklist, changelog, usage notes, operator documentation, setup docs, troubleshooting notes, or project-facing implementation notes.
 mode: subagent
-model: opencode-go/deepseek-v4-flash
 temperature: 0.2
 steps: 35
 hidden: true

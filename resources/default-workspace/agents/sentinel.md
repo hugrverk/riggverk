@@ -1,7 +1,6 @@
 ---
 description: Use automatically for auth, permissions, uploads, forms, checkout, account pages, API routes, server actions, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.
 mode: subagent
-model: opencode-go/deepseek-v4-pro
 temperature: 0.1
 steps: 45
 hidden: true

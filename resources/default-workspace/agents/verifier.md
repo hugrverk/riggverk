@@ -1,7 +1,6 @@
 ---
 description: Use automatically after implementation to run relevant non-destructive verification commands, inspect failures, summarize evidence, and identify remaining manual checks. Read-only except for normal test/build artifacts.
 mode: subagent
-model: opencode-go/deepseek-v4-flash
 temperature: 0.1
 steps: 50
 hidden: true
