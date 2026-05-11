@@ -2875,156 +2875,7 @@ html, body, #root {
 
 /* ---- workspace inventory (collapsible secondary) ---- */
 
-.ws-inventory {
-  border-top: 1px solid var(--border-strong);
-  flex-shrink: 0;
-  overflow: hidden;
-}
 
-.ws-inventory-toggle {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-  padding: 8px 14px;
-  background: transparent;
-  border: none;
-  border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  font-family: var(--font);
-  color: var(--text-muted);
-  font-size: 12px;
-  gap: 12px;
-}
-
-.ws-inventory-toggle:hover {
-  background: var(--accent-dim);
-}
-
-.ws-inventory-toggle:focus-visible {
-  outline: 2px solid rgba(var(--accent-rgb), 0.5);
-  outline-offset: -1px;
-}
-
-.ws-inventory-toggle-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  opacity: 0.7;
-  flex-shrink: 0;
-}
-
-.ws-inventory-toggle-icon {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.5;
-  flex-shrink: 0;
-}
-
-.ws-inventory-toggle-summary {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  align-items: center;
-  flex: 1;
-  min-width: 0;
-  justify-content: flex-end;
-}
-
-.ws-inventory-body {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-  max-height: 55vh;
-  overflow-y: auto;
-}
-
-.ws-inv-row {
-  border-bottom: 1px solid var(--border);
-  padding: 8px 12px;
-}
-
-.ws-inv-row:last-child { border-bottom: none; }
-
-.ws-inv-row-label {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  color: var(--text-muted);
-  opacity: 0.55;
-  text-transform: uppercase;
-  margin-bottom: 4px;
-}
-
-.ws-inv-row-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-}
-
-.ws-inv-row-input {
-  display: flex;
-}
-
-.ws-inv-chip {
-  font-size: 11px;
-  padding: 2px 7px;
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  color: var(--text-muted);
-  font-family: var(--font);
-}
-
-.ws-inv-chip-ok {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: var(--accent-dim);
-}
-
-.ws-inv-chip-warn {
-  color: var(--warn);
-  border-color: rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.ws-inv-chip-dim {
-  opacity: 0.55;
-}
-
-/* compact horizontal system map */
-.ws-inv-map {
-  padding: 4px 0;
-  position: relative;
-}
-
-.ws-inv-map-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-
-.ws-inv-map-btn {
-  display: inline-flex;
-  align-items: center;
-  border: none;
-  background: none;
-  padding: 3px 6px;
-  cursor: pointer;
-  font-family: var(--font);
-  outline-offset: 2px;
-  border-radius: 3px;
-}
-
-.ws-inv-map-btn:focus-visible {
-  outline: 2px solid rgba(var(--accent-rgb), 0.5);
-}
-
-.ws-inv-map-btn-expanded {
-  background: var(--accent-dim);
-}
 
 /* ── panes ── */
 
@@ -3094,11 +2945,6 @@ html, body, #root {
   padding: 8px 10px;
 }
 
-.ws-path-input {
-  width: 100%;
-  max-width: 100%;
-}
-
 /* ── diagnostics list ── */
 
 .ws-diag-list {
@@ -3106,15 +2952,7 @@ html, body, #root {
   flex-direction: column;
 }
 
-.ws-diag-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 10px;
-  border-bottom: 1px solid var(--border);
-  font-size: 12px;
-  color: var(--text);
-}
+
 
 .ws-diag-row:last-child { border-bottom: none; }
 
@@ -3137,15 +2975,6 @@ html, body, #root {
 .ws-missing-list {
   display: flex;
   flex-direction: column;
-}
-
-/* ── create command flow ── */
-
-.ws-create-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding: 8px 10px;
 }
 
 .ws-cmd-row {
@@ -3182,16 +3011,6 @@ html, body, #root {
   opacity: 0.6;
 }
 
-.ws-cmd-action {
-  padding: 2px 0;
-}
-
-.ws-cmd-result {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
 .ws-cmd-warnings {
   display: flex;
   flex-direction: column;
@@ -3199,43 +3018,7 @@ html, body, #root {
   padding: 2px 0;
 }
 
-.ws-cmd-files {
-  margin-top: 4px;
-}
 
-.ws-create-action {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  padding-top: 6px;
-  border-top: 1px solid var(--border);
-}
-
-/* ── file list helpers ── */
-
-.ws-file-list {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding-left: 4px;
-  margin-top: 2px;
-}
-
-.ws-file-row {
-  display: flex;
-  align-items: center;
-  font-size: 11px;
-  color: var(--text);
-  padding: 2px 0;
-}
-
-.ws-file-path {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-}
 
 .ws-file-missing {
   opacity: 0.4;
@@ -3257,11 +3040,7 @@ html, body, #root {
   position: relative;
 }
 
-.ws-map-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
+
 
 .ws-map-row {
   display: flex;
@@ -3461,134 +3240,6 @@ html, body, #root {
 }
 
 /* ── resource strip ── */
-
-.ws-resource-strip {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 5px;
-  padding: 6px 10px;
-}
-
-.ws-resource-chip {
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 2px 7px;
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.5;
-}
-
-.ws-resource-chip-ok {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: var(--accent-dim);
-}
-
-.ws-resource-details {
-  padding: 0 10px 6px;
-}
-
-.ws-resource-desc {
-  font-size: 11px;
-  color: var(--text-muted);
-  opacity: 0.5;
-  line-height: 1.4;
-  margin-bottom: 6px;
-}
-
-.ws-resource-cat {
-  border-bottom: 1px solid var(--border);
-}
-
-.ws-resource-cat:last-child { border-bottom: none; }
-
-.ws-resource-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 4px 0;
-  cursor: pointer;
-  font-size: 12px;
-}
-
-.ws-resource-name {
-  color: var(--text);
-}
-
-.ws-resource-count {
-  font-size: 11px;
-  color: var(--text-muted);
-  opacity: 0.5;
-}
-
-.ws-resource-files {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-  padding: 0 0 4px 2px;
-}
-
-/* ── skill grid (two-column compact) ── */
-
-.ws-skill-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 1px 12px;
-  padding: 2px 2px 4px;
-  max-height: 260px;
-  overflow-y: auto;
-  align-content: start;
-}
-
-.ws-skill-item {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 0;
-  min-width: 0;
-  border-radius: 2px;
-  transition: background 0.1s;
-}
-
-.ws-skill-item:hover {
-  background: var(--accent-dim);
-}
-
-.ws-skill-item-missing {
-  opacity: 0.35;
-}
-
-.ws-skill-item .ws-dot {
-  flex-shrink: 0;
-}
-
-.ws-skill-name {
-  font-size: 11px;
-  color: var(--text);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex-shrink: 1;
-  min-width: 0;
-}
-
-.ws-skill-path {
-  font-size: 10px;
-  color: var(--text-muted);
-  opacity: 0.45;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  min-width: 0;
-  flex-shrink: 2;
-  margin-left: auto;
-}
-
-@media (max-width: 700px) {
-  .ws-skill-grid {
-    grid-template-columns: 1fr;
-  }
-}
 
 /* ---- operation block cards (removed; see .ws-lane above) ---- */
 
@@ -4322,127 +3973,6 @@ html, body, #root {
 
 /* ── Workspace Contract panel ── */
 
-.ws-contract-body {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.ws-contract-empty {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 11px;
-}
-
-.ws-contract-summary {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-wrap: wrap;
-  font-size: 11px;
-  font-family: var(--font);
-}
-
-.ws-contract-status {
-  font-weight: 600;
-  font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-
-.ws-contract-status-valid {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.3);
-  background: var(--accent-dim);
-}
-
-.ws-contract-status-invalid {
-  color: var(--fail);
-  border-color: rgba(248, 113, 113, 0.25);
-  background: rgba(248, 113, 113, 0.08);
-}
-
-.ws-contract-details {
-  font-size: 11px;
-  font-family: var(--font);
-}
-
-.ws-contract-details-summary {
-  font-size: 10px;
-  color: var(--text-muted);
-  cursor: pointer;
-  padding: 2px 0;
-  user-select: none;
-}
-
-.ws-contract-details-summary:hover {
-  color: var(--text);
-}
-
-.ws-contract-checks-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-top: 4px;
-  padding-left: 2px;
-  border-left: 2px solid var(--border);
-}
-
-.ws-contract-check-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: baseline;
-  gap: 6px;
-  padding: 2px 0 2px 8px;
-}
-
-.ws-contract-check-status {
-  font-size: 9px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  padding: 1px 5px;
-  border-radius: 2px;
-  border: 1px solid var(--border);
-  flex-shrink: 0;
-  font-family: var(--font);
-}
-
-.ws-contract-check-pass {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: var(--accent-dim);
-}
-
-.ws-contract-check-warn {
-  color: var(--warn);
-  border-color: rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.08);
-}
-
-.ws-contract-check-fail {
-  color: var(--fail);
-  border-color: rgba(248, 113, 113, 0.25);
-  background: rgba(248, 113, 113, 0.08);
-}
-
-.ws-contract-check-label {
-  font-size: 11px;
-  color: var(--text);
-  flex: 1;
-  min-width: 0;
-}
-
-.ws-contract-check-detail {
-  font-size: 10px;
-  word-break: break-word;
-  width: 100%;
-}
-
 /* ── shared focus-visible outlines for inputs ── */
 
 .settings-input:focus-visible,
@@ -4589,34 +4119,34 @@ html, body, #root {
 /* ── OpenCode Runtime compact details ── */
 
 .ws-runtime-summary {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-muted);
-  margin-bottom: 8px;
+  margin-bottom: 4px;
   line-height: 1.4;
 }
 
 .ws-runtime-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin-bottom: 8px;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2px 12px;
+  margin-bottom: 4px;
 }
 
 .ws-runtime-row {
   display: flex;
   align-items: baseline;
-  gap: 6px;
-  font-size: 11px;
-  line-height: 1.6;
+  gap: 4px;
+  font-size: 10px;
+  line-height: 1.7;
 }
 
 .ws-runtime-row-label {
   color: var(--text-muted);
-  min-width: 56px;
+  min-width: 48px;
   flex-shrink: 0;
   text-transform: uppercase;
-  font-size: 10px;
-  letter-spacing: 0.03em;
+  font-size: 9px;
+  letter-spacing: 0.04em;
 }
 
 .ws-runtime-row-value {
@@ -4627,32 +4157,9 @@ html, body, #root {
   white-space: nowrap;
 }
 
-.ws-runtime-row-detail {
-  color: var(--text-muted);
-  font-size: 10px;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.ws-runtime-models {
-  font-size: 10px;
-  color: var(--text-muted);
-  margin-bottom: 6px;
-  padding: 4px 0;
-  border-top: 1px solid var(--border);
-  line-height: 1.5;
-}
-
-.ws-runtime-models-label {
-  color: var(--text-muted);
-  opacity: 0.7;
-}
-
 .ws-runtime-next-action {
   font-size: 10px;
-  margin-bottom: 6px;
+  margin-bottom: 4px;
   line-height: 1.4;
 }
 

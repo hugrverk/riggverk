@@ -87,81 +87,6 @@ interface WorkspaceViewProps {
   onOpenInstalledDesignMd: () => void;
 }
 
-const findCat = (summary: DefaultWorkspaceSummary | null, label: string) =>
-  summary?.categories.find(c => c.label === label);
-
-function skillDisplayName(filePath: string): string {
-  const parts = filePath.replace(/\\/g, "/").split("/");
-  const skillsIdx = parts.indexOf("skills");
-  if (skillsIdx !== -1 && skillsIdx + 1 < parts.length) {
-    return parts[skillsIdx + 1];
-  }
-  return parts[parts.length - 2] ?? parts[parts.length - 1] ?? filePath;
-}
-
-function mapNodeClass(condition: "valid" | "invalid" | "partial" | "dim"): string {
-  switch (condition) {
-    case "valid": return "ws-node ws-node-valid";
-    case "invalid": return "ws-node ws-node-invalid";
-    case "partial": return "ws-node ws-node-partial";
-    case "dim": return "ws-node ws-node-dim";
-  }
-}
-
-function mapNodeStatus(
-  diag: WorkspaceDiagnostics | null,
-  summary: DefaultWorkspaceSummary | null,
-  node: string,
-): "valid" | "invalid" | "partial" | "dim" {
-  if (node === "workspace") {
-    if (!diag) return "dim";
-    return diag.valid ? "valid" : "invalid";
-  }
-  if (node === "rules") {
-    if (!diag) return "dim";
-    const e = diag.enabled_rule_targets;
-    const t = diag.total_rule_targets;
-    if (t === 0) return "dim";
-    if (e === t) return "valid";
-    if (e > 0) return "partial";
-    return "invalid";
-  }
-  if (node === "configs") {
-    if (!diag) return "dim";
-    const e = diag.enabled_config_targets;
-    const t = diag.total_config_targets;
-    if (t === 0) return "dim";
-    if (e === t) return "valid";
-    if (e > 0) return "partial";
-    return "invalid";
-  }
-  if (node === "skills") {
-    if (!summary) return "dim";
-    const c = findCat(summary, "Skills");
-    if (!c || c.count === 0) return "dim";
-    return "valid";
-  }
-  if (node === "agents") {
-    if (!summary) return "dim";
-    const c = findCat(summary, "Agents");
-    if (!c || c.count === 0) return "dim";
-    return "valid";
-  }
-  if (node === "docs") {
-    if (!summary) return "dim";
-    const c = findCat(summary, "Docs");
-    if (!c || c.count === 0) return "dim";
-    return c.count > 0 ? "valid" : "dim";
-  }
-  if (node === "scripts") {
-    if (!summary) return "dim";
-    const c = findCat(summary, "Scripts");
-    if (!c || c.count === 0) return "dim";
-    return c.count > 0 ? "valid" : "dim";
-  }
-  return "dim";
-}
-
 // Shared helpers for standardized panels
 function SectionChip({ label, tone }: { label: string; tone: "ok" | "warn" | "fail" | "muted" }) {
   return <span className={`ws-section-chip ws-section-chip-${tone}`}>{label}</span>;
@@ -189,12 +114,10 @@ function runtimeChipLabel(status: string): string {
 
 export function WorkspaceView({
   appSettings,
-  onSetWorkspacePath,
   onApplyWorkspacePath,
   onChooseWorkspaceFolder,
   workspaceDiagnostics,
   onRefreshDiagnostics,
-  defaultWorkspaceSummary,
   createPlan,
   createPlanRunning,
   onPlanCreate,
@@ -246,10 +169,7 @@ export function WorkspaceView({
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
-  // contract
-    contractResult,
-    onRefreshContract,
-    // Design MD
+  // Design MD
     designMdCatalogStatus,
     designMdEntries,
     activeDesignMdSlug,
@@ -269,10 +189,8 @@ export function WorkspaceView({
     onOpenDesignMdTargetFolder,
     onOpenInstalledDesignMd,
   }: WorkspaceViewProps) {
-  const [expandedNode, setExpandedNode] = useState<string | null>(null);
   const [showSkillSelector, setShowSkillSelector] = useState(false);
   const [showDesignPicker, setShowDesignPicker] = useState(false);
-  const [showInventory, setShowInventory] = useState(false);
 
   const skillsCount = skills.length;
   const selectedSkillsCount = selectedSkills.size;
@@ -292,23 +210,6 @@ export function WorkspaceView({
   const defaultLabel = "~/Agent Workspace";
   const displayPath = appSettings?.workspace_path ?? defaultLabel;
   const diagnosticsPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
-  const summary = defaultWorkspaceSummary;
-
-  const mapNodes: { id: string; label: string }[] = [
-    { id: "workspace", label: "workspace" },
-    { id: "rules", label: "rules" },
-    { id: "configs", label: "configs" },
-    { id: "agents", label: "agents" },
-    { id: "skills", label: "skills" },
-    { id: "docs", label: "docs" },
-    { id: "scripts", label: "scripts" },
-  ];
-
-  const skillsCat = findCat(summary, "Skills");
-  const docsCat = findCat(summary, "Docs");
-  const scriptsCat = findCat(summary, "Scripts");
-  const templatesCat = findCat(summary, "Templates");
-  const agentsCat = findCat(summary, "Agents");
 
   const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
 
@@ -329,161 +230,6 @@ export function WorkspaceView({
     : wsLog
       ? "completed"
       : "ready";
-
-  const renderNodeDetails = (nodeId: string) => {
-    switch (nodeId) {
-      case "workspace":
-        return (
-          <div className="ws-detail-body">
-            {diag ? (
-              <>
-                <div className="ws-detail-row">
-                  <span className="ws-detail-key">path</span>
-                  <span className="ws-detail-val">{diagnosticsPath}</span>
-                </div>
-                <div className="ws-detail-row">
-                  <span className="ws-detail-key">markers missing</span>
-                  <span className={`ws-detail-val ${missingMarkers.length > 0 ? "ws-color-fail" : "ws-color-ok"}`}>
-                    {missingMarkers.length}
-                  </span>
-                </div>
-              </>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
-            )}
-          </div>
-        );
-      case "rules":
-        return (
-          <div className="ws-detail-body">
-            {diag ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">enabled</span>
-                <span className={`ws-detail-val ${diag.enabled_rule_targets > 0 ? "ws-color-ok" : ""}`}>
-                  {diag.enabled_rule_targets}/{diag.total_rule_targets}
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
-            )}
-          </div>
-        );
-      case "configs":
-        return (
-          <div className="ws-detail-body">
-            {diag ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">enabled</span>
-                <span className={`ws-detail-val ${diag.enabled_config_targets > 0 ? "ws-color-ok" : ""}`}>
-                  {diag.enabled_config_targets}/{diag.total_config_targets}
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">waiting for diagnostics</div>
-            )}
-          </div>
-        );
-      case "skills": {
-        const cat = findCat(summary, "Skills");
-        return (
-          <div className="ws-detail-body">
-            {cat ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">bundled</span>
-                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
-                  {cat.count} skills
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
-            )}
-          </div>
-        );
-      }
-      case "agents": {
-        const cat = findCat(summary, "Agents");
-        return (
-          <div className="ws-detail-body">
-            {cat ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">bundled</span>
-                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
-                  {cat.count} agents
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
-            )}
-          </div>
-        );
-      }
-      case "docs": {
-        const cat = findCat(summary, "Docs");
-        return (
-          <div className="ws-detail-body">
-            {cat ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">bundled</span>
-                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
-                  {cat.count} docs
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
-            )}
-          </div>
-        );
-      }
-      case "scripts": {
-        const cat = findCat(summary, "Scripts");
-        return (
-          <div className="ws-detail-body">
-            {cat ? (
-              <div className="ws-detail-row">
-                <span className="ws-detail-key">bundled</span>
-                <span className={`ws-detail-val ${cat.count > 0 ? "ws-color-ok" : ""}`}>
-                  {cat.count} scripts
-                </span>
-              </div>
-            ) : (
-              <div className="ws-detail-row ws-detail-dim">no starter summary</div>
-            )}
-          </div>
-        );
-      }
-      default:
-        return null;
-    }
-  };
-
-  const statusRows: { key: string; value: string; ok: boolean; warn: boolean }[] = [];
-  if (diag) {
-    statusRows.push({
-      key: "markers",
-      value: missingMarkers.length === 0 ? "\u2713 0" : String(missingMarkers.length),
-      ok: missingMarkers.length === 0,
-      warn: missingMarkers.length > 0,
-    });
-    statusRows.push({
-      key: "rule targets",
-      value: `${diag.enabled_rule_targets}/${diag.total_rule_targets}`,
-      ok: diag.enabled_rule_targets > 0,
-      warn: false,
-    });
-    statusRows.push({
-      key: "config targets",
-      value: `${diag.enabled_config_targets}/${diag.total_config_targets}`,
-      ok: diag.enabled_config_targets > 0,
-      warn: false,
-    });
-  }
-  const resourceRows: { key: string; value: string; cat: typeof skillsCat }[] = [
-    { key: "skills", value: skillsCat ? String(skillsCat.count) : "\u2014", cat: skillsCat },
-    { key: "agents", value: agentsCat ? String(agentsCat.count) : "\u2014", cat: agentsCat },
-    { key: "docs", value: docsCat ? String(docsCat.count) : "\u2014", cat: docsCat },
-    { key: "scripts", value: scriptsCat ? String(scriptsCat.count) : "\u2014", cat: scriptsCat },
-    { key: "templates", value: templatesCat ? String(templatesCat.count) : "\u2014", cat: templatesCat },
-  ];
 
   return (
     <section className="ws-layout">
@@ -737,9 +483,6 @@ export function WorkspaceView({
                       <span className="ws-runtime-row-value">
                         {runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}
                       </span>
-                      <span className="ws-runtime-row-detail">
-                        {opencodeRuntimeHealth.model ? `model ${opencodeRuntimeHealth.model}` : ""}
-                      </span>
                     </div>
 
                     {/* TUI row */}
@@ -751,9 +494,6 @@ export function WorkspaceView({
                       <span className="ws-runtime-row-value">
                         {runtimeChipLabel(opencodeRuntimeHealth.tui_status).toLowerCase()}
                       </span>
-                      <span className="ws-runtime-row-detail">
-                        {opencodeRuntimeHealth.tui_status === "synced" ? "theme system" : ""}
-                      </span>
                     </div>
 
                     {/* Agents row */}
@@ -764,56 +504,25 @@ export function WorkspaceView({
                       </span>
                       <span className="ws-runtime-row-value">
                         {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled
-                      </span>
-                      <span className="ws-runtime-row-detail">
                         {opencodeRuntimeHealth.agent_mismatches.length > 0
-                          ? `${opencodeRuntimeHealth.agent_mismatches.length} diverged`
-                          : "all synced"}
-                        {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
-                          <> (+{opencodeRuntimeHealth.extra_installed_agent_count} extra)</>
-                        )}
+                          ? ` (${opencodeRuntimeHealth.agent_mismatches.length} diverged)`
+                          : ""}
+                        {opencodeRuntimeHealth.extra_installed_agent_count > 0
+                          ? ` (+${opencodeRuntimeHealth.extra_installed_agent_count} extra)`
+                          : ""}
                       </span>
                     </div>
 
                     {/* Generated snapshot row */}
                     <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Gen</span>
+                      <span className="ws-runtime-row-label">Generated</span>
                       <span className={`ws-dot ${opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok" : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
                         {"\u25CF"}
                       </span>
                       <span className="ws-runtime-row-value">
                         {opencodeRuntimeHealth.generated_snapshot_status}
                       </span>
-                      <span className="ws-runtime-row-detail">
-                        {opencodeRuntimeHealth.generated_snapshot_status === "current"
-                          ? "source + snapshot valid"
-                          : "source or snapshot missing"}
-                      </span>
                     </div>
-                  </div>
-
-                  {/* Models summary */}
-                  <div className="ws-runtime-models">
-                    <span className="ws-runtime-models-label">Model:</span>{" "}
-                    {opencodeRuntimeHealth.default_agent || "\u2014"}
-                    {" | "}
-                    {opencodeRuntimeHealth.model || "\u2014"}
-                    {" | "}
-                    {opencodeRuntimeHealth.small_model
-                      ? opencodeRuntimeHealth.small_model.replace(/^opencode-go\//, "")
-                      : "\u2014"}
-                    {(opencodeRuntimeHealth.qwen_context || opencodeRuntimeHealth.qwen_output) && (
-                      <>
-                        {" | "}qwen3.6-plus: context{" "}
-                        {opencodeRuntimeHealth.qwen_context
-                          ? opencodeRuntimeHealth.qwen_context.toLocaleString()
-                          : "\u2014"}
-                        , output{" "}
-                        {opencodeRuntimeHealth.qwen_output
-                          ? opencodeRuntimeHealth.qwen_output.toLocaleString()
-                          : "\u2014"}
-                      </>
-                    )}
                   </div>
 
                   {/* Warnings for agent mismatches */}
@@ -1153,393 +862,7 @@ export function WorkspaceView({
             </div>
           )}
 
-          {/* ---- Secondary: Workspace Inventory (collapsed by default when valid) ---- */}
-          {appSettings && (
-            <div className="ws-inventory">
-              <button
-                className="ws-inventory-toggle"
-                onClick={() => setShowInventory(prev => !prev)}
-                aria-expanded={showInventory}
-                aria-label={showInventory ? "Collapse workspace inventory" : "Expand workspace inventory"}
-              >
-                <span className="ws-inventory-toggle-label">INVENTORY</span>
-                {!showInventory && statusRows.length > 0 && (
-                  <span className="ws-inventory-toggle-summary">
-                    {statusRows.map(row => (
-                      <span key={row.key} className={`ws-inv-chip ${row.ok ? "ws-inv-chip-ok" : row.warn ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
-                        {row.key} {row.value}
-                      </span>
-                    ))}
-                    {summary && resourceRows.slice(0, 3).map(row => (
-                      <span key={row.key} className={`ws-inv-chip ${row.cat && row.cat.count > 0 ? "ws-inv-chip-ok" : "ws-inv-chip-dim"}`}>
-                        {row.key} {row.value}
-                      </span>
-                    ))}
-                  </span>
-                )}
-                <span className="ws-inventory-toggle-icon">{showInventory ? "\u25bc" : "\u25b6"}</span>
-              </button>
 
-              {showInventory && (
-                <div className="ws-inventory-body">
-                  {/* Status summary — compact row */}
-                  <div className="ws-inv-row">
-                    <div className="ws-inv-row-label">STATUS</div>
-                    <div className="ws-inv-row-items">
-                      {statusRows.map(row => (
-                        <span key={row.key} className={`ws-inv-chip ${row.ok ? "ws-inv-chip-ok" : row.warn ? "ws-inv-chip-warn" : "ws-inv-chip-dim"}`}>
-                          {row.key} {row.value}
-                        </span>
-                      ))}
-                      {summary && resourceRows.map(row => (
-                        <span key={row.key} className={`ws-inv-chip ${row.cat && row.cat.count > 0 ? "ws-inv-chip-ok" : "ws-inv-chip-dim"}`}>
-                          {row.key} {row.value}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Path input */}
-                  <div className="ws-inv-row">
-                    <div className="ws-inv-row-label">PATH</div>
-                    <div className="ws-inv-row-input">
-                      <input
-                        className="settings-input ws-path-input"
-                        type="text"
-                        placeholder="default (env or repo default)"
-                        value={appSettings.workspace_path ?? ""}
-                        onChange={e => onSetWorkspacePath(e.target.value || null)}
-                        aria-label="Workspace path"
-                      />
-                    </div>
-                  </div>
-
-                  {/* System map — compact horizontal */}
-                  <div className="ws-inv-row">
-                    <div className="ws-inv-row-label">SYSTEM MAP</div>
-                    <div className="ws-inv-map">
-                      {!diag && <div className="ws-map-scan" />}
-                      <div className="ws-inv-map-items">
-                        {mapNodes.map(node => {
-                          const nodeStatus = mapNodeStatus(diag, summary, node.id);
-                          const isExpanded = expandedNode === node.id;
-                          return (
-                            <button
-                              key={node.id}
-                              className={`ws-inv-map-btn ${isExpanded ? "ws-inv-map-btn-expanded" : ""}`}
-                              onClick={() => setExpandedNode(isExpanded ? null : node.id)}
-                              aria-expanded={isExpanded}
-                              aria-label={`${node.label} system node`}
-                            >
-                              <span className={mapNodeClass(nodeStatus)}>
-                                <span className="ws-map-dot" />
-                                <span className="ws-map-label">{node.label}</span>
-                              </span>
-                            </button>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Node detail */}
-                  {expandedNode && (
-                    <div className="ws-inv-row" role="region" aria-label={`${mapNodes.find(n => n.id === expandedNode)?.label} details`}>
-                      <div className="ws-inv-row-label">
-                        {mapNodes.find(n => n.id === expandedNode)?.label ?? ""} DETAIL
-                      </div>
-                      {renderNodeDetails(expandedNode)}
-                    </div>
-                  )}
-
-                  {/* Diagnostics */}
-                  {diag && (
-                    <div className="ws-inv-row">
-                      <div className="ws-inv-row-label">DIAGNOSTICS</div>
-                      <div className="ws-inv-row-items">
-                        {diag.resolved_path && diag.resolved_path !== diag.candidate_path && (
-                          <span className="ws-inv-chip ws-inv-chip-dim">
-                            candidate: {diag.candidate_path}
-                          </span>
-                        )}
-                        {diag.error && (
-                          <span className="ws-inv-chip ws-inv-chip-warn">{diag.error}</span>
-                        )}
-                        {diag.valid && missingMarkers.length === 0 && (
-                          <span className="ws-inv-chip ws-inv-chip-ok">all markers present</span>
-                        )}
-                      </div>
-                      {missingMarkers.length > 0 && (
-                        <div className="ws-missing-list">
-                          {missingMarkers.map((m, i) => (
-                            <div key={i} className="ws-diag-row ws-color-fail">
-                              missing {m.kind}: {m.path}
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Workspace Contract */}
-                  <div className="ws-inv-row">
-                    <div className="ws-inv-row-label">CONTRACT</div>
-                    <div className="ws-contract-body">
-                      {!contractResult ? (
-                        <div className="ws-contract-empty">
-                          <span className="ws-detail-dim">Not validated</span>
-                          <button className="btn btn-sm" onClick={onRefreshContract}>
-                            validate
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="ws-contract-summary">
-                            <span className={`ws-contract-status ${contractResult.valid ? "ws-contract-status-valid" : "ws-contract-status-invalid"}`}>
-                              {contractResult.valid ? "valid" : "failed"}
-                            </span>
-                            {contractResult.checks.filter(c => c.status === "fail").length > 0 && (
-                              <span className="ws-inv-chip ws-inv-chip-warn">
-                                {contractResult.checks.filter(c => c.status === "fail").length} fail
-                              </span>
-                            )}
-                            {contractResult.checks.filter(c => c.status === "warn").length > 0 && (
-                              <span className="ws-inv-chip ws-inv-chip-dim">
-                                {contractResult.checks.filter(c => c.status === "warn").length} warn
-                              </span>
-                            )}
-                            <span className="ws-inv-chip ws-inv-chip-ok">
-                              {contractResult.checks.filter(c => c.status === "pass").length} pass
-                            </span>
-                            <button className="btn btn-sm" onClick={onRefreshContract} aria-label="Refresh workspace contract validation">
-                              refresh
-                            </button>
-                          </div>
-                          <details className="ws-contract-details">
-                            <summary className="ws-contract-details-summary">
-                              {contractResult.checks.length} checks
-                            </summary>
-                            <div className="ws-contract-checks-list">
-                              {contractResult.checks.map(check => {
-                                const statusLabel = check.status === "pass" ? "PASS" : check.status === "warn" ? "WARN" : "FAIL";
-                                const statusClass = check.status === "pass" ? "ws-contract-check-pass" : check.status === "warn" ? "ws-contract-check-warn" : "ws-contract-check-fail";
-                                return (
-                                  <div key={check.id} className="ws-contract-check-row">
-                                    <span className={`ws-contract-check-status ${statusClass}`} aria-label={`Status ${statusLabel}`}>
-                                      {statusLabel}
-                                    </span>
-                                    <span className="ws-contract-check-label">{check.label}</span>
-                                    <span className="ws-contract-check-detail ws-detail-dim">{check.detail}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </details>
-                        </>
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Resources — compact summary + expandable */}
-                  {summary && (
-                    <div className="ws-inv-row">
-                      <div className="ws-inv-row-label">RESOURCES</div>
-                      <div className="ws-resource-details">
-                        {summary.categories.map((cat) => (
-                          <details key={cat.label} className="ws-resource-cat" open={cat.label === "Skills"}>
-                            <summary className="ws-resource-header">
-                              <span className="ws-resource-name">{cat.label}</span>
-                              <span className="ws-resource-count">{cat.count}/{cat.files.length}</span>
-                            </summary>
-                            {cat.label === "Skills" ? (
-                              <div className="ws-skill-grid">
-                                {cat.files.map((f, fi) => {
-                                  const name = skillDisplayName(f.path);
-                                  return (
-                                    <div key={fi} className={`ws-skill-item ${f.exists ? "" : "ws-skill-item-missing"}`}>
-                                      <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
-                                      <span className="ws-skill-name">{name}</span>
-                                      <span className="ws-skill-path">{f.path}</span>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            ) : (
-                              <div className="ws-resource-files">
-                                {cat.files.map((f, fi) => (
-                                  <div key={fi} className={`ws-file-row ${f.exists ? "" : "ws-file-missing"}`}>
-                                    <span className={`ws-dot ${f.exists ? "ws-dot-ok" : "ws-dot-fail"}`}>&#x25CF;</span>
-                                    <span className="ws-file-path">{f.path}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            )}
-                          </details>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Create workspace */}
-                  <div className="ws-inv-row">
-                    <div className="ws-inv-row-label">CREATE</div>
-                    <div className="ws-create-body">
-                      {!createPlan && (
-                        <div className="ws-create-body">
-                          <div className="ws-cmd-row">
-                            <span className="ws-cmd-prompt">$</span>
-                            <span>dry-run create</span>
-                          </div>
-                          <div className="ws-cmd-tags">
-                            <span className="ws-tag">read-only</span>
-                            <span className="ws-tag">no overwrite</span>
-                            <span className="ws-tag">no scripts</span>
-                          </div>
-                          <div className="ws-cmd-action">
-                            <button
-                              className="btn btn-sm btn-primary"
-                              onClick={onPlanCreate}
-                              disabled={createPlanRunning}
-                            >
-                              {createPlanRunning ? "planning\u2026" : "dry-run create"}
-                            </button>
-                          </div>
-                        </div>
-                      )}
-
-                      {createPlan && !createPlan.ok && (
-                        <div className="ws-create-body">
-                          <div className="ws-cmd-result">
-                            <div className="ws-cmd-row ws-color-warn">
-                              <span className="ws-cmd-prompt">warn</span>
-                              <span>{createPlan.status}</span>
-                            </div>
-                            <div className="ws-cmd-row ws-color-dim">
-                              target: {createPlan.target_path || "(empty)"}
-                            </div>
-                            <div className="ws-cmd-row">{createPlan.reason}</div>
-                            {createPlan.warnings.length > 0 && (
-                              <div className="ws-cmd-warnings">
-                                {createPlan.warnings.map((w, i) => (
-                                  <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-                                ))}
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      )}
-
-                      {createPlan && createPlan.ok && (
-                        <div className="ws-create-body">
-                          <div className="ws-cmd-result">
-                            <div className="ws-cmd-row ws-color-ok">
-                              <span className="ws-cmd-prompt">ok</span>
-                              <span>{createPlan.status}</span>
-                            </div>
-                            <div className="ws-cmd-row ws-color-dim">
-                              target: {createPlan.target_path || "(empty)"}
-                            </div>
-                            <div className="ws-cmd-row">{createPlan.reason}</div>
-                            {createPlan.warnings.length > 0 && (
-                              <div className="ws-cmd-warnings">
-                                {createPlan.warnings.map((w, i) => (
-                                  <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-                                ))}
-                              </div>
-                            )}
-                            {createPlan.planned_files.length > 0 && (
-                              <div className="ws-cmd-files">
-                                <div className="ws-cmd-row ws-color-dim">
-                                  planned ({createPlan.planned_files.length})
-                                </div>
-                                <div className="ws-file-list">
-                                  {createPlan.planned_files.map((f, i) => (
-                                    <div key={i} className="ws-file-row">
-                                      <span className="ws-dot ws-dot-ok">&#x25CF;</span>
-                                      <span className="ws-file-path">{f}</span>
-                                    </div>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                          {createPlanEligible && (
-                            <div className="ws-create-action">
-                              <div className="ws-cmd-row">
-                                <span className="ws-cmd-prompt ws-color-ok">$</span>
-                                <span>create workspace &mdash; path is safe</span>
-                              </div>
-                              <button
-                                className="btn btn-sm btn-primary"
-                                onClick={onCreateWorkspace}
-                                disabled={createRunning}
-                              >
-                                {createRunning ? "creating\u2026" : "create workspace"}
-                              </button>
-                              <div className="ws-cmd-tags">
-                                <span className="ws-tag">{createPlan.planned_files.length} files</span>
-                                <span className="ws-tag">no overwrite</span>
-                                <span className="ws-tag">no scripts</span>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-
-                      {createResult && (
-                        <div className="ws-create-body">
-                          <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>
-                            <span className="ws-cmd-prompt">{createResult.success ? "ok" : "fail"}</span>
-                            <span>{createResult.message}</span>
-                          </div>
-                          <div className="ws-cmd-row ws-color-dim">
-                            status: {createResult.status} | target: {createResult.target_path}
-                          </div>
-                          {createResult.copied_files.length > 0 && (
-                            <div className="ws-cmd-files">
-                              <div className="ws-cmd-row ws-color-dim">
-                                copied ({createResult.copied_files.length})
-                              </div>
-                              <div className="ws-file-list">
-                                {createResult.copied_files.map((f, i) => (
-                                  <div key={i} className="ws-file-row">
-                                    <span className="ws-dot ws-dot-ok">&#x25CF;</span>
-                                    <span className="ws-file-path">{f}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {createResult.skipped_files.length > 0 && (
-                            <div className="ws-cmd-files">
-                              <div className="ws-cmd-row ws-color-dim">
-                                skipped ({createResult.skipped_files.length})
-                              </div>
-                              <div className="ws-file-list">
-                                {createResult.skipped_files.map((f, i) => (
-                                  <div key={i} className="ws-file-row">
-                                    <span className="ws-dot ws-dot-fail">&#x25CF;</span>
-                                    <span className="ws-file-path">{f}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                          {createResult.warnings.length > 0 && (
-                            <div className="ws-cmd-warnings">
-                              {createResult.warnings.map((w, i) => (
-                                <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
         </div>
 
         {/* ---- Right column: terminal ---- */}
