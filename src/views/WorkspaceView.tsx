@@ -527,6 +527,9 @@ export function WorkspaceView({
                       </span>
                       <span className="ws-runtime-row-value">
                         {opencodeRuntimeHealth.generated_snapshot_status}
+                        {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
+                          <span className="ws-runtime-row-detail"> — Regenerate before sync</span>
+                        )}
                       </span>
                     </div>
                   </div>

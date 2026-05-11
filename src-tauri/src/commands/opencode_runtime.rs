@@ -618,7 +618,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     // - "valid": source files + snapshot exist and are valid, no generator available to check freshness
     // - "missing": some required files missing or invalid
     // - "unknown": no snapshot files at all
-    let (generated_snapshot_status, generated_snapshot_detail) =
+    let (generated_snapshot_status, mut generated_snapshot_detail) =
         if base_source_exists
             && base_source_valid
             && policy_source_exists
@@ -639,6 +639,12 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         } else {
             ("missing".into(), "snapshot source files missing or invalid".into())
         };
+
+    // Stale generated snapshot: affect overall status and use concise detail.
+    if generated_snapshot_status == "stale" {
+        has_warn = true;
+        generated_snapshot_detail = "Regenerate opencode.json before sync.".into();
+    }
 
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);
@@ -737,24 +743,32 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         "synced".into()
     };
 
-    // Compute summary and next action from overall status
-    let (summary, next_action) = match status.as_str() {
-        "synced" => (
-            "OpenCode runtime matches the bundled workspace.".to_string(),
-            "No runtime action needed.".to_string(),
-        ),
-        "diverged" => (
-            "Runtime differs from bundled templates. Review diff before applying.".to_string(),
-            "Run diff before apply.".to_string(),
-        ),
-        "missing" => (
-            "OpenCode runtime is missing required files.".to_string(),
-            "Install/sync required.".to_string(),
-        ),
-        _ => (
-            "Insufficient workspace state to determine runtime status.".to_string(),
-            "Check workspace configuration.".to_string(),
-        ),
+    // Compute summary and next action.
+    // Stale generated snapshot takes priority over generic divergence.
+    let (summary, next_action) = if generated_snapshot_status == "stale" {
+        (
+            "OpenCode generated config snapshot is stale.".to_string(),
+            "Regenerate opencode.json before sync.".to_string(),
+        )
+    } else {
+        match status.as_str() {
+            "synced" => (
+                "OpenCode runtime matches the bundled workspace.".to_string(),
+                "No runtime action needed.".to_string(),
+            ),
+            "diverged" => (
+                "Runtime differs from bundled templates. Review diff before applying.".to_string(),
+                "Run diff before apply.".to_string(),
+            ),
+            "missing" => (
+                "OpenCode runtime is missing required files.".to_string(),
+                "Install/sync required.".to_string(),
+            ),
+            _ => (
+                "Insufficient workspace state to determine runtime status.".to_string(),
+                "Check workspace configuration.".to_string(),
+            ),
+        }
     };
 
     OpenCodeRuntimeHealth {
@@ -1301,7 +1315,11 @@ mod tests {
         cleanup(&home);
 
         assert_eq!(health.generated_snapshot_status, "stale");
-        assert!(health.generated_snapshot_detail.contains("stale"));
+        assert_eq!(health.generated_snapshot_detail, "Regenerate opencode.json before sync.");
+        // Stale snapshot should raise overall status to diverged
+        assert_eq!(health.status, "diverged");
+        assert!(health.summary.contains("stale"));
+        assert_eq!(health.next_action, "Regenerate opencode.json before sync.");
     }
 
     #[test]
