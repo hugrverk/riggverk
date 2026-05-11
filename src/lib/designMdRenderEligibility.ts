@@ -304,33 +304,4 @@ export function checkRenderEligibility(
   };
 }
 
-/**
- * Check all components in a board and return eligibility results.
- */
-export function checkAllComponents(
-  components: DesignMdBoardComponentGroup[],
-): ComponentRenderEligibility[] {
-  return components.map(checkRenderEligibility);
-}
 
-/**
- * Return only components eligible for graphical rendering.
- */
-export function graphicalComponents(
-  components: DesignMdBoardComponentGroup[],
-): { component: DesignMdBoardComponentGroup; eligibility: ComponentRenderEligibility }[] {
-  return components
-    .map((c) => ({ component: c, eligibility: checkRenderEligibility(c) }))
-    .filter((r) => r.eligibility.canRenderGraphic);
-}
-
-/**
- * Return only components eligible for compact rendering (non-graphical).
- */
-export function compactComponents(
-  components: DesignMdBoardComponentGroup[],
-): { component: DesignMdBoardComponentGroup; eligibility: ComponentRenderEligibility }[] {
-  return components
-    .map((c) => ({ component: c, eligibility: checkRenderEligibility(c) }))
-    .filter((r) => !r.eligibility.canRenderGraphic && r.eligibility.canRenderCompact);
-}

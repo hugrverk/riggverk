@@ -3,7 +3,7 @@ import { isSafeColorValue } from "./designMdPreviewParser";
 /**
  * Convert a hex color string to RGB components.
  */
-function hexToRgb(value: string): { r: number; g: number; b: number } | null {
+export function hexToRgb(value: string): { r: number; g: number; b: number } | null {
   const hex = value.trim();
   if (!/^#[0-9a-fA-F]{3,8}$/.test(hex)) return null;
   const raw = hex.slice(1);

@@ -194,9 +194,6 @@ export function canUseAsButtonFill(color: DesignMdColorSemantics | undefined): b
   return color.semanticRole === "primaryAction" || color.semanticRole === "brandAccent";
 }
 
-export function canUseAsPaletteSwatch(_color: DesignMdColorSemantics | undefined): boolean {
-  return true;
-}
 
 export function canUseAsDarkCanvasCandidate(color: DesignMdColorSemantics | undefined): boolean {
   if (!color) return true;

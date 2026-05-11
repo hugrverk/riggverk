@@ -344,8 +344,6 @@ function parseNestedFrontmatter(content: string): Map<string, string> {
   }
 }
 
-export const parseFlatFrontmatter = parseNestedFrontmatter;
-
 export function isUnsafeDesignMdStyleValue(value: string): boolean {
   return UNSAFE_VALUE_RE.test(value);
 }
@@ -1407,40 +1405,3 @@ export function parseDesignMdForPreview(
   };
 }
 
-export function safeColorStyle(val: string): Record<string, string> | null {
-  return isSafeColorValue(val) ? { backgroundColor: val } : null;
-}
-
-export function safeTypoStyle(
-  fontSize: string | undefined,
-  fontWeight: string | undefined,
-  lineHeight: string | undefined,
-  fontFamily: string | undefined,
-): Record<string, string> {
-  const style: Record<string, string> = {};
-  if (isSafeSizeValue(fontSize)) style.fontSize = fontSize;
-  if (fontWeight && /^(?:\d{3}|bold|normal|lighter|bolder)$/.test(fontWeight)) style.fontWeight = fontWeight;
-  if (lineHeight && !isUnsafeDesignMdStyleValue(lineHeight)) style.lineHeight = lineHeight;
-  if (isSafeFontFamilyValue(fontFamily)) style.fontFamily = fontFamily;
-  return style;
-}
-
-export function safeButtonStyle(fm: Map<string, string>): Record<string, string> {
-  const style: Record<string, string> = {};
-  const bg = resolveTokenRef(fm.get("components.button-primary.backgroundColor") ?? "", fm);
-  const color = resolveTokenRef(fm.get("components.button-primary.textColor") ?? "", fm);
-  const radius = resolveTokenRef(fm.get("components.button-primary.rounded") ?? "", fm);
-  if (isSafeColorValue(bg)) { style.backgroundColor = bg; style.borderColor = bg; }
-  if (isSafeColorValue(color)) style.color = color;
-  if (isSafeSizeValue(radius)) style.borderRadius = radius;
-  return style;
-}
-
-export function safeCardStyle(fm: Map<string, string>): Record<string, string> {
-  const style: Record<string, string> = {};
-  const bg = resolveTokenRef(fm.get("components.card.backgroundColor") ?? fm.get("components.card.background") ?? "", fm);
-  const radius = resolveTokenRef(fm.get("components.card.borderRadius") ?? fm.get("components.card.rounded") ?? "", fm);
-  if (isSafeColorValue(bg)) style.backgroundColor = bg;
-  if (isSafeSizeValue(radius)) style.borderRadius = radius;
-  return style;
-}

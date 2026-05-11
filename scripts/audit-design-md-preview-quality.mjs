@@ -22,7 +22,9 @@ const compileFiles = [
   "src/lib/designMdContrast.ts",
   "src/lib/designMdDisplay.ts",
   "src/lib/designMdSourceEvidence.ts",
+  "src/lib/designMdSourceIntent.ts",
   "src/lib/designMdPreviewQuality.ts",
+  "src/lib/designMdThemeResolver.ts",
 ];
 
 function compilePreviewModules() {
@@ -55,7 +57,9 @@ function compilePreviewModules() {
       .replaceAll('from "./designMdContrast"', 'from "./designMdContrast.js"')
       .replaceAll('from "./designMdDisplay"', 'from "./designMdDisplay.js"')
       .replaceAll('from "./designMdSourceEvidence"', 'from "./designMdSourceEvidence.js"')
-      .replaceAll('from "./designMdPreviewQuality"', 'from "./designMdPreviewQuality.js"');
+      .replaceAll('from "./designMdPreviewQuality"', 'from "./designMdPreviewQuality.js"')
+      .replaceAll('from "./designMdSourceIntent"', 'from "./designMdSourceIntent.js"')
+      .replaceAll('from "./designMdThemeResolver"', 'from "./designMdThemeResolver.js"');
     fs.writeFileSync(fullPath, content);
   }
 }
