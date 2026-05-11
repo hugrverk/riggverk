@@ -1812,6 +1812,32 @@ pub fn list_opencode_config_editor_sources() -> Vec<agent_targets::ConfigEditorS
     agent_targets::opencode_config_editor_source_meta_list()
 }
 
+/// Open an opencode config editor source file (base, policy, or snapshot) in the system editor.
+/// This is a narrow special case for activeConfigTargetId == "opencode_config".
+#[tauri::command]
+pub fn open_opencode_config_source(source_type: String) -> Result<ActionResult, String> {
+    let source = agent_targets::opencode_config_editor_source_by_id(&source_type)
+        .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
+
+    if source.rel_path.contains("..") || Path::new(source.rel_path).is_absolute() {
+        return Err("invalid registry path".to_string());
+    }
+
+    let root = workspace_root()?;
+    let path = root.join(source.rel_path);
+    safe_canonical_target(&root, &path)?;
+
+    let path_str = path_arg(&path)?;
+    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
+    Ok(ActionResult::new(
+        ok,
+        format!("open_opencode_config_source:{}", source_type),
+        out,
+        err,
+        code,
+    ))
+}
+
 const MAX_OPENCODE_CONFIG_SOURCE_SIZE: usize = 512 * 1024;
 
 /// Save an opencode config editor source file.
@@ -2665,5 +2691,58 @@ mod agent_metadata_tests {
         let opencode = targets.iter().find(|t| t.id == "opencode_config").unwrap();
         assert_eq!(opencode.source_rel, "templates/opencode.json");
         assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");
+    }
+
+    // ── open_opencode_config_source tests ──
+
+    fn ocs_open_source_rejects_unknown(source_type: &str) -> Result<(), String> {
+        // Simulate the validation logic of open_opencode_config_source without running `open`
+        let source = agent_targets::opencode_config_editor_source_by_id(source_type)
+            .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
+        if source.rel_path.contains("..") || std::path::Path::new(source.rel_path).is_absolute() {
+            return Err("invalid registry path".to_string());
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn open_opencode_config_source_unknown_type_rejected() {
+        let result = ocs_open_source_rejects_unknown("unknown");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().contains("unknown opencode config source"));
+    }
+
+    #[test]
+    fn open_opencode_config_source_known_types_accepted() {
+        for id in &["base", "policy", "snapshot"] {
+            let result = ocs_open_source_rejects_unknown(id);
+            assert!(result.is_ok(), "known source type '{}' should be accepted", id);
+        }
+    }
+
+    #[test]
+    fn open_opencode_config_source_rejects_invalid_source_type() {
+        for bad in &["../etc/passwd", "/abs/path", "", "base;rm"] {
+            let result = agent_targets::opencode_config_editor_source_by_id(bad);
+            assert!(result.is_none(), "invalid source type '{}' should not be found", bad);
+        }
+    }
+
+    #[test]
+    fn open_opencode_config_source_paths_are_safe() {
+        // All source rel_paths must be relative and not contain parent references
+        for id in &["base", "policy", "snapshot"] {
+            let source = agent_targets::opencode_config_editor_source_by_id(id).unwrap();
+            assert!(
+                !source.rel_path.starts_with('/'),
+                "rel_path for '{}' must not be absolute: {}",
+                id, source.rel_path
+            );
+            assert!(
+                !source.rel_path.contains(".."),
+                "rel_path for '{}' must not contain ..: {}",
+                id, source.rel_path
+            );
+        }
     }
 }

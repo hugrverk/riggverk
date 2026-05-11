@@ -436,8 +436,11 @@ function App() {
 
   const onChangeConfigDraft = useCallback((value: string) => {
     setConfigDraft(value);
-    setConfigDirty(value !== (configTemplateContent?.content ?? ""));
-  }, [configTemplateContent]);
+    const baseline = activeConfigTargetId === "opencode_config"
+      ? (configEditorSourceContent?.content ?? "")
+      : (configTemplateContent?.content ?? "");
+    setConfigDirty(value !== baseline);
+  }, [configTemplateContent, configEditorSourceContent, activeConfigTargetId]);
 
   const loadConfigTemplate = useCallback(async (targetId: string, generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -541,12 +544,15 @@ function App() {
   }, [activeConfigTargetId, activeConfigSourceType, configDraft]);
 
   const onResetConfig = useCallback(() => {
-    if (configTemplateContent) {
-      setConfigDraft(configTemplateContent.content);
+    const baseline = activeConfigTargetId === "opencode_config"
+      ? configEditorSourceContent
+      : configTemplateContent;
+    if (baseline) {
+      setConfigDraft(baseline.content);
       setConfigDirty(false);
       setConfigSaveResult(null);
     }
-  }, [configTemplateContent]);
+  }, [configTemplateContent, configEditorSourceContent, activeConfigTargetId]);
 
   // ── agent source callbacks ──
 
@@ -1582,7 +1588,11 @@ function App() {
             configTargets={configTargets}
             onSelectConfigTarget={selectConfigTarget}
             onOpenConfig={() => {
-              invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`));
+              if (activeConfigTargetId === "opencode_config") {
+                invoke<ActionResult>("open_opencode_config_source", { sourceType: activeConfigSourceType }).catch(e => setError(`Open: ${e}`));
+              } else {
+                invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`));
+              }
             }}
             configDraft={configDraft}
             configDirty={configDirty}
@@ -1597,6 +1607,7 @@ function App() {
             activeConfigSourceType={activeConfigSourceType}
             onSelectConfigSource={selectConfigSourceType}
             configEditorSourceSaveMessage={configEditorSourceSaveMessage}
+            configEditorSourceContent={configEditorSourceContent}
             // Common
             workspaceValid={workspaceValid}
             // Design MD

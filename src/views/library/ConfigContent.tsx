@@ -31,6 +31,8 @@ interface ConfigContentProps {
   activeConfigSourceType: string;
   onSelectConfigSource: (sourceType: string) => void;
   configEditorSourceSaveMessage: string;
+  // Active source content for opencode_config display
+  configEditorSourceContent: DocumentContent | null;
 }
 
 export function ConfigContent(props: ConfigContentProps) {
@@ -53,9 +55,32 @@ export function ConfigContent(props: ConfigContentProps) {
     activeConfigSourceType,
     onSelectConfigSource,
     configEditorSourceSaveMessage,
+    configEditorSourceContent,
   } = props;
 
-  if (!configTemplateContent) return null;
+  const isOpenCodeConfig = activeConfigTargetId === "opencode_config";
+
+  // For opencode_config, display the active source content; for other targets, use configTemplateContent.
+  const displayedContent = isOpenCodeConfig ? configEditorSourceContent : configTemplateContent;
+
+  // Early return for loading/missing state
+  if (!displayedContent) {
+    if (isOpenCodeConfig) {
+      return (
+        <>
+          <div className="lib-editor-meta-strip">
+            <div className="lib-editor-meta-left">
+              <span className="lib-editor-meta-title">opencode config + agents</span>
+            </div>
+          </div>
+          <div className="lib-editor-body">
+            <div className="lib-main-empty">Loading config source...</div>
+          </div>
+        </>
+      );
+    }
+    return null;
+  }
 
   const selectedConfigTarget = configTargets.find((t) => t.id === activeConfigTargetId);
   const targetPath = selectedConfigTarget?.target_rel ?? "";
@@ -63,11 +88,10 @@ export function ConfigContent(props: ConfigContentProps) {
   const activeSource = configEditorSources.find((s) => s.id === activeConfigSourceType);
   const sourcePath = activeSource?.rel_path ?? selectedConfigTarget?.source_rel ?? "";
 
-  const isOpenCodeConfig = activeConfigTargetId === "opencode_config";
   const isSnapshot = isOpenCodeConfig && activeConfigSourceType === "snapshot";
   const currentSourceIsEditable = activeSource ? activeSource.editable : true;
 
-  const formattedJson = useMemo(() => formatJson(configTemplateContent.content), [configTemplateContent.content]);
+  const formattedJson = useMemo(() => formatJson(displayedContent.content), [displayedContent.content]);
 
   // Determine edit mode availability
   const canEdit = currentSourceIsEditable && configMode === "edit";

@@ -574,7 +574,7 @@ export function WorkspaceView({
                     </button>
                     <button
                       className={`btn btn-sm ${opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "btn-warn" : ""}`}
-                      disabled={!workspaceValid || !configEnabled || wsRunning !== null}
+                      disabled={!workspaceValid || wsRunning !== null}
                       onClick={onGenerateOpenCodeConfig}
                       title="Generate opencode.json from Base and Policy."
                     >

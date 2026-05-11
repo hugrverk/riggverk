@@ -12,11 +12,12 @@ use commands::{
     list_design_md_entries, list_docs, list_opencode_config_editor_sources, list_skills,
     open_agent_source, open_agent_template, open_backups_folder, open_config_template,
     open_design_md_target_folder, open_doc, open_install_skills_script, open_installed_design_md,
-    open_skill, plan_create_workspace, plan_install_design_md, read_agent_source,
-    read_agent_template, read_config_template, read_design_md_entry, read_design_md_preview,
-    read_doc, read_opencode_config_source, read_skill, run_action, save_agent_source,
-    save_agent_template, save_config_template, save_doc, save_opencode_config_source,
-    sync_design_md_catalog, update_settings, validate_workspace_contract,
+    open_opencode_config_source, open_skill, plan_create_workspace, plan_install_design_md,
+    read_agent_source, read_agent_template, read_config_template, read_design_md_entry,
+    read_design_md_preview, read_doc, read_opencode_config_source, read_skill, run_action,
+    save_agent_source, save_agent_template, save_config_template, save_doc,
+    save_opencode_config_source, sync_design_md_catalog, update_settings,
+    validate_workspace_contract,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,6 +48,7 @@ pub fn run() {
             read_opencode_config_source,
             list_opencode_config_editor_sources,
             save_opencode_config_source,
+            open_opencode_config_source,
             list_agent_sources,
             list_agent_metadata,
             read_agent_source,

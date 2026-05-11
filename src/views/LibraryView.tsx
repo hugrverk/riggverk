@@ -118,6 +118,7 @@ interface LibraryViewProps {
   activeConfigSourceType: string;
   onSelectConfigSource: (sourceType: string) => void;
   configEditorSourceSaveMessage: string;
+  configEditorSourceContent: DocumentContent | null;
 
   // Common
   workspaceValid: boolean;
@@ -621,6 +622,7 @@ export function LibraryView(props: LibraryViewProps) {
     activeConfigSourceType,
     onSelectConfigSource,
     configEditorSourceSaveMessage,
+    configEditorSourceContent,
     workspaceValid,
     designMdCatalogStatus,
     designMdEntries,
@@ -727,6 +729,7 @@ export function LibraryView(props: LibraryViewProps) {
         activeConfigSourceType={activeConfigSourceType}
         onSelectConfigSource={onSelectConfigSource}
         configEditorSourceSaveMessage={configEditorSourceSaveMessage}
+        configEditorSourceContent={configEditorSourceContent}
       />
     );
   } else if (sourceType === "designMd" && activeDesignMdContent) {
