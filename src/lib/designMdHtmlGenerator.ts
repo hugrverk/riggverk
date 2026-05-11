@@ -644,13 +644,23 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
       lines.push("this dark preview is conservative and token-based.");
       lines.push("──");
     }
+    // For sectionalSourceDark, add a positive diagnostic note
+    if (colors.darkPreviewMode === "sectionalSourceDark") {
+      lines.push("──");
+      lines.push("Sectional dark surfaces detected in DESIGN.md;");
+      lines.push("this dark preview uses source-backed dark sections.");
+      lines.push("──");
+    }
     diagnosticsHtml = '\n<!--\n' + lines.join('\n') + '\n-->';
   }
 
-  // Dark token board banner: visible callout at top of preview
+  // Dark token board banner: visible only in darkTokenBoard mode
   const tokenBoardBanner = isTokenBoard
     ? '<div class="board-banner">[!] Dark preview: no explicit dark theme detected \u2014 showing a conservative token board</div>'
     : '';
+
+  // Show dark preview note in source notes for both token board and sectional dark
+  const showDarkPreviewNote = isTokenBoard || colors.darkPreviewMode === "sectionalSourceDark";
 
   const html = [
     tokenBoardBanner,
@@ -660,7 +670,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     renderTypography(board),
     renderRadiusSpacing(board, colors),
     renderLayout(board),
-    renderSourceNotes(board, isTokenBoard ? colors.darkPreviewNote : undefined),
+    renderSourceNotes(board, showDarkPreviewNote ? colors.darkPreviewNote : undefined),
     '</div>',
     diagnosticsHtml,
   ].join("\n");

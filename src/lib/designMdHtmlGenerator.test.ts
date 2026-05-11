@@ -783,6 +783,201 @@ function luma(hex: string): number {
   assert(dark.canvas === "#101820", "body-dark must be selected as dark canvas");
 }
 
+// ── Pass 6: Sectional dark regression tests ──
+
+// Test 1: Apple-like sectional dark → sectionalSourceDark
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#f5f5f7'",
+    "  surface-tile-1: '#1d1d1f'",
+    "  surface-tile-2: '#2d2d2f'",
+    "  surface-tile-3: '#3d3d3f'",
+    "  surface-black: '#000000'",
+    "  on-dark: '#f5f5f7'",
+    "  body-on-dark: '#f5f5f7'",
+    "  primary-on-dark: '#2997ff'",
+    "  ink: '#1d1d1f'",
+    "components:",
+    "  global-nav:",
+    "    backgroundColor: '#000000'",
+    "    textColor: '#f5f5f7'",
+    "  product-tile-dark:",
+    "    backgroundColor: '#1d1d1f'",
+    "    textColor: '#f5f5f7'",
+    "  product-tile-dark-2:",
+    "    backgroundColor: '#2d2d2f'",
+    "    textColor: '#f5f5f7'",
+    "---",
+    "## Overview",
+    "Alternating light and dark canvases. Light hero → dark product tile → light utility tile → dark tile → parchment footer.",
+  ].join("\n");
+  const board = buildBoard("apple-sectional", "Apple Sectional", "Apple design", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  // Should be sectionalSourceDark, NOT darkTokenBoard or fullSourceDark
+  assert(dark.darkPreviewMode === "sectionalSourceDark",
+    `Apple-like must be sectionalSourceDark (got ${dark.darkPreviewMode})`);
+  assert(dark.darkPreviewMode !== "darkTokenBoard",
+    "Apple-like must NOT be darkTokenBoard");
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    "Apple-like must NOT be fullSourceDark (no global dark canvas)");
+
+  // Canvas should be dark but not from surface tiles (conservative derivation)
+  assert(!dark.darkThemeSource || dark.darkThemeSource.canvas.source !== "policy",
+    "Apple dark canvas should not be policy fallback");
+
+  // Surface should come from source (surface-tile or surface-black)
+  assert(dark.darkThemeSource && (dark.darkThemeSource.surface.source === "source" || dark.darkThemeSource.surface.source === "derived"),
+    `Apple dark surface should be source- or derivation-based, not fallback (got ${dark.darkThemeSource?.surface.source})`);
+
+  // HTML should NOT include token board banner
+  const html = generateBoardHtml(board, { variant: "dark" });
+  assert(!html.includes("No explicit dark theme detected"),
+    "Apple sectional dark MUST NOT show 'No explicit dark theme detected' banner");
+  assert(!html.includes("dark token board"),
+    "Apple sectional dark MUST NOT show dark token board warning");
+  assert(html.includes("sectionalSourceDark") || html.includes("sectional dark surfaces"),
+    "Apple dark diagnostics should mention sectional dark mode");
+}
+
+// Test 2: Full source dark → fullSourceDark (regression)
+{
+  const content = "---\ncolors:\n  primary: '#2563eb'\n  background-dark: '#0d1117'\n  on-dark: '#f0f2f5'\n  surface-dark: '#161b22'\n  border-dark: '#30363d'\n---\n## Overview\nExplicit dark canvas design.";
+  const board = buildBoard("full-dark-regression", "Full Dark", "Full dark regression", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode === "fullSourceDark",
+    `explicit dark canvas must be fullSourceDark (got ${dark.darkPreviewMode})`);
+}
+
+// Test 3: Weak dark component → NOT sectionalSourceDark
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  ink: '#111111'\n  button-dark: '#333333'\n  on-dark: '#f0f0f0'\ncomponents:\n  button-dark:\n    backgroundColor: '#333333'\n    textColor: '#ffffff'\n---\n## Overview\nA light design with a single dark button.";
+  const board = buildBoard("weak-dark-component", "Weak Dark", "Weak dark component", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    "weak dark component must NOT be fullSourceDark");
+  assert(dark.darkPreviewMode !== "sectionalSourceDark",
+    "weak dark component must NOT be sectionalSourceDark (only one dark surface)");
+}
+
+// Test 4: Surface-dark only (no on-dark, no prose) → NOT sectionalSourceDark
+{
+  const content = "---\ncolors:\n  canvas: '#fbfaf6'\n  ink: '#24211d'\n  surface-dark: '#1f2937'\n  body: '#3d3d3a'\n---\n## Overview\nA warm design with surface-dark for product cards.";
+  const board = buildBoard("surface-dark-only", "Surface Dark Only", "Surface dark without text", content);
+  const dark = deriveDarkThemeTokens(board);
+  // No on-dark text → insufficient for sectionalSourceDark
+  assert(dark.darkPreviewMode !== "sectionalSourceDark",
+    "surface-dark without on-dark must NOT be sectionalSourceDark");
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    "surface-dark without on-dark must NOT be fullSourceDark");
+  // Should be darkTokenBoard or conservativeDerivedDark
+  assert(dark.darkPreviewMode === "darkTokenBoard" || dark.darkPreviewMode === "conservativeDerivedDark",
+    `surface-dark only should fall to darkTokenBoard/conservativeDerivedDark (got ${dark.darkPreviewMode})`);
+}
+
+// Test 5: Isolated dark component (only one dark surface) → NOT sectionalSourceDark
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  ink: '#111111'\n  card-dark: '#1a1a2e'\n  on-dark: '#e0e0e0'\n---\n## Overview\nLight design with one dark card.";
+  const board = buildBoard("isolated-dark-surface", "Isolated Dark", "Single dark surface", content);
+  const dark = deriveDarkThemeTokens(board);
+  // One dark surface + on-dark is NOT enough for sectional (needs 2+ surfaces or components+prose)
+  assert(dark.darkPreviewMode !== "sectionalSourceDark",
+    "single dark surface must NOT be sectionalSourceDark");
+}
+
+// Test 6: Black nav only (nav dark + on-dark, no other surfaces) → evaluation
+{
+  const content = "---\ncolors:\n  canvas: '#ffffff'\n  ink: '#111111'\n  global-nav: '#000000'\n  on-dark: '#ffffff'\ncomponents:\n  global-nav:\n    backgroundColor: '#000000'\n    textColor: '#ffffff'\n---\n## Overview\nLight design with a dark navigation bar.";
+  const board = buildBoard("black-nav-only", "Black Nav", "Dark nav bar only", content);
+  const dark = deriveDarkThemeTokens(board);
+  // global-nav is a component name, not a surface token key.
+  // Only one dark surface (nav) → insufficient for sectionalSourceDark
+  assert(dark.darkPreviewMode !== "sectionalSourceDark",
+    "single dark nav must NOT be sectionalSourceDark without multiple surface tokens");
+}
+
+// Test 7: Cursor-like → stays darkTokenBoard (regression)
+{
+  const cursorContent = "---\ncolors:\n  canvas: '#f7f7f4'\n  primary: '#f54e00'\n  ink: '#26251e'\n  surface-card: '#ffffff'\n  hairline: '#e5e5e0'\n  surface: '#fafaf8'\n---\n## Overview\nA warm cream canvas with orange CTA.";
+  const board = buildBoard("cursor-sectional-test", "Cursor", "Warm cream editorial", cursorContent);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `Cursor warm-cream must stay darkTokenBoard (got ${dark.darkPreviewMode})`);
+}
+
+// Test 8: Apple-like HTML has required safety properties
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#f5f5f7'",
+    "  surface-tile-1: '#1d1d1f'",
+    "  surface-tile-2: '#2d2d2f'",
+    "  surface-black: '#000000'",
+    "  on-dark: '#f5f5f7'",
+    "  body-on-dark: '#f5f5f7'",
+    "  primary-on-dark: '#2997ff'",
+    "  ink: '#1d1d1f'",
+    "---",
+    "## Overview",
+    "Alternating light and dark canvases.",
+  ].join("\n");
+  const board = buildBoard("apple-safety", "Apple Safety", "Safety check", content);
+  const dark = deriveDarkThemeTokens(board);
+  assert(dark.darkPreviewMode === "sectionalSourceDark",
+    `Apple-like must be sectionalSourceDark for safety tests (got ${dark.darkPreviewMode})`);
+
+  const html = generateBoardHtml(board, { variant: "dark" });
+  // CSP must exist
+  assert(html.includes("Content-Security-Policy"), "Apple dark HTML must include CSP");
+  // No scripts
+  const scriptCount = (html.match(/<script[^>]*>/g) ?? []).length;
+  assert(scriptCount === 0, "Apple dark HTML must have no script tags");
+  // No external assets
+  assert(!/@import|@font-face|url\(|https?:\/\//i.test(html), "Apple dark HTML must not include external assets");
+  // No fake content
+  assertNoForbiddenStrings(html);
+}
+
+// Test 9: sectionalSourceDark generates different HTML from darkTokenBoard
+{
+  const appleContent = [
+    "---",
+    "colors:",
+    "  canvas: '#f5f5f7'",
+    "  surface-tile-1: '#1d1d1f'",
+    "  surface-tile-2: '#2d2d2f'",
+    "  surface-black: '#000000'",
+    "  on-dark: '#f5f5f7'",
+    "  body-on-dark: '#f5f5f7'",
+    "  primary-on-dark: '#2997ff'",
+    "  ink: '#1d1d1f'",
+    "---",
+    "## Overview",
+    "Alternating light and dark canvases.",
+  ].join("\n");
+  const lightContent = "---\ncolors:\n  canvas: '#fbfaf6'\n  ink: '#24211d'\n  primary: '#ff6b00'\n---\n## Overview\nLight-only design.";
+
+  const appleBoard = buildBoard("apple-diff", "Apple Diff", "Sectional dark", appleContent);
+  const lightBoard = buildBoard("light-diff", "Light Diff", "Light only", lightContent);
+
+  const appleDark = deriveDarkThemeTokens(appleBoard);
+  const lightDark = deriveDarkThemeTokens(lightBoard);
+
+  // Apple should be sectional, light-only should be token board
+  assert(appleDark.darkPreviewMode === "sectionalSourceDark",
+    `Apple must be sectionalSourceDark (got ${appleDark.darkPreviewMode})`);
+  assert(lightDark.darkPreviewMode === "darkTokenBoard",
+    `Light-only must be darkTokenBoard (got ${lightDark.darkPreviewMode})`);
+
+  // Their HTML should differ
+  const appleHtml = generateBoardHtml(appleBoard, { variant: "dark" });
+  const lightHtml = generateBoardHtml(lightBoard, { variant: "dark" });
+  assert(appleHtml !== lightHtml, "sectional and token board HTML must differ");
+}
+
 // ── Summary ──
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);

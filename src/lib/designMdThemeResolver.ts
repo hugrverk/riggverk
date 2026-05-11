@@ -408,6 +408,101 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     };
   }
 
+  // ── sectionalSourceDark ──
+  // No global dark canvas, but explicit dark sections/tiles/surfaces with on-dark text.
+  // Canvas is derived from palette neutrals (not dark section surfaces).
+  // Surface uses source-backed dark section surfaces when available.
+  // Text uses on-dark/body-on-dark/primary-on-dark tokens.
+  if (darkPolicy.mode === "sectionalSourceDark") {
+    // Canvas: conservative derivation from palette neutrals — NOT from section surfaces
+    const canvasResolve = resolveDarkToken(
+      allColors,
+      [],
+      () => deriveConservativeDarkCanvas(),
+      softWarm ? "#3b3830" : "#1a1c1e",
+      true, // filter forbidden canvas candidates
+    );
+    const darkCanvas = canvasResolve.value;
+
+    // Surface: prefer source-backed dark section surfaces (surface-tile-*, surface-black)
+    const sectionDarkKeys = [
+      "surface-tile-1", "surface-tile-2", "surface-tile-3",
+      "surface-black", "surface-dark",
+      "product-tile-dark", "product-tile-dark-2", "product-tile-dark-3",
+      "dark-surface", "dark-tile", "card-dark", "panel-dark",
+    ];
+    const surfaceResolve = resolveDarkToken(
+      allColors,
+      sectionDarkKeys,
+      () => {
+        const lighten = softWarm ? 0.11 : 0.08;
+        const mixed = mixHexColor(darkCanvas, "#ffffff", lighten);
+        if (mixed && isSafeColorValue(mixed)) return mixed;
+        return softWarm ? "#4a4740" : "#242628";
+      },
+      softWarm ? "#4a4740" : "#242628",
+      false, // don't filter non-canvas — we want surface tokens
+    );
+    const darkSurface = surfaceResolve.value;
+
+    // Text: use on-dark body text tokens explicitly.
+    // primary-on-dark is excluded — it is an accent/link color, not body text.
+    const textExplicit = [
+      "on-dark", "body-on-dark", "text-on-dark",
+      "foreground-dark", "on-canvas-dark", "ink-on-dark",
+    ];
+    const textResolve = resolveDarkToken(
+      allColors,
+      textExplicit,
+      () => {
+        const textGroupTokens = board.colorGroups
+          .filter((g) => g.prefix === "text/ink")
+          .flatMap((g) => g.tokens)
+          .filter((t) => !isContextualTextToken(t.key) && isTextRole(t, "low"));
+        const lightestText = lightestPaletteColor(textGroupTokens, "");
+        if (lightestText && !isDarkColor(lightestText)) {
+          if (ensureReadable(lightestText, darkCanvas, "") === lightestText) return lightestText;
+        }
+        return softWarm ? "#f6f1e8" : "#f0f2f5";
+      },
+      softWarm ? "#f6f1e8" : "#f0f2f5",
+    );
+    const darkText = ensureReadable(textResolve.value, darkCanvas, softWarm ? "#f6f1e8" : "#f0f2f5");
+
+    const mutedResolve = resolveDarkToken(
+      allColors,
+      ["muted-on-dark", "on-dark-muted", "text-muted-dark", "muted-dark"],
+      () => {
+        const mixed = mixHexColor(darkText, darkCanvas, softWarm ? 0.60 : 0.55);
+        if (mixed && isSafeColorValue(mixed)) return mixed;
+        return softWarm ? "#aaa59c" : "#8b909a";
+      },
+      softWarm ? "#aaa59c" : "#8b909a",
+    );
+    const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, softWarm ? "#aaa59c" : "#8b909a");
+
+    const borderResolve = resolveDarkToken(
+      allColors,
+      ["border-dark", "hairline-dark", "divider-dark", "stroke-dark"],
+      () => {
+        const mixed = mixHexColor(darkSurface, darkText, softWarm ? 0.06 : 0.10);
+        if (mixed && isSafeColorValue(mixed)) return mixed;
+        return softWarm ? "#4f4c46" : "#2a2e35";
+      },
+      softWarm ? "#46433d" : "#2a2e35",
+    );
+
+    return {
+      canvas: canvasResolve,
+      surface: surfaceResolve,
+      text: { value: darkText, source: textResolve.source, matchedKey: textResolve.matchedKey, note: textResolve.note },
+      border: borderResolve,
+      muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
+      darkPreviewMode: darkPolicy.mode,
+      darkPreviewNote: darkPolicy.reason,
+    };
+  }
+
   // ── fullSourceDark / conservativeDerivedDark ──
 
   const isFullSource = darkPolicy.mode === "fullSourceDark";
