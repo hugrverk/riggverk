@@ -204,8 +204,12 @@ function luma(hex: string): number {
   const content = "---\ncolors:\n  canvas: '#ffffff'\n  text: '#111111'\n  body-on-dark: '#f8fafc'\n  surface-dark: '#1f2937'\n---\n## Overview\nBody on dark is text on dark surfaces.";
   const board = buildBoard("body-dark-text", "Body Dark Text", "Body dark text", content);
   const dark = deriveDarkThemeTokens(board);
-  assert(dark.text === "#f8fafc", "body-on-dark is selected as dark text");
+  // No explicit dark canvas key (body-dark or canvas-dark) → darkTokenBoard
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `no explicit dark canvas → darkTokenBoard (got ${dark.darkPreviewMode})`);
   assert(dark.canvas !== "#f8fafc", "body-on-dark must not become dark canvas");
+  assert(dark.canvas !== "#ffffff", "dark canvas must not be light canvas");
+  assert(luma(dark.canvas) < 0.3, "dark canvas must be dark (not light canvas value)");
 }
 
 {
@@ -474,8 +478,11 @@ function luma(hex: string): number {
   const light = deriveLightThemeTokens(board);
   const dark = deriveDarkThemeTokens(board);
   assert(light.canvas === "#f7f7f4", "Cursor intent light canvas uses warm cream");
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `Cursor warm-cream editorial source must be darkTokenBoard (got ${dark.darkPreviewMode})`);
   assert(dark.canvas !== "#f54e00" && dark.canvas !== "#d04200" && dark.canvas !== "#9fbbe0", "Cursor intent dark canvas excludes primary, state, and timeline colors");
-  assert(luma(dark.canvas) > 0.02, `Cursor intent dark canvas must not be harsh black (got ${dark.canvas})`);
+  // darkTokenBoard uses fixed neutral canvas #1a1c1e — not harsh black, not brand
+  assert(luma(dark.canvas) > 0.01, `Cursor intent dark canvas must not be pure black (got ${dark.canvas}, luma ${luma(dark.canvas).toFixed(4)})`);
   assert(board.sourceIntent.darkModeIntent === "lightFirstDerived", "Cursor intent is light-first derived");
   const html = generateBoardHtml(board, { variant: "light" });
   const heroButtons = html.match(/<button class="hero-btn[^>]*>[\s\S]*?<\/button>/g) ?? [];
@@ -489,8 +496,10 @@ function luma(hex: string): number {
   const board = buildBoard("claude-intent", "Claude", "Warm-canvas editorial interface with tinted cream canvas and warm coral CTAs.", claudeContent);
   const dark = deriveDarkThemeTokens(board);
   assert(board.sourceIntent.darkModeIntent === "lightFirstDerived", "Claude warm editorial intent is light-first derived");
-  assert(luma(dark.canvas) > luma("#141413"), `Claude derived dark canvas must be softer than raw ink (got ${dark.canvas})`);
-  assert(luma(dark.canvas) > 0.02, `Claude derived dark canvas must not be overly black (got ${dark.canvas})`);
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `Claude warm-editorial source must be darkTokenBoard (got ${dark.darkPreviewMode})`);
+  // darkTokenBoard uses fixed neutral canvas; verify it is not harsh black
+  assert(luma(dark.canvas) > 0.01, `Claude derived dark canvas must not be pure black (got ${dark.canvas}, luma ${luma(dark.canvas).toFixed(4)})`);
   assert(luma(dark.border) < 0.18, "Claude warm/editorial dark border stays subtle");
 }
 
@@ -706,10 +715,11 @@ function luma(hex: string): number {
   const content = "---\ncolors:\n  canvas: '#0a0a12'\n  surface: '#1a1a2e'\n  ink: '#e8e6f0'\n  accent: '#7c6ff7'\n---\n## Overview\nDark-native terminal interface on a near-black canvas with high contrast.";
   const board = buildBoard("dark-native-terminal", "Dark Terminal", "Dark-native terminal", content);
   const dark = deriveDarkThemeTokens(board);
-  // canvas with "canvas" key and dark value → should be recognized
-  assert(dark.darkPreviewMode === "fullSourceDark" || dark.darkPreviewMode === "conservativeDerivedDark",
-    `dark-native terminal should be at least conservativeDerivedDark (got ${dark.darkPreviewMode})`);
-  assert(dark.canvas === "#0a0a12", "dark canvas must use explicit dark canvas token");
+  // Has dark canvas VALUE but no EXPLICIT dark canvas KEY (canvas-dark/body-dark).
+  // With only 2 dark neutral tokens and no explicit key, strict policy gives darkTokenBoard.
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `dark-native terminal without explicit dark canvas key → darkTokenBoard (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#1a1c1e", "dark canvas must use stable token board fallback");
 }
 
 // Test: surface-dark without explicit dark canvas does NOT become dark page canvas

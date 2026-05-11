@@ -534,6 +534,8 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
     "html,body{width:100%;height:100%;min-height:100%;overflow:auto}",
+    // Token board banner: visible only in darkTokenBoard mode
+    ".board-banner{background:#2d283e;color:#d4d0e0;text-align:center;font-size:11px;padding:6px 12px;line-height:1.4;letter-spacing:.01em}",
     "body{font-family:" + body.family + ";font-size:" + body.size + ";font-weight:" + body.weight + ";line-height:1.5;letter-spacing:0;background:" + colors.canvas + ";color:" + colors.text + ";-webkit-font-smoothing:antialiased}",
     ".board{min-height:100%;background:" + colors.canvas + ";color:" + colors.text + "}",
 
@@ -645,14 +647,20 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     diagnosticsHtml = '\n<!--\n' + lines.join('\n') + '\n-->';
   }
 
+  // Dark token board banner: visible callout at top of preview
+  const tokenBoardBanner = isTokenBoard
+    ? '<div class="board-banner">[!] Dark preview: no explicit dark theme detected \u2014 showing a conservative token board</div>'
+    : '';
+
   const html = [
+    tokenBoardBanner,
     '<div class="board">',
     renderHero(board, colors, display),
     renderPalette(board),
     renderTypography(board),
     renderRadiusSpacing(board, colors),
     renderLayout(board),
-    renderSourceNotes(board, colors.darkPreviewMode === "darkTokenBoard" ? colors.darkPreviewNote : undefined),
+    renderSourceNotes(board, isTokenBoard ? colors.darkPreviewNote : undefined),
     '</div>',
     diagnosticsHtml,
   ].join("\n");

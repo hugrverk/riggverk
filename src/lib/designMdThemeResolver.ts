@@ -334,23 +334,27 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
 
   const explicitCanvasKeys = [
     "body-dark", "canvas-dark", "background-dark", "page-dark", "app-dark",
-    "canvas-night", "background-night", "inverse-canvas",
+    "canvas-night", "background-night",
     "dark-body", "dark-canvas", "dark-background",
+    // inverse-canvas explicitly excluded — it is an inversion hint, not a dark-theme token.
   ];
 
-  // ── Derive a conservative dark canvas fallback (never from scoped tokens) ──
+  // ── Derive a conservative dark canvas fallback (never from scoped or section-only tokens) ──
   const deriveConservativeDarkCanvas = (): string => {
-    // Only use neutral (text/canvas/surface/border) dark tokens
+    // Only use neutral (text/canvas/border) dark tokens; never component-surface
     const neutralDarkTokens = allColors.filter((t) =>
       !isForbiddenThemeCandidate(t)
       && !isComponentSurfaceRole(t, "medium")
       && isSafeColorValue(t.resolvedValue)
       && isDarkColor(t.resolvedValue)
     );
+    // Canvas derivation: require canvas role (globalCanvas/pageBackground/bodyBackground).
+    // SectionSurface and component-surface tokens are deliberately excluded:
+    // surface-dark/card-dark/panel-dark are ELEVATED surfaces, not page canvas.
     const canvasGroupTokens = board.colorGroups
       .filter((g) => g.prefix === "canvas/surface")
       .flatMap((g) => g.tokens)
-      .filter((t) => !isForbiddenThemeCandidate(t) && (isCanvasRole(t, "low") || isSectionSurfaceRole(t, "medium")));
+      .filter((t) => !isForbiddenThemeCandidate(t) && isCanvasRole(t, "low"));
     const textGroupTokens = board.colorGroups
       .filter((g) => g.prefix === "text/ink")
       .flatMap((g) => g.tokens)
@@ -386,17 +390,19 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     return softWarm ? "#3b3830" : "#2a2d34";
   };
 
-  // ── darkTokenBoard: minimal conservative dark wrapper ──
-  // Do NOT derive a full dark theme. Use a safe neutral dark wrapper.
+  // ── darkTokenBoard: stable neutral dark wrapper, NOT a derived dark theme ──
+  // Uses fixed colors that are identical for every board to visually communicate
+  // "no explicit dark theme detected". Does NOT derive from board palette to avoid
+  // giving the impression of a real dark mode.
+  //
+  // The wrapper is dark-safe for readability but visually distinct from fullSourceDark.
   if (darkPolicy.mode === "darkTokenBoard") {
-    const neutralCanvas = deriveConservativeDarkCanvas();
-    const neutralSurface = mixHexColor(neutralCanvas, "#ffffff", 0.08) ?? "#2d3038";
     return {
-      canvas: { value: neutralCanvas, source: "fallback", note: "conservative neutral wrapper (dark token board)" },
-      surface: { value: neutralSurface, source: "fallback", note: "conservative neutral wrapper (dark token board)" },
-      text: { value: softWarm ? "#e8e4da" : "#e4e6ea", source: "fallback", note: "conservative neutral text (dark token board)" },
-      border: { value: softWarm ? "#46433d" : "#2a2e35", source: "fallback", note: "conservative neutral border (dark token board)" },
-      muted: { value: softWarm ? "#aaa59c" : "#8b909a", source: "fallback", note: "conservative neutral muted (dark token board)" },
+      canvas: { value: "#1a1c1e", source: "fallback", note: "stable neutral wrapper (dark token board)" },
+      surface: { value: "#242628", source: "fallback", note: "stable neutral wrapper (dark token board)" },
+      text: { value: "#e0e2e5", source: "fallback", note: "stable neutral text (dark token board)" },
+      border: { value: "#333538", source: "fallback", note: "stable neutral border (dark token board)" },
+      muted: { value: "#8b909a", source: "fallback", note: "stable neutral muted (dark token board)" },
       darkPreviewMode: darkPolicy.mode,
       darkPreviewNote: darkPolicy.reason,
     };

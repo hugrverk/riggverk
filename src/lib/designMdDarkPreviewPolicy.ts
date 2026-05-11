@@ -70,6 +70,28 @@ function isScopedToken(token: BoardToken): boolean {
     || token.resolvedRole === "brandAccent";
 }
 
+/**
+ * Check whether a token's value is visually dark (low relative luminance).
+ * Used to prevent light or mid-tone tokens from qualifying as dark theme
+ * candidates when only their key implies darkness.
+ */
+function tokenIsDarkValue(token: BoardToken): boolean {
+  const hex = token.resolvedValue?.trim();
+  if (!hex || !/^#[0-9a-fA-F]{3,8}$/.test(hex)) return false;
+  const raw = hex.slice(1);
+  const full = raw.length === 3 || raw.length === 4
+    ? raw.slice(0, 3).split("").map((c) => c + c).join("")
+    : raw.slice(0, 6);
+  const int = Number.parseInt(full, 16);
+  if (Number.isNaN(int)) return false;
+  const r = (int >> 16) & 255;
+  const g = (int >> 8) & 255;
+  const b = int & 255;
+  // Relative luminance < ~0.32 means visually dark
+  const luma = 0.2126 * (r / 255) + 0.7152 * (g / 255) + 0.0722 * (b / 255);
+  return luma < 0.32;
+}
+
 // ─── Key matching helpers ──────────────────────────────────────────
 
 function keyParts(key: string): string[] {
@@ -88,10 +110,13 @@ function isExplicitDarkCanvasKey(key: string): boolean {
   const compact = keyParts(key).join("-");
   const matches = [
     "body-dark", "canvas-dark", "background-dark", "page-dark", "app-dark",
-    "canvas-night", "background-night", "inverse-canvas",
+    "canvas-night", "background-night",
     "dark-body", "dark-canvas", "dark-background",
     "dark-page", "dark-app",
   ];
+  // NOTE: inverse-canvas deliberately excluded — inverse tokens are inversion hints,
+  // not dark-theme declarations. A light-first design may have inverse-canvas but no
+  // actual dark mode.
   return matches.includes(compact) || matches.some((m) => key.toLowerCase().includes(m));
 }
 
@@ -140,17 +165,6 @@ function isStronglyLightOnly(board: DesignMdBoard): boolean {
   return (lightCanvas || lightFirst || editorial || soft || warm) && !isDarkNativeIntent(board);
 }
 
-function hasAnyDarkEvidenceInProse(board: DesignMdBoard): boolean {
-  const text = [
-    board.overview,
-    board.description,
-    board.visualLanguage.phrases.join(" "),
-    board.visualLanguage.keywords.join(" "),
-    board.fontSubstitutes,
-  ].join(" ").toLowerCase();
-  return /\bdark\b|\bnight\b|\bblack canvas\b|\binverse\b|\bon-dark\b|\bterminal\b|\bconsole\b|\bhigh contrast\b/.test(text);
-}
-
 // ─── Main policy function ──────────────────────────────────────────
 
 export function determineDarkPreviewMode(board: DesignMdBoard): DarkPreviewDecision {
@@ -188,75 +202,85 @@ export function determineDarkPreviewMode(board: DesignMdBoard): DarkPreviewDecis
   if (darkNative) evidence.push("source intent is dark-native");
 
   // ── Rule 1: fullSourceDark ──
-  // Requires explicit dark canvas with medium+ confidence AND
-  // either dark-native intent or explicit on-dark tokens or explicit dark surface tokens.
-  // BUT: if source intent is strongly light-first, explicit dark tokens are overridden.
+  // Requires ALL of:
+  //   - explicit dark canvas key with medium+ canvas role confidence
+  //   - explicit on-dark text token (body-on-dark, text-on-dark, on-dark, etc.)
+  //   - source intent not strongly light-first
+  //
+  // inverse-canvas is explicitly excluded from dark canvas key detection
+  // because it is an inverse-palette hint, not a dark-theme declaration.
+  //
+  // If explicit dark canvas exists but lacks on-dark text evidence,
+  // fall through to conservativeDerivedDark or darkTokenBoard.
   if (hasExplicitDarkCanvas) {
     // Light-first designs with cream/off-white/warm canvas should NOT get fullSourceDark
-    // even if they have dark-named canvas tokens (e.g., "inverse-canvas" in a light-first design).
+    // even if they have dark-named canvas tokens.
     if (isStronglyLightOnly(board)) {
-      evidence.push("explicit dark canvas token exists but source intent is light-first");
+      evidence.push("explicit dark canvas token exists but source is light-first");
       warnings.push("dark canvas token exists but source is light-first; rendering conservative");
-      // Fall through to conservativeDerivedDark
-    } else if (darkNative || hasExplicitOnDark || hasExplicitDarkSurface) {
+      // Fall through — will not qualify for fullSourceDark due to light-only source
+    } else if (hasExplicitOnDark && (hasExplicitDarkSurface || darkNative)) {
       return {
         mode: "fullSourceDark",
-        reason: "explicit dark canvas token with supporting dark evidence",
+        reason: "explicit dark canvas with on-dark text supported by explicit surface or dark-native intent",
         evidence,
         warnings,
       };
-    } else if (hasAnyDarkEvidenceInProse(board)) {
-      evidence.push("dark prose evidence supports dark canvas");
+    } else if (hasExplicitOnDark) {
+      // Has explicit dark canvas key with canvas role AND explicit on-dark text,
+      // but no surface-dark token and no dark-native intent.
+      // Still qualifies because canvas+text together are sufficient dark-theme evidence.
+      evidence.push("explicit dark canvas and on-dark text token form sufficient dark theme evidence");
       return {
         mode: "fullSourceDark",
-        reason: "explicit dark canvas token with prose evidence",
+        reason: "explicit dark canvas with on-dark text",
         evidence,
         warnings,
       };
     } else {
-      // Explicit dark canvas token but no supporting evidence — weak fullSourceDark
-      evidence.push("explicit dark canvas token but limited supporting evidence");
-      warnings.push("dark canvas exists but lacks on-dark/surface-dark; preview may be incomplete");
-      return {
-        mode: "fullSourceDark",
-        reason: "explicit dark canvas token (limited support)",
-        evidence,
-        warnings,
-      };
+      evidence.push("explicit dark canvas token exists but no explicit on-dark text token");
+      warnings.push("dark canvas exists but lacks on-dark text; rendering conservative");
+      // Fall through to conservativeDerivedDark or darkTokenBoard
     }
   }
 
   // ── Rule 2: conservativeDerivedDark ──
-  // No explicit dark canvas, but enough neutral tokens to derive safely.
+  // No explicit dark canvas, but enough neutral dark-valued tokens to derive safely.
   // Source must not be strongly light-only.
+  // Requires AT LEAST:
+  //   - one dark-valued text/ink candidate
+  //   - one dark-valued surface/canvas candidate
+  //   - three total neutral candidates with dark values
 
   if (isStronglyLightOnly(board)) {
     evidence.push("source is strongly light-only (cream/offWhite/warmLight canvas with light-first intent)");
   } else {
-    // Check if enough neutral tokens exist for derivation
-    const neutralDarkTokens = allColors.filter((t) =>
+    // Check if enough neutral dark-valued tokens exist for safe derivation
+    const neutralDarkValueTokens = allColors.filter((t) =>
       !isScopedToken(t)
       && !isComponentSurfaceRole(t)
       && t.resolvedRole !== "unknown"
       && (hasCanvasRole(t, "low") || hasTextRole(t, "low") || hasSurfaceRole(t, "low") || t.resolvedRole === "border" || t.resolvedRole === "hairline")
+      && tokenIsDarkValue(t)  // value must actually be dark, not just have a dark role
     );
 
-    if (neutralDarkTokens.length >= 2) {
-      // Additional checks for darkNative intent without explicit canvas
-      if (darkNative) {
-        evidence.push("dark-native intent without explicit dark canvas — conservative derivation");
-      }
+    const darkTextCandidate = neutralDarkValueTokens.some((t) =>
+      hasTextRole(t, "low") && tokenIsDarkValue(t));
+    const darkSurfaceCandidate = neutralDarkValueTokens.some((t) =>
+      hasCanvasRole(t, "low") || hasSurfaceRole(t, "low"));
+
+    if (neutralDarkValueTokens.length >= 3 && darkTextCandidate && darkSurfaceCandidate) {
       if (hasAnyDarkCanvasKey && !hasExplicitDarkCanvas) {
         warnings.push("dark canvas key exists but role confidence is low/fallback");
       }
       return {
         mode: "conservativeDerivedDark",
-        reason: `neutral tokens available for safe dark derivation (${neutralDarkTokens.length} neutral tokens)`,
+        reason: `neutral dark-valued tokens for safe derivation (${neutralDarkValueTokens.length} tokens, text: ${darkTextCandidate}, surface: ${darkSurfaceCandidate})`,
         evidence,
         warnings,
       };
     } else {
-      evidence.push("insufficient neutral tokens for safe dark derivation");
+      evidence.push(`insufficient dark-valued neutral tokens for safe dark derivation (${neutralDarkValueTokens.length} tokens, text: ${darkTextCandidate}, surface: ${darkSurfaceCandidate})`);
     }
   }
 
