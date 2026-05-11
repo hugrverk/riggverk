@@ -8,11 +8,23 @@ failed=0
 pass() { printf 'PASS %s\n' "$1"; }
 fail() { printf 'FAIL %s\n' "$1"; failed=1; }
 
-# --- JSON validation ---
+# --- JSON validation (source + generated) ---
 if python3 -m json.tool "$dw/templates/opencode.json" >/dev/null 2>&1; then
   pass "default-workspace/templates/opencode.json strict JSON"
 else
   fail "default-workspace/templates/opencode.json strict JSON"
+fi
+
+if python3 -m json.tool "$dw/templates/opencode.base.json" >/dev/null 2>&1; then
+  pass "default-workspace/templates/opencode.base.json strict JSON"
+else
+  fail "default-workspace/templates/opencode.base.json strict JSON"
+fi
+
+if python3 -m json.tool "$dw/templates/opencode.policy.json" >/dev/null 2>&1; then
+  pass "default-workspace/templates/opencode.policy.json strict JSON"
+else
+  fail "default-workspace/templates/opencode.policy.json strict JSON"
 fi
 
 if python3 -m json.tool "$dw/templates/tui.json" >/dev/null 2>&1; then
@@ -30,6 +42,13 @@ for key in "${tui_keys[@]}"; do
     fail "default-workspace/templates/tui.json missing $key"
   fi
 done
+
+# --- Generated opencode.json is current ---
+if python3 "$repo_root/scripts/generate-default-opencode-config.py" --check >/dev/null 2>&1; then
+  pass "opencode.json snapshot is current (generated from source)"
+else
+  fail "opencode.json snapshot is stale (run generate-default-opencode-config.py --write)"
+fi
 
 # --- opencode.json model keys ---
 for key in '"model"' '"small_model"'; do

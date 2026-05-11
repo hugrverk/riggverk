@@ -8,3 +8,6 @@ src-tauri/gen/
 
 # Release assets
 release/
+
+# Python cache
+__pycache__/

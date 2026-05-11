@@ -2,7 +2,26 @@
 
 ## Source template
 
-The source template for OpenCode configuration is `templates/opencode.json`. This file defines:
+The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly.
+
+The maintainable source files are:
+
+- **`templates/opencode.base.json`** — non-permission config (model, provider, watcher, compaction, etc.)
+- **`templates/opencode.policy.json`** — permission policy in a compact grouped format
+
+To regenerate the snapshot after changing a source file:
+
+```
+python3 scripts/generate-default-opencode-config.py --write
+```
+
+To verify the snapshot is current (used by CI/release checks):
+
+```
+python3 scripts/generate-default-opencode-config.py --check
+```
+
+The template defines:
 
 - Share settings (recommended: disabled)
 - Model selection via `model` and `small_model`

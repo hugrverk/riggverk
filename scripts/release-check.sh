@@ -169,6 +169,21 @@ if [ ! -f resources/default-workspace/.agent-workspace/workspace.json ]; then
   exit 1
 fi
 
+step "bundled default opencode config source files"
+for source_file in \
+  resources/default-workspace/templates/opencode.base.json \
+  resources/default-workspace/templates/opencode.policy.json; do
+  if [ ! -f "$source_file" ]; then
+    printf 'FAIL: missing opencode config source: %s\n' "$source_file" >&2
+    exit 1
+  fi
+  python3 -m json.tool "$source_file" >/dev/null
+done
+printf '  opencode.base.json + opencode.policy.json: valid strict JSON\n'
+
+step "bundled default opencode.json snapshot is current"
+python3 scripts/generate-default-opencode-config.py --check
+
 step "bundled default opencode.json"
 python3 -m json.tool resources/default-workspace/templates/opencode.json >/dev/null
 if ! grep -q '"default_agent": "architect"' resources/default-workspace/templates/opencode.json; then
