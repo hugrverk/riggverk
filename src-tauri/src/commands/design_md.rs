@@ -417,7 +417,7 @@ fn list_design_md_entries_impl(cache: &Path) -> Result<Vec<DesignMdEntry>, Strin
         });
     }
 
-    entries.sort_by(|a, b| a.title.to_lowercase().cmp(&b.title.to_lowercase()));
+    entries.sort_by_key(|a| a.title.to_lowercase());
     Ok(entries)
 }
 
@@ -611,7 +611,7 @@ fn chrono_lite(ts: u64) -> String {
 }
 
 fn is_leap_year(y: u64) -> bool {
-    (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0)
+    (y.is_multiple_of(4) && !y.is_multiple_of(100)) || y.is_multiple_of(400)
 }
 
 // ── install commands ──
@@ -788,11 +788,10 @@ fn install_design_md_impl(
     }
 
     if let Err(e) = std::fs::write(&target_file_path, &content) {
-        if backup_path.is_some() {
+        if let Some(ref bp) = backup_path {
             warnings.push(format!(
                 "backup created but install failed: {} (backup at {})",
-                e,
-                backup_path.as_ref().unwrap()
+                e, bp
             ));
         }
         return Err(format!("failed to write DESIGN.md: {}", e));
@@ -955,7 +954,7 @@ pub fn open_design_md_target_folder(target_dir: String) -> Result<ActionResult, 
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &canonical);
     Ok(ActionResult::new(
         ok,
-        format!("open_design_md_target_folder"),
+        "open_design_md_target_folder".to_string(),
         out,
         err,
         code,
@@ -989,7 +988,7 @@ pub fn open_installed_design_md(target_dir: String) -> Result<ActionResult, Stri
     let (ok, out, err, code) = run_cmd("open", &[&file_str], &canonical);
     Ok(ActionResult::new(
         ok,
-        format!("open_installed_design_md"),
+        "open_installed_design_md".to_string(),
         out,
         err,
         code,
