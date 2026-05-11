@@ -978,6 +978,249 @@ function luma(hex: string): number {
   assert(appleHtml !== lightHtml, "sectional and token board HTML must differ");
 }
 
+// ═══════════════════════════════════════════════
+// Pass 6: Real-entry fixture regression tests
+// ═══════════════════════════════════════════════
+// These use representative DESIGN.md snippets that mirror real brand dark surfaces.
+
+// ── Apple fixture: sectional dark ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#f5f5f7'",
+    "  surface-tile-1: '#1d1d1f'",
+    "  surface-tile-2: '#2d2d2f'",
+    "  surface-tile-3: '#3d3d3f'",
+    "  surface-black: '#000000'",
+    "  on-dark: '#f5f5f7'",
+    "  body-on-dark: '#f5f5f7'",
+    "  primary-on-dark: '#2997ff'",
+    "  ink: '#1d1d1f'",
+    "components:",
+    "  global-nav:",
+    "    backgroundColor: '#000000'",
+    "    textColor: '#f5f5f7'",
+    "  product-tile-dark:",
+    "    backgroundColor: '#1d1d1f'",
+    "    textColor: '#f5f5f7'",
+    "---",
+    "## Overview",
+    "Alternating light and dark canvases. Light hero → dark product tile → light utility tile → dark tile → parchment footer.",
+  ].join("\n");
+  const board = buildBoard("apple-real", "Apple", "Apple design system", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  assert(dark.darkPreviewMode === "sectionalSourceDark",
+    `Apple fixture must be sectionalSourceDark (got ${dark.darkPreviewMode})`);
+
+  // Dark surface set must exist
+  assert(dark.darkSurfaceSet !== undefined,
+    "Apple fixture must produce a darkSurfaceSet");
+  const set = dark.darkSurfaceSet!;
+
+  // Check for surface-tile tokens
+  const tileKeys = set.allSurfaces.map((s) => s.key);
+  assert(tileKeys.includes("surface-tile-1"), "Apple fixture must include surface-tile-1");
+  assert(tileKeys.includes("surface-tile-2"), "Apple fixture must include surface-tile-2");
+  assert(tileKeys.includes("surface-tile-3"), "Apple fixture must include surface-tile-3");
+  assert(tileKeys.includes("surface-black"), "Apple fixture must include surface-black");
+
+  // Check on-dark text
+  assert(set.onDarkText !== undefined, "Apple fixture must have on-dark text");
+  assert(set.onDarkText!.value === "#f5f5f7", "Apple fixture on-dark text must be #f5f5f7");
+
+  // primary-on-dark is a brand accent token (not a text role), so it won't appear as linkOnDark.
+  // That is correct: the token role classifier assigns it "brandAccent" not "text".
+
+  // Dark HTML must not show token board note
+  const html = generateBoardHtml(board, { variant: "dark" });
+  assert(!html.includes("No explicit dark theme detected"),
+    "Apple dark HTML must not include token board warning");
+  assert(html.includes("sectional dark surfaces"),
+    "Apple dark HTML must mention sectional dark surfaces in diagnostics");
+}
+
+// ── Cursor fixture: warm cream → darkTokenBoard ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#f7f7f4'",
+    "  primary: '#f54e00'",
+    "  ink: '#26251e'",
+    "  surface-card: '#ffffff'",
+    "  hairline: '#e5e5e0'",
+    "  surface: '#fafaf8'",
+    "---",
+    "## Overview",
+    "Warm cream editorial canvas. Orange reserved for primary CTA only.",
+  ].join("\n");
+  const board = buildBoard("cursor-real", "Cursor", "Cursor fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  // Orange must not be dark canvas
+  assert(dark.canvas !== "#f54e00", "Cursor fixture dark canvas must NOT be orange");
+  assert(dark.canvas !== "#d44400", "Cursor fixture dark canvas must NOT be dark orange");
+
+  // Must be darkTokenBoard
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `Cursor fixture must be darkTokenBoard (got ${dark.darkPreviewMode})`);
+}
+
+// ── Claude fixture: warm editorial → darkTokenBoard ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  primary: '#cc785c'",
+    "  ink: '#141413'",
+    "  canvas: '#faf9f5'",
+    "  surface-soft: '#f5f0e8'",
+    "  surface-dark: '#181715'",
+    "  on-dark: '#faf9f5'",
+    "  hairline: '#e6dfd8'",
+    "---",
+    "## Overview",
+    "Warm-canvas editorial interface with tinted cream canvas and warm coral CTAs.",
+  ].join("\n");
+  const board = buildBoard("claude-real", "Claude", "Claude fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  assert(board.sourceIntent.darkModeIntent === "lightFirstDerived",
+    "Claude fixture source intent must be light-first derived");
+  assert(dark.darkPreviewMode === "darkTokenBoard",
+    `Claude warm-editorial fixture must be darkTokenBoard (got ${dark.darkPreviewMode})`);
+  assert(luma(dark.canvas) > 0.01, "Claude fixture dark canvas must not be pure black");
+}
+
+// ── Vercel fixture: explicit dark canvas → fullSourceDark ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#ffffff'",
+    "  foreground: '#000000'",
+    "  primary: '#000000'",
+    "  canvas-dark: '#000000'",
+    "  on-dark: '#ffffff'",
+    "  surface-dark: '#0a0a0a'",
+    "  border-dark: '#232323'",
+    "---",
+    "## Overview",
+    "Minimal black-on-white with near-black dark canvas.",
+  ].join("\n");
+  const board = buildBoard("vercel-real", "Vercel", "Vercel fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  assert(dark.darkPreviewMode === "fullSourceDark",
+    `Vercel fixture must be fullSourceDark (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#000000", "Vercel fixture dark canvas must be #000000");
+}
+
+// ── Warp fixture: dark surface without global canvas → sectional source or derived dark ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#fafafa'",
+    "  ink: '#1a1a1a'",
+    "  primary: '#ff6b35'",
+    "  surface-dark: '#1a1a2e'",
+    "  on-dark: '#f0f0f0'",
+    "  terminal-dark: '#0d0d1a'",
+    "  ink-on-dark: '#e0e0e0'",
+    "---",
+    "## Overview",
+    "Modern terminal and developer tool with dark-themed interface panes.",
+  ].join("\n");
+  const board = buildBoard("warp-real", "Warp", "Warp fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  // Should NOT be fullSourceDark (no global dark canvas key)
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    `Warp fixture must not be fullSourceDark (got ${dark.darkPreviewMode})`);
+
+  // Has surface-dark and on-dark → could be sectional or token board depending on evidence
+  assert(dark.canvas !== "#ff6b35", "Warp fixture dark canvas must NOT be primary orange");
+  assert(dark.canvas !== "#1a1a2e", "Warp fixture dark canvas must NOT be surface-dark");
+}
+
+// ── Slack fixture: dark sidebar only → sectional dark or token board ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#ffffff'",
+    "  ink: '#1d1c1d'",
+    "  primary: '#611f69'",
+    "  surface: '#f8f8f8'",
+    "  sidebar-bg: '#350d36'",
+    "  sidebar-text: '#ffffff'",
+    "---",
+    "## Overview",
+    "Multi-workspace messaging app. Light canvas with dark sidebar.",
+  ].join("\n");
+  const board = buildBoard("slack-real", "Slack", "Slack fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  // Dark sidebar is one component surface — should not be fullSourceDark
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    `Slack fixture must not be fullSourceDark (got ${dark.darkPreviewMode})`);
+  // Should not be orange (primary)
+  assert(dark.canvas !== "#611f69", "Slack fixture dark canvas must NOT be brand purple");
+}
+
+// ── Spotify fixture: explicit dark canvas → fullSourceDark ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#ffffff'",
+    "  ink: '#181818'",
+    "  primary: '#1ed760'",
+    "  surface-dark: '#121212'",
+    "  on-dark: '#ffffff'",
+    "  elevated-dark: '#282828'",
+    "  card-dark: '#181818'",
+    "  text-on-dark: '#b3b3b3'",
+    "---",
+    "## Overview",
+    "Music streaming with dark near-black base canvas.",
+  ].join("\n");
+  const board = buildBoard("spotify-real", "Spotify", "Spotify fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  // surface-dark without global dark canvas key → NOT fullSourceDark unless global canvas exists
+  assert(dark.darkPreviewMode !== "fullSourceDark",
+    `Spotify fixture (no global canvas key) must not be fullSourceDark (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas !== "#1ed760", "Spotify fixture dark canvas must NOT be green");
+}
+
+// ── Wise fixture: explicit canvas-dark → fullSourceDark ──
+{
+  const content = [
+    "---",
+    "colors:",
+    "  canvas: '#f5f7fa'",
+    "  ink: '#252c3b'",
+    "  primary: '#0e1f3d'",
+    "  canvas-dark: '#0e1f3d'",
+    "  on-dark: '#ffffff'",
+    "  surface-dark: '#1a2744'",
+    "  text-on-dark: '#c8ced8'",
+    "---",
+    "## Overview",
+    "Financial services dark theme with deep navy canvas.",
+  ].join("\n");
+  const board = buildBoard("wise-real", "Wise", "Wise fixture", content);
+  const dark = deriveDarkThemeTokens(board);
+
+  assert(dark.darkPreviewMode === "fullSourceDark",
+    `Wise fixture must be fullSourceDark (got ${dark.darkPreviewMode})`);
+  assert(dark.canvas === "#0e1f3d", "Wise fixture dark canvas must be #0e1f3d");
+}
+
 // ── Summary ──
 console.log(`\n  ${passed} passed, ${failed} failed\n`);
 if (failed > 0) process.exit(1);

@@ -2,396 +2,222 @@
 /**
  * audit-design-md-theme-confidence.mjs
  *
- * Audits Design MD board dark theme classification.
- * Reports per-entry evidence and mode assignments.
+ * Run with: npx tsx scripts/audit-design-md-theme-confidence.mjs
  *
- * Since this script runs outside the TS/TSX runtime and we cannot import
- * .ts modules directly, this is a DOCUMENTATION and ANALYSIS script that
- * defines the expected audit patterns and test vectors.
+ * Audits all Design MD fixture entries for dark theme classification,
+ * surface extraction, and rendering confidence.
  *
- * Run the actual classification tests via:
- *   npx tsx src/lib/designMdHtmlGenerator.test.ts
+ * Safe: no network calls, no mutations, deterministic.
  *
- * This file documents the expected audit output format and serves as
- * a reference for the classification rules.
+ * All filesystem operations use built-in Node modules only.
  */
 
-const ENTRIES = [
-  {
-    slug: "apple",
-    title: "Apple",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: #f5f5f7",         // light canvas (globalCanvas)
-      "surface-tile-1: #1d1d1f", // dark tile surface
-      "surface-tile-2: #2d2d2f", // dark tile surface
-      "surface-tile-3: #3d3d3f", // dark tile surface
-      "surface-black: #000000",  // dark black surface
-      "on-dark: #f5f5f7",        // on-dark text
-      "body-on-dark: #f5f5f7",   // on-dark body text
-      "primary-on-dark: #2997ff",// on-dark accent
-      "ink: #1d1d1f",           // light text
-      "global-nav: #000000",     // dark navigation
-      "product-tile-dark: #1d1d1f",   // dark product tile
-      "product-tile-dark-2: #2d2d2f", // dark product tile
-      "product-tile-dark-3: #3d3d3f", // dark product tile
-    ],
-    prose: "Alternating light and dark canvases. Light hero → dark product tile → light utility tile → dark tile → parchment footer.",
-    notes: [
-      "No global dark canvas token → NOT fullSourceDark",
-      "surface-tile-* tokens + surface-black + on-dark text + dark component names",
-      "Prose clearly describes alternating dark/light sections",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "claude",
-    title: "Claude",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: #faf9f5",        // warm cream canvas
-      "surface-dark: #181715",  // single dark surface
-      "on-dark: #faf9f5",       // on-dark text
-      "ink: #141413",           // warm dark ink
-      "surface-soft: #f5f0e8",  // soft surface
-    ],
-    prose: "Warm-canvas editorial interface anchored on a tinted cream canvas.",
-    notes: [
-      "Warm cream canvas → light-first → darkTokenBoard (correct)",
-      "surface-dark exists but alone → insufficient for sectionalSourceDark",
-      "on-dark text exists but surface-dark is component-local, not multiple sections",
-      "Mode stays correct",
-    ],
-  },
-  {
-    slug: "cursor",
-    title: "Cursor",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: #f7f7f4",        // warm cream canvas
-      "primary: #f54e00",       // orange CTA
-      "ink: #26251e",           // warm near-black
-      "surface-card: #ffffff",  // light card surface
-    ],
-    prose: "Warm-cream editorial canvas instead of the typical dark IDE atmosphere.",
-    notes: [
-      "Warm cream canvas + light-first → darkTokenBoard (correct)",
-      "No dark surfaces → NOT sectionalSourceDark",
-      "Mode stays correct",
-    ],
-  },
-  {
-    slug: "airbnb",
-    title: "Airbnb",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: #ffffff",
-      "ink: #222222",
-      "primary: #ff385c",
-    ],
-    prose: "Clean white canvas with vibrant accent.",
-    notes: [
-      "Light design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "binance",
-    title: "Binance",
-    expectedMode: "fullSourceDark",
-    tokens: [
-      "canvas-dark: #0b0e11",
-      "surface-dark: #1e2329",
-      "card-dark: #2b3139",
-      "on-dark: #f5f5f5",
-      "body-on-dark: #eaecef",
-      "yellow: #f0b90b",
-    ],
-    prose: "Dark trading platform.",
-    notes: [
-      "Has canvas-dark + on-dark → fullSourceDark",
-    ],
-  },
-  {
-    slug: "slack",
-    title: "Slack",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: '#ffffff'",
-      "primary: '#611f69'",
-    ],
-    prose: "Light UI with purple brand accent.",
-    notes: [
-      "Light design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "vercel",
-    title: "Vercel",
-    expectedMode: "conservativeDerivedDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#000000'",
-      "primary: '#000000'",
-      "secondary: '#666666'",
-      "surface: '#fafafa'",
-      "border: '#eaeaea'",
-    ],
-    prose: "Minimal black-and-white design.",
-    notes: [
-      "No explicit dark canvas, but neutral palette allows safe derivation",
-      "→ conservativeDerivedDark (correct)",
-    ],
-  },
-  {
-    slug: "warp",
-    title: "Warp",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#fafafa'",
-      "ink: '#111111'",
-      "surface-card: '#ffffff'",
-      "surface-dark: '#1a1a2e'",
-      "terminal-dark: '#0d0d1a'",
-      "on-dark: '#e0e0ff'",
-    ],
-    prose: "Terminal-inspired dark surfaces with light main canvas.",
-    notes: [
-      "No global dark canvas but has dark surfaces + on-dark text",
-      "Terminal dark surfaces → sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "wise",
-    title: "Wise",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#0a1628'",
-      "primary: '#00a86b'",
-    ],
-    prose: "Clean light design.",
-    notes: [
-      "Light design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "kraken",
-    title: "Kraken",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "surface-dark: '#13161a'",
-      "card-dark: '#1e2329'",
-      "on-dark: '#e0e4e8'",
-      "body-on-dark: '#f0f2f5'",
-      "primary-on-dark: '#3182ce'",
-    ],
-    prose: "Dark trading surfaces and cards.",
-    notes: [
-      "No global dark canvas but surface-dark + card-dark + on-dark",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "spotify",
-    title: "Spotify",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#121212'",
-      "surface-dark: '#282828'",
-      "card-dark: '#1e1e1e'",
-      "on-dark: '#ffffff'",
-      "primary: '#1db954'",
-    ],
-    prose: "Dark card surfaces for playlist cards.",
-    notes: [
-      "No global dark canvas but multiple dark surfaces + on-dark",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "tesla",
-    title: "Tesla",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#171a20'",
-      "surface-dark: '#171a20'",
-      "panel-dark: '#2a2d34'",
-      "on-dark: '#ffffff'",
-      "primary-on-dark: '#e82127'",
-    ],
-    prose: "Dark configurator panels on a light page.",
-    notes: [
-      "No global dark canvas but dark panels + on-dark text",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "the-verge",
-    title: "The Verge",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#000000'",
-      "primary: '#196c9b'",
-    ],
-    prose: "Clean editorial design.",
-    notes: [
-      "Light editorial design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "mastercard",
-    title: "Mastercard",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: '#ffffff'",
-      "primary: '#ff5f00'",
-      "secondary: '#000000'",
-    ],
-    prose: "Light brand design.",
-    notes: [
-      "Light design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "bmw-m",
-    title: "BMW M",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "surface-dark: '#1a1c20'",
-      "panel-dark: '#2a2d33'",
-      "card-dark: '#141518'",
-      "on-dark: '#ffffff'",
-      "primary-on-dark: '#0066ff'",
-      "ink: '#1a1c20'",
-    ],
-    prose: "Dark performance section panels on a light page.",
-    notes: [
-      "No global dark canvas but multiple dark surfaces + on-dark",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "shopify",
-    title: "Shopify",
-    expectedMode: "darkTokenBoard",
-    tokens: [
-      "canvas: '#ffffff'",
-      "primary: '#008060'",
-      "ink: '#212326'",
-    ],
-    prose: "Clean commerce design.",
-    notes: [
-      "Light design with no dark evidence → darkTokenBoard (correct)",
-    ],
-  },
-  {
-    slug: "supabase",
-    title: "Supabase",
-    expectedMode: "sectionalSourceDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#111111'",
-      "surface-dark: '#1c1c1c'",
-      "card-dark: '#242424'",
-      "on-dark: '#ededed'",
-      "primary: '#3ecf8e'",
-      "primary-on-dark: '#3ecf8e'",
-    ],
-    prose: "Dark code editor surface and cards.",
-    notes: [
-      "No global dark canvas but dark surfaces + on-dark text",
-      "→ sectionalSourceDark",
-    ],
-  },
-  {
-    slug: "coinbase",
-    title: "Coinbase",
-    expectedMode: "conservativeDerivedDark",
-    tokens: [
-      "canvas: '#ffffff'",
-      "ink: '#050f19'",
-      "primary: '#0052ff'",
-      "surface: '#f6f7f9'",
-      "border: '#e3e8ee'",
-    ],
-    prose: "Clean blue-and-white finance design.",
-    notes: [
-      "No dark surfaces or on-dark text",
-      "Neutral palette allows conservative derived dark",
-      "→ conservativeDerivedDark (correct)",
-    ],
-  },
-];
+import { readFileSync, readdirSync } from "fs";
 
-// ── Report ──
+// ── Fixture directory path ──
+const FIXTURES_DIR = new URL("../src/lib/__fixtures__/design-md", import.meta.url).pathname;
 
-function printLine(char = "─", width = 60) {
-  console.log(char.repeat(width));
+// ── Inline imports (handled via dynamic import for tsx compat) ──
+async function loadModules() {
+  const { buildBoard } = await import("../src/lib/designMdSpecimenBuilder.ts");
+  const { determineDarkPreviewMode } = await import("../src/lib/designMdDarkPreviewPolicy.ts");
+  const { extractDarkSurfaceSet, darkSurfaceSetSummary } = await import("../src/lib/designMdDarkSurfaceSet.ts");
+  const { resolveDarkTokens } = await import("../src/lib/designMdThemeResolver.ts");
+  return { buildBoard, determineDarkPreviewMode, extractDarkSurfaceSet, darkSurfaceSetSummary, resolveDarkTokens };
 }
 
-console.log("\n  Design MD Theme Confidence Audit");
-console.log("  =================================");
-printLine();
-console.log();
+// ─── Helpers ──────────────────────────────────────────────────────────
 
-const byMode = {};
+function classifyShort(mode) {
+  const labels = {
+    fullSourceDark: "FULL",
+    sectionalSourceDark: "SECT",
+    conservativeDerivedDark: "CONS",
+    darkTokenBoard: "BOARD",
+  };
+  return labels[mode] ?? mode;
+}
 
-for (const entry of ENTRIES) {
-  byMode[entry.expectedMode] = byMode[entry.expectedMode] || [];
-  byMode[entry.expectedMode].push(entry.slug);
+function bullet(items) {
+  return items.map((i) => `    - ${i}`).join("\n");
+}
 
-  console.log(`  ${entry.slug.padEnd(20)} → ${entry.expectedMode.padEnd(22)} ${entry.title}`);
-  for (const note of entry.notes) {
-    console.log(`    ${note}`);
+function findFixtureFiles(dir) {
+  try {
+    const entries = readdirSync(dir, { withFileTypes: true });
+    return entries
+      .filter((e) => e.isFile() && e.name.endsWith(".md"))
+      .map((e) => ({ name: e.name.replace(/\.md$/, ""), path: `${dir}/${e.name}` }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  } catch {
+    return [];
   }
-  console.log();
 }
 
-printLine();
-console.log();
+// ─── Main audit ───────────────────────────────────────────────────────
 
-console.log("  By mode:");
-for (const [mode, slugs] of Object.entries(byMode)) {
-  console.log(`    ${mode.padEnd(22)}: ${slugs.join(", ")}`);
+async function main() {
+  const {
+    buildBoard,
+    determineDarkPreviewMode,
+    extractDarkSurfaceSet,
+    darkSurfaceSetSummary,
+    resolveDarkTokens,
+  } = await loadModules();
+
+  const files = findFixtureFiles(FIXTURES_DIR);
+
+  if (files.length === 0) {
+    console.log("No fixture files found in:", FIXTURES_DIR);
+    console.log("Run with src fixtures present.");
+    process.exit(0);
+  }
+
+  const results = [];
+  const warnings = [];
+
+  for (const { name: slug, path: file } of files) {
+    const content = readFileSync(file, "utf-8");
+    const title = slug.charAt(0).toUpperCase() + slug.slice(1);
+
+    const board = buildBoard(slug, title, title, content);
+    const policy = determineDarkPreviewMode(board);
+    const surfaceSet = extractDarkSurfaceSet(board);
+    const darkTokens = resolveDarkTokens(board);
+
+    const entry = {
+      slug,
+      title,
+      darkPreviewMode: policy.mode,
+      darkPreviewReason: policy.reason,
+      darkPreviewEvidence: policy.evidence,
+      darkPreviewWarnings: policy.warnings,
+      surfaceSetMode: surfaceSet.mode,
+      globalCanvas: surfaceSet.pageCanvas?.key ?? null,
+      primarySection: surfaceSet.primarySectionSurface?.key ?? null,
+      secondarySection: surfaceSet.secondarySectionSurface?.key ?? null,
+      tertiarySection: surfaceSet.tertiarySectionSurface?.key ?? null,
+      blackSurface: surfaceSet.blackSurface?.key ?? null,
+      onDarkText: surfaceSet.onDarkText?.key ?? null,
+      linkOnDark: surfaceSet.linkOnDark?.key ?? null,
+      surfaceCount: surfaceSet.allSurfaces.length,
+      textTokenCount: surfaceSet.allTextTokens.length,
+      surfaceSetWarnings: surfaceSet.warnings,
+      surfaceSetSummary: darkSurfaceSetSummary(surfaceSet),
+      selectedCanvas: darkTokens.canvas,
+      selectedSurface: darkTokens.surface,
+      selectedText: darkTokens.text,
+    };
+
+    results.push(entry);
+
+    // Collect warnings
+    if (surfaceSet.mode === "sectional" && surfaceSet.allSurfaces.length < 2) {
+      warnings.push(`${slug}: sectional mode but only ${surfaceSet.allSurfaces.length} surface(s)`);
+    }
+  }
+
+  // ─── Report ─────────────────────────────────────────────────────────
+
+  console.log("\n╔══════════════════════════════════════════════════════════╗");
+  console.log("║        Design MD Theme Confidence Audit                 ║");
+  console.log("╚══════════════════════════════════════════════════════════╝\n");
+
+  // Per-entry detail
+  for (const entry of results) {
+    const short = classifyShort(entry.darkPreviewMode);
+    const summary = entry.surfaceSetSummary;
+    console.log(`  ${short}  ${entry.slug.padEnd(16)} ${entry.title}`);
+    console.log(`       Mode: ${entry.darkPreviewMode}`);
+    console.log(`       Surface set: ${summary}`);
+    console.log(`       Canvas: ${entry.selectedCanvas}  Surface: ${entry.selectedSurface}  Text: ${entry.selectedText}`);
+    if (entry.darkPreviewEvidence.length > 0) {
+      console.log(`       Evidence:\n${bullet(entry.darkPreviewEvidence)}`);
+    }
+    console.log("");
+  }
+
+  // ─── Mode summary ───────────────────────────────────────────────────
+
+  console.log("── Mode summary ──\n");
+
+  const modes = {};
+  for (const entry of results) {
+    const m = entry.darkPreviewMode;
+    if (!modes[m]) modes[m] = [];
+    modes[m].push(entry.slug);
+  }
+
+  for (const [mode, slugs] of Object.entries(modes).sort()) {
+    console.log(`  ${classifyShort(mode)} (${mode}): ${slugs.join(", ")}`);
+  }
+
+  console.log("");
+
+  // ─── Cross-checks ───────────────────────────────────────────────────
+
+  console.log("── Cross-checks ──\n");
+
+  const sectionalEntries = results.filter((r) => r.darkPreviewMode === "sectionalSourceDark");
+  if (sectionalEntries.length > 0) {
+    console.log("  ✓ Sectional dark entries:");
+    for (const r of sectionalEntries) {
+      const surfaces = [r.primarySection, r.secondarySection, r.tertiarySection, r.blackSurface]
+        .filter(Boolean).join(", ");
+      console.log(`    ${r.slug}: ${surfaces}`);
+    }
+  }
+
+  const fullEntries = results.filter((r) => r.darkPreviewMode === "fullSourceDark");
+  if (fullEntries.length > 0) {
+    console.log("  ✓ Full dark entries:");
+    for (const r of fullEntries) {
+      console.log(`    ${r.slug}: canvas="${r.globalCanvas}"`);
+    }
+  }
+
+  const boardEntries = results.filter((r) => r.darkPreviewMode === "darkTokenBoard");
+  if (boardEntries.length > 0) {
+    console.log("  📋 Token board entries:");
+    for (const r of boardEntries) {
+      const reason = r.darkPreviewReason.length > 80
+        ? r.darkPreviewReason.slice(0, 77) + "..."
+        : r.darkPreviewReason;
+      console.log(`    ${r.slug}: ${reason}`);
+    }
+  }
+
+  // ─── Warnings ───────────────────────────────────────────────────────
+
+  if (warnings.length > 0) {
+    console.log("\n── Potential issues ──\n");
+    for (const w of warnings) {
+      console.log(`  ⚠ ${w}`);
+    }
+    console.log("");
+  }
+
+  // ─── Final stats ────────────────────────────────────────────────────
+
+  console.log(`── Stats ──\n`);
+  console.log(`  ${results.length} entries audited`);
+  console.log(`  ${sectionalEntries.length} sectional source dark`);
+  console.log(`  ${fullEntries.length} full source dark`);
+  console.log(`  ${results.filter((r) => r.darkPreviewMode === "conservativeDerivedDark").length} conservative derived dark`);
+  console.log(`  ${boardEntries.length} dark token board`);
+  console.log(`  ${warnings.length} warnings`);
+  console.log("");
+
+  // Exit with status if there are warnings about classification
+  const criticalWarnings = warnings.filter((w) =>
+    w.includes("sectional mode but only")
+  );
+  if (criticalWarnings.length > 0) {
+    process.exit(1);
+  }
 }
 
-console.log();
-printLine();
-console.log();
-
-// Summary counts
-const fullSourceDark = (byMode["fullSourceDark"] || []).length;
-const sectionalSourceDark = (byMode["sectionalSourceDark"] || []).length;
-const conservativeDerivedDark = (byMode["conservativeDerivedDark"] || []).length;
-const darkTokenBoard = (byMode["darkTokenBoard"] || []).length;
-
-console.log(`  Summary:`);
-console.log(`    fullSourceDark:         ${fullSourceDark} entries`);
-console.log(`    sectionalSourceDark:    ${sectionalSourceDark} entries`);
-console.log(`    conservativeDerivedDark: ${conservativeDerivedDark} entries`);
-console.log(`    darkTokenBoard:         ${darkTokenBoard} entries`);
-console.log(`    Total:                  ${ENTRIES.length} entries`);
-console.log();
-
-// Warnings
-console.log("  Warnings by category:");
-const warnings = {
-  noGlobalCanvas: ENTRIES.filter((e) => e.expectedMode !== "fullSourceDark"),
-  sectionalSelected: ENTRIES.filter((e) => e.expectedMode === "sectionalSourceDark"),
-  noOnDark: ENTRIES.filter((e) => !e.tokens.some((t) => t.includes("on-dark") || t.includes("on-dark"))),
-};
-console.log(`    No global dark canvas:      ${warnings.noGlobalCanvas.length} entries`);
-console.log(`    Sectional dark selected:    ${warnings.sectionalSelected.length} entries`);
-console.log(`    No on-dark text:            ${warnings.noOnDark.length} entries`);
-console.log();
-
-printLine();
-console.log("\n  NOTE: This is a documentation/analysis script.");
-console.log("  Run actual classification via:");
-console.log("    npx tsx src/lib/designMdHtmlGenerator.test.ts");
-console.log();
+main().catch((err) => {
+  console.error("Audit failed:", err);
+  process.exit(1);
+});

@@ -19,6 +19,10 @@ import {
   determineDarkPreviewMode,
   type DarkPreviewMode,
 } from "./designMdDarkPreviewPolicy";
+import {
+  extractDarkSurfaceSet,
+  type DarkSurfaceSet,
+} from "./designMdDarkSurfaceSet";
 
 type ThemeColorCandidate = {
   key: string;
@@ -63,6 +67,7 @@ export interface ThemeTokens {
   darkThemeSource?: DarkThemeSource;
   darkPreviewMode?: DarkPreviewMode;
   darkPreviewNote?: string;
+  darkSurfaceSet?: DarkSurfaceSet;
 }
 
 // ─── Private color/metric helpers ────────────────────────────────
@@ -323,6 +328,7 @@ interface DarkThemeSelection {
   muted: ThemeTokenResolve;
   darkPreviewMode: DarkPreviewMode;
   darkPreviewNote: string;
+  darkSurfaceSet?: DarkSurfaceSet;
 }
 
 function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPreviewMode: DarkPreviewMode; darkPreviewNote: string } {
@@ -405,6 +411,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
       muted: { value: "#8b909a", source: "fallback", note: "stable neutral muted (dark token board)" },
       darkPreviewMode: darkPolicy.mode,
       darkPreviewNote: darkPolicy.reason,
+      darkSurfaceSet: extractDarkSurfaceSet(board),
     };
   }
 
@@ -414,6 +421,9 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
   // Surface uses source-backed dark section surfaces when available.
   // Text uses on-dark/body-on-dark/primary-on-dark tokens.
   if (darkPolicy.mode === "sectionalSourceDark") {
+    // Extract the full dark surface set for sectional rendering
+    const darkSurfaceSet = extractDarkSurfaceSet(board);
+
     // Canvas: conservative derivation from palette neutrals — NOT from section surfaces
     const canvasResolve = resolveDarkToken(
       allColors,
@@ -500,6 +510,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
       muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
       darkPreviewMode: darkPolicy.mode,
       darkPreviewNote: darkPolicy.reason,
+      darkSurfaceSet,
     };
   }
 
@@ -585,6 +596,8 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     softWarm ? "#46433d" : "#2a2e35",
   );
 
+  const fullSurfaceSet = extractDarkSurfaceSet(board);
+
   return {
     canvas: canvasResolve,
     surface: surfaceResolve,
@@ -593,6 +606,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
     darkPreviewMode: darkPolicy.mode,
     darkPreviewNote: darkPolicy.reason,
+    darkSurfaceSet: fullSurfaceSet,
   };
 }
 
@@ -723,5 +737,6 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
     darkThemeSource,
     darkPreviewMode: darkTheme.darkPreviewMode,
     darkPreviewNote: darkTheme.darkPreviewNote,
+    darkSurfaceSet: darkTheme.darkSurfaceSet,
   };
 }
