@@ -33,6 +33,18 @@ pub struct OpenCodeRuntimeHealth {
     pub extra_installed_agent_count: usize,
     pub agent_mismatches: Vec<OpenCodeAgentMismatch>,
     pub warnings: Vec<String>,
+    // New TUI fields
+    pub template_tui_path: String,
+    pub installed_tui_path: String,
+    pub tui_status: String,
+    // New generated snapshot fields
+    pub generated_snapshot_base_path: String,
+    pub generated_snapshot_policy_path: String,
+    pub generated_snapshot_path: String,
+    pub generated_snapshot_status: String,
+    // Explainers
+    pub summary: String,
+    pub next_action: String,
 }
 
 /// Extract a non-sensitive field from a JSON value at a dotted path.
@@ -100,8 +112,22 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     let agents_source_dir = workspace_root.join("agents");
     let agents_target_dir = home_dir.join(".config/opencode/agents");
 
+    // TUI paths
+    let template_tui_path = workspace_root.join("templates/tui.json");
+    let installed_tui_path = home_dir.join(".config/opencode/tui.json");
+
+    // Generated snapshot paths
+    let generated_snapshot_base_path = workspace_root.join("templates/opencode.base.json");
+    let generated_snapshot_policy_path = workspace_root.join("templates/opencode.policy.json");
+    let generated_snapshot_path = workspace_root.join("templates/opencode.json");
+
     let template_config_path_str = template_config_path.to_string_lossy().into_owned();
     let installed_config_path_str = installed_config_path.to_string_lossy().into_owned();
+    let template_tui_path_str = template_tui_path.to_string_lossy().into_owned();
+    let installed_tui_path_str = installed_tui_path.to_string_lossy().into_owned();
+    let generated_snapshot_base_path_str = generated_snapshot_base_path.to_string_lossy().into_owned();
+    let generated_snapshot_policy_path_str = generated_snapshot_policy_path.to_string_lossy().into_owned();
+    let generated_snapshot_path_str = generated_snapshot_path.to_string_lossy().into_owned();
 
     let mut checks: Vec<OpenCodeRuntimeCheck> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();
@@ -345,6 +371,210 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         // One parsed, one didn't — already marked fail above
     }
 
+    // ── TUI config checks ──
+    let template_tui_exists = template_tui_path.is_file();
+    let installed_tui_exists = installed_tui_path.is_file();
+
+    let template_tui_valid = if template_tui_exists {
+        match std::fs::read_to_string(&template_tui_path) {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
+    let installed_tui_valid = if installed_tui_exists {
+        match std::fs::read_to_string(&installed_tui_path) {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "template_tui_config_exists".into(),
+        label: "Template TUI config exists".into(),
+        status: if template_tui_exists && template_tui_valid {
+            "pass".into()
+        } else {
+            "fail".into()
+        },
+        detail: if template_tui_exists && template_tui_valid {
+            template_tui_path_str.clone()
+        } else if template_tui_exists {
+            format!("invalid JSON: {}", template_tui_path_str)
+        } else {
+            format!("not found: {}", template_tui_path_str)
+        },
+    });
+    if !template_tui_exists || !template_tui_valid {
+        has_fail = true;
+    }
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "installed_tui_config_exists".into(),
+        label: "Installed TUI config exists".into(),
+        status: if installed_tui_exists && installed_tui_valid {
+            "pass".into()
+        } else {
+            "fail".into()
+        },
+        detail: if installed_tui_exists && installed_tui_valid {
+            installed_tui_path_str.clone()
+        } else if installed_tui_exists {
+            format!("invalid JSON: {}", installed_tui_path_str)
+        } else {
+            format!("not found: {}", installed_tui_path_str)
+        },
+    });
+    if !installed_tui_exists || !installed_tui_valid {
+        has_fail = true;
+    }
+
+    let tui_synced = template_tui_exists
+        && installed_tui_exists
+        && template_tui_valid
+        && installed_tui_valid
+        && file_eq(&template_tui_path, &installed_tui_path);
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "tui_configs_match".into(),
+        label: "Installed TUI matches template".into(),
+        status: if tui_synced {
+            "pass".into()
+        } else if template_tui_exists && installed_tui_exists {
+            "warn".into()
+        } else {
+            "fail".into()
+        },
+        detail: if tui_synced {
+            "exact match".into()
+        } else if template_tui_exists && installed_tui_exists {
+            "installed TUI differs from template. Run diff before sync.".into()
+        } else if !template_tui_exists {
+            "template TUI config not found".into()
+        } else {
+            "installed TUI config not found".into()
+        },
+    });
+    if !tui_synced {
+        has_warn = true;
+    }
+
+    // Derive tui_status from checks
+    let tui_status = if tui_synced {
+        "synced".into()
+    } else if !template_tui_exists && !installed_tui_exists {
+        "missing".into()
+    } else if template_tui_exists && installed_tui_exists {
+        "diverged".into()
+    } else {
+        "missing".into()
+    };
+
+    // ── Generated snapshot checks ──
+    let base_source_exists = generated_snapshot_base_path.is_file();
+    let policy_source_exists = generated_snapshot_policy_path.is_file();
+    let snapshot_exists = generated_snapshot_path.is_file();
+
+    let base_source_valid = if base_source_exists {
+        match std::fs::read_to_string(&generated_snapshot_base_path) {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
+    let policy_source_valid = if policy_source_exists {
+        match std::fs::read_to_string(&generated_snapshot_policy_path) {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
+    let snapshot_valid = if snapshot_exists {
+        match std::fs::read_to_string(&generated_snapshot_path) {
+            Ok(content) => serde_json::from_str::<serde_json::Value>(&content).is_ok(),
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "generated_snapshot_source_base".into(),
+        label: "Snapshot source base.json".into(),
+        status: if base_source_exists && base_source_valid {
+            "pass".into()
+        } else {
+            "fail".into()
+        },
+        detail: if base_source_exists && base_source_valid {
+            generated_snapshot_base_path_str.clone()
+        } else if base_source_exists {
+            "invalid JSON".into()
+        } else {
+            format!("not found: {}", generated_snapshot_base_path_str)
+        },
+    });
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "generated_snapshot_source_policy".into(),
+        label: "Snapshot source policy.json".into(),
+        status: if policy_source_exists && policy_source_valid {
+            "pass".into()
+        } else {
+            "fail".into()
+        },
+        detail: if policy_source_exists && policy_source_valid {
+            generated_snapshot_policy_path_str.clone()
+        } else if policy_source_exists {
+            "invalid JSON".into()
+        } else {
+            format!("not found: {}", generated_snapshot_policy_path_str)
+        },
+    });
+
+    checks.push(OpenCodeRuntimeCheck {
+        id: "generated_snapshot_exists".into(),
+        label: "Generated opencode.json snapshot".into(),
+        status: if snapshot_exists && snapshot_valid {
+            "pass".into()
+        } else {
+            "fail".into()
+        },
+        detail: if snapshot_exists && snapshot_valid {
+            generated_snapshot_path_str.clone()
+        } else if snapshot_exists {
+            "invalid JSON".into()
+        } else {
+            format!("not found: {}", generated_snapshot_path_str)
+        },
+    });
+
+    // Conservative generated snapshot status:
+    // - "current": source files and snapshot exist and are valid JSON
+    // - "missing": any required file missing or invalid
+    // - "unknown": not enough workspace state
+    let generated_snapshot_status = if base_source_exists
+        && base_source_valid
+        && policy_source_exists
+        && policy_source_valid
+        && snapshot_exists
+        && snapshot_valid
+    {
+        "current".into()
+    } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
+        "unknown".into()
+    } else {
+        "missing".into()
+    };
+
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);
     let bundled_agent_count = bundled_agents.len();
@@ -431,15 +661,35 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         has_warn = true;
     }
 
-    // Determine overall status
-    let status = if has_fail {
+    // Determine overall status (now includes TUI)
+    let status: String = if has_fail {
         "missing".into()
     } else if has_warn {
         "diverged".into()
-    } else if bundled_agent_count == 0 && !template_exists {
+    } else if bundled_agent_count == 0 && !template_exists && !template_tui_exists {
         "unknown".into()
     } else {
         "synced".into()
+    };
+
+    // Compute summary and next action from overall status
+    let (summary, next_action) = match status.as_str() {
+        "synced" => (
+            "OpenCode runtime matches the bundled workspace.".to_string(),
+            "No runtime action needed.".to_string(),
+        ),
+        "diverged" => (
+            "Runtime differs from bundled templates. Review diff before applying.".to_string(),
+            "Run diff before apply.".to_string(),
+        ),
+        "missing" => (
+            "OpenCode runtime is missing required files.".to_string(),
+            "Install/sync required.".to_string(),
+        ),
+        _ => (
+            "Insufficient workspace state to determine runtime status.".to_string(),
+            "Check workspace configuration.".to_string(),
+        ),
     };
 
     OpenCodeRuntimeHealth {
@@ -457,6 +707,15 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         extra_installed_agent_count,
         agent_mismatches,
         warnings,
+        template_tui_path: template_tui_path_str,
+        installed_tui_path: installed_tui_path_str,
+        tui_status,
+        generated_snapshot_base_path: generated_snapshot_base_path_str,
+        generated_snapshot_policy_path: generated_snapshot_policy_path_str,
+        generated_snapshot_path: generated_snapshot_path_str,
+        generated_snapshot_status,
+        summary,
+        next_action,
     }
 }
 
@@ -499,6 +758,11 @@ mod tests {
         let _ = fs::remove_dir_all(root);
     }
 
+    fn add_tui(ws: &Path, home: &Path) {
+        write_file(ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
+    }
+
     fn setup_synced_workspace(name: &str) -> (PathBuf, PathBuf) {
         let ws = temp_root(&format!("{name}-ws"));
         let home = temp_root(&format!("{name}-home"));
@@ -508,6 +772,17 @@ mod tests {
             "templates/opencode.json",
             r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
         );
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(
+            &ws,
+            "templates/opencode.base.json",
+            r#"{"model":"test"}"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow","deny":[]}}"#,
+        );
         write_file(&ws, "agents/architect.md", "# architect");
         write_file(&ws, "agents/scout.md", "# scout");
 
@@ -515,6 +790,11 @@ mod tests {
             &home,
             ".config/opencode/opencode.json",
             r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
+        );
+        write_file(
+            &home,
+            ".config/opencode/tui.json",
+            r#"{"theme":"system"}"#,
         );
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/agents/scout.md", "# scout");
@@ -542,6 +822,10 @@ mod tests {
         assert_eq!(health.installed_bundled_agent_count, 2);
         assert_eq!(health.extra_installed_agent_count, 0);
         assert!(health.agent_mismatches.is_empty());
+        assert_eq!(health.tui_status, "synced");
+        assert_eq!(health.generated_snapshot_status, "current");
+        assert!(health.summary.contains("matches"));
+        assert_eq!(health.next_action, "No runtime action needed.");
     }
 
     #[test]
@@ -551,6 +835,7 @@ mod tests {
 
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "agents/architect.md", "# architect");
+        add_tui(&ws, &home);
 
         // No installed config
         let health = compute_health(&ws, &home);
@@ -568,6 +853,7 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/opencode.json", "not json {{{");
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -590,6 +876,7 @@ mod tests {
         write_file(&ws, "templates/opencode.json", "bad json {{{");
         write_file(&ws, "agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -613,6 +900,7 @@ mod tests {
         write_file(&ws, "agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/opencode.json", r#"{"version":1}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -638,6 +926,7 @@ mod tests {
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
         // scout.md missing from installed
 
         let health = compute_health(&ws, &home);
@@ -664,6 +953,7 @@ mod tests {
             ".config/opencode/agents/architect.md",
             "# architect v1",
         );
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -686,6 +976,7 @@ mod tests {
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/agents/custom-agent.md", "# custom");
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -717,6 +1008,7 @@ mod tests {
             r#"{"provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
         );
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -736,6 +1028,7 @@ mod tests {
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -755,5 +1048,239 @@ mod tests {
         assert_eq!(out_check.status, "warn");
         assert_eq!(health.qwen_context, None);
         assert_eq!(health.qwen_output, None);
+    }
+
+    // ── New tests for TUI config ──
+
+    #[test]
+    fn test_tui_missing_installed_linked_status() {
+        let ws = temp_root("tui-miss-ws");
+        let home = temp_root("tui-miss-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        // No installed tui.json
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        // Installed TUI missing => has_fail => "missing"
+        assert_eq!(health.status, "missing");
+        assert_eq!(health.tui_status, "missing");
+        let check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "installed_tui_config_exists")
+            .unwrap();
+        assert_eq!(check.status, "fail");
+    }
+
+    #[test]
+    fn test_tui_diverged_when_differs() {
+        let ws = temp_root("tui-div-ws");
+        let home = temp_root("tui-div-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"dark"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "diverged");
+        assert_eq!(health.tui_status, "diverged");
+        let check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "tui_configs_match")
+            .unwrap();
+        assert_eq!(check.status, "warn");
+    }
+
+    #[test]
+    fn test_tui_invalid_installed_json() {
+        let ws = temp_root("tui-inv-ws");
+        let home = temp_root("tui-inv-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", "not json {{{");
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "missing");
+        let check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "installed_tui_config_exists")
+            .unwrap();
+        assert_eq!(check.status, "fail");
+    }
+
+    // ── New tests for generated snapshot ──
+
+    #[test]
+    fn test_generated_snapshot_current() {
+        let ws = temp_root("gen-cur-ws");
+        let home = temp_root("gen-cur-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.generated_snapshot_status, "current");
+    }
+
+    #[test]
+    fn test_generated_snapshot_missing_source_does_not_panic() {
+        let ws = temp_root("gen-no-src-ws");
+        let home = temp_root("gen-no-src-home");
+
+        // No opencode.base.json or opencode.policy.json
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.generated_snapshot_status, "missing");
+        // Should not panic — status is still computed
+        assert_eq!(health.status, "synced"); // Missing snapshot doesn't affect overall status
+    }
+
+    // ── New tests for summary and next_action ──
+
+    #[test]
+    fn test_summary_synced() {
+        let (ws, home) = setup_synced_workspace("sum-synced");
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.summary, "OpenCode runtime matches the bundled workspace.");
+        assert_eq!(health.next_action, "No runtime action needed.");
+    }
+
+    #[test]
+    fn test_summary_diverged() {
+        let ws = temp_root("sum-div-ws");
+        let home = temp_root("sum-div-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{"version":2}"#);
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{"version":1}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "diverged");
+        assert_eq!(
+            health.summary,
+            "Runtime differs from bundled templates. Review diff before applying."
+        );
+        assert_eq!(health.next_action, "Run diff before apply.");
+    }
+
+    #[test]
+    fn test_summary_missing() {
+        let ws = temp_root("sum-miss-ws");
+        let home = temp_root("sum-miss-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        // No installed files at all
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "missing");
+        assert_eq!(
+            health.summary,
+            "OpenCode runtime is missing required files."
+        );
+        assert_eq!(health.next_action, "Install/sync required.");
+    }
+
+    #[test]
+    fn test_summary_extra_agents_still_informational() {
+        let ws = temp_root("extra-sum-ws");
+        let home = temp_root("extra-sum-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        write_file(&home, ".config/opencode/agents/custom.md", "# custom");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "synced");
+        assert_eq!(health.extra_installed_agent_count, 1);
+        assert_eq!(health.summary, "OpenCode runtime matches the bundled workspace.");
+        assert_eq!(health.next_action, "No runtime action needed.");
+    }
+
+    #[test]
+    fn test_tui_synced_produces_expected_status() {
+        let ws = temp_root("tui-synced-ws");
+        let home = temp_root("tui-synced-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.tui_status, "synced");
     }
 }

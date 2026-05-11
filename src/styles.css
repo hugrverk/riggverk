@@ -4586,46 +4586,86 @@ html, body, #root {
   border-color: var(--border);
 }
 
-/* ── OpenCode Runtime compact metrics ── */
+/* ── OpenCode Runtime compact details ── */
 
-.ws-runtime-metrics {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  margin-bottom: 6px;
+.ws-runtime-summary {
   font-size: 11px;
-  align-items: baseline;
-}
-
-.ws-runtime-metric {
-  display: inline-flex;
-  align-items: baseline;
-  gap: 4px;
-}
-
-.ws-runtime-metric-label {
   color: var(--text-muted);
+  margin-bottom: 8px;
+  line-height: 1.4;
 }
 
-.ws-runtime-metric-value {
+.ws-runtime-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-bottom: 8px;
+}
+
+.ws-runtime-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.6;
+}
+
+.ws-runtime-row-label {
+  color: var(--text-muted);
+  min-width: 56px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+}
+
+.ws-runtime-row-value {
   color: var(--text);
-  font-family: var(--font);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-.ws-runtime-metric-extra .ws-runtime-metric-value {
+.ws-runtime-row-detail {
+  color: var(--text-muted);
+  font-size: 10px;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ws-runtime-models {
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+  padding: 4px 0;
+  border-top: 1px solid var(--border);
+  line-height: 1.5;
+}
+
+.ws-runtime-models-label {
+  color: var(--text-muted);
+  opacity: 0.7;
+}
+
+.ws-runtime-next-action {
+  font-size: 10px;
+  margin-bottom: 6px;
+  line-height: 1.4;
+}
+
+.ws-runtime-next-action-ok {
   color: var(--accent);
 }
 
-.ws-runtime-warning {
-  font-size: 10px;
+.ws-runtime-next-action-warn {
   color: var(--warn);
-  line-height: 1.3;
-  margin-bottom: 6px;
 }
 
-.ws-runtime-metrics:last-child,
-.ws-runtime-warning:last-child {
-  margin-bottom: 0;
+.ws-runtime-next-action-fail {
+  color: var(--fail);
 }
 
 .ws-card-targets {

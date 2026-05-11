@@ -211,6 +211,18 @@ export interface OpenCodeRuntimeHealth {
   extra_installed_agent_count: number;
   agent_mismatches: OpenCodeAgentMismatch[];
   warnings: string[];
+  // TUI config
+  template_tui_path: string;
+  installed_tui_path: string;
+  tui_status: string;
+  // Generated snapshot
+  generated_snapshot_base_path: string;
+  generated_snapshot_policy_path: string;
+  generated_snapshot_path: string;
+  generated_snapshot_status: string;
+  // Explainers
+  summary: string;
+  next_action: string;
 }
 
 export interface DesignMdCatalogStatus {

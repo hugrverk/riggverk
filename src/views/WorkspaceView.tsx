@@ -721,38 +721,122 @@ export function WorkspaceView({
 
               {opencodeRuntimeHealth && (
                 <>
-                  <div className="ws-runtime-metrics">
-                    <span className="ws-runtime-metric">
-                      <span className="ws-runtime-metric-label">Config</span>
-                      <span className="ws-runtime-metric-value">{runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}</span>
-                    </span>
-                    <span className="ws-runtime-metric">
-                      <span className="ws-runtime-metric-label">Agents</span>
-                      <span className="ws-runtime-metric-value">{opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled</span>
-                    </span>
-                    {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
-                      <span className="ws-runtime-metric ws-runtime-metric-extra">
-                        <span className="ws-runtime-metric-value">+{opencodeRuntimeHealth.extra_installed_agent_count} extra</span>
+                  {/* Summary line */}
+                  <div className="ws-runtime-summary" aria-live="polite">
+                    {opencodeRuntimeHealth.summary}
+                  </div>
+
+                  {/* Runtime detail rows */}
+                  <div className="ws-runtime-rows">
+                    {/* Config row */}
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Config</span>
+                      <span className={`ws-dot ${opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "pass" ? "ws-color-ok" : opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "warn" ? "ws-color-warn" : "ws-color-dim"}`}>
+                        {"\u25CF"}
                       </span>
+                      <span className="ws-runtime-row-value">
+                        {runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}
+                      </span>
+                      <span className="ws-runtime-row-detail">
+                        {opencodeRuntimeHealth.model ? `model ${opencodeRuntimeHealth.model}` : ""}
+                      </span>
+                    </div>
+
+                    {/* TUI row */}
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">TUI</span>
+                      <span className={`ws-dot ${opencodeRuntimeHealth.tui_status === "synced" ? "ws-color-ok" : opencodeRuntimeHealth.tui_status === "diverged" ? "ws-color-warn" : opencodeRuntimeHealth.tui_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
+                        {"\u25CF"}
+                      </span>
+                      <span className="ws-runtime-row-value">
+                        {runtimeChipLabel(opencodeRuntimeHealth.tui_status).toLowerCase()}
+                      </span>
+                      <span className="ws-runtime-row-detail">
+                        {opencodeRuntimeHealth.tui_status === "synced" ? "theme system" : ""}
+                      </span>
+                    </div>
+
+                    {/* Agents row */}
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Agents</span>
+                      <span className={`ws-dot ${opencodeRuntimeHealth.agent_mismatches.length === 0 ? "ws-color-ok" : "ws-color-warn"}`}>
+                        {"\u25CF"}
+                      </span>
+                      <span className="ws-runtime-row-value">
+                        {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled
+                      </span>
+                      <span className="ws-runtime-row-detail">
+                        {opencodeRuntimeHealth.agent_mismatches.length > 0
+                          ? `${opencodeRuntimeHealth.agent_mismatches.length} diverged`
+                          : "all synced"}
+                        {opencodeRuntimeHealth.extra_installed_agent_count > 0 && (
+                          <> (+{opencodeRuntimeHealth.extra_installed_agent_count} extra)</>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Generated snapshot row */}
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Gen</span>
+                      <span className={`ws-dot ${opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok" : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
+                        {"\u25CF"}
+                      </span>
+                      <span className="ws-runtime-row-value">
+                        {opencodeRuntimeHealth.generated_snapshot_status}
+                      </span>
+                      <span className="ws-runtime-row-detail">
+                        {opencodeRuntimeHealth.generated_snapshot_status === "current"
+                          ? "source + snapshot valid"
+                          : "source or snapshot missing"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Models summary */}
+                  <div className="ws-runtime-models">
+                    <span className="ws-runtime-models-label">Model:</span>{" "}
+                    {opencodeRuntimeHealth.default_agent || "\u2014"}
+                    {" | "}
+                    {opencodeRuntimeHealth.model || "\u2014"}
+                    {" | "}
+                    {opencodeRuntimeHealth.small_model
+                      ? opencodeRuntimeHealth.small_model.replace(/^opencode-go\//, "")
+                      : "\u2014"}
+                    {(opencodeRuntimeHealth.qwen_context || opencodeRuntimeHealth.qwen_output) && (
+                      <>
+                        {" | "}qwen3.6-plus: context{" "}
+                        {opencodeRuntimeHealth.qwen_context
+                          ? opencodeRuntimeHealth.qwen_context.toLocaleString()
+                          : "\u2014"}
+                        , output{" "}
+                        {opencodeRuntimeHealth.qwen_output
+                          ? opencodeRuntimeHealth.qwen_output.toLocaleString()
+                          : "\u2014"}
+                      </>
                     )}
                   </div>
 
+                  {/* Warnings for agent mismatches */}
                   {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
-                    <div className="ws-runtime-warning">
-                      {opencodeRuntimeHealth.agent_mismatches[0].detail}
-                      {opencodeRuntimeHealth.agent_mismatches.length > 1 && (
-                        <> +{opencodeRuntimeHealth.agent_mismatches.length - 1} more</>
-                      )}
+                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
+                      {opencodeRuntimeHealth.agent_mismatches.length} agent(s) diverged or missing.
                     </div>
                   )}
+
+                  {/* Warnings for extra agents */}
                   {opencodeRuntimeHealth.warnings.length > 0 && opencodeRuntimeHealth.agent_mismatches.length === 0 && (
-                    <div className="ws-runtime-warning">
+                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
                       {opencodeRuntimeHealth.warnings[0]}
                       {opencodeRuntimeHealth.warnings.length > 1 && (
-                        <> +{opencodeRuntimeHealth.warnings.length - 1} more</>
+                        <> (+{opencodeRuntimeHealth.warnings.length - 1} more)</>
                       )}
                     </div>
                   )}
+
+                  {/* Next action */}
+                  <div className={`ws-runtime-next-action ws-runtime-next-action-${opencodeRuntimeHealth.status === "synced" ? "ok" : opencodeRuntimeHealth.status === "diverged" ? "warn" : opencodeRuntimeHealth.status === "missing" ? "fail" : "ok"}`}>
+                    {opencodeRuntimeHealth.next_action}
+                  </div>
 
                   <div className="ws-section-actions">
                     <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
