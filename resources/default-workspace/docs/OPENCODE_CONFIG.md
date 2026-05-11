@@ -40,13 +40,17 @@ The default template is conservative:
 - `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
 - `npm run dev` and other dev server commands are ask-gated in the public starter template
 
+## TUI config
+
+`templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It is synced by the same install script as the main config.
+
 ## Sync workflow
 
-1. Review the template at `templates/opencode.json`
-2. Run `--diff` to see differences between the template and your current config
-3. Run `--apply` to write the template to `~/.config/opencode/opencode.json`
+1. Review the template at `templates/opencode.json` and `templates/tui.json`
+2. Run `--diff` to see differences between the templates and your current configs
+3. Run `--apply` to write the templates to `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`
 
-The sync also installs agent files to `~/.config/opencode/agents/*.md`. Extra existing runtime agent files in that directory are not deleted.
+The sync validates both JSON files before applying. It also installs agent files to `~/.config/opencode/agents/*.md`. Extra existing runtime agent files in that directory are not deleted.
 
 A backup is created before overwriting if the current config or agent files differ.
 

@@ -74,6 +74,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             &[
                 "templates/global-agent-rules.md",
                 "templates/opencode.json",
+                "templates/tui.json",
                 "templates/prompts/standard-prompt.md",
                 "templates/prompts/masterprompt.md",
             ],
@@ -356,6 +357,7 @@ mod tests {
         for &rel in &[
             "templates/global-agent-rules.md",
             "templates/opencode.json",
+            "templates/tui.json",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {

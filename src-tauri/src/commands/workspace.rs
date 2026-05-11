@@ -1308,6 +1308,7 @@ mod tests {
         for &rel in &[
             "templates/global-agent-rules.md",
             "templates/opencode.json",
+            "templates/tui.json",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {

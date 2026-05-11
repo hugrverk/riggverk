@@ -19,6 +19,7 @@ Workspace validation checks for these markers inside the workspace root:
 | `scripts/install-skills.sh` | file | Skill install script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
+| `templates/tui.json` | file | OpenCode TUI config template |
 | `agents/` | directory | OpenCode agent definitions |
 | `README.md` | file | Workspace readme |
 | `skills/` | directory | Skill definitions |

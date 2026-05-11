@@ -4,15 +4,17 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SOURCE_FILE="$WORKSPACE_ROOT/templates/opencode.json"
+TUI_SOURCE_FILE="$WORKSPACE_ROOT/templates/tui.json"
 AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/agents"
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/install-opencode-config.sh [options]
 
-Sync OpenCode config and agents from the workspace to the OpenCode config path.
+Sync OpenCode config, TUI config, and agents from the workspace to the OpenCode config path.
 
 Config:  templates/opencode.json  ->  ~/.config/opencode/opencode.json
+TUI:     templates/tui.json       ->  ~/.config/opencode/tui.json
 Agents:  agents/*.md              ->  ~/.config/opencode/agents/*.md
 
 Options:
@@ -21,12 +23,23 @@ Options:
   --quiet          Print compact app-friendly output
   --help           Show this help
 
+Environment override:
+  OPENCODE_CONFIG_PATH
+  OPENCODE_TUI_CONFIG_PATH
+  OPENCODE_AGENTS_DIR
+  AGENT_WORKSPACE_BACKUP_DIR
+
 Default mode is dry-run. Use --apply to write files.
 USAGE
 }
 
 if [ ! -f "$SOURCE_FILE" ]; then
   printf 'install-opencode-config.sh: source file not found: %s\n' "$SOURCE_FILE" >&2
+  exit 1
+fi
+
+if [ ! -f "$TUI_SOURCE_FILE" ]; then
+  printf 'install-opencode-config.sh: TUI source file not found: %s\n' "$TUI_SOURCE_FILE" >&2
   exit 1
 fi
 
@@ -64,6 +77,7 @@ case "$BACKUP_ROOT" in
 esac
 
 TARGET="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode/opencode.json}"
+TUI_TARGET="${OPENCODE_TUI_CONFIG_PATH:-$HOME/.config/opencode/tui.json}"
 TARGET_AGENTS_DIR="${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}"
 
 # Refuse unsafe target agents directories
@@ -110,9 +124,11 @@ agent_basename() {
 # ── Header ──
 
 if ! $quiet; then
-  printf '\nOpenCode Config + Agents Sync\n'
+  printf '\nOpenCode Config + TUI + Agents Sync\n'
   printf '  Config source: %s\n' "$SOURCE_FILE"
   printf '  Config target: %s\n' "$TARGET"
+  printf '  TUI source: %s\n' "$TUI_SOURCE_FILE"
+  printf '  TUI target: %s\n' "$TUI_TARGET"
   printf '  Agents source: %s\n' "$AGENTS_SOURCE_DIR"
   printf '  Agents target: %s\n' "$TARGET_AGENTS_DIR"
   printf '  Bundled agents: %s\n' "$(agent_count)"
@@ -131,7 +147,7 @@ fi
 if $diff_mode; then
   has_diffs=false
 
-  # Config diff
+  # Config diffs
   if [ -f "$TARGET" ]; then
     if ! cmp -s "$SOURCE_FILE" "$TARGET"; then
       printf '\n--- opencode config diffs (%s)\n' "$TARGET"
@@ -140,6 +156,17 @@ if $diff_mode; then
     fi
   else
     printf '\n--- opencode config missing (no target file at %s)\n' "$TARGET"
+    has_diffs=true
+  fi
+
+  if [ -f "$TUI_TARGET" ]; then
+    if ! cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
+      printf '\n--- tui config diffs (%s)\n' "$TUI_TARGET"
+      diff -u "$TUI_TARGET" "$TUI_SOURCE_FILE" || true
+      has_diffs=true
+    fi
+  else
+    printf '\n--- tui config missing (no target file at %s)\n' "$TUI_TARGET"
     has_diffs=true
   fi
 
@@ -160,7 +187,7 @@ if $diff_mode; then
   done < <(list_agent_files)
 
   if ! $has_diffs; then
-    if ! $quiet; then printf '  opencode config + agents synced\n'; fi
+    if ! $quiet; then printf '  opencode config + tui + agents synced\n'; fi
   fi
   exit 0
 fi
@@ -168,9 +195,13 @@ fi
 # ── Apply mode ──
 
 if $apply; then
-  # Validate config JSON
+  # Validate config JSONs
   validate_json "$SOURCE_FILE" || {
     printf 'install-opencode-config.sh: source JSON is invalid\n' >&2
+    exit 1
+  }
+  validate_json "$TUI_SOURCE_FILE" || {
+    printf 'install-opencode-config.sh: TUI source JSON is invalid\n' >&2
     exit 1
   }
 
@@ -193,6 +224,27 @@ if $apply; then
     if ! $quiet; then printf '  opencode config creating new\n'; fi
     cp "$SOURCE_FILE" "$TARGET"
     if ! $quiet; then printf '  opencode config synced\n'; fi
+  fi
+
+  # ── Apply TUI config ──
+  if [ -f "$TUI_TARGET" ]; then
+    if cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
+      if ! $quiet; then printf '  tui config already synced\n'; fi
+    else
+      ts="$(date -u +%Y%m%d-%H%M%S)"
+      backup_dir="$BACKUP_ROOT/$ts/opencode-config"
+      mkdir -p "$backup_dir"
+      tui_backup_file="$backup_dir/tui.json"
+      cp "$TUI_TARGET" "$tui_backup_file"
+      if ! $quiet; then printf '  tui config backed up to %s\n' "$tui_backup_file"; fi
+      cp "$TUI_SOURCE_FILE" "$TUI_TARGET"
+      if ! $quiet; then printf '  tui config synced\n'; fi
+    fi
+  else
+    mkdir -p "$(dirname "$TUI_TARGET")"
+    if ! $quiet; then printf '  tui config creating new\n'; fi
+    cp "$TUI_SOURCE_FILE" "$TUI_TARGET"
+    if ! $quiet; then printf '  tui config synced\n'; fi
   fi
 
   # ── Apply agents ──
@@ -219,7 +271,7 @@ if $apply; then
     fi
   done < <(list_agent_files)
 
-  if ! $quiet; then printf '  opencode config + %s agents synced\n' "$(agent_count)"; fi
+  if ! $quiet; then printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"; fi
   exit 0
 fi
 
@@ -240,21 +292,34 @@ else
   all_synced=false
 fi
 
+# TUI config check
+if [ -f "$TUI_TARGET" ]; then
+  if cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
+    if ! $quiet; then printf '  tui config synced\n'; fi
+  else
+    if ! $quiet; then printf '  tui config diverged (use --apply to sync)\n'; fi
+    all_synced=false
+  fi
+else
+  if ! $quiet; then printf '  tui config missing (use --apply to create)\n'; fi
+  all_synced=false
+fi
+
 # Agent checks
-  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
-    agent_name="$(agent_basename "$agent_src")"
-    agent_target="$TARGET_AGENTS_DIR/$agent_name"
-    if [ -f "$agent_target" ]; then
-      if ! cmp -s "$agent_src" "$agent_target"; then
-        if ! $quiet; then printf '  agent %s diverged (use --apply to sync)\n' "$agent_name"; fi
-        all_synced=false
-      fi
-    else
-      if ! $quiet; then printf '  agent %s missing (use --apply to create)\n' "$agent_name"; fi
+while IFS= read -r agent_src || [ -n "$agent_src" ]; do
+  agent_name="$(agent_basename "$agent_src")"
+  agent_target="$TARGET_AGENTS_DIR/$agent_name"
+  if [ -f "$agent_target" ]; then
+    if ! cmp -s "$agent_src" "$agent_target"; then
+      if ! $quiet; then printf '  agent %s diverged (use --apply to sync)\n' "$agent_name"; fi
       all_synced=false
     fi
-  done < <(list_agent_files)
+  else
+    if ! $quiet; then printf '  agent %s missing (use --apply to create)\n' "$agent_name"; fi
+    all_synced=false
+  fi
+done < <(list_agent_files)
 
 if $all_synced && [ -f "$TARGET" ]; then
-  if ! $quiet; then printf '  opencode config + %s agents synced\n' "$(agent_count)"; fi
+  if ! $quiet; then printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"; fi
 fi
