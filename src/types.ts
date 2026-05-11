@@ -220,6 +220,7 @@ export interface OpenCodeRuntimeHealth {
   generated_snapshot_policy_path: string;
   generated_snapshot_path: string;
   generated_snapshot_status: string;
+  generated_snapshot_detail: string;
   // Explainers
   summary: string;
   next_action: string;

@@ -516,7 +516,13 @@ export function WorkspaceView({
                     {/* Generated snapshot row */}
                     <div className="ws-runtime-row">
                       <span className="ws-runtime-row-label">Generated</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok" : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
+                      <span className={`ws-dot ${
+                        opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok"
+                        : opencodeRuntimeHealth.generated_snapshot_status === "valid" ? "ws-color-ok"
+                        : opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "ws-color-fail"
+                        : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail"
+                        : "ws-color-dim"
+                      }`}>
                         {"\u25CF"}
                       </span>
                       <span className="ws-runtime-row-value">
@@ -524,6 +530,13 @@ export function WorkspaceView({
                       </span>
                     </div>
                   </div>
+
+                  {/* Stale generated snapshot warning */}
+                  {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
+                    <div className="ws-runtime-next-action ws-runtime-next-action-fail">
+                      {opencodeRuntimeHealth.generated_snapshot_detail || "Regenerate opencode.json before sync"}
+                    </div>
+                  )}
 
                   {/* Warnings for agent mismatches */}
                   {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
@@ -554,7 +567,7 @@ export function WorkspaceView({
                     <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>
                       diff
                     </button>
-                    <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onSyncConfigs}>
+                    <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null || opencodeRuntimeHealth.generated_snapshot_status === "stale"} onClick={onSyncConfigs} title={opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "Regenerate opencode.json snapshot before sync" : undefined}>
                       sync
                     </button>
                   </div>

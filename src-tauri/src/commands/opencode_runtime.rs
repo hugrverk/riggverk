@@ -42,6 +42,7 @@ pub struct OpenCodeRuntimeHealth {
     pub generated_snapshot_policy_path: String,
     pub generated_snapshot_path: String,
     pub generated_snapshot_status: String,
+    pub generated_snapshot_detail: String,
     // Explainers
     pub summary: String,
     pub next_action: String,
@@ -102,6 +103,60 @@ fn file_eq(a: &Path, b: &Path) -> bool {
         (Ok(ac), Ok(bc)) => ac == bc,
         _ => false,
     }
+}
+
+/// Try to run a generator --check script from the workspace root.
+/// Returns `Some(status, detail)` if a generator was found and executed,
+/// `None` if no generator script exists or `python3` is unavailable.
+fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
+    let candidates = [
+        "scripts/generate-opencode-config.py",
+        "scripts/generate-default-opencode-config.py",
+    ];
+
+    for script_rel in &candidates {
+        let script_path = workspace_root.join(script_rel);
+        if !script_path.is_file() {
+            continue;
+        }
+
+        let output = std::process::Command::new("python3")
+            .args([script_rel, "--check"])
+            .current_dir(workspace_root)
+            .stdout(std::process::Stdio::piped())
+            .stderr(std::process::Stdio::piped())
+            .output();
+
+        match output {
+            Ok(out) => {
+                let passed = out.status.success();
+                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
+                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
+                let detail = if passed {
+                    if !stdout.is_empty() {
+                        stdout
+                    } else {
+                        "snapshot is current".into()
+                    }
+                } else if !stderr.is_empty() {
+                    stderr
+                } else if !stdout.is_empty() {
+                    stdout
+                } else {
+                    "snapshot is stale (generator check failed)".into()
+                };
+                return Some((
+                    if passed { "current".into() } else { "stale".into() },
+                    detail,
+                ));
+            }
+            Err(_) => {
+                // python3 not found or similar
+                return None;
+            }
+        }
+    }
+    None
 }
 
 /// Compute OpenCode runtime health for a given workspace root and home directory.
@@ -557,23 +612,33 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         },
     });
 
-    // Conservative generated snapshot status:
-    // - "current": source files and snapshot exist and are valid JSON
-    // - "missing": any required file missing or invalid
-    // - "unknown": not enough workspace state
-    let generated_snapshot_status = if base_source_exists
-        && base_source_valid
-        && policy_source_exists
-        && policy_source_valid
-        && snapshot_exists
-        && snapshot_valid
-    {
-        "current".into()
-    } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
-        "unknown".into()
-    } else {
-        "missing".into()
-    };
+    // Generated snapshot status with freshness check:
+    // - "current": source files + snapshot exist, valid JSON, AND generator --check passes
+    // - "stale": source files + snapshot exist and are valid, but generator --check fails
+    // - "valid": source files + snapshot exist and are valid, no generator available to check freshness
+    // - "missing": some required files missing or invalid
+    // - "unknown": no snapshot files at all
+    let (generated_snapshot_status, generated_snapshot_detail) =
+        if base_source_exists
+            && base_source_valid
+            && policy_source_exists
+            && policy_source_valid
+            && snapshot_exists
+            && snapshot_valid
+        {
+            // Try running generator --check to verify freshness
+            match run_generator_check(workspace_root) {
+                Some((status, detail)) => (status, detail),
+                None => (
+                    "valid".into(),
+                    "source + snapshot valid; not freshness-checked (no generator)".into(),
+                ),
+            }
+        } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
+            ("unknown".into(), String::new())
+        } else {
+            ("missing".into(), "snapshot source files missing or invalid".into())
+        };
 
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);
@@ -714,6 +779,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         generated_snapshot_policy_path: generated_snapshot_policy_path_str,
         generated_snapshot_path: generated_snapshot_path_str,
         generated_snapshot_status,
+        generated_snapshot_detail,
         summary,
         next_action,
     }
@@ -823,7 +889,7 @@ mod tests {
         assert_eq!(health.extra_installed_agent_count, 0);
         assert!(health.agent_mismatches.is_empty());
         assert_eq!(health.tui_status, "synced");
-        assert_eq!(health.generated_snapshot_status, "current");
+        assert_eq!(health.generated_snapshot_status, "valid");
         assert!(health.summary.contains("matches"));
         assert_eq!(health.next_action, "No runtime action needed.");
     }
@@ -1154,7 +1220,88 @@ mod tests {
         cleanup(&ws);
         cleanup(&home);
 
+        // Without a generator script, status is "valid" (not freshness-checked)
+        assert_eq!(health.generated_snapshot_status, "valid");
+        assert!(health.generated_snapshot_detail.contains("not freshness-checked"));
+    }
+
+    #[test]
+    fn test_generated_snapshot_current_with_check() {
+        let ws = temp_root("gen-chk-ok-ws");
+        let home = temp_root("gen-chk-ok-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        // Create a generator script that passes --check
+        let script_dir = ws.join("scripts");
+        fs::create_dir_all(&script_dir).expect("create scripts dir");
+        let script_path = script_dir.join("generate-opencode-config.py");
+        fs::write(
+            &script_path,
+            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--check':\n    sys.exit(0)\n",
+        )
+        .expect("write generator script");
+        // Make it executable (macOS/Linux)
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+                .expect("make script executable");
+        }
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
         assert_eq!(health.generated_snapshot_status, "current");
+        assert!(!health.generated_snapshot_detail.is_empty());
+    }
+
+    #[test]
+    fn test_generated_snapshot_stale_with_check() {
+        let ws = temp_root("gen-chk-fail-ws");
+        let home = temp_root("gen-chk-fail-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        // Create a generator script that FAILS --check
+        let script_dir = ws.join("scripts");
+        fs::create_dir_all(&script_dir).expect("create scripts dir");
+        let script_path = script_dir.join("generate-opencode-config.py");
+        fs::write(
+            &script_path,
+            "#!/usr/bin/env python3\nimport sys\nprint('CHECK FAILED: opencode.json snapshot is stale', file=sys.stderr)\nsys.exit(1)\n",
+        )
+        .expect("write generator script");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
+                .expect("make script executable");
+        }
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.generated_snapshot_status, "stale");
+        assert!(health.generated_snapshot_detail.contains("stale"));
     }
 
     #[test]
