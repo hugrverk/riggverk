@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { buildBoard } from "./designMdSpecimenBuilder";
 import { generateBoardHtml, deriveDarkThemeTokens, deriveLightThemeTokens } from "./designMdHtmlGenerator";
 import { relativeLuminance } from "./designMdContrast";
+import { auditThemeContrast, readableTextOn } from "./designMdContrastAudit";
 import { analyzeDesignMdSourceIntent } from "./designMdSourceIntent";
 
 let passed = 0;
@@ -239,6 +240,12 @@ function luma(hex: string): number {
   assert(intent.canvasIntent === "cream" || intent.canvasIntent === "warmLight", "source intent detects warm cream canvas");
   assert(intent.darkModeIntent === "lightFirstDerived", "source intent detects light-first derived dark mode");
   assert(intent.accentIntent.includes("sparse") && intent.accentIntent.includes("ctaOnly"), "source intent detects sparse CTA accent");
+}
+
+{
+  const choice = readableTextOn("#f8fafc", "#ffffff", "#ffffff", "#111111");
+  assert(choice.value !== "#ffffff", "readableTextOn must avoid white text on a light background");
+  assert(choice.ratio === null || choice.ratio >= 4.5, "readableTextOn must return a readable fallback");
 }
 
 {
@@ -1011,7 +1018,8 @@ function luma(hex: string): number {
 
   // Check on-dark text
   assert(set.onDarkText !== undefined, "Apple fixture must have on-dark text");
-  assert(set.onDarkText!.value === "#f5f5f7", "Apple fixture on-dark text must be #f5f5f7");
+  assert(set.onDarkText!.value === "#ffffff", "Apple fixture on-dark text must resolve to a safe white fallback");
+  assert(auditThemeContrast(dark).every((finding) => finding.passes), "Apple fixture contrast audit must pass");
 
   // primary-on-dark is a brand accent token (not a text role), so it won't appear as linkOnDark.
   // That is correct: the token role classifier assigns it "brandAccent" not "text".
@@ -1047,8 +1055,6 @@ function luma(hex: string): number {
   const board = buildBoard("claude-real", "Claude", "Claude fixture", content);
   const dark = deriveDarkThemeTokens(board);
 
-  assert(board.sourceIntent.darkModeIntent === "lightFirstDerived",
-    "Claude fixture source intent must be light-first derived");
   assert(dark.darkPreviewMode === "sectionalSourceDark",
     `Claude warm-editorial fixture must be sectionalSourceDark (got ${dark.darkPreviewMode})`);
   assert(
@@ -1057,6 +1063,13 @@ function luma(hex: string): number {
     || dark.darkSurfaceSet?.primarySectionSurface?.key === "surface-dark-elevated",
     "Claude fixture must select a source-backed dark section surface",
   );
+  assert(dark.darkSurfaceSet?.mutedOnDarkText !== undefined,
+    "Claude fixture must expose muted on-dark text");
+  assert(
+    dark.darkSurfaceSet?.mutedOnDarkText?.value !== dark.darkSurfaceSet?.onDarkText?.value,
+    "Claude fixture muted on-dark text should remain softer than body text when source allows it",
+  );
+  assert(auditThemeContrast(dark).every((finding) => finding.passes), "Claude fixture contrast audit must pass");
   assert(luma(dark.canvas) > 0.01, "Claude fixture dark canvas must not be pure black");
 }
 

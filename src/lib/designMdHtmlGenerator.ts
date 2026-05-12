@@ -25,6 +25,7 @@ import {
   hexToRgb,
   ensureReadable,
 } from "./designMdContrast";
+import { readableTextOn } from "./designMdContrastAudit";
 import {
   resolveLightTokens,
   resolveDarkTokens,
@@ -329,7 +330,7 @@ function renderHero(board: DesignMdBoard, _colors: ThemeTokens, display: ReturnT
     '</section>';
 }
 
-function renderPalette(board: DesignMdBoard): string {
+function renderPalette(board: DesignMdBoard, colors: ThemeTokens): string {
   const tokens = board.colorGroups.flatMap((group) => group.tokens.map((token) => ({ ...token, group: group.prefix })));
   if (tokens.length === 0) return "";
   const roleOrder = ["canvas", "surface", "text", "border", "primaryAction", "brandAccent", "semantic", "status", "timeline", "state", "decorative", "unknown"];
@@ -339,6 +340,8 @@ function renderPalette(board: DesignMdBoard): string {
     return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
   }).slice(0, 24);
   const moodRoles = new Set(["canvas", "surface", "text", "border", "primaryAction", "brandAccent"]);
+  const swatchText = readableTextOn(colors.surface, colors.text, "#111111", "#f8fafc").value;
+  const swatchMuted = readableTextOn(colors.surface, colors.muted, swatchText, colors.onDark).value;
   return '<section class="strip" id="palette">' +
     '<header><h3>Palette</h3><span>' + tokens.length + ' colors</span></header>' +
     '<div class="palette-grid">' +
@@ -349,9 +352,9 @@ function renderPalette(board: DesignMdBoard): string {
       const note = token.semanticWarnings?.[0] ?? token.semanticEvidence?.[0] ?? token.group;
       return '<div class="swatch' + (scoped ? ' swatch-scoped' : '') + (utility ? ' swatch-utility' : '') + '">' +
       '<i style="background:' + cssColor(token.resolvedValue, "#d8d8d8") + '"></i>' +
-      '<b>' + esc(token.key) + '</b>' +
-      '<small>' + esc((token.semanticRole ?? "unknown") + ' · ' + (token.usageScope ?? token.group)) + '</small>' +
-      '<em>' + esc(note) + '</em>' +
+      '<b style="color:' + swatchText + '">' + esc(token.key) + '</b>' +
+      '<small style="color:' + swatchMuted + '">' + esc((token.semanticRole ?? "unknown") + ' · ' + (token.usageScope ?? token.group)) + '</small>' +
+      '<em style="color:' + swatchMuted + '">' + esc(note) + '</em>' +
       '</div>';
     }).join("") +
     '</div></section>';
@@ -383,14 +386,17 @@ function renderTypography(board: DesignMdBoard): string {
 }
 
 function renderRadiusSpacing(board: DesignMdBoard, colors: ThemeTokens): string {
+  const cellText = readableTextOn(colors.surface, colors.muted, colors.text, colors.onDark).value;
+  const spacingText = readableTextOn(colors.surface, colors.text, "#111111", "#f8fafc").value;
+  const spacingMuted = readableTextOn(colors.surface, colors.muted, spacingText, colors.onDark).value;
   const radius = board.radiusTokens.slice(0, 8).map((token) =>
-    '<div class="radius-cell" style="border-radius:' + cssSize(token.resolvedValue, "0px") + '">' + esc(token.key) + '</div>'
+    '<div class="radius-cell" style="border-radius:' + cssSize(token.resolvedValue, "0px") + ';color:' + cellText + '">' + esc(token.key) + '</div>'
   ).join("");
   const spacing = board.spacingTokens.slice(0, 8).map((token) =>
     '<div class="space-row">' +
-    '<span>' + esc(token.key) + '</span>' +
+    '<span style="color:' + spacingText + '">' + esc(token.key) + '</span>' +
     '<i style="width:' + cssSize(token.resolvedValue, "8px") + '"></i>' +
-    '<small>' + esc(token.resolvedValue) + '</small>' +
+    '<small style="color:' + spacingMuted + '">' + esc(token.resolvedValue) + '</small>' +
     '</div>'
   ).join("");
   if (!radius && !spacing) return "";
@@ -398,7 +404,7 @@ function renderRadiusSpacing(board: DesignMdBoard, colors: ThemeTokens): string 
     '<header><h3>Radius &amp; Spacing</h3><span>source tokens</span></header>' +
     '<div class="rhythm-grid">' +
     '<div class="radius-grid">' + radius + '</div>' +
-    '<div style="color:' + colors.text + '">' + spacing + '</div>' +
+    '<div style="color:' + spacingText + '">' + spacing + '</div>' +
     '</div></section>';
 }
 
@@ -462,8 +468,12 @@ function renderDarkSurfaces(colors: ThemeTokens, darkSurfaceSet?: DarkSurfaceSet
     '<div class="sectional-bands">' +
     darkSections.map((surface) => {
       const bg = surface.value;
-      // Pick readable text: if surface is very dark, use on-dark text; otherwise derive
-      const textColor = darkSurfaceSet.onDarkText?.value ?? colors.text;
+      const textColor = readableTextOn(
+        bg,
+        darkSurfaceSet.onDarkText?.value ?? colors.text,
+        colors.text,
+        colors.onDark,
+      ).value;
       const roleLabel = surface.sourceKind.replace(/([A-Z])/g, " $1").trim();
       return '<div class="sectional-band" style="background:' + bg + ';color:' + textColor + '">' +
         '<div class="sectional-band-inner">' +
@@ -477,7 +487,12 @@ function renderDarkSurfaces(colors: ThemeTokens, darkSurfaceSet?: DarkSurfaceSet
     (supportTokens.length > 0
       ? '<div class="sectional-support">' + supportTokens.map((surface) => {
         const bg = surface.value;
-        const textColor = colors.darkSurfaceSet?.onDarkText?.value ?? colors.text;
+        const textColor = readableTextOn(
+          bg,
+          colors.darkSurfaceSet?.onDarkText?.value ?? colors.text,
+          colors.text,
+          colors.onDark,
+        ).value;
         return '<span class="sectional-support-chip" style="background:' + bg + ';color:' + textColor + '">' +
           '<b>' + esc(surface.key) + '</b>' +
           '<em>' + esc(surface.sourceKind.replace(/([A-Z])/g, " $1").trim()) + '</em>' +
@@ -640,6 +655,12 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     : (softWarm && variant === "dark"
       ? (mixHexColor(colors.canvas, colors.surface, 0.42) ?? colors.surface)
       : colors.surface);
+  const heroKickerColor = readableTextOn(
+    heroBackground,
+    conservative || isTokenBoard ? colors.muted : colors.primary,
+    colors.muted,
+    colors.text,
+  ).value;
 
   const css = [
     "*{box-sizing:border-box;margin:0;padding:0}",
@@ -654,7 +675,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero:not(:last-child){border-bottom:1px solid " + colors.border + "}",
     ".hero-inner{display:flex;gap:28px;align-items:flex-start;max-width:960px;margin:0 auto}",
     ".hero-text{flex:1;min-width:0;display:flex;flex-direction:column;gap:6px}",
-    ".hero-kicker{color:" + (conservative || isTokenBoard ? colors.muted : colors.primary) + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
+    ".hero-kicker{color:" + heroKickerColor + ";font-size:" + caption.size + ";font-weight:700;text-transform:uppercase;letter-spacing:.04em}",
     ".hero-title{color:" + colors.text + "}",
     ".hero-meta{color:" + colors.muted + ";font-size:" + caption.size + "}",
     ".hero-desc{color:" + colors.muted + ";max-width:540px;line-height:1.5;font-size:" + caption.size + "}",
@@ -684,8 +705,8 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".swatch{min-height:68px;border:1px solid " + colors.border + ";border-radius:" + radius + ";padding:6px 8px;background:" + colors.surface + ";overflow:hidden}",
     ".swatch i{display:block;height:24px;border-radius:5px;margin-bottom:5px;border:1px solid " + subtleSwatchBorder + "}",
     ".swatch b{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:" + caption.size + "}",
-    ".swatch small{display:block;color:" + colors.muted + ";font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
-    ".swatch em{display:block;color:" + colors.muted + ";font-size:9px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.62}",
+    ".swatch small{display:block;font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}",
+    ".swatch em{display:block;font-size:9px;font-style:normal;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;opacity:.78}",
     ".swatch-scoped{opacity:.72}",
     ".swatch-scoped i{height:14px}",
     ".swatch-utility{opacity:.66}",
@@ -715,7 +736,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".sectional-band-inner em{font-size:9px;opacity:0.6;margin-left:auto;white-space:nowrap;font-style:normal}",
 
     // ── Layout notes ──
-    ".notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;padding-left:16px;color:" + colors.muted + ";font-size:" + caption.size + ";line-height:1.45;opacity:0.75}",
+    ".notes-strip ul{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6px 14px;padding-left:16px;color:" + colors.muted + ";font-size:" + caption.size + ";line-height:1.45;opacity:0.86}",
 
     // ── Source notes ──
     ".src-body{display:flex;flex-direction:column;gap:12px}",
@@ -811,7 +832,7 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     tokenBoardBanner,
     '<div class="board">',
     renderHero(board, colors, display),
-    renderPalette(board),
+    renderPalette(board, colors),
     renderTypography(board),
     renderRadiusSpacing(board, colors),
     renderLayout(board),

@@ -165,11 +165,14 @@ export function analyzeDesignMdSourceIntent(content: string, title: string, desc
   const darkNative = hasAny(text, [
     /\bdark[-\s]native\b/,
     /\bdark theme\b/,
+    /\bdark immersive\b/,
+    /\bimmersive dark\b/,
     /\bnear[-\s]black canvas\b/,
     /\bblack canvas\b/,
     /\bdeep near[-\s]black canvas\b/,
     /\bmarketing and product surfaces default to the dark theme\b/,
     /\bdark, immersive\b/,
+    /\bdark immersive music player\b/,
   ]);
   const lightFirst = hasAny(text, [
     /\blight[-\s]first\b/,

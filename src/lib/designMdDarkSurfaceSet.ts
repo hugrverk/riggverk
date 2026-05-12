@@ -15,7 +15,9 @@
 
 import type { DesignMdBoard, DesignMdBoardToken } from "./designMdSpecimenBuilder";
 import { isSafeColorValue } from "./designMdPreviewParser";
-import { relativeLuminance } from "./designMdContrast";
+import { contrastRatio, relativeLuminance } from "./designMdContrast";
+import { readableTextOn } from "./designMdContrastAudit";
+import { isScopedOnlyColor } from "./designMdColorSemantics";
 import {
   getExplicitGlobalDarkCanvasEvidence,
   getSectionalDarkSurfaceEvidence,
@@ -99,6 +101,32 @@ function tokenIsDarkValue(token: DesignMdBoardToken): boolean {
   if (!hex || !/^#[0-9a-fA-F]{3,8}$/.test(hex)) return false;
   const lum = relativeLuminance(hex);
   return lum !== null && lum < 0.32;
+}
+
+function isScopedSurfaceToken(token: DesignMdBoardToken): boolean {
+  const semantic = token.semanticRole;
+  const scope = token.usageScope;
+  const intensity = token.usageIntensity;
+  const role = token.resolvedRole ?? "unknown";
+  if (semantic === "primaryAction" || semantic === "brandAccent" || semantic === "semantic" || semantic === "status" || semantic === "timeline" || semantic === "state" || semantic === "decorative") {
+    return true;
+  }
+  if (scope === "stateOnly" || scope === "timelineOnly" || scope === "semanticOnly" || scope === "decorativeOnly") {
+    return true;
+  }
+  if (role === "border" || role === "hairline") return true;
+  if (/(?:^|[-_])(border|hairline|divider|stroke|line)(?:$|[-_])/i.test(token.key)) return true;
+  return intensity === "scopedOnly" || isScopedOnlyColor({
+    resolvedRole: role,
+    roleConfidence: token.roleConfidence ?? "fallback",
+    roleEvidence: token.roleEvidence ?? [],
+    roleWarnings: token.roleWarnings ?? [],
+    semanticRole: semantic ?? "unknown",
+    usageScope: scope ?? "unknown",
+    usageIntensity: intensity ?? "unknown",
+    evidence: [],
+    warnings: [],
+  });
 }
 
 function isSolidHex(value: string | undefined): value is string {
@@ -236,6 +264,74 @@ function pickBestSurfaceToken(
   return ranked[0];
 }
 
+function lightestSurfaceToken(tokens: Array<DarkSurfaceToken | undefined>): DarkSurfaceToken | undefined {
+  return tokens
+    .filter((token): token is DarkSurfaceToken => !!token && isSolidHex(token.value))
+    .sort((a, b) => {
+      const aLum = relativeLuminance(a.value) ?? 0;
+      const bLum = relativeLuminance(b.value) ?? 0;
+      return bLum - aLum;
+    })[0];
+}
+
+function chooseReadableMutedText(
+  background: string,
+  preferred: string,
+  fallbackLight: string,
+  fallbackDark: string,
+): { value: string; source: "preferred" | "fallbackLight" | "fallbackDark" | "safeFallback"; warning?: string } {
+  const bg = isSolidHex(background) ? background.trim() : "";
+  const candidates = [
+    { value: preferred, source: "preferred" as const, ratio: bg ? contrastRatio(bg, preferred) : null },
+    { value: fallbackLight, source: "fallbackLight" as const, ratio: bg ? contrastRatio(bg, fallbackLight) : null },
+    { value: fallbackDark, source: "fallbackDark" as const, ratio: bg ? contrastRatio(bg, fallbackDark) : null },
+  ].filter((entry) => isSafeColorValue(entry.value));
+
+  if (!bg || candidates.length === 0) {
+    const readable = readableTextOn(background, preferred, fallbackLight, fallbackDark);
+    return {
+      value: readable.value,
+      source: readable.source === "preferred" ? "preferred" : "safeFallback",
+      warning: readable.warning,
+    };
+  }
+
+  const preferredEntry = candidates.find((entry) => entry.source === "preferred");
+  const preferredRatio = preferredEntry?.ratio;
+  if (preferredEntry && preferredEntry.ratio !== null && preferredEntry.ratio >= 3.0) {
+    return { value: preferredEntry.value, source: "preferred" };
+  }
+
+  const fallbackLightEntry = candidates.find((entry) => entry.source === "fallbackLight");
+  if (fallbackLightEntry && fallbackLightEntry.ratio !== null && fallbackLightEntry.ratio >= 3.0) {
+    return {
+      value: fallbackLightEntry.value,
+      source: "fallbackLight",
+      warning: preferredRatio !== null && preferredRatio !== undefined
+        ? `preferred muted text contrast is ${preferredRatio.toFixed(2)}:1`
+        : "preferred muted text is unavailable",
+    };
+  }
+
+  const fallbackDarkEntry = candidates.find((entry) => entry.source === "fallbackDark");
+  if (fallbackDarkEntry && fallbackDarkEntry.ratio !== null && fallbackDarkEntry.ratio >= 3.0) {
+    return {
+      value: fallbackDarkEntry.value,
+      source: "fallbackDark",
+      warning: preferredRatio !== null && preferredRatio !== undefined
+        ? `preferred muted text contrast is ${preferredRatio.toFixed(2)}:1`
+        : "preferred muted text is unavailable",
+    };
+  }
+
+  const readable = readableTextOn(background, preferred, fallbackLight, fallbackDark);
+  return {
+    value: readable.value,
+    source: readable.source === "preferred" ? "preferred" : "safeFallback",
+    warning: readable.warning,
+  };
+}
+
 // ─── Key classification ──────────────────────────────────────────
 
 function keyParts(key: string): string[] {
@@ -314,6 +410,8 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
   const darkTokens = allColors.filter((t) =>
     isSafeColorValue(t.resolvedValue)
     && tokenIsDarkValue(t)
+    && !isScopedSurfaceToken(t)
+    && t.resolvedRole !== "stateOnly"
   );
 
   const globalCanvasTokens: DarkSurfaceToken[] = [];
@@ -328,13 +426,9 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
 
   for (const token of darkTokens) {
     const isGlobal = globalCanvasSet.has(token.key);
-    const isTextToken = textEvidence.some((e) => e.tokenKey === token.key);
     // Skip text-role tokens that are not on-dark text (ink, foreground, body text in light mode)
     const role = token.resolvedRole ?? "";
-    const isSurfaceIrrelevantText = !isTextToken && (
-      role === "bodyText" || role === "foregroundText" || role === "headingText" || role === "mutedText"
-    );
-    if (isSurfaceIrrelevantText) continue;
+    if (role === "bodyText" || role === "foregroundText" || role === "headingText" || role === "mutedText") continue;
 
     const kind = classifySourceKind(token, isGlobal);
 
@@ -373,7 +467,7 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
       // Component-local dark surfaces should NOT be page canvas
     }
 
-    if (!isTextToken && surfaceToken.usableAs.length === 0) {
+    if (surfaceToken.usableAs.length === 0) {
       surfaceToken.usableAs.push("paletteSwatch");
     }
 
@@ -558,7 +652,17 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
     evidence.push(`nav dark surface: ${navSurface.key}`);
   }
 
-  // Text tokens
+  const contrastBackground = lightestSurfaceToken([
+    surfaceSet.primarySectionSurface,
+    surfaceSet.secondarySectionSurface,
+    surfaceSet.tertiarySectionSurface,
+    surfaceSet.pageCanvas,
+    surfaceSet.blackSurface,
+    surfaceSet.navSurface,
+  ]);
+
+  // Text tokens are chosen after the primary surfaces exist so the preview stays
+  // readable against the lightest selected dark surface.
   const bodyOnDark = onDarkTextTokens.find((t) =>
     /body-on-dark/.test(t.key) || /^on-dark$/.test(t.key) || /text-on-dark/.test(t.key) || /ink-on-dark/.test(t.key)
   );
@@ -566,24 +670,72 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
     ?? linkOnDarkTokens.find((t) => /primary-on-dark/.test(t.key))
     ?? linkOnDarkTokens[0]
     ?? onDarkTextTokens.find((t) => /primary-on-dark/.test(t.key) || /link-on-dark/.test(t.key));
-  const mutedOnDark = onDarkTextTokens.find((t) => /muted-on-dark/.test(t.key) || /on-dark-muted/.test(t.key));
+  const mutedOnDark = onDarkTextTokens.find((t) =>
+    /muted-on-dark/.test(t.key)
+    || /on-dark-muted/.test(t.key)
+    || /text-muted-dark/.test(t.key)
+    || /muted-dark/.test(t.key)
+    || /on-dark-soft/.test(t.key)
+    || /on-dark-faint/.test(t.key)
+    || /on-dark-mute/.test(t.key)
+  );
 
-  if (bodyOnDark) {
-    surfaceSet.onDarkText = bodyOnDark;
-    evidence.push(`on-dark text: ${bodyOnDark.key} (${bodyOnDark.value})`);
-  } else if (onDarkTextTokens.length > 0) {
-    surfaceSet.onDarkText = onDarkTextTokens[0];
-    evidence.push(`on-dark text: ${onDarkTextTokens[0].key} (${onDarkTextTokens[0].value})`);
+  if (bodyOnDark || onDarkTextTokens.length > 0) {
+    const preferred = bodyOnDark ?? onDarkTextTokens[0];
+    const choice = contrastBackground
+      ? readableTextOn(contrastBackground.value, preferred!.value, "#ffffff", "#111111")
+      : { value: preferred!.value, source: "preferred" as const, warning: undefined };
+    surfaceSet.onDarkText = {
+      key: choice.source === "preferred" ? preferred!.key : "safe-on-dark-fallback",
+      value: choice.value,
+      resolvedRole: preferred!.resolvedRole,
+      roleConfidence: preferred!.roleConfidence,
+      sourceKind: preferred!.sourceKind,
+      evidence: choice.source === "preferred"
+        ? [`on-dark text: ${preferred!.key} (${preferred!.value})`]
+        : [`on-dark text fallback for ${preferred!.key}`],
+      usableAs: ["sourceNoteOnly"],
+    };
+    evidence.push(`on-dark text: ${surfaceSet.onDarkText.key} (${surfaceSet.onDarkText.value})`);
+    if (choice.warning) warnings.push(`on-dark text adjusted: ${choice.warning}`);
   }
 
   if (primaryOnDark) {
-    surfaceSet.linkOnDark = primaryOnDark;
-    evidence.push(`link on dark: ${primaryOnDark.key} (${primaryOnDark.value})`);
+    const choice = contrastBackground
+      ? readableTextOn(contrastBackground.value, primaryOnDark.value, "#ffffff", "#111111")
+      : { value: primaryOnDark.value, source: "preferred" as const, warning: undefined };
+    surfaceSet.linkOnDark = {
+      key: choice.source === "preferred" ? primaryOnDark.key : "safe-link-on-dark-fallback",
+      value: choice.value,
+      resolvedRole: primaryOnDark.resolvedRole,
+      roleConfidence: primaryOnDark.roleConfidence,
+      sourceKind: primaryOnDark.sourceKind,
+      evidence: choice.source === "preferred"
+        ? ["link/accent on dark token"]
+        : ["link/accent on dark fallback"],
+      usableAs: ["paletteSwatch", "sourceNoteOnly"],
+    };
+    evidence.push(`link on dark: ${surfaceSet.linkOnDark.key} (${surfaceSet.linkOnDark.value})`);
+    if (choice.warning) warnings.push(`link-on-dark adjusted: ${choice.warning}`);
   }
 
   if (mutedOnDark) {
-    surfaceSet.mutedOnDarkText = mutedOnDark;
-    evidence.push(`muted on dark: ${mutedOnDark.key} (${mutedOnDark.value})`);
+    const choice = contrastBackground
+      ? chooseReadableMutedText(contrastBackground.value, mutedOnDark.value, "#d1d5db", "#6b7280")
+      : { value: mutedOnDark.value, source: "preferred" as const, warning: undefined };
+    surfaceSet.mutedOnDarkText = {
+      key: choice.source === "preferred" ? mutedOnDark.key : "safe-muted-on-dark-fallback",
+      value: choice.value,
+      resolvedRole: mutedOnDark.resolvedRole,
+      roleConfidence: mutedOnDark.roleConfidence,
+      sourceKind: mutedOnDark.sourceKind,
+      evidence: choice.source === "preferred"
+        ? [`muted on dark: ${mutedOnDark.key} (${mutedOnDark.value})`]
+        : ["muted on dark fallback"],
+      usableAs: ["sourceNoteOnly"],
+    };
+    evidence.push(`muted on dark: ${surfaceSet.mutedOnDarkText.key} (${surfaceSet.mutedOnDarkText.value})`);
+    if (choice.warning) warnings.push(`muted-on-dark adjusted: ${choice.warning}`);
   }
 
   // Border on dark

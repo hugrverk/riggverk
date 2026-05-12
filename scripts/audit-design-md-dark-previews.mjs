@@ -200,7 +200,8 @@ function entryWarnings(entry) {
   if (entry.explicitSectionalDarkSurface.length === 0 && entry.explicitGlobalDarkCanvas.length === 0 && entry.onDarkTextTokens.length > 0) warnings.push("dark surface missing");
   if (entry.mode === "fullSourceDark" && entry.explicitGlobalDarkCanvas.length === 0) warnings.push("fullSourceDark selected without sufficient global evidence");
   if (entry.mode === "conservativeDerivedDark" && strongSectionalEvidence) warnings.push("conservativeDerivedDark selected despite strong sectional evidence");
-  if (entry.sourceIntent.darkModeIntent === "lightFirstDerived" && entry.mode !== "darkTokenBoard" && !hasPattern(entry.sourceText, [/\bfull dark\b/, /\bdark theme\b/, /\bdark canvas\b/, /\bdark-native\b/])) warnings.push("source prose contradicts mode");
+  if (entry.sourceIntent.darkModeIntent === "lightFirstDerived" && entry.mode === "fullSourceDark" && !hasPattern(entry.sourceText, [/\bfull dark\b/, /\bdark theme\b/, /\bdark canvas\b/, /\bdark-native\b/])) warnings.push("source prose contradicts mode");
+  if (entry.sourceIntent.darkModeIntent === "lightFirstDerived" && entry.mode === "conservativeDerivedDark" && strongSectionalEvidence) warnings.push("conservative derivation used despite sectional evidence");
   if (entry.primarySectionSurface === "surface-black" && entry.explicitSectionalDarkSurface.some((key) => /tile/i.test(key))) warnings.push("likely too black");
   if (entry.mode === "darkTokenBoard" && darkEvidenceExists) warnings.push("likely too generic");
   if (entry.mode === "darkTokenBoard" && (entry.explicitSectionalDarkSurface.length > 0 || entry.onDarkTextTokens.length > 0)) warnings.push("likely underusing source dark tokens");
@@ -214,6 +215,7 @@ async function main() {
   const { determineDarkPreviewMode } = await import(path.join(outDir, "designMdDarkPreviewPolicy.js"));
   const { extractDarkSurfaceSet } = await import(path.join(outDir, "designMdDarkSurfaceSet.js"));
   const { resolveDarkTokens } = await import(path.join(outDir, "designMdThemeResolver.js"));
+  const { auditThemeContrast, auditDarkSurfaceSetContrast } = await import(path.join(outDir, "designMdContrastAudit.js"));
   const { generateBoardHtml } = await import(path.join(outDir, "designMdHtmlGenerator.js"));
   const { designMdDisplayTitle } = await import(path.join(outDir, "designMdDisplay.js"));
   const { sourceIntentSummary } = await import(path.join(outDir, "designMdSourceIntent.js"));
@@ -231,6 +233,13 @@ async function main() {
     const theme = resolveDarkTokens(board);
     const html = generateBoardHtml(board, { variant: "dark" });
     const tokenClasses = classifyTokens(board, { ...helpers, relativeLuminance });
+    const themeContrastFindings = auditThemeContrast(theme);
+    const surfaceContrastFindings = surfaceSet.allSurfaces.length > 0
+      ? auditDarkSurfaceSetContrast(surfaceSet, theme)
+      : [];
+    const contrastWarnings = [...themeContrastFindings, ...surfaceContrastFindings]
+      .filter((finding) => finding.ratio !== null && !finding.passes)
+      .map((finding) => `${finding.label}: ${finding.note}${finding.ratio === null ? "" : ` (${finding.ratio.toFixed(2)}:1)`}`);
     const sourceText = [board.title, board.description, board.overview ?? "", board.layout ?? "", ...board.visualLanguage.phrases].join(" ").toLowerCase();
 
     const row = {
@@ -258,6 +267,7 @@ async function main() {
       selectedDarkText: surfaceSet.onDarkText?.key ?? null,
       selectedDarkMutedText: surfaceSet.mutedOnDarkText?.key ?? null,
       selectedDarkLinkAccent: surfaceSet.linkOnDark?.key ?? null,
+      contrastWarnings,
       warnings: entryWarnings({
         ...tokenClasses,
         mode: policy.mode,
@@ -284,7 +294,7 @@ async function main() {
   const onDarkButNoDarkSurface = results.filter((row) => row.onDarkTextTokens.length > 0 && row.explicitSectionalDarkSurface.length === 0 && row.explicitGlobalDarkCanvas.length === 0);
   const blackOverPromoted = results.filter((row) => row.selectedPrimarySectionSurface === "surface-black" || row.selectedBlackSurface === row.selectedPrimarySectionSurface);
   const manualQa = results
-    .map((row) => ({ ...row, score: row.warnings.length }))
+    .map((row) => ({ ...row, score: row.warnings.length + row.contrastWarnings.length }))
     .filter((row) => row.score > 0)
     .sort((a, b) => b.score - a.score || a.slug.localeCompare(b.slug))
     .slice(0, 20);
@@ -309,6 +319,18 @@ async function main() {
   } else {
     for (const row of manualQa) {
       console.log(`- ${row.slug}: ${row.warnings.join("; ")}`);
+    }
+  }
+  console.log("");
+  const contrastRisks = results
+    .flatMap((row) => row.contrastWarnings.map((warning) => ({ slug: row.slug, warning })))
+    .sort((a, b) => a.slug.localeCompare(b.slug) || a.warning.localeCompare(b.warning));
+  console.log("Top 20 contrast risks:");
+  if (contrastRisks.length === 0) {
+    console.log("- none");
+  } else {
+    for (const item of contrastRisks.slice(0, 20)) {
+      console.log(`- ${item.slug}: ${item.warning}`);
     }
   }
   console.log("");
@@ -343,6 +365,7 @@ async function main() {
     console.log(`- selected dark text: ${row.selectedDarkText ?? "none"}`);
     console.log(`- selected dark muted text: ${row.selectedDarkMutedText ?? "none"}`);
     console.log(`- selected dark link/accent: ${row.selectedDarkLinkAccent ?? "none"}`);
+    console.log(`- contrast warnings: ${compact(row.contrastWarnings) || "none"}`);
     console.log(`- warnings: ${compact(row.warnings) || "none"}`);
     console.log("");
   }

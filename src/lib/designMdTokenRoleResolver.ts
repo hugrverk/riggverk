@@ -108,6 +108,8 @@ export function resolveDesignMdTokenRole(input: DesignMdTokenRoleInput): DesignM
   if (part(/^(page|background)$/)) add("pageBackground", 4, "page/background key");
   if (part(/^(ink|foreground)$/)) add("foregroundText", 5, "ink/foreground key");
   if (part(/^(text)$/)) add("foregroundText", 4, "text key");
+  if (exact("on-dark", "text-on-dark", "foreground-on-dark", "ink-on-dark")) add("foregroundText", 5, "on-dark text key");
+  if (exact("on-dark-soft", "on-dark-muted", "on-dark-mute", "on-dark-faint")) add("mutedText", 5, "soft on-dark text key");
   if (part(/^(heading|headline|title)$/)) add("headingText", 4, "heading/title key");
   if (part(/^(muted|secondary|subtle)$/)) add("mutedText", 3, "muted/secondary key");
 

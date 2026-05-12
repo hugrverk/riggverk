@@ -16,6 +16,11 @@ import {
   ensureReadable,
 } from "./designMdContrast";
 import {
+  readableTextOn,
+  auditThemeContrast,
+  auditDarkSurfaceSetContrast,
+} from "./designMdContrastAudit";
+import {
   determineDarkPreviewMode,
   type DarkPreviewMode,
 } from "./designMdDarkPreviewPolicy";
@@ -471,7 +476,12 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
       },
       softWarm ? "#f6f1e8" : "#f0f2f5",
     );
-    const darkText = ensureReadable(textResolve.value, darkCanvas, softWarm ? "#f6f1e8" : "#f0f2f5");
+    const darkText = readableTextOn(
+      darkCanvas,
+      textResolve.value,
+      softWarm ? "#f6f1e8" : "#f0f2f5",
+      readableTextColor(darkCanvas),
+    ).value;
 
     const mutedResolve = resolveDarkToken(
       allColors,
@@ -483,7 +493,12 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
       },
       softWarm ? "#aaa59c" : "#8b909a",
     );
-    const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, softWarm ? "#aaa59c" : "#8b909a");
+    const darkMuted = readableTextOn(
+      darkCanvas,
+      mutedResolve.value,
+      softWarm ? "#aaa59c" : "#8b909a",
+      softWarm ? "#8a867e" : "#8b909a",
+    ).value;
 
     const borderResolve = resolveDarkToken(
       allColors,
@@ -560,7 +575,12 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     },
     softWarm ? "#f6f1e8" : "#f0f2f5",
   );
-  const darkText = ensureReadable(textResolve.value, darkCanvas, softWarm ? "#f6f1e8" : "#f0f2f5");
+  const darkText = readableTextOn(
+    darkCanvas,
+    textResolve.value,
+    softWarm ? "#f6f1e8" : "#f0f2f5",
+    readableTextColor(darkCanvas),
+  ).value;
 
   const mutedExplicit = ["muted-on-dark", "on-dark-muted", "text-muted-dark", "muted-dark"];
   const mutedResolve = resolveDarkToken(
@@ -573,7 +593,12 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     },
     softWarm ? "#aaa59c" : "#8b909a",
   );
-  const darkMuted = ensureReadable(mutedResolve.value, darkCanvas, softWarm ? "#aaa59c" : "#8b909a");
+  const darkMuted = readableTextOn(
+    darkCanvas,
+    mutedResolve.value,
+    softWarm ? "#aaa59c" : "#8b909a",
+    softWarm ? "#8a867e" : "#8b909a",
+  ).value;
 
   const borderExplicit = [
     "border-dark", "hairline-dark", "divider-dark", "stroke-dark",
@@ -691,11 +716,16 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
   const darkText = darkTheme.text.value;
   const darkBorder = darkTheme.border.value;
   const darkMuted = darkTheme.muted.value;
-  const onDark = ensureReadable(tokenColor(allColors, ["on-dark", "body-on-dark", "text-on-dark", "on-black", "white"], darkText), darkCanvas, darkText);
+  const onDark = readableTextOn(
+    darkCanvas,
+    tokenColor(allColors, ["on-dark", "body-on-dark", "text-on-dark", "on-black", "white"], darkText),
+    darkText,
+    readableTextColor(darkCanvas),
+  ).value;
 
   const primary = tokenColorByPolicy(allColors, ["primary", "brand", "accent"], "#2563eb", (sem) =>
     canUseAsHeroAccent(sem));
-  const onPrimary = ensureReadable(tokenColor(allColors, ["on-primary"], readableTextColor(primary)), primary, readableTextColor(primary));
+  const onPrimary = readableTextOn(primary, tokenColor(allColors, ["on-primary"], readableTextColor(primary)), readableTextColor(primary), darkText).value;
 
   const isTokenBoard = darkTheme.darkPreviewMode === "darkTokenBoard";
   const darkThemeSource: DarkThemeSource = {
@@ -714,7 +744,7 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
     ),
   };
 
-  return {
+  const theme: ThemeTokens = {
     variant: "dark",
     canvas: darkCanvas,
     surface: darkSurface,
@@ -731,4 +761,16 @@ export function resolveDarkTokens(board: DesignMdBoard): ThemeTokens {
     darkPreviewNote: darkTheme.darkPreviewNote,
     darkSurfaceSet: darkTheme.darkSurfaceSet,
   };
+
+  const contrastWarnings = auditThemeContrast(theme)
+    .filter((finding) => !finding.passes)
+    .map((finding) => `${finding.label}: ${finding.note} (${finding.ratio === null ? "n/a" : finding.ratio.toFixed(2) + ":1"})`);
+  const surfaceWarnings = darkTheme.darkSurfaceSet
+    ? auditDarkSurfaceSetContrast(darkTheme.darkSurfaceSet, theme)
+      .filter((finding) => !finding.passes)
+      .map((finding) => `${finding.label}: ${finding.note}${finding.ratio === null ? "" : ` (${finding.ratio.toFixed(2)}:1)`}`)
+    : [];
+  darkThemeSource.warnings.push(...contrastWarnings, ...surfaceWarnings);
+
+  return theme;
 }
