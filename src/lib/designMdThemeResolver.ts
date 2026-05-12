@@ -337,6 +337,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
 
   // ── Consult the dark preview policy ──
   const darkPolicy = determineDarkPreviewMode(board);
+  const darkSurfaceSet = extractDarkSurfaceSet(board);
 
   const explicitCanvasKeys = [
     "body-dark", "canvas-dark", "background-dark", "page-dark", "app-dark",
@@ -411,7 +412,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
       muted: { value: "#8b909a", source: "fallback", note: "stable neutral muted (dark token board)" },
       darkPreviewMode: darkPolicy.mode,
       darkPreviewNote: darkPolicy.reason,
-      darkSurfaceSet: extractDarkSurfaceSet(board),
+      darkSurfaceSet,
     };
   }
 
@@ -421,9 +422,6 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
   // Surface uses source-backed dark section surfaces when available.
   // Text uses on-dark/body-on-dark/primary-on-dark tokens.
   if (darkPolicy.mode === "sectionalSourceDark") {
-    // Extract the full dark surface set for sectional rendering
-    const darkSurfaceSet = extractDarkSurfaceSet(board);
-
     // Canvas: conservative derivation from palette neutrals — NOT from section surfaces
     const canvasResolve = resolveDarkToken(
       allColors,
@@ -434,25 +432,21 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     );
     const darkCanvas = canvasResolve.value;
 
-    // Surface: prefer source-backed dark section surfaces (surface-tile-*, surface-black)
-    const sectionDarkKeys = [
-      "surface-tile-1", "surface-tile-2", "surface-tile-3",
-      "surface-black", "surface-dark",
-      "product-tile-dark", "product-tile-dark-2", "product-tile-dark-3",
-      "dark-surface", "dark-tile", "card-dark", "panel-dark",
-    ];
-    const surfaceResolve = resolveDarkToken(
-      allColors,
-      sectionDarkKeys,
-      () => {
-        const lighten = softWarm ? 0.11 : 0.08;
-        const mixed = mixHexColor(darkCanvas, "#ffffff", lighten);
-        if (mixed && isSafeColorValue(mixed)) return mixed;
-        return softWarm ? "#4a4740" : "#242628";
-      },
-      softWarm ? "#4a4740" : "#242628",
-      false, // don't filter non-canvas — we want surface tokens
-    );
+    const sectionalSurfaceToken = darkSurfaceSet.primarySectionSurface
+      ?? darkSurfaceSet.secondarySectionSurface
+      ?? darkSurfaceSet.tertiarySectionSurface;
+    const surfaceResolve = sectionalSurfaceToken
+      ? {
+          value: sectionalSurfaceToken.value,
+          source: "source" as const,
+          matchedKey: sectionalSurfaceToken.key,
+          note: `ranked sectional surface (${sectionalSurfaceToken.sourceKind})`,
+        }
+      : {
+          value: mixHexColor(darkCanvas, "#ffffff", softWarm ? 0.11 : 0.08) ?? (softWarm ? "#4a4740" : "#242628"),
+          source: "derived" as const,
+          note: "derived from neutral canvas",
+        };
     const darkSurface = surfaceResolve.value;
 
     // Text: use on-dark body text tokens explicitly.
@@ -596,8 +590,6 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     softWarm ? "#46433d" : "#2a2e35",
   );
 
-  const fullSurfaceSet = extractDarkSurfaceSet(board);
-
   return {
     canvas: canvasResolve,
     surface: surfaceResolve,
@@ -606,7 +598,7 @@ function selectDarkTheme(board: DesignMdBoard): DarkThemeSelection & { darkPrevi
     muted: { value: darkMuted, source: mutedResolve.source, matchedKey: mutedResolve.matchedKey, note: mutedResolve.note },
     darkPreviewMode: darkPolicy.mode,
     darkPreviewNote: darkPolicy.reason,
-    darkSurfaceSet: fullSurfaceSet,
+    darkSurfaceSet,
   };
 }
 

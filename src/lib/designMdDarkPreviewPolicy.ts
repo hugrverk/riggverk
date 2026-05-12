@@ -234,6 +234,30 @@ function hasSectionalDarkProse(board: DesignMdBoard): boolean {
   return patterns.some((p) => p.test(text));
 }
 
+function hasExplicitFullDarkProse(board: DesignMdBoard): boolean {
+  const text = [
+    board.title,
+    board.description,
+    board.overview ?? "",
+    board.layout ?? "",
+    ...board.visualLanguage.phrases,
+  ].join(" ").toLowerCase();
+
+  const patterns = [
+    /\bdark theme\b/,
+    /\bdark-native\b/,
+    /\bdark canvas\b/,
+    /\bnear[-\s]black canvas\b/,
+    /\bblack canvas\b/,
+    /\bdark mode\b/,
+    /\bfull dark\b/,
+    /\bdark interface\b/,
+    /\bdark shell\b/,
+    /\bimmersive dark\b/,
+  ];
+  return patterns.some((p) => p.test(text));
+}
+
 // ─── Source intent helpers ─────────────────────────────────────────
 
 function isDarkNativeIntent(board: DesignMdBoard): boolean {
@@ -291,37 +315,25 @@ export function determineDarkPreviewMode(board: DesignMdBoard): DarkPreviewDecis
   }
 
   const darkNative = isDarkNativeIntent(board);
+  const fullDarkProse = hasExplicitFullDarkProse(board);
   if (darkNative) evidence.push("source intent is dark-native");
+  if (fullDarkProse) evidence.push("explicit full-dark prose evidence");
 
   // ── Rule 1: fullSourceDark ──
-  // Requires ALL of:
+  // Requires:
   //   - explicit dark canvas key with medium+ canvas role confidence
-  //   - explicit on-dark text token (body-on-dark, text-on-dark, on-dark, etc.)
-  //   - source intent not strongly light-first
+  //   - explicit on-dark text token
+  //   - source intent not strongly light-first unless explicit full-dark prose exists
   //
   // inverse-canvas is explicitly excluded from dark canvas key detection
   // because it is an inverse-palette hint, not a dark-theme declaration.
   //
-  // If explicit dark canvas exists but lacks on-dark text evidence,
-  // fall through to conservativeDerivedDark or darkTokenBoard.
   if (hasExplicitDarkCanvas) {
-    // Light-first designs with cream/off-white/warm canvas should NOT get fullSourceDark
-    // even if they have dark-named canvas tokens.
-    if (isStronglyLightOnly(board)) {
+    if (isStronglyLightOnly(board) && !fullDarkProse) {
       evidence.push("explicit dark canvas token exists but source is light-first");
       warnings.push("dark canvas token exists but source is light-first; rendering conservative");
       // Fall through — will not qualify for fullSourceDark due to light-only source
-    } else if (hasExplicitOnDark && (hasExplicitDarkSurface || darkNative)) {
-      return {
-        mode: "fullSourceDark",
-        reason: "explicit dark canvas with on-dark text supported by explicit surface or dark-native intent",
-        evidence,
-        warnings,
-      };
     } else if (hasExplicitOnDark) {
-      // Has explicit dark canvas key with canvas role AND explicit on-dark text,
-      // but no surface-dark token and no dark-native intent.
-      // Still qualifies because canvas+text together are sufficient dark-theme evidence.
       evidence.push("explicit dark canvas and on-dark text token form sufficient dark theme evidence");
       return {
         mode: "fullSourceDark",
@@ -337,24 +349,6 @@ export function determineDarkPreviewMode(board: DesignMdBoard): DarkPreviewDecis
   }
 
   // ── Rule 2: sectionalSourceDark ──
-  // No global dark canvas, but explicit dark sections/tiles/cards/nav/surfaces
-  // with on-dark text and/or prose evidence of dark sectional components.
-  //
-  // Requires AT LEAST:
-  //   - explicit on-dark text token (on-dark, body-on-dark, text-on-dark, primary-on-dark)
-  //     AND at least two of:
-  //     - sectional dark surface token (surface-tile-*, surface-black, tile-dark)
-  //     - component dark token (product-tile-dark, dark-nav, dark-component)
-  //     - dark-named component group (component name containing "dark" or "black")
-  //     - sectional dark prose evidence
-  //
-  // OR:
-  //   - three or more sectional dark surface tokens AND on-dark text
-  //     (even without prose evidence, the token pattern is strong enough)
-  //
-  // Strongly light-only (cream/offWhite/warmLight) sources are excluded unless
-  // they have both on-dark text AND dark surface tokens AND prose evidence.
-
   const sectionalDarkSurfaceTokens = allColors.filter((t) =>
     (isSectionalDarkKey(t.key) || isTileDarkKey(t.key) || isNavDarkKey(t.key) || isComponentDarkKey(t.key))
     && isSafeColorValue(t.resolvedValue)
@@ -380,52 +374,29 @@ export function determineDarkPreviewMode(board: DesignMdBoard): DarkPreviewDecis
     evidence.push("sectional dark prose evidence");
   }
 
-  // Strong criterion: on-dark text + at least 2 dark surfaces + (components or prose)
-  if (hasExplicitOnDark && sectionalDarkSurfaceTokens.length >= 2) {
-    // For light-only sources, require stronger evidence: at least 3 surfaces + prose
-    if (isStronglyLightOnly(board)) {
-      if (sectionalDarkSurfaceTokens.length >= 3 && hasSectionalProse) {
-        evidence.push("strong light-only source with sectional dark override: 3+ dark surfaces and prose");
-        return {
-          mode: "sectionalSourceDark",
-          reason: "sectional dark surfaces with on-dark text and prose (light-only override)",
-          evidence,
-          warnings,
-        };
-      }
-      evidence.push("sectional dark surfaces exist but source is light-first; need stronger evidence");
-    } else {
-      // Strong enough evidence for non-light-only sources
-      if (sectionalDarkSurfaceTokens.length >= 3 || hasDarkComponents || hasSectionalProse) {
-        return {
-          mode: "sectionalSourceDark",
-          reason: `sectional dark surfaces (${sectionalDarkSurfaceTokens.length}) with on-dark text${hasDarkComponents ? " and dark components" : ""}${hasSectionalProse ? " and prose evidence" : ""}`,
-          evidence,
-          warnings,
-        };
-      }
-    }
-  }
-
-  // Weaker criterion: on-dark text + at least 1 dark section surface + dark components + prose
-  if (hasExplicitOnDark && hasSectionalSurfaces && hasDarkComponents && hasSectionalProse) {
+  if (hasExplicitOnDark && sectionalDarkSurfaceTokens.length >= 3) {
     return {
       mode: "sectionalSourceDark",
-      reason: "sectional dark surfaces with on-dark text, dark components, and prose evidence",
+      reason: `sectional dark surfaces (${sectionalDarkSurfaceTokens.length}) with on-dark text`,
+      evidence,
+      warnings,
+    };
+  }
+
+  if (hasExplicitOnDark && sectionalDarkSurfaceTokens.length >= 2 && (hasDarkComponents || hasSectionalProse)) {
+    return {
+      mode: "sectionalSourceDark",
+      reason: `sectional dark surfaces (${sectionalDarkSurfaceTokens.length}) with on-dark text and ${hasDarkComponents ? "dark components" : "prose evidence"}`,
       evidence,
       warnings,
     };
   }
 
   // ── Rule 3: conservativeDerivedDark ──
-  // No explicit dark canvas, but enough neutral dark-valued tokens to derive safely.
-  // Source must not be strongly light-only.
-  // Requires AT LEAST:
-  //   - one dark-valued text/ink candidate
-  //   - one dark-valued surface/canvas candidate
-  //   - three total neutral candidates with dark values
-
-  if (isStronglyLightOnly(board)) {
+  // Only allow derivation when there are no explicit sectional dark surfaces.
+  if (sectionalDarkSurfaceTokens.length > 0) {
+    evidence.push("explicit sectional dark surfaces exist; conservative derivation skipped");
+  } else if (isStronglyLightOnly(board)) {
     evidence.push("source is strongly light-only (cream/offWhite/warmLight canvas with light-first intent)");
   } else {
     // Check if enough neutral dark-valued tokens exist for safe derivation

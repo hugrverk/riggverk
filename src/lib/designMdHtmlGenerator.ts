@@ -426,10 +426,25 @@ function renderDarkSurfaces(colors: ThemeTokens, darkSurfaceSet?: DarkSurfaceSet
   const mode = darkSurfaceSet.mode;
   if (mode !== "sectional" && mode !== "full") return "";
 
-  // Surface bands: render each dark surface as a labeled color band
-  const darkSections = darkSurfaceSet.allSurfaces
-    .filter((s) => s.usableAs.includes("sectionSurface") || s.usableAs.includes("paletteSwatch"))
-    .slice(0, 6);
+  const namedKeys = new Set([
+    darkSurfaceSet.primarySectionSurface?.key,
+    darkSurfaceSet.secondarySectionSurface?.key,
+    darkSurfaceSet.tertiarySectionSurface?.key,
+    darkSurfaceSet.blackSurface?.key,
+    darkSurfaceSet.navSurface?.key,
+  ].filter((value): value is string => !!value));
+
+  const darkSections = [
+    darkSurfaceSet.primarySectionSurface,
+    darkSurfaceSet.secondarySectionSurface,
+    darkSurfaceSet.tertiarySectionSurface,
+    ...darkSurfaceSet.allSurfaces.filter((surface) =>
+      surface.usableAs.includes("sectionSurface")
+      && !namedKeys.has(surface.key)
+      && surface.sourceKind !== "blackVoid"
+      && surface.sourceKind !== "navSurface"
+    ).slice(0, 3),
+  ].filter((surface): surface is NonNullable<typeof surface> => !!surface);
 
   if (darkSections.length === 0) return "";
 
@@ -437,6 +452,10 @@ function renderDarkSurfaces(colors: ThemeTokens, darkSurfaceSet?: DarkSurfaceSet
   const subtitle = mode === "sectional"
     ? `${darkSections.length} source-backed dark surfaces`
     : `${darkSections.length} source-backed surfaces`;
+  const supportTokens = [
+    darkSurfaceSet.blackSurface,
+    darkSurfaceSet.navSurface,
+  ].filter((surface): surface is NonNullable<typeof surface> => !!surface && !namedKeys.has(surface.key));
 
   return '<section class="strip" id="dark-surfaces">' +
     '<header><h3>' + label + '</h3><span>' + subtitle + '</span></header>' +
@@ -455,6 +474,16 @@ function renderDarkSurfaces(colors: ThemeTokens, darkSurfaceSet?: DarkSurfaceSet
         '</div>';
     }).join("") +
     '</div>' +
+    (supportTokens.length > 0
+      ? '<div class="sectional-support">' + supportTokens.map((surface) => {
+        const bg = surface.value;
+        const textColor = colors.darkSurfaceSet?.onDarkText?.value ?? colors.text;
+        return '<span class="sectional-support-chip" style="background:' + bg + ';color:' + textColor + '">' +
+          '<b>' + esc(surface.key) + '</b>' +
+          '<em>' + esc(surface.sourceKind.replace(/([A-Z])/g, " $1").trim()) + '</em>' +
+          '</span>';
+      }).join("") + '</div>'
+      : '') +
     '</section>';
 }
 
@@ -467,19 +496,33 @@ function renderSourceNotes(board: DesignMdBoard, darkPreviewNote?: string, darkS
 
     // Add dark surface token list when available
     if (darkSurfaceSet && darkSurfaceSet.allSurfaces.length > 0) {
-      const modeLabel = darkSurfaceSet.mode === "sectional" ? "sectional" : darkSurfaceSet.mode === "full" ? "full" : "derived";
-      noteHtml += '<div class="dark-surface-list"><b>Dark surfaces (' + modeLabel + ')</b><ul>';
-      for (const surface of darkSurfaceSet.allSurfaces.slice(0, 10)) {
-        noteHtml += '<li><span class="dark-surface-dot" style="background:' + esc(surface.value) + '"></span>' +
-          esc(surface.key) + ' <code>' + esc(surface.value) + '</code> <em>' + esc(surface.sourceKind.replace(/([A-Z])/g, " $1").trim()) + '</em></li>';
+      const entries: Array<{ label: string; token?: DarkSurfaceSet["allSurfaces"][number] }> = [
+        { label: "Page canvas", token: darkSurfaceSet.pageCanvas },
+        { label: "Primary section", token: darkSurfaceSet.primarySectionSurface },
+        { label: "Secondary section", token: darkSurfaceSet.secondarySectionSurface },
+        { label: "Tertiary section", token: darkSurfaceSet.tertiarySectionSurface },
+        { label: "Black surface", token: darkSurfaceSet.blackSurface },
+        { label: "Nav surface", token: darkSurfaceSet.navSurface },
+        { label: "On-dark text", token: darkSurfaceSet.onDarkText },
+        { label: "Muted on-dark", token: darkSurfaceSet.mutedOnDarkText },
+        { label: "Link/accent", token: darkSurfaceSet.linkOnDark },
+      ];
+      const seen = new Set<string>();
+      noteHtml += '<div class="dark-surface-list"><b>Dark surfaces</b><ul>';
+      for (const entry of entries) {
+        if (!entry.token || seen.has(entry.token.key)) continue;
+        seen.add(entry.token.key);
+        noteHtml += '<li><span class="dark-surface-dot" style="background:' + esc(entry.token.value) + '"></span>' +
+          esc(entry.label) + ': ' + esc(entry.token.key) + ' <code>' + esc(entry.token.value) + '</code> <em>' + esc(entry.token.sourceKind.replace(/([A-Z])/g, " $1").trim()) + '</em></li>';
       }
-      if (darkSurfaceSet.onDarkText) {
-        noteHtml += '<li><span class="dark-surface-dot" style="background:' + esc(darkSurfaceSet.onDarkText.value) + '"></span>' +
-          esc(darkSurfaceSet.onDarkText.key) + ' <code>' + esc(darkSurfaceSet.onDarkText.value) + '</code> <em>on-dark text</em></li>';
-      }
-      if (darkSurfaceSet.linkOnDark) {
-        noteHtml += '<li><span class="dark-surface-dot" style="background:' + esc(darkSurfaceSet.linkOnDark.value) + '"></span>' +
-          esc(darkSurfaceSet.linkOnDark.key) + ' <code>' + esc(darkSurfaceSet.linkOnDark.value) + '</code> <em>link on dark</em></li>';
+      const supplemental = darkSurfaceSet.allSurfaces.filter((surface) =>
+        surface.usableAs.includes("sectionSurface")
+        && !seen.has(surface.key)
+      ).slice(0, 6);
+      if (supplemental.length > 0) {
+        noteHtml += '<li><span class="dark-surface-dot" style="background:' + esc(supplemental[0].value) + '"></span>' +
+          'Additional section surfaces: ' + supplemental.map((surface) => esc(surface.key) + ' <code>' + esc(surface.value) + '</code>').join(" · ") +
+          '</li>';
       }
       noteHtml += '</ul></div>';
     }
@@ -624,6 +667,10 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ".hero-visual{flex-shrink:0;display:flex;align-items:flex-start;gap:4px;padding-top:2px}",
     ".hero-palette-strip{display:flex;flex-wrap:wrap;gap:3px;max-width:112px}",
     ".hero-swatch{display:block;width:18px;height:18px;border-radius:4px;border:1px solid " + subtleSwatchBorder + ";flex-shrink:0}",
+    ".sectional-support{display:flex;flex-wrap:wrap;gap:8px;margin-top:8px}",
+    ".sectional-support-chip{display:flex;align-items:center;gap:8px;padding:7px 10px;border-radius:" + pill + ";border:1px solid " + subtleSwatchBorder + ";font-size:10px;line-height:1.2}",
+    ".sectional-support-chip b{font-size:10px;font-weight:600}",
+    ".sectional-support-chip em{font-size:9px;opacity:0.7;font-style:normal;white-space:nowrap}",
 
     // ── Section strips ──
     ".strip{padding:clamp(18px,3vw," + spacing + ") clamp(16px,4vw," + spacing + ");border-top:1px solid " + colors.border + ";max-width:960px;margin:0 auto}",
@@ -756,8 +803,9 @@ export function generateBoardHtml(board: DesignMdBoard, options: { variant?: Gen
     ? '<div class="board-banner">[!] Dark preview: no explicit dark theme detected \u2014 showing a conservative token board</div>'
     : '';
 
-  // Show dark preview note in source notes for both token board and sectional dark
-  const showDarkPreviewNote = isTokenBoard || colors.darkPreviewMode === "sectionalSourceDark";
+  // Show the dark preview note for every dark render so the source notes explain
+  // whether the preview is full, sectional, derived, or token-board.
+  const showDarkPreviewNote = !!colors.darkPreviewNote;
 
   const html = [
     tokenBoardBanner,

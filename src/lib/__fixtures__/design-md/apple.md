@@ -1,39 +1,37 @@
 ---
+version: alpha
+name: Apple
+description: A photography-first interface that turns marketing into a museum gallery. Edge-to-edge product tiles alternate light and dark canvases, framed by SF Pro Display headlines with negative letter-spacing and a single Action Blue (#0066cc) interactive color.
+
 colors:
-  canvas: '#f5f5f7'
-  surface-tile-1: '#1d1d1f'
-  surface-tile-2: '#2d2d2f'
-  surface-tile-3: '#3d3d3f'
-  surface-black: '#000000'
-  on-dark: '#f5f5f7'
-  body-on-dark: '#f5f5f7'
-  primary-on-dark: '#2997ff'
-  ink: '#1d1d1f'
+  primary: "#0066cc"
+  primary-on-dark: "#2997ff"
+  ink: "#1d1d1f"
+  body: "#1d1d1f"
+  body-on-dark: "#ffffff"
+  canvas: "#ffffff"
+  canvas-parchment: "#f5f5f7"
+  surface-pearl: "#fafafc"
+  surface-tile-1: "#272729"
+  surface-tile-2: "#2a2a2c"
+  surface-tile-3: "#252527"
+  surface-black: "#000000"
+  on-dark: "#ffffff"
+
 components:
   global-nav:
-    backgroundColor: '#000000'
-    textColor: '#f5f5f7'
+    backgroundColor: "{colors.surface-black}"
+    textColor: "{colors.on-dark}"
   product-tile-dark:
-    backgroundColor: '#1d1d1f'
-    textColor: '#f5f5f7'
+    backgroundColor: "{colors.surface-tile-1}"
+    textColor: "{colors.on-dark}"
   product-tile-dark-2:
-    backgroundColor: '#2d2d2f'
-    textColor: '#f5f5f7'
+    backgroundColor: "{colors.surface-tile-2}"
+    textColor: "{colors.on-dark}"
   product-tile-dark-3:
-    backgroundColor: '#3d3d3f'
-    textColor: '#f5f5f7'
+    backgroundColor: "{colors.surface-tile-3}"
+    textColor: "{colors.on-dark}"
+
 ---
 ## Overview
-
-Alternating light and dark canvases. Light hero → dark product tile → light utility tile → dark tile → parchment footer.
-
-## Key Characteristics
-
-- Alternating light and dark page sections
-- Near-black product tile surfaces
-- Translucent glassmorphism overlays
-- Minimal typographic hierarchy
-
-## Layout
-
-Fluid single-column layout with full-bleed alternating section backgrounds. Page body uses a light canvas with dark product showcase tiles, utility tiles, and a dark global navigation bar.
+Alternating light and dark canvases. Light hero -> dark product tile -> light utility tile -> dark tile -> parchment footer.

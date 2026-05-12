@@ -105,6 +105,137 @@ function isSolidHex(value: string | undefined): value is string {
   return !!value && /^#[0-9a-fA-F]{3,8}$/.test(value.trim());
 }
 
+function confidenceWeight(confidence: string): number {
+  if (confidence === "high") return 30;
+  if (confidence === "medium") return 18;
+  if (confidence === "low") return 8;
+  return 0;
+}
+
+function luminanceWeight(value: string): number {
+  const lum = relativeLuminance(value);
+  if (lum === null) return 0;
+  return Math.max(0, Math.round((1 - lum) * 20));
+}
+
+type SurfaceSelectionContext = "canvas" | "section" | "black" | "nav";
+
+interface RankedSurfaceToken extends DarkSurfaceToken {
+  score: number;
+  order: number;
+}
+
+function scoreSurfaceToken(
+  token: DarkSurfaceToken,
+  context: SurfaceSelectionContext,
+  options: {
+    sectionalEvidenceKeys: Set<string>;
+    proseEvidenceCount: number;
+    darkComponentCount: number;
+    allowBlackAsSection?: boolean;
+  },
+): number {
+  const key = token.key.toLowerCase();
+  const parts = keyParts(token.key);
+  const sourceKindScore: Record<DarkSurfaceSourceKind, number> = {
+    globalCanvas: context === "canvas" ? 1000 : 0,
+    tileSurface: context === "section" ? 520 : 0,
+    sectionSurface: context === "section" ? 420 : 0,
+    componentSurface: context === "section" ? 360 : 0,
+    cardSurface: context === "section" ? 320 : 0,
+    panelSurface: context === "section" ? 300 : 0,
+    blackVoid: context === "black" ? 520 : (context === "section" ? -180 : 0),
+    navSurface: context === "nav" ? 520 : (context === "section" ? -160 : 0),
+  };
+
+  let score = sourceKindScore[token.sourceKind];
+
+  if (context === "canvas") {
+    if (key.includes("body-dark") || key.includes("canvas-dark") || key.includes("background-dark") || key.includes("page-dark") || key.includes("app-dark")) {
+      score += 220;
+    }
+    if (token.resolvedRole === "globalCanvas") score += 40;
+    if (token.resolvedRole === "pageBackground") score += 30;
+    if (token.resolvedRole === "bodyBackground") score += 25;
+  }
+
+  if (context === "section") {
+    if (key.includes("surface-tile-1")) score += 160;
+    else if (key.includes("surface-tile-2")) score += 150;
+    else if (key.includes("surface-tile-3")) score += 140;
+    else if (key.includes("product-tile-dark-3")) score += 150;
+    else if (key.includes("product-tile-dark-2")) score += 155;
+    else if (key.includes("product-tile-dark")) score += 165;
+    else if (key.includes("section-dark")) score += 130;
+    else if (key.includes("dark-tile")) score += 125;
+    else if (key.includes("surface-dark")) score += 100;
+    else if (key.includes("dark-surface")) score += 100;
+
+    if (parts.includes("tile")) score += 80;
+    if (parts.includes("surface")) score += 28;
+    if (parts.includes("section")) score += 24;
+    if (parts.includes("product")) score += 18;
+    if (parts.includes("card")) score += 10;
+    if (parts.includes("panel")) score += 8;
+    if (parts.includes("black")) score -= 120;
+    if (parts.some((p) => /^(nav|navigation|global-nav)$/.test(p))) score -= 160;
+    if (parts.some((p) => /^(1|2|3)$/.test(p))) score += 12;
+    if (parts.some((p) => /^(hero|feature|editorial|environment|utility|band|strip|block)$/.test(p))) score += 10;
+    if (token.sourceKind === "tileSurface") score += 24;
+    if (token.sourceKind === "sectionSurface") score += 16;
+    if (token.sourceKind === "cardSurface" || token.sourceKind === "panelSurface" || token.sourceKind === "componentSurface") score += 8;
+    if (options.sectionalEvidenceKeys.has(token.key)) score += 22;
+    score += Math.min(18, options.proseEvidenceCount * 3);
+    score += Math.min(12, options.darkComponentCount * 4);
+  }
+
+  if (context === "black") {
+    if (token.sourceKind === "blackVoid") score += 180;
+    if (key === "surface-black") score += 160;
+    if (parts.includes("black")) score += 90;
+    if (parts.some((p) => /^(nav|video|void)$/.test(p))) score += 30;
+    if (options.sectionalEvidenceKeys.has(token.key)) score += 18;
+    score += Math.min(10, options.proseEvidenceCount * 2);
+    score += Math.min(8, options.darkComponentCount * 2);
+  }
+
+  if (context === "nav") {
+    if (token.sourceKind === "navSurface") score += 180;
+    if (parts.some((p) => /^(nav|navigation|global-nav)$/.test(p))) score += 120;
+    if (parts.includes("dark")) score += 35;
+    if (options.sectionalEvidenceKeys.has(token.key)) score += 10;
+  }
+
+  score += confidenceWeight(token.roleConfidence);
+  score += luminanceWeight(token.value);
+
+  if (context === "section" && token.sourceKind === "blackVoid" && !options.allowBlackAsSection) {
+    score -= 220;
+  }
+
+  return score;
+}
+
+function pickBestSurfaceToken(
+  tokens: DarkSurfaceToken[],
+  context: SurfaceSelectionContext,
+  options: {
+    sectionalEvidenceKeys: Set<string>;
+    proseEvidenceCount: number;
+    darkComponentCount: number;
+    allowBlackAsSection?: boolean;
+  },
+): RankedSurfaceToken | undefined {
+  const ranked = tokens
+    .map((token, order) => ({
+      ...token,
+      score: scoreSurfaceToken(token, context, options),
+      order,
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order);
+  return ranked[0];
+}
+
 // ─── Key classification ──────────────────────────────────────────
 
 function keyParts(key: string): string[] {
@@ -193,6 +324,7 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
   const componentTokens: DarkSurfaceToken[] = [];
   const genericSectionTokens: DarkSurfaceToken[] = [];
   const onDarkTextTokens: DarkSurfaceToken[] = [];
+  const linkOnDarkTokens: DarkSurfaceToken[] = [];
 
   for (const token of darkTokens) {
     const isGlobal = globalCanvasSet.has(token.key);
@@ -229,14 +361,11 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
     }
 
     if (kind === "navSurface") {
-      surfaceToken.usableAs.push("sectionSurface", "paletteSwatch");
+      surfaceToken.usableAs.push("paletteSwatch", "sourceNoteOnly");
     }
 
     if (kind === "blackVoid") {
-      surfaceToken.usableAs.push("sectionSurface", "paletteSwatch");
-      if (token.key.toLowerCase().includes("nav") || token.key.toLowerCase().includes("video")) {
-        surfaceToken.usableAs.push("sourceNoteOnly");
-      }
+      surfaceToken.usableAs.push("paletteSwatch", "sourceNoteOnly");
     }
 
     if (kind === "cardSurface" || kind === "panelSurface" || kind === "componentSurface") {
@@ -266,6 +395,23 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
     }
   }
 
+  // Dark link/accent tokens are tracked separately from text tokens.
+  for (const token of allColors) {
+    if (!isSafeColorValue(token.resolvedValue)) continue;
+    const keyLc = token.key.toLowerCase();
+    if (!/^(primary-on-dark|link-on-dark|accent-on-dark|on-primary-dark)$/.test(keyLc)) continue;
+    const accentToken: DarkSurfaceToken = {
+      key: token.key,
+      value: token.resolvedValue.trim(),
+      resolvedRole: token.resolvedRole ?? "unknown",
+      roleConfidence: token.roleConfidence ?? "fallback",
+      sourceKind: "sectionSurface",
+      evidence: ["link/accent on dark token"],
+      usableAs: ["paletteSwatch", "sourceNoteOnly"],
+    };
+    linkOnDarkTokens.push(accentToken);
+  }
+
   // ── Extract text tokens separately ──
   for (const textToken of textEvidence) {
     const token = allColors.find((t) => t.key === textToken.tokenKey);
@@ -280,27 +426,21 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
       usableAs: ["sourceNoteOnly"],
     };
 
-    // Determine if this is body text vs link/accent vs muted
-    const keyLc = textToken.tokenKey.toLowerCase();
-    if (/primary-on-dark|link-on-dark|accent-on-dark/.test(keyLc)) {
-      // This is a link/accent token, not body text
-      // But we keep it as a text token reference
-    }
-    if (/muted-on-dark|on-dark-muted|text-muted-dark/.test(keyLc)) {
-      // Muted text
-    }
-
     onDarkTextTokens.push(t);
   }
 
-  // ── Rank section surfaces by darkness for role assignment ──
-  const allSectionSurfaces = [
+  const sectionSurfaceTokens = [
     ...sectionTiles,
-    ...navTokens,
-    ...blackTokens,
     ...cardPanelTokens,
+    ...componentTokens,
     ...genericSectionTokens,
-  ].sort((a, b) => (tokenLumaFromValue(a.value) ?? 1) - (tokenLumaFromValue(b.value) ?? 1));
+  ];
+  const sectionEvidenceKeys = new Set(sectionalEvidence.map((item) => item.tokenKey));
+  const sectionCandidates = sectionSurfaceTokens;
+  const blackCandidates = blackTokens;
+  const navCandidates = navTokens;
+  const canUseBlackAsSection = sectionCandidates.length === 0
+    && (sectionalEvidence.length > 0 || proseEvidence.length > 0 || componentEvidence.length > 0 || navTokens.length === 0);
 
   // ── Build the dark surface set ──
   const surfaceSet: DarkSurfaceSet = {
@@ -313,13 +453,23 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
 
   // Determine overall mode
   const hasGlobalCanvas = globalCanvasTokens.length > 0;
-  const hasSectionalSurfaces = allSectionSurfaces.length > 0;
+  const hasSectionalSurfaces = sectionCandidates.length > 0 || blackCandidates.length > 0 || navCandidates.length > 0;
   const hasTextTokens = onDarkTextTokens.length > 0;
 
   if (hasGlobalCanvas) {
     surfaceSet.mode = "full";
-    surfaceSet.pageCanvas = globalCanvasTokens[0];
-  } else if (hasSectionalSurfaces && hasTextTokens) {
+    surfaceSet.pageCanvas = pickBestSurfaceToken(globalCanvasTokens, "canvas", {
+      sectionalEvidenceKeys: sectionEvidenceKeys,
+      proseEvidenceCount: proseEvidence.length,
+      darkComponentCount: componentEvidence.length,
+    }) ?? globalCanvasTokens[0];
+  } else if (
+    hasTextTokens
+    && (
+      sectionCandidates.length >= 3
+      || (sectionCandidates.length >= 2 && (sectionalEvidence.length > 0 || componentEvidence.length > 0 || proseEvidence.length > 0))
+    )
+  ) {
     surfaceSet.mode = "sectional";
   } else if (hasSectionalSurfaces || hasTextTokens) {
     surfaceSet.mode = "derived";
@@ -329,41 +479,93 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
 
   // Assign surfaces by rank
   if (globalCanvasTokens.length > 0) {
-    surfaceSet.pageCanvas = globalCanvasTokens[0];
-    evidence.push(`global dark canvas: ${globalCanvasTokens[0].key}`);
+    surfaceSet.pageCanvas = surfaceSet.pageCanvas ?? pickBestSurfaceToken(globalCanvasTokens, "canvas", {
+      sectionalEvidenceKeys: sectionEvidenceKeys,
+      proseEvidenceCount: proseEvidence.length,
+      darkComponentCount: componentEvidence.length,
+    }) ?? globalCanvasTokens[0];
+    evidence.push(`global dark canvas: ${surfaceSet.pageCanvas.key}`);
   }
 
-  if (allSectionSurfaces.length >= 1) {
-    surfaceSet.primarySectionSurface = allSectionSurfaces[0];
-    evidence.push(`primary dark section surface: ${allSectionSurfaces[0].key} (${allSectionSurfaces[0].value})`);
+  const rankedSectionCandidate = (token: DarkSurfaceToken) => ({
+    ...token,
+    score: scoreSurfaceToken(token, "section", {
+      sectionalEvidenceKeys: sectionEvidenceKeys,
+      proseEvidenceCount: proseEvidence.length,
+      darkComponentCount: componentEvidence.length,
+      allowBlackAsSection: canUseBlackAsSection,
+    }),
+    order: sectionCandidates.indexOf(token),
+  });
+
+  const rankedSections = sectionCandidates
+    .map(rankedSectionCandidate)
+    .sort((a, b) => b.score - a.score || a.order - b.order);
+
+  const rankedBlack = blackCandidates
+    .map((token, order) => ({
+      ...token,
+      score: scoreSurfaceToken(token, "black", {
+        sectionalEvidenceKeys: sectionEvidenceKeys,
+        proseEvidenceCount: proseEvidence.length,
+        darkComponentCount: componentEvidence.length,
+      }),
+      order,
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order);
+
+  const rankedNav = navCandidates
+    .map((token, order) => ({
+      ...token,
+      score: scoreSurfaceToken(token, "nav", {
+        sectionalEvidenceKeys: sectionEvidenceKeys,
+        proseEvidenceCount: proseEvidence.length,
+        darkComponentCount: componentEvidence.length,
+      }),
+      order,
+    }))
+    .sort((a, b) => b.score - a.score || a.order - b.order);
+
+  const primary = rankedSections[0] ?? (canUseBlackAsSection ? rankedBlack[0] : undefined);
+  const secondary = rankedSections[1];
+  const tertiary = rankedSections[2];
+
+  if (primary) {
+    surfaceSet.primarySectionSurface = primary;
+    evidence.push(`primary dark section surface: ${primary.key} (${primary.value})`);
+    if (primary.sourceKind === "blackVoid") {
+      primary.usableAs.push("sectionSurface");
+    }
   }
-  if (allSectionSurfaces.length >= 2) {
-    surfaceSet.secondarySectionSurface = allSectionSurfaces[1];
-    evidence.push(`secondary dark section surface: ${allSectionSurfaces[1].key} (${allSectionSurfaces[1].value})`);
+  if (secondary) {
+    surfaceSet.secondarySectionSurface = secondary;
+    evidence.push(`secondary dark section surface: ${secondary.key} (${secondary.value})`);
   }
-  if (allSectionSurfaces.length >= 3) {
-    surfaceSet.tertiarySectionSurface = allSectionSurfaces[2];
-    evidence.push(`tertiary dark section surface: ${allSectionSurfaces[2].key} (${allSectionSurfaces[2].value})`);
+  if (tertiary) {
+    surfaceSet.tertiarySectionSurface = tertiary;
+    evidence.push(`tertiary dark section surface: ${tertiary.key} (${tertiary.value})`);
   }
 
-  // Black void surface
-  const blackVoid = blackTokens[0] ?? allSectionSurfaces.find((s) => s.sourceKind === "blackVoid");
+  const blackVoid = rankedBlack[0];
   if (blackVoid) {
     surfaceSet.blackSurface = blackVoid;
     evidence.push(`black void surface: ${blackVoid.key}`);
   }
 
-  // Nav surface
-  if (navTokens.length > 0) {
-    surfaceSet.navSurface = navTokens[0];
-    evidence.push(`nav dark surface: ${navTokens[0].key}`);
+  const navSurface = rankedNav[0];
+  if (navSurface) {
+    surfaceSet.navSurface = navSurface;
+    evidence.push(`nav dark surface: ${navSurface.key}`);
   }
 
   // Text tokens
   const bodyOnDark = onDarkTextTokens.find((t) =>
     /body-on-dark/.test(t.key) || /^on-dark$/.test(t.key) || /text-on-dark/.test(t.key) || /ink-on-dark/.test(t.key)
   );
-  const primaryOnDark = onDarkTextTokens.find((t) => /primary-on-dark/.test(t.key) || /link-on-dark/.test(t.key));
+  const primaryOnDark = linkOnDarkTokens.find((t) => /link-on-dark/.test(t.key))
+    ?? linkOnDarkTokens.find((t) => /primary-on-dark/.test(t.key))
+    ?? linkOnDarkTokens[0]
+    ?? onDarkTextTokens.find((t) => /primary-on-dark/.test(t.key) || /link-on-dark/.test(t.key));
   const mutedOnDark = onDarkTextTokens.find((t) => /muted-on-dark/.test(t.key) || /on-dark-muted/.test(t.key));
 
   if (bodyOnDark) {
@@ -405,14 +607,23 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
   if (sectionalEvidence.length > 0 && onDarkTextTokens.length === 0) {
     warnings.push("sectional dark surfaces detected but no on-dark text tokens");
   }
-  if (onDarkTextTokens.length > 0 && allSectionSurfaces.length === 0 && !hasGlobalCanvas) {
+  if (onDarkTextTokens.length > 0 && sectionCandidates.length === 0 && !hasGlobalCanvas) {
     warnings.push("on-dark text detected but no dark surfaces");
   }
-  if (componentEvidence.length > 0 && allSectionSurfaces.length === 0) {
+  if (componentEvidence.length > 0 && sectionCandidates.length === 0) {
     warnings.push("dark component names exist but no dark surface tokens");
   }
-  if (proseEvidence.length > 0 && allSectionSurfaces.length === 0 && !hasGlobalCanvas) {
+  if (proseEvidence.length > 0 && sectionCandidates.length === 0 && !hasGlobalCanvas) {
     warnings.push("dark prose evidence exists but no dark surface tokens");
+  }
+  if (sectionCandidates.length > 0 && surfaceSet.primarySectionSurface?.sourceKind === "blackVoid") {
+    warnings.push("black surface selected as primary while tile surfaces exist");
+  }
+  if (sectionCandidates.length > 0 && surfaceSet.primarySectionSurface?.sourceKind === "navSurface") {
+    warnings.push("nav surface selected as primary section");
+  }
+  if (sectionCandidates.length > 0 && (surfaceSet.primarySectionSurface?.sourceKind === "cardSurface" || surfaceSet.primarySectionSurface?.sourceKind === "panelSurface" || surfaceSet.primarySectionSurface?.sourceKind === "componentSurface") && sectionTiles.length > 0) {
+    warnings.push("component-local surface promoted too broadly");
   }
 
   // Collect all surfaces: named slots first, then remaining section tiles,
@@ -426,38 +637,36 @@ export function extractDarkSurfaceSet(board: DesignMdBoard): DarkSurfaceSet {
     surfaceSet.navSurface?.key,
   ].filter((k): k is string => !!k));
 
-  // Include named slots + remaining section tiles + other surfaces not already captured
-  const remainingTiles = sectionTiles.filter((t) => !namedKeys.has(t.key));
-  const remainingBlack = blackTokens.filter((t) => !namedKeys.has(t.key));
-  const remainingNav = navTokens.filter((t) => !namedKeys.has(t.key));
-  const remainingCardPanel = cardPanelTokens.filter((t) => !namedKeys.has(t.key));
-  const remainingComponents = componentTokens.filter((t) => !namedKeys.has(t.key));
-  const remainingGeneric = genericSectionTokens.filter((t) => !namedKeys.has(t.key));
+  // Include named slots + remaining section surfaces + separate black/nav surfaces.
+  const remainingSections = rankedSections
+    .slice(3)
+    .map(({ score: _score, order: _order, ...token }) => token)
+    .filter((t) => !namedKeys.has(t.key));
+  const remainingBlack = rankedBlack
+    .slice(1)
+    .map(({ score: _score, order: _order, ...token }) => token)
+    .filter((t) => !namedKeys.has(t.key));
+  const remainingNav = rankedNav
+    .slice(1)
+    .map(({ score: _score, order: _order, ...token }) => token)
+    .filter((t) => !namedKeys.has(t.key));
 
   surfaceSet.allSurfaces = [
     ...(surfaceSet.pageCanvas ? [surfaceSet.pageCanvas] : []),
     ...(surfaceSet.primarySectionSurface ? [surfaceSet.primarySectionSurface] : []),
     ...(surfaceSet.secondarySectionSurface ? [surfaceSet.secondarySectionSurface] : []),
     ...(surfaceSet.tertiarySectionSurface ? [surfaceSet.tertiarySectionSurface] : []),
+    ...remainingSections,
     ...(surfaceSet.blackSurface ? [surfaceSet.blackSurface] : []),
     ...(surfaceSet.navSurface ? [surfaceSet.navSurface] : []),
-    ...remainingTiles,
     ...remainingBlack,
     ...remainingNav,
-    ...remainingCardPanel,
-    ...remainingComponents,
-    ...remainingGeneric,
   ];
 
   surfaceSet.evidence = evidence;
   surfaceSet.warnings = warnings;
 
   return surfaceSet;
-}
-
-function tokenLumaFromValue(value: string): number | null {
-  if (!isSolidHex(value)) return null;
-  return relativeLuminance(value);
 }
 
 export function darkSurfaceSetSummary(set: DarkSurfaceSet): string {
