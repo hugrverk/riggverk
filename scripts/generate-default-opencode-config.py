@@ -135,7 +135,7 @@ def generate_config():
     base_keys = [
         "$schema", "share", "autoupdate", "snapshot",
         "model", "small_model", "default_agent",
-        "provider", "compaction", "watcher",
+        "provider", "mcp", "compaction", "watcher",
     ]
     for key in base_keys:
         if key in base:
