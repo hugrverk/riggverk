@@ -18,6 +18,19 @@
       }
     }
   },
+  "mcp": {
+    "playwright": {
+      "type": "local",
+      "command": [
+        "npx",
+        "-y",
+        "@playwright/mcp@latest",
+        "--headless",
+        "--browser=chrome"
+      ],
+      "enabled": true
+    }
+  },
   "compaction": {
     "auto": true,
     "prune": true,

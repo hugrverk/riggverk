@@ -26,9 +26,27 @@ The template defines:
 - Share settings (recommended: disabled)
 - Model selection via `model` and `small_model`
 - Default primary agent via `default_agent`
+- Playwright MCP through on-demand `npx`, without adding repository dependencies
 - Permission model (which operations are allowed, denied, or require asking)
 - File-scope read/edit deny rules for secrets and credentials
 - Watcher ignore patterns
+
+Playwright MCP is defined in `templates/opencode.base.json` and included in the generated `templates/opencode.json`.
+
+Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate.
+
+Local MCP checks:
+
+```
+npx -y @playwright/mcp@latest --help
+opencode mcp list
+```
+
+If browser binaries are missing, install Chromium with:
+
+```
+npx -y playwright install chromium
+```
 
 ## OpenCode agents
 
