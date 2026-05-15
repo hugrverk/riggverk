@@ -11,7 +11,7 @@ related: security-review, database-migrations
 
 ## Purpose
 
-- Check readiness before merge, deploy, or handoff.
+- Check readiness before merge or deploy.
 - Surface risk before it reaches production.
 - Keep the checklist short and evidence-based.
 

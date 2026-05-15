@@ -11,7 +11,7 @@ related: diagnose, release-check
 
 ## Purpose
 
-- Catch common security regressions before implementation, merge, deploy, or handoff.
+- Catch common security regressions before implementation, merge, deploy, or transfer.
 - Focus on the changed surface and realistic abuse paths.
 - Keep findings evidence-based, scoped, and actionable.
 

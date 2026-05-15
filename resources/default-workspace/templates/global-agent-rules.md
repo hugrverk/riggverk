@@ -22,7 +22,9 @@ Use the installed skill system as routing and workflow guidance, not boilerplate
 - **Security/auth/uploads/endpoints/secrets/shell/payments**: `security-review`.
 - **DB/schema/data changes**: `database-migrations`.
 - **Dependencies/SDKs/CLIs/packages**: `dependency-evaluation`; add `current-docs` for fast-moving APIs.
-- **Release/merge/deploy/handoff**: `release-check`.
+- **Prototyping before implementation**: `prototype`; add `frontend-design` for UI prototypes or `zoom-out`/`implementation-plan` when repo context is needed.
+- **Release readiness**: `release-check`.
+- **Handoff/continuation**: `handoff`; add `agent-report-review` when based on executor reports.
 - **Executor reports**: `agent-report-review`.
 - **Product/spec/triage/planning**: `to-prd`, `triage`, `grill-me`, or `grill-with-docs`.
 - **Skill authoring**: `write-a-skill`.

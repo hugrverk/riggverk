@@ -30,7 +30,8 @@ All bundled skills are treated as core starter skills. There is no core vs add-o
 - grill-with-docs — stress-test a plan against repo docs
 - implementation-plan — turn approved direction into small verifiable slices
 - improve-codebase-architecture — find bounded architecture improvements
-- release-check — check readiness before merge, deploy, or handoff
+- prototype — validate throwaway ideas before production implementation
+- release-check — check readiness before merge or deploy
 - screenshot-review — review UI screenshots before implementation
 - security-review — review security risks
 - tdd — red-green-refactor with narrow behavior tests
@@ -44,6 +45,7 @@ All bundled skills are treated as core starter skills. There is no core vs add-o
 - caveman — compressed technical communication
 - context-budget — audit skills, rules, docs for token overhead
 - grill-me — bounded plan stress-test
+- handoff — compact paused workflows or agent chains into next-action state
 - write-a-skill — edit or add skills with minimal structure
 
 ## Adding or removing skills
