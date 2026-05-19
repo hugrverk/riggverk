@@ -328,12 +328,46 @@ if ! grep -q 'workspace_has_cursor_mdc_rule' src-tauri/src/commands/workspace.rs
 fi
 
 step "regression: cursor appears in user-facing rule/sync targets"
-if ! rg -q '"cursor_setup".*kind:.*Rules' src-tauri/src/agent_targets.rs; then
-  if ! rg -q 'cursor_setup.*Rules' src-tauri/src/agent_targets.rs; then
-    printf 'FAIL: cursor_setup must be a user-facing Rules target\n' >&2
-    exit 1
-  fi
-fi
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("src-tauri/src/agent_targets.rs")
+text = path.read_text()
+
+def function_body(name: str) -> str:
+    marker = f"pub fn {name}()"
+    start = text.find(marker)
+    if start == -1:
+        raise SystemExit(f"FAIL: missing {name}() in agent_targets.rs")
+    brace = text.find("{", start)
+    if brace == -1:
+        raise SystemExit(f"FAIL: missing {name}() body in agent_targets.rs")
+    depth = 0
+    for idx in range(brace, len(text)):
+        char = text[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:idx]
+    raise SystemExit(f"FAIL: unterminated {name}() body in agent_targets.rs")
+
+targets = function_body("targets")
+cursor_id = 'id: "cursor_setup"'
+cursor_index = targets.find(cursor_id)
+if cursor_index == -1:
+    raise SystemExit("FAIL: cursor_setup must exist in targets()")
+next_target_index = targets.find("AgentSyncTarget", cursor_index + len(cursor_id))
+cursor_block = targets[cursor_index: next_target_index if next_target_index != -1 else len(targets)]
+if "kind: TargetKind::Rules" not in cursor_block:
+    raise SystemExit("FAIL: cursor_setup must have kind TargetKind::Rules")
+
+config_sync_targets = function_body("config_sync_targets")
+if "cursor_setup" in config_sync_targets:
+    raise SystemExit("FAIL: cursor_setup must not be in config_sync_targets()")
+PY
+printf '  cursor_setup target registry verified\n'
 
 step "regression: cursor_setup is not in config_sync_targets"
 if rg -q 'cursor_setup' src-tauri/src/agent_targets.rs -A 5 | grep -q 'ConfigSyncTarget'; then
