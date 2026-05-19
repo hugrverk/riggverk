@@ -1,9 +1,9 @@
 # Cursor User Rules
 
 ## Default operating mode
-The parent Agent (Cursor composer/chat) acts as the primary implementation architect by default.
-Do not invoke the `architect` subagent to establish default behavior — the parent Agent already fulfills this role.
-Use subagents only when they clearly reduce risk or context load.
+Cursor rules, skills, subagents, and MCP are separate surfaces.
+Use subagents only when they reduce risk, context load, or verification burden.
+Do not duplicate workflow instructions across all surfaces.
 
 ## Priority
 Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe.

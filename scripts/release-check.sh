@@ -282,16 +282,32 @@ if [ ! -f "$user_rules_file" ]; then
   exit 1
 fi
 printf '  user-rules.md exists\n'
-if ! grep -qF 'primary implementation architect' "$user_rules_file"; then
-  printf 'FAIL: user-rules.md missing primary implementation architect\n' >&2
-  exit 1
-fi
-printf '  user-rules.md contains primary implementation architect\n'
-if ! grep -qF 'Use subagents only when they clearly reduce risk or context load' "$user_rules_file"; then
-  printf 'FAIL: user-rules.md missing subagent guidance\n' >&2
-  exit 1
-fi
-printf '  user-rules.md contains subagent guidance\n'
+
+# Must NOT contain deprecated architect framing
+for forbidden in \
+  'primary implementation architect' \
+  'architect subagent' \
+  'Cursor composer/chat' \
+  'Do not invoke the `architect`' \
+  'Do not invoke the architect'; do
+  if grep -qF "$forbidden" "$user_rules_file"; then
+    printf 'FAIL: user-rules.md must not contain deprecated wording: %s\n' "$forbidden" >&2
+    exit 1
+  fi
+done
+printf '  user-rules.md avoids deprecated architect framing\n'
+
+# Must contain updated subagent/worksurface guidance
+for required in \
+  'Cursor rules, skills, subagents, and MCP are separate surfaces' \
+  'Use subagents only when they reduce risk, context load, or verification burden' \
+  'Do not duplicate workflow instructions across all surfaces'; do
+  if ! grep -qF "$required" "$user_rules_file"; then
+    printf 'FAIL: user-rules.md missing required wording: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+printf '  user-rules.md contains updated subagent guidance\n'
 
 step "regression: global-agent-rules.md avoids Cursor-specific content"
 global_rules="resources/default-workspace/templates/global-agent-rules.md"

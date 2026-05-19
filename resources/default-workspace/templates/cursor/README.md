@@ -4,7 +4,7 @@ This directory is the starter Cursor profile source for this workspace.
 
 - `user-rules.md` is copied manually into Cursor Settings. It is not installed to a file-backed global path.
 - `rules/*.mdc` are project rules for `.cursor/rules`.
-- `agents/*.md` are focused Cursor subagents. The parent Cursor Agent remains the default implementer and architect.
+- `agents/*.md` are focused Cursor subagents. Use them when they reduce risk or context load.
 - `manifest.json` is the machine-readable profile inventory used by checks and GUI integrations.
 - `mcp/` contains opt-in examples only. Review MCP security before creating `.cursor/mcp.json` in a project.
 
