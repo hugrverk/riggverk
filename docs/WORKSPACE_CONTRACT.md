@@ -26,12 +26,12 @@ workspace) and bundled default resources (shipped with the app, not strictly req
 | `templates/opencode.json` | file | OpenCode config template |
 | `templates/cursor/agents/` | directory | Cursor subagent adapter templates |
 | `templates/cursor/rules/` | directory | Cursor project rule templates dir (must contain at least one `.mdc` file) |
+| `templates/cursor/manifest.json` | file | Cursor profile manifest |
+| `templates/cursor/mcp/mcp.example.json` | file | Cursor MCP example using env placeholders |
 | `README.md` | file | Workspace readme |
 | `skills/` | directory | Skill definitions |
 
-The Cursor project rule `.mdc` filename is workspace-specific. Examples:
-- `templates/cursor/rules/agent-workspace.mdc` (Agent Workspace default)
-- `templates/cursor/rules/ux-workspace.mdc` (private ux-workspace)
+Cursor project rules are split into focused `.mdc` files. At least one rule must be always-applied, and not all rules should be always-applied.
 
 All generic markers must be present for a workspace to pass validation. A folder
 missing any marker is rejected.
@@ -44,7 +44,7 @@ The following files are shipped with the app as bundled starter content but are
 | Resource | Purpose |
 |----------|---------|
 | `templates/cursor/README.md` | Cursor setup source note (bundled default doc) |
-| `templates/cursor/rules/agent-workspace.mdc` | Cursor project rule (Agent Workspace-specific name) |
+| `templates/cursor/rules/core-safety.mdc` | Always-applied Cursor core safety project rule |
 | `templates/tui.json` | OpenCode TUI config template |
 | `agents/` directory + 6 agent files | OpenCode agent definitions |
 
@@ -67,7 +67,7 @@ The app supports editing allowlisted config templates. OpenCode config sources a
 
 The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
 
-Cursor support is script-backed and scoped: skills install to Cursor skill folders, subagents install to Cursor agent folders, and project rules install to `.cursor/rules/agent-workspace.mdc` inside an explicit project target. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (a Cursor-only template separate from the cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup.
+Cursor support is script-backed and scoped: skills install to Cursor skill folders, focused subagents install to Cursor agent folders, and project rules install to `.cursor/rules/*.mdc` inside an explicit project target. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (a Cursor-only template separate from the cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup. MCP examples are opt-in only and must use environment interpolation for auth-like values.
 
 ## Transition state
 
@@ -91,7 +91,7 @@ The app source carries a generic starter workspace under `resources/default-work
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
-A newly created default workspace includes real sync and install scripts plus all six Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie, Cursor. Config/setup sync targets: OpenCode config + agents, and Cursor global subagents. Cursor project rules are available through the Cursor setup script with an explicit project target. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install requires a real project marker and rejects broad parent directories.
+A newly created default workspace includes real sync and install scripts plus five focused Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie, Cursor. Config/setup sync targets: OpenCode config + agents, and Cursor global subagents. Cursor project rules are available through the Cursor setup script with an explicit project target. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install and Cursor project sync require a real project marker and reject broad parent directories.
 
 These resources are not automatically copied into the active workspace. Future import and upgrade flows may use them as source material when setting up new workspaces or resetting an existing workspace to defaults.
 
