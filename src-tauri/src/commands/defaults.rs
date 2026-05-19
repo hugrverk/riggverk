@@ -74,6 +74,8 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             &[
                 "templates/global-agent-rules.md",
                 "templates/opencode.json",
+                "templates/opencode.base.json",
+                "templates/opencode.policy.json",
                 "templates/tui.json",
                 "templates/cursor/README.md",
                 "templates/cursor/manifest.json",
@@ -111,6 +113,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             "Scripts",
             &[
                 "scripts/bootstrap.sh",
+                "scripts/generate-opencode-config.py",
                 "scripts/install-skills.sh",
                 "scripts/install-agent-rules.sh",
                 "scripts/install-opencode-config.sh",
@@ -278,8 +281,8 @@ mod tests {
             .expect("scripts category must exist");
         assert_eq!(
             scripts.files.len(),
-            5,
-            "scripts category must have 5 known paths"
+            6,
+            "scripts category must have 6 known paths"
         );
     }
 
@@ -375,6 +378,8 @@ mod tests {
         for &rel in &[
             "templates/global-agent-rules.md",
             "templates/opencode.json",
+            "templates/opencode.base.json",
+            "templates/opencode.policy.json",
             "templates/tui.json",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
@@ -410,6 +415,7 @@ mod tests {
         }
         for &rel in &[
             "scripts/bootstrap.sh",
+            "scripts/generate-opencode-config.py",
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",

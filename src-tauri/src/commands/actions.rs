@@ -274,8 +274,14 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let mut err = String::new();
             let mut last_code = Some(0);
 
+            let agent_rules_script = "scripts/install-agent-rules.sh";
+            let cursor_script = "scripts/install-cursor-workspace.sh";
+
+            let mut subsets_attempted: Vec<&str> = Vec::new();
+
             if !rule_flags.is_empty() {
-                let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
+                subsets_attempted.push("install-agent-rules");
+                let script_str = workspace_script_arg(&root, agent_rules_script)?;
                 let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply"];
                 all_args.extend(&rule_flags);
                 let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
@@ -288,8 +294,8 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             }
 
             if cursor_on {
-                let script_str =
-                    workspace_script_arg(&root, "scripts/install-cursor-workspace.sh")?;
+                subsets_attempted.push("install-cursor-workspace");
+                let script_str = workspace_script_arg(&root, cursor_script)?;
                 let all_args: Vec<&str> =
                     vec![&script_str, "--quiet", "--apply", "--global-agents"];
                 let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
@@ -299,6 +305,17 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 last_code = code;
                 out.push_str(&o);
                 err.push_str(&e);
+            }
+
+            // When a subcommand fails with empty stdout+stderr, emit synthetic
+            // diagnostics so the user sees actionable information.
+            if !all_ok && out.trim().is_empty() && err.trim().is_empty() {
+                let subsets = subsets_attempted.join(", ");
+                err = format!(
+                    "Action 'sync_agent_rules' failed (exit code {:?}) with no output. \
+                     Attempted subsets: {}. Scripts: {}, {}.\n",
+                    last_code, subsets, agent_rules_script, cursor_script,
+                );
             }
 
             Ok(ActionResult::new(

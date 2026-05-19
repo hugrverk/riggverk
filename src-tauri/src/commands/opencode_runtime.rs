@@ -657,6 +657,19 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         generated_snapshot_detail = "Regenerate opencode.json before sync.".into();
     }
 
+    // When source templates exist but no generator script, surface a warning
+    // so the user knows a workspace upgrade can add it.
+    if base_source_exists
+        && policy_source_exists
+        && generated_snapshot_status == "valid"
+        && run_generator_check(workspace_root).is_none()
+    {
+        warnings.push(
+            "OpenCode config generator script not found. Use 'Repair workspace' to upgrade."
+                .to_string(),
+        );
+    }
+
     // Bundled agents check
     let bundled_agents = list_bundled_agents(&agents_source_dir);
     let bundled_agent_count = bundled_agents.len();

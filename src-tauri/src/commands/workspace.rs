@@ -849,11 +849,228 @@ pub fn create_workspace_from_defaults(
     Ok(create_workspace_from_source(&source_root, target_path))
 }
 
+#[derive(Serialize)]
+pub struct RepairWorkspaceResult {
+    pub ok: bool,
+    pub dry_run: bool,
+    pub target_path: String,
+    pub copied_files: Vec<String>,
+    pub skipped_files: Vec<String>,
+    pub errors: Vec<String>,
+    pub warnings: Vec<String>,
+    pub message: String,
+}
+
+/// Core repair logic: copy missing default workspace files from `source_root`
+/// into `target`. This is the testable inner function.
+///
+/// Semantics:
+/// - Never overwrites existing files.
+/// - If dry_run is true, only reports what would be copied.
+/// - Skips files missing from the source bundle.
+/// - Skips files with unsafe relative paths.
+fn repair_workspace_core(
+    source_root: &std::path::Path,
+    target: &std::path::Path,
+    dry_run: bool,
+) -> RepairWorkspaceResult {
+    let target_path = target.to_string_lossy().into_owned();
+
+    // Collect missing files from the default workspace file list
+    let file_list = super::defaults::default_workspace_files();
+    let mut missing_files: Vec<&str> = Vec::new();
+    for (_label, paths) in &file_list {
+        for &rel in *paths {
+            let src = source_root.join(rel);
+            let dst = target.join(rel);
+
+            if !src.is_file() {
+                continue; // source file missing from bundle — skip
+            }
+            if dst.exists() {
+                continue; // already present — skip
+            }
+            if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+                continue; // safety filter
+            }
+            missing_files.push(rel);
+        }
+    }
+
+    if dry_run {
+        let count = missing_files.len();
+        let message = if count == 0 {
+            "No missing files to repair. Workspace is up to date.".to_string()
+        } else {
+            format!("Dry-run: {} file(s) would be copied.", count)
+        };
+        return RepairWorkspaceResult {
+            ok: true,
+            dry_run: true,
+            target_path,
+            copied_files: missing_files.into_iter().map(|s| s.to_string()).collect(),
+            skipped_files: vec![],
+            errors: vec![],
+            warnings: vec![],
+            message,
+        };
+    }
+
+    // Apply: copy missing files
+    let mut copied_files: Vec<String> = Vec::new();
+    let mut errors: Vec<String> = Vec::new();
+
+    for &rel in &missing_files {
+        let src = source_root.join(rel);
+        let dst = target.join(rel);
+
+        // Create parent directory if needed
+        if let Some(parent) = dst.parent() {
+            if !parent.exists() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    errors.push(format!("Failed to create directory for '{}': {}", rel, e));
+                    continue;
+                }
+            }
+        }
+
+        match fs::copy(&src, &dst) {
+            Ok(_) => {
+                copied_files.push(rel.to_string());
+            }
+            Err(e) => {
+                errors.push(format!("Failed to copy '{}': {}", rel, e));
+            }
+        }
+    }
+
+    let status_ok = errors.is_empty();
+    let message = if copied_files.is_empty() && errors.is_empty() {
+        "No files needed repair.".to_string()
+    } else if errors.is_empty() {
+        format!("Repair complete. {} file(s) copied.", copied_files.len())
+    } else {
+        format!(
+            "Repair finished with {} error(s). {} file(s) copied.",
+            errors.len(),
+            copied_files.len()
+        )
+    };
+
+    RepairWorkspaceResult {
+        ok: status_ok,
+        dry_run: false,
+        target_path,
+        copied_files,
+        skipped_files: vec![],
+        errors,
+        warnings: vec![],
+        message,
+    }
+}
+
+/// Repair a workspace by copying missing bundled default files.
+///
+/// Semantics:
+/// - Never overwrites existing files.
+/// - If dry_run is true, only reports what would be copied.
+/// - Rejects unsafe/broad paths (same safety check as workspace creation).
+/// - Falls back to source-tree default workspace if bundled is unavailable.
+/// - Copies only files from `default_workspace_files()` that are absent in target.
+fn repair_workspace_impl(
+    app: &tauri::AppHandle,
+    target_path: &str,
+    dry_run: bool,
+) -> RepairWorkspaceResult {
+    let normalized = match normalize_user_workspace_path_for_save(target_path) {
+        Ok(Some(p)) => p,
+        Ok(None) => {
+            return RepairWorkspaceResult {
+                ok: false,
+                dry_run,
+                target_path: target_path.to_string(),
+                copied_files: vec![],
+                skipped_files: vec![],
+                errors: vec!["No target path provided".to_string()],
+                warnings: vec![],
+                message: "Missing target path.".to_string(),
+            };
+        }
+        Err(e) => {
+            return RepairWorkspaceResult {
+                ok: false,
+                dry_run,
+                target_path: target_path.to_string(),
+                copied_files: vec![],
+                skipped_files: vec![],
+                errors: vec![e],
+                warnings: vec![],
+                message: "Invalid target path.".to_string(),
+            };
+        }
+    };
+
+    let target = Path::new(&normalized);
+
+    if is_unsafe_target(target) {
+        return RepairWorkspaceResult {
+            ok: false,
+            dry_run,
+            target_path: normalized,
+            copied_files: vec![],
+            skipped_files: vec![],
+            errors: vec!["Target path is too broad or unsafe for repair.".to_string()],
+            warnings: vec!["Use a specific workspace directory.".to_string()],
+            message: "Unsafe target path rejected.".to_string(),
+        };
+    }
+
+    if !target.is_dir() {
+        return RepairWorkspaceResult {
+            ok: false,
+            dry_run,
+            target_path: normalized,
+            copied_files: vec![],
+            skipped_files: vec![],
+            errors: vec!["Target is not an existing directory.".to_string()],
+            warnings: vec![],
+            message: "Repair requires an existing workspace directory.".to_string(),
+        };
+    }
+
+    let source_root = match super::defaults::resolve_default_workspace_root(app) {
+        Ok(r) => r,
+        Err(e) => {
+            return RepairWorkspaceResult {
+                ok: false,
+                dry_run,
+                target_path: normalized,
+                copied_files: vec![],
+                skipped_files: vec![],
+                errors: vec![e],
+                warnings: vec![],
+                message: "Default workspace resources unavailable.".to_string(),
+            };
+        }
+    };
+
+    repair_workspace_core(&source_root, target, dry_run)
+}
+
+#[tauri::command]
+pub fn repair_workspace(
+    app: tauri::AppHandle,
+    target_path: String,
+    dry_run: bool,
+) -> Result<RepairWorkspaceResult, String> {
+    Ok(repair_workspace_impl(&app, &target_path, dry_run))
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
-        create_workspace_from_source, plan_create_workspace, repo_path_from_settings,
-        validate_workspace_root,
+        create_workspace_from_source, is_unsafe_target, plan_create_workspace,
+        repair_workspace_core, repo_path_from_settings, validate_workspace_root,
     };
     use crate::settings::AppSettings;
     use std::fs;
@@ -1549,6 +1766,8 @@ mod tests {
         for &rel in &[
             "templates/global-agent-rules.md",
             "templates/opencode.json",
+            "templates/opencode.base.json",
+            "templates/opencode.policy.json",
             "templates/tui.json",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
@@ -1584,6 +1803,7 @@ mod tests {
         }
         for &rel in &[
             "scripts/bootstrap.sh",
+            "scripts/generate-opencode-config.py",
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
@@ -1927,5 +2147,179 @@ mod tests {
             result.copied_files.is_empty(),
             "no files should be copied when parent is missing"
         );
+    }
+
+    // ── repair_workspace_core tests ──
+
+    #[test]
+    fn repair_dry_run_reports_missing_files() {
+        let source = setup_source_root("repair-dry-ws");
+        let target = temp_root("repair-dry-tgt");
+        fs::create_dir_all(&target).expect("create target dir");
+
+        // Add workspace markers so it's a valid workspace
+        write_file(&target, ".agent-workspace/workspace.json", "{}");
+        // Deliberately missing: scripts/generate-opencode-config.py,
+        // templates/opencode.base.json, templates/opencode.policy.json.
+
+        let result = repair_workspace_core(&source, &target, true);
+        assert!(result.ok, "dry run should succeed: {}", result.message);
+        assert!(result.dry_run, "should be dry run");
+
+        // Should report generator, base.json, policy.json as missing
+        let missing: Vec<&str> = result.copied_files.iter().map(|s| s.as_str()).collect();
+        assert!(
+            missing.contains(&"scripts/generate-opencode-config.py"),
+            "dry-run must report missing generator, got: {:?}",
+            missing
+        );
+        assert!(
+            missing.contains(&"templates/opencode.base.json"),
+            "dry-run must report missing base.json, got: {:?}",
+            missing
+        );
+        assert!(
+            missing.contains(&"templates/opencode.policy.json"),
+            "dry-run must report missing policy.json, got: {:?}",
+            missing
+        );
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_no_work_when_all_files_present() {
+        let source = setup_source_root("repair-nop-ws");
+        let target = temp_root("repair-nop-tgt");
+        fs::create_dir_all(&target).expect("create target dir");
+
+        // Full workspace via source copy
+        for (_label, paths) in super::super::defaults::default_workspace_files() {
+            for &rel in paths {
+                let src = source.join(rel);
+                let dst = target.join(rel);
+                if src.is_file() {
+                    if let Some(parent) = dst.parent() {
+                        fs::create_dir_all(parent).expect("create parent");
+                    }
+                    fs::copy(&src, &dst).expect("copy file");
+                }
+            }
+        }
+
+        let result = repair_workspace_core(&source, &target, true);
+        assert!(result.ok, "repair should report ok");
+        assert!(
+            result.copied_files.is_empty(),
+            "no files should need repair, got: {:?}",
+            result.copied_files
+        );
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_copies_only_missing_files() {
+        let source = setup_source_root("repair-copy-ws");
+        let target = temp_root("repair-copy-tgt");
+        fs::create_dir_all(&target).expect("create target dir");
+
+        // Create a minimal workspace with markers but missing generator/base/policy
+        write_file(&target, ".agent-workspace/workspace.json", "{}");
+        write_file(&target, "README.md", "# workspace\n");
+        write_file(&target, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &target,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &target,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &target,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &target,
+            "scripts/install-skills.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&target, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&target, "templates/opencode.json", "{}");
+        write_file(&target, "templates/tui.json", "{}");
+        mkdir(&target, "templates/cursor/agents");
+        write_file(
+            &target,
+            "templates/cursor/rules/workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        mkdir(&target, "skills");
+
+        // Pre-existing user content — must NOT be overwritten
+        let user_content = "user-edited-content";
+        write_file(&target, "templates/opencode.json", user_content);
+
+        let result = repair_workspace_core(&source, &target, false);
+        assert!(result.ok, "repair should succeed: {}", result.message);
+
+        let copied: Vec<&str> = result.copied_files.iter().map(|s| s.as_str()).collect();
+        assert!(
+            copied.contains(&"scripts/generate-opencode-config.py"),
+            "generator should be copied, got: {:?}",
+            copied
+        );
+        assert!(
+            copied.contains(&"templates/opencode.base.json"),
+            "base.json should be copied, got: {:?}",
+            copied
+        );
+        assert!(
+            copied.contains(&"templates/opencode.policy.json"),
+            "policy.json should be copied"
+        );
+
+        // Verify pre-existing user content was NOT overwritten
+        let saved_content =
+            fs::read_to_string(target.join("templates/opencode.json")).unwrap_or_default();
+        assert_eq!(
+            saved_content, user_content,
+            "existing user content must not be overwritten"
+        );
+
+        // Verify the new files actually exist on disk
+        assert!(
+            target.join("scripts/generate-opencode-config.py").is_file(),
+            "generator must exist on disk after repair"
+        );
+        assert!(
+            target.join("templates/opencode.base.json").is_file(),
+            "base.json must exist on disk after repair"
+        );
+        assert!(
+            target.join("templates/opencode.policy.json").is_file(),
+            "policy.json must exist on disk after repair"
+        );
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_rejects_broad_paths() {
+        // Simulate the unsafe target checks used by repair_workspace_impl
+        assert!(is_unsafe_target(std::path::Path::new("/")));
+        let home = std::env::var("HOME").unwrap_or_default();
+        assert!(is_unsafe_target(std::path::Path::new(&home)));
+        assert!(is_unsafe_target(std::path::Path::new("/Users")));
+        assert!(!is_unsafe_target(std::path::Path::new(&format!(
+            "{}/my-workspace",
+            home
+        ))));
     }
 }

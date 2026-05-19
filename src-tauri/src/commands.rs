@@ -38,4 +38,5 @@ pub use skills::{install_skills, list_skills, open_install_skills_script, open_s
 pub use status::get_status;
 pub use workspace::{
     create_workspace_from_defaults, get_workspace_diagnostics, plan_create_workspace,
+    repair_workspace,
 };
