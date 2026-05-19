@@ -204,6 +204,22 @@ if [ "$cursor_count" -ne 6 ]; then
 fi
 printf '  Cursor setup verified: help, adapters, project rule, global-agent smoke\n'
 
+step "regression: workspace.rs does not hard-require specific cursor rule filename"
+if search_has_match "rel_path:.*agent-workspace.mdc" src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: workspace.rs must not hard-require agent-workspace.mdc as a generic marker\n' >&2
+  exit 1
+fi
+if search_has_match "rel_path:.*templates/cursor/README.md" src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: workspace.rs must not hard-require cursor README.md as a generic marker\n' >&2
+  exit 1
+fi
+
+step "regression: workspace.rs always requires cursor mdc rule check"
+if ! grep -q 'workspace_has_cursor_mdc_rule' src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: workspace.rs must include cursor mdc rule validation\n' >&2
+  exit 1
+fi
+
 step "bundled default docs exist and non-empty"
 for doc in \
   resources/default-workspace/docs/START_HERE.md \

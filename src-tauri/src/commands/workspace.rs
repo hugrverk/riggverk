@@ -70,16 +70,12 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
             rel_path: "templates/opencode.json",
         },
         MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "templates/cursor/README.md",
-        },
-        MarkerDef {
-            kind: MarkerKind::File,
-            rel_path: "templates/cursor/rules/agent-workspace.mdc",
+            kind: MarkerKind::Dir,
+            rel_path: "templates/cursor/agents",
         },
         MarkerDef {
             kind: MarkerKind::Dir,
-            rel_path: "templates/cursor/agents",
+            rel_path: "templates/cursor/rules",
         },
         MarkerDef {
             kind: MarkerKind::File,
@@ -90,6 +86,22 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
             rel_path: "skills",
         },
     ]
+}
+
+/// Check that templates/cursor/rules/ contains at least one .mdc file.
+/// This enforces that Cursor project rules are present while allowing
+/// workspace-specific filenames (e.g. agent-workspace.mdc, ux-workspace.mdc).
+pub(crate) fn workspace_has_cursor_mdc_rule(base: &Path) -> bool {
+    let rules_dir = base.join("templates/cursor/rules");
+    if !rules_dir.is_dir() {
+        return false;
+    }
+    match rules_dir.read_dir() {
+        Ok(entries) => entries
+            .flatten()
+            .any(|e| e.path().extension().is_some_and(|ext| ext == "mdc")),
+        Err(_) => false,
+    }
 }
 
 pub(super) fn repo_path() -> PathBuf {
@@ -129,6 +141,10 @@ pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> 
         return Err("invalid workspace path: not a valid workspace".into());
     }
 
+    if !workspace_has_cursor_mdc_rule(&canonical) {
+        return Err("invalid workspace path: not a valid workspace".into());
+    }
+
     Ok(canonical)
 }
 
@@ -140,6 +156,16 @@ pub(super) fn path_arg(path: &Path) -> Result<String, String> {
     path.to_str()
         .map(|s| s.to_string())
         .ok_or_else(|| "path is not valid UTF-8".to_string())
+}
+
+/// Append a cursor rule marker status to the diagnostics markers vec.
+/// Uses the base path to check for .mdc files in templates/cursor/rules/.
+fn push_cursor_rule_marker(markers: &mut Vec<WorkspaceMarkerStatus>, base: &Path) {
+    markers.push(WorkspaceMarkerStatus {
+        kind: "dir_with_mdc".to_string(),
+        path: "templates/cursor/rules/*.mdc".to_string(),
+        exists: workspace_has_cursor_mdc_rule(base),
+    });
 }
 
 fn release_check_available(root: &Path) -> bool {
@@ -178,7 +204,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     let (valid, resolved_path, error, markers) = match candidate.canonicalize() {
         Ok(canonical) => {
             if !canonical.is_dir() {
-                let markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
+                let mut markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
                     .iter()
                     .map(|def| WorkspaceMarkerStatus {
                         kind: def.kind.as_str().to_string(),
@@ -186,6 +212,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
                         exists: false,
                     })
                     .collect();
+                push_cursor_rule_marker(&mut markers, &canonical);
                 (
                     false,
                     Some(canonical.to_string_lossy().into_owned()),
@@ -193,7 +220,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
                     markers,
                 )
             } else {
-                let markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
+                let mut markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
                     .iter()
                     .map(|def| WorkspaceMarkerStatus {
                         kind: def.kind.as_str().to_string(),
@@ -201,6 +228,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
                         exists: def.kind.exists(&canonical, def.rel_path),
                     })
                     .collect();
+                push_cursor_rule_marker(&mut markers, &canonical);
                 let all_exist = markers.iter().all(|m| m.exists);
                 let error = if !all_exist {
                     Some("missing required markers".to_string())
@@ -217,23 +245,27 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         }
         Err(_) => {
             let markers: Vec<WorkspaceMarkerStatus> = if candidate.exists() {
-                workspace_marker_defs()
+                let mut markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
                     .iter()
                     .map(|def| WorkspaceMarkerStatus {
                         kind: def.kind.as_str().to_string(),
                         path: def.rel_path.to_string(),
                         exists: def.kind.exists(&candidate, def.rel_path),
                     })
-                    .collect()
+                    .collect();
+                push_cursor_rule_marker(&mut markers, &candidate);
+                markers
             } else {
-                workspace_marker_defs()
+                let mut markers: Vec<WorkspaceMarkerStatus> = workspace_marker_defs()
                     .iter()
                     .map(|def| WorkspaceMarkerStatus {
                         kind: def.kind.as_str().to_string(),
                         path: def.rel_path.to_string(),
                         exists: false,
                     })
-                    .collect()
+                    .collect();
+                push_cursor_rule_marker(&mut markers, &candidate);
+                markers
             };
             (
                 false,
@@ -873,10 +905,9 @@ mod tests {
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
-        write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(
             &root,
-            "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/rules/workspace.mdc",
             "---\nalwaysApply: true\n---\n",
         );
         mkdir(&root, "templates/cursor/agents");
@@ -916,10 +947,9 @@ mod tests {
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
-        write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(
             &root,
-            "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/rules/workspace.mdc",
             "---\nalwaysApply: true\n---\n",
         );
         mkdir(&root, "templates/cursor/agents");
@@ -957,10 +987,9 @@ mod tests {
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
-        write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(
             &root,
-            "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/rules/workspace.mdc",
             "---\nalwaysApply: true\n---\n",
         );
         mkdir(&root, "templates/cursor/agents");
@@ -992,6 +1021,162 @@ mod tests {
 
         assert_eq!(
             result.expect_err("fake workspace should be rejected"),
+            "invalid workspace path: not a valid workspace"
+        );
+    }
+
+    #[test]
+    fn accepts_workspace_with_ux_cursor_rule() {
+        let root = temp_root("ux-cursor-rule");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        mkdir(&root, "templates/cursor/agents");
+        mkdir(&root, "templates/cursor/rules");
+        write_file(
+            &root,
+            "templates/cursor/rules/ux-workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+        // No templates/cursor/README.md — should still be valid
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert!(
+            result.is_ok(),
+            "workspace with ux-workspace.mdc cursor rule should be accepted"
+        );
+    }
+
+    #[test]
+    fn accepts_workspace_without_cursor_readme() {
+        let root = temp_root("no-cursor-readme");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        mkdir(&root, "templates/cursor/agents");
+        write_file(
+            &root,
+            "templates/cursor/rules/agent-workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+        // Deliberately no templates/cursor/README.md
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert!(
+            result.is_ok(),
+            "workspace without cursor README should still be accepted"
+        );
+    }
+
+    #[test]
+    fn rejects_workspace_without_cursor_mdc_rule() {
+        let root = temp_root("no-cursor-mdc");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        mkdir(&root, "templates/cursor/agents");
+        mkdir(&root, "templates/cursor/rules");
+        // No .mdc file inside templates/cursor/rules/
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert_eq!(
+            result.expect_err("workspace without cursor mdc rule should be rejected"),
+            "invalid workspace path: not a valid workspace"
+        );
+    }
+
+    #[test]
+    fn rejects_workspace_missing_cursor_rules_dir() {
+        let root = temp_root("no-cursor-rules");
+        write_file(&root, ".agent-workspace/workspace.json", "{}");
+        write_file(&root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}");
+        mkdir(&root, "templates/cursor/agents");
+        // No templates/cursor/rules/ directory at all
+        write_file(&root, "README.md", "# readme\n");
+        mkdir(&root, "skills");
+
+        let result = validate_workspace_root(root.clone());
+        cleanup(&root);
+        assert_eq!(
+            result.expect_err("workspace without cursor rules dir should be rejected"),
             "invalid workspace path: not a valid workspace"
         );
     }

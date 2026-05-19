@@ -8,7 +8,11 @@ Workspace contents are user-writable and can be git-versioned. The workspace fol
 
 ## Current required markers
 
-Workspace validation checks for these markers inside the workspace root:
+Workspace validation checks for these markers inside the workspace root.
+Markers are split into two categories: generic runtime markers (required for every
+workspace) and bundled default resources (shipped with the app, not strictly required).
+
+### Generic runtime markers (always required)
 
 | Marker | Kind | Purpose |
 |--------|------|---------|
@@ -20,15 +24,32 @@ Workspace validation checks for these markers inside the workspace root:
 | `scripts/install-cursor-workspace.sh` | file | Cursor subagent and project-rule setup script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
-| `templates/cursor/README.md` | file | Cursor setup source note |
-| `templates/cursor/rules/agent-workspace.mdc` | file | Cursor project rule template |
 | `templates/cursor/agents/` | directory | Cursor subagent adapter templates |
-| `templates/tui.json` | file | OpenCode TUI config template |
-| `agents/` | directory | OpenCode agent definitions |
+| `templates/cursor/rules/` | directory | Cursor project rule templates dir (must contain at least one `.mdc` file) |
 | `README.md` | file | Workspace readme |
 | `skills/` | directory | Skill definitions |
 
-All markers must be present for a workspace to pass validation. A folder missing any marker is rejected.
+The Cursor project rule `.mdc` filename is workspace-specific. Examples:
+- `templates/cursor/rules/agent-workspace.mdc` (Agent Workspace default)
+- `templates/cursor/rules/ux-workspace.mdc` (private ux-workspace)
+
+All generic markers must be present for a workspace to pass validation. A folder
+missing any marker is rejected.
+
+### Bundled default workspace resources (app-shipped, not runtime-required)
+
+The following files are shipped with the app as bundled starter content but are
+**not** required for generic workspace validity:
+
+| Resource | Purpose |
+|----------|---------|
+| `templates/cursor/README.md` | Cursor setup source note (bundled default doc) |
+| `templates/cursor/rules/agent-workspace.mdc` | Cursor project rule (Agent Workspace-specific name) |
+| `templates/tui.json` | OpenCode TUI config template |
+| `agents/` directory + 6 agent files | OpenCode agent definitions |
+
+These files are included when creating a new workspace from defaults but are
+not validated against arbitrary existing workspaces.
 
 ## What a workspace is not
 
