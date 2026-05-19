@@ -52,7 +52,7 @@ export interface AgentSourceContent {
   id: string; title: string; path: string; content: string; exists: boolean;
 }
 
-export const INSTALL_AGENTS = ["codex", "opencode", "claude", "gemini", "auggie"] as const;
+export const INSTALL_AGENTS = ["codex", "opencode", "claude", "gemini", "auggie", "cursor"] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
 

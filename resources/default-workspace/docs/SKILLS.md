@@ -64,6 +64,7 @@ Use dry-run to preview installations before applying:
 
 ```bash
 ./scripts/install-skills.sh --dry-run --agent opencode --global
+./scripts/install-skills.sh --dry-run --agent cursor --global
 ```
 
-Skills from the workspace are installed directly as filesystem copies. No external package managers are used.
+Skills from the workspace are installed directly as filesystem copies. No external package managers are used. Cursor installs to `~/.cursor/skills` globally or `<project>/.cursor/skills` with `--project --target /path/to/project`.

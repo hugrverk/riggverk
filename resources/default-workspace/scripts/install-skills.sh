@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_DIR="$WORKSPACE_ROOT/skills"
 
-VALID_AGENTS="codex opencode claude gemini auggie"
+VALID_AGENTS="codex opencode claude gemini auggie cursor"
 
 usage() {
   cat <<'USAGE'
@@ -14,7 +14,7 @@ Usage: ./scripts/install-skills.sh [options]
 Install workspace skills to agent tool skill folders.
 
 Options:
-  --agent <target>    Agent target: codex, opencode, claude, gemini, auggie
+  --agent <target>    Agent target: codex, opencode, claude, gemini, auggie, cursor
                       Repeatable. Default: opencode.
   --global            Install globally (system-wide)
   --project           Install into a project folder
@@ -162,6 +162,7 @@ agent_global_dest() {
     claude)   printf '%s' "${CLAUDE_SKILLS_PATH:-$HOME/.claude/skills}" ;;
     gemini)   printf '%s' "${GEMINI_SKILLS_PATH:-$HOME/.gemini/skills}" ;;
     auggie)   printf '%s' "${AUGGIE_SKILLS_PATH:-$HOME/.augment/skills}" ;;
+    cursor)   printf '%s' "${CURSOR_SKILLS_PATH:-$HOME/.cursor/skills}" ;;
   esac
 }
 
@@ -173,6 +174,7 @@ agent_project_dest() {
     claude)   printf '%s/.claude/skills' "$target" ;;
     gemini)   printf '%s/.gemini/skills' "$target" ;;
     auggie)   printf '%s/.augment/skills' "$target" ;;
+    cursor)   printf '%s/.cursor/skills' "$target" ;;
   esac
 }
 
@@ -199,7 +201,7 @@ validate_project_target() {
   done
 
   local has_marker=false
-  for marker in .git package.json Cargo.toml composer.json pyproject.toml AGENTS.md .opencode .codex wp-content wordpress/wp-content; do
+  for marker in .git package.json Cargo.toml composer.json pyproject.toml AGENTS.md .opencode .codex .cursor wp-content wordpress/wp-content; do
     if [ -e "$target/$marker" ]; then
       has_marker=true
       break

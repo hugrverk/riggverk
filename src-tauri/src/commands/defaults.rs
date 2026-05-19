@@ -75,6 +75,8 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "templates/global-agent-rules.md",
                 "templates/opencode.json",
                 "templates/tui.json",
+                "templates/cursor/README.md",
+                "templates/cursor/rules/agent-workspace.mdc",
                 "templates/prompts/standard-prompt.md",
                 "templates/prompts/masterprompt.md",
             ],
@@ -97,6 +99,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "scripts/install-skills.sh",
                 "scripts/install-agent-rules.sh",
                 "scripts/install-opencode-config.sh",
+                "scripts/install-cursor-workspace.sh",
             ],
         ),
         (
@@ -260,8 +263,8 @@ mod tests {
             .expect("scripts category must exist");
         assert_eq!(
             scripts.files.len(),
-            4,
-            "scripts category must have 4 known paths"
+            5,
+            "scripts category must have 5 known paths"
         );
     }
 
@@ -358,6 +361,8 @@ mod tests {
             "templates/global-agent-rules.md",
             "templates/opencode.json",
             "templates/tui.json",
+            "templates/cursor/README.md",
+            "templates/cursor/rules/agent-workspace.mdc",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
@@ -378,6 +383,7 @@ mod tests {
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/install-cursor-workspace.sh",
         ] {
             write_file(&root, rel);
         }

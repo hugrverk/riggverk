@@ -83,6 +83,13 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             target_rel: ".config/opencode/opencode.json",
             source_rel: "templates/opencode.json",
         },
+        AgentSyncTarget {
+            id: "cursor_setup",
+            label: "cursor setup",
+            kind: TargetKind::Config,
+            target_rel: ".cursor/agents",
+            source_rel: "templates/cursor/README.md",
+        },
     ]
 }
 
@@ -135,6 +142,14 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec!["opencode_rules".into(), "opencode_config".into()],
         },
         TargetProfileMeta {
+            id: "cursor".into(),
+            label: "Cursor".into(),
+            description:
+                "Cursor global subagents. Project rules are installed by the Cursor setup script."
+                    .into(),
+            target_ids: vec!["cursor_setup".into()],
+        },
+        TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
             description: "Codex, OpenCode, Claude, Gemini, Auggie rule targets".into(),
@@ -149,7 +164,8 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_supported".into(),
             label: "All supported".into(),
-            description: "All supported rule targets + OpenCode config + agents".into(),
+            description: "All supported rule targets + OpenCode config + agents + Cursor setup"
+                .into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
@@ -157,6 +173,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "claude_rules".into(),
                 "gemini_rules".into(),
                 "opencode_config".into(),
+                "cursor_setup".into(),
             ],
         },
     ]
@@ -185,6 +202,7 @@ pub fn home_dir() -> Result<PathBuf, String> {
 
 pub enum ConfigScript {
     OpenCode,
+    Cursor,
 }
 
 #[allow(dead_code)]
@@ -206,6 +224,13 @@ impl ConfigSyncTarget {
                     ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
                 },
             ),
+            ConfigScript::Cursor => (
+                "scripts/install-cursor-workspace.sh",
+                match mode {
+                    ConfigScriptMode::Diff => vec!["--quiet", "--global-agents"],
+                    ConfigScriptMode::Apply => vec!["--quiet", "--apply", "--global-agents"],
+                },
+            ),
         }
     }
 }
@@ -217,13 +242,22 @@ pub enum ConfigScriptMode {
 }
 
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
-    vec![ConfigSyncTarget {
-        id: "opencode_config",
-        label: "opencode config + agents",
-        source_rel: "templates/opencode.json",
-        target_rel: ".config/opencode/opencode.json",
-        script: ConfigScript::OpenCode,
-    }]
+    vec![
+        ConfigSyncTarget {
+            id: "opencode_config",
+            label: "opencode config + agents",
+            source_rel: "templates/opencode.json",
+            target_rel: ".config/opencode/opencode.json",
+            script: ConfigScript::OpenCode,
+        },
+        ConfigSyncTarget {
+            id: "cursor_setup",
+            label: "cursor setup",
+            source_rel: "templates/cursor/README.md",
+            target_rel: ".cursor/agents",
+            script: ConfigScript::Cursor,
+        },
+    ]
 }
 
 // ── config editor sources ──
@@ -276,8 +310,12 @@ pub fn opencode_config_editor_sources() -> Vec<ConfigEditorSource> {
     OPENCODE_CONFIG_EDITOR_SOURCES.to_vec()
 }
 
-pub fn opencode_config_editor_source_by_id(source_type: &str) -> Option<&'static ConfigEditorSource> {
-    OPENCODE_CONFIG_EDITOR_SOURCES.iter().find(|s| s.id == source_type)
+pub fn opencode_config_editor_source_by_id(
+    source_type: &str,
+) -> Option<&'static ConfigEditorSource> {
+    OPENCODE_CONFIG_EDITOR_SOURCES
+        .iter()
+        .find(|s| s.id == source_type)
 }
 
 pub fn opencode_config_editor_source_meta_list() -> Vec<ConfigEditorSourceMeta> {
@@ -387,6 +425,19 @@ mod tests {
         let t = opencode.unwrap();
         assert_eq!(t.source_rel, "templates/opencode.json");
         assert_eq!(t.target_rel, ".config/opencode/opencode.json");
+    }
+
+    #[test]
+    fn cursor_setup_in_config_sync_targets() {
+        let targets = config_sync_targets();
+        let cursor = targets.iter().find(|t| t.id == "cursor_setup");
+        assert!(
+            cursor.is_some(),
+            "cursor_setup must be in config_sync_targets"
+        );
+        let t = cursor.unwrap();
+        assert_eq!(t.source_rel, "templates/cursor/README.md");
+        assert_eq!(t.target_rel, ".cursor/agents");
     }
 
     #[test]

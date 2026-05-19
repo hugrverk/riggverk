@@ -55,6 +55,10 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         },
         MarkerDef {
             kind: MarkerKind::File,
+            rel_path: "scripts/install-cursor-workspace.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
             rel_path: "scripts/install-skills.sh",
         },
         MarkerDef {
@@ -64,6 +68,10 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         MarkerDef {
             kind: MarkerKind::File,
             rel_path: "templates/opencode.json",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/cursor/README.md",
         },
         MarkerDef {
             kind: MarkerKind::File,
@@ -849,9 +857,15 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "#!/usr/bin/env bash\n",
         );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
         root
@@ -880,9 +894,15 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "#!/usr/bin/env bash\n",
         );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
         // No app source directory inside workspace — this should still be valid
@@ -907,6 +927,11 @@ mod tests {
         write_file(
             &root,
             "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
@@ -1309,6 +1334,8 @@ mod tests {
             "templates/global-agent-rules.md",
             "templates/opencode.json",
             "templates/tui.json",
+            "templates/cursor/README.md",
+            "templates/cursor/rules/agent-workspace.mdc",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
@@ -1329,6 +1356,7 @@ mod tests {
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/install-cursor-workspace.sh",
         ] {
             write_file(&root, rel, "#!/usr/bin/env bash\necho script\n");
         }

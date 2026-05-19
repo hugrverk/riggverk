@@ -17,8 +17,10 @@ Workspace validation checks for these markers inside the workspace root:
 | `scripts/install-agent-rules.sh` | file | Agent rules sync script |
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
 | `scripts/install-skills.sh` | file | Skill install script |
+| `scripts/install-cursor-workspace.sh` | file | Cursor subagent and project-rule setup script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
+| `templates/cursor/README.md` | file | Cursor setup source note |
 | `templates/tui.json` | file | OpenCode TUI config template |
 | `agents/` | directory | OpenCode agent definitions |
 | `README.md` | file | Workspace readme |
@@ -42,6 +44,8 @@ The app supports editing config templates through the selected config target's s
 
 The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
 
+Cursor support is script-backed and scoped: skills install to Cursor skill folders, subagents install to Cursor agent folders, and project rules install to `.cursor/rules/agent-workspace.mdc` inside an explicit project target. The app must not claim a global file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise.
+
 ## Transition state
 
 The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
@@ -60,11 +64,11 @@ Script-backed actions will remain allowlisted regardless of where the scripts li
 
 ## Bundled default workspace resources
 
-The app source carries a generic starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, and 22 starter skills.
+The app source carries a generic starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 24 starter skills.
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
-A newly created default workspace includes real sync and install scripts. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie. Config sync target: OpenCode config + agents. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install requires a real project marker and rejects broad parent directories.
+A newly created default workspace includes real sync and install scripts. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie, Cursor. Config sync targets: OpenCode config + agents, and Cursor global subagents. Cursor project rules are available through the Cursor setup script with an explicit project target. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install requires a real project marker and rejects broad parent directories.
 
 These resources are not automatically copied into the active workspace. Future import and upgrade flows may use them as source material when setting up new workspaces or resetting an existing workspace to defaults.
 
