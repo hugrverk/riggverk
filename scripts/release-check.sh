@@ -981,6 +981,15 @@ for bp in BROAD_PATHS:
 print("  repair safety simulation passed")
 PY
 
+step "repair commands registered in commands.rs"
+for cmd_regex in 'plan_workspace_repair' 'apply_workspace_repair'; do
+  if ! grep -q "$cmd_regex" src-tauri/src/commands.rs; then
+    printf 'FAIL: repair command not re-exported in commands.rs: %s\n' "$cmd_regex" >&2
+    exit 1
+  fi
+done
+printf '  plan_workspace_repair + apply_workspace_repair: registered in commands.rs\n'
+
 step "app checks"
 npm run build
 

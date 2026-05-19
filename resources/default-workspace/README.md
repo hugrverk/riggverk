@@ -18,6 +18,7 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 
 All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to see changes, `--quiet` for compact output, and `--help` for usage.
 
+- **`generate-opencode-config.py`** — generates `templates/opencode.json` from `templates/opencode.base.json` and `templates/opencode.policy.json`. Supports `--check` (verify snapshot currency) and `--write` (regenerate snapshot). Paths are workspace-relative.
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, Gemini, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
 - **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
 - **`install-cursor-workspace.sh`** — installs Cursor subagents from `templates/cursor/agents/*.md` to `~/.cursor/agents` or `<project>/.cursor/agents`, and project rules to `<project>/.cursor/rules`.

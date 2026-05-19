@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
@@ -1505,6 +1505,36 @@ function App() {
             // opencode runtime
             opencodeRuntimeHealth={opencodeRuntimeHealth}
             onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
+            onPlanWorkspaceRepair={() => runWsTask({
+              label: "plan workspace repair",
+              action: "plan_workspace_repair",
+              task: async () => {
+                return await invoke<RepairWorkspaceResult>("plan_workspace_repair");
+              },
+              toActionResult: (r) => ({
+                success: r.ok,
+                action: "plan_workspace_repair",
+                stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
+                stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
+                exit_code: r.ok ? 0 : 1,
+              }),
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
+            onApplyWorkspaceRepair={() => runWsTask({
+              label: "apply workspace repair",
+              action: "apply_workspace_repair",
+              task: async () => {
+                return await invoke<RepairWorkspaceResult>("apply_workspace_repair");
+              },
+              toActionResult: (r) => ({
+                success: r.ok,
+                action: "apply_workspace_repair",
+                stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
+                stderr: r.errors.join("\n"),
+                exit_code: r.ok ? 0 : 1,
+              }),
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
             onGenerateOpenCodeConfig={() => runWsTask({
               label: "generate opencode config",
               action: "generate_opencode_config_snapshot",
