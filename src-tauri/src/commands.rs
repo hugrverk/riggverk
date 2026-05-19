@@ -2,6 +2,7 @@ mod actions;
 mod backups;
 mod content;
 mod contract;
+mod cursor_profile;
 mod defaults;
 mod design_md;
 mod opencode_runtime;
@@ -22,6 +23,7 @@ pub use content::{
     save_opencode_config_source,
 };
 pub use contract::validate_workspace_contract;
+pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
 pub use defaults::get_default_workspace_summary;
 pub use design_md::{
     get_design_md_catalog_status, get_design_md_install_status, install_design_md,
