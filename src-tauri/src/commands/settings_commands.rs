@@ -18,7 +18,7 @@ pub fn get_agent_targets() -> Result<Vec<agent_targets::AgentTargetMeta>, String
         .map(|t| agent_targets::AgentTargetMeta {
             id: t.id.to_string(),
             label: t.label.to_string(),
-            kind: t.kind.clone(),
+            kind: t.kind,
             target_rel: t.target_rel.to_string(),
             source_rel: t.source_rel.to_string(),
         })

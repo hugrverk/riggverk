@@ -39,12 +39,18 @@ fn no_enabled_config_targets(action: &str) -> ActionResult {
     )
 }
 
+fn cursor_is_selected() -> bool {
+    let enabled = settings::load().enabled_target_ids;
+    enabled.contains(&"cursor_setup".to_string())
+}
+
 fn enabled_rule_flags() -> Vec<&'static str> {
     let enabled = settings::load().enabled_target_ids;
     agent_targets::targets()
         .iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
         .filter_map(|t| t.script_flag())
+        .filter(|f| *f != "--cursor") // cursor handled separately, not passed to install-agent-rules.sh
         .collect()
 }
 
@@ -62,6 +68,7 @@ fn enabled_rule_targets() -> Vec<agent_targets::AgentSyncTarget> {
     agent_targets::rule_targets()
         .into_iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
+        .filter(|t| t.id != "cursor_setup") // cursor handled separately
         .collect()
 }
 
@@ -104,6 +111,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--skip-skills"];
             all_args.extend(&rule_args);
+            if cursor_is_selected() {
+                all_args.push("--cursor");
+            }
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
             Ok(ActionResult::new(ok, "bootstrap_preview", out, err, code))
         }
@@ -113,6 +123,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff", "--skip-skills"];
             all_args.extend(&rule_args);
+            if cursor_is_selected() {
+                all_args.push("--cursor");
+            }
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
             Ok(ActionResult::new(ok, "bootstrap_diff", out, err, code))
         }
@@ -122,6 +135,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
             let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply", "--skip-skills"];
             all_args.extend(&rule_args);
+            if cursor_is_selected() {
+                all_args.push("--cursor");
+            }
             let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
             Ok(ActionResult::new(ok, "bootstrap_apply", out, err, code))
         }
@@ -129,8 +145,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
         "verify_state" => {
             let home = agent_targets::home_dir()?;
             let targets = enabled_rule_targets();
+            let cursor_on = cursor_is_selected();
 
-            if targets.is_empty() {
+            if targets.is_empty() && !cursor_on {
                 return Ok(ActionResult::new(
                     true,
                     "verify_state",
@@ -161,6 +178,20 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 }
             }
 
+            if cursor_on {
+                let agents_target = home.join(".cursor/agents");
+                let cursor_status = if agents_target.exists() {
+                    super::status::cursor_setup_status(&root, &home)
+                } else {
+                    "missing".to_string()
+                };
+                out.push_str(&format!("cursor setup: {}\n", cursor_status));
+                if cursor_status != "synced" {
+                    all_ok = false;
+                    err.push_str(&format!("cursor setup: {}\n", cursor_status));
+                }
+            }
+
             Ok(ActionResult::new(
                 all_ok,
                 "verify_state",
@@ -172,8 +203,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "diff_agent_rules" => {
             let rule_flags = enabled_rule_flags();
+            let cursor_on = cursor_is_selected();
 
-            if rule_flags.is_empty() {
+            if rule_flags.is_empty() && !cursor_on {
                 return Ok(ActionResult::new(
                     true,
                     "diff_agent_rules",
@@ -183,18 +215,51 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 ));
             }
 
-            let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
-            let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff"];
-            all_args.extend(&rule_flags);
+            let mut all_ok = true;
+            let mut out = String::new();
+            let mut err = String::new();
+            let mut last_code = Some(0);
 
-            let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
-            Ok(ActionResult::new(ok, "diff_agent_rules", out, err, code))
+            if !rule_flags.is_empty() {
+                let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
+                let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff"];
+                all_args.extend(&rule_flags);
+                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
+                if !ok {
+                    all_ok = false;
+                }
+                last_code = code;
+                out.push_str(&o);
+                err.push_str(&e);
+            }
+
+            if cursor_on {
+                let script_str =
+                    workspace_script_arg(&root, "scripts/install-cursor-workspace.sh")?;
+                let all_args: Vec<&str> = vec![&script_str, "--quiet", "--global-agents"];
+                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
+                if !ok {
+                    all_ok = false;
+                }
+                last_code = code;
+                out.push_str(&o);
+                err.push_str(&e);
+            }
+
+            Ok(ActionResult::new(
+                all_ok,
+                "diff_agent_rules",
+                out,
+                err,
+                last_code,
+            ))
         }
 
         "sync_agent_rules" => {
             let rule_flags = enabled_rule_flags();
+            let cursor_on = cursor_is_selected();
 
-            if rule_flags.is_empty() {
+            if rule_flags.is_empty() && !cursor_on {
                 return Ok(ActionResult::new(
                     true,
                     "sync_agent_rules",
@@ -204,12 +269,45 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 ));
             }
 
-            let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
-            let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply"];
-            all_args.extend(&rule_flags);
+            let mut all_ok = true;
+            let mut out = String::new();
+            let mut err = String::new();
+            let mut last_code = Some(0);
 
-            let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
-            Ok(ActionResult::new(ok, "sync_agent_rules", out, err, code))
+            if !rule_flags.is_empty() {
+                let script_str = workspace_script_arg(&root, "scripts/install-agent-rules.sh")?;
+                let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply"];
+                all_args.extend(&rule_flags);
+                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
+                if !ok {
+                    all_ok = false;
+                }
+                last_code = code;
+                out.push_str(&o);
+                err.push_str(&e);
+            }
+
+            if cursor_on {
+                let script_str =
+                    workspace_script_arg(&root, "scripts/install-cursor-workspace.sh")?;
+                let all_args: Vec<&str> =
+                    vec![&script_str, "--quiet", "--apply", "--global-agents"];
+                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
+                if !ok {
+                    all_ok = false;
+                }
+                last_code = code;
+                out.push_str(&o);
+                err.push_str(&e);
+            }
+
+            Ok(ActionResult::new(
+                all_ok,
+                "sync_agent_rules",
+                out,
+                err,
+                last_code,
+            ))
         }
 
         "diff_configs" => {

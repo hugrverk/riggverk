@@ -108,7 +108,7 @@ fn opencode_config_status(root: &Path, home: &Path) -> String {
     "synced".into()
 }
 
-fn cursor_setup_status(root: &Path, home: &Path) -> String {
+pub(super) fn cursor_setup_status(root: &Path, home: &Path) -> String {
     let agents_dir = root.join("templates/cursor/agents");
     if !agents_dir.is_dir() {
         return "diverged".into();

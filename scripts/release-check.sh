@@ -220,6 +220,34 @@ if ! grep -q 'workspace_has_cursor_mdc_rule' src-tauri/src/commands/workspace.rs
   exit 1
 fi
 
+step "regression: cursor appears in user-facing rule/sync targets"
+if ! rg -q '"cursor_setup".*kind:.*Rules' src-tauri/src/agent_targets.rs; then
+  if ! rg -q 'cursor_setup.*Rules' src-tauri/src/agent_targets.rs; then
+    printf 'FAIL: cursor_setup must be a user-facing Rules target\n' >&2
+    exit 1
+  fi
+fi
+
+step "regression: cursor_setup is not in config_sync_targets"
+if rg -q 'cursor_setup' src-tauri/src/agent_targets.rs -A 5 | grep -q 'ConfigSyncTarget'; then
+  printf 'FAIL: cursor_setup must not be in config_sync_targets\n' >&2
+  exit 1
+fi
+# Verify opencode_config is the only config sync target
+opencode_count=$(rg 'id: "opencode_config"' src-tauri/src/agent_targets.rs | wc -l | tr -d ' ')
+if [ "$opencode_count" -lt 1 ]; then
+  printf 'FAIL: opencode_config must be in agent_targets.rs\n' >&2
+  exit 1
+fi
+
+step "regression: no fake global Cursor User Rules path"
+if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|global.*cursor.*user.*rules' \
+  src-tauri src/resources/default-workspace/scripts \
+  --ignore-case 2>/dev/null; then
+  printf 'FAIL: must not claim a fake global Cursor User Rules file path\n' >&2
+  exit 1
+fi
+
 step "bundled default docs exist and non-empty"
 for doc in \
   resources/default-workspace/docs/START_HERE.md \

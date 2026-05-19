@@ -181,9 +181,9 @@ export function SettingsView({
             </div>
           )}
 
-          {/* Rule Targets */}
+          {/* Sync Targets */}
           <div className="settings-section">
-            <div className="settings-section-label">RULE TARGETS</div>
+            <div className="settings-section-label">SYNC TARGETS</div>
             <div className="settings-section-body">
               <div className="settings-target-list">
                 {agentTargets.filter(t => t.kind === "rules").map(t => {

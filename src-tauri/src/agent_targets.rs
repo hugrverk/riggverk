@@ -1,7 +1,7 @@
 use serde::Serialize;
 use std::path::PathBuf;
 
-#[derive(Serialize, Clone)]
+#[derive(Serialize, Clone, Copy, PartialEq)]
 pub enum TargetKind {
     #[serde(rename = "rules")]
     Rules,
@@ -25,6 +25,7 @@ impl AgentSyncTarget {
             "auggie_rules" => Some("--auggie"),
             "claude_rules" => Some("--claude"),
             "gemini_rules" => Some("--gemini"),
+            "cursor_setup" => Some("--cursor"),
             _ => None,
         }
     }
@@ -86,7 +87,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor setup",
-            kind: TargetKind::Config,
+            kind: TargetKind::Rules,
             target_rel: ".cursor/agents",
             source_rel: "templates/cursor/README.md",
         },
@@ -160,13 +161,14 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
-            description: "Codex, OpenCode, Claude, Gemini, Auggie rule targets".into(),
+            description: "Codex, OpenCode, Auggie, Claude, Gemini rules + Cursor setup".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
                 "auggie_rules".into(),
                 "claude_rules".into(),
                 "gemini_rules".into(),
+                "cursor_setup".into(),
             ],
         },
         TargetProfileMeta {
@@ -210,7 +212,6 @@ pub fn home_dir() -> Result<PathBuf, String> {
 
 pub enum ConfigScript {
     OpenCode,
-    Cursor,
 }
 
 #[allow(dead_code)]
@@ -232,13 +233,6 @@ impl ConfigSyncTarget {
                     ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
                 },
             ),
-            ConfigScript::Cursor => (
-                "scripts/install-cursor-workspace.sh",
-                match mode {
-                    ConfigScriptMode::Diff => vec!["--quiet", "--global-agents"],
-                    ConfigScriptMode::Apply => vec!["--quiet", "--apply", "--global-agents"],
-                },
-            ),
         }
     }
 }
@@ -250,22 +244,13 @@ pub enum ConfigScriptMode {
 }
 
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
-    vec![
-        ConfigSyncTarget {
-            id: "opencode_config",
-            label: "opencode config + agents",
-            source_rel: "templates/opencode.json",
-            target_rel: ".config/opencode/opencode.json",
-            script: ConfigScript::OpenCode,
-        },
-        ConfigSyncTarget {
-            id: "cursor_setup",
-            label: "cursor setup",
-            source_rel: "templates/cursor/README.md",
-            target_rel: ".cursor/agents",
-            script: ConfigScript::Cursor,
-        },
-    ]
+    vec![ConfigSyncTarget {
+        id: "opencode_config",
+        label: "opencode config + agents",
+        source_rel: "templates/opencode.json",
+        target_rel: ".config/opencode/opencode.json",
+        script: ConfigScript::OpenCode,
+    }]
 }
 
 // ── config editor sources ──
@@ -436,16 +421,14 @@ mod tests {
     }
 
     #[test]
-    fn cursor_setup_in_config_sync_targets() {
+    fn cursor_setup_not_in_config_sync_targets() {
+        // Cursor setup moved to sync/rules targets; config targets only has opencode_config.
         let targets = config_sync_targets();
         let cursor = targets.iter().find(|t| t.id == "cursor_setup");
         assert!(
-            cursor.is_some(),
-            "cursor_setup must be in config_sync_targets"
+            cursor.is_none(),
+            "cursor_setup must NOT be in config_sync_targets"
         );
-        let t = cursor.unwrap();
-        assert_eq!(t.source_rel, "templates/cursor/README.md");
-        assert_eq!(t.target_rel, ".cursor/agents");
     }
 
     #[test]
@@ -500,6 +483,34 @@ mod tests {
         assert!(
             unknown.is_none(),
             "unknown config target must not be in config_sync_targets"
+        );
+    }
+
+    #[test]
+    fn cursor_in_rule_targets() {
+        // Cursor setup is now a first-class sync/rules target, not a config target.
+        let rules = rule_targets();
+        let cursor = rules.iter().find(|t| t.id == "cursor_setup");
+        assert!(
+            cursor.is_some(),
+            "cursor_setup must appear in rule_targets()"
+        );
+        let t = cursor.unwrap();
+        assert!(
+            matches!(t.kind, TargetKind::Rules),
+            "cursor_setup kind must be Rules"
+        );
+    }
+
+    #[test]
+    fn all_rules_profile_includes_cursor() {
+        let profile = target_profiles()
+            .into_iter()
+            .find(|p| p.id == "all_rules")
+            .expect("all_rules profile must exist");
+        assert!(
+            profile.target_ids.contains(&"cursor_setup".to_string()),
+            "all_rules profile must include cursor_setup"
         );
     }
 
