@@ -107,6 +107,14 @@ pub fn config_targets() -> Vec<AgentSyncTarget> {
         .collect()
 }
 
+pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
+    targets()
+        .into_iter()
+        .filter(|t| matches!(t.kind, TargetKind::Config))
+        .filter(|t| t.id == "opencode_config")
+        .collect()
+}
+
 pub fn default_enabled_rule_ids() -> Vec<String> {
     vec![
         "codex_rules".into(),
@@ -511,6 +519,27 @@ mod tests {
                 id
             );
         }
+    }
+
+    #[test]
+    fn editable_config_targets_exclude_script_backed_cursor_setup() {
+        let ids: Vec<&str> = editable_config_targets().iter().map(|t| t.id).collect();
+        assert_eq!(ids, &["opencode_config"]);
+        assert!(
+            !ids.contains(&"cursor_setup"),
+            "cursor_setup is script-backed setup, not an editable config template"
+        );
+    }
+
+    #[test]
+    fn opencode_config_editor_source_behavior_unchanged() {
+        let editable = editable_config_targets();
+        let opencode = editable
+            .iter()
+            .find(|t| t.id == "opencode_config")
+            .expect("opencode_config remains editable");
+        assert_eq!(opencode.source_rel, "templates/opencode.json");
+        assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");
     }
 
     // ── config editor source tests ──

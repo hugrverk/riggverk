@@ -167,7 +167,27 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
       exit 1
     fi
   done
+  if ! grep -q "templates/cursor/agents/$agent" src-tauri/src/commands/defaults.rs; then
+    printf 'FAIL: default workspace copy list missing Cursor adapter: %s\n' "$agent" >&2
+    exit 1
+  fi
 done
+if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
+  printf 'FAIL: editable config target allowlist missing\n' >&2
+  exit 1
+fi
+if ! grep -q 'editable_config_targets' src-tauri/src/commands/content.rs; then
+  printf 'FAIL: config template commands must use editable_config_targets\n' >&2
+  exit 1
+fi
+if ! grep -q 'EDITABLE_CONFIG_TARGET_IDS' src/App.tsx; then
+  printf 'FAIL: Library Configs must filter to editable config targets\n' >&2
+  exit 1
+fi
+if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
+  printf 'FAIL: cursor_setup must not be exposed as an editable config target\n' >&2
+  exit 1
+fi
 if ! grep -q 'alwaysApply: true' resources/default-workspace/templates/cursor/rules/agent-workspace.mdc; then
   printf 'FAIL: Cursor project rule missing MDC frontmatter\n' >&2
   exit 1

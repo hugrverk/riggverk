@@ -77,6 +77,12 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "templates/tui.json",
                 "templates/cursor/README.md",
                 "templates/cursor/rules/agent-workspace.mdc",
+                "templates/cursor/agents/architect.md",
+                "templates/cursor/agents/scout.md",
+                "templates/cursor/agents/inspector.md",
+                "templates/cursor/agents/sentinel.md",
+                "templates/cursor/agents/scribe.md",
+                "templates/cursor/agents/verifier.md",
                 "templates/prompts/standard-prompt.md",
                 "templates/prompts/masterprompt.md",
             ],
@@ -363,6 +369,12 @@ mod tests {
             "templates/tui.json",
             "templates/cursor/README.md",
             "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/agents/architect.md",
+            "templates/cursor/agents/scout.md",
+            "templates/cursor/agents/inspector.md",
+            "templates/cursor/agents/sentinel.md",
+            "templates/cursor/agents/scribe.md",
+            "templates/cursor/agents/verifier.md",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
@@ -461,5 +473,23 @@ mod tests {
             content.contains("release-check"),
             "template must reference release-check skill"
         );
+    }
+
+    #[test]
+    fn default_workspace_files_include_all_cursor_adapter_templates() {
+        let files: Vec<&str> = default_workspace_files()
+            .into_iter()
+            .flat_map(|(_, paths)| paths.iter().copied())
+            .collect();
+        for rel in [
+            "templates/cursor/agents/architect.md",
+            "templates/cursor/agents/scout.md",
+            "templates/cursor/agents/inspector.md",
+            "templates/cursor/agents/sentinel.md",
+            "templates/cursor/agents/scribe.md",
+            "templates/cursor/agents/verifier.md",
+        ] {
+            assert!(files.contains(&rel), "missing Cursor adapter: {}", rel);
+        }
     }
 }

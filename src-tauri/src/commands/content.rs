@@ -732,11 +732,11 @@ mod tests {
         let root = temp_root("config-template-known");
         write_file(&root, "templates/opencode.json", "{}");
 
-        let targets = agent_targets::config_sync_targets();
+        let targets = agent_targets::editable_config_targets();
         let opencode = targets.iter().find(|t| t.id == "opencode_config");
         assert!(
             opencode.is_some(),
-            "opencode_config must be in config_sync_targets"
+            "opencode_config must be in editable_config_targets"
         );
 
         let path = root.join(opencode.unwrap().source_rel);
@@ -746,17 +746,26 @@ mod tests {
 
     #[test]
     fn config_template_unknown_target_rejected() {
-        let targets = agent_targets::config_sync_targets();
+        let targets = agent_targets::editable_config_targets();
         let unknown = targets.iter().find(|t| t.id == "nonexistent_config");
         assert!(
             unknown.is_none(),
-            "unknown config target must not be in registry"
+            "unknown config target must not be in editable registry"
+        );
+    }
+
+    #[test]
+    fn cursor_setup_is_not_an_editable_config_template() {
+        let targets = agent_targets::editable_config_targets();
+        assert!(
+            targets.iter().all(|t| t.id != "cursor_setup"),
+            "cursor_setup must stay out of config template editing"
         );
     }
 
     #[test]
     fn config_sync_target_source_paths_are_safe() {
-        let targets = agent_targets::config_sync_targets();
+        let targets = agent_targets::editable_config_targets();
         for t in &targets {
             assert!(
                 !t.source_rel.starts_with('/'),
@@ -1145,7 +1154,9 @@ mod tests {
         cleanup(&root);
         let _ = std::fs::remove_dir_all(&backup_root);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown config target"));
+        assert!(result
+            .unwrap_err()
+            .contains("unknown editable config target"));
     }
 
     #[test]
@@ -1232,10 +1243,10 @@ mod tests {
             return Err("content exceeds 512 KB limit".to_string());
         }
 
-        let target = agent_targets::config_sync_targets()
+        let target = agent_targets::editable_config_targets()
             .into_iter()
             .find(|t| t.id == target_id)
-            .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+            .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
 
         if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
             return Err("invalid registry path".to_string());
@@ -1673,10 +1684,10 @@ pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
 #[tauri::command]
 pub fn read_config_template(target_id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
-    let target = agent_targets::config_sync_targets()
+    let target = agent_targets::editable_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
     let path = root.join(target.source_rel);
     let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
     Ok(DocumentContent {
@@ -1692,10 +1703,10 @@ pub fn read_config_template(target_id: String) -> Result<DocumentContent, String
 #[tauri::command]
 pub fn open_config_template(target_id: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
-    let target = agent_targets::config_sync_targets()
+    let target = agent_targets::editable_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
     let path = root.join(target.source_rel);
     let path_str = path_arg(&path)?;
     let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
@@ -1716,10 +1727,10 @@ pub fn save_config_template(target_id: String, content: String) -> Result<Action
         return Err("content exceeds 512 KB limit".to_string());
     }
 
-    let target = agent_targets::config_sync_targets()
+    let target = agent_targets::editable_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown config target: {}", target_id))?;
+        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
 
     if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
         return Err("invalid registry path".to_string());
@@ -1893,8 +1904,11 @@ pub fn save_opencode_config_source(
             ));
         }
 
-        let backup_path =
-            doc_backup_path(&format!("opencode_config:{}", source_type), &target_path, None)?;
+        let backup_path = doc_backup_path(
+            &format!("opencode_config:{}", source_type),
+            &target_path,
+            None,
+        )?;
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
@@ -2489,7 +2503,11 @@ mod agent_metadata_tests {
         })
     }
 
-    fn ocs_save_source(root: &Path, source_type: &str, content: &str) -> Result<ActionResult, String> {
+    fn ocs_save_source(
+        root: &Path,
+        source_type: &str,
+        content: &str,
+    ) -> Result<ActionResult, String> {
         ocs_save_source_with_backup(root, source_type, content, None)
     }
 
@@ -2505,7 +2523,10 @@ mod agent_metadata_tests {
         let source = agent_targets::opencode_config_editor_source_by_id(source_type)
             .ok_or_else(|| format!("unknown opencode config source type: {}", source_type))?;
         if !source.editable {
-            return Err(format!("{} is read-only. Edit Base or Policy instead.", source.label));
+            return Err(format!(
+                "{} is read-only. Edit Base or Policy instead.",
+                source.label
+            ));
         }
         if source.rel_path.contains("..") || Path::new(source.rel_path).is_absolute() {
             return Err("invalid registry path".to_string());
@@ -2518,17 +2539,40 @@ mod agent_metadata_tests {
         serde_json::from_str::<serde_json::Value>(content)
             .map_err(|e| format!("invalid JSON: {}", e))?;
         if target_path.exists() {
-            let existing = fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
+            let existing =
+                fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
             if existing == content {
-                return Ok(ActionResult::new(true, "save_opencode_config_source", "unchanged".to_string(), String::new(), Some(0)));
+                return Ok(ActionResult::new(
+                    true,
+                    "save_opencode_config_source",
+                    "unchanged".to_string(),
+                    String::new(),
+                    Some(0),
+                ));
             }
-            let backup_path = doc_backup_path(&format!("opencode_config:{}", source_type), &target_path, custom_backup_root)?;
+            let backup_path = doc_backup_path(
+                &format!("opencode_config:{}", source_type),
+                &target_path,
+                custom_backup_root,
+            )?;
             fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
             fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-            return Ok(ActionResult::new(true, "save_opencode_config_source", "saved with backup".to_string(), String::new(), Some(0)));
+            return Ok(ActionResult::new(
+                true,
+                "save_opencode_config_source",
+                "saved with backup".to_string(),
+                String::new(),
+                Some(0),
+            ));
         }
         fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
-        Ok(ActionResult::new(true, "save_opencode_config_source", "saved".to_string(), String::new(), Some(0)))
+        Ok(ActionResult::new(
+            true,
+            "save_opencode_config_source",
+            "saved".to_string(),
+            String::new(),
+            Some(0),
+        ))
     }
 
     #[test]
@@ -2537,13 +2581,19 @@ mod agent_metadata_tests {
         let result = ocs_read_source(&root, "unknown");
         ocs_cleanup(&root);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown opencode config source"));
+        assert!(result
+            .unwrap_err()
+            .contains("unknown opencode config source"));
     }
 
     #[test]
     fn opencode_config_editor_source_base_reads_file() {
         let root = temp_root("ocs-base-read");
-        ocs_write_file(&root, "templates/opencode.base.json", "{\"model\":\"gpt-4\"}");
+        ocs_write_file(
+            &root,
+            "templates/opencode.base.json",
+            "{\"model\":\"gpt-4\"}",
+        );
         let result = ocs_read_source(&root, "base");
         ocs_cleanup(&root);
         assert!(result.is_ok());
@@ -2584,7 +2634,9 @@ mod agent_metadata_tests {
         let result = ocs_save_source(&root, "unknown", "{}");
         ocs_cleanup(&root);
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown opencode config source"));
+        assert!(result
+            .unwrap_err()
+            .contains("unknown opencode config source"));
     }
 
     #[test]
@@ -2602,7 +2654,8 @@ mod agent_metadata_tests {
         let root = temp_root("ocs-save-base");
         let backup_root = temp_root("ocs-save-base-backup");
         ocs_write_file(&root, "templates/opencode.base.json", "{}");
-        let result = ocs_save_source_with_backup(&root, "base", "{\"model\":\"gpt-4\"}", Some(&backup_root));
+        let result =
+            ocs_save_source_with_backup(&root, "base", "{\"model\":\"gpt-4\"}", Some(&backup_root));
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert!(ar.success);
@@ -2617,7 +2670,8 @@ mod agent_metadata_tests {
         let root = temp_root("ocs-save-policy");
         let backup_root = temp_root("ocs-save-policy-backup");
         ocs_write_file(&root, "templates/opencode.policy.json", "{}");
-        let result = ocs_save_source_with_backup(&root, "policy", "{\"read\":{}}", Some(&backup_root));
+        let result =
+            ocs_save_source_with_backup(&root, "policy", "{\"read\":{}}", Some(&backup_root));
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert!(ar.success);
@@ -2630,7 +2684,11 @@ mod agent_metadata_tests {
     #[test]
     fn opencode_config_editor_save_base_unchanged_does_not_write() {
         let root = temp_root("ocs-save-base-unchanged");
-        ocs_write_file(&root, "templates/opencode.base.json", "{\"model\":\"gpt-4\"}");
+        ocs_write_file(
+            &root,
+            "templates/opencode.base.json",
+            "{\"model\":\"gpt-4\"}",
+        );
         let result = ocs_save_source(&root, "base", "{\"model\":\"gpt-4\"}");
         assert!(result.is_ok());
         let ar = result.unwrap();
@@ -2653,7 +2711,8 @@ mod agent_metadata_tests {
         let root = temp_root("ocs-save-backup");
         let backup_root = temp_root("ocs-save-backup-dir");
         ocs_write_file(&root, "templates/opencode.base.json", "{\"original\":true}");
-        let result = ocs_save_source_with_backup(&root, "base", "{\"modified\":true}", Some(&backup_root));
+        let result =
+            ocs_save_source_with_backup(&root, "base", "{\"modified\":true}", Some(&backup_root));
         assert!(result.is_ok());
         let ar = result.unwrap();
         assert_eq!(ar.stdout, "saved with backup");
@@ -2709,14 +2768,20 @@ mod agent_metadata_tests {
     fn open_opencode_config_source_unknown_type_rejected() {
         let result = ocs_open_source_rejects_unknown("unknown");
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("unknown opencode config source"));
+        assert!(result
+            .unwrap_err()
+            .contains("unknown opencode config source"));
     }
 
     #[test]
     fn open_opencode_config_source_known_types_accepted() {
         for id in &["base", "policy", "snapshot"] {
             let result = ocs_open_source_rejects_unknown(id);
-            assert!(result.is_ok(), "known source type '{}' should be accepted", id);
+            assert!(
+                result.is_ok(),
+                "known source type '{}' should be accepted",
+                id
+            );
         }
     }
 
@@ -2724,7 +2789,11 @@ mod agent_metadata_tests {
     fn open_opencode_config_source_rejects_invalid_source_type() {
         for bad in &["../etc/passwd", "/abs/path", "", "base;rm"] {
             let result = agent_targets::opencode_config_editor_source_by_id(bad);
-            assert!(result.is_none(), "invalid source type '{}' should not be found", bad);
+            assert!(
+                result.is_none(),
+                "invalid source type '{}' should not be found",
+                bad
+            );
         }
     }
 
@@ -2736,12 +2805,14 @@ mod agent_metadata_tests {
             assert!(
                 !source.rel_path.starts_with('/'),
                 "rel_path for '{}' must not be absolute: {}",
-                id, source.rel_path
+                id,
+                source.rel_path
             );
             assert!(
                 !source.rel_path.contains(".."),
                 "rel_path for '{}' must not contain ..: {}",
-                id, source.rel_path
+                id,
+                source.rel_path
             );
         }
     }
