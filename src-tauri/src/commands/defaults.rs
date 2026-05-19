@@ -76,6 +76,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "templates/opencode.json",
                 "templates/tui.json",
                 "templates/cursor/README.md",
+                "templates/cursor/user-rules.md",
                 "templates/cursor/rules/agent-workspace.mdc",
                 "templates/cursor/agents/architect.md",
                 "templates/cursor/agents/scout.md",
@@ -368,6 +369,7 @@ mod tests {
             "templates/opencode.json",
             "templates/tui.json",
             "templates/cursor/README.md",
+            "templates/cursor/user-rules.md",
             "templates/cursor/rules/agent-workspace.mdc",
             "templates/cursor/agents/architect.md",
             "templates/cursor/agents/scout.md",
@@ -488,6 +490,7 @@ mod tests {
             "templates/cursor/agents/sentinel.md",
             "templates/cursor/agents/scribe.md",
             "templates/cursor/agents/verifier.md",
+            "templates/cursor/user-rules.md",
         ] {
             assert!(files.contains(&rel), "missing Cursor adapter: {}", rel);
         }

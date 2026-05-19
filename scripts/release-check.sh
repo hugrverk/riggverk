@@ -204,6 +204,61 @@ if [ "$cursor_count" -ne 6 ]; then
 fi
 printf '  Cursor setup verified: help, adapters, project rule, global-agent smoke\n'
 
+step "bundled default cursor user-rules"
+user_rules_file="resources/default-workspace/templates/cursor/user-rules.md"
+if [ ! -f "$user_rules_file" ]; then
+  printf 'FAIL: cursor user-rules template missing: %s\n' "$user_rules_file" >&2
+  exit 1
+fi
+printf '  user-rules.md exists\n'
+if ! grep -qF 'primary implementation architect' "$user_rules_file"; then
+  printf 'FAIL: user-rules.md missing primary implementation architect\n' >&2
+  exit 1
+fi
+printf '  user-rules.md contains primary implementation architect\n'
+if ! grep -qF 'Use subagents only when they clearly reduce risk or context load' "$user_rules_file"; then
+  printf 'FAIL: user-rules.md missing subagent guidance\n' >&2
+  exit 1
+fi
+printf '  user-rules.md contains subagent guidance\n'
+
+step "regression: global-agent-rules.md avoids Cursor-specific content"
+global_rules="resources/default-workspace/templates/global-agent-rules.md"
+if grep -qF 'primary implementation architect by default' "$global_rules"; then
+  printf 'FAIL: global-agent-rules.md must not contain Cursor-specific architect-default phrase\n' >&2
+  exit 1
+fi
+printf '  global-agent-rules.md avoids Cursor-specific architect-default phrase\n'
+if grep -qF 'Do not invoke the `architect` subagent' "$global_rules"; then
+  printf 'FAIL: global-agent-rules.md must not contain Cursor-specific architect-subagent phrase\n' >&2
+  exit 1
+fi
+printf '  global-agent-rules.md avoids Cursor-specific architect-subagent phrase\n'
+
+step "bundled default cursor user-rules show and copy"
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --show-user-rules >/dev/null 2>&1; then
+  printf 'FAIL: install-cursor-workspace.sh --show-user-rules failed\n' >&2
+  exit 1
+fi
+printf '  --show-user-rules works\n'
+if command -v pbcopy >/dev/null 2>&1; then
+  if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >/dev/null 2>&1; then
+    printf 'FAIL: install-cursor-workspace.sh --copy-user-rules failed\n' >&2
+    exit 1
+  fi
+  printf '  --copy-user-rules works\n'
+else
+  printf '  --copy-user-rules skipped (no pbcopy)\n'
+fi
+
+step "regression: no fake global Cursor User Rules path"
+if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|global.*cursor.*user.*rules' \
+  src-tauri src/resources/default-workspace/scripts \
+  --ignore-case 2>/dev/null; then
+  printf 'FAIL: must not claim a fake global Cursor User Rules file path\n' >&2
+  exit 1
+fi
+
 step "regression: workspace.rs does not hard-require specific cursor rule filename"
 if search_has_match "rel_path:.*agent-workspace.mdc" src-tauri/src/commands/workspace.rs; then
   printf 'FAIL: workspace.rs must not hard-require agent-workspace.mdc as a generic marker\n' >&2
@@ -240,13 +295,7 @@ if [ "$opencode_count" -lt 1 ]; then
   exit 1
 fi
 
-step "regression: no fake global Cursor User Rules path"
-if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|global.*cursor.*user.*rules' \
-  src-tauri src/resources/default-workspace/scripts \
-  --ignore-case 2>/dev/null; then
-  printf 'FAIL: must not claim a fake global Cursor User Rules file path\n' >&2
-  exit 1
-fi
+
 
 step "bundled default docs exist and non-empty"
 for doc in \

@@ -172,7 +172,7 @@ Global destinations:
 - Gemini: `$HOME/.gemini/skills` (override with `GEMINI_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
-Cursor project installs use `<project>/.cursor/skills`. Cursor subagents are installed by `resources/default-workspace/scripts/install-cursor-workspace.sh` to `~/.cursor/agents` or `<project>/.cursor/agents`; project rules install to `<project>/.cursor/rules/agent-workspace.mdc`. Cursor global User Rules are settings-managed in Cursor and are not treated as a file-backed sync target.
+Cursor project installs use `<project>/.cursor/skills`. Cursor subagents are installed by `resources/default-workspace/scripts/install-cursor-workspace.sh` to `~/.cursor/agents` or `<project>/.cursor/agents`; project rules install to `<project>/.cursor/rules/agent-workspace.mdc`. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` and can be shown or copied to clipboard via `--show-user-rules` / `--copy-user-rules`; they are not auto-written because Cursor does not document a stable file-backed write target.
 - Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 
 ## Workspace Contract Validator

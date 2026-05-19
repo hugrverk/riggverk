@@ -67,7 +67,7 @@ The app supports editing allowlisted config templates. OpenCode config sources a
 
 The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
 
-Cursor support is script-backed and scoped: skills install to Cursor skill folders, subagents install to Cursor agent folders, and project rules install to `.cursor/rules/agent-workspace.mdc` inside an explicit project target. The app must not claim a global file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise.
+Cursor support is script-backed and scoped: skills install to Cursor skill folders, subagents install to Cursor agent folders, and project rules install to `.cursor/rules/agent-workspace.mdc` inside an explicit project target. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (a Cursor-only template separate from the cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup.
 
 ## Transition state
 

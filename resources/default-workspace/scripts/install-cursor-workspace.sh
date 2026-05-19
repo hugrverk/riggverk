@@ -6,12 +6,16 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
 RULE_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules/agent-workspace.mdc"
+USER_RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/user-rules.md"
 
 apply=false
 quiet=false
 global_agents=false
 project_agents=false
 project_rules=false
+show_user_rules=false
+copy_user_rules=false
+open_cursor_settings=false
 target=""
 
 usage() {
@@ -26,10 +30,16 @@ Options:
   --project                Alias for --project-agents --project-rules
   --all                    Select all Cursor targets
   --target <path>          Target project path for project installs (default: current directory)
+  --user-rules             Operate on Cursor User Rules (versioned copy, not auto-installed)
+  --show-user-rules        Print the versioned Cursor User Rules file
+  --copy-user-rules        Copy Cursor User Rules to clipboard (macOS only, uses pbcopy)
+  --open-cursor-settings   Open Cursor Settings in the app (macOS only)
   --quiet                  Print compact app-friendly output
   --help                   Show this help
 
-Cursor User Rules are defined in Cursor Settings > Rules and are not synced by this script.
+Cursor User Rules are set in Cursor Settings > Rules > User Rules. This script
+can show or copy the versioned rules file to clipboard but does not write to
+undocumented Cursor internal storage paths.
 USAGE
 }
 
@@ -149,6 +159,10 @@ while [ $# -gt 0 ]; do
     --apply) apply=true ;;
     --quiet) quiet=true ;;
     --help) usage; exit 0 ;;
+    --user-rules) show_user_rules=true ;;
+    --show-user-rules) show_user_rules=true ;;
+    --copy-user-rules) copy_user_rules=true ;;
+    --open-cursor-settings) open_cursor_settings=true ;;
     --global-agents) global_agents=true ;;
     --project-agents) project_agents=true ;;
     --project-rules) project_rules=true ;;
@@ -164,13 +178,48 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! $global_agents && ! $project_agents && ! $project_rules; then
+if ! $global_agents && ! $project_agents && ! $project_rules && ! $show_user_rules && ! $copy_user_rules && ! $open_cursor_settings; then
   global_agents=true
 fi
 
 project_target=""
 if $project_agents || $project_rules; then
   project_target="$(validate_project_target "${target:-$caller_dir}")"
+fi
+
+if $show_user_rules; then
+  if [ -f "$USER_RULES_SOURCE" ]; then
+    cat "$USER_RULES_SOURCE"
+  else
+    die "user rules source not found: $USER_RULES_SOURCE"
+  fi
+  exit 0
+fi
+
+if $copy_user_rules; then
+  if command -v pbcopy >/dev/null 2>&1; then
+    if [ -f "$USER_RULES_SOURCE" ]; then
+      pbcopy < "$USER_RULES_SOURCE"
+      printf 'Cursor User Rules copied to clipboard.\n'
+      printf 'Paste them into Cursor Settings > Rules > User Rules.\n'
+    else
+      die "user rules source not found: $USER_RULES_SOURCE"
+    fi
+  else
+    die "pbcopy not available. Copy the file manually."
+  fi
+  exit 0
+fi
+
+if $open_cursor_settings; then
+  if command -v open >/dev/null 2>&1; then
+    open -a Cursor 2>/dev/null || open "cursor://settings/rules" 2>/dev/null || {
+      printf 'Could not open Cursor Settings. Open Cursor manually and go to Settings > Rules.\n'
+    }
+  else
+    die "open command not available"
+  fi
+  exit 0
 fi
 
 if $global_agents; then

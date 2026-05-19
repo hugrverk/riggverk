@@ -1551,6 +1551,7 @@ mod tests {
             "templates/opencode.json",
             "templates/tui.json",
             "templates/cursor/README.md",
+            "templates/cursor/user-rules.md",
             "templates/cursor/rules/agent-workspace.mdc",
             "templates/cursor/agents/architect.md",
             "templates/cursor/agents/scout.md",
