@@ -981,14 +981,40 @@ for bp in BROAD_PATHS:
 print("  repair safety simulation passed")
 PY
 
-step "repair commands registered in commands.rs"
-for cmd_regex in 'plan_workspace_repair' 'apply_workspace_repair'; do
-  if ! grep -q "$cmd_regex" src-tauri/src/commands.rs; then
-    printf 'FAIL: repair command not re-exported in commands.rs: %s\n' "$cmd_regex" >&2
-    exit 1
-  fi
-done
-printf '  plan_workspace_repair + apply_workspace_repair: registered in commands.rs\n'
+step "repair commands: no arbitrary-target, safe plan/apply only"
+# Verify public commands.rs does NOT export arbitrary-target repair_workspace
+if grep -Eq '^\s*repair_workspace[\s,]' src-tauri/src/commands.rs && ! grep -q 'repair_workspace_impl' <<<''; then
+  # Check for actual public re-export (not internal like repair_workspace_core)
+  if ! grep -q '//' src-tauri/src/commands.rs | grep -qF 'repair_workspace'; then true; fi
+fi
+python3 -c "
+import re, sys
+# commands.rs: 'repair_workspace' must not appear after 'pub use workspace'
+with open('src-tauri/src/commands.rs') as f:
+    content = f.read()
+# Check the pub use workspace block
+ws_block = content[content.index('pub use workspace'):content.index(';', content.index('pub use workspace'))]
+if 'repair_workspace' in ws_block:
+    print('FAIL: commands.rs pub use workspace still exports repair_workspace')
+    sys.exit(1)
+print('  commands.rs: repair_workspace not in public exports')
+
+# Verify plan/apply are still exported
+for safe_cmd in ['plan_workspace_repair', 'apply_workspace_repair']:
+    if safe_cmd not in ws_block:
+        print(f'FAIL: commands.rs missing safe repair command {safe_cmd}')
+        sys.exit(1)
+print('  commands.rs: plan_workspace_repair + apply_workspace_repair exported')
+
+# lib.rs: repair_workspace must not be imported or in generate_handler!
+with open('src-tauri/src/lib.rs') as f:
+    lib = f.read()
+if 'repair_workspace' in lib:
+    print('FAIL: lib.rs still references repair_workspace')
+    sys.exit(1)
+print('  lib.rs: no repair_workspace reference')
+"
+printf '  repair command surface is safe (plan/apply only)\n'
 
 step "app checks"
 npm run build

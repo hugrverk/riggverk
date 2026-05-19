@@ -1057,15 +1057,6 @@ fn repair_workspace_impl(
     repair_workspace_core(&source_root, target, dry_run)
 }
 
-#[tauri::command]
-pub fn repair_workspace(
-    app: tauri::AppHandle,
-    target_path: String,
-    dry_run: bool,
-) -> Result<RepairWorkspaceResult, String> {
-    Ok(repair_workspace_impl(&app, &target_path, dry_run))
-}
-
 /// Plan a workspace repair for the current workspace root.
 /// Returns what bundled default files are missing without copying anything.
 #[tauri::command]
