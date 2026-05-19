@@ -1,0 +1,14 @@
+---
+description: Core safety rules that always apply in this workspace.
+alwaysApply: true
+---
+
+# Core Safety
+
+- Repository reality overrides assumptions. Inspect relevant files before editing.
+- Keep diffs bounded, reviewable, and consistent with existing scripts, docs, templates, and checks.
+- Credential-bearing or credential-adjacent data is no-print: do not inspect, quote, expose, summarize verbatim, or pass onward secrets, tokens, passwords, private keys, raw env values, cookies, sessions, auth headers, private tokenized URLs, or credential-bearing config.
+- Do not read `.env*`, private keys, dumps, credential stores, or unrelated personal files unless explicitly requested and safe.
+- Treat install scripts, sync scripts, MCP configs, target paths, shell execution, and filesystem writes as security-sensitive.
+- Do not add database changes, migrations, deployment behavior, cloud-agent automation, or MCP runtime enablement unless the task explicitly asks for it.
+- Verify with the lightest command that can falsify the change and report passed checks, skipped checks, and residual risk.
