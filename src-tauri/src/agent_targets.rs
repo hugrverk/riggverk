@@ -83,6 +83,13 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             target_rel: ".config/opencode/opencode.json",
             source_rel: "templates/opencode.json",
         },
+        AgentSyncTarget {
+            id: "cursor_setup",
+            label: "cursor setup",
+            kind: TargetKind::Config,
+            target_rel: ".cursor/agents",
+            source_rel: "templates/cursor/README.md",
+        },
     ]
 }
 
@@ -97,6 +104,14 @@ pub fn config_targets() -> Vec<AgentSyncTarget> {
     targets()
         .into_iter()
         .filter(|t| matches!(t.kind, TargetKind::Config))
+        .collect()
+}
+
+pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
+    targets()
+        .into_iter()
+        .filter(|t| matches!(t.kind, TargetKind::Config))
+        .filter(|t| t.id == "opencode_config")
         .collect()
 }
 
@@ -135,6 +150,14 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec!["opencode_rules".into(), "opencode_config".into()],
         },
         TargetProfileMeta {
+            id: "cursor".into(),
+            label: "Cursor".into(),
+            description:
+                "Cursor global subagents. Project rules are installed by the Cursor setup script."
+                    .into(),
+            target_ids: vec!["cursor_setup".into()],
+        },
+        TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
             description: "Codex, OpenCode, Claude, Gemini, Auggie rule targets".into(),
@@ -149,7 +172,8 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_supported".into(),
             label: "All supported".into(),
-            description: "All supported rule targets + OpenCode config + agents".into(),
+            description: "All supported rule targets + OpenCode config + agents + Cursor setup"
+                .into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
@@ -157,6 +181,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "claude_rules".into(),
                 "gemini_rules".into(),
                 "opencode_config".into(),
+                "cursor_setup".into(),
             ],
         },
     ]
@@ -185,6 +210,7 @@ pub fn home_dir() -> Result<PathBuf, String> {
 
 pub enum ConfigScript {
     OpenCode,
+    Cursor,
 }
 
 #[allow(dead_code)]
@@ -206,6 +232,13 @@ impl ConfigSyncTarget {
                     ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
                 },
             ),
+            ConfigScript::Cursor => (
+                "scripts/install-cursor-workspace.sh",
+                match mode {
+                    ConfigScriptMode::Diff => vec!["--quiet", "--global-agents"],
+                    ConfigScriptMode::Apply => vec!["--quiet", "--apply", "--global-agents"],
+                },
+            ),
         }
     }
 }
@@ -217,13 +250,22 @@ pub enum ConfigScriptMode {
 }
 
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
-    vec![ConfigSyncTarget {
-        id: "opencode_config",
-        label: "opencode config + agents",
-        source_rel: "templates/opencode.json",
-        target_rel: ".config/opencode/opencode.json",
-        script: ConfigScript::OpenCode,
-    }]
+    vec![
+        ConfigSyncTarget {
+            id: "opencode_config",
+            label: "opencode config + agents",
+            source_rel: "templates/opencode.json",
+            target_rel: ".config/opencode/opencode.json",
+            script: ConfigScript::OpenCode,
+        },
+        ConfigSyncTarget {
+            id: "cursor_setup",
+            label: "cursor setup",
+            source_rel: "templates/cursor/README.md",
+            target_rel: ".cursor/agents",
+            script: ConfigScript::Cursor,
+        },
+    ]
 }
 
 // ── config editor sources ──
@@ -276,8 +318,12 @@ pub fn opencode_config_editor_sources() -> Vec<ConfigEditorSource> {
     OPENCODE_CONFIG_EDITOR_SOURCES.to_vec()
 }
 
-pub fn opencode_config_editor_source_by_id(source_type: &str) -> Option<&'static ConfigEditorSource> {
-    OPENCODE_CONFIG_EDITOR_SOURCES.iter().find(|s| s.id == source_type)
+pub fn opencode_config_editor_source_by_id(
+    source_type: &str,
+) -> Option<&'static ConfigEditorSource> {
+    OPENCODE_CONFIG_EDITOR_SOURCES
+        .iter()
+        .find(|s| s.id == source_type)
 }
 
 pub fn opencode_config_editor_source_meta_list() -> Vec<ConfigEditorSourceMeta> {
@@ -390,6 +436,19 @@ mod tests {
     }
 
     #[test]
+    fn cursor_setup_in_config_sync_targets() {
+        let targets = config_sync_targets();
+        let cursor = targets.iter().find(|t| t.id == "cursor_setup");
+        assert!(
+            cursor.is_some(),
+            "cursor_setup must be in config_sync_targets"
+        );
+        let t = cursor.unwrap();
+        assert_eq!(t.source_rel, "templates/cursor/README.md");
+        assert_eq!(t.target_rel, ".cursor/agents");
+    }
+
+    #[test]
     fn config_sync_target_ids_are_unique() {
         let targets = config_sync_targets();
         let mut seen = HashSet::new();
@@ -460,6 +519,27 @@ mod tests {
                 id
             );
         }
+    }
+
+    #[test]
+    fn editable_config_targets_exclude_script_backed_cursor_setup() {
+        let ids: Vec<&str> = editable_config_targets().iter().map(|t| t.id).collect();
+        assert_eq!(ids, &["opencode_config"]);
+        assert!(
+            !ids.contains(&"cursor_setup"),
+            "cursor_setup is script-backed setup, not an editable config template"
+        );
+    }
+
+    #[test]
+    fn opencode_config_editor_source_behavior_unchanged() {
+        let editable = editable_config_targets();
+        let opencode = editable
+            .iter()
+            .find(|t| t.id == "opencode_config")
+            .expect("opencode_config remains editable");
+        assert_eq!(opencode.source_rel, "templates/opencode.json");
+        assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");
     }
 
     // ── config editor source tests ──

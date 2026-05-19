@@ -178,6 +178,7 @@ fn has_project_marker(target: &Path) -> bool {
         "AGENTS.md",
         ".opencode",
         ".codex",
+        ".cursor",
         "wp-content",
         "wordpress/wp-content",
     ]
@@ -231,7 +232,7 @@ fn validate_project_install_target(raw: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "gemini", "auggie"];
+const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "gemini", "auggie", "cursor"];
 
 fn validate_agent(agent: &str) -> Result<(), String> {
     if VALID_SKILL_AGENTS.contains(&agent) {
@@ -513,7 +514,7 @@ mod tests {
     }
 
     #[test]
-    fn agent_validation_accepts_all_five_valid_agents() {
+    fn agent_validation_accepts_all_valid_agents() {
         for agent in super::VALID_SKILL_AGENTS {
             assert!(
                 super::validate_agent(agent).is_ok(),

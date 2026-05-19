@@ -108,6 +108,45 @@ fn opencode_config_status(root: &Path, home: &Path) -> String {
     "synced".into()
 }
 
+fn cursor_setup_status(root: &Path, home: &Path) -> String {
+    let agents_dir = root.join("templates/cursor/agents");
+    if !agents_dir.is_dir() {
+        return "diverged".into();
+    }
+
+    let entries = match std::fs::read_dir(&agents_dir) {
+        Ok(entries) => entries,
+        Err(_) => return "diverged".into(),
+    };
+
+    let agents: Vec<String> = entries
+        .filter_map(|e| e.ok())
+        .filter(|e| {
+            e.path().extension().map(|ext| ext == "md").unwrap_or(false)
+                && e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+        })
+        .map(|e| e.file_name().to_string_lossy().into_owned())
+        .collect();
+
+    if agents.is_empty() {
+        return "diverged".into();
+    }
+
+    let target_dir = home.join(".cursor/agents");
+    for agent_name in agents {
+        let source = agents_dir.join(&agent_name);
+        let target = target_dir.join(&agent_name);
+        if !target.exists() {
+            return "missing".into();
+        }
+        if !file_eq(&target, &source) {
+            return "diverged".into();
+        }
+    }
+
+    "synced".into()
+}
+
 #[derive(Serialize)]
 pub struct StatusData {
     repo_path: String,
@@ -186,6 +225,8 @@ pub fn get_status() -> Result<StatusData, String> {
     for t in &config_targets {
         let status = if t.id == "opencode_config" {
             opencode_config_status(&root, &home)
+        } else if t.id == "cursor_setup" {
+            cursor_setup_status(&root, &home)
         } else {
             sync_label(&home.join(t.target_rel), &root.join(t.source_rel))
         };

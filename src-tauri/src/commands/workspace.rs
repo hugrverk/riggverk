@@ -55,6 +55,10 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         },
         MarkerDef {
             kind: MarkerKind::File,
+            rel_path: "scripts/install-cursor-workspace.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
             rel_path: "scripts/install-skills.sh",
         },
         MarkerDef {
@@ -64,6 +68,18 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         MarkerDef {
             kind: MarkerKind::File,
             rel_path: "templates/opencode.json",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/cursor/README.md",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/cursor/rules/agent-workspace.mdc",
+        },
+        MarkerDef {
+            kind: MarkerKind::Dir,
+            rel_path: "templates/cursor/agents",
         },
         MarkerDef {
             kind: MarkerKind::File,
@@ -849,9 +865,21 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "#!/usr/bin/env bash\n",
         );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
+        write_file(
+            &root,
+            "templates/cursor/rules/agent-workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        mkdir(&root, "templates/cursor/agents");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
         root
@@ -880,9 +908,21 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "#!/usr/bin/env bash\n",
         );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
+        write_file(
+            &root,
+            "templates/cursor/rules/agent-workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        mkdir(&root, "templates/cursor/agents");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
         // No app source directory inside workspace — this should still be valid
@@ -909,9 +949,21 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "#!/usr/bin/env bash\n",
         );
+        write_file(
+            &root,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/cursor/README.md", "# cursor\n");
+        write_file(
+            &root,
+            "templates/cursor/rules/agent-workspace.mdc",
+            "---\nalwaysApply: true\n---\n",
+        );
+        mkdir(&root, "templates/cursor/agents");
         write_file(&root, "README.md", "# readme\n");
         mkdir(&root, "skills");
         // Missing .agent-workspace/workspace.json
@@ -1174,6 +1226,10 @@ mod tests {
             "planned files must include opencode config"
         );
         assert!(
+            files.contains(&"templates/cursor/agents/architect.md"),
+            "planned files must include Cursor adapter templates"
+        );
+        assert!(
             files.contains(&"docs/START_HERE.md"),
             "planned files must include docs"
         );
@@ -1309,6 +1365,14 @@ mod tests {
             "templates/global-agent-rules.md",
             "templates/opencode.json",
             "templates/tui.json",
+            "templates/cursor/README.md",
+            "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/agents/architect.md",
+            "templates/cursor/agents/scout.md",
+            "templates/cursor/agents/inspector.md",
+            "templates/cursor/agents/sentinel.md",
+            "templates/cursor/agents/scribe.md",
+            "templates/cursor/agents/verifier.md",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
@@ -1329,6 +1393,7 @@ mod tests {
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/install-cursor-workspace.sh",
         ] {
             write_file(&root, rel, "#!/usr/bin/env bash\necho script\n");
         }

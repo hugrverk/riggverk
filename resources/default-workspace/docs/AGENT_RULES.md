@@ -25,6 +25,8 @@ When synced, the template is written to tool-specific global rule paths:
 | Claude | `~/.claude/CLAUDE.md` |
 | Gemini | `~/.gemini/GEMINI.md` |
 
+Cursor project rules are separate from this global rules sync. Use `scripts/install-cursor-workspace.sh --project --target /path/to/project` to install `.cursor/rules/agent-workspace.mdc` into a project. Cursor User Rules are configured in Cursor Settings > Rules and are not synced as a file-backed target here.
+
 Paths can be overridden via environment variables.
 
 ## Sync workflow

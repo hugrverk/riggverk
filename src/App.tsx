@@ -16,6 +16,7 @@ const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ defa
 import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
+const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
 type View = "workspace" | "library" | "routing" | "settings";
 
@@ -275,7 +276,7 @@ function App() {
 
   // initialize active config target from first enabled / first available
   useEffect(() => {
-    const targets = agentTargets.filter(t => t.kind === "config");
+    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
     const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
     const firstEnabled = targets.find(t => enabledSet.has(t.id));
     const selected = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
@@ -287,7 +288,7 @@ function App() {
   // fallback when active config target disappears from registry or settings
   useEffect(() => {
     if (!activeConfigTargetId) return;
-    const targets = agentTargets.filter(t => t.kind === "config");
+    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
     const stillExists = targets.some(t => t.id === activeConfigTargetId);
     if (!stillExists) {
       const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
@@ -1304,7 +1305,10 @@ function App() {
   }, [configDirty, activeConfigSourceType]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
-  const configTargets = useMemo(() => agentTargets.filter(t => t.kind === "config"), [agentTargets]);
+  const configTargets = useMemo(
+    () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
+    [agentTargets],
+  );
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;

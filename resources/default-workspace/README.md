@@ -9,8 +9,8 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 ## What lives here
 
 - **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting
-- **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 22 starter skills are bundled.
-- **templates/** — source templates for agent rules (`global-agent-rules.md`) and OpenCode config (`opencode.json`)
+- **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 24 starter skills are bundled.
+- **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), and Cursor setup assets (`templates/cursor/`, including six Cursor agent adapters)
 - **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
 - **.agent-workspace/** — workspace identity marker (do not delete)
 
@@ -20,7 +20,8 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, Gemini, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
 - **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
-- **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all five agents), `--global`/`--project`, `--skill`, and `--all`.
+- **`install-cursor-workspace.sh`** — installs Cursor subagents from `templates/cursor/agents/*.md` to `~/.cursor/agents` or `<project>/.cursor/agents`, and project rules to `<project>/.cursor/rules`.
+- **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all six agents), `--global`/`--project`, `--skill`, and `--all`.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
 All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories. Use dry-run or diff before every apply.

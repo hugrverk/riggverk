@@ -148,7 +148,11 @@ fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
                     "snapshot is stale (generator check failed)".into()
                 };
                 return Some((
-                    if passed { "current".into() } else { "stale".into() },
+                    if passed {
+                        "current".into()
+                    } else {
+                        "stale".into()
+                    },
                     detail,
                 ));
             }
@@ -182,8 +186,11 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     let installed_config_path_str = installed_config_path.to_string_lossy().into_owned();
     let template_tui_path_str = template_tui_path.to_string_lossy().into_owned();
     let installed_tui_path_str = installed_tui_path.to_string_lossy().into_owned();
-    let generated_snapshot_base_path_str = generated_snapshot_base_path.to_string_lossy().into_owned();
-    let generated_snapshot_policy_path_str = generated_snapshot_policy_path.to_string_lossy().into_owned();
+    let generated_snapshot_base_path_str =
+        generated_snapshot_base_path.to_string_lossy().into_owned();
+    let generated_snapshot_policy_path_str = generated_snapshot_policy_path
+        .to_string_lossy()
+        .into_owned();
     let generated_snapshot_path_str = generated_snapshot_path.to_string_lossy().into_owned();
 
     let mut checks: Vec<OpenCodeRuntimeCheck> = Vec::new();
@@ -620,27 +627,29 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     // - "valid": source files + snapshot exist and are valid, no generator available to check freshness
     // - "missing": some required files missing or invalid
     // - "unknown": no snapshot files at all
-    let (generated_snapshot_status, mut generated_snapshot_detail) =
-        if base_source_exists
-            && base_source_valid
-            && policy_source_exists
-            && policy_source_valid
-            && snapshot_exists
-            && snapshot_valid
-        {
-            // Try running generator --check to verify freshness
-            match run_generator_check(workspace_root) {
-                Some((status, detail)) => (status, detail),
-                None => (
-                    "valid".into(),
-                    "source + snapshot valid; not freshness-checked (no generator)".into(),
-                ),
-            }
-        } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
-            ("unknown".into(), String::new())
-        } else {
-            ("missing".into(), "snapshot source files missing or invalid".into())
-        };
+    let (generated_snapshot_status, mut generated_snapshot_detail) = if base_source_exists
+        && base_source_valid
+        && policy_source_exists
+        && policy_source_valid
+        && snapshot_exists
+        && snapshot_valid
+    {
+        // Try running generator --check to verify freshness
+        match run_generator_check(workspace_root) {
+            Some((status, detail)) => (status, detail),
+            None => (
+                "valid".into(),
+                "source + snapshot valid; not freshness-checked (no generator)".into(),
+            ),
+        }
+    } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
+        ("unknown".into(), String::new())
+    } else {
+        (
+            "missing".into(),
+            "snapshot source files missing or invalid".into(),
+        )
+    };
 
     // Stale generated snapshot: affect overall status and use concise detail.
     if generated_snapshot_status == "stale" {
@@ -842,7 +851,8 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
             .output()
             .map_err(|e| {
                 if e.kind() == std::io::ErrorKind::NotFound {
-                    "python3 is not available on this system. Install Python 3 to generate config.".to_string()
+                    "python3 is not available on this system. Install Python 3 to generate config."
+                        .to_string()
                 } else {
                     format!("failed to run generator: {}", e)
                 }
@@ -924,11 +934,7 @@ mod tests {
             r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
         );
         write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.base.json",
-            r#"{"model":"test"}"#,
-        );
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
         write_file(
             &ws,
             "templates/opencode.policy.json",
@@ -942,11 +948,7 @@ mod tests {
             ".config/opencode/opencode.json",
             r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
         );
-        write_file(
-            &home,
-            ".config/opencode/tui.json",
-            r#"{"theme":"system"}"#,
-        );
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
         write_file(&home, ".config/opencode/agents/scout.md", "# scout");
 
@@ -1294,7 +1296,11 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
         write_file(&ws, "agents/architect.md", "# architect");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
@@ -1307,7 +1313,9 @@ mod tests {
 
         // Without a generator script, status is "valid" (not freshness-checked)
         assert_eq!(health.generated_snapshot_status, "valid");
-        assert!(health.generated_snapshot_detail.contains("not freshness-checked"));
+        assert!(health
+            .generated_snapshot_detail
+            .contains("not freshness-checked"));
     }
 
     #[test]
@@ -1318,7 +1326,11 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
         write_file(&ws, "agents/architect.md", "# architect");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
@@ -1358,7 +1370,11 @@ mod tests {
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "templates/tui.json", r#"{}"#);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
         write_file(&ws, "agents/architect.md", "# architect");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
@@ -1386,7 +1402,10 @@ mod tests {
         cleanup(&home);
 
         assert_eq!(health.generated_snapshot_status, "stale");
-        assert_eq!(health.generated_snapshot_detail, "Regenerate opencode.json before sync.");
+        assert_eq!(
+            health.generated_snapshot_detail,
+            "Regenerate opencode.json before sync."
+        );
         // Stale snapshot should raise overall status to diverged
         assert_eq!(health.status, "diverged");
         assert!(health.summary.contains("stale"));
@@ -1425,7 +1444,10 @@ mod tests {
         cleanup(&ws);
         cleanup(&home);
 
-        assert_eq!(health.summary, "OpenCode runtime matches the bundled workspace.");
+        assert_eq!(
+            health.summary,
+            "OpenCode runtime matches the bundled workspace."
+        );
         assert_eq!(health.next_action, "No runtime action needed.");
     }
 
@@ -1496,7 +1518,10 @@ mod tests {
 
         assert_eq!(health.status, "synced");
         assert_eq!(health.extra_installed_agent_count, 1);
-        assert_eq!(health.summary, "OpenCode runtime matches the bundled workspace.");
+        assert_eq!(
+            health.summary,
+            "OpenCode runtime matches the bundled workspace."
+        );
         assert_eq!(health.next_action, "No runtime action needed.");
     }
 
@@ -1537,8 +1562,16 @@ mod tests {
     fn write_marker_workspace(root: &Path) {
         write_file(root, ".agent-workspace/workspace.json", "{}");
         write_file(root, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
-        write_file(root, "scripts/install-agent-rules.sh", "#!/usr/bin/env bash\n");
-        write_file(root, "scripts/install-opencode-config.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            root,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            root,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
         write_file(root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(root, "templates/global-agent-rules.md", "# rules\n");
         write_file(root, "templates/opencode.json", "{}");
@@ -1551,7 +1584,11 @@ mod tests {
         let ws = temp_root("gen-write-def");
         write_marker_workspace(&ws);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
 
         // Use generate-default-opencode-config.py which exists in the dev checkout
         // We can't rely on it existing in a temp workspace, so create a custom one
@@ -1567,7 +1604,10 @@ mod tests {
 
         assert!(result.success, "generator write should succeed");
         assert_eq!(result.action, "generate_opencode_config_snapshot");
-        assert!(result.stdout.contains("Generated"), "stdout should indicate generation");
+        assert!(
+            result.stdout.contains("Generated"),
+            "stdout should indicate generation"
+        );
     }
 
     #[test]
@@ -1575,7 +1615,11 @@ mod tests {
         let ws = temp_root("gen-write-alt");
         write_marker_workspace(&ws);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
 
         // Only provide generate-opencode-config.py (the alternative name)
         write_generator_script(
@@ -1596,7 +1640,11 @@ mod tests {
         let ws = temp_root("gen-write-first");
         write_marker_workspace(&ws);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
 
         // Both scripts present. Only the first candidate succeeds.
         // generate-opencode-config.py returns 0, generate-default-opencode-config.py returns 1.
@@ -1635,7 +1683,11 @@ mod tests {
         let ws = temp_root("gen-write-flag");
         write_marker_workspace(&ws);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
 
         // Script that verifies argv[1] is --write, not --check or --apply
         write_generator_script(
@@ -1655,7 +1707,11 @@ mod tests {
         let ws = temp_root("gen-write-safe");
         write_marker_workspace(&ws);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(&ws, "templates/opencode.policy.json", r#"{"read":{"default":"allow"}}"#);
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
 
         // Script that writes to a marker file under the workspace only
         write_generator_script(
@@ -1669,9 +1725,15 @@ mod tests {
 
         // Verify the generated file exists inside the workspace
         let snapshot = ws.join("templates/opencode.json");
-        assert!(snapshot.is_file(), "snapshot should be written in workspace templates/");
+        assert!(
+            snapshot.is_file(),
+            "snapshot should be written in workspace templates/"
+        );
         let content = std::fs::read_to_string(&snapshot).unwrap_or_default();
-        assert!(content.contains("generated"), "snapshot should contain generated content");
+        assert!(
+            content.contains("generated"),
+            "snapshot should contain generated content"
+        );
 
         cleanup(&ws);
     }

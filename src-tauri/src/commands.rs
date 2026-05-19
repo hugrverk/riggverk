@@ -28,9 +28,7 @@ pub use design_md::{
     list_design_md_entries, open_design_md_target_folder, open_installed_design_md,
     plan_install_design_md, read_design_md_entry, read_design_md_preview, sync_design_md_catalog,
 };
-pub use opencode_runtime::{
-    generate_opencode_config_snapshot, get_opencode_runtime_health,
-};
+pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };

@@ -103,6 +103,7 @@ bash -n resources/default-workspace/scripts/bootstrap.sh
 bash -n resources/default-workspace/scripts/install-skills.sh
 bash -n resources/default-workspace/scripts/install-agent-rules.sh
 bash -n resources/default-workspace/scripts/install-opencode-config.sh
+bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
@@ -112,8 +113,8 @@ for pattern in "placeholder" "No files are written" "future app flows"; do
   fi
 done
 
-step "bundled default install-skills.sh help mentions all five agents"
-for agent in codex opencode claude gemini auggie; do
+step "bundled default install-skills.sh help mentions all six agents"
+for agent in codex opencode claude gemini auggie cursor; do
   if ! bash resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
     exit 1
@@ -144,6 +145,64 @@ if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
     exit 1
   fi
 fi
+
+step "bundled default cursor setup"
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF ".cursor/agents"; then
+  printf 'FAIL: install-cursor-workspace.sh --help missing .cursor/agents\n' >&2
+  exit 1
+fi
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF ".cursor/rules"; then
+  printf 'FAIL: install-cursor-workspace.sh --help missing .cursor/rules\n' >&2
+  exit 1
+fi
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  file="resources/default-workspace/templates/cursor/agents/$agent"
+  if [ ! -s "$file" ]; then
+    printf 'FAIL: Cursor agent adapter missing or empty: %s\n' "$file" >&2
+    exit 1
+  fi
+  for key in '^permission:' '^mode:' '^temperature:' '^steps:' '^hidden:'; do
+    if grep -q "$key" "$file"; then
+      printf 'FAIL: Cursor agent adapter contains OpenCode-only frontmatter key %s: %s\n' "$key" "$file" >&2
+      exit 1
+    fi
+  done
+  if ! grep -q "templates/cursor/agents/$agent" src-tauri/src/commands/defaults.rs; then
+    printf 'FAIL: default workspace copy list missing Cursor adapter: %s\n' "$agent" >&2
+    exit 1
+  fi
+done
+if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
+  printf 'FAIL: editable config target allowlist missing\n' >&2
+  exit 1
+fi
+if ! grep -q 'editable_config_targets' src-tauri/src/commands/content.rs; then
+  printf 'FAIL: config template commands must use editable_config_targets\n' >&2
+  exit 1
+fi
+if ! grep -q 'EDITABLE_CONFIG_TARGET_IDS' src/App.tsx; then
+  printf 'FAIL: Library Configs must filter to editable config targets\n' >&2
+  exit 1
+fi
+if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
+  printf 'FAIL: cursor_setup must not be exposed as an editable config target\n' >&2
+  exit 1
+fi
+if ! grep -q 'alwaysApply: true' resources/default-workspace/templates/cursor/rules/agent-workspace.mdc; then
+  printf 'FAIL: Cursor project rule missing MDC frontmatter\n' >&2
+  exit 1
+fi
+tmpdir="$(mktemp -d)"
+CURSOR_AGENTS_PATH="$tmpdir/cursor agents" \
+AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents >/dev/null
+cursor_count="$(find "$tmpdir/cursor agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
+rm -rf "$tmpdir"
+if [ "$cursor_count" -ne 6 ]; then
+  printf 'FAIL: Cursor global agents smoke wrote %s agents, expected 6\n' "$cursor_count" >&2
+  exit 1
+fi
+printf '  Cursor setup verified: help, adapters, project rule, global-agent smoke\n'
 
 step "bundled default docs exist and non-empty"
 for doc in \
