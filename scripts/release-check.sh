@@ -363,9 +363,9 @@ cursor_block = targets[cursor_index: next_target_index if next_target_index != -
 if "kind: TargetKind::Rules" not in cursor_block:
     raise SystemExit("FAIL: cursor_setup must have kind TargetKind::Rules")
 
-config_sync_targets = function_body("config_sync_targets")
-if "cursor_setup" in config_sync_targets:
-    raise SystemExit("FAIL: cursor_setup must not be in config_sync_targets()")
+config_targets = function_body("config_targets")
+if "cursor_setup" in config_targets:
+    raise SystemExit("FAIL: cursor_setup must not be in config_targets()")
 PY
 printf '  cursor_setup target registry verified\n'
 
