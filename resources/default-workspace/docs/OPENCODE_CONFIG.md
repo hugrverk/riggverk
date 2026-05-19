@@ -12,13 +12,13 @@ The maintainable source files are:
 To regenerate the snapshot after changing a source file:
 
 ```
-python3 scripts/generate-default-opencode-config.py --write
+python3 scripts/generate-opencode-config.py --write
 ```
 
 To verify the snapshot is current (used by CI/release checks):
 
 ```
-python3 scripts/generate-default-opencode-config.py --check
+python3 scripts/generate-opencode-config.py --check
 ```
 
 The template defines:

@@ -55,6 +55,8 @@ The app source includes a generic starter workspace under `resources/default-wor
 
 Bundled defaults are read-only source material previewed in the Workspace tab. They can be applied to create a new workspace via the **create workspace** button, which copies bundled default files into a safe empty or missing target directory. The Workspace tab shows a **Workspace Setup** panel when the active path is invalid (e.g. default path does not exist). Click **dry-run create** to evaluate safety, then **create workspace** to initialize. No files are created automatically on launch — all create actions are explicit user operations. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
 
+Existing workspaces that are missing newer bundled files (such as the OpenCode config generator or config source templates) can be repaired via the Workspace view. The **Workspace Repair** panel appears in the Runtime Health section when files are detected as missing. Click **check** for a dry-run preview of what would be copied, or **repair** to copy only missing files. Repair never overwrites existing user edits, never executes scripts, and only copies files from the app's bundled default workspace.
+
 ### Workspace startup
 
 On app startup, the Workspace view loads settings, diagnostics, the default workspace summary (bundled resource preview), and workspace resources (skills list, docs list, agent sources, workspace contract, and status). When a valid workspace path has been saved from a previous session, the Workspace view immediately shows the active skill count and auto-selects all workspace skills without requiring the user to open the Library first.

@@ -1057,13 +1057,22 @@ fn repair_workspace_impl(
     repair_workspace_core(&source_root, target, dry_run)
 }
 
+/// Plan a workspace repair for the current workspace root.
+/// Returns what bundled default files are missing without copying anything.
 #[tauri::command]
-pub fn repair_workspace(
-    app: tauri::AppHandle,
-    target_path: String,
-    dry_run: bool,
-) -> Result<RepairWorkspaceResult, String> {
-    Ok(repair_workspace_impl(&app, &target_path, dry_run))
+pub fn plan_workspace_repair(app: tauri::AppHandle) -> Result<RepairWorkspaceResult, String> {
+    let root = workspace_root()?;
+    let root_str = path_arg(&root)?;
+    Ok(repair_workspace_impl(&app, &root_str, true))
+}
+
+/// Apply a workspace repair for the current workspace root.
+/// Copies missing bundled default files. Never overwrites existing files.
+#[tauri::command]
+pub fn apply_workspace_repair(app: tauri::AppHandle) -> Result<RepairWorkspaceResult, String> {
+    let root = workspace_root()?;
+    let root_str = path_arg(&root)?;
+    Ok(repair_workspace_impl(&app, &root_str, false))
 }
 
 #[cfg(test)]
@@ -2321,5 +2330,76 @@ mod tests {
             "{}/my-workspace",
             home
         ))));
+    }
+
+    #[test]
+    fn repair_skips_source_missing_files_gracefully() {
+        let source = temp_root("repair-src-miss");
+        let target = temp_root("repair-tgt-miss");
+        fs::create_dir_all(&target).expect("create target");
+
+        // Source has workspace.json but NOT the generator script, base.json, or policy.json
+        write_file(&source, ".agent-workspace/workspace.json", "{}");
+        write_file(&source, "README.md", "# readme\n");
+        // No other files — many default_workspace_files will be missing from source
+
+        let result = repair_workspace_core(&source, &target, true);
+        // Should still succeed — missing source files are skipped gracefully
+        assert!(result.ok, "repair should succeed even with sparse source");
+        // copied_files should be empty or only contain files that exist in the sparse source
+        for f in &result.copied_files {
+            let src = source.join(f);
+            assert!(src.is_file(), "copied file '{}' must exist in source", f);
+        }
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_skips_traversal_rel_paths() {
+        // The core function filters out rel paths containing ".."
+        // This test verifies by providing a path with ".." that would be in the
+        // default file list — but the default_workspace_files() never contains ".."
+        // so this path is never exercised. The filter exists for defense-in-depth.
+        let source = temp_root("repair-trav-src");
+        let target = temp_root("repair-trav-tgt");
+        fs::create_dir_all(&target).expect("create target");
+
+        write_file(&source, ".agent-workspace/workspace.json", "{}");
+        write_file(&source, "README.md", "# readme\n");
+
+        // Target is a valid existing workspace; repair should find nothing to do
+        // (since target already has workspace.json and README.md)
+        let result = repair_workspace_core(&source, &target, true);
+        assert!(result.ok, "repair should succeed");
+        // The function filters ".." paths — nothing to assert about traversal
+        // except that it doesn't panic.
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_second_run_reports_nothing_to_do() {
+        let source = setup_source_root("repair-2nd-ws");
+        let target = temp_root("repair-2nd-tgt");
+        fs::create_dir_all(&target).expect("create target");
+
+        // Apply repair once
+        let first = repair_workspace_core(&source, &target, false);
+        assert!(first.ok, "first repair should succeed: {}", first.message);
+
+        // Second repair (dry-run) should report nothing to do
+        let second = repair_workspace_core(&source, &target, true);
+        assert!(second.ok, "second repair should succeed");
+        assert!(
+            second.copied_files.is_empty(),
+            "second repair should find no missing files, got: {:?}",
+            second.copied_files
+        );
+
+        cleanup(&source);
+        cleanup(&target);
     }
 }

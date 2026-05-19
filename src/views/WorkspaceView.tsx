@@ -41,6 +41,9 @@ interface WorkspaceViewProps {
   opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
   onRefreshOpenCodeRuntimeHealth: () => void;
   onGenerateOpenCodeConfig: () => void;
+  // workspace repair
+  onPlanWorkspaceRepair: () => void;
+  onApplyWorkspaceRepair: () => void;
   // cursor profile
   cursorProfileHealth: CursorProfileHealth | null;
   cursorProjectTarget: string;
@@ -163,6 +166,8 @@ export function WorkspaceView({
   opencodeRuntimeHealth,
   onRefreshOpenCodeRuntimeHealth,
   onGenerateOpenCodeConfig,
+  onPlanWorkspaceRepair,
+  onApplyWorkspaceRepair,
   cursorProfileHealth,
   cursorProjectTarget,
   onSetCursorProjectTarget,
@@ -611,6 +616,24 @@ export function WorkspaceView({
                       sync
                     </button>
                   </div>
+
+                  {/* Workspace repair affordance */}
+                  {(opencodeRuntimeHealth.generated_snapshot_status === "valid" || opencodeRuntimeHealth.generated_snapshot_status === "missing" || opencodeRuntimeHealth.warnings.some(w => w.includes("Repair"))) && (
+                    <div className="ws-section-box" style={{marginTop:"8px",padding:"8px",border:"1px solid var(--color-border)",borderRadius:"6px"}}>
+                      <div style={{fontSize:"12px",fontWeight:600,marginBottom:"4px"}}>Workspace Repair</div>
+                      <div style={{fontSize:"11px",color:"var(--color-dim)",marginBottom:"6px"}}>
+                        Missing bundled scripts or templates can be repaired.
+                      </div>
+                      <div style={{display:"flex",gap:"6px"}}>
+                        <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onPlanWorkspaceRepair}>
+                          check
+                        </button>
+                        <button className="btn btn-sm btn-primary" disabled={wsRunning !== null} onClick={onApplyWorkspaceRepair}>
+                          repair
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>

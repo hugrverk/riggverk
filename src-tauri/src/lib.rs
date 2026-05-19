@@ -4,20 +4,20 @@ mod path_utils;
 mod settings;
 
 use commands::{
-    create_doc, create_workspace_from_defaults, generate_opencode_config_snapshot,
-    get_agent_targets, get_backup_details, get_cursor_profile_health,
-    get_default_workspace_summary, get_design_md_catalog_status, get_design_md_install_status,
-    get_opencode_runtime_health, get_settings, get_status, get_target_profiles,
-    get_workspace_diagnostics, install_design_md, install_skills, list_agent_metadata,
-    list_agent_sources, list_backups, list_design_md_entries, list_docs,
+    apply_workspace_repair, create_doc, create_workspace_from_defaults,
+    generate_opencode_config_snapshot, get_agent_targets, get_backup_details,
+    get_cursor_profile_health, get_default_workspace_summary, get_design_md_catalog_status,
+    get_design_md_install_status, get_opencode_runtime_health, get_settings, get_status,
+    get_target_profiles, get_workspace_diagnostics, install_design_md, install_skills,
+    list_agent_metadata, list_agent_sources, list_backups, list_design_md_entries, list_docs,
     list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
     open_backups_folder, open_config_template, open_design_md_target_folder, open_doc,
     open_install_skills_script, open_installed_design_md, open_opencode_config_source, open_skill,
-    plan_create_workspace, plan_install_design_md, read_agent_source, read_agent_template,
-    read_config_template, read_design_md_entry, read_design_md_preview, read_doc,
-    read_opencode_config_source, read_skill, repair_workspace, run_action,
-    run_cursor_profile_action, save_agent_source, save_agent_template, save_config_template,
-    save_doc, save_opencode_config_source, sync_design_md_catalog, update_settings,
+    plan_create_workspace, plan_install_design_md, plan_workspace_repair, read_agent_source,
+    read_agent_template, read_config_template, read_design_md_entry, read_design_md_preview,
+    read_doc, read_opencode_config_source, read_skill, run_action, run_cursor_profile_action,
+    save_agent_source, save_agent_template, save_config_template, save_doc,
+    save_opencode_config_source, sync_design_md_catalog, update_settings,
     validate_workspace_contract,
 };
 
@@ -79,7 +79,8 @@ pub fn run() {
             open_installed_design_md,
             read_design_md_preview,
             generate_opencode_config_snapshot,
-            repair_workspace,
+            plan_workspace_repair,
+            apply_workspace_repair,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -234,6 +234,17 @@ export interface OpenCodeRuntimeHealth {
   next_action: string;
 }
 
+export interface RepairWorkspaceResult {
+  ok: boolean;
+  dry_run: boolean;
+  target_path: string;
+  copied_files: string[];
+  skipped_files: string[];
+  errors: string[];
+  warnings: string[];
+  message: string;
+}
+
 export interface CursorProfileHealth {
   status: "synced" | "diverged" | "missing" | "partial" | "unknown" | string;
   manifest_status: string;

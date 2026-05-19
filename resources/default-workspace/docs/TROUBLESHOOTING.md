@@ -51,6 +51,21 @@ If scripts fail to read or write files:
 2. Check that target agent tool directories are writable
 3. Run with `--diff` to verify template content is readable without writing
 
+## Missing OpenCode generator or config source files
+
+If the app reports that the OpenCode config generator is missing or that the
+generated snapshot could not be created, your workspace may be missing newer
+bundled files. Use the Workspace Repair feature in the app:
+
+1. Open the Workspace view.
+2. In the Runtime Health section, find the "Workspace Repair" box.
+3. Click **check** to see which files would be added (dry-run).
+4. Click **repair** to copy only missing bundled files.
+
+Repair never overwrites existing files, never executes scripts, and only copies
+files from the app's built-in default workspace bundle. After repair, the
+generator script will be available and the snapshot can be regenerated.
+
 ## Inspecting scripts
 
 All workspace scripts support `--help`. Run any script with `--help` to see available options and modes.

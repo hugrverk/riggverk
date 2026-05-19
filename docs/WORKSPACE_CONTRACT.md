@@ -43,9 +43,12 @@ The following files are shipped with the app as bundled starter content but are
 
 | Resource | Purpose |
 |----------|---------|
-| `templates/cursor/README.md` | Cursor setup source note (bundled default doc) |
+ | `templates/cursor/README.md` | Cursor setup source note (bundled default doc) |
 | `templates/cursor/rules/core-safety.mdc` | Always-applied Cursor core safety project rule |
 | `templates/tui.json` | OpenCode TUI config template |
+| `templates/opencode.base.json` | OpenCode config base (non-permission settings) |
+| `templates/opencode.policy.json` | OpenCode permission policy (compact format) |
+| `scripts/generate-opencode-config.py` | OpenCode config snapshot generator (workspace-relative) |
 | `agents/` directory + 6 agent files | OpenCode agent definitions |
 
 These files are included when creating a new workspace from defaults but are
@@ -73,7 +76,7 @@ Cursor support is script-backed and scoped: skills install to Cursor skill folde
 
 The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
-This repository is the public Agent Workspace app source. Private workspace repositories can store user-owned docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults. Import and upgrade flows for existing workspaces are future work.
+This repository is the public Agent Workspace app source. Private workspace repositories can store user-owned docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults. Repair flows for existing workspaces copy only missing bundled files and never overwrite user edits.
 
 ## Script location
 
@@ -93,7 +96,7 @@ These resources are bundled as Tauri app resources and are available at runtime 
 
 A newly created default workspace includes real sync and install scripts plus five focused Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude, Gemini, Auggie. Skill install targets: Codex, OpenCode, Claude, Gemini, Auggie, Cursor. Config/setup sync targets: OpenCode config + agents, and Cursor global subagents. Cursor project rules are available through the Cursor setup script with an explicit project target. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install and Cursor project sync require a real project marker and reject broad parent directories.
 
-These resources are not automatically copied into the active workspace. Future import and upgrade flows may use them as source material when setting up new workspaces or resetting an existing workspace to defaults.
+These resources are not automatically copied into the active workspace. A repair flow (`plan_workspace_repair` / `apply_workspace_repair`) copies only missing bundled files into an existing workspace. Repair never overwrites user edits, never executes scripts, and rejects unsafe paths.
 
 The default workspace content is read-only source material. It does not contain user data, secrets, or private preferences. User workspaces remain user-owned and are separate from the bundled defaults.
 
