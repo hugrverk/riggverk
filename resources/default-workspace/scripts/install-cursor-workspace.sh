@@ -5,7 +5,7 @@ caller_dir="$PWD"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
-RULE_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules/agent-workspace.mdc"
+RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules"
 USER_RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/user-rules.md"
 
 apply=false
@@ -26,7 +26,7 @@ Options:
   --apply                  Write target files (default is dry-run)
   --global-agents          Install Cursor subagents to ${CURSOR_AGENTS_PATH:-$HOME/.cursor/agents}
   --project-agents         Install Cursor subagents to <target>/.cursor/agents
-  --project-rules          Install project Cursor rules to <target>/.cursor/rules/agent-workspace.mdc
+  --project-rules          Install project Cursor rules to <target>/.cursor/rules
   --project                Alias for --project-agents --project-rules
   --all                    Select all Cursor targets
   --target <path>          Target project path for project installs (default: current directory)
@@ -132,25 +132,31 @@ install_agents() {
   fi
 }
 
-install_project_rule() {
+install_project_rules() {
   local project="$1"
   local dest_root="$project/.cursor/rules"
-  local dest="$dest_root/agent-workspace.mdc"
+  local count=0 source name dest
   ensure_dest_root "$dest_root"
-  ensure_child "$dest_root" "$dest"
-  [ -f "$RULE_SOURCE" ] || die "Cursor rule source not found: $RULE_SOURCE"
-  if $apply; then
-    mkdir -p "$dest_root"
-    backup_file "$dest" cursor-rules
-    cp "$RULE_SOURCE" "$dest"
-  fi
+  [ -d "$RULES_SOURCE" ] || die "Cursor rules source not found: $RULES_SOURCE"
+  for source in "$RULES_SOURCE"/*.md "$RULES_SOURCE"/*.mdc; do
+    [ -f "$source" ] || continue
+    name="$(basename "$source")"
+    dest="$dest_root/$name"
+    ensure_child "$dest_root" "$dest"
+    count=$((count + 1))
+    if $apply; then
+      mkdir -p "$dest_root"
+      backup_file "$dest" cursor-rules
+      cp "$source" "$dest"
+    fi
+  done
   local verb
   if $apply; then verb=written; else verb=planned; fi
   if $quiet; then
-    printf '%-15s %s %s\n' "project-rules" "$verb" "$dest"
+    printf '%-15s %s %s\n' "project-rules" "$verb" "$count"
   else
     if $apply; then verb=Installed; else verb=Planned; fi
-    printf '%s Cursor project rule: %s -> %s\n' "$verb" "$RULE_SOURCE" "$dest"
+    printf '%s Cursor project rules: %s -> %s (%s files)\n' "$verb" "$RULES_SOURCE" "$dest_root" "$count"
   fi
 }
 
@@ -229,5 +235,5 @@ if $project_agents; then
   install_agents "$project_target/.cursor/agents" "project-agents"
 fi
 if $project_rules; then
-  install_project_rule "$project_target"
+  install_project_rules "$project_target"
 fi

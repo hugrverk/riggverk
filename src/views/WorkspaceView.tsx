@@ -1,6 +1,6 @@
 import { useState, useMemo } from "react";
 import { TerminalState, type ActionResult } from "../components/TerminalOutput";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, WorkspaceContractResult, WorkspaceDiagnostics } from "../types";
 import { designMdDisplayTitle, designMdSearchText } from "../lib/designMdDisplay";
 import { INSTALL_AGENTS } from "../types";
 
@@ -41,6 +41,19 @@ interface WorkspaceViewProps {
   opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
   onRefreshOpenCodeRuntimeHealth: () => void;
   onGenerateOpenCodeConfig: () => void;
+  // cursor profile
+  cursorProfileHealth: CursorProfileHealth | null;
+  cursorProjectTarget: string;
+  onSetCursorProjectTarget: (value: string) => void;
+  onRefreshCursorProfile: () => void;
+  onCursorDiffGlobal: () => void;
+  onCursorSyncGlobal: () => void;
+  onCursorShowUserRules: () => void;
+  onCursorCopyUserRules: () => void;
+  onCursorOpenSettings: () => void;
+  onCursorDiffProject: () => void;
+  onCursorSyncProject: () => void;
+  onCursorValidateProfile: () => void;
   // skills compact
   skills: SkillSummary[];
   skillsLoaded: boolean;
@@ -97,6 +110,7 @@ function runtimeChipTone(status: string): "ok" | "warn" | "fail" | "muted" {
   switch (status) {
     case "synced": return "ok";
     case "diverged": return "warn";
+    case "partial": return "warn";
     case "missing": return "fail";
     case "invalid": return "fail";
     default: return "muted";
@@ -107,6 +121,7 @@ function runtimeChipLabel(status: string): string {
   switch (status) {
     case "synced": return "Synced";
     case "diverged": return "Diverged";
+    case "partial": return "Partial";
     case "missing": return "Missing";
     case "invalid": return "Invalid";
     default: return "Unknown";
@@ -148,6 +163,18 @@ export function WorkspaceView({
   opencodeRuntimeHealth,
   onRefreshOpenCodeRuntimeHealth,
   onGenerateOpenCodeConfig,
+  cursorProfileHealth,
+  cursorProjectTarget,
+  onSetCursorProjectTarget,
+  onRefreshCursorProfile,
+  onCursorDiffGlobal,
+  onCursorSyncGlobal,
+  onCursorShowUserRules,
+  onCursorCopyUserRules,
+  onCursorOpenSettings,
+  onCursorDiffProject,
+  onCursorSyncProject,
+  onCursorValidateProfile,
   // skills
   skills,
   skillsLoaded,
@@ -253,7 +280,7 @@ export function WorkspaceView({
               </div>
             )}
             <div className="ws-action-row">
-              <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); }}>
+              <button className="btn btn-sm" onClick={() => { onRefreshDiagnostics(); onRefreshStatus(); onRefreshOpenCodeRuntimeHealth(); onRefreshCursorProfile(); }}>
                 refresh
               </button>
               {diag && !diag.valid ? (
@@ -583,6 +610,84 @@ export function WorkspaceView({
                     <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null || opencodeRuntimeHealth.generated_snapshot_status === "stale"} onClick={onSyncConfigs} title={opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "Regenerate opencode.json snapshot before sync" : undefined}>
                       sync
                     </button>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* ---- Cursor Profile section ---- */}
+          {workspaceValid && (
+            <div className="ws-section" role="region" aria-label="Cursor Profile health">
+              <div className="ws-section-header">
+                <span className="ws-section-title">CURSOR PROFILE</span>
+                {cursorProfileHealth ? (
+                  <SectionChip label={runtimeChipLabel(cursorProfileHealth.status)} tone={runtimeChipTone(cursorProfileHealth.status)} />
+                ) : (
+                  <span className="ws-section-chip ws-section-chip-muted">loading</span>
+                )}
+              </div>
+
+              {cursorProfileHealth && (
+                <>
+                  <div className="ws-runtime-summary" aria-live="polite">
+                    manifest {cursorProfileHealth.manifest_status} | user rules {cursorProfileHealth.user_rules_status}
+                  </div>
+
+                  <div className="ws-runtime-rows">
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Global agents</span>
+                      <span className={`ws-dot ${cursorProfileHealth.global_agents_status === "synced" ? "ws-color-ok" : cursorProfileHealth.global_agents_status === "missing" ? "ws-color-fail" : "ws-color-warn"}`}>{"\u25CF"}</span>
+                      <span className="ws-runtime-row-value">
+                        {cursorProfileHealth.global_agents_count}/{cursorProfileHealth.expected_global_agents_count} {cursorProfileHealth.global_agents_status}
+                      </span>
+                    </div>
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Project</span>
+                      <span className={`ws-dot ${cursorProfileHealth.project_agents_status === "synced" && cursorProfileHealth.project_rules_status === "synced" ? "ws-color-ok" : cursorProfileHealth.project_agents_status === "unknown" ? "ws-color-dim" : "ws-color-warn"}`}>{"\u25CF"}</span>
+                      <span className="ws-runtime-row-value">
+                        agents {cursorProfileHealth.project_agents_status} | rules {cursorProfileHealth.project_rules_status} | skills {cursorProfileHealth.project_skills_status}
+                      </span>
+                    </div>
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">MCP</span>
+                      <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
+                      <span className="ws-runtime-row-value">{cursorProfileHealth.mcp_status}</span>
+                    </div>
+                  </div>
+
+                  {cursorProfileHealth.warnings.length > 0 && (
+                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
+                      {cursorProfileHealth.warnings[0]}
+                      {cursorProfileHealth.warnings.length > 1 && <> (+{cursorProfileHealth.warnings.length - 1} more)</>}
+                    </div>
+                  )}
+
+                  <div className={`ws-runtime-next-action ws-runtime-next-action-${cursorProfileHealth.status === "synced" ? "ok" : cursorProfileHealth.status === "missing" ? "fail" : "warn"}`}>
+                    {cursorProfileHealth.next_action}
+                  </div>
+
+                  <div className="ws-card-project-target">
+                    <input
+                      className="install-target-input"
+                      type="text"
+                      placeholder="/path/to/project"
+                      value={cursorProjectTarget}
+                      onChange={e => onSetCursorProjectTarget(e.target.value)}
+                      aria-label="Cursor project target path"
+                    />
+                  </div>
+
+                  <div className="ws-section-actions">
+                    <button className="btn btn-sm" onClick={onRefreshCursorProfile} disabled={wsRunning !== null}>refresh</button>
+                    <button className="btn btn-sm" onClick={onCursorDiffGlobal} disabled={wsRunning !== null}>diff global</button>
+                    <button className="btn btn-sm btn-primary" onClick={onCursorSyncGlobal} disabled={wsRunning !== null}>sync global</button>
+                    <button className="btn btn-sm" onClick={onCursorShowUserRules} disabled={wsRunning !== null}>show rules</button>
+                    <button className="btn btn-sm" onClick={onCursorCopyUserRules} disabled={wsRunning !== null}>copy rules</button>
+                    <button className="btn btn-sm" onClick={onCursorOpenSettings} disabled={wsRunning !== null}>open settings</button>
+                    <button className="btn btn-sm" onClick={onCursorDiffProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>dry-run project</button>
+                    <button className="btn btn-sm btn-primary" onClick={onCursorSyncProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>sync project</button>
+                    <button className="btn btn-sm" onClick={onCursorValidateProfile} disabled={wsRunning !== null}>validate</button>
                   </div>
                 </>
               )}

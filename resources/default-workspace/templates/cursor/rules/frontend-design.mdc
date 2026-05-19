@@ -1,0 +1,13 @@
+---
+description: Frontend UI design and implementation constraints.
+globs: **/*.tsx, **/*.css, **/*.scss
+alwaysApply: false
+---
+
+# Frontend Design
+
+- Match the existing design system, spacing, typography, density, controls, and interaction patterns before adding new UI.
+- Build the actual usable surface rather than marketing or explanatory screens.
+- Use restrained, domain-appropriate visuals; avoid generic decorative gradients, nested cards, and one-note palettes.
+- Ensure text fits across mobile and desktop, controls are keyboard-reachable, and states are clear.
+- Verify meaningful UI changes with browser or screenshot evidence when a local runtime is available.

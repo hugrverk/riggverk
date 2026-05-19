@@ -76,6 +76,60 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             title: "Troubleshooting",
             rel_path: "docs/TROUBLESHOOTING.md",
         },
+        DocEntry {
+            id: "templates/cursor/README.md",
+            section: "Cursor",
+            title: "Cursor Profile Readme",
+            rel_path: "templates/cursor/README.md",
+        },
+        DocEntry {
+            id: "templates/cursor/manifest.json",
+            section: "Cursor",
+            title: "Cursor Manifest",
+            rel_path: "templates/cursor/manifest.json",
+        },
+        DocEntry {
+            id: "templates/cursor/user-rules.md",
+            section: "Cursor",
+            title: "Cursor User Rules",
+            rel_path: "templates/cursor/user-rules.md",
+        },
+        DocEntry {
+            id: "templates/cursor/mcp/README.md",
+            section: "Cursor",
+            title: "Cursor MCP Readme",
+            rel_path: "templates/cursor/mcp/README.md",
+        },
+        DocEntry {
+            id: "templates/cursor/mcp/mcp.example.json",
+            section: "Cursor",
+            title: "Cursor MCP Example",
+            rel_path: "templates/cursor/mcp/mcp.example.json",
+        },
+        DocEntry {
+            id: "templates/cursor/rules/core-safety.mdc",
+            section: "Cursor Rules",
+            title: "Core Safety",
+            rel_path: "templates/cursor/rules/core-safety.mdc",
+        },
+        DocEntry {
+            id: "templates/cursor/rules/repo-workflow.mdc",
+            section: "Cursor Rules",
+            title: "Repo Workflow",
+            rel_path: "templates/cursor/rules/repo-workflow.mdc",
+        },
+        DocEntry {
+            id: "templates/cursor/agents/verifier.md",
+            section: "Cursor Agents",
+            title: "Verifier Agent",
+            rel_path: "templates/cursor/agents/verifier.md",
+        },
+        DocEntry {
+            id: "templates/cursor/agents/security-reviewer.md",
+            section: "Cursor Agents",
+            title: "Security Reviewer Agent",
+            rel_path: "templates/cursor/agents/security-reviewer.md",
+        },
     ]
 }
 

@@ -1,0 +1,46 @@
+{
+  "schema_version": "1.0",
+  "profile": {
+    "id": "agent-workspace-cursor",
+    "name": "Agent Workspace Cursor Profile",
+    "description": "Public-safe starter Cursor profile assets for rules, focused subagents, skills guidance, and MCP examples."
+  },
+  "user_rules": "templates/cursor/user-rules.md",
+  "agents_dir": "templates/cursor/agents",
+  "rules_dir": "templates/cursor/rules",
+  "mcp_examples_dir": "templates/cursor/mcp",
+  "recommended_pinned_skills": [
+    "diagnose",
+    "implementation-plan",
+    "release-check",
+    "browser-qa",
+    "security-review",
+    "frontend-design"
+  ],
+  "agents": [
+    "verifier.md",
+    "security-reviewer.md",
+    "release-checker.md",
+    "browser-qa.md",
+    "repo-scout.md"
+  ],
+  "rules": [
+    "core-safety.mdc",
+    "prompt-contract.mdc",
+    "repo-workflow.mdc",
+    "php-cms.mdc",
+    "nextjs-data.mdc",
+    "frontend-design.mdc",
+    "release-check.mdc"
+  ],
+  "mcp_examples": [
+    "README.md",
+    "mcp.example.json"
+  ],
+  "notes": [
+    "User Rules are manually managed in Cursor Settings; this profile does not define a global User Rules file path.",
+    "Project Rules are installed to .cursor/rules in explicit project targets.",
+    "MCP examples are opt-in templates and must be reviewed before use.",
+    "Secrets must be supplied via Cursor-supported environment interpolation such as ${env:VARIABLE_NAME}."
+  ]
+}

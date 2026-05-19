@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "local-example": {
+      "command": "python3",
+      "args": [
+        "${workspaceFolder}/tools/mcp/local_server.py"
+      ],
+      "env": {
+        "EXAMPLE_API_KEY": "${env:EXAMPLE_API_KEY}"
+      }
+    }
+  }
+}

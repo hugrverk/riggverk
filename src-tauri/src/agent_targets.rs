@@ -86,7 +86,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         },
         AgentSyncTarget {
             id: "cursor_setup",
-            label: "cursor setup",
+            label: "cursor global agents",
             kind: TargetKind::Rules,
             target_rel: ".cursor/agents",
             source_rel: "templates/cursor/README.md",
@@ -153,9 +153,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "cursor".into(),
             label: "Cursor".into(),
-            description:
-                "Cursor global subagents. Project rules are installed by the Cursor setup script."
-                    .into(),
+            description: "Cursor User Rules template, global subagents, project rules, skills install support.".into(),
             target_ids: vec!["cursor_setup".into()],
         },
         TargetProfileMeta {

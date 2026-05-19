@@ -1,0 +1,11 @@
+---
+description: Use before merge, release, handoff, or when asked for readiness.
+alwaysApply: false
+---
+
+# Release Check
+
+- Inspect branch, git status, changed files, verification evidence, migrations/env risk, and rollback path.
+- Run the smallest set of existing checks that can falsify the changed surface, then broader release checks when risk justifies them.
+- Do not claim ready when required checks failed or were skipped. Report blockers separately from acceptable residual risk.
+- For docs/templates/scripts changes, verify generated or bundled resources stay aligned with release checks.

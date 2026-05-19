@@ -1,9 +1,11 @@
-# Cursor Setup
+# Cursor Profile
 
-This directory contains Cursor-specific setup assets:
+This directory is the starter Cursor profile source for this workspace.
 
-- `templates/cursor/agents/*.md` installs to `~/.cursor/agents` or `<project>/.cursor/agents`.
-- `templates/cursor/rules/agent-workspace.mdc` installs to `<project>/.cursor/rules/agent-workspace.mdc`.
-- Skills install separately with `scripts/install-skills.sh --agent cursor`.
+- `user-rules.md` is copied manually into Cursor Settings. It is not installed to a file-backed global path.
+- `rules/*.mdc` are project rules for `.cursor/rules`.
+- `agents/*.md` are focused Cursor subagents. The parent Cursor Agent remains the default implementer and architect.
+- `manifest.json` is the machine-readable profile inventory used by checks and GUI integrations.
+- `mcp/` contains opt-in examples only. Review MCP security before creating `.cursor/mcp.json` in a project.
 
-Cursor User Rules are configured in Cursor Settings > Rules. This workspace does not claim or write a global User Rules file path.
+Install/diff through `scripts/install-cursor-workspace.sh`; scripts remain the source of truth for sync behavior.

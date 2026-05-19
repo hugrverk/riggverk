@@ -1,0 +1,13 @@
+---
+description: Next.js and data-access implementation constraints.
+globs: app/**, src/**, db/**
+alwaysApply: false
+---
+
+# Next.js And Data Access
+
+- Respect existing route, component, server action, data loading, and validation patterns.
+- Treat auth, data access policies, privileged service credentials, server actions, API routes, and environment access as security-sensitive.
+- Do not bypass data access controls unless the authorization boundary is explicit and server-only.
+- Keep client components minimal and avoid exposing secrets or privileged operations to the browser.
+- Verify with the repo's narrowest relevant typecheck, lint, test, build, or route smoke check.

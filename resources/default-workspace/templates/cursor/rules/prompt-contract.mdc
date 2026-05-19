@@ -1,0 +1,11 @@
+---
+description: Use when writing, reviewing, or refining agent prompts, rules, skills, or task briefs.
+alwaysApply: false
+---
+
+# Prompt Contract
+
+- Convert selected skills into concrete workflow, acceptance criteria, verification, and reporting requirements; listing skill names alone is insufficient.
+- Include scope, non-goals, DB/migration status, repository targets, security boundaries, verification commands, and final report expectations for non-trivial prompts.
+- Keep prompts compact. Prefer references to canonical docs such as `docs/PROMPTING.md`, `docs/SKILLS.md`, and `docs/USER_CONTEXT.md` over duplicating long memory blocks.
+- Preserve the no-secrets rule. Do not ask an agent to inspect or print credential-bearing files.

@@ -234,6 +234,22 @@ export interface OpenCodeRuntimeHealth {
   next_action: string;
 }
 
+export interface CursorProfileHealth {
+  status: "synced" | "diverged" | "missing" | "partial" | "unknown" | string;
+  manifest_status: string;
+  user_rules_status: "manual" | "template-missing" | "unknown" | string;
+  global_agents_status: string;
+  global_agents_count: number;
+  expected_global_agents_count: number;
+  project_target: string | null;
+  project_agents_status: string;
+  project_rules_status: string;
+  project_skills_status: string;
+  mcp_status: string;
+  warnings: string[];
+  next_action: string;
+}
+
 export interface DesignMdCatalogStatus {
   exists: boolean;
   repo_url: string;

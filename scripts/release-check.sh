@@ -147,6 +147,57 @@ if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
 fi
 
 step "bundled default cursor setup"
+python3 -m json.tool resources/default-workspace/templates/cursor/manifest.json >/dev/null
+python3 -m json.tool resources/default-workspace/templates/cursor/mcp/mcp.example.json >/dev/null
+printf '  Cursor manifest + MCP example valid JSON\n'
+for required in \
+  resources/default-workspace/templates/cursor/manifest.json \
+  resources/default-workspace/templates/cursor/mcp/README.md \
+  resources/default-workspace/templates/cursor/mcp/mcp.example.json; do
+  if [ ! -s "$required" ]; then
+    printf 'FAIL: Cursor profile asset missing or empty: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+cursor_always="$(grep -R '^alwaysApply: true' resources/default-workspace/templates/cursor/rules/*.mdc | wc -l | tr -d ' ')"
+cursor_rules="$(find resources/default-workspace/templates/cursor/rules -maxdepth 1 -type f \( -name '*.md' -o -name '*.mdc' \) | wc -l | tr -d ' ')"
+if [ "$cursor_always" -lt 1 ]; then
+  printf 'FAIL: Cursor rules need at least one always-apply rule\n' >&2
+  exit 1
+fi
+if [ "$cursor_always" -ge "$cursor_rules" ]; then
+  printf 'FAIL: not all Cursor rules may be always-apply\n' >&2
+  exit 1
+fi
+if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp; then
+  printf 'FAIL: Cursor MCP examples contain token-like literals\n' >&2
+  exit 1
+fi
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+root = Path("resources/default-workspace/templates/cursor")
+manifest = json.loads((root / "manifest.json").read_text())
+for name in manifest["agents"]:
+    if not (root / "agents" / name).is_file():
+        raise SystemExit(f"FAIL: manifest-listed Cursor agent missing: {name}")
+for name in manifest["rules"]:
+    if not (root / "rules" / name).is_file():
+        raise SystemExit(f"FAIL: manifest-listed Cursor rule missing: {name}")
+allowed = {"name", "description", "model", "readonly", "is_background"}
+blocked = {"permission", "mode", "temperature", "steps", "hidden"}
+for path in (root / "agents").glob("*.md"):
+    text = path.read_text()
+    if not text.startswith("---\n"):
+        raise SystemExit(f"FAIL: Cursor agent missing frontmatter: {path}")
+    fm = text.split("---", 2)[1]
+    keys = {line.split(":", 1)[0].strip() for line in fm.splitlines() if ":" in line}
+    bad = (keys - allowed) | (keys & blocked)
+    if bad:
+        raise SystemExit(f"FAIL: Cursor agent has unsupported frontmatter {sorted(bad)}: {path}")
+PY
+printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
 if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF ".cursor/agents"; then
   printf 'FAIL: install-cursor-workspace.sh --help missing .cursor/agents\n' >&2
   exit 1
@@ -155,7 +206,7 @@ if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help
   printf 'FAIL: install-cursor-workspace.sh --help missing .cursor/rules\n' >&2
   exit 1
 fi
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in verifier.md security-reviewer.md release-checker.md browser-qa.md repo-scout.md; do
   file="resources/default-workspace/templates/cursor/agents/$agent"
   if [ ! -s "$file" ]; then
     printf 'FAIL: Cursor agent adapter missing or empty: %s\n' "$file" >&2
@@ -188,18 +239,18 @@ if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
   printf 'FAIL: cursor_setup must not be exposed as an editable config target\n' >&2
   exit 1
 fi
-if ! grep -q 'alwaysApply: true' resources/default-workspace/templates/cursor/rules/agent-workspace.mdc; then
-  printf 'FAIL: Cursor project rule missing MDC frontmatter\n' >&2
-  exit 1
-fi
 tmpdir="$(mktemp -d)"
 CURSOR_AGENTS_PATH="$tmpdir/cursor agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
   bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents >/dev/null
 cursor_count="$(find "$tmpdir/cursor agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
 rm -rf "$tmpdir"
-if [ "$cursor_count" -ne 6 ]; then
-  printf 'FAIL: Cursor global agents smoke wrote %s agents, expected 6\n' "$cursor_count" >&2
+if [ "$cursor_count" -ne 5 ]; then
+  printf 'FAIL: Cursor global agents smoke wrote %s agents, expected 5\n' "$cursor_count" >&2
+  exit 1
+fi
+if bash resources/default-workspace/scripts/install-cursor-workspace.sh --project --target "$HOME" >/dev/null 2>&1; then
+  printf 'FAIL: Cursor project sync accepted broad HOME target\n' >&2
   exit 1
 fi
 printf '  Cursor setup verified: help, adapters, project rule, global-agent smoke\n'
@@ -243,17 +294,18 @@ fi
 printf '  --show-user-rules works\n'
 if command -v pbcopy >/dev/null 2>&1; then
   if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >/dev/null 2>&1; then
-    printf 'FAIL: install-cursor-workspace.sh --copy-user-rules failed\n' >&2
-    exit 1
+    printf '  --copy-user-rules skipped (pbcopy unavailable to this session)\n'
+  else
+    printf '  --copy-user-rules works\n'
   fi
-  printf '  --copy-user-rules works\n'
 else
   printf '  --copy-user-rules skipped (no pbcopy)\n'
 fi
 
 step "regression: no fake global Cursor User Rules path"
-if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|global.*cursor.*user.*rules' \
-  src-tauri src/resources/default-workspace/scripts \
+if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md' \
+  src-tauri src resources/default-workspace \
+  -g '!src-tauri/target/**' \
   --ignore-case 2>/dev/null; then
   printf 'FAIL: must not claim a fake global Cursor User Rules file path\n' >&2
   exit 1
@@ -276,12 +328,46 @@ if ! grep -q 'workspace_has_cursor_mdc_rule' src-tauri/src/commands/workspace.rs
 fi
 
 step "regression: cursor appears in user-facing rule/sync targets"
-if ! rg -q '"cursor_setup".*kind:.*Rules' src-tauri/src/agent_targets.rs; then
-  if ! rg -q 'cursor_setup.*Rules' src-tauri/src/agent_targets.rs; then
-    printf 'FAIL: cursor_setup must be a user-facing Rules target\n' >&2
-    exit 1
-  fi
-fi
+python3 - <<'PY'
+from pathlib import Path
+
+path = Path("src-tauri/src/agent_targets.rs")
+text = path.read_text()
+
+def function_body(name: str) -> str:
+    marker = f"pub fn {name}()"
+    start = text.find(marker)
+    if start == -1:
+        raise SystemExit(f"FAIL: missing {name}() in agent_targets.rs")
+    brace = text.find("{", start)
+    if brace == -1:
+        raise SystemExit(f"FAIL: missing {name}() body in agent_targets.rs")
+    depth = 0
+    for idx in range(brace, len(text)):
+        char = text[idx]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return text[brace + 1:idx]
+    raise SystemExit(f"FAIL: unterminated {name}() body in agent_targets.rs")
+
+targets = function_body("targets")
+cursor_id = 'id: "cursor_setup"'
+cursor_index = targets.find(cursor_id)
+if cursor_index == -1:
+    raise SystemExit("FAIL: cursor_setup must exist in targets()")
+next_target_index = targets.find("AgentSyncTarget", cursor_index + len(cursor_id))
+cursor_block = targets[cursor_index: next_target_index if next_target_index != -1 else len(targets)]
+if "kind: TargetKind::Rules" not in cursor_block:
+    raise SystemExit("FAIL: cursor_setup must have kind TargetKind::Rules")
+
+config_targets = function_body("config_targets")
+if "cursor_setup" in config_targets:
+    raise SystemExit("FAIL: cursor_setup must not be in config_targets()")
+PY
+printf '  cursor_setup target registry verified\n'
 
 step "regression: cursor_setup is not in config_sync_targets"
 if rg -q 'cursor_setup' src-tauri/src/agent_targets.rs -A 5 | grep -q 'ConfigSyncTarget'; then

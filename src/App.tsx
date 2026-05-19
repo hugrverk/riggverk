@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
@@ -114,6 +114,8 @@ function App() {
 
   // opencode runtime health
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
+  const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
+  const [cursorProjectTarget, setCursorProjectTarget] = useState("");
 
   const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -125,6 +127,20 @@ function App() {
       setError(`Contract: ${e}`);
     }
   }, [isWorkspaceLoadCurrent]);
+
+  const loadCursorProfileHealth = useCallback(async (generation = workspaceLoadGenerationRef.current, target = cursorProjectTarget) => {
+    try {
+      const health = await invoke<CursorProfileHealth>("get_cursor_profile_health", {
+        projectTarget: target.trim() || null,
+      });
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setCursorProfileHealth(health);
+    } catch (e) {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setCursorProfileHealth(null);
+      if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${e}`);
+    }
+  }, [cursorProjectTarget, isWorkspaceLoadCurrent]);
 
   const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -604,8 +620,9 @@ function App() {
       loadContract(generation).catch(() => {}),
       fetchStatus(generation).catch(() => {}),
       loadOpenCodeRuntimeHealth(generation).catch(() => {}),
+      loadCursorProfileHealth(generation).catch(() => {}),
     ]);
-  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus, loadOpenCodeRuntimeHealth]);
+  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus, loadOpenCodeRuntimeHealth, loadCursorProfileHealth]);
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -637,6 +654,7 @@ function App() {
     setWorkspaceDiagnostics(null);
     setContractResult(null);
     setOpencodeRuntimeHealth(null);
+    setCursorProfileHealth(null);
 
     setSkills([]);
     setSkillsLoaded(false);
@@ -1282,10 +1300,10 @@ function App() {
     }
     setView(v);
     setSettingsMsg(null);
-    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); }
+    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); loadCursorProfileHealth(); }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadContract, loadCursorProfileHealth, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1303,6 +1321,26 @@ function App() {
     setConfigMode("preview");
     setConfigSaveResult(null);
   }, [configDirty, activeConfigSourceType]);
+
+  const runCursorProfileAction = useCallback((action: string, label: string) => {
+    runWsTask({
+      label,
+      action,
+      task: async () => {
+        return await invoke<ActionResult>("run_cursor_profile_action", {
+          action,
+          projectTarget: cursorProjectTarget.trim() || null,
+        });
+      },
+      toActionResult: (r) => r,
+      refresh: async () => {
+        await Promise.all([
+          loadCursorProfileHealth(workspaceLoadGenerationRef.current, cursorProjectTarget),
+          fetchStatus(),
+        ]);
+      },
+    });
+  }, [runWsTask, cursorProjectTarget, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = useMemo(
@@ -1437,7 +1475,7 @@ function App() {
             onApplyWorkspacePath={applyWorkspacePath}
             onChooseWorkspaceFolder={chooseWorkspaceFolder}
             workspaceDiagnostics={workspaceDiagnostics}
-            onRefreshDiagnostics={loadWorkspaceDiagnostics}
+            onRefreshDiagnostics={() => { loadWorkspaceDiagnostics(); loadCursorProfileHealth(); }}
             defaultWorkspaceSummary={defaultWorkspaceSummary}
             createPlan={createPlan}
             createPlanRunning={createPlanRunning}
@@ -1476,6 +1514,19 @@ function App() {
               toActionResult: (r) => r,
               refresh: loadOpenCodeRuntimeHealth,
             })}
+            // cursor profile
+            cursorProfileHealth={cursorProfileHealth}
+            cursorProjectTarget={cursorProjectTarget}
+            onSetCursorProjectTarget={setCursorProjectTarget}
+            onRefreshCursorProfile={() => loadCursorProfileHealth()}
+            onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
+            onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
+            onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
+            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
+            onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
+            onCursorDiffProject={() => runCursorProfileAction("cursor_diff_project", "cursor dry-run project")}
+            onCursorSyncProject={() => runCursorProfileAction("cursor_sync_project", "cursor sync project")}
+            onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
             // skills
             skills={skills}
             skillsLoaded={skillsLoaded}

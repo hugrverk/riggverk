@@ -1093,7 +1093,7 @@ mod tests {
         mkdir(&root, "templates/cursor/agents");
         write_file(
             &root,
-            "templates/cursor/rules/agent-workspace.mdc",
+            "templates/cursor/rules/core-safety.mdc",
             "---\nalwaysApply: true\n---\n",
         );
         write_file(&root, "README.md", "# readme\n");
@@ -1411,7 +1411,7 @@ mod tests {
             "planned files must include opencode config"
         );
         assert!(
-            files.contains(&"templates/cursor/agents/architect.md"),
+            files.contains(&"templates/cursor/agents/verifier.md"),
             "planned files must include Cursor adapter templates"
         );
         assert!(
@@ -1551,14 +1551,22 @@ mod tests {
             "templates/opencode.json",
             "templates/tui.json",
             "templates/cursor/README.md",
+            "templates/cursor/manifest.json",
             "templates/cursor/user-rules.md",
-            "templates/cursor/rules/agent-workspace.mdc",
-            "templates/cursor/agents/architect.md",
-            "templates/cursor/agents/scout.md",
-            "templates/cursor/agents/inspector.md",
-            "templates/cursor/agents/sentinel.md",
-            "templates/cursor/agents/scribe.md",
+            "templates/cursor/mcp/README.md",
+            "templates/cursor/mcp/mcp.example.json",
+            "templates/cursor/rules/core-safety.mdc",
+            "templates/cursor/rules/prompt-contract.mdc",
+            "templates/cursor/rules/repo-workflow.mdc",
+            "templates/cursor/rules/php-cms.mdc",
+            "templates/cursor/rules/nextjs-data.mdc",
+            "templates/cursor/rules/frontend-design.mdc",
+            "templates/cursor/rules/release-check.mdc",
             "templates/cursor/agents/verifier.md",
+            "templates/cursor/agents/security-reviewer.md",
+            "templates/cursor/agents/release-checker.md",
+            "templates/cursor/agents/browser-qa.md",
+            "templates/cursor/agents/repo-scout.md",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
