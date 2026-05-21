@@ -90,6 +90,15 @@ export function StartView({
     <section className="ws-layout ws-layout-start">
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Workspace start">
+          <div role="region" aria-label="About Agent Workspace">
+            <p className="target-page-lead">
+              Agent Workspace is a local control panel for your AI-agent workspace. It keeps rules, skills,
+              configs, docs, and install/sync scripts in one versioned folder, then lets you preview and apply
+              changes to Codex, OpenCode, Cursor, Auggie, and Claude. It does not run agents for you. Writes are
+              explicit, and sync/install/release actions run scripts from the selected workspace.
+            </p>
+          </div>
+
           <div className="ws-panel">
             <div className="ws-panel-header">
               <div className="ws-panel-title-row">
