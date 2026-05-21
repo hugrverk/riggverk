@@ -37,25 +37,27 @@ related: screenshot-review, accessibility-review, frontend-design
 ## Process
 
 1. Identify target routes, entry points, and critical flows affected by the change.
-2. Start or use the local app server if needed, following repo instructions.
-3. Run smoke tests in an actual browser or available browser automation:
+2. Before starting a local dev server, check whether the required local URL or port already responds. Reuse an existing server when possible; do not start duplicates. Kretsverket may use `http://localhost:1420/`.
+3. If you start a dev server, record enough command, PID, session, and port detail to stop only the server you started. You own cleanup for servers you start.
+4. Run smoke tests in an actual browser or available browser automation:
    - Page loads.
    - Main content renders.
    - Navigation works.
    - No blocking console errors.
    - No unexpected failed network requests.
-4. Exercise critical interactions:
+5. Exercise critical interactions:
    - Forms, validation, submit states, search, filters, menus, modals, tabs, drawers, checkout, onboarding, or admin flows as relevant.
-5. Check responsive behavior:
+6. Check responsive behavior:
    - At minimum one desktop and one mobile/tablet viewport when layout changed.
    - Verify text fits, controls remain usable, and no incoherent overlap appears.
-6. Run accessibility smoke:
+7. Run accessibility smoke:
    - Keyboard reachability for critical controls.
    - Visible focus.
    - Labels or accessible names for controls.
    - Obvious contrast, heading, landmark, and semantic issues.
-7. Capture screenshots or traces where useful for layout, regression evidence, or failure diagnosis.
-8. Keep the run bounded; list untested flows instead of pretending coverage is complete.
+8. Capture screenshots or traces where useful for layout, regression evidence, or failure diagnosis.
+9. Stop any dev server you started before the final report. If cleanup cannot be completed safely, report exact port/process status and risk.
+10. Keep the run bounded; list untested flows instead of pretending coverage is complete.
 
 ## Output
 
@@ -65,6 +67,7 @@ related: screenshot-review, accessibility-review, frontend-design
 - Steps run.
 - Console errors and network failures.
 - Screenshots or artifacts, if captured.
+- Dev server lifecycle status: reused existing server, no server needed, or started and stopped with port/process details.
 - Failures found.
 - Untested areas and remaining risk.
 
@@ -74,3 +77,4 @@ related: screenshot-review, accessibility-review, frontend-design
 - Do not rely only on a screenshot for interaction claims.
 - Do not hide console or network failures; classify whether they block the task.
 - Do not require a specific browser MCP or tool; use available local tooling.
+- Do not claim browser smoke completed without reporting dev server lifecycle status.
