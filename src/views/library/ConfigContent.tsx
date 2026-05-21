@@ -71,7 +71,7 @@ export function ConfigContent(props: ConfigContentProps) {
         <>
           <div className="lib-editor-meta-strip">
             <div className="lib-editor-meta-left">
-              <span className="lib-editor-meta-title">opencode config + agents</span>
+              <span className="lib-editor-meta-title">opencode config</span>
             </div>
           </div>
           <div className="lib-editor-body">
@@ -138,7 +138,7 @@ export function ConfigContent(props: ConfigContentProps) {
 
       {/* Bundle summary for opencode_config */}
       {isOpenCodeConfig && (
-        <div className="configs-bundle-section" role="region" aria-label="OpenCode config + agents bundle">
+        <div className="configs-bundle-section" role="region" aria-label="OpenCode config bundle">
           <span className="configs-bundle-header">bundle contents</span>
           <span className="configs-bundle-item">
             <span className="configs-bundle-key">source</span>

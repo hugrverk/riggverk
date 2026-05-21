@@ -23,8 +23,12 @@ interface OpenCodeViewProps {
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
-  configEnabled: boolean;
+  ruleTargetsEnabled: boolean;
+  opencodeAgentsEnabled: boolean;
+  opencodeConfigEnabled: boolean;
   canRunReleaseCheck: boolean;
+  onDiffRules: () => void;
+  onSyncRules: () => void;
   opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
   onRefreshOpenCodeRuntimeHealth: () => void;
   onGenerateOpenCodeConfig: () => void;
@@ -90,8 +94,12 @@ export function OpenCodeView({
   status,
   workspaceValid,
   gitAvailable,
-  configEnabled,
+  ruleTargetsEnabled,
+  opencodeAgentsEnabled,
+  opencodeConfigEnabled,
   canRunReleaseCheck,
+  onDiffRules,
+  onSyncRules,
   opencodeRuntimeHealth,
   onRefreshOpenCodeRuntimeHealth,
   onGenerateOpenCodeConfig,
@@ -151,6 +159,23 @@ export function OpenCodeView({
 
           {workspaceValid && (
             <HarnessActionCard
+              title="Rules"
+              ariaLabel="OpenCode rules sync"
+              description="Sync global agent rules to ~/.config/opencode/AGENTS.md."
+              statusChip={{ label: ruleTargetsEnabled ? "ready" : "off", tone: ruleTargetsEnabled ? "ok" : "muted" }}
+              secondaryActions={[
+                { label: "diff rules", onClick: onDiffRules, disabled: busy || !ruleTargetsEnabled },
+              ]}
+              primaryAction={{
+                label: "sync rules",
+                onClick: onSyncRules,
+                disabled: busy || !ruleTargetsEnabled,
+              }}
+            />
+          )}
+
+          {workspaceValid && (
+            <HarnessActionCard
               title="Agents"
               ariaLabel="OpenCode bundled agents sync"
               description="Bundled runtime agents installed to ~/.config/opencode/agents. Does not change opencode.json or TUI."
@@ -182,13 +207,13 @@ export function OpenCodeView({
               nextActionTone={agentMismatchCount > 0 ? "warn" : health?.status === "missing" ? "fail" : "ok"}
               secondaryActions={[
                 { label: "refresh", onClick: onRefreshOpenCodeRuntimeHealth, disabled: busy },
-                { label: "diff agents", onClick: onDiffOpenCodeAgents, disabled: busy || !configEnabled },
+                { label: "diff agents", onClick: onDiffOpenCodeAgents, disabled: busy || !opencodeAgentsEnabled },
               ]}
               primaryAction={{
                 label: "sync agents",
                 onClick: onSyncOpenCodeAgents,
-                disabled: busy || !configEnabled,
-                title: !configEnabled ? "Enable opencode config target in Targets" : undefined,
+                disabled: busy || !opencodeAgentsEnabled,
+                title: !opencodeAgentsEnabled ? "Enable opencode agents target in Targets" : undefined,
               }}
             />
           )}
@@ -225,7 +250,7 @@ export function OpenCodeView({
                 ? (health?.generated_snapshot_detail || "Generated opencode.json is stale — regenerate before sync.")
                 : undefined}
               secondaryActions={[
-                { label: "diff config", onClick: onDiffOpenCodeConfig, disabled: busy || !configEnabled },
+                { label: "diff config", onClick: onDiffOpenCodeConfig, disabled: busy || !opencodeConfigEnabled },
                 {
                   label: "generate config",
                   onClick: onGenerateOpenCodeConfig,
@@ -237,10 +262,10 @@ export function OpenCodeView({
               primaryAction={{
                 label: "sync config",
                 onClick: onSyncOpenCodeConfig,
-                disabled: busy || !configEnabled || staleSnapshot,
+                disabled: busy || !opencodeConfigEnabled || staleSnapshot,
                 title: staleSnapshot
                   ? "Regenerate opencode.json snapshot before sync"
-                  : (!configEnabled ? "Enable opencode config target in Targets" : "Sync config, TUI, and Playwright MCP only"),
+                  : (!opencodeConfigEnabled ? "Enable opencode config target in Targets" : "Sync config, TUI, and Playwright MCP only"),
               }}
             />
           )}

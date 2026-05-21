@@ -384,7 +384,7 @@ function ConfigItemList({
         <div className="lib-sidebar-group">
           <div className="lib-sidebar-group-label">Bundle</div>
           <div className="lib-sidebar-item lib-sidebar-item-meta">
-            <span className="lib-sidebar-item-title">Config + Agents</span>
+            <span className="lib-sidebar-item-title">OpenCode bundle</span>
             <span className="lib-sidebar-item-desc">
               {bundledAgentCount > 0 ? `${bundledAgentCount} agents bundled` : "agents bundled"}
             </span>
