@@ -120,7 +120,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Global agents sync automatically. User Rules, MCP, and sandbox profiles are copy/manual."
+            summary="Sync Cursor adapter agents from templates/cursor/agents. User Rules, MCP, and sandbox profiles are copy/manual."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
