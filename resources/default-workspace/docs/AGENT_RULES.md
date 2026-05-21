@@ -30,6 +30,20 @@ Cursor User Rules are version-controlled separately in `templates/cursor/user-ru
 
 Paths can be overridden via environment variables.
 
+## Shared runtime agents (separate from rules)
+
+Bundled runtime agent prompts live in `agents/*.md` (six agents). They are **not** the same as global rules in `templates/global-agent-rules.md`.
+
+| Tool | Default agents directory | Sync script |
+|------|------------------------|-------------|
+| OpenCode | `~/.config/opencode/agents/*.md` | `scripts/install-runtime-agents.sh --opencode` |
+| Claude Code | `~/.claude/agents/*.md` | `scripts/install-runtime-agents.sh --claude` |
+| Augment | `~/.augment/agents/*.md` | `scripts/install-runtime-agents.sh --auggie` |
+
+Codex custom agents use **TOML** files under `~/.codex/agents/` (see Codex docs), not this shared `.md` set. The app syncs Codex **rules** and **config** only.
+
+Cursor adapter agents are a separate five-file set under `templates/cursor/agents/` and sync via `scripts/install-cursor-workspace.sh --global-agents` to `~/.cursor/agents/`.
+
 ## Sync workflow
 
 1. Review the template at `templates/global-agent-rules.md`

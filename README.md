@@ -142,7 +142,7 @@ Primary navigation:
 - Sync targets are defined through an internal agent target registry (`agent_targets.rs`). This does not permit arbitrary file sync or arbitrary commands.
 - Config sync targets are managed through an internal allowlisted config target registry (also in `agent_targets.rs`). Config scripts are mapped by enum, not by frontend-supplied paths.
 - Editable config templates use a narrower allowlist. Cursor setup remains a script-backed sync/status target and is not exposed through the Library Configs editor.
-- Supported targets: Codex rules (`.codex/AGENTS.md`), Codex config (`.codex/config.toml`), OpenCode rules (`.config/opencode/AGENTS.md`), Auggie rules (`.augment/rules/global.md`), Claude rules (`.claude/CLAUDE.md`), OpenCode config (`.config/opencode/opencode.json`), OpenCode TUI config (`.config/opencode/tui.json`), and Cursor setup (`.cursor/agents` via the Cursor setup script).
+- Supported targets: Codex rules + config; OpenCode rules + shared runtime agents + config/TUI; Claude rules + shared runtime agents; Augment rules + shared runtime agents; Cursor adapter global agents (`templates/cursor/agents/`). Rules, agents, config, and skills are separate sync surfaces on harness pages.
 
 ### Agent rule sync (scripts/install-agent-rules.sh)
 
@@ -156,6 +156,18 @@ Primary navigation:
 | `--claude` | `${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}` |
 
 On apply, existing diverged rule targets are backed up under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwrite. `AGENT_WORKSPACE_BACKUP_DIR` can override the backup root for testing or advanced local use. Diff and dry-run modes do not create backups.
+
+### Shared runtime agents (scripts/install-runtime-agents.sh)
+
+`scripts/install-runtime-agents.sh` syncs `agents/*.md` to harness-specific agent directories:
+
+| Flag | Target directory |
+|------|------------------|
+| `--opencode` | `${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}` |
+| `--claude` | `${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}` |
+| `--auggie` | `${AUGGIE_AGENTS_DIR:-$HOME/.augment/agents}` |
+
+Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses adapter agents in `templates/cursor/agents/` via `install-cursor-workspace.sh --global-agents`.
 
 ## Skill installation
 

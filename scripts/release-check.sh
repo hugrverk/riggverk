@@ -170,6 +170,7 @@ bash -n resources/default-workspace/scripts/install-agent-rules.sh
 bash -n resources/default-workspace/scripts/install-opencode-config.sh
 bash -n resources/default-workspace/scripts/install-codex-config.sh
 bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
+bash -n resources/default-workspace/scripts/install-runtime-agents.sh
 
 step "bundled default workspace opencode generator script"
 if [ ! -f resources/default-workspace/scripts/generate-opencode-config.py ]; then
@@ -524,8 +525,8 @@ if cursor_index == -1:
     raise SystemExit("FAIL: cursor_setup must exist in targets()")
 next_target_index = targets.find("AgentSyncTarget", cursor_index + len(cursor_id))
 cursor_block = targets[cursor_index: next_target_index if next_target_index != -1 else len(targets)]
-if "kind: TargetKind::Rules" not in cursor_block:
-    raise SystemExit("FAIL: cursor_setup must have kind TargetKind::Rules")
+if "kind: TargetKind::Agents" not in cursor_block:
+    raise SystemExit("FAIL: cursor_setup must have kind TargetKind::Agents")
 
 config_targets = function_body("config_targets")
 if "cursor_setup" in config_targets:
@@ -962,6 +963,59 @@ fi
 rm -rf "$tmpdir"
 if ! $config_only_ok; then exit 1; fi
 printf '  install-opencode-config.sh --config-only: config + tui written, agents untouched\n'
+
+step "bundled default install-runtime-agents.sh help mentions supported harnesses"
+for harness in opencode claude auggie; do
+  if ! bash resources/default-workspace/scripts/install-runtime-agents.sh --help 2>&1 | grep -qF "$harness"; then
+    printf 'FAIL: install-runtime-agents.sh --help missing harness: %s\n' "$harness" >&2
+    exit 1
+  fi
+done
+
+step "bundled default install-runtime-agents.sh temp apply (claude + auggie)"
+tmpdir="$(mktemp -d)"
+CLAUDE_AGENTS_DIR="$tmpdir/claude/agents" \
+AUGGIE_AGENTS_DIR="$tmpdir/augment/agents" \
+AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+  bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --auggie --apply --quiet >/dev/null
+runtime_ok=true
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  for dest in "$tmpdir/claude/agents/$agent" "$tmpdir/augment/agents/$agent"; do
+    if [ ! -f "$dest" ]; then
+      printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
+      runtime_ok=false
+    fi
+  done
+done
+rm -rf "$tmpdir"
+if ! $runtime_ok; then exit 1; fi
+printf '  install-runtime-agents.sh: claude + auggie agents written (6 each)\n'
+
+step "harness pages use page-scoped agent sync actions"
+for required in \
+  'action: "sync_claude_agents"' \
+  'action: "diff_claude_agents"' \
+  'action: "sync_auggie_agents"' \
+  'action: "diff_auggie_agents"' \
+  'action: "sync_opencode_agents"' \
+  'action: "diff_opencode_agents"'; do
+  if ! grep -qF "$required" src/App.tsx; then
+    printf 'FAIL: App.tsx missing page-scoped wiring: %s\n' "$required" >&2
+    exit 1
+  fi
+done
+if grep -q 'sync_agent_rules.*sync agents' src/App.tsx; then
+  printf 'FAIL: App.tsx must not wire Agents cards to sync_agent_rules\n' >&2
+  exit 1
+fi
+printf '  page-scoped agent sync actions verified in App.tsx\n'
+
+step "regression: no stale config + agents labels in app UI"
+if search_has_match 'config \\+ agents' src/views src/App.tsx; then
+  printf 'FAIL: stale config + agents wording in app UI\n' >&2
+  exit 1
+fi
+printf '  app UI uses config-only / agents-only labels\n'
 
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
 if OPENCODE_AGENTS_DIR=/ bash resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
