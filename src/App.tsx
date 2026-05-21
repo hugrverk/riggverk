@@ -8,12 +8,11 @@ import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
-import { pageLabelToTargetPage } from "./lib/targetGroups";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
+import { MiscView } from "./views/MiscView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
-import { WorkspaceView } from "./views/WorkspaceView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
@@ -33,10 +32,8 @@ type View =
   | "routing"
   | "settings";
 
-const LEGACY_TARGET_VIEWS = new Set<View>(["misc"]);
-
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || LEGACY_TARGET_VIEWS.has(view);
+  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "misc";
 }
 
 /* ---- main app ---- */
@@ -1154,60 +1151,6 @@ function App() {
     return match ? match.id : null;
   }, [appSettings, targetProfiles]);
 
-  const targetPageLabel = view === "codex"
-    ? "CODEX"
-    : view === "opencode"
-      ? "OPENCODE"
-      : view === "cursor"
-        ? "CURSOR"
-        : view === "misc"
-          ? "MISC"
-          : undefined;
-
-  const targetWorkspaceView = (
-    <WorkspaceView
-      pageLabel={targetPageLabel}
-      targetPage={pageLabelToTargetPage(targetPageLabel)}
-      appSettings={appSettings}
-      agentTargets={agentTargets}
-      targetProfiles={targetProfiles}
-      activeProfileId={activeProfileId}
-      settingsDirty={settingsDirty}
-      onToggleTarget={toggleTarget}
-      onApplyProfile={applyTargetProfile}
-      wsLog={wsLog}
-      wsLogCompletedAt={wsLogCompletedAt}
-      wsRunning={wsRunning}
-      activityIndex={activityIndex}
-      activityCellClass={activityCellClass}
-      status={status}
-      workspaceValid={workspaceValid}
-      gitAvailable={gitAvailable}
-      ruleTargetsEnabled={ruleTargetsEnabled}
-      canRunReleaseCheck={canRunReleaseCheck}
-      onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
-      onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
-      onReleaseCheck={() => runWsAction("release_check", "release-check")}
-      skills={skills}
-      skillsLoaded={skillsLoaded}
-      selectedSkills={selectedSkills}
-      skillSearch={skillSearch}
-      installAgents={installAgentsArray}
-      skillsCanInstall={skillsCanInstall}
-      onDryRunSkills={() => runWsInstall(true)}
-      onInstallSkills={() => runWsInstall(false)}
-      onToggleSkill={toggleSkill}
-      onSelectAllSkills={selectAll}
-      onClearSelectionSkills={clearSelection}
-      onToggleInstallAgent={toggleInstallAgent}
-      onSetSkillSearch={setSkillSearch}
-      onOpenInstallScript={openInstallScript}
-      backupCount={backups.length}
-      onRefreshBackups={loadBackups}
-      onOpenBackupsFolder={openBackupsFolder}
-    />
-  );
-
   return (
       <div className="app-shell">
       {error && (
@@ -1358,6 +1301,24 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             onPull={() => runWsAction("git_pull", "git pull")}
             onRefreshStatus={fetchStatus}
+            skills={skills}
+            skillsLoaded={skillsLoaded}
+            selectedSkills={selectedSkills}
+            skillSearch={skillSearch}
+            installAgents={installAgentsArray}
+            skillsCanInstall={skillsCanInstall}
+            onDryRunSkills={() => runWsInstall(true)}
+            onInstallSkills={() => runWsInstall(false)}
+            onToggleSkill={toggleSkill}
+            onSelectAllSkills={selectAll}
+            onClearSelectionSkills={clearSelection}
+            onToggleInstallAgent={toggleInstallAgent}
+            onSetSkillSearch={setSkillSearch}
+            onOpenInstallScript={openInstallScript}
+            onReleaseCheck={() => runWsAction("release_check", "release-check")}
+            backupCount={backups.length}
+            onRefreshBackups={loadBackups}
+            onOpenBackupsFolder={openBackupsFolder}
           />
         )}
 
@@ -1485,7 +1446,29 @@ function App() {
           />
         )}
 
-        {view === "misc" && targetWorkspaceView}
+        {view === "misc" && (
+          <MiscView
+            appSettings={appSettings}
+            agentTargets={agentTargets}
+            targetProfiles={targetProfiles}
+            activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
+            onToggleTarget={toggleTarget}
+            onApplyProfile={applyTargetProfile}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            ruleTargetsEnabled={ruleTargetsEnabled}
+            canRunReleaseCheck={canRunReleaseCheck}
+            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
+            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+          />
+        )}
 
         {view === "library" && (
           <Suspense fallback={<div className="view-loading">loading library…</div>}>

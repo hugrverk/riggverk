@@ -1,6 +1,7 @@
+import { WorkspaceSkillsVerify } from "../components/WorkspaceSkillsVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, StatusData, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, InstallAgent, SkillSummary, StatusData, WorkspaceDiagnostics } from "../types";
 
 interface StartViewProps {
   appSettings: AppSettings | null;
@@ -25,6 +26,24 @@ interface StartViewProps {
   canRunReleaseCheck: boolean;
   onPull: () => void;
   onRefreshStatus: () => void;
+  skills: SkillSummary[];
+  skillsLoaded: boolean;
+  selectedSkills: Set<string>;
+  skillSearch: string;
+  installAgents: string[];
+  skillsCanInstall: boolean;
+  onDryRunSkills: () => void;
+  onInstallSkills: () => void;
+  onToggleSkill: (name: string) => void;
+  onSelectAllSkills: () => void;
+  onClearSelectionSkills: () => void;
+  onToggleInstallAgent: (agent: InstallAgent) => void;
+  onSetSkillSearch: (value: string) => void;
+  onOpenInstallScript: () => void;
+  onReleaseCheck: () => void;
+  backupCount: number;
+  onRefreshBackups: () => void;
+  onOpenBackupsFolder: () => void;
 }
 
 export function StartView({
@@ -50,6 +69,24 @@ export function StartView({
   canRunReleaseCheck,
   onPull,
   onRefreshStatus,
+  skills,
+  skillsLoaded,
+  selectedSkills,
+  skillSearch,
+  installAgents,
+  skillsCanInstall,
+  onDryRunSkills,
+  onInstallSkills,
+  onToggleSkill,
+  onSelectAllSkills,
+  onClearSelectionSkills,
+  onToggleInstallAgent,
+  onSetSkillSearch,
+  onOpenInstallScript,
+  onReleaseCheck,
+  backupCount,
+  onRefreshBackups,
+  onOpenBackupsFolder,
 }: StartViewProps) {
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
@@ -252,6 +289,30 @@ export function StartView({
               </div>
             </div>
           )}
+
+          <WorkspaceSkillsVerify
+            workspaceValid={workspaceValid}
+            wsRunning={wsRunning}
+            skills={skills}
+            skillsLoaded={skillsLoaded}
+            selectedSkills={selectedSkills}
+            skillSearch={skillSearch}
+            installAgents={installAgents}
+            skillsCanInstall={skillsCanInstall}
+            canRunReleaseCheck={canRunReleaseCheck}
+            backupCount={backupCount}
+            onDryRunSkills={onDryRunSkills}
+            onInstallSkills={onInstallSkills}
+            onToggleSkill={onToggleSkill}
+            onSelectAllSkills={onSelectAllSkills}
+            onClearSelectionSkills={onClearSelectionSkills}
+            onToggleInstallAgent={onToggleInstallAgent}
+            onSetSkillSearch={onSetSkillSearch}
+            onOpenInstallScript={onOpenInstallScript}
+            onReleaseCheck={onReleaseCheck}
+            onRefreshBackups={onRefreshBackups}
+            onOpenBackupsFolder={onOpenBackupsFolder}
+          />
 
           {!workspaceValid && (
             <div className="ws-guide" role="region" aria-label="First run guide">
