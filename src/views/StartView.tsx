@@ -89,30 +89,68 @@ export function StartView({
   return (
     <section className="ws-layout ws-layout-start">
       <div className="ws-shell">
-        <div className="ws-left" role="region" aria-label="Workspace start">
-          <div role="region" aria-label="About Agent Workspace">
-            <p className="target-page-lead">
-              Agent Workspace is a local control panel for your AI-agent workspace. It keeps rules, skills,
-              configs, docs, and install/sync scripts in one versioned folder, then lets you preview and apply
-              changes to Codex, OpenCode, Cursor, Auggie, and Claude. It does not run agents for you. Writes are
-              explicit, and sync/install/release actions run scripts from the selected workspace.
-            </p>
+        <div className="ws-left start-left" role="region" aria-label="Workspace start">
+          <div className="start-overview" role="region" aria-label="About Agent Workspace">
+            <div className="start-overview-header">
+              <p className="start-overview-eyebrow">local control panel</p>
+              <h1 className="start-overview-title">Agent Workspace</h1>
+            </div>
+            <div className="start-overview-body">
+              <p className="start-overview-copy">
+                A local control panel for your AI-agent workspace. Keeps rules, skills, configs, docs, and
+                install/sync scripts in one versioned folder, then lets you preview and apply changes to Codex,
+                OpenCode, Cursor, Auggie, and Claude. Does not run agents for you. Writes are explicit; sync,
+                install, and release actions run scripts from the selected workspace.
+              </p>
+              <dl className="start-overview-facts">
+                <div className="start-overview-fact">
+                  <dt>scope</dt>
+                  <dd>rules, skills, configs, docs, scripts</dd>
+                </div>
+                <div className="start-overview-fact">
+                  <dt>storage</dt>
+                  <dd>versioned workspace folder</dd>
+                </div>
+                <div className="start-overview-fact">
+                  <dt>targets</dt>
+                  <dd>Codex, OpenCode, Cursor, Auggie, Claude</dd>
+                </div>
+                <div className="start-overview-fact">
+                  <dt>agents</dt>
+                  <dd>does not run agents</dd>
+                </div>
+                <div className="start-overview-fact">
+                  <dt>writes</dt>
+                  <dd>explicit only</dd>
+                </div>
+                <div className="start-overview-fact">
+                  <dt>scripts</dt>
+                  <dd>from selected workspace</dd>
+                </div>
+              </dl>
+            </div>
           </div>
 
-          <div className="ws-panel">
-            <div className="ws-panel-header">
-              <div className="ws-panel-title-row">
+          <div className="start-workspace-card ws-panel">
+            <div className="start-workspace-card-head">
+              <div className="start-workspace-card-title">
                 <span className="ws-panel-title">WORKSPACE</span>
                 <span className={`ws-status-chip ${statusClass}`}>{statusText}</span>
               </div>
-              <span className="ws-path-value" title={displayPath}>{displayPath}</span>
+              <div className="start-workspace-path-block">
+                <span className="start-workspace-path-label">path</span>
+                <code className="start-workspace-path-value" title={displayPath}>
+                  {displayPath}
+                </code>
+              </div>
             </div>
             {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
-              <div className="ws-path-resolved" title={`resolved: ${diagnosticsPath}`}>
-                {diagnosticsPath}
+              <div className="start-workspace-path-resolved" title={`resolved: ${diagnosticsPath}`}>
+                <span className="start-workspace-path-label">resolved</span>
+                <span className="start-workspace-path-resolved-value">{diagnosticsPath}</span>
               </div>
             )}
-            <div className="ws-action-row">
+            <div className="ws-action-row start-workspace-actions">
               <button
                 className="btn btn-sm"
                 onClick={() => {
@@ -138,7 +176,7 @@ export function StartView({
                 use default
               </button>
             </div>
-            <div className="ws-panel-meta-row">
+            <div className="start-workspace-status-row ws-panel-meta-row">
               <button
                 className="btn btn-sm btn-primary"
                 disabled={!workspaceValid || !gitAvailable || wsRunning !== null}
@@ -146,17 +184,31 @@ export function StartView({
               >
                 pull
               </button>
-              {status && (
-                <span className="ws-panel-meta-context">
-                  branch {status.branch} | {status.enabled_rule_target_ids.length} rule targets | {status.enabled_config_target_ids.length} config targets
-                </span>
+              {status ? (
+                <div className="start-workspace-status-meta" aria-label="Workspace git and targets">
+                  <span>branch {status.branch}</span>
+                  <span className="start-workspace-status-sep" aria-hidden="true">
+                    |
+                  </span>
+                  <span>{status.enabled_rule_target_ids.length} rule targets</span>
+                  <span className="start-workspace-status-sep" aria-hidden="true">
+                    |
+                  </span>
+                  <span>{status.enabled_config_target_ids.length} config targets</span>
+                </div>
+              ) : (
+                <span className="ws-panel-meta-context">waiting for status</span>
               )}
             </div>
-            <div className="ws-path-trust-note">
-              Trust boundary: sync/install/release actions run scripts from the selected workspace. Use workspaces you control.
+            <div className="start-trust-note" role="note">
+              <span className="start-trust-note-label">Trust boundary</span>
+              <span className="start-trust-note-copy">
+                Sync, install, and release actions run scripts from the selected workspace. Use workspaces you
+                control.
+              </span>
             </div>
             {diag && !diag.valid && (
-              <div className="ws-path-status-detail">{statusDetail}</div>
+              <div className="ws-path-status-detail start-workspace-status-detail">{statusDetail}</div>
             )}
           </div>
 
@@ -272,13 +324,21 @@ export function StartView({
           )}
 
           {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="Skills install location">
-              <div className="ws-section-header">
+            <div className="start-block start-skills ws-section" role="region" aria-label="Skills install location">
+              <div className="ws-section-header start-block-header">
                 <span className="ws-section-title">SKILLS</span>
+                <span className="start-block-badge">on target pages</span>
               </div>
-              <p className="target-page-hint">
-                Install skills from the Codex, OpenCode, Cursor, or Misc pages. Each page installs only to its harness.
+              <p className="start-block-copy">
+                Skills install moved to target pages. Open a harness page to preview and install skills for that
+                tool only.
               </p>
+              <div className="start-destination-chips" aria-label="Skills install destinations">
+                <span className="start-destination-chip">Codex</span>
+                <span className="start-destination-chip">OpenCode</span>
+                <span className="start-destination-chip">Cursor</span>
+                <span className="start-destination-chip">Misc</span>
+              </div>
             </div>
           )}
 
