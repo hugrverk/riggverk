@@ -84,6 +84,8 @@ export interface AppSettings {
   workspace_path: string | null;
   enabled_target_ids: string[];
   accent_color: string | null;
+  background_color: string | null;
+  foreground_color: string | null;
 }
 
 export interface BackupRunSummary {

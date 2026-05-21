@@ -13,6 +13,10 @@ pub struct AppSettings {
     pub enabled_target_ids: Vec<String>,
     #[serde(default)]
     pub accent_color: Option<String>,
+    #[serde(default)]
+    pub background_color: Option<String>,
+    #[serde(default)]
+    pub foreground_color: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -22,11 +26,13 @@ impl Default for AppSettings {
             workspace_path: None,
             enabled_target_ids: agent_targets::default_enabled_ids(),
             accent_color: None,
+            background_color: None,
+            foreground_color: None,
         }
     }
 }
 
-fn validate_accent_color(raw: &str) -> Option<String> {
+fn validate_hex_color(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
         return None;
@@ -58,7 +64,15 @@ fn normalize(settings: &mut AppSettings) {
     settings.accent_color = settings
         .accent_color
         .as_deref()
-        .and_then(validate_accent_color);
+        .and_then(validate_hex_color);
+    settings.background_color = settings
+        .background_color
+        .as_deref()
+        .and_then(validate_hex_color);
+    settings.foreground_color = settings
+        .foreground_color
+        .as_deref()
+        .and_then(validate_hex_color);
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -77,7 +91,15 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
     settings.accent_color = settings
         .accent_color
         .as_deref()
-        .and_then(validate_accent_color);
+        .and_then(validate_hex_color);
+    settings.background_color = settings
+        .background_color
+        .as_deref()
+        .and_then(validate_hex_color);
+    settings.foreground_color = settings
+        .foreground_color
+        .as_deref()
+        .and_then(validate_hex_color);
 
     Ok(())
 }
@@ -117,7 +139,7 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize, normalize_for_save, validate_accent_color, AppSettings};
+    use super::{normalize, normalize_for_save, validate_hex_color, AppSettings};
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -125,6 +147,8 @@ mod tests {
             workspace_path: path.map(|s| s.to_string()),
             enabled_target_ids: vec![],
             accent_color: None,
+            background_color: None,
+            foreground_color: None,
         }
     }
 
@@ -206,6 +230,8 @@ mod tests {
                 "unknown".into(),
             ],
             accent_color: None,
+            background_color: None,
+            foreground_color: None,
         };
 
         normalize(&mut settings);
@@ -220,37 +246,37 @@ mod tests {
 
     #[test]
     fn accent_color_accepts_valid_hex() {
-        assert_eq!(validate_accent_color("#ff00aa"), Some("#ff00aa".into()));
+        assert_eq!(validate_hex_color("#ff00aa"), Some("#ff00aa".into()));
     }
 
     #[test]
     fn accent_color_normalizes_uppercase() {
-        assert_eq!(validate_accent_color("#FF00AA"), Some("#ff00aa".into()));
+        assert_eq!(validate_hex_color("#FF00AA"), Some("#ff00aa".into()));
     }
 
     #[test]
     fn accent_color_rejects_missing_hash() {
-        assert_eq!(validate_accent_color("ff00aa"), None);
+        assert_eq!(validate_hex_color("ff00aa"), None);
     }
 
     #[test]
     fn accent_color_rejects_invalid_hex() {
-        assert_eq!(validate_accent_color("#xyzxyz"), None);
+        assert_eq!(validate_hex_color("#xyzxyz"), None);
     }
 
     #[test]
     fn accent_color_rejects_three_digit_hex() {
-        assert_eq!(validate_accent_color("#fff"), None);
+        assert_eq!(validate_hex_color("#fff"), None);
     }
 
     #[test]
     fn accent_color_empty_string_is_none() {
-        assert_eq!(validate_accent_color(""), None);
+        assert_eq!(validate_hex_color(""), None);
     }
 
     #[test]
     fn accent_color_whitespace_only_is_none() {
-        assert_eq!(validate_accent_color("   "), None);
+        assert_eq!(validate_hex_color("   "), None);
     }
 
     #[test]
@@ -260,6 +286,8 @@ mod tests {
             workspace_path: None,
             enabled_target_ids: vec![],
             accent_color: Some("#FFAA00".into()),
+            background_color: None,
+            foreground_color: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -272,6 +300,8 @@ mod tests {
             workspace_path: None,
             enabled_target_ids: vec![],
             accent_color: Some("bad".into()),
+            background_color: None,
+            foreground_color: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);

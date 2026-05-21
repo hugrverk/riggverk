@@ -1690,6 +1690,16 @@ html, body, #root {
   opacity: 0.6;
 }
 
+.settings-contrast-warning {
+  font-size: 11px;
+  color: var(--dirty);
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid rgba(var(--dirty-rgb, 200, 120, 80), 0.35);
+  border-radius: var(--radius);
+  background: rgba(var(--dirty-rgb, 200, 120, 80), 0.08);
+}
+
 .settings-accent-hint-invalid {
   color: var(--fail);
   opacity: 1;

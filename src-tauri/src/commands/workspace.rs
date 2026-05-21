@@ -1510,6 +1510,8 @@ mod tests {
             workspace_path: Some("~/Desktop/test".into()),
             enabled_target_ids: vec![],
             accent_color: None,
+            background_color: None,
+            foreground_color: None,
         };
         let candidate = repo_path_from_settings(&settings)
             .to_string_lossy()
@@ -1532,6 +1534,8 @@ mod tests {
             workspace_path: Some("workspace/local".into()),
             enabled_target_ids: vec![],
             accent_color: None,
+            background_color: None,
+            foreground_color: None,
         };
 
         let candidate = repo_path_from_settings(&settings)

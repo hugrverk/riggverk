@@ -964,7 +964,7 @@ function App() {
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
-      setAccentResetKey(k => k + 1);
+      setColorResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "settings saved" });
       if (workspacePathChanged) {
         await Promise.all([
@@ -1020,7 +1020,7 @@ function App() {
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
-      setAccentResetKey(k => k + 1);
+      setColorResetKey(k => k + 1);
       setSettingsMsg({ ok: true, text: "reset to defaults" });
       if (workspacePathChanged) {
         await Promise.all([
@@ -1049,6 +1049,26 @@ function App() {
     setAppSettings(prev => {
       if (!prev) return prev;
       const next = { ...prev, accent_color: accentColor };
+      applyThemeSettings(next);
+      return next;
+    });
+  }, []);
+
+  const setBackgroundColor = useCallback((backgroundColor: string | null) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, background_color: backgroundColor };
+      applyThemeSettings(next);
+      return next;
+    });
+  }, []);
+
+  const setForegroundColor = useCallback((foregroundColor: string | null) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, foreground_color: foregroundColor };
       applyThemeSettings(next);
       return next;
     });
@@ -1144,7 +1164,7 @@ function App() {
     });
   }, []);
 
-  const [accentResetKey, setAccentResetKey] = useState(0);
+  const [colorResetKey, setColorResetKey] = useState(0);
 
   const applyTargetProfile = useCallback((profileId: string) => {
     const profile = targetProfiles.find(p => p.id === profileId);
@@ -1611,9 +1631,11 @@ function App() {
             settingsDirty={settingsDirty}
             onSetAppearance={setAppearance}
             onSetAccentColor={setAccentColor}
+            onSetBackgroundColor={setBackgroundColor}
+            onSetForegroundColor={setForegroundColor}
             onSave={saveSettings}
             onReset={resetSettings}
-            accentResetKey={accentResetKey}
+            colorResetKey={colorResetKey}
           />
           </Suspense>
         )}
