@@ -1303,7 +1303,7 @@ function App() {
       <div className="app-shell">
       <header className="app-header">
         <div className="app-header-drag-leading" data-tauri-drag-region aria-hidden="true" />
-        <nav className="nav-icons" aria-label="Main navigation">
+        <nav className="nav-icons" aria-label="Main navigation" data-tauri-drag-region>
           <button
             className={`nav-icon ${view === "start" ? "nav-icon-active" : ""}`}
             onClick={() => switchView("start")}
@@ -1398,6 +1398,7 @@ function App() {
             </svg>
           </button>
         </nav>
+        <div className="app-header-drag-trailing" data-tauri-drag-region aria-hidden="true" />
       </header>
 
       {error && (

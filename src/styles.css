@@ -17,7 +17,7 @@
   --radius: 4px;
   --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   --header-height: 44px;
-  --traffic-light-reserve: 104px;
+  --traffic-light-reserve: 80px;
   --nav-icon-size: 32px;
 }
 
@@ -102,11 +102,20 @@ html, body, #root {
   flex-shrink: 0;
 }
 
-/* Draggable titlebar band (Tauri macOS overlay). Interactive nav stays outside this region. */
-.app-header-drag-leading {
+/* Draggable titlebar bands (Tauri macOS overlay). Nav buttons opt out via app-region: no-drag. */
+.app-header-drag-leading,
+.app-header-drag-trailing {
   flex-shrink: 0;
-  width: var(--traffic-light-reserve);
   align-self: stretch;
+}
+
+.app-header-drag-leading {
+  width: var(--traffic-light-reserve);
+}
+
+.app-header-drag-trailing {
+  flex: 1;
+  min-width: 24px;
 }
 
 .nav-icons {
@@ -114,9 +123,9 @@ html, body, #root {
   gap: 4px;
   height: 100%;
   align-items: center;
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: max(0px, calc(100% - var(--traffic-light-reserve) - 24px));
   overflow-x: auto;
   scrollbar-width: none;
 }
