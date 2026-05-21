@@ -100,14 +100,15 @@ Dry-runs only unless testing your own machine:
 
 ## 7. Skills Selection Smoke (Workspace Operations)
 
-- [ ] Workspace SKILLS operation block shows selected count and agent/scope info
+- [ ] Workspace SKILLS operation block shows selected count and agent toggles (global install only)
 - [ ] "select skills" button expands the skills selector
 - [ ] Search input filters skills by name, id, and description
 - [ ] "all" selects all skills; "clear" deselects all
 - [ ] Checkbox toggles install selection for each skill
-- [ ] Agent toggles (codex, opencode, claude, auggie) are visible and toggleable
-- [ ] Scope toggles (global/project) with project target path input work
-- [ ] Install plan info shows agent count/names, scope, and project target
+- [ ] Agent toggles (codex, opencode, claude, auggie, cursor) are visible and toggleable
+- [ ] No project scope toggle or project target path input in Skills panel
+- [ ] Cursor Profile panel has no project target input or project sync/diff buttons
+- [ ] Cursor actions grouped: Global (refresh/diff/sync/validate), Rules (show/copy/settings), Templates (MCP/sandbox show/copy)
 - [ ] "hide selector" collapses the skills selector
 - [ ] Dry-run and install actions behave identically to previous behavior
 - [ ] "open script" button opens install-skills.sh in system editor

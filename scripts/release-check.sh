@@ -976,6 +976,22 @@ if search_has_match -w "$private_name_pattern" resources/default-workspace; then
   exit 1
 fi
 
+step "app must not expose project-target sync/install UI"
+app_project_pattern='cursorProjectTarget|cursor_diff_project|cursor_sync_project|onCursorDiffProject|onCursorSyncProject|dry-run project|sync project|installScope|installTarget|Project install target|Project scope needs|validate_project_install_target|project scope requires'
+if command -v rg >/dev/null 2>&1; then
+  if rg -n "$app_project_pattern" src src-tauri -g '!target/**' >/dev/null 2>&1; then
+    printf 'FAIL: app source still references project-target UI/actions\n' >&2
+    rg -n "$app_project_pattern" src src-tauri -g '!target/**' >&2 || true
+    exit 1
+  fi
+else
+  if grep -R -n -E "$app_project_pattern" src src-tauri 2>/dev/null | grep -v target; then
+    printf 'FAIL: app source still references project-target UI/actions\n' >&2
+    exit 1
+  fi
+fi
+printf '  no project-target app surfaces in src/ or src-tauri/\n'
+
 step "forbidden source scans"
 scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
 scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'

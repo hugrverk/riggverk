@@ -22,11 +22,11 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
 - **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
 - **`install-codex-config.sh`** — syncs Codex config template without running Codex.
-- **`install-cursor-workspace.sh`** — installs Cursor subagents from `templates/cursor/agents/*.md` to `~/.cursor/agents` or `<project>/.cursor/agents`, and project rules to `<project>/.cursor/rules`.
-- **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all supported agents), `--global`/`--project`, `--skill`, and `--all`.
+- **`install-cursor-workspace.sh`** — installs Cursor subagents globally to `~/.cursor/agents` (app default). CLI-only: `--project --target` for project agents/rules.
+- **`install-skills.sh`** — installs skills to native agent skill folders. App uses `--global` only. CLI-only: `--project --target` for per-project installs.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
-All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. Project skill install requires a real project marker (`.git`, `package.json`, etc.) and rejects broad parent directories. Use dry-run or diff before every apply.
+All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. The Agent Workspace app syncs global/home config only. CLI project installs require a real project marker and reject broad parent directories. Use dry-run or diff before every apply.
 
 ## Separation
 

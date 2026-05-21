@@ -58,7 +58,7 @@ Users can add, edit, or remove skills under `skills/`. Domain-specific skills ca
 
 ## Installing skills
 
-Skills can be installed globally (available in all projects) or per-project (scoped to a specific project folder).
+The app installs skills globally (available in all projects). CLI-only: per-project install via `--project --target`.
 
 Use dry-run to preview installations before applying:
 
@@ -67,4 +67,4 @@ Use dry-run to preview installations before applying:
 ./scripts/install-skills.sh --dry-run --agent cursor --global
 ```
 
-Skills from the workspace are installed directly as filesystem copies. No external package managers are used. Cursor installs to `~/.cursor/skills` globally or `<project>/.cursor/skills` with `--project --target /path/to/project`.
+Skills from the workspace are installed directly as filesystem copies. No external package managers are used. The app installs to global agent skill folders only. CLI-only: Cursor `<project>/.cursor/skills` via `--project --target`.
