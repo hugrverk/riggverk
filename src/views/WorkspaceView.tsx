@@ -627,8 +627,12 @@ export function WorkspaceView({
                     </div>
                     <div className="ws-runtime-row">
                       <span className="ws-runtime-row-label">MCP</span>
-                      <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
-                      <span className="ws-runtime-row-value">{cursorProfileHealth.mcp_status}</span>
+                      <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status === "templates-only" ? "ws-color-ok" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
+                      <span className="ws-runtime-row-value">
+                        {cursorProfileHealth.mcp_status === "templates-only"
+                          ? "templates only"
+                          : cursorProfileHealth.mcp_status}
+                      </span>
                     </div>
                     <div className="ws-runtime-row">
                       <span className="ws-runtime-row-label">Sandbox</span>

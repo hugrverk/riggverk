@@ -81,9 +81,21 @@ fn sync_dir_status(
     (status.into(), installed, sources.len())
 }
 
-fn mcp_has_unsafe_literals(content: &str) -> bool {
-    let lower = content.to_ascii_lowercase();
-    let auth_words = [
+const DOC_ONLY_KEYS: &[&str] = &[
+    "description",
+    "notes",
+    "warnings",
+    "excluded_capabilities",
+    "validation_todo",
+];
+
+fn is_env_placeholder(value: &str) -> bool {
+    value.starts_with("${env:") && value.ends_with('}')
+}
+
+fn leaf_key_is_auth_like(key: &str) -> bool {
+    let lower = key.to_ascii_lowercase();
+    [
         "api_key",
         "apikey",
         "token",
@@ -91,16 +103,65 @@ fn mcp_has_unsafe_literals(content: &str) -> bool {
         "password",
         "authorization",
         "cookie",
-    ];
-    if content.contains("sk-") || content.contains("Bearer ") || content.contains("Basic ") {
+    ]
+    .iter()
+    .any(|word| lower.contains(word))
+}
+
+fn value_has_credential_literal(value: &str) -> bool {
+    if value.contains("sk-")
+        || value.contains("Bearer ")
+        || value.contains("Basic ")
+        || value.contains("ghp_")
+        || value.contains("gho_")
+        || value.contains("ghu_")
+        || value.contains("ghs_")
+        || value.contains("ghr_")
+        || value.contains("xoxb-")
+        || value.contains("xoxp-")
+        || value.contains("xoxa-")
+        || value.contains("xoxr-")
+        || value.contains("xoxs-")
+    {
         return true;
     }
-    for word in auth_words {
-        if lower.contains(word) && !content.contains("${env:") {
-            return true;
-        }
-    }
     false
+}
+
+fn scan_json_for_unsafe(value: &serde_json::Value, key: Option<&str>) -> bool {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (child_key, child) in map {
+                if DOC_ONLY_KEYS.contains(&child_key.as_str()) {
+                    continue;
+                }
+                if scan_json_for_unsafe(child, Some(child_key)) {
+                    return true;
+                }
+            }
+            false
+        }
+        serde_json::Value::Array(items) => items.iter().any(|item| scan_json_for_unsafe(item, key)),
+        serde_json::Value::String(text) => {
+            if value_has_credential_literal(text) {
+                return true;
+            }
+            if let Some(leaf) = key {
+                if leaf_key_is_auth_like(leaf) && !is_env_placeholder(text) {
+                    return true;
+                }
+            }
+            false
+        }
+        _ => false,
+    }
+}
+
+fn json_has_unsafe_literals(content: &str) -> bool {
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) else {
+        return false;
+    };
+    scan_json_for_unsafe(&parsed, None)
 }
 
 fn mcp_status(root: &Path, warnings: &mut Vec<String>) -> String {
@@ -114,14 +175,14 @@ fn mcp_status(root: &Path, warnings: &mut Vec<String>) -> String {
                 warnings.push("Cursor MCP example is invalid JSON.".into());
                 return "example-invalid".into();
             }
-            if mcp_has_unsafe_literals(&content) {
+            if json_has_unsafe_literals(&content) {
                 warnings.push("Cursor MCP example contains suspicious auth-like literals.".into());
                 return "example-unsafe".into();
             }
         }
         Err(_) => return "example-unreadable".into(),
     }
-    "example-only".into()
+    "templates-only".into()
 }
 
 fn sandbox_status(root: &Path, warnings: &mut Vec<String>) -> (String, usize) {
@@ -145,7 +206,7 @@ fn sandbox_status(root: &Path, warnings: &mut Vec<String>) -> (String, usize) {
             Ok(parsed) => parsed,
             Err(_) => return ("invalid".into(), count),
         };
-        if mcp_has_unsafe_literals(&content) {
+        if json_has_unsafe_literals(&content) {
             warnings.push(format!(
                 "Cursor sandbox profile contains suspicious auth-like literals: {name}"
             ));
@@ -227,14 +288,18 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     }
     .to_string();
 
+    let mcp_note = if mcp_status == "templates-only" {
+        " MCP templates are in the workspace; copy them into Cursor settings manually."
+    } else {
+        ""
+    };
     let next_action = match status.as_str() {
-        "synced" => "Cursor global profile is synced.",
-        "missing" => "Sync global agents from Workspace.",
-        "partial" => "Fix missing Cursor profile assets before syncing.",
-        "diverged" => "Run diff global, then sync global agents.",
-        _ => "Refresh after checking the workspace templates.",
-    }
-    .to_string();
+        "synced" => format!("Cursor global profile is synced.{mcp_note}"),
+        "missing" => format!("Sync global agents from Workspace.{mcp_note}"),
+        "partial" => format!("Fix missing Cursor profile assets before syncing.{mcp_note}"),
+        "diverged" => format!("Run diff global, then sync global agents.{mcp_note}"),
+        _ => format!("Refresh after checking the workspace templates.{mcp_note}"),
+    };
 
     Ok(CursorProfileHealth {
         status,
@@ -326,4 +391,29 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
 
     let (ok, out, err, code) = run_cmd_owned("bash", &args, &root);
     Ok(ActionResult::new(ok, action, out, err, code))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn playwright_safe_documentation_text_is_not_unsafe() {
+        let content = include_str!(
+            "../../../resources/default-workspace/templates/cursor/sandbox/playwright-safe.json"
+        );
+        assert!(!json_has_unsafe_literals(content));
+    }
+
+    #[test]
+    fn hardcoded_auth_like_values_are_unsafe() {
+        let content = r#"{"servers":{"demo":{"api_key":"sk-test12345678901234567890"}}}"#;
+        assert!(json_has_unsafe_literals(content));
+    }
+
+    #[test]
+    fn env_placeholder_auth_values_are_allowed() {
+        let content = r#"{"env":{"EXAMPLE_API_KEY":"${env:EXAMPLE_API_KEY}"}}"#;
+        assert!(!json_has_unsafe_literals(content));
+    }
 }
