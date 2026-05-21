@@ -32,6 +32,59 @@ search_quiet() {
   fi
 }
 
+assert_json_file() {
+  local path="$1"
+  local label="$2"
+  if [ ! -f "$path" ]; then
+    printf 'FAIL: %s not found: %s\n' "$label" "$path" >&2
+    return 1
+  fi
+  if ! python3 -m json.tool "$path" >/dev/null 2>&1; then
+    printf 'FAIL: %s is not valid JSON: %s\n' "$label" "$path" >&2
+    return 1
+  fi
+}
+
+assert_opencode_playwright_rendered() {
+  local opencode_json="$1"
+  local playwright_config="$2"
+  local browsers_path="$3"
+  local label="${4:-smoke}"
+  local ok=true
+
+  assert_json_file "$playwright_config" "$label playwright-mcp config" || ok=false
+  assert_json_file "$opencode_json" "$label opencode.json" || ok=false
+
+  for needle in '@playwright/mcp@0.0.48' '--config' 'PLAYWRIGHT_BROWSERS_PATH'; do
+    if ! grep -qF -e "$needle" "$opencode_json"; then
+      printf 'FAIL: %s opencode.json missing %s\n' "$label" "$needle" >&2
+      ok=false
+    fi
+  done
+  if ! grep -qF -e "$playwright_config" "$opencode_json"; then
+    printf 'FAIL: %s opencode.json missing playwright config path\n' "$label" >&2
+    ok=false
+  fi
+  if ! grep -qF -e "$browsers_path" "$opencode_json"; then
+    printf 'FAIL: %s opencode.json missing browser cache path\n' "$label" >&2
+    ok=false
+  fi
+  for forbidden in \
+    '__PLAYWRIGHT_MCP_CONFIG_PATH__' \
+    '__PLAYWRIGHT_BROWSERS_PATH__' \
+    '@playwright/mcp@latest' \
+    '--browser=chrome' \
+    'PLAYWRIGHT_BROWSERS_PATH=0' \
+    '/Users/me'; do
+    if grep -qF -e "$forbidden" "$opencode_json"; then
+      printf 'FAIL: %s opencode.json must not contain %s\n' "$label" "$forbidden" >&2
+      ok=false
+    fi
+  done
+
+  $ok
+}
+
 scan_forbidden() {
   local pattern="$1"
   local label="$2"
@@ -707,10 +760,14 @@ fi
 
 step "bundled default install-opencode-config.sh temp apply smoke"
 tmpdir="$(mktemp -d)"
+playwright_config="$tmpdir/playwright-mcp/config.json"
+browsers_path="$tmpdir/ms-playwright"
 OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
 OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
 OPENCODE_AGENTS_DIR="$tmpdir/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
+PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
   bash resources/default-workspace/scripts/install-opencode-config.sh --apply >/dev/null
 apply_ok=true
 if [ ! -f "$tmpdir/opencode.json" ]; then
@@ -784,6 +841,13 @@ data = json.load(open('$tmpdir/tui.json'))
 if not data.get('scroll_acceleration', {}).get('enabled'):
     sys.exit('FAIL: smoke tui.json scroll_acceleration.enabled must be true')
 " || { apply_ok=false; }
+if ! assert_opencode_playwright_rendered \
+  "$tmpdir/opencode.json" \
+  "$playwright_config" \
+  "$browsers_path" \
+  "temp apply"; then
+  apply_ok=false
+fi
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh --apply smoke: 1 config + 1 tui + 6 agents written, content checks passed\n'
@@ -801,6 +865,8 @@ runtime_config="$tmpdir/runtime/opencode.json"
 runtime_tui="$tmpdir/runtime/tui.json"
 runtime_agents="$tmpdir/runtime/agents"
 backup_dir="$tmpdir/runtime/backups"
+runtime_playwright_config="$tmpdir/runtime/playwright-mcp/config.json"
+runtime_browsers_path="$tmpdir/runtime/ms-playwright"
 
 # Copy entire workspace tree to space-containing path so the script
 # itself runs from a path with spaces and computes SCRIPT_DIR / SOURCE_FILE
@@ -812,6 +878,8 @@ OPENCODE_CONFIG_PATH="$runtime_config" \
 OPENCODE_TUI_CONFIG_PATH="$runtime_tui" \
 OPENCODE_AGENTS_DIR="$runtime_agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$backup_dir" \
+PLAYWRIGHT_MCP_CONFIG_PATH="$runtime_playwright_config" \
+PLAYWRIGHT_BROWSERS_PATH="$runtime_browsers_path" \
   bash "$space_dir/scripts/install-opencode-config.sh" --apply >/dev/null
 
 apply_ok=true
@@ -868,6 +936,13 @@ data = json.load(open('$runtime_tui'))
 if not data.get('scroll_acceleration', {}).get('enabled'):
     sys.exit('FAIL: space-in-path tui.json scroll_acceleration.enabled must be true')
 " || { apply_ok=false; }
+if ! assert_opencode_playwright_rendered \
+  "$runtime_config" \
+  "$runtime_playwright_config" \
+  "$runtime_browsers_path" \
+  "space-in-path"; then
+  apply_ok=false
+fi
 
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
