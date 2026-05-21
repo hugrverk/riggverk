@@ -66,7 +66,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     try {
       if (action === "release_check" && workspaceDiagnostics && !workspaceDiagnostics.valid) {
         if (isCurrentAction()) {
-          setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+          setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace installed. Use install or repair on the Workspace page.", exit_code: null });
         }
         setWsLogCompletedAt(Date.now());
         return;
@@ -79,7 +79,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     } catch (e) {
       if (!isCurrentAction()) return;
       if (isInvalidWorkspaceError(e)) {
-        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace selected. Set path above or create one.", exit_code: null });
+        setWsLog({ success: false, action, stdout: "", stderr: "No valid workspace installed. Use install or repair on the Workspace page.", exit_code: null });
       } else {
         setError(`${action}: ${e}`);
       }

@@ -8,7 +8,6 @@ use crate::agent_targets;
 use crate::path_utils::{
     default_installed_workspace_path, is_legacy_default_workspace_path,
     normalize_user_workspace_path, normalize_user_workspace_path_for_save,
-    DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
 };
 use crate::settings;
 
@@ -637,19 +636,14 @@ fn is_unsafe_target(target: &Path) -> bool {
     false
 }
 
-#[tauri::command]
-pub fn plan_create_workspace(target_path: Option<String>) -> Result<CreateWorkspacePlan, String> {
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) fn plan_create_workspace(
+    target_path: Option<String>,
+) -> Result<CreateWorkspacePlan, String> {
     Ok(evaluate_create_plan(target_path))
 }
 
-#[derive(Serialize, Clone, Debug, PartialEq)]
-pub struct WorkspaceSetupEvaluation {
-    pub candidate_path: String,
-    pub setup_phase: String,
-    pub plan: CreateWorkspacePlan,
-    pub missing_files_to_add: Vec<String>,
-}
-
+#[cfg_attr(not(test), allow(dead_code))]
 pub(crate) fn workspace_setup_phase(plan: &CreateWorkspacePlan) -> &'static str {
     match plan.status.as_str() {
         "valid_existing_workspace" => "valid_existing",
@@ -658,28 +652,6 @@ pub(crate) fn workspace_setup_phase(plan: &CreateWorkspacePlan) -> &'static str 
         "missing_target" | "invalid_target" => "no_target",
         _ => "blocked",
     }
-}
-
-#[tauri::command]
-pub fn evaluate_workspace_setup(
-    app: tauri::AppHandle,
-    target_path: Option<String>,
-) -> Result<WorkspaceSetupEvaluation, String> {
-    let plan = evaluate_create_plan(target_path);
-    let candidate_path = plan.target_path.clone();
-    let mut missing_files_to_add = Vec::new();
-
-    if plan.status == "non_empty_non_workspace" && !candidate_path.is_empty() {
-        let preview = repair_workspace_impl(&app, &candidate_path, true);
-        missing_files_to_add = preview.copied_files;
-    }
-
-    Ok(WorkspaceSetupEvaluation {
-        setup_phase: workspace_setup_phase(&plan).to_string(),
-        candidate_path,
-        plan,
-        missing_files_to_add,
-    })
 }
 
 #[derive(Serialize, Clone, Debug, PartialEq)]
@@ -720,8 +692,7 @@ fn initialize_result_from_repair(repair: RepairWorkspaceResult) -> InitializeWor
     }
 }
 
-#[tauri::command]
-pub fn initialize_workspace_at_path(
+pub(crate) fn initialize_workspace_at_path(
     app: tauri::AppHandle,
     target_path: Option<String>,
     confirm_non_empty: bool,
@@ -1104,15 +1075,6 @@ fn create_workspace_from_source(
     }
 }
 
-#[tauri::command]
-pub fn create_workspace_from_defaults(
-    app: tauri::AppHandle,
-    target_path: Option<String>,
-) -> Result<CreateWorkspaceResult, String> {
-    let source_root = super::defaults::resolve_default_workspace_root(&app)?;
-    Ok(create_workspace_from_source(&source_root, target_path))
-}
-
 #[derive(Serialize)]
 pub struct RepairWorkspaceResult {
     pub ok: bool,
@@ -1337,21 +1299,6 @@ pub fn apply_workspace_repair(app: tauri::AppHandle) -> Result<RepairWorkspaceRe
     let root = workspace_root()?;
     let root_str = path_arg(&root)?;
     Ok(repair_workspace_impl(&app, &root_str, false))
-}
-
-#[derive(Serialize)]
-pub struct DefaultWorkspacePathInfo {
-    pub display_path: String,
-    pub resolved_path: String,
-}
-
-#[tauri::command]
-pub fn get_default_workspace_path() -> Result<DefaultWorkspacePathInfo, String> {
-    let path = default_installed_workspace_path()?;
-    Ok(DefaultWorkspacePathInfo {
-        display_path: DEFAULT_INSTALLED_WORKSPACE_DISPLAY.to_string(),
-        resolved_path: path.to_string_lossy().into_owned(),
-    })
 }
 
 #[tauri::command]

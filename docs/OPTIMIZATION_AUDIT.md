@@ -72,12 +72,12 @@
 - `scripts/release-size-report.sh` — reports dist, default workspace, and Tauri bundle sizes
 
 ### B. Frontend bundle optimization
-- `React.lazy` + `Suspense` for LibraryView, RoutingView, SettingsView
-- WorkspaceView remains eager (initial view)
+- `React.lazy` + `Suspense` for LibraryView and SettingsView
+- StartView and harness pages remain eager (initial navigation)
 - Loading fallbacks styled with `.view-loading` class
 
 ### C. React render optimization
-- `useMemo` for `filteredSkills` in WorkspaceView
+- `useMemo` for filtered skills on harness pages
 - `useMemo` for `activeProfileId` in App.tsx
 - `useMemo` for `installAgentsArray` in App.tsx
 - `useMemo` for `configTargets` in App.tsx

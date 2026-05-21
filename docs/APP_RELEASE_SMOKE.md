@@ -1,6 +1,6 @@
 # App Release Smoke
 
-Manual smoke checklist for Agent Workspace app builds. Complements `scripts/release-check.sh` (automated syntax, bundled-default checks, forbidden-source scans, app build, Cargo checks). `scripts/release-check.sh` does not test GUI behavior, installed-app bundles, workspace creation, or folder picker interactions.
+Manual smoke checklist for Agent Workspace app builds. Complements `scripts/release-check.sh` (automated syntax, bundled-default checks, forbidden-source scans, app build, Cargo checks). `scripts/release-check.sh` does not test GUI behavior, installed-app bundles, or folder-picker interactions.
 
 Run this checklist before sharing a built app bundle with another user.
 
@@ -15,177 +15,65 @@ Run this checklist before sharing a built app bundle with another user.
 
 ## 2. Build / Install Smoke
 
-- [ ] App bundle was built successfully (or dev mode confirmed working)
-- [ ] App launches without generic error banner (no "Contract: invalid workspace path" on first launch)
-- [ ] Fresh launch with no saved workspace shows setup-needed state, not missing-marker diagnostics for `~/Agent Workspace`
-- [ ] Toolbar icons stay on the same compact row as macOS traffic lights (no global top padding on the app shell)
-- [ ] Error/info banner renders below the toolbar and does not overlap macOS traffic-light buttons
-- [ ] "use default" checks path without activating; offers create or explicit initialize for non-empty folders
-- [ ] Workspace path field supports type + check path + choose folder; active path only after valid/init
-- [ ] Non-empty non-workspace folder shows as blocked candidate, not active path
-- [ ] Initialize into non-empty folder requires checkbox confirmation and lists files to add
-- [ ] After create/initialize, path persists as active and workspace validates
-- [ ] Window drags from the header band left of toolbar icons (Tauri); toolbar buttons remain clickable
-- [ ] Start view and main content scroll when content exceeds window height (Tauri build)
-- [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)
-- [ ] Bundled default workspace preview appears in Workspace tab (not only in dev source checkout)
+- [ ] App bundle built successfully (or dev mode confirmed working)
+- [ ] App launches without generic error banner on first launch
+- [ ] Fresh launch shows Workspace install state (MISSING or INSTALLED), not path-chooser UI
+- [ ] Workspace displays canonical path `~/.config/agent-workspace`
+- [ ] Toolbar icons stay on the same compact row as macOS traffic lights
+- [ ] Error/info banner renders below the toolbar
+- [ ] Window drags from the header band; toolbar buttons remain clickable
+- [ ] Start view scrolls when content exceeds window height
+- [ ] Product title "Agent Workspace" visible
 
-## 3. Workspace Setup Smoke
+## 3. Workspace Install Smoke
 
-Folder picker and workspace path:
+- [ ] With no prior install, status is MISSING and **install** is offered
+- [ ] **install** creates `~/.config/agent-workspace` with `.agent-workspace/workspace.json` and bundled files
+- [ ] **repair** adds missing files only; does not overwrite edited files
+- [ ] **open folder** opens the installed directory
+- [ ] **refresh** updates diagnostics
+- [ ] No choose-folder, check-path, use-default, or clear-active controls
+- [ ] Idle terminal shows operations ready; hints mention diff/sync, not pull
 
-- [ ] Click "choose folder" in Workspace tab — native folder dialog opens
-- [ ] Select a folder — workspace path is saved and diagnostics refresh
-- [ ] Cancel the picker — path remains unchanged
-- [ ] Type a path manually — apply path saves and refreshes diagnostics
-- [ ] Fresh launch with no saved path shows setup actions (not marker errors for an implicit default)
-- [ ] Invalid workspace path shows missing markers and "invalid workspace"
-- [ ] Workspace view shows compact validity note and first-run guide when no valid workspace selected
-- [ ] First-run guide shows 5 numbered steps (choose path, dry-run, create, library, dry-run sync) and security hints
-- [ ] Idle terminal shows "$ operations ready" with workspace status, branch, and target counts
-- [ ] Idle terminal suggests next commands: "try: pull, diff rules, sync configs, release-check"
-- [ ] After a command runs, the terminal shows the action name, OK/FAILED status, exit code, and relative timestamp
-- [ ] Running commands show "$ <label>..." with activity loader animation
+## 4. Harness and Library Smoke
 
-## 4. Create Workspace Smoke
+- [ ] Codex, OpenCode, Cursor, Claude, Augment nav icons load harness pages
+- [ ] Harness pages show diff/sync actions when workspace is valid
+- [ ] Skills install UI on harness pages (not Workspace)
+- [ ] Library: Docs, Rules, Skills, Agents, Configs, Brain Setup switch correctly
+- [ ] Brain Setup copy block works
+- [ ] Settings: appearance and theme colors save and reset
 
-Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
-
-- [ ] Type or choose a missing/empty target path
-- [ ] Click "dry-run create"
-- [ ] Plan status is `missing_directory` or `empty_existing_directory`
-- [ ] "create workspace" button appears (only for safe statuses)
-- [ ] Click "create workspace"
-- [ ] Confirm created files:
-  - [ ] `.agent-workspace/workspace.json`
-  - [ ] `README.md`
-  - [ ] `docs/`
-  - [ ] `templates/`
-  - [ ] `agents/`
-  - [ ] `scripts/`
-  - [ ] `skills/`
-- [ ] Confirm bundled skill files exist:
-  - [ ] `skills/diagnose/SKILL.md`
-  - [ ] `skills/security-review/SKILL.md`
-  - [ ] `skills/context-budget/SKILL.md`
-- [ ] App auto-saves and uses the created workspace
-- [ ] Diagnostics show valid workspace with all markers present
-- [ ] Scripts were not executed (check file timestamps or content integrity)
-- [ ] Existing files in the target were not overwritten
-- [ ] Non-empty, unsafe, valid-existing, or missing-parent targets are rejected by dry-run
-- [ ] Remove throwaway test folder after test
-
-## 5. Library and Default Workspace Smoke
-
-- [ ] Library view shows a three-column layout: source rail (Docs, Rules, Skills, Agents, Configs), item sidebar, and content pane
-- [ ] Source rail uses text-only labels with count badges; no unicode icons
-- [ ] Source rail active source has a subtle accent underline indicator
-- [ ] Library view allows switching between source types: Docs, Rules, Skills, Agents, Configs
-- [ ] Docs are grouped by section in the sidebar (Start, Guides, Reference, Context)
-- [ ] Start section includes README, Start Here, and Concepts
-- [ ] Guides section includes Using the App, Git Versioning, and Workflows (when present)
-- [ ] Reference section includes Skills, Agent Rules, OpenCode Config, and Troubleshooting (when present)
-- [ ] Selecting a doc renders its Markdown content in the main pane
-- [ ] "open" button opens the doc in the system editor
-- [ ] Rules shows Global Rules template with preview/edit tabs
-- [ ] Skills shows search-filtered skill list with preview
-- [ ] Agents shows agent source list with edit/save functionality
-- [ ] Configs shows config targets with JSON preview and edit
-- [ ] Bundled starter preview in Workspace tab shows known categories and file paths
-- [ ] Bundled starter preview shows non-empty Skills category
-- [ ] Bundled default resources contain no private names, secrets, or core-skill-subset language
-- [ ] Workspace docs are separate from templates/config (Library handles source editing; Workspace handles operations)
-
-## 6. Sync / Install Smoke (Caution)
+## 5. Sync / Install Smoke (Caution)
 
 Dry-runs only unless testing your own machine:
 
-- [ ] In a created or selected workspace, `scripts/install-agent-rules.sh --quiet --diff --opencode --codex --claude --auggie` reports synced/diverged
-- [ ] In a created or selected workspace, `scripts/install-opencode-config.sh --quiet --diff` reports synced/diverged for config + tui + agents
-- [ ] In a created or selected workspace, `scripts/install-skills.sh --quiet --dry-run --agent codex --agent opencode --agent claude --agent auggie --global` reports planned counts
-- [ ] install-skills dry-run from a created workspace reports the bundled skills
-- [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --auggie` completes without error
-- [ ] Do not run `--apply` actions when testing someone else's machine
-- [ ] Real apply creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwriting diverged target files
+- [ ] `scripts/install-agent-rules.sh --quiet --diff` from installed workspace
+- [ ] `scripts/install-opencode-config.sh --quiet --diff`
+- [ ] `scripts/install-skills.sh --quiet --dry-run --global` for selected agents
+- [ ] Do not run `--apply` on someone else's machine without intent
+- [ ] Apply creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups`
 
-## 7. Skills Selection Smoke (Workspace Operations)
+## 6. Verify and Terminal Smoke
 
-- [ ] Workspace SKILLS operation block shows selected count and agent toggles (global install only)
-- [ ] "select skills" button expands the skills selector
-- [ ] Search input filters skills by name, id, and description
-- [ ] "all" selects all skills; "clear" deselects all
-- [ ] Checkbox toggles install selection for each skill
-- [ ] Agent toggles (codex, opencode, claude, auggie, cursor) are visible and toggleable
-- [ ] No project scope toggle or project target path input in Skills panel
-- [ ] Cursor Profile panel has no project target input or project sync/diff buttons
-- [ ] Cursor actions grouped: Global (refresh/diff/sync/validate), Rules (show/copy/settings), Templates (MCP/sandbox show/copy)
-- [ ] "hide selector" collapses the skills selector
-- [ ] Dry-run and install actions behave identically to previous behavior
-- [ ] "open script" button opens install-skills.sh in system editor
+- [ ] **release-check** on Workspace VERIFY when script exists in workspace
+- [ ] Terminal shows action label, OK/FAILED, exit code after a safe dry-run
+- [ ] Output does not leak secrets or private paths from fixtures
 
-## 8. Brain Setup Smoke
+## 7. Keyboard and Lazy Views
 
-- [ ] Brain Setup page renders the generated prompt block with skill routing, model recommendations, security rules, and verification discipline
-- [ ] "copy brain setup" button copies the prompt block to clipboard
-- [ ] Pasted block is well-formed and ready for AI assistant custom instructions
+- [ ] Tab through nav — focus rings visible
+- [ ] Library and Settings lazy-load with brief fallback
+- [ ] Escape dismisses error banner
 
-## 9. Backup Smoke
+## 8. Known Limitations
 
-- [ ] "open backup folder" opens the backup directory in Finder
-- [ ] Backup folder opens even with an invalid/empty workspace (backups are app-level, not workspace-dependent)
-- [ ] Backup listing shows timestamped backup directories
+- Workspace marker is `.agent-workspace/workspace.json` inside the install directory
+- Install path is `~/.config/agent-workspace` (not a dot-prefixed `.agent-workspace` config folder)
+- `AGENT_WORKSPACE_PATH` overrides path for dev/test only
+- Import/upgrade from arbitrary folders is not supported in normal UI
 
-## 10. Terminal Redaction Smoke
-
-- [ ] Run a safe action (dry-run sync, diff, or contract check) and confirm terminal output appears
-- [ ] Check that terminal output does not contain raw file content, secrets, or private paths if any fixture data would include them
-- [ ] Terminal shows action label, OK/FAILED status, exit code, and relative timestamp
-
-## 11. Settings Smoke
-
-- [ ] Settings view shows Appearance (dark/light/system) and Accent color picker with hex input
-- [ ] Changing accent via color picker updates the hex input and applies accent immediately
-- [ ] Typing a valid hex color updates the color picker and applies accent immediately
-- [ ] Typing an invalid hex shows a validation hint and disables the save button
-- [ ] The last valid accent remains applied while an invalid hex is being typed
-- [ ] Clicking "default" on the accent row clears the input and resets to the built-in accent
-- [ ] "save" button saves accent color to persisted settings
-- [ ] After save, the hex input and picker remain in sync with persisted settings
-- [ ] "reset defaults" clears the accent and all settings to factory defaults
-- [ ] Rule targets and config targets can be toggled individually
-- [ ] Target profiles can be applied and show matched profile name
-
-## 12. Lazy-Loaded Views Smoke
-
-- [ ] Click Library tab — view loads with brief "loading library…" fallback, then renders
-- [ ] Click Brain Setup tab — view loads with brief "loading…" fallback, then renders
-- [ ] Click Settings tab — view loads with brief "loading…" fallback, then renders
-- [ ] Switching back to Workspace tab is instant (eager-loaded)
-- [ ] No console errors during lazy view transitions
-
-## 13. Keyboard Navigation Smoke
-
-- [ ] Tab through top nav icons (Workspace, Library, Brain Setup, Settings) — focus ring visible
-- [ ] Tab through Workspace controls — focus ring visible on all buttons
-- [ ] Tab through Library source rail — focus ring visible
-- [ ] Tab through skill search and selector — focus ring visible
-- [ ] Tab through Settings controls — focus ring visible
-- [ ] Escape or click dismisses error banner
-- [ ] Search "clear" buttons are labeled and keyboard-accessible
-
-## 14. Known Limitations
-
-- Workspace marker naming is `.agent-workspace/workspace.json` (established contract marker)
-- Create flow has no rollback on rare I/O/race failure after preflight
-- Import/upgrade flow is not implemented
-- First public/share build should be tested as an installed `.app` bundle, not only dev mode
-- `create_workspace_from_defaults` copies files only — no dependency install, no git init, no post-create hook
-- Workspace scripts in the created workspace are copies of the bundled defaults and may not match the repo originals after bundles are updated
-- Clean git status should be confirmed — residual dev artifacts in `dist/` or `target/` could be bundled unintentionally
-
-## 15. Pass / Fail Report Template
-
-Copy this template and fill in results.
+## 9. Pass / Fail Report Template
 
 ```
 ## Agent Workspace App Smoke Report
@@ -197,26 +85,17 @@ Copy this template and fill in results.
 - App bundle path: ________ (or "dev mode")
 
 ### Checks Passed
-- [ ] Preflight (clean git, release-check, build, size report)
-- [ ] Build/install (launch, no error banner, product name, bundled preview)
-- [ ] Workspace setup (folder picker, save, diagnostics, idle terminal, result timestamp)
-- [ ] Create workspace (dry-run, create, files, validation, no-overwrite, no-execute, rejection of unsafe targets)
-- [ ] Library (source rail nav, sidebar items, edit/save docs, agents, configs, skills)
-- [ ] Brain Setup (copy block, clipboard, well-formed output)
-- [ ] Backup (open folder, listing, works with invalid workspace)
-- [ ] Terminal redaction (safe fixture output, no raw secrets)
-- [ ] Settings (appearance, accent picker, hex input, save, reset)
-- [ ] Sync dry-runs (rules diff, config diff, skills dry-run, bootstrap diff)
-- [ ] Lazy-loaded views (Library, Brain Setup, Settings load with fallback)
-- [ ] Keyboard navigation (focus-visible rings, error dismiss, search clear)
+- [ ] Preflight
+- [ ] Build/install
+- [ ] Workspace install/repair
+- [ ] Harness + Library + Settings
+- [ ] Sync dry-runs
+- [ ] Verify + terminal
 
 ### Checks Failed
 - ________
 
-### Notes
-- ________
-
 ### Release Decision
 - [ ] Ready to share
-- [ ] Not ready — needs fixes
+- [ ] Not ready
 ```

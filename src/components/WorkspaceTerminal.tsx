@@ -65,8 +65,8 @@ export function WorkspaceTerminal({
                     <span>targets: {status.enabled_rule_target_ids.length} rules, {status.enabled_config_target_ids.length} configs</span>
                     <span className="ws-idle-hint">
                       {canRunReleaseCheck
-                        ? "try: pull, diff rules, sync configs, release-check"
-                        : "try: pull, diff rules, sync configs"}
+                        ? "try: diff rules, sync configs, release-check"
+                        : "try: diff rules, sync configs"}
                     </span>
                   </div>
                 ) : (

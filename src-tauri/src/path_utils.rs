@@ -1,6 +1,7 @@
 use std::path::PathBuf;
 
-/// Display form of the canonical installed workspace path.
+/// Display form of the canonical installed workspace path (verified by release-check).
+#[allow(dead_code)]
 pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
 
 pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {

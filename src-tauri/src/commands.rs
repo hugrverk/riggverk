@@ -23,7 +23,6 @@ pub use content::{
 };
 pub use contract::validate_workspace_contract;
 pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
-pub use defaults::get_default_workspace_summary;
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
@@ -31,9 +30,7 @@ pub use settings_commands::{
 pub use skills::{install_skills, list_skills, open_install_skills_script, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
-    apply_workspace_repair, create_workspace_from_defaults, evaluate_workspace_setup,
-    get_default_workspace_path, get_workspace_diagnostics, initialize_workspace_at_path,
-    install_default_workspace, open_default_workspace_folder, plan_create_workspace,
-    plan_workspace_repair, read_brain_setup_seed, repair_default_workspace,
-    try_set_active_workspace_path,
+    apply_workspace_repair, get_workspace_diagnostics, install_default_workspace,
+    open_default_workspace_folder, plan_workspace_repair, read_brain_setup_seed,
+    repair_default_workspace, try_set_active_workspace_path,
 };

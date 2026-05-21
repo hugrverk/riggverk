@@ -2,12 +2,14 @@ use serde::Serialize;
 use std::path::PathBuf;
 use tauri::Manager;
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceFile {
     path: String,
     exists: bool,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceCategory {
     label: String,
@@ -15,6 +17,7 @@ pub struct DefaultWorkspaceCategory {
     files: Vec<DefaultWorkspaceFile>,
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceSummary {
     root_label: String,
@@ -173,6 +176,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
     ]
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
     let categories: Vec<DefaultWorkspaceCategory> = default_workspace_files()
         .into_iter()
@@ -194,17 +198,9 @@ fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
         .collect();
     DefaultWorkspaceSummary {
         root_label: "Bundled Starter".to_string(),
-        description: "Read-only bundled starter resources. They are not copied automatically; Settings can create a new workspace from them after a safe dry-run. Import/upgrade flows are future work.".to_string(),
+        description: "Bundled defaults installed to ~/.config/agent-workspace via install or repair on the Workspace page.".to_string(),
         categories,
     }
-}
-
-#[tauri::command]
-pub fn get_default_workspace_summary(
-    app: tauri::AppHandle,
-) -> Result<DefaultWorkspaceSummary, String> {
-    let root = resolve_default_workspace_root(&app)?;
-    Ok(build_summary(&root))
 }
 
 #[cfg(test)]

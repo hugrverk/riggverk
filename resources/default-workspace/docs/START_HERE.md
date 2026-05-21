@@ -2,63 +2,58 @@
 
 ## What this is
 
-This is an agent workspace — a user-owned directory that stores docs, skills, templates, and scripts. The Agent Workspace app reads this directory, displays its contents, and syncs templates to agent tool folders on your system.
+An agent workspace — a directory of docs, skills, templates, and scripts. The Agent Workspace app installs a runtime copy at `~/.config/agent-workspace`, displays its contents, and syncs templates to agent tool folders.
 
 ## What the app is and is not
 
-The app is a desktop sync tool for managing agent configuration across tools like OpenCode, Codex, Claude, and Auggie. It helps you:
+The app helps you:
 
 - Browse and edit workspace docs, skills, templates, and rules
 - Preview sync operations (dry-run/diff) before writing files
-- Sync agent rules and config to tool folders
-- Install skills to agent tool directories
-- Run release verification checks on the workspace
+- Sync agent rules and config to tool folders from harness pages
+- Install skills per tool from harness pages
+- Run release verification when the workspace includes release-check
 
 The app does not:
 
-- Write files automatically on launch — all writes are explicit
-- Manage GitHub authentication or create remote repos automatically
-- Encrypt workspace contents — the workspace is plain text owned by you
-- Auto-create workspace directories — you confirm the path first
-- Run agents, route tasks automatically, or change tool config from Brain Setup
-- Import or upgrade existing non-workspace directories
+- Write files automatically on launch — use **install** or **repair** on Workspace
+- Ask you to choose an arbitrary folder in normal UI
+- Manage GitHub auth or create remotes
+- Encrypt workspace contents
+- Run agents or change tool config from Brain Setup alone
 
 ## Mental model
 
-- **The app** manages sync and display operations.
-- **The workspace** is your data — a directory of plain-text files you own and version.
-- The app reads your workspace but never overwrites anything without your explicit action.
+- **The app** manages install, display, and sync operations.
+- **The workspace** is plain-text data at `~/.config/agent-workspace` (or `AGENT_WORKSPACE_PATH` for dev/test).
+- Nothing is overwritten without an explicit action.
 
-## Safe first steps (first 5 minutes)
+## Safe first steps
 
-1. **Inspect the default workspace** — the app shows a "Bundled Starter" preview in the Workspace tab.
-2. **Create a workspace** — choose a folder or use the default path, then dry-run and create.
-3. **Open the Library tab** — browse this doc, Concepts, and guides grouped under Start, Guides, and Reference.
-4. **Read CONCEPTS.md** — understand workspace terms before editing.
-5. **Review templates** — look at `templates/global-agent-rules.md` and `templates/opencode.json`.
+1. Open **Workspace** — if missing, click **install**.
+2. Open **Library** — read this doc, Concepts, and guides.
+3. Read [CONCEPTS.md](CONCEPTS.md).
+4. Open a harness page (e.g. Codex) — run **Diff Rules** before **Sync Rules**.
+5. Review `templates/global-agent-rules.md` and `templates/opencode.json`.
 
-## What to click in the app
+## What to click
 
-- **Workspace tab**: View diagnostics, create workspace, sync rules/configs, install skills, verify workspace.
-- **Library tab**: Read and edit docs, rules, skills, agents, and config templates.
-- **Library → Brain Setup**: Copy assistant setup instructions for skill routing discipline.
-- **Settings tab**: Configure appearance and enabled sync targets.
+- **Workspace**: install, repair, verify, terminal output
+- **Harness pages**: per-tool diff/sync and skills install
+- **Library**: edit docs, rules, skills, agents, configs; Brain Setup copy block
+- **Settings**: appearance and colors
 
 ## Dry-run before apply
 
-Always dry-run (preview/diff) before applying changes. The app shows what would be written without touching files. Scripts follow the same pattern: `--dry-run`, `--diff`, then `--apply`.
-
-Workspace selection is a trust decision. The app exposes allowlisted actions only, but sync, install, and release actions may execute scripts from the selected workspace. Use workspaces you control. Workspace creation copies starter files but does not execute scripts.
+Always preview before apply. Scripts use `--dry-run`, `--diff`, then `--apply`.
 
 ## Workspace ownership
 
-This workspace is yours. Edit docs, add skills, modify templates, version with Git. The app does not hide, encrypt, or lock your workspace contents.
-
-Do not store or commit secrets, tokens, passwords, private keys, cookies, auth headers, signed/private URLs, or `.env` values in workspace files.
+Edit freely; version with Git if you want. Do not store secrets, tokens, or `.env` values in workspace files.
 
 ## Next steps
 
-- Read [CONCEPTS.md](CONCEPTS.md) for core terms
-- Read [USING_THE_APP.md](USING_THE_APP.md) for a practical walkthrough
-- Read [GIT_VERSIONING.md](GIT_VERSIONING.md) to version the workspace
-- Run a dry-run sync to preview what would change
+- [CONCEPTS.md](CONCEPTS.md)
+- [USING_THE_APP.md](USING_THE_APP.md)
+- [GIT_VERSIONING.md](GIT_VERSIONING.md)
+- Dry-run sync from a harness page before any apply

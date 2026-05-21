@@ -33,9 +33,6 @@ export function isValidThemeHex(v: string | null | undefined): boolean {
   return !!v && THEME_HEX_RE.test(v);
 }
 
-/** @deprecated use isValidThemeHex */
-export const isValidAccentHex = isValidThemeHex;
-
 function relativeLuminance(hex: string): number {
   const channel = (slice: string) => {
     const c = parseInt(slice, 16) / 255;

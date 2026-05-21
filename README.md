@@ -124,15 +124,16 @@ Applying a profile updates the local settings draft target selection. The user m
 
 Settings are validated before save: `appearance` is enum-constrained to `dark`/`light`/`system`, `workspace_path` is trimmed and normalized. Settings do not expose the app to arbitrary command execution — all backend actions remain allowlisted. The workspace path only affects the working directory of existing allowlisted commands and cannot introduce new commands or shell execution.
 
-The workspace creation dry-run plan (`plan_create_workspace`) is a read-only evaluation that checks whether the configured workspace path is safe and viable for initialization. It does not create directories, copy files, execute scripts, or write any user data. When the plan reports a safe status (`missing_directory` or `empty_existing_directory`), the `create_workspace_from_defaults` command copies only allowlisted bundled default files into the target. This command never overwrites existing files, never runs scripts, and never writes outside the target directory.
+Install and repair copy bundled defaults only into the canonical path (`~/.config/agent-workspace`). They never overwrite existing files, never run scripts, and never write outside that install directory (except `AGENT_WORKSPACE_PATH` dev/test overrides).
 
 ## App Surfaces
 
-The app has three top-level views:
+Primary navigation:
 
-- **Workspace** — operations cockpit and app landing page. Shows whether the canonical install at `~/.config/agent-workspace` is installed, missing, or needs repair, with **install**, **repair**, **refresh**, and **open folder** actions. Verify section provides release-check and backup management. Skills install moved to harness pages. Integrated terminal output panel. The app does not sync or install into arbitrary project checkouts.
-- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs, and Brain Setup. Docs provides curated workspace documentation browser and editor with section groups, search, custom context doc creation, and allowlisted key Cursor profile assets. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides editable OpenCode config source templates with metadata. Script-backed setup targets such as Cursor setup are run from Workspace sync actions, not edited as config templates. Library handles source editing; operations (sync, install) happen in Workspace.
-- **Settings** — appearance (dark/light/system) and theme colors. Workspace install is on the Workspace tab; target profiles and sync toggles are on harness pages. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
+- **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
+- **Harness pages** (Codex, OpenCode, Cursor, Claude, Augment) — per-tool diff/sync/install actions and skills install for that tool.
+- **Library** — browse and edit workspace sources: Docs, Rules, Skills, Agents, Configs, and Brain Setup.
+- **Settings** — appearance and theme colors. Target profiles and sync toggles live on harness pages.
 
 **Brain Setup** (under Library) is a copy-paste instruction surface for external AI assistants. It helps you copy a durable prompt block for ChatGPT, Claude Web, Codex, or another coding assistant — skill routing discipline, model/tool recommendations, security rules, and verification discipline. It does not run agents, change enabled sync targets, or mutate runtime config.
 
@@ -259,7 +260,12 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   │   ├── useWorkspaceActions.ts  Workspace operation action dispatcher
 │   │   └── useWorkspaceGeneration.ts  Workspace generation hook
 │   ├── views/
-│   │   ├── WorkspaceView.tsx    Workspace operations cockpit and skills install selector
+│   │   ├── StartView.tsx        Workspace install/repair landing page
+│   │   ├── CodexView.tsx        Codex harness (rules/config/skills)
+│   │   ├── OpenCodeView.tsx     OpenCode harness
+│   │   ├── CursorView.tsx       Cursor harness
+│   │   ├── ClaudeView.tsx       Claude harness
+│   │   ├── AugmentView.tsx      Augment harness
 │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
 │   │   ├── library/BrainSetupContent.tsx  Brain Setup copy-paste surface
 │   │   ├── SettingsView.tsx     Settings view

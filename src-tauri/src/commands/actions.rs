@@ -94,11 +94,6 @@ fn enabled_rule_targets() -> Vec<agent_targets::AgentSyncTarget> {
         .collect()
 }
 
-fn git_available(root: &std::path::Path) -> bool {
-    let (ok, out, _, _) = run_cmd("git", &["rev-parse", "--is-inside-work-tree"], root);
-    ok && out.trim() == "true"
-}
-
 fn workspace_script_arg(root: &std::path::Path, script_rel: &str) -> Result<String, String> {
     let script = root.join(script_rel);
     let canonical = safe_canonical_target(root, &script)?;
@@ -113,21 +108,6 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
 
     match action.as_str() {
-        "git_pull" => {
-            if !git_available(&root) {
-                return Ok(ActionResult::new(
-                    false,
-                    "git_pull",
-                    String::new(),
-                    "Git pull is unavailable because this workspace is not a git checkout.\n"
-                        .into(),
-                    Some(1),
-                ));
-            }
-            let (ok, out, err, code) = run_cmd("git", &["pull", "--ff-only"], &root);
-            Ok(ActionResult::new(ok, "git_pull", out, err, code))
-        }
-
         "bootstrap_preview" => {
             let rule_args = bootstrap_rule_args();
             let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
