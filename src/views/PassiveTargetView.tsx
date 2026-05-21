@@ -2,6 +2,7 @@ import { TargetPageHeader } from "../components/TargetPageHeader";
 import type { ToolIconName } from "../components/ToolIcon";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
+import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
@@ -87,6 +88,7 @@ export function PassiveTargetView({
   onOpenInstallScript,
 }: PassiveTargetViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
+  const busy = wsRunning !== null;
 
   return (
     <section className="ws-layout target-page-layout">
@@ -112,30 +114,25 @@ export function PassiveTargetView({
           />
 
           {workspaceValid && (
-            <div className="ws-section" role="region" aria-label={`${title} rules sync`}>
-              <div className="ws-section-header">
-                <span className="ws-section-title">Rules</span>
-              </div>
-              <p className="target-compact-note">All enabled rule targets</p>
-              <div className="ws-section-actions">
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
-                  onClick={onDiffRules}
-                >
-                  diff enabled rules
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-sm btn-primary"
-                  disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
-                  onClick={onSyncRules}
-                >
-                  sync enabled rules
-                </button>
-              </div>
-            </div>
+            <HarnessActionCard
+              title="Rules"
+              ariaLabel={`${title} rules sync`}
+              description={`Sync enabled rule targets to ${title} paths.`}
+              statusChip={{ label: ruleTargetsEnabled ? "ready" : "off", tone: ruleTargetsEnabled ? "ok" : "muted" }}
+              secondaryActions={[
+                {
+                  label: "diff rules",
+                  onClick: onDiffRules,
+                  disabled: busy || !ruleTargetsEnabled,
+                  title: !ruleTargetsEnabled ? "Enable rule targets in Targets" : undefined,
+                },
+              ]}
+              primaryAction={{
+                label: "sync rules",
+                onClick: onSyncRules,
+                disabled: busy || !ruleTargetsEnabled,
+              }}
+            />
           )}
 
           <TargetSkillsPanel

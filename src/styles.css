@@ -1711,6 +1711,23 @@ code {
   overflow: hidden;
 }
 
+.settings-shell {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  overflow: hidden;
+}
+
+.settings-left {
+  flex: 1;
+  min-width: 0;
+  overflow-y: auto;
+  padding: 12px 14px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
 .settings-body {
   flex: 1;
   overflow-y: auto;
@@ -1770,6 +1787,37 @@ code {
   font-size: 11px;
   line-height: 1.4;
   opacity: 0.62;
+}
+
+.settings-color-row {
+  margin-top: 10px;
+}
+
+.settings-color-row:first-of-type {
+  margin-top: 4px;
+}
+
+.settings-color-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text);
+  margin-bottom: 6px;
+  display: block;
+}
+
+.settings-color-input-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.settings-color-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  border: 1px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-elevated);
 }
 
 /* accent color input */
@@ -5046,12 +5094,71 @@ code {
   padding: 8px 14px;
 }
 
-.target-page-layout .ws-section {
+.target-page-layout .ws-section,
+.target-page-layout .harness-action-card {
   margin-bottom: 0;
   padding: 10px 14px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-inset);
+}
+
+.harness-action-card-desc {
+  font-size: 10px;
+  color: var(--text-muted);
+  opacity: 0.62;
+  line-height: 1.45;
+  margin: 0 0 6px;
+}
+
+.harness-action-card-advanced {
+  opacity: 0.92;
+}
+
+.harness-action-card-advanced .ws-section-title {
+  font-size: 10px;
+}
+
+.harness-action-warning {
+  margin-top: 4px;
+}
+
+.harness-action-next {
+  margin-top: 4px;
+}
+
+.harness-sandbox-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.harness-sandbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.harness-sandbox-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--text);
+  min-width: 88px;
+  flex-shrink: 0;
+}
+
+.harness-manual-badge {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.75;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  flex-shrink: 0;
 }
 
 .ws-section-header {

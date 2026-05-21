@@ -1,8 +1,9 @@
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
+import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
-import { runtimeChipLabel, runtimeChipTone, SectionChip } from "../lib/runtimeUi";
+import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
@@ -29,8 +30,10 @@ interface OpenCodeViewProps {
   onGenerateOpenCodeConfig: () => void;
   onPlanWorkspaceRepair: () => void;
   onApplyWorkspaceRepair: () => void;
-  onDiffConfigs: () => void;
-  onSyncConfigs: () => void;
+  onDiffOpenCodeAgents: () => void;
+  onSyncOpenCodeAgents: () => void;
+  onDiffOpenCodeConfig: () => void;
+  onSyncOpenCodeConfig: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -42,6 +45,33 @@ interface OpenCodeViewProps {
   onClearSelectionSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
+}
+
+function configCheckTone(health: OpenCodeRuntimeHealth, id: string): "ok" | "warn" | "fail" | "muted" {
+  const check = health.checks.find(c => c.id === id);
+  if (!check) return "muted";
+  if (check.status === "pass") return "ok";
+  if (check.status === "warn") return "warn";
+  return "fail";
+}
+
+function snapshotTone(status: string): "ok" | "warn" | "fail" | "muted" {
+  if (status === "current" || status === "valid") return "ok";
+  if (status === "stale" || status === "missing") return "fail";
+  return "muted";
+}
+
+function tuiTone(status: string): "ok" | "warn" | "fail" | "muted" {
+  if (status === "synced") return "ok";
+  if (status === "diverged") return "warn";
+  if (status === "missing") return "fail";
+  return "muted";
+}
+
+function agentsTone(health: OpenCodeRuntimeHealth): "ok" | "warn" | "fail" | "muted" {
+  if (health.agent_mismatches.length > 0) return "warn";
+  if (health.installed_bundled_agent_count < health.bundled_agent_count) return "fail";
+  return "ok";
 }
 
 export function OpenCodeView({
@@ -67,8 +97,10 @@ export function OpenCodeView({
   onGenerateOpenCodeConfig,
   onPlanWorkspaceRepair,
   onApplyWorkspaceRepair,
-  onDiffConfigs,
-  onSyncConfigs,
+  onDiffOpenCodeAgents,
+  onSyncOpenCodeAgents,
+  onDiffOpenCodeConfig,
+  onSyncOpenCodeConfig,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -82,6 +114,17 @@ export function OpenCodeView({
   onOpenInstallScript,
 }: OpenCodeViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
+  const busy = wsRunning !== null;
+  const health = opencodeRuntimeHealth;
+  const staleSnapshot = health?.generated_snapshot_status === "stale";
+  const showRepair = health && (
+    health.generated_snapshot_status === "valid"
+    || health.generated_snapshot_status === "missing"
+    || health.warnings.some(w => w.includes("Repair"))
+  );
+
+  const agentMismatchCount = health?.agent_mismatches.length ?? 0;
+  const agentExtra = health?.extra_installed_agent_count ?? 0;
 
   return (
     <section className="ws-layout target-page-layout">
@@ -90,7 +133,7 @@ export function OpenCodeView({
           <TargetPageHeader
             icon="opencode"
             title="OpenCode"
-            summary="Runtime config, bundled agents, generated snapshot, and OpenCode skills."
+            summary="Sync bundled runtime agents, OpenCode config/TUI, and install skills separately."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running OpenCode actions." : undefined}
           />
@@ -107,145 +150,99 @@ export function OpenCodeView({
           />
 
           {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="OpenCode Runtime health">
-              <div className="ws-section-header">
-                <span className="ws-section-title">Runtime</span>
-                {opencodeRuntimeHealth ? (
-                  <SectionChip label={runtimeChipLabel(opencodeRuntimeHealth.status)} tone={runtimeChipTone(opencodeRuntimeHealth.status)} />
-                ) : (
-                  <span className="ws-section-chip ws-section-chip-muted">loading</span>
-                )}
-              </div>
+            <HarnessActionCard
+              title="Agents"
+              ariaLabel="OpenCode bundled agents sync"
+              description="Bundled runtime agents installed to ~/.config/opencode/agents. Does not change opencode.json or TUI."
+              statusChip={health
+                ? { label: runtimeChipLabel(health.status), tone: agentsTone(health) }
+                : { label: "loading", tone: "muted" }}
+              details={health ? [
+                {
+                  label: "Bundled",
+                  value: `${health.installed_bundled_agent_count}/${health.bundled_agent_count}`,
+                  tone: health.installed_bundled_agent_count === health.bundled_agent_count ? "ok" : "warn",
+                },
+                ...(agentMismatchCount > 0 ? [{
+                  label: "Diverged",
+                  value: String(agentMismatchCount),
+                  tone: "warn" as const,
+                }] : []),
+                ...(agentExtra > 0 ? [{
+                  label: "Extra installed",
+                  value: String(agentExtra),
+                  tone: "muted" as const,
+                }] : []),
+              ] : undefined}
+              nextAction={agentMismatchCount > 0
+                ? `${agentMismatchCount} agent(s) diverged or missing — sync agents or diff first.`
+                : health && health.installed_bundled_agent_count < health.bundled_agent_count
+                  ? "Some bundled agents are missing — sync agents."
+                  : undefined}
+              nextActionTone={agentMismatchCount > 0 ? "warn" : health?.status === "missing" ? "fail" : "ok"}
+              secondaryActions={[
+                { label: "refresh", onClick: onRefreshOpenCodeRuntimeHealth, disabled: busy },
+                { label: "diff agents", onClick: onDiffOpenCodeAgents, disabled: busy || !configEnabled },
+              ]}
+              primaryAction={{
+                label: "sync agents",
+                onClick: onSyncOpenCodeAgents,
+                disabled: busy || !configEnabled,
+                title: !configEnabled ? "Enable opencode config target in Targets" : undefined,
+              }}
+            />
+          )}
 
-              {opencodeRuntimeHealth && (
-                <>
-                  <div className="ws-runtime-summary" aria-live="polite">
-                    {opencodeRuntimeHealth.summary}
-                  </div>
-
-                  <div className="ws-runtime-rows">
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Config</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "pass" ? "ws-color-ok" : opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "warn" ? "ws-color-warn" : "ws-color-dim"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">TUI</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.tui_status === "synced" ? "ws-color-ok" : opencodeRuntimeHealth.tui_status === "diverged" ? "ws-color-warn" : opencodeRuntimeHealth.tui_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {runtimeChipLabel(opencodeRuntimeHealth.tui_status).toLowerCase()}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Agents</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.agent_mismatches.length === 0 ? "ws-color-ok" : "ws-color-warn"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled
-                        {opencodeRuntimeHealth.agent_mismatches.length > 0
-                          ? ` (${opencodeRuntimeHealth.agent_mismatches.length} diverged)`
-                          : ""}
-                        {opencodeRuntimeHealth.extra_installed_agent_count > 0
-                          ? ` (+${opencodeRuntimeHealth.extra_installed_agent_count} extra)`
-                          : ""}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Generated</span>
-                      <span className={`ws-dot ${
-                        opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "valid" ? "ws-color-ok"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "ws-color-fail"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail"
-                        : "ws-color-dim"
-                      }`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {opencodeRuntimeHealth.generated_snapshot_status}
-                        {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
-                          <span className="ws-runtime-row-detail"> — Regenerate before sync</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-fail">
-                      {opencodeRuntimeHealth.generated_snapshot_detail || "Regenerate opencode.json before sync"}
-                    </div>
-                  )}
-
-                  {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
-                      {opencodeRuntimeHealth.agent_mismatches.length} agent(s) diverged or missing.
-                    </div>
-                  )}
-
-                  {opencodeRuntimeHealth.warnings.length > 0 && opencodeRuntimeHealth.agent_mismatches.length === 0 && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
-                      {opencodeRuntimeHealth.warnings[0]}
-                      {opencodeRuntimeHealth.warnings.length > 1 && (
-                        <> (+{opencodeRuntimeHealth.warnings.length - 1} more)</>
-                      )}
-                    </div>
-                  )}
-
-                  <div className={`ws-runtime-next-action ws-runtime-next-action-${opencodeRuntimeHealth.status === "synced" ? "ok" : opencodeRuntimeHealth.status === "diverged" ? "warn" : opencodeRuntimeHealth.status === "missing" ? "fail" : "ok"}`}>
-                    {opencodeRuntimeHealth.next_action}
-                  </div>
-
-                  <div className="ws-section-actions">
-                    <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
-                      refresh
-                    </button>
-                    <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>
-                      diff enabled configs
-                    </button>
-                    <button
-                      className={`btn btn-sm ${opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "btn-warn" : ""}`}
-                      disabled={!workspaceValid || wsRunning !== null}
-                      onClick={onGenerateOpenCodeConfig}
-                      title="Generate opencode.json from Base and Policy."
-                    >
-                      generate opencode config
-                    </button>
-                    <button
-                      className="btn btn-sm btn-primary"
-                      disabled={!workspaceValid || !configEnabled || wsRunning !== null || opencodeRuntimeHealth.generated_snapshot_status === "stale"}
-                      onClick={onSyncConfigs}
-                      title={opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "Regenerate opencode.json snapshot before sync" : undefined}
-                    >
-                      sync enabled configs
-                    </button>
-                  </div>
-
-                  {(opencodeRuntimeHealth.generated_snapshot_status === "valid" || opencodeRuntimeHealth.generated_snapshot_status === "missing" || opencodeRuntimeHealth.warnings.some(w => w.includes("Repair"))) && (
-                    <div className="ws-repair-box">
-                      <div className="ws-repair-title">Workspace Repair</div>
-                      <div className="ws-repair-hint">
-                        Missing bundled scripts or templates can be repaired.
-                      </div>
-                      <div className="ws-repair-actions">
-                        <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onPlanWorkspaceRepair}>
-                          check
-                        </button>
-                        <button className="btn btn-sm btn-primary" disabled={wsRunning !== null} onClick={onApplyWorkspaceRepair}>
-                          repair
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+          {workspaceValid && (
+            <HarnessActionCard
+              title="Config"
+              ariaLabel="OpenCode config sync"
+              description="OpenCode config, TUI config, and Playwright MCP paths. Uses generated templates/opencode.json snapshot. Does not install bundled agents."
+              statusChip={health
+                ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
+                : { label: "loading", tone: "muted" }}
+              details={health ? [
+                {
+                  label: "Config",
+                  value: runtimeChipLabel(configCheckTone(health, "configs_match")).toLowerCase(),
+                  tone: configCheckTone(health, "configs_match"),
+                },
+                {
+                  label: "TUI",
+                  value: health.tui_status,
+                  tone: tuiTone(health.tui_status),
+                },
+                {
+                  label: "Snapshot",
+                  value: health.generated_snapshot_status,
+                  tone: snapshotTone(health.generated_snapshot_status),
+                  detail: health.generated_snapshot_status === "stale"
+                    ? (health.generated_snapshot_detail || "Regenerate before sync")
+                    : undefined,
+                },
+              ] : undefined}
+              warning={staleSnapshot
+                ? (health?.generated_snapshot_detail || "Generated opencode.json is stale — regenerate before sync.")
+                : undefined}
+              secondaryActions={[
+                { label: "diff config", onClick: onDiffOpenCodeConfig, disabled: busy || !configEnabled },
+                {
+                  label: "generate config",
+                  onClick: onGenerateOpenCodeConfig,
+                  disabled: busy,
+                  variant: staleSnapshot ? "warn" : "default",
+                  title: "Generate opencode.json from Base and Policy",
+                },
+              ]}
+              primaryAction={{
+                label: "sync config",
+                onClick: onSyncOpenCodeConfig,
+                disabled: busy || !configEnabled || staleSnapshot,
+                title: staleSnapshot
+                  ? "Regenerate opencode.json snapshot before sync"
+                  : (!configEnabled ? "Enable opencode config target in Targets" : "Sync config, TUI, and Playwright MCP only"),
+              }}
+            />
           )}
 
           <TargetSkillsPanel
@@ -266,6 +263,22 @@ export function OpenCodeView({
             onOpenInstallScript={onOpenInstallScript}
           />
 
+          {workspaceValid && showRepair && (
+            <HarnessActionCard
+              title="Repair"
+              variant="advanced"
+              ariaLabel="OpenCode workspace repair"
+              description="Restore missing bundled scripts or templates when diagnostics recommend repair."
+              secondaryActions={[
+                { label: "check", onClick: onPlanWorkspaceRepair, disabled: busy },
+              ]}
+              primaryAction={{
+                label: "repair",
+                onClick: onApplyWorkspaceRepair,
+                disabled: busy,
+              }}
+            />
+          )}
         </div>
 
         <WorkspaceTerminal

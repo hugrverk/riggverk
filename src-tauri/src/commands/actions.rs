@@ -39,6 +39,28 @@ fn no_enabled_config_targets(action: &str) -> ActionResult {
     )
 }
 
+fn opencode_config_enabled() -> bool {
+    settings::load()
+        .enabled_target_ids
+        .contains(&"opencode_config".to_string())
+}
+
+fn run_opencode_install(
+    root: &std::path::Path,
+    action: &str,
+    mode: agent_targets::ConfigScriptMode,
+    scope: agent_targets::OpenCodeInstallScope,
+) -> Result<ActionResult, String> {
+    if !opencode_config_enabled() {
+        return Ok(no_enabled_config_targets(action));
+    }
+    let script_str = workspace_script_arg(root, "scripts/install-opencode-config.sh")?;
+    let mut all_args: Vec<&str> = vec![&script_str];
+    all_args.extend(agent_targets::opencode_install_args(mode, scope));
+    let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    Ok(ActionResult::new(ok, action, out, err, code))
+}
+
 fn cursor_is_selected() -> bool {
     let enabled = settings::load().enabled_target_ids;
     enabled.contains(&"cursor_setup".to_string())
@@ -392,6 +414,34 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 last_code,
             ))
         }
+
+        "diff_opencode_agents" => run_opencode_install(
+            &root,
+            "diff_opencode_agents",
+            agent_targets::ConfigScriptMode::Diff,
+            agent_targets::OpenCodeInstallScope::AgentsOnly,
+        ),
+
+        "sync_opencode_agents" => run_opencode_install(
+            &root,
+            "sync_opencode_agents",
+            agent_targets::ConfigScriptMode::Apply,
+            agent_targets::OpenCodeInstallScope::AgentsOnly,
+        ),
+
+        "diff_opencode_config" => run_opencode_install(
+            &root,
+            "diff_opencode_config",
+            agent_targets::ConfigScriptMode::Diff,
+            agent_targets::OpenCodeInstallScope::ConfigOnly,
+        ),
+
+        "sync_opencode_config" => run_opencode_install(
+            &root,
+            "sync_opencode_config",
+            agent_targets::ConfigScriptMode::Apply,
+            agent_targets::OpenCodeInstallScope::ConfigOnly,
+        ),
 
         "release_check" => {
             let script_str = match workspace_script_arg(&root, "scripts/release-check.sh") {

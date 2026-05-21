@@ -1,4 +1,6 @@
 import { useState, useEffect, useRef } from "react";
+import { TargetPageHeader } from "../components/TargetPageHeader";
+import { HarnessActionCard } from "../components/HarnessActionCard";
 import { contrastRatio, hasPoorContrast, isValidThemeHex } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 
@@ -63,12 +65,21 @@ function ColorControl({
     }
   };
 
+  const swatchStyle = isValidThemeHex(pickerHex)
+    ? { backgroundColor: pickerHex }
+    : undefined;
+
   return (
-    <div className="settings-accent-row">
-      <label className="settings-accent-label" htmlFor={`${id}-input`}>
+    <div className="settings-color-row">
+      <label className="settings-color-label" htmlFor={`${id}-input`}>
         {label}
       </label>
-      <div className="settings-accent-input-group">
+      <div className="settings-color-input-group">
+        <span
+          className="settings-color-swatch"
+          style={swatchStyle}
+          aria-hidden="true"
+        />
         <input
           type="color"
           value={pickerHex}
@@ -87,6 +98,7 @@ function ColorControl({
           aria-invalid={touched && !valid}
         />
         <button
+          type="button"
           className="btn btn-sm"
           onClick={onReset}
           aria-label={`Use default ${label.toLowerCase()} color`}
@@ -191,95 +203,108 @@ export function SettingsView({
   };
 
   return (
-    <section className="settings-layout">
-      <div className="lib-topline">
-        <span className="terminal-title">SETTINGS</span>
-        <span className="terminal-host">
-          {settingsDirty ? "modified \u2014 save to persist" : "preferences"}
-        </span>
-      </div>
+    <section className="settings-layout target-page-layout">
+      <div className="settings-shell ws-shell">
+        <div className="settings-left ws-left" role="region" aria-label="Settings">
+          <TargetPageHeader
+            title="Settings"
+            summary="Appearance and theme colors. Workspace path and target toggles live on Start and harness pages."
+            facts={settingsDirty ? [{ label: "unsaved", tone: "warn" }] : [{ label: "saved", tone: "ok" }]}
+          />
 
-      {appSettings && (
-        <div className="settings-body">
-          <div className="settings-section">
-            <div className="settings-section-label">APPEARANCE</div>
-            <div className="settings-section-body">
-              <div className="settings-options">
-                {(["dark", "light", "system"] as const).map(m => (
-                  <button
-                    key={m}
-                    className={`btn btn-sm ${appSettings.appearance === m ? "btn-active" : ""}`}
-                    aria-pressed={appSettings.appearance === m}
-                    onClick={() => onSetAppearance(m)}
-                  >
-                    {m}
-                  </button>
-                ))}
-              </div>
-
-              <ColorControl
-                id="accent"
-                label="Accent"
-                draft={accentDraft}
-                saved={appSettings.accent_color}
-                defaultPicker="#6ea8fe"
-                touched={accentTouched}
-                onDraftChange={applyAccent}
-                onReset={() => { setAccentTouched(false); applyAccent(""); }}
-                onValidChange={setAccentValid}
-              />
-
-              <ColorControl
-                id="background"
-                label="Background"
-                draft={backgroundDraft}
-                saved={appSettings.background_color}
-                defaultPicker="#212121"
-                touched={backgroundTouched}
-                onDraftChange={applyBackground}
-                onReset={() => { setBackgroundTouched(false); applyBackground(""); }}
-                onValidChange={setBackgroundValid}
-              />
-
-              <ColorControl
-                id="foreground"
-                label="Foreground"
-                draft={foregroundDraft}
-                saved={appSettings.foreground_color}
-                defaultPicker="#e0e0e0"
-                touched={foregroundTouched}
-                onDraftChange={applyForeground}
-                onReset={() => { setForegroundTouched(false); applyForeground(""); }}
-                onValidChange={setForegroundValid}
-              />
-
-              {contrastDetail && (
-                <div className="settings-contrast-warning" role="alert">
-                  {contrastDetail}
+          {appSettings && (
+            <>
+              <HarnessActionCard
+                title="Appearance"
+                ariaLabel="Appearance mode"
+                description="Light, dark, or follow system."
+              >
+                <div className="settings-options">
+                  {(["dark", "light", "system"] as const).map(m => (
+                    <button
+                      key={m}
+                      type="button"
+                      className={`btn btn-sm ${appSettings.appearance === m ? "btn-active" : ""}`}
+                      aria-pressed={appSettings.appearance === m}
+                      onClick={() => onSetAppearance(m)}
+                    >
+                      {m}
+                    </button>
+                  ))}
                 </div>
-              )}
-            </div>
-          </div>
+              </HarnessActionCard>
 
-          <div className="settings-section settings-section-actions">
-            <div className="settings-section-label">ACTIONS</div>
-            <div className="settings-section-body">
-              <div className="settings-actions">
-                <button className="btn btn-primary" onClick={onSave} disabled={!canSave}>save</button>
-                <button className="btn" onClick={onReset}>reset defaults</button>
-              </div>
-              <div className="settings-path-hint">
-                Workspace path is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
-              </div>
-              {settingsMsg && (
-                <div className={`settings-msg ${settingsMsg.ok ? "log-ok" : "log-fail"}`}>
-                  <span className="log-prompt">$</span> {settingsMsg.text}
-                </div>
-              )}
-            </div>
-          </div>
+              <HarnessActionCard
+                title="Colors"
+                ariaLabel="Theme colors"
+                description="Optional accent, background, and foreground overrides."
+                warning={contrastDetail ?? undefined}
+              >
+                <ColorControl
+                  id="accent"
+                  label="Accent"
+                  draft={accentDraft}
+                  saved={appSettings.accent_color}
+                  defaultPicker="#6ea8fe"
+                  touched={accentTouched}
+                  onDraftChange={applyAccent}
+                  onReset={() => { setAccentTouched(false); applyAccent(""); }}
+                  onValidChange={setAccentValid}
+                />
+                <ColorControl
+                  id="background"
+                  label="Background"
+                  draft={backgroundDraft}
+                  saved={appSettings.background_color}
+                  defaultPicker="#212121"
+                  touched={backgroundTouched}
+                  onDraftChange={applyBackground}
+                  onReset={() => { setBackgroundTouched(false); applyBackground(""); }}
+                  onValidChange={setBackgroundValid}
+                />
+                <ColorControl
+                  id="foreground"
+                  label="Foreground"
+                  draft={foregroundDraft}
+                  saved={appSettings.foreground_color}
+                  defaultPicker="#e0e0e0"
+                  touched={foregroundTouched}
+                  onDraftChange={applyForeground}
+                  onReset={() => { setForegroundTouched(false); applyForeground(""); }}
+                  onValidChange={setForegroundValid}
+                />
+              </HarnessActionCard>
+
+              <HarnessActionCard
+                title="Actions"
+                ariaLabel="Settings actions"
+                description="Save persists to app storage. Reset restores defaults."
+                statusChip={settingsMsg
+                  ? { label: settingsMsg.ok ? "ok" : "error", tone: settingsMsg.ok ? "ok" : "fail" }
+                  : undefined}
+                secondaryActions={[
+                  { label: "reset defaults", onClick: onReset },
+                ]}
+                primaryAction={{
+                  label: "save",
+                  onClick: onSave,
+                  disabled: !canSave,
+                  title: !settingsDirty ? "No changes to save" : (!colorsValid ? "Fix invalid colors first" : undefined),
+                }}
+              >
+                {settingsMsg && (
+                  <div className={`settings-msg ${settingsMsg.ok ? "log-ok" : "log-fail"}`} role="status">
+                    <span className="log-prompt">$</span> {settingsMsg.text}
+                  </div>
+                )}
+                <p className="settings-path-hint">
+                  Workspace path is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
+                </p>
+              </HarnessActionCard>
+            </>
+          )}
         </div>
-      )}
+      </div>
     </section>
   );
 }

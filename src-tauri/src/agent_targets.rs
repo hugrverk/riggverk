@@ -250,10 +250,7 @@ impl ConfigSyncTarget {
             ),
             ConfigScript::OpenCode => (
                 "scripts/install-opencode-config.sh",
-                match mode {
-                    ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
-                    ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
-                },
+                opencode_install_args(mode, OpenCodeInstallScope::Full),
             ),
         }
     }
@@ -263,6 +260,29 @@ impl ConfigSyncTarget {
 pub enum ConfigScriptMode {
     Diff,
     Apply,
+}
+
+#[derive(Clone, Copy)]
+pub enum OpenCodeInstallScope {
+    Full,
+    AgentsOnly,
+    ConfigOnly,
+}
+
+pub fn opencode_install_args(
+    mode: ConfigScriptMode,
+    scope: OpenCodeInstallScope,
+) -> Vec<&'static str> {
+    let mut args = match mode {
+        ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
+        ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
+    };
+    match scope {
+        OpenCodeInstallScope::Full => {}
+        OpenCodeInstallScope::AgentsOnly => args.push("--agents-only"),
+        OpenCodeInstallScope::ConfigOnly => args.push("--config-only"),
+    }
+    args
 }
 
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
@@ -561,6 +581,22 @@ mod tests {
                 id
             );
         }
+    }
+
+    #[test]
+    fn opencode_install_args_supports_scoped_sync() {
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::AgentsOnly),
+            vec!["--quiet", "--diff", "--agents-only"]
+        );
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Apply, OpenCodeInstallScope::ConfigOnly),
+            vec!["--quiet", "--apply", "--config-only"]
+        );
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::Full),
+            vec!["--quiet", "--diff"]
+        );
     }
 
     #[test]

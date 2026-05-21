@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { SectionChip } from "../lib/runtimeUi";
+import { HarnessActionCard } from "./HarnessActionCard";
 import type { InstallAgent, SkillSummary } from "../types";
 
 interface TargetSkillSelectorProps {
@@ -105,7 +105,6 @@ interface TargetSkillsPanelProps {
 
 export function TargetSkillsPanel({
   targetName,
-  installAgents,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -123,7 +122,7 @@ export function TargetSkillsPanel({
   const [showSkillSelector, setShowSkillSelector] = useState(false);
   const skillsCount = skills.length;
   const selectedSkillsCount = selectedSkills.size;
-  const skillsCanInstall = workspaceValid && selectedSkillsCount > 0 && installAgents.length > 0;
+  const skillsCanInstall = workspaceValid && selectedSkillsCount > 0;
 
   if (!workspaceValid) return null;
 
@@ -139,54 +138,32 @@ export function TargetSkillsPanel({
       ? "No skills in workspace."
       : selectedSkillsCount === 0
         ? "Select skills to install."
-        : null;
+        : undefined;
 
   return (
-    <div className="ws-section target-skills-compact" role="region" aria-label={`${targetName} skills install`}>
-      <div className="ws-section-header">
-        <div className="target-skills-header-main">
-          <span className="ws-section-title">Skills</span>
-          <SectionChip label={targetName} tone="muted" />
-        </div>
-        {skillsCount > 0 && (
-          <SectionChip label={`${selectedSkillsCount}/${skillsCount}`} tone={selectionTone} />
-        )}
-      </div>
-
-      <div className="ws-section-actions target-skills-actions">
-        <button
-          type="button"
-          className="btn btn-sm"
-          disabled={!skillsCanInstall || wsRunning !== null}
-          onClick={onDryRun}
-        >
-          dry run
-        </button>
-        <button
-          type="button"
-          className="btn btn-sm btn-primary"
-          disabled={!skillsCanInstall || wsRunning !== null}
-          onClick={onInstall}
-        >
-          install
-        </button>
-        {skillsLoaded && skillsCount > 0 && (
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setShowSkillSelector(prev => !prev)}
-            aria-expanded={showSkillSelector}
-          >
-            {showSkillSelector ? "hide selector" : "select skills"}
-          </button>
-        )}
-        <button type="button" className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
-      </div>
-
-      {selectionHint && (
-        <p className="target-skills-hint">{selectionHint}</p>
-      )}
-
+    <HarnessActionCard
+      title="Skills"
+      ariaLabel={`${targetName} skills install`}
+      description={`Install selected workspace skills for ${targetName}. Uses install-skills.sh — does not sync rules or config.`}
+      statusChip={skillsCount > 0
+        ? { label: `${selectedSkillsCount}/${skillsCount}`, tone: selectionTone }
+        : { label: "none", tone: "muted" }}
+      warning={selectionHint}
+      secondaryActions={[
+        { label: "dry run", onClick: onDryRun, disabled: !skillsCanInstall || wsRunning !== null },
+        ...(skillsLoaded && skillsCount > 0 ? [{
+          label: showSkillSelector ? "hide selector" : "select skills",
+          onClick: () => setShowSkillSelector(prev => !prev),
+          disabled: wsRunning !== null,
+        }] : []),
+        { label: "open script", onClick: onOpenInstallScript, disabled: wsRunning !== null },
+      ]}
+      primaryAction={{
+        label: "install",
+        onClick: onInstall,
+        disabled: !skillsCanInstall || wsRunning !== null,
+      }}
+    >
       {showSkillSelector && (
         <TargetSkillSelector
           skills={skills}
@@ -198,6 +175,6 @@ export function TargetSkillsPanel({
           onSetSkillSearch={onSetSkillSearch}
         />
       )}
-    </div>
+    </HarnessActionCard>
   );
 }

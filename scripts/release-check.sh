@@ -913,6 +913,56 @@ rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh --apply smoke: 1 config + 1 tui + 6 agents written, content checks passed\n'
 
+step "bundled default install-opencode-config.sh --agents-only temp apply"
+tmpdir="$(mktemp -d)"
+playwright_config="$tmpdir/playwright-mcp/config.json"
+browsers_path="$tmpdir/ms-playwright"
+OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
+OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
+OPENCODE_AGENTS_DIR="$tmpdir/agents" \
+AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
+PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
+  bash resources/default-workspace/scripts/install-opencode-config.sh --apply --agents-only >/dev/null
+agents_only_ok=true
+for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+  if [ ! -f "$tmpdir/agents/$agent" ]; then
+    printf 'FAIL: --agents-only did not write agents/%s\n' "$agent" >&2
+    agents_only_ok=false
+  fi
+done
+if [ -f "$tmpdir/opencode.json" ] || [ -f "$tmpdir/tui.json" ]; then
+  printf 'FAIL: --agents-only must not write config or tui files\n' >&2
+  agents_only_ok=false
+fi
+rm -rf "$tmpdir"
+if ! $agents_only_ok; then exit 1; fi
+printf '  install-opencode-config.sh --agents-only: agents written, config/tui untouched\n'
+
+step "bundled default install-opencode-config.sh --config-only temp apply"
+tmpdir="$(mktemp -d)"
+playwright_config="$tmpdir/playwright-mcp/config.json"
+browsers_path="$tmpdir/ms-playwright"
+OPENCODE_CONFIG_PATH="$tmpdir/opencode.json" \
+OPENCODE_TUI_CONFIG_PATH="$tmpdir/tui.json" \
+OPENCODE_AGENTS_DIR="$tmpdir/agents" \
+AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
+PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
+  bash resources/default-workspace/scripts/install-opencode-config.sh --apply --config-only >/dev/null
+config_only_ok=true
+if [ ! -f "$tmpdir/opencode.json" ] || [ ! -f "$tmpdir/tui.json" ]; then
+  printf 'FAIL: --config-only did not write opencode.json and tui.json\n' >&2
+  config_only_ok=false
+fi
+if [ -d "$tmpdir/agents" ] && [ "$(find "$tmpdir/agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')" -gt 0 ]; then
+  printf 'FAIL: --config-only must not write agent files\n' >&2
+  config_only_ok=false
+fi
+rm -rf "$tmpdir"
+if ! $config_only_ok; then exit 1; fi
+printf '  install-opencode-config.sh --config-only: config + tui written, agents untouched\n'
+
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
 if OPENCODE_AGENTS_DIR=/ bash resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
   printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=/\n' >&2

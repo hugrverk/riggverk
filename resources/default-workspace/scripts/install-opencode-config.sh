@@ -29,6 +29,8 @@ Options:
   --apply-cursor   With --apply, merge Playwright MCP into ~/.cursor/mcp.json
   --cursor         Alias for --apply-cursor
   --diff           Show diff without writing
+  --agents-only    Diff or sync bundled agents only (skip config and TUI)
+  --config-only    Diff or sync config and TUI only (skip agents)
   --quiet          Print compact app-friendly output
   --help           Show this help
 
@@ -85,12 +87,16 @@ apply=false
 apply_cursor=false
 diff_mode=false
 quiet=false
+agents_only=false
+config_only=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) apply=true ;;
     --apply-cursor|--cursor) apply_cursor=true ;;
     --diff) diff_mode=true ;;
+    --agents-only) agents_only=true ;;
+    --config-only) config_only=true ;;
     --quiet) quiet=true ;;
     --help) usage; exit 0 ;;
     *)
@@ -101,6 +107,19 @@ while [ $# -gt 0 ]; do
   esac
   shift
 done
+
+if $agents_only && $config_only; then
+  printf 'install-opencode-config.sh: --agents-only and --config-only are mutually exclusive\n' >&2
+  exit 1
+fi
+
+should_sync_config() {
+  ! $agents_only
+}
+
+should_sync_agents() {
+  ! $config_only
+}
 
 backup_root() {
   if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
@@ -188,40 +207,41 @@ if $diff_mode; then
   has_diffs=false
 
   # Config diffs
-  if [ -f "$TARGET" ]; then
+  if should_sync_config && [ -f "$TARGET" ]; then
     if ! cmp -s "$rendered_opencode" "$TARGET"; then
       printf '\n--- opencode config diffs (%s)\n' "$TARGET"
       diff -u "$TARGET" "$rendered_opencode" || true
       has_diffs=true
     fi
-  else
+  elif should_sync_config; then
     printf '\n--- opencode config missing (no target file at %s)\n' "$TARGET"
     has_diffs=true
   fi
 
-  if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+  if should_sync_config && [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
     if ! cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
       printf '\n--- playwright mcp config diffs (%s)\n' "$PLAYWRIGHT_MCP_TARGET"
       diff -u "$PLAYWRIGHT_MCP_TARGET" "$PLAYWRIGHT_MCP_SOURCE" || true
       has_diffs=true
     fi
-  else
+  elif should_sync_config; then
     printf '\n--- playwright mcp config missing (no target file at %s)\n' "$PLAYWRIGHT_MCP_TARGET"
     has_diffs=true
   fi
 
-  if [ -f "$TUI_TARGET" ]; then
+  if should_sync_config && [ -f "$TUI_TARGET" ]; then
     if ! cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
       printf '\n--- tui config diffs (%s)\n' "$TUI_TARGET"
       diff -u "$TUI_TARGET" "$TUI_SOURCE_FILE" || true
       has_diffs=true
     fi
-  else
+  elif should_sync_config; then
     printf '\n--- tui config missing (no target file at %s)\n' "$TUI_TARGET"
     has_diffs=true
   fi
 
   # Agent diffs
+  if should_sync_agents; then
   while IFS= read -r agent_src || [ -n "$agent_src" ]; do
     agent_name="$(agent_basename "$agent_src")"
     agent_target="$TARGET_AGENTS_DIR/$agent_name"
@@ -236,9 +256,18 @@ if $diff_mode; then
       has_diffs=true
     fi
   done < <(list_agent_files)
+  fi
 
   if ! $has_diffs; then
-    if ! $quiet; then printf '  opencode config + tui + agents synced\n'; fi
+    if ! $quiet; then
+      if $agents_only; then
+        printf '  opencode agents synced\n'
+      elif $config_only; then
+        printf '  opencode config + tui synced\n'
+      else
+        printf '  opencode config + tui + agents synced\n'
+      fi
+    fi
   fi
   exit 0
 fi
@@ -247,6 +276,7 @@ fi
 
 if $apply; then
   # Validate config JSONs
+  if should_sync_config; then
   validate_json "$rendered_opencode" || {
     printf 'install-opencode-config.sh: rendered opencode JSON is invalid\n' >&2
     exit 1
@@ -259,8 +289,9 @@ if $apply; then
     printf 'install-opencode-config.sh: Playwright MCP template JSON is invalid\n' >&2
     exit 1
   }
+  fi
 
-  if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+  if should_sync_config && [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
     if cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
       if ! $quiet; then printf '  playwright mcp config already synced\n'; fi
     else
@@ -273,14 +304,14 @@ if $apply; then
       cp "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"
       if ! $quiet; then printf '  playwright mcp config synced\n'; fi
     fi
-  else
+  elif should_sync_config; then
     mkdir -p "$(dirname "$PLAYWRIGHT_MCP_TARGET")"
     if ! $quiet; then printf '  playwright mcp config creating new\n'; fi
     cp "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"
     if ! $quiet; then printf '  playwright mcp config synced\n'; fi
   fi
 
-  if $apply_cursor; then
+  if should_sync_config && $apply_cursor; then
     if [ -f "$CURSOR_MCP_TARGET" ]; then
       ts="$(date -u +%Y%m%d-%H%M%S)"
       backup_dir="$BACKUP_ROOT/$ts/cursor-mcp"
@@ -303,7 +334,7 @@ if $apply; then
   fi
 
   # ── Apply config ──
-  if [ -f "$TARGET" ]; then
+  if should_sync_config && [ -f "$TARGET" ]; then
     if cmp -s "$rendered_opencode" "$TARGET"; then
       if ! $quiet; then printf '  opencode config already synced\n'; fi
     else
@@ -316,7 +347,7 @@ if $apply; then
       cp "$rendered_opencode" "$TARGET"
       if ! $quiet; then printf '  opencode config synced\n'; fi
     fi
-  else
+  elif should_sync_config; then
     mkdir -p "$(dirname "$TARGET")"
     if ! $quiet; then printf '  opencode config creating new\n'; fi
     cp "$rendered_opencode" "$TARGET"
@@ -324,7 +355,7 @@ if $apply; then
   fi
 
   # ── Apply TUI config ──
-  if [ -f "$TUI_TARGET" ]; then
+  if should_sync_config && [ -f "$TUI_TARGET" ]; then
     if cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
       if ! $quiet; then printf '  tui config already synced\n'; fi
     else
@@ -337,7 +368,7 @@ if $apply; then
       cp "$TUI_SOURCE_FILE" "$TUI_TARGET"
       if ! $quiet; then printf '  tui config synced\n'; fi
     fi
-  else
+  elif should_sync_config; then
     mkdir -p "$(dirname "$TUI_TARGET")"
     if ! $quiet; then printf '  tui config creating new\n'; fi
     cp "$TUI_SOURCE_FILE" "$TUI_TARGET"
@@ -345,6 +376,7 @@ if $apply; then
   fi
 
   # ── Apply agents ──
+  if should_sync_agents; then
   mkdir -p "$TARGET_AGENTS_DIR"
   ts="$(date -u +%Y%m%d-%H%M%S)"
   while IFS= read -r agent_src || [ -n "$agent_src" ]; do
@@ -367,8 +399,17 @@ if $apply; then
       if ! $quiet; then printf '  agent %s created\n' "$agent_name"; fi
     fi
   done < <(list_agent_files)
+  fi
 
-  if ! $quiet; then printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"; fi
+  if ! $quiet; then
+    if $agents_only; then
+      printf '  opencode %s agents synced\n' "$(agent_count)"
+    elif $config_only; then
+      printf '  opencode config + tui synced\n'
+    else
+      printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"
+    fi
+  fi
   exit 0
 fi
 
@@ -377,44 +418,45 @@ fi
 all_synced=true
 
 # Config check
-if [ -f "$TARGET" ]; then
+if should_sync_config && [ -f "$TARGET" ]; then
   if cmp -s "$rendered_opencode" "$TARGET"; then
     if ! $quiet; then printf '  opencode config synced\n'; fi
   else
     if ! $quiet; then printf '  opencode config diverged (use --apply to sync)\n'; fi
     all_synced=false
   fi
-else
+elif should_sync_config; then
   if ! $quiet; then printf '  opencode config missing (use --apply to create)\n'; fi
   all_synced=false
 fi
 
-if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+if should_sync_config && [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
   if cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
     if ! $quiet; then printf '  playwright mcp config synced\n'; fi
   else
     if ! $quiet; then printf '  playwright mcp config diverged (use --apply to sync)\n'; fi
     all_synced=false
   fi
-else
+elif should_sync_config; then
   if ! $quiet; then printf '  playwright mcp config missing (use --apply to create)\n'; fi
   all_synced=false
 fi
 
 # TUI config check
-if [ -f "$TUI_TARGET" ]; then
+if should_sync_config && [ -f "$TUI_TARGET" ]; then
   if cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
     if ! $quiet; then printf '  tui config synced\n'; fi
   else
     if ! $quiet; then printf '  tui config diverged (use --apply to sync)\n'; fi
     all_synced=false
   fi
-else
+elif should_sync_config; then
   if ! $quiet; then printf '  tui config missing (use --apply to create)\n'; fi
   all_synced=false
 fi
 
 # Agent checks
+if should_sync_agents; then
 while IFS= read -r agent_src || [ -n "$agent_src" ]; do
   agent_name="$(agent_basename "$agent_src")"
   agent_target="$TARGET_AGENTS_DIR/$agent_name"
@@ -428,7 +470,18 @@ while IFS= read -r agent_src || [ -n "$agent_src" ]; do
     all_synced=false
   fi
 done < <(list_agent_files)
+fi
 
-if $all_synced && [ -f "$TARGET" ]; then
-  if ! $quiet; then printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"; fi
+if $all_synced; then
+  if $agents_only; then
+    if should_sync_agents && [ -d "$TARGET_AGENTS_DIR" ]; then
+      if ! $quiet; then printf '  opencode %s agents synced\n' "$(agent_count)"; fi
+    fi
+  elif $config_only; then
+    if should_sync_config && [ -f "$TARGET" ]; then
+      if ! $quiet; then printf '  opencode config + tui synced\n'; fi
+    fi
+  elif [ -f "$TARGET" ]; then
+    if ! $quiet; then printf '  opencode config + tui + %s agents synced\n' "$(agent_count)"; fi
+  fi
 fi

@@ -1528,8 +1528,34 @@ function App() {
               }),
               refresh: loadOpenCodeRuntimeHealth,
             })}
-            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
-            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+            onDiffOpenCodeAgents={() => runWsTask({
+              label: "diff opencode agents",
+              action: "diff_opencode_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_agents" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
+            })}
+            onSyncOpenCodeAgents={() => runWsTask({
+              label: "sync opencode agents",
+              action: "sync_opencode_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_agents" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
+            })}
+            onDiffOpenCodeConfig={() => runWsTask({
+              label: "diff opencode config",
+              action: "diff_opencode_config",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_config" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
+            })}
+            onSyncOpenCodeConfig={() => runWsTask({
+              label: "sync opencode config",
+              action: "sync_opencode_config",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_config" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
+            })}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["opencode"], "install skills dry-run (opencode)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["opencode"], "install skills (opencode)")}
@@ -1558,16 +1584,12 @@ function App() {
             onRefreshCursorProfile={() => loadCursorProfileHealth()}
             onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
             onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
-            onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
             onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
             onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
             onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
             onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
-            onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
             onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
-            onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
             onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
-            onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
             onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
             onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
             {...targetSkillsShared}
