@@ -1,0 +1,12 @@
+---
+description: WordPress and WooCommerce implementation constraints.
+globs: wordpress/**, wp-content/**, **/*.php
+alwaysApply: false
+---
+
+# WordPress And WooCommerce
+
+- Preserve hooks, template override behavior, translations, nonces, escaping, capability checks, checkout/cart/PDP behavior, and plugin compatibility.
+- Prefer WordPress/WooCommerce APIs over direct SQL or ad hoc request handling.
+- Sanitize input and escape output for the target context. Treat AJAX, REST, checkout, payment, upload, and account surfaces as security-sensitive.
+- Verify with the narrowest relevant PHP, WP-CLI, browser, or runtime check available in the repo.

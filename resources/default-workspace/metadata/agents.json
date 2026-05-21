@@ -2,70 +2,71 @@
   "agents": {
     "architect.md": {
       "role": "Default autonomous implementation architect/orchestrator",
-      "summary": "Default OpenCode autonomous implementation architect/orchestrator. Break work into bounded slices, inspect repository reality first, delegate to subagents, implement safe patches, verify, and report.",
+      "summary": "Primary executor for most user tasks. Breaks work into bounded slices, inspects repository reality first, delegates investigation, review, docs, security, and QA work to subagents when useful, implements safe patches, verifies, commits when requested, and reports exact changes.",
       "targets": ["opencode"],
       "risk": "medium",
-      "default_skills": ["diagnose", "implementation-plan"],
+      "default_skills": ["diagnose", "implementation-plan", "agent-report-review"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Runtime frontmatter affects OpenCode behavior. Do not edit casually.",
-        "Permission blocks are behavior-sensitive."
+        "The only primary-mode agent.",
+        "All other agents are subagents.",
+        "Delegates to subagents via the task tool."
       ]
     },
     "scout.md": {
       "role": "Repository structure scout",
-      "summary": "Read-only repository scout. Maps structure, ownership, patterns, and constraints before implementation.",
+      "summary": "Explores repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, and risk boundaries before implementation. Read-only.",
       "targets": ["opencode"],
       "risk": "low",
       "default_skills": ["zoom-out"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Read-only agent. Safe to use for any workspace exploration."
+        "Use proactively before implementation when repo structure is unclear."
       ]
     },
     "inspector.md": {
       "role": "Post-implementation code inspector/reviewer",
-      "summary": "Read-only code inspector/reviewer for bugs, regressions, security mistakes, complexity, and pattern mismatches.",
+      "summary": "Reviews changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, unnecessary complexity, and mismatch with existing project patterns. Read-only.",
       "targets": ["opencode"],
       "risk": "low",
-      "default_skills": ["diagnose", "tdd"],
+      "default_skills": ["agent-report-review"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Read-only agent. Use after implementation or before commit."
+        "Use automatically after implementation or before commit."
       ]
     },
     "sentinel.md": {
       "role": "Security-focused sentinel/auditor",
-      "summary": "Read-only security sentinel/auditor for auth, permissions, uploads, forms, checkout, API routes, DB access, secrets, shell execution, and webhooks.",
+      "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
       "targets": ["opencode"],
       "risk": "high",
-      "default_skills": ["security-review"],
+      "default_skills": ["security-review", "supabase-rls-review"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Read-only agent. Use for security-sensitive changes before merge/deploy.",
-        "Do not expose credentials."
+        "Use automatically for security-sensitive surfaces.",
+        "Risk: high because it handles sensitive data classification and vulnerable surface identification."
       ]
     },
     "scribe.md": {
       "role": "Documentation writer",
-      "summary": "Read-only documentation writer for README, docs, runbooks, QA checklists, changelogs, and operator guides.",
+      "summary": "Writes README, docs, runbook, QA checklist, changelog, usage notes, operator documentation, setup docs, troubleshooting notes, and project-facing implementation notes when code changes require them.",
       "targets": ["opencode"],
       "risk": "low",
-      "default_skills": ["write-a-skill"],
+      "default_skills": ["write-a-skill", "current-docs"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Read-only agent. Produces documentation, does not mutate code."
+        "Use automatically when code changes require documentation updates."
       ]
     },
     "verifier.md": {
       "role": "QA verifier",
-      "summary": "Read-only QA verifier. Runs non-destructive verification commands, inspects failures, and summarizes evidence.",
+      "summary": "Runs relevant non-destructive verification commands, inspects failures, summarizes evidence, and identifies remaining manual checks. Read-only except for normal test/build artifacts.",
       "targets": ["opencode"],
       "risk": "low",
-      "default_skills": ["browser-qa"],
+      "default_skills": ["browser-qa", "diagnose"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Read-only agent except for normal test/build artifacts."
+        "Use automatically after implementation to run non-destructive verification."
       ]
     }
   }

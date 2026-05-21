@@ -1024,20 +1024,20 @@ for baseline in diagnose security-review context-budget to-prd grill-with-docs i
   fi
 done
 
-step "bundled default public skill count"
+step "bundled default shared skill count"
 skill_count="$(find resources/default-workspace/skills -type f -name SKILL.md | wc -l | tr -d ' ')"
-if [ "$skill_count" -ne 24 ]; then
-  printf 'FAIL: expected 24 public starter skills, found %s\n' "$skill_count" >&2
+if [ "$skill_count" -ne 28 ]; then
+  printf 'FAIL: expected 28 shared bundled skills, found %s\n' "$skill_count" >&2
   exit 1
 fi
 
-step "bundled default no private workflow skills"
-if search_has_match "woocommerce-pdp-review|wordpress-woocommerce|nextjs-product-slice|supabase-rls-review" \
-  resources/default-workspace \
-  src-tauri/src/commands/defaults.rs; then
-  printf 'FAIL: bundled default workspace must not contain private/domain-specific workflow skills\n' >&2
-  exit 1
-fi
+step "bundled default shared domain skills exist"
+for domain_skill in wordpress-woocommerce woocommerce-pdp-review nextjs-product-slice supabase-rls-review; do
+  if [ ! -f "resources/default-workspace/skills/${domain_skill}/SKILL.md" ]; then
+    printf 'FAIL: shared domain skill missing: skills/%s/SKILL.md\n' "$domain_skill" >&2
+    exit 1
+  fi
+done
 
 step "bundled default no private names"
 private_name_pattern="$(printf '%s|' "C""arl" "Dis""chornan" "Disch""örnan" "Hantverks""registret" "Auggie cred""its" "personal mod""el")"

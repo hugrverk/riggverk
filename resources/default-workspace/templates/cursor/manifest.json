@@ -29,8 +29,8 @@
     "core-safety.mdc",
     "prompt-contract.mdc",
     "repo-workflow.mdc",
-    "php-cms.mdc",
-    "nextjs-data.mdc",
+    "wordpress-woocommerce.mdc",
+    "nextjs-supabase.mdc",
     "frontend-design.mdc",
     "release-check.mdc"
   ],
