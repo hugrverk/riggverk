@@ -20,10 +20,12 @@ workspace) and bundled default resources (shipped with the app, not strictly req
 | `scripts/bootstrap.sh` | file | Full bootstrap script |
 | `scripts/install-agent-rules.sh` | file | Agent rules sync script |
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
+| `scripts/install-codex-config.sh` | file | Codex config/profile sync script |
 | `scripts/install-skills.sh` | file | Skill install script |
 | `scripts/install-cursor-workspace.sh` | file | Cursor subagent and project-rule setup script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
+| `templates/codex/config.toml` | file | Codex config template |
 | `templates/cursor/agents/` | directory | Cursor subagent adapter templates |
 | `templates/cursor/rules/` | directory | Cursor project rule templates dir (must contain at least one `.mdc` file) |
 | `templates/cursor/manifest.json` | file | Cursor profile manifest |

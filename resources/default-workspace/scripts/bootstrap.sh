@@ -6,6 +6,7 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 RULES_SCRIPT="$SCRIPT_DIR/install-agent-rules.sh"
 CONFIG_SCRIPT="$SCRIPT_DIR/install-opencode-config.sh"
+CODEX_CONFIG_SCRIPT="$SCRIPT_DIR/install-codex-config.sh"
 CURSOR_SCRIPT="$SCRIPT_DIR/install-cursor-workspace.sh"
 SKILLS_SCRIPT="$SCRIPT_DIR/install-skills.sh"
 
@@ -22,10 +23,12 @@ Options:
   --skills-only    Run only skills install
   --rules-only     Run only agent rules sync
   --opencode-only  Run only OpenCode config sync
+  --codex-only     Run only Codex config sync
   --cursor-only    Run only Cursor workspace setup
   --skip-skills    Skip skills install
   --skip-rules     Skip agent rules sync
   --skip-opencode  Skip OpenCode config sync
+  --skip-codex     Skip Codex config sync
   --skip-cursor    Skip Cursor workspace setup
   --cursor         Include Cursor workspace setup (not enabled by default)
   --codex          Rule target: Codex (passed to rules script)
@@ -45,10 +48,12 @@ quiet=false
 skip_skills=false
 skip_rules=false
 skip_opencode=false
+skip_codex=false
 skip_cursor=false
 skills_only=false
 rules_only=false
 opencode_only=false
+codex_only=false
 cursor_only=false
 include_cursor=false
 
@@ -64,11 +69,13 @@ while [ $# -gt 0 ]; do
     --skip-skills) skip_skills=true ;;
     --skip-rules) skip_rules=true ;;
     --skip-opencode) skip_opencode=true ;;
+    --skip-codex) skip_codex=true ;;
     --skip-cursor) skip_cursor=true ;;
     --cursor) include_cursor=true ;;
     --skills-only) skills_only=true ;;
     --rules-only) rules_only=true ;;
     --opencode-only) opencode_only=true ;;
+    --codex-only) codex_only=true ;;
     --cursor-only) cursor_only=true ;;
     --codex)   rule_flags+=(--codex) ;;
     --opencode) rule_flags+=(--opencode) ;;
@@ -92,36 +99,44 @@ while [ $# -gt 0 ]; do
 done
 
 # narrow-mode flags
-if $skills_only && ($rules_only || $opencode_only || $cursor_only); then
+if $skills_only && ($rules_only || $opencode_only || $codex_only || $cursor_only); then
   printf 'bootstrap.sh: only one narrow mode may be used\n' >&2
   exit 1
 fi
-if $rules_only && ($opencode_only || $cursor_only); then
+if $rules_only && ($opencode_only || $codex_only || $cursor_only); then
   printf 'bootstrap.sh: only one narrow mode may be used\n' >&2
   exit 1
 fi
-if $opencode_only && $cursor_only; then
+if $opencode_only && ($codex_only || $cursor_only); then
+  printf 'bootstrap.sh: only one narrow mode may be used\n' >&2
+  exit 1
+fi
+if $codex_only && $cursor_only; then
   printf 'bootstrap.sh: only one narrow mode may be used\n' >&2
   exit 1
 fi
 
 run_rules=true
 run_config=true
+run_codex_config=true
 run_skills=true
 run_cursor=false
 
 if $skills_only; then
-  run_rules=false; run_config=false; run_skills=true
+  run_rules=false; run_config=false; run_codex_config=false; run_skills=true
 elif $rules_only; then
-  run_rules=true; run_config=false; run_skills=false
+  run_rules=true; run_config=false; run_codex_config=false; run_skills=false
 elif $opencode_only; then
-  run_rules=false; run_config=true; run_skills=false
+  run_rules=false; run_config=true; run_codex_config=false; run_skills=false
+elif $codex_only; then
+  run_rules=false; run_config=false; run_codex_config=true; run_skills=false
 elif $cursor_only; then
-  run_rules=false; run_config=false; run_skills=false; run_cursor=true
+  run_rules=false; run_config=false; run_codex_config=false; run_skills=false; run_cursor=true
 fi
 
 $skip_rules  && run_rules=false
 $skip_opencode && run_config=false
+$skip_codex && run_codex_config=false
 $skip_skills && run_skills=false
 $include_cursor && run_cursor=true
 $skip_cursor && run_cursor=false
@@ -129,21 +144,25 @@ $skip_cursor && run_cursor=false
 # --- resolve args for sub-scripts ---
 declare -a rules_args=()
 declare -a config_args=()
+declare -a codex_config_args=()
 declare -a cursor_args=()
 declare -a skills_args=()
 
 $quiet && rules_args+=(--quiet)
 $quiet && config_args+=(--quiet)
+$quiet && codex_config_args+=(--quiet)
 $quiet && cursor_args+=(--quiet)
 $quiet && skills_args+=(--quiet)
 
 if $apply; then
   rules_args+=(--apply)
   config_args+=(--apply)
+  codex_config_args+=(--apply)
   cursor_args+=(--apply)
 elif $diff_mode; then
   rules_args+=(--diff)
   config_args+=(--diff)
+  codex_config_args+=(--diff)
 fi
 
 for flag in "${rule_flags[@]}"; do
@@ -174,7 +193,8 @@ if ! $quiet; then
     printf '  Mode: dry-run\n'
   fi
   if $run_rules;   then printf '  Rules: yes\n'; else printf '  Rules: skipped\n'; fi
-  if $run_config;  then printf '  Config: yes\n'; else printf '  Config: skipped\n'; fi
+  if $run_config;  then printf '  OpenCode config: yes\n'; else printf '  OpenCode config: skipped\n'; fi
+  if $run_codex_config; then printf '  Codex config: yes\n'; else printf '  Codex config: skipped\n'; fi
   if $run_cursor;  then printf '  Cursor: yes\n'; else printf '  Cursor: skipped\n'; fi
   if $run_skills;  then printf '  Skills: yes\n'; else printf '  Skills: skipped\n'; fi
 fi
@@ -191,8 +211,13 @@ if $run_rules; then
 fi
 
 if $run_config; then
-  if ! $quiet; then printf '  [config]\n'; fi
+  if ! $quiet; then printf '  [opencode-config]\n'; fi
   "$CONFIG_SCRIPT" "${config_args[@]}" || exit_code=$?
+fi
+
+if $run_codex_config; then
+  if ! $quiet; then printf '  [codex-config]\n'; fi
+  "$CODEX_CONFIG_SCRIPT" "${codex_config_args[@]}" || exit_code=$?
 fi
 
 if $run_cursor; then

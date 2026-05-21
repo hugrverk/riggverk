@@ -77,6 +77,13 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/opencode.json",
         },
         AgentSyncTarget {
+            id: "codex_config",
+            label: "codex config + profiles",
+            kind: TargetKind::Config,
+            target_rel: ".codex/config.toml",
+            source_rel: "templates/codex/config.toml",
+        },
+        AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor global agents",
             kind: TargetKind::Rules,
@@ -117,7 +124,7 @@ pub fn default_enabled_rule_ids() -> Vec<String> {
 }
 
 pub fn default_enabled_config_ids() -> Vec<String> {
-    vec!["opencode_config".into()]
+    vec!["opencode_config".into(), "codex_config".into()]
 }
 
 pub fn default_enabled_ids() -> Vec<String> {
@@ -136,6 +143,12 @@ pub struct TargetProfileMeta {
 
 pub fn target_profiles() -> Vec<TargetProfileMeta> {
     vec![
+        TargetProfileMeta {
+            id: "codex".into(),
+            label: "Codex".into(),
+            description: "Codex rules + config profile".into(),
+            target_ids: vec!["codex_rules".into(), "codex_config".into()],
+        },
         TargetProfileMeta {
             id: "opencode".into(),
             label: "OpenCode".into(),
@@ -171,6 +184,7 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "auggie_rules".into(),
                 "claude_rules".into(),
                 "opencode_config".into(),
+                "codex_config".into(),
                 "cursor_setup".into(),
             ],
         },
@@ -200,6 +214,7 @@ pub fn home_dir() -> Result<PathBuf, String> {
 
 pub enum ConfigScript {
     OpenCode,
+    Codex,
 }
 
 #[allow(dead_code)]
@@ -214,6 +229,13 @@ pub struct ConfigSyncTarget {
 impl ConfigSyncTarget {
     pub fn script_rel_and_args(&self, mode: ConfigScriptMode) -> (&'static str, Vec<&'static str>) {
         match self.script {
+            ConfigScript::Codex => (
+                "scripts/install-codex-config.sh",
+                match mode {
+                    ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
+                    ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
+                },
+            ),
             ConfigScript::OpenCode => (
                 "scripts/install-opencode-config.sh",
                 match mode {
@@ -232,13 +254,22 @@ pub enum ConfigScriptMode {
 }
 
 pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
-    vec![ConfigSyncTarget {
-        id: "opencode_config",
-        label: "opencode config + agents",
-        source_rel: "templates/opencode.json",
-        target_rel: ".config/opencode/opencode.json",
-        script: ConfigScript::OpenCode,
-    }]
+    vec![
+        ConfigSyncTarget {
+            id: "opencode_config",
+            label: "opencode config + agents",
+            source_rel: "templates/opencode.json",
+            target_rel: ".config/opencode/opencode.json",
+            script: ConfigScript::OpenCode,
+        },
+        ConfigSyncTarget {
+            id: "codex_config",
+            label: "codex config + profiles",
+            source_rel: "templates/codex/config.toml",
+            target_rel: ".codex/config.toml",
+            script: ConfigScript::Codex,
+        },
+    ]
 }
 
 // ── config editor sources ──

@@ -103,6 +103,7 @@ bash -n resources/default-workspace/scripts/bootstrap.sh
 bash -n resources/default-workspace/scripts/install-skills.sh
 bash -n resources/default-workspace/scripts/install-agent-rules.sh
 bash -n resources/default-workspace/scripts/install-opencode-config.sh
+bash -n resources/default-workspace/scripts/install-codex-config.sh
 bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
 
 step "bundled default workspace opencode generator script"
@@ -112,6 +113,36 @@ if [ ! -f resources/default-workspace/scripts/generate-opencode-config.py ]; the
 fi
 python3 -m py_compile resources/default-workspace/scripts/generate-opencode-config.py
 printf '  generate-opencode-config.py: exists, valid Python syntax\n'
+
+step "bundled default codex config templates"
+python3 - <<'PY'
+import re
+import tomllib
+from pathlib import Path
+
+root = Path("resources/default-workspace/templates/codex")
+required = [
+    root / "README.md",
+    root / "config.toml",
+    root / "profiles/safe.toml",
+    root / "profiles/workspace-write.toml",
+    root / "mcp/README.md",
+    root / "mcp/playwright.toml",
+]
+tokenish = re.compile(r"(sk-[A-Za-z0-9_-]{12,}|Bearer\s+\S+|Basic\s+\S+|gh[pousr]_[A-Za-z0-9_]{12,}|xox[baprs]-)", re.I)
+for path in required:
+    if not path.is_file():
+        raise SystemExit(f"FAIL: missing Codex template: {path}")
+    text = path.read_text()
+    if tokenish.search(text):
+        raise SystemExit(f"FAIL: Codex template contains credential-like literal: {path}")
+    if path.suffix == ".toml":
+        tomllib.loads(text)
+config = tomllib.loads((root / "config.toml").read_text())
+if config.get("profile") != "safe":
+    raise SystemExit("FAIL: Codex config must default to safe profile")
+PY
+printf '  Codex config/profile templates valid\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do

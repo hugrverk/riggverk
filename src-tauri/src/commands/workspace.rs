@@ -55,6 +55,10 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         },
         MarkerDef {
             kind: MarkerKind::File,
+            rel_path: "scripts/install-codex-config.sh",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
             rel_path: "scripts/install-cursor-workspace.sh",
         },
         MarkerDef {
@@ -68,6 +72,10 @@ pub(crate) fn workspace_marker_defs() -> &'static [MarkerDef] {
         MarkerDef {
             kind: MarkerKind::File,
             rel_path: "templates/opencode.json",
+        },
+        MarkerDef {
+            kind: MarkerKind::File,
+            rel_path: "templates/codex/config.toml",
         },
         MarkerDef {
             kind: MarkerKind::Dir,
@@ -1125,12 +1133,18 @@ mod tests {
         );
         write_file(
             &root,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
         write_file(
             &root,
             "templates/cursor/rules/workspace.mdc",
@@ -1167,12 +1181,18 @@ mod tests {
         );
         write_file(
             &root,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
         write_file(
             &root,
             "templates/cursor/rules/workspace.mdc",
@@ -1203,6 +1223,11 @@ mod tests {
         write_file(
             &root,
             "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
+            "scripts/install-codex-config.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(
@@ -1268,12 +1293,18 @@ mod tests {
         );
         write_file(
             &root,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
         mkdir(&root, "templates/cursor/agents");
         mkdir(&root, "templates/cursor/rules");
         write_file(
@@ -1310,12 +1341,18 @@ mod tests {
         );
         write_file(
             &root,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
         mkdir(&root, "templates/cursor/agents");
         write_file(
             &root,
@@ -1768,6 +1805,7 @@ mod tests {
             "docs/SKILLS.md",
             "docs/AGENT_RULES.md",
             "docs/OPENCODE_CONFIG.md",
+            "docs/CODEX_CONFIG.md",
             "docs/TROUBLESHOOTING.md",
         ] {
             write_file(&root, rel, "doc content\n");
@@ -1778,6 +1816,12 @@ mod tests {
             "templates/opencode.base.json",
             "templates/opencode.policy.json",
             "templates/tui.json",
+            "templates/codex/README.md",
+            "templates/codex/config.toml",
+            "templates/codex/profiles/safe.toml",
+            "templates/codex/profiles/workspace-write.toml",
+            "templates/codex/mcp/README.md",
+            "templates/codex/mcp/playwright.toml",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
             "templates/cursor/user-rules.md",
@@ -1821,6 +1865,7 @@ mod tests {
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
         ] {
             write_file(&root, rel, "#!/usr/bin/env bash\necho script\n");
@@ -2256,6 +2301,11 @@ mod tests {
         );
         write_file(
             &target,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &target,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
@@ -2266,6 +2316,11 @@ mod tests {
         );
         write_file(&target, "templates/global-agent-rules.md", "# rules\n");
         write_file(&target, "templates/opencode.json", "{}");
+        write_file(
+            &target,
+            "templates/codex/config.toml",
+            "profile = \"safe\"\n",
+        );
         write_file(&target, "templates/tui.json", "{}");
         mkdir(&target, "templates/cursor/agents");
         write_file(

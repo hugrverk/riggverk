@@ -646,12 +646,18 @@ mod tests {
         );
         write_file(
             &root,
+            "scripts/install-codex-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &root,
             "scripts/install-cursor-workspace.sh",
             "#!/usr/bin/env bash\n",
         );
         write_file(&root, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
         write_file(&root, "templates/global-agent-rules.md", "# rules\n");
         write_file(&root, "templates/opencode.json", "{}");
+        write_file(&root, "templates/codex/config.toml", "profile = \"safe\"\n");
         write_file(&root, "templates/cursor/README.md", "# cursor\n");
         write_file(&root, "README.md", "# readme\n");
         fs::create_dir_all(root.join("skills")).expect("create skills dir");

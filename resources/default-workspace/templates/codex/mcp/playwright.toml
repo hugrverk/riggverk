@@ -1,0 +1,6 @@
+# Optional Playwright MCP snippet for Codex config review.
+# Requires the runtime environment to provide npx and browser dependencies.
+
+[mcp_servers.playwright]
+command = "npx"
+args = ["-y", "@playwright/mcp@latest"]

@@ -66,6 +66,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "docs/SKILLS.md",
                 "docs/AGENT_RULES.md",
                 "docs/OPENCODE_CONFIG.md",
+                "docs/CODEX_CONFIG.md",
                 "docs/TROUBLESHOOTING.md",
             ],
         ),
@@ -77,6 +78,12 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "templates/opencode.base.json",
                 "templates/opencode.policy.json",
                 "templates/tui.json",
+                "templates/codex/README.md",
+                "templates/codex/config.toml",
+                "templates/codex/profiles/safe.toml",
+                "templates/codex/profiles/workspace-write.toml",
+                "templates/codex/mcp/README.md",
+                "templates/codex/mcp/playwright.toml",
                 "templates/cursor/README.md",
                 "templates/cursor/manifest.json",
                 "templates/cursor/user-rules.md",
@@ -122,6 +129,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "scripts/install-skills.sh",
                 "scripts/install-agent-rules.sh",
                 "scripts/install-opencode-config.sh",
+                "scripts/install-codex-config.sh",
                 "scripts/install-cursor-workspace.sh",
             ],
         ),
@@ -286,8 +294,8 @@ mod tests {
             .expect("scripts category must exist");
         assert_eq!(
             scripts.files.len(),
-            6,
-            "scripts category must have 6 known paths"
+            7,
+            "scripts category must have 7 known paths"
         );
     }
 
@@ -376,6 +384,7 @@ mod tests {
             "docs/SKILLS.md",
             "docs/AGENT_RULES.md",
             "docs/OPENCODE_CONFIG.md",
+            "docs/CODEX_CONFIG.md",
             "docs/TROUBLESHOOTING.md",
         ] {
             write_file(&root, rel);
@@ -386,6 +395,12 @@ mod tests {
             "templates/opencode.base.json",
             "templates/opencode.policy.json",
             "templates/tui.json",
+            "templates/codex/README.md",
+            "templates/codex/config.toml",
+            "templates/codex/profiles/safe.toml",
+            "templates/codex/profiles/workspace-write.toml",
+            "templates/codex/mcp/README.md",
+            "templates/codex/mcp/playwright.toml",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
             "templates/cursor/user-rules.md",
@@ -429,6 +444,7 @@ mod tests {
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
         ] {
             write_file(&root, rel);

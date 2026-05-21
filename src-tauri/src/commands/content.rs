@@ -71,6 +71,12 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/OPENCODE_CONFIG.md",
         },
         DocEntry {
+            id: "docs/CODEX_CONFIG.md",
+            section: "Reference",
+            title: "Codex Config",
+            rel_path: "docs/CODEX_CONFIG.md",
+        },
+        DocEntry {
             id: "docs/TROUBLESHOOTING.md",
             section: "Reference",
             title: "Troubleshooting",
@@ -81,6 +87,24 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             section: "Cursor",
             title: "Cursor Profile Readme",
             rel_path: "templates/cursor/README.md",
+        },
+        DocEntry {
+            id: "templates/codex/README.md",
+            section: "Configs",
+            title: "Codex Config Readme",
+            rel_path: "templates/codex/README.md",
+        },
+        DocEntry {
+            id: "templates/codex/config.toml",
+            section: "Configs",
+            title: "Codex Config",
+            rel_path: "templates/codex/config.toml",
+        },
+        DocEntry {
+            id: "templates/codex/mcp/README.md",
+            section: "Configs",
+            title: "Codex MCP Readme",
+            rel_path: "templates/codex/mcp/README.md",
         },
         DocEntry {
             id: "templates/cursor/manifest.json",

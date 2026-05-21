@@ -1,0 +1,15 @@
+# Codex global config template.
+# Review against your installed Codex version before applying.
+
+profile = "safe"
+
+[profiles.safe]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[profiles.workspace-write]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[mcp_servers]
+# Optional MCP snippets live under templates/codex/mcp/.

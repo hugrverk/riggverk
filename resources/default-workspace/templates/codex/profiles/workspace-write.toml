@@ -1,0 +1,6 @@
+# Workspace-write Codex profile template for trusted local repositories.
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+
+[notes]
+purpose = "Manual profile reference; avoid broad filesystem access and secrets."
