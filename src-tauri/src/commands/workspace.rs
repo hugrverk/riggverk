@@ -1852,14 +1852,14 @@ mod tests {
         let candidate = configured_workspace_path(&settings).expect("canonical fallback");
         assert_eq!(
             candidate,
-            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+            std::path::PathBuf::from(home).join(".config/agent-workspace")
         );
     }
 
     #[test]
     fn default_settings_use_installed_workspace_candidate() {
         let home = std::env::var("HOME").expect("HOME required for test");
-        let expected = std::path::PathBuf::from(home).join(".config/.agent-workspace");
+        let expected = std::path::PathBuf::from(home).join(".config/agent-workspace");
         let candidate = configured_workspace_path(&AppSettings::default())
             .expect("canonical default should resolve when HOME is set");
         assert_eq!(candidate, expected);
@@ -1879,7 +1879,7 @@ mod tests {
         let candidate = configured_workspace_path(&settings).expect("candidate");
         assert_eq!(
             candidate,
-            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+            std::path::PathBuf::from(home).join(".config/agent-workspace")
         );
     }
 

@@ -3,7 +3,7 @@ import type { AppSettings } from "../types";
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 
 /** Canonical installed workspace path (display form; backend owns resolution). */
-export const DEFAULT_WORKSPACE_PATH = "~/.config/.agent-workspace";
+export const DEFAULT_WORKSPACE_PATH = "~/.config/agent-workspace";
 
 export function defaultSettings(): AppSettings {
   return {

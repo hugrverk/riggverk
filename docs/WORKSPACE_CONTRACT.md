@@ -124,7 +124,7 @@ The workspace path is resolved in this order:
 
 1. `AGENT_WORKSPACE_PATH` environment variable (when set and non-empty; dev/test override).
 2. `workspace_path` in app settings (when set to a valid non-legacy custom path).
-3. Canonical installed path: `~/.config/.agent-workspace`.
+3. Canonical installed path: `~/.config/agent-workspace`.
 
 The previous default `~/Agent Workspace` is deprecated. Saved settings that still point at the old path are normalized away on load. The app does not delete or modify an existing `~/Agent Workspace` folder automatically.
 

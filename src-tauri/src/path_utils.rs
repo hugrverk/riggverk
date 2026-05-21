@@ -1,14 +1,14 @@
 use std::path::PathBuf;
 
 /// Display form of the canonical installed workspace path.
-pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/.agent-workspace";
+pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
 
 pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {
     let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
     if home.is_empty() {
         return Err("HOME is empty".to_string());
     }
-    Ok(PathBuf::from(home).join(".config/.agent-workspace"))
+    Ok(PathBuf::from(home).join(".config/agent-workspace"))
 }
 
 /// Previous built-in default (`~/Agent Workspace`). Treated as deprecated, not a custom path.
@@ -151,11 +151,11 @@ mod tests {
         let path = default_installed_workspace_path().expect("default path");
         assert_eq!(
             path,
-            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+            std::path::PathBuf::from(home).join(".config/agent-workspace")
         );
         assert_eq!(
             DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
-            "~/.config/.agent-workspace"
+            "~/.config/agent-workspace"
         );
     }
 
@@ -169,7 +169,7 @@ mod tests {
         assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
         assert!(is_legacy_default_workspace_path(&legacy));
         assert!(!is_legacy_default_workspace_path(
-            "~/.config/.agent-workspace"
+            "~/.config/agent-workspace"
         ));
     }
 

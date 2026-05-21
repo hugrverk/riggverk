@@ -61,7 +61,7 @@ See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the full worksp
 
 The app source includes a shared starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, 28 skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
-Bundled defaults are copied only when you click **install** or **repair** on the Workspace (Start) page. The app installs the local runtime workspace at `~/.config/.agent-workspace` — it does not ask you to choose a folder. No files are created automatically on launch. Install and repair are explicit user actions; they do not overwrite existing files, do not run scripts, and only write under the canonical install path (or `AGENT_WORKSPACE_PATH` for dev/test overrides).
+Bundled defaults are copied only when you click **install** or **repair** on the Workspace (Start) page. The app installs the local runtime workspace at `~/.config/agent-workspace` — it does not ask you to choose a folder. No files are created automatically on launch. Install and repair are explicit user actions; they do not overwrite existing files, do not run scripts, and only write under the canonical install path (or `AGENT_WORKSPACE_PATH` for dev/test overrides).
 
 Existing installs that are missing newer bundled files can be fixed with **repair** on the Workspace page. Repair copies only missing files from the app's bundled default workspace and never overwrites existing user edits.
 
@@ -84,7 +84,7 @@ The workspace root is resolved in order of precedence:
 
 1. **Environment**: `AGENT_WORKSPACE_PATH` (dev/test override when set and non-empty).
 2. **Settings**: `workspace_path` in app settings when set to a valid non-legacy custom path.
-3. **Default**: `~/.config/.agent-workspace` (canonical installed runtime workspace).
+3. **Default**: `~/.config/agent-workspace` (canonical installed runtime workspace).
 
 The Workspace (Start) page shows whether the local runtime workspace is installed, missing, or needs repair. Use **install** or **repair** there; the app does not expose arbitrary path selection in normal UI. The deprecated `~/Agent Workspace` default is not used; existing folders at that path are not modified automatically.
 
@@ -99,7 +99,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
-| `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/.agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
+| `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
 | `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules) and config targets (opencode_config, codex_config, cursor_setup) are filtered by kind in the UI. Claude and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (Codex, OpenCode, Cursor, Claude, Augment, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
@@ -130,7 +130,7 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 
 The app has three top-level views:
 
-- **Workspace** — operations cockpit and app landing page. Shows whether the canonical install at `~/.config/.agent-workspace` is installed, missing, or needs repair, with **install**, **repair**, **refresh**, and **open folder** actions. Verify section provides release-check and backup management. Skills install moved to harness pages. Integrated terminal output panel. The app does not sync or install into arbitrary project checkouts.
+- **Workspace** — operations cockpit and app landing page. Shows whether the canonical install at `~/.config/agent-workspace` is installed, missing, or needs repair, with **install**, **repair**, **refresh**, and **open folder** actions. Verify section provides release-check and backup management. Skills install moved to harness pages. Integrated terminal output panel. The app does not sync or install into arbitrary project checkouts.
 - **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs, and Brain Setup. Docs provides curated workspace documentation browser and editor with section groups, search, custom context doc creation, and allowlisted key Cursor profile assets. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides editable OpenCode config source templates with metadata. Script-backed setup targets such as Cursor setup are run from Workspace sync actions, not edited as config templates. Library handles source editing; operations (sync, install) happen in Workspace.
 - **Settings** — appearance (dark/light/system) and theme colors. Workspace install is on the Workspace tab; target profiles and sync toggles are on harness pages. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
 

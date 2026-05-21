@@ -1336,8 +1336,13 @@ if ! search_has_match 'DEFAULT_INSTALLED_WORKSPACE_DISPLAY' src-tauri/src/path_u
   printf 'FAIL: canonical installed workspace constant missing in path_utils.rs\n' >&2
   exit 1
 fi
-if ! search_has_match '~/.config/.agent-workspace' src/lib/settingsDraft.ts src/views/StartView.tsx; then
-  printf 'FAIL: frontend must reference ~/.config/.agent-workspace\n' >&2
+if ! search_has_match '~/.config/agent-workspace' src/lib/settingsDraft.ts src/views/StartView.tsx; then
+  printf 'FAIL: frontend must reference ~/.config/agent-workspace\n' >&2
+  exit 1
+fi
+if search_has_match -F '.config/.agent-workspace' \
+  src src-tauri README.md docs resources/default-workspace; then
+  printf 'FAIL: mistaken install path ~/.config/.agent-workspace found in active sources\n' >&2
   exit 1
 fi
 if search_has_match 'choose folder|check path|use default|clear active' src/views/StartView.tsx src/App.tsx; then
