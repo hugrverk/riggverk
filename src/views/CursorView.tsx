@@ -1,3 +1,4 @@
+import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -102,12 +103,12 @@ export function CursorView({
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Cursor controls">
-          <div className="ws-page-label">CURSOR</div>
-
-          <p className="target-page-lead">
-            Global agents can be diffed and synced to <code>~/.cursor/agents</code> when enabled.
-            User Rules, MCP JSON, and sandbox profiles are copy-only — paste them into Cursor yourself.
-          </p>
+          <TargetPageHeader
+            title="Cursor"
+            summary="Global agents can sync automatically. User Rules, MCP, and sandbox profiles remain copy/paste."
+            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
+          />
 
           <TargetSettingsPanel
             page="cursor"
@@ -123,7 +124,7 @@ export function CursorView({
           {workspaceValid && (
             <div className="ws-section" role="region" aria-label="Cursor Profile health">
               <div className="ws-section-header">
-                <span className="ws-section-title">CURSOR PROFILE</span>
+                <span className="ws-section-title">Profile</span>
                 {cursorProfileHealth ? (
                   <SectionChip label={runtimeChipLabel(cursorProfileHealth.status)} tone={runtimeChipTone(cursorProfileHealth.status)} />
                 ) : (
@@ -204,7 +205,7 @@ export function CursorView({
 
           <div className="ws-section cursor-manual-guide" role="region" aria-label="Cursor manual setup guide">
             <div className="ws-section-header">
-              <span className="ws-section-title">MANUAL SETUP</span>
+              <span className="ws-section-title">Manual setup</span>
             </div>
             <div className="cursor-manual-steps">
               <div className="cursor-manual-step">
@@ -291,9 +292,6 @@ export function CursorView({
             onOpenInstallScript={onOpenInstallScript}
           />
 
-          {!workspaceValid && (
-            <div className="ws-card-warn">Select a valid workspace on Start before running Cursor actions.</div>
-          )}
         </div>
 
         <WorkspaceTerminal

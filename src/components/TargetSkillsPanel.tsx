@@ -2,6 +2,89 @@ import { useState, useMemo } from "react";
 import { SectionChip } from "../lib/runtimeUi";
 import type { InstallAgent, SkillSummary } from "../types";
 
+interface TargetSkillSelectorProps {
+  skills: SkillSummary[];
+  selectedSkills: Set<string>;
+  skillSearch: string;
+  onToggleSkill: (name: string) => void;
+  onSelectAllSkills: () => void;
+  onClearSelectionSkills: () => void;
+  onSetSkillSearch: (value: string) => void;
+}
+
+export function TargetSkillSelector({
+  skills,
+  selectedSkills,
+  skillSearch,
+  onToggleSkill,
+  onSelectAllSkills,
+  onClearSelectionSkills,
+  onSetSkillSearch,
+}: TargetSkillSelectorProps) {
+  const filteredSkills = useMemo(() => {
+    if (!skillSearch.trim()) return skills;
+    const q = skillSearch.toLowerCase().trim();
+    return skills.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      s.id.toLowerCase().includes(q) ||
+      s.description.toLowerCase().includes(q)
+    );
+  }, [skills, skillSearch]);
+
+  return (
+    <div className="ws-skill-selector" role="region" aria-label="Skill selection">
+      <div className="ws-skill-selector-controls">
+        <input
+          className="skills-search"
+          type="text"
+          placeholder="search skills..."
+          value={skillSearch}
+          onChange={e => onSetSkillSearch(e.target.value)}
+          aria-label="Search workspace skills"
+        />
+        {skillSearch && (
+          <button
+            type="button"
+            className="btn btn-sm btn-clear-search"
+            onClick={() => onSetSkillSearch("")}
+            aria-label="Clear workspace skills search"
+          >
+            clear
+          </button>
+        )}
+        <button type="button" className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
+        <button type="button" className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
+      </div>
+      <div className="ws-skill-selector-list">
+        {filteredSkills.length === 0 ? (
+          <div className="ws-skill-selector-empty">
+            {skillSearch ? "No matching skills" : "No skills found"}
+          </div>
+        ) : (
+          filteredSkills.map(s => {
+            const isSelected = selectedSkills.has(s.name);
+            return (
+              <div key={s.id} className={`ws-skill-selector-row ${isSelected ? "ws-skill-selector-row-on" : ""}`}>
+                <button
+                  type="button"
+                  className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
+                  onClick={() => onToggleSkill(s.name)}
+                  aria-pressed={isSelected}
+                  aria-label={`${isSelected ? "Deselect" : "Select"} skill ${s.name}`}
+                >
+                  {isSelected ? "x" : ""}
+                </button>
+                <span className="ws-skill-selector-name">{s.name}</span>
+                <span className="ws-skill-selector-desc">{s.description}</span>
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+}
+
 interface TargetSkillsPanelProps {
   targetName: string;
   installAgents: InstallAgent[];
@@ -42,40 +125,37 @@ export function TargetSkillsPanel({
   const selectedSkillsCount = selectedSkills.size;
   const skillsCanInstall = workspaceValid && selectedSkillsCount > 0 && installAgents.length > 0;
 
-  const filteredSkills = useMemo(() => {
-    if (!skillSearch.trim()) return skills;
-    const q = skillSearch.toLowerCase().trim();
-    return skills.filter(s =>
-      s.name.toLowerCase().includes(q) ||
-      s.id.toLowerCase().includes(q) ||
-      s.description.toLowerCase().includes(q)
-    );
-  }, [skills, skillSearch]);
-
   if (!workspaceValid) return null;
 
-  const installLabel = installAgents.length === 1
-    ? installAgents[0]
-    : installAgents.join(" + ");
+  const selectionTone: "ok" | "warn" | "muted" = selectedSkillsCount === skillsCount && skillsCount > 0
+    ? "ok"
+    : selectedSkillsCount > 0
+      ? "warn"
+      : "muted";
+
+  const selectionHint = !skillsLoaded
+    ? "Loading skills…"
+    : skills.length === 0
+      ? "No skills in workspace."
+      : selectedSkillsCount === 0
+        ? "Select skills to install."
+        : null;
 
   return (
-    <div className="ws-section" role="region" aria-label={`${targetName} skills install`}>
+    <div className="ws-section target-skills-compact" role="region" aria-label={`${targetName} skills install`}>
       <div className="ws-section-header">
-        <span className="ws-section-title">SKILLS</span>
-        {skillsCount > 0 && (() => {
-          const tone: "ok" | "warn" | "fail" | "muted" = selectedSkillsCount === skillsCount
-            ? "ok"
-            : selectedSkillsCount > 0
-              ? "warn"
-              : "muted";
-          return <SectionChip label={`${selectedSkillsCount}/${skillsCount} selected`} tone={tone} />;
-        })()}
+        <div className="target-skills-header-main">
+          <span className="ws-section-title">Skills</span>
+          <SectionChip label={targetName} tone="muted" />
+        </div>
+        {skillsCount > 0 && (
+          <SectionChip label={`${selectedSkillsCount}/${skillsCount}`} tone={selectionTone} />
+        )}
       </div>
-      <div className="ws-section-context">
-        Installs to {installLabel}
-      </div>
-      <div className="ws-section-actions">
+
+      <div className="ws-section-actions target-skills-actions">
         <button
+          type="button"
           className="btn btn-sm"
           disabled={!skillsCanInstall || wsRunning !== null}
           onClick={onDryRun}
@@ -83,6 +163,7 @@ export function TargetSkillsPanel({
           dry run
         </button>
         <button
+          type="button"
           className="btn btn-sm btn-primary"
           disabled={!skillsCanInstall || wsRunning !== null}
           onClick={onInstall}
@@ -91,6 +172,7 @@ export function TargetSkillsPanel({
         </button>
         {skillsLoaded && skillsCount > 0 && (
           <button
+            type="button"
             className="btn btn-sm"
             onClick={() => setShowSkillSelector(prev => !prev)}
             aria-expanded={showSkillSelector}
@@ -98,69 +180,23 @@ export function TargetSkillsPanel({
             {showSkillSelector ? "hide selector" : "select skills"}
           </button>
         )}
-        <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
+        <button type="button" className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
       </div>
-      {!skillsLoaded && !wsRunning && (
-        <div className="ws-card-warn">Loading skills...</div>
+
+      {selectionHint && (
+        <p className="target-skills-hint">{selectionHint}</p>
       )}
-      {skillsLoaded && !skillsCanInstall && !wsRunning && (
-        <div className="ws-card-warn">
-          {skills.length === 0
-            ? "No skills found in workspace."
-            : selectedSkillsCount === 0
-              ? "No skills selected."
-              : null}
-        </div>
-      )}
+
       {showSkillSelector && (
-        <div className="ws-skill-selector" role="region" aria-label="Skill selection">
-          <div className="ws-skill-selector-controls">
-            <input
-              className="skills-search"
-              type="text"
-              placeholder="search skills..."
-              value={skillSearch}
-              onChange={e => onSetSkillSearch(e.target.value)}
-              aria-label="Search workspace skills"
-            />
-            {skillSearch && (
-              <button
-                className="btn btn-sm btn-clear-search"
-                onClick={() => onSetSkillSearch("")}
-                aria-label="Clear workspace skills search"
-              >
-                clear
-              </button>
-            )}
-            <button className="btn btn-sm" onClick={onSelectAllSkills}>all</button>
-            <button className="btn btn-sm" onClick={onClearSelectionSkills}>clear</button>
-          </div>
-          <div className="ws-skill-selector-list">
-            {filteredSkills.length === 0 ? (
-              <div className="ws-skill-selector-empty">
-                {skillSearch ? "No matching skills" : "No skills found"}
-              </div>
-            ) : (
-              filteredSkills.map(s => {
-                const isSelected = selectedSkills.has(s.name);
-                return (
-                  <div key={s.id} className={`ws-skill-selector-row ${isSelected ? "ws-skill-selector-row-on" : ""}`}>
-                    <button
-                      className={`skills-row-check-button ${isSelected ? "skills-row-check-button-on" : ""}`}
-                      onClick={() => onToggleSkill(s.name)}
-                      aria-pressed={isSelected}
-                      aria-label={`${isSelected ? "Deselect" : "Select"} skill ${s.name}`}
-                    >
-                      {isSelected ? "x" : ""}
-                    </button>
-                    <span className="ws-skill-selector-name">{s.name}</span>
-                    <span className="ws-skill-selector-desc">{s.description}</span>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
+        <TargetSkillSelector
+          skills={skills}
+          selectedSkills={selectedSkills}
+          skillSearch={skillSearch}
+          onToggleSkill={onToggleSkill}
+          onSelectAllSkills={onSelectAllSkills}
+          onClearSelectionSkills={onClearSelectionSkills}
+          onSetSkillSearch={onSetSkillSearch}
+        />
       )}
     </div>
   );

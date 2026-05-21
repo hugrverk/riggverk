@@ -1,5 +1,6 @@
+import { TargetMiscSkillsPanel } from "../components/TargetMiscSkillsPanel";
+import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
-import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
@@ -79,12 +80,12 @@ export function MiscView({
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Misc target controls">
-          <div className="ws-page-label">MISC</div>
-
-          <p className="target-page-lead">
-            Passive rule sync targets for Auggie and Claude. They share the workspace global rules template.
-            Sync behavior follows whichever rule targets are enabled.
-          </p>
+          <TargetPageHeader
+            title="Misc"
+            summary="Passive rule and skill targets for Auggie and Claude."
+            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            warning={!workspaceValid ? "Select a valid workspace on Start before syncing passive targets." : undefined}
+          />
 
           <TargetSettingsPanel
             page="misc"
@@ -100,13 +101,12 @@ export function MiscView({
           {workspaceValid && (
             <div className="ws-section" role="region" aria-label="Passive rules sync">
               <div className="ws-section-header">
-                <span className="ws-section-title">RULES</span>
+                <span className="ws-section-title">Rules</span>
               </div>
-              <p className="target-page-hint">
-                Diff and sync operate on all enabled rule targets.
-              </p>
+              <p className="target-compact-note">All enabled rule targets</p>
               <div className="ws-section-actions">
                 <button
+                  type="button"
                   className="btn btn-sm"
                   disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
                   onClick={onDiffRules}
@@ -114,6 +114,7 @@ export function MiscView({
                   diff enabled rules
                 </button>
                 <button
+                  type="button"
                   className="btn btn-sm btn-primary"
                   disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
                   onClick={onSyncRules}
@@ -124,45 +125,23 @@ export function MiscView({
             </div>
           )}
 
-          <TargetSkillsPanel
-            targetName="Auggie"
-            installAgents={["auggie"]}
+          <TargetMiscSkillsPanel
             skills={skills}
             skillsLoaded={skillsLoaded}
             selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             wsRunning={wsRunning}
             workspaceValid={workspaceValid}
-            onDryRun={onDryRunAuggieSkills}
-            onInstall={onInstallAuggieSkills}
+            onDryRunAuggie={onDryRunAuggieSkills}
+            onInstallAuggie={onInstallAuggieSkills}
+            onDryRunClaude={onDryRunClaudeSkills}
+            onInstallClaude={onInstallClaudeSkills}
             onToggleSkill={onToggleSkill}
             onSelectAllSkills={onSelectAllSkills}
             onClearSelectionSkills={onClearSelectionSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
-
-          <TargetSkillsPanel
-            targetName="Claude"
-            installAgents={["claude"]}
-            skills={skills}
-            skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
-            skillSearch={skillSearch}
-            wsRunning={wsRunning}
-            workspaceValid={workspaceValid}
-            onDryRun={onDryRunClaudeSkills}
-            onInstall={onInstallClaudeSkills}
-            onToggleSkill={onToggleSkill}
-            onSelectAllSkills={onSelectAllSkills}
-            onClearSelectionSkills={onClearSelectionSkills}
-            onSetSkillSearch={onSetSkillSearch}
-            onOpenInstallScript={onOpenInstallScript}
-          />
-
-          {!workspaceValid && (
-            <div className="ws-card-warn">Select a valid workspace on Start before syncing passive targets.</div>
-          )}
         </div>
 
         <WorkspaceTerminal

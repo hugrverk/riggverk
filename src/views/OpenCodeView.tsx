@@ -1,3 +1,4 @@
+import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -86,13 +87,12 @@ export function OpenCodeView({
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="OpenCode controls">
-          <div className="ws-page-label">OPENCODE</div>
-
-          <p className="target-page-lead">
-            OpenCode config is generated from workspace Base and Policy sources.
-            Generate the snapshot before sync when status is stale.
-            The app triggers existing scripts only.
-          </p>
+          <TargetPageHeader
+            title="OpenCode"
+            summary="Runtime config, bundled agents, generated snapshot, and OpenCode skills."
+            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            warning={!workspaceValid ? "Select a valid workspace on Start before running OpenCode actions." : undefined}
+          />
 
           <TargetSettingsPanel
             page="opencode"
@@ -108,7 +108,7 @@ export function OpenCodeView({
           {workspaceValid && (
             <div className="ws-section" role="region" aria-label="OpenCode Runtime health">
               <div className="ws-section-header">
-                <span className="ws-section-title">OPENCODE RUNTIME</span>
+                <span className="ws-section-title">Runtime</span>
                 {opencodeRuntimeHealth ? (
                   <SectionChip label={runtimeChipLabel(opencodeRuntimeHealth.status)} tone={runtimeChipTone(opencodeRuntimeHealth.status)} />
                 ) : (
@@ -265,9 +265,6 @@ export function OpenCodeView({
             onOpenInstallScript={onOpenInstallScript}
           />
 
-          {!workspaceValid && (
-            <div className="ws-card-warn">Select a valid workspace on Start before running OpenCode actions.</div>
-          )}
         </div>
 
         <WorkspaceTerminal

@@ -33,92 +33,102 @@ export function TargetSettingsPanel({
   const showCustomSelection = activeProfileId === null
     || (activeProfileId !== null && !profileMatchesPage && !pageProfiles.some(p => p.id === activeProfileId));
 
+  const activeProfile = pageProfiles.find(p => p.id === activeProfileId);
+
   return (
-    <div className="target-settings-panel" role="region" aria-label={`${page} target settings`}>
+    <div className="target-panel target-settings-panel" role="region" aria-label={`${page} target settings`}>
       {settingsDirty && (
         <div className="target-settings-dirty" role="status">
-          Target changes modified — save in Settings to persist.
+          Unsaved target changes — save in Settings to persist.
         </div>
       )}
 
-      {pageProfiles.length > 0 && (
-        <div className="settings-section">
-          <div className="settings-section-label">TARGET PROFILES</div>
-          <div className="settings-section-body">
-            <div className="settings-profile-list">
+      <div className="target-panel-header">
+        <h2 className="target-panel-title">Targets</h2>
+      </div>
+
+      <div className="target-panel-body">
+        {pageProfiles.length > 0 && (
+          <div className="target-panel-row target-panel-row-profiles">
+            <span className="target-panel-row-label">profiles</span>
+            <div className="target-profile-chips">
               {pageProfiles.map(p => (
-                <div key={p.id} className="settings-profile-row">
-                  <button
-                    className={`btn btn-sm settings-profile-button ${activeProfileId === p.id ? "settings-profile-active" : ""}`}
-                    aria-pressed={activeProfileId === p.id}
-                    onClick={() => onApplyProfile(p.id)}
-                  >
-                    {p.label}
-                  </button>
-                  <span className={`settings-profile-description ${activeProfileId === p.id ? "settings-profile-desc-active" : ""}`}>
-                    {p.description}
-                  </span>
-                </div>
+                <button
+                  key={p.id}
+                  type="button"
+                  className={`btn btn-sm target-profile-chip ${activeProfileId === p.id ? "target-profile-chip-active" : ""}`}
+                  aria-pressed={activeProfileId === p.id}
+                  title={p.description}
+                  onClick={() => onApplyProfile(p.id)}
+                >
+                  {p.label}
+                </button>
               ))}
               {showCustomSelection && (
-                <div className="settings-profile-custom">
-                  <span className="settings-profile-description">custom selection</span>
-                </div>
+                <span className="target-profile-chip target-profile-chip-custom" aria-current="true">
+                  custom
+                </span>
               )}
             </div>
+            {activeProfile && (
+              <p className="target-profile-desc">{activeProfile.description}</p>
+            )}
+            {showCustomSelection && !activeProfile && (
+              <p className="target-profile-desc">Manual target selection</p>
+            )}
           </div>
-        </div>
-      )}
+        )}
 
-      {ruleTargets.length > 0 && (
-        <div className="settings-section">
-          <div className="settings-section-label">SYNC TARGETS</div>
-          <div className="settings-section-body">
+        {ruleTargets.length > 0 && (
+          <div className="target-panel-group">
+            <div className="target-panel-group-label">rules</div>
             <div className="settings-target-list">
               {ruleTargets.map(t => {
                 const enabled = appSettings.enabled_target_ids.includes(t.id);
                 return (
                   <button
                     key={t.id}
+                    type="button"
                     className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
                     onClick={() => onToggleTarget(t.id)}
                     aria-pressed={enabled}
+                    title={`${t.target_rel} ← ${t.source_rel}`}
                   >
                     <span className={`settings-target-dot ${enabled ? "settings-target-dot-on" : ""}`} />
                     <span className="cell-value">{t.label}</span>
-                    <span className="settings-target-path" title={`${t.target_rel} ← ${t.source_rel}`}>{t.target_rel}</span>
+                    <span className="settings-target-path">{t.target_rel}</span>
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {configTargets.length > 0 && (
-        <div className="settings-section">
-          <div className="settings-section-label">CONFIG TARGETS</div>
-          <div className="settings-section-body">
+        {configTargets.length > 0 && (
+          <div className="target-panel-group">
+            <div className="target-panel-group-label">config</div>
             <div className="settings-target-list">
               {configTargets.map(t => {
                 const enabled = appSettings.enabled_target_ids.includes(t.id);
                 return (
                   <button
                     key={t.id}
+                    type="button"
                     className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
                     onClick={() => onToggleTarget(t.id)}
                     aria-pressed={enabled}
+                    title={`${t.target_rel} ← ${t.source_rel}`}
                   >
                     <span className={`settings-target-dot ${enabled ? "settings-target-dot-on" : ""}`} />
                     <span className="cell-value">{t.label}</span>
-                    <span className="settings-target-path" title={`${t.target_rel} ← ${t.source_rel}`}>{t.target_rel}</span>
+                    <span className="settings-target-path">{t.target_rel}</span>
                   </button>
                 );
               })}
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }

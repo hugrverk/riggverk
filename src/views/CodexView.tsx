@@ -1,3 +1,4 @@
+import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -83,12 +84,12 @@ export function CodexView({
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Codex controls">
-          <div className="ws-page-label">CODEX</div>
-
-          <p className="target-page-lead">
-            Codex rules sync AGENTS.md-style rules from the selected workspace template.
-            Codex config syncs <code>templates/codex/config.toml</code> to your Codex install path.
-          </p>
+          <TargetPageHeader
+            title="Codex"
+            summary="Rules and config for Codex. Sync global agent rules and templates/codex/config.toml."
+            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            warning={!workspaceValid ? "Select a valid workspace on Start before running Codex actions." : undefined}
+          />
 
           <TargetSettingsPanel
             page="codex"
@@ -104,13 +105,12 @@ export function CodexView({
           {workspaceValid && (
             <div className="ws-section" role="region" aria-label="Codex rules sync">
               <div className="ws-section-header">
-                <span className="ws-section-title">RULES</span>
+                <span className="ws-section-title">Rules</span>
               </div>
-              <p className="target-page-hint">
-                Diff and sync operate on all enabled rule targets, not Codex alone.
-              </p>
+              <p className="target-compact-note">All enabled rule targets</p>
               <div className="ws-section-actions">
                 <button
+                  type="button"
                   className="btn btn-sm"
                   disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
                   onClick={onDiffRules}
@@ -118,6 +118,7 @@ export function CodexView({
                   diff enabled rules
                 </button>
                 <button
+                  type="button"
                   className="btn btn-sm btn-primary"
                   disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null}
                   onClick={onSyncRules}
@@ -131,13 +132,14 @@ export function CodexView({
           {workspaceValid && (
             <div className="ws-section" role="region" aria-label="Codex config sync">
               <div className="ws-section-header">
-                <span className="ws-section-title">CONFIG</span>
+                <span className="ws-section-title">Config</span>
               </div>
-              <p className="target-page-hint">
-                Config diff/sync runs for enabled config targets when codex config is enabled.
+              <p className="target-compact-note">
+                Enabled config targets{codexConfigEnabled ? "" : " · codex config off"}
               </p>
               <div className="ws-section-actions">
                 <button
+                  type="button"
                   className="btn btn-sm"
                   disabled={!workspaceValid || !configEnabled || wsRunning !== null}
                   onClick={onDiffConfigs}
@@ -145,6 +147,7 @@ export function CodexView({
                   diff enabled configs
                 </button>
                 <button
+                  type="button"
                   className="btn btn-sm btn-primary"
                   disabled={!workspaceValid || !codexConfigEnabled || !configEnabled || wsRunning !== null}
                   onClick={onSyncConfigs}
@@ -154,7 +157,9 @@ export function CodexView({
                 </button>
               </div>
               {!codexConfigEnabled && configEnabled && (
-                <div className="ws-card-warn">codex config target is disabled in sync targets above.</div>
+                <p className="target-compact-note target-compact-note-warn" role="status">
+                  Enable codex config in Targets to sync.
+                </p>
               )}
             </div>
           )}
@@ -176,10 +181,6 @@ export function CodexView({
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
-
-          {!workspaceValid && (
-            <div className="ws-card-warn">Select a valid workspace on Start before running Codex actions.</div>
-          )}
         </div>
 
         <WorkspaceTerminal
