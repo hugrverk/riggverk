@@ -1,6 +1,0 @@
-# Conservative Codex profile template.
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[notes]
-purpose = "Manual profile reference; sync does not run Codex."

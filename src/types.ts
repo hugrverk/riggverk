@@ -57,7 +57,7 @@ export const INSTALL_AGENTS = ["codex", "opencode", "claude", "auggie", "cursor"
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
 
 export interface InstallSkillsRequest {
-  agents: string[]; scope: string; target?: string; skills: string[]; dry_run: boolean;
+  agents: string[]; skills: string[]; dry_run: boolean;
 }
 
 export interface AgentTargetMeta {
@@ -252,10 +252,6 @@ export interface CursorProfileHealth {
   global_agents_status: string;
   global_agents_count: number;
   expected_global_agents_count: number;
-  project_target: string | null;
-  project_agents_status: string;
-  project_rules_status: string;
-  project_skills_status: string;
   mcp_status: string;
   sandbox_status: string;
   sandbox_profiles_count: number;

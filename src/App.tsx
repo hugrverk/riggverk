@@ -115,7 +115,6 @@ function App() {
   // opencode runtime health
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
-  const [cursorProjectTarget, setCursorProjectTarget] = useState("");
 
   const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -128,11 +127,9 @@ function App() {
     }
   }, [isWorkspaceLoadCurrent]);
 
-  const loadCursorProfileHealth = useCallback(async (generation = workspaceLoadGenerationRef.current, target = cursorProjectTarget) => {
+  const loadCursorProfileHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      const health = await invoke<CursorProfileHealth>("get_cursor_profile_health", {
-        projectTarget: target.trim() || null,
-      });
+      const health = await invoke<CursorProfileHealth>("get_cursor_profile_health");
       if (!isWorkspaceLoadCurrent(generation)) return;
       setCursorProfileHealth(health);
     } catch (e) {
@@ -140,7 +137,7 @@ function App() {
       setCursorProfileHealth(null);
       if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${e}`);
     }
-  }, [cursorProjectTarget, isWorkspaceLoadCurrent]);
+  }, [isWorkspaceLoadCurrent]);
 
   const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -181,8 +178,6 @@ function App() {
   // install skills state
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
   const [installAgents, setInstallAgents] = useState<Set<string>>(new Set(["opencode"]));
-  const [installScope, setInstallScope] = useState<"global" | "project">("global");
-  const [installTarget, setInstallTarget] = useState("");
   const skillsSelectionTouched = useRef(false);
 
   // skill preview state
@@ -628,8 +623,6 @@ function App() {
     isInvalidWorkspaceError,
     workspaceDiagnostics,
     installAgents,
-    installScope,
-    installTarget,
     selectedSkills,
     setError,
   });
@@ -1093,20 +1086,17 @@ function App() {
       label,
       action,
       task: async () => {
-        return await invoke<ActionResult>("run_cursor_profile_action", {
-          action,
-          projectTarget: cursorProjectTarget.trim() || null,
-        });
+        return await invoke<ActionResult>("run_cursor_profile_action", { action });
       },
       toActionResult: (r) => r,
       refresh: async () => {
         await Promise.all([
-          loadCursorProfileHealth(workspaceLoadGenerationRef.current, cursorProjectTarget),
+          loadCursorProfileHealth(workspaceLoadGenerationRef.current),
           fetchStatus(),
         ]);
       },
     });
-  }, [runWsTask, cursorProjectTarget, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
+  }, [runWsTask, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const configTargets = useMemo(
@@ -1118,7 +1108,7 @@ function App() {
   const gitAvailable = status?.git_available === true;
   const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
   const installAgentsArray = useMemo(() => Array.from(installAgents), [installAgents]);
-  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning && (installScope !== "project" || installTarget.trim() !== "");
+  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning;
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -1312,16 +1302,20 @@ function App() {
             })}
             // cursor profile
             cursorProfileHealth={cursorProfileHealth}
-            cursorProjectTarget={cursorProjectTarget}
-            onSetCursorProjectTarget={setCursorProjectTarget}
             onRefreshCursorProfile={() => loadCursorProfileHealth()}
             onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
             onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
             onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
             onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
             onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
-            onCursorDiffProject={() => runCursorProfileAction("cursor_diff_project", "cursor dry-run project")}
-            onCursorSyncProject={() => runCursorProfileAction("cursor_sync_project", "cursor sync project")}
+            onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
+            onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
+            onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
+            onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
+            onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
+            onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
+            onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
+            onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
             onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
             // skills
             skills={skills}
@@ -1329,8 +1323,6 @@ function App() {
             selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             installAgents={installAgentsArray}
-            installScope={installScope}
-            installTarget={installTarget}
             skillsCanInstall={skillsCanInstall}
             onDryRunSkills={() => runWsInstall(true)}
             onInstallSkills={() => runWsInstall(false)}
@@ -1338,8 +1330,6 @@ function App() {
             onSelectAllSkills={selectAll}
             onClearSelectionSkills={clearSelection}
             onToggleInstallAgent={toggleInstallAgent}
-            onSetInstallScope={setInstallScope}
-            onSetInstallTarget={setInstallTarget}
             onSetSkillSearch={setSkillSearch}
             onOpenInstallScript={openInstallScript}
             // backups

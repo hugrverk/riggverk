@@ -23,7 +23,7 @@ Selecting a workspace is a trust decision. The app exposes allowlisted actions o
 Available when a valid workspace is active. Three action lanes:
 
 - **SYNC**: Pull from Git (`git pull --ff-only`), diff rules (preview changes), sync rules (apply), diff configs, sync configs
-- **SKILLS**: Select skills, choose agents and scope, dry-run install, apply install
+- **SKILLS**: Select skills, choose agents, dry-run global install, apply global install
 - **VERIFY**: View backup count, open backups folder, and run `release-check` only when the selected workspace includes `scripts/release-check.sh`. Workspace contract validation is in the Inventory panel below.
 
 ### Inventory panel (collapsible)

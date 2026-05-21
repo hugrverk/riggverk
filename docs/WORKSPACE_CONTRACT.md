@@ -20,7 +20,7 @@ workspace) and bundled default resources (shipped with the app, not strictly req
 | `scripts/bootstrap.sh` | file | Full bootstrap script |
 | `scripts/install-agent-rules.sh` | file | Agent rules sync script |
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
-| `scripts/install-codex-config.sh` | file | Codex config/profile sync script |
+| `scripts/install-codex-config.sh` | file | Codex config sync script |
 | `scripts/install-skills.sh` | file | Skill install script |
 | `scripts/install-cursor-workspace.sh` | file | Cursor subagent and project-rule setup script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
@@ -96,7 +96,7 @@ The app source carries a generic starter workspace under `resources/default-work
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
-A newly created default workspace includes real sync and install scripts plus five focused Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude, Auggie. Skill install targets: Codex, OpenCode, Claude, Auggie, Cursor. Config/setup sync targets: OpenCode config + agents, and Cursor global subagents. Cursor project rules are available through the Cursor setup script with an explicit project target. All writes are explicit apply/install actions and are allowlisted. Backups are created before overwriting diverged target files. Project skill install and Cursor project sync require a real project marker and reject broad parent directories.
+A newly created default workspace includes real sync and install scripts plus five focused Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude, Auggie. Skill install targets (app: global only): Codex, OpenCode, Claude, Auggie, Cursor. Config/setup sync targets: OpenCode config + agents, and Cursor global subagents. All app writes are explicit apply/install actions to global/home paths and are allowlisted. Backups are created before overwriting diverged target files. The app does not drive project checkout sync or install. Bundled CLI scripts may still accept `--project --target` when run manually; those flags are CLI-only and outside app workflow.
 
 These resources are not automatically copied into the active workspace. A repair flow (`plan_workspace_repair` / `apply_workspace_repair`) copies only missing bundled files into an existing workspace. Repair never overwrites user edits, never executes scripts, and rejects unsafe paths.
 

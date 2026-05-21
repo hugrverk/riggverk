@@ -124,8 +124,6 @@ root = Path("resources/default-workspace/templates/codex")
 required = [
     root / "README.md",
     root / "config.toml",
-    root / "profiles/safe.toml",
-    root / "profiles/workspace-write.toml",
     root / "mcp/README.md",
     root / "mcp/playwright.toml",
 ]
@@ -141,8 +139,15 @@ for path in required:
 config = tomllib.loads((root / "config.toml").read_text())
 if config.get("profile") != "safe":
     raise SystemExit("FAIL: Codex config must default to safe profile")
+profiles = config.get("profiles")
+if not isinstance(profiles, dict):
+    raise SystemExit("FAIL: Codex config must define [profiles.*] sections")
+for name in ("safe", "workspace-write"):
+    profile = profiles.get(name)
+    if not isinstance(profile, dict):
+        raise SystemExit(f"FAIL: Codex config missing [profiles.{name}]")
 PY
-printf '  Codex config/profile templates valid\n'
+printf '  Codex config template valid\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
@@ -970,6 +975,22 @@ if search_has_match -w "$private_name_pattern" resources/default-workspace; then
   printf 'FAIL: bundled default workspace must not contain private names\n' >&2
   exit 1
 fi
+
+step "app must not expose project-target sync/install UI"
+app_project_pattern='cursorProjectTarget|cursor_diff_project|cursor_sync_project|onCursorDiffProject|onCursorSyncProject|dry-run project|sync project|installScope|installTarget|Project install target|Project scope needs|validate_project_install_target|project scope requires'
+if command -v rg >/dev/null 2>&1; then
+  if rg -n "$app_project_pattern" src src-tauri -g '!target/**' >/dev/null 2>&1; then
+    printf 'FAIL: app source still references project-target UI/actions\n' >&2
+    rg -n "$app_project_pattern" src src-tauri -g '!target/**' >&2 || true
+    exit 1
+  fi
+else
+  if grep -R -n -E "$app_project_pattern" src src-tauri 2>/dev/null | grep -v target; then
+    printf 'FAIL: app source still references project-target UI/actions\n' >&2
+    exit 1
+  fi
+fi
+printf '  no project-target app surfaces in src/ or src-tauri/\n'
 
 step "forbidden source scans"
 scan_forbidden 'sh[[:space:]]+-c' 'sh -c'

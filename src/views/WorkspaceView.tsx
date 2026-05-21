@@ -45,16 +45,20 @@ interface WorkspaceViewProps {
   onApplyWorkspaceRepair: () => void;
   // cursor profile
   cursorProfileHealth: CursorProfileHealth | null;
-  cursorProjectTarget: string;
-  onSetCursorProjectTarget: (value: string) => void;
   onRefreshCursorProfile: () => void;
   onCursorDiffGlobal: () => void;
   onCursorSyncGlobal: () => void;
   onCursorShowUserRules: () => void;
   onCursorCopyUserRules: () => void;
   onCursorOpenSettings: () => void;
-  onCursorDiffProject: () => void;
-  onCursorSyncProject: () => void;
+  onCursorShowPlaywrightMcp: () => void;
+  onCursorCopyPlaywrightMcp: () => void;
+  onCursorShowSandboxSafe: () => void;
+  onCursorCopySandboxSafe: () => void;
+  onCursorShowSandboxPlaywrightSafe: () => void;
+  onCursorCopySandboxPlaywrightSafe: () => void;
+  onCursorShowSandboxPlaywrightFull: () => void;
+  onCursorCopySandboxPlaywrightFull: () => void;
   onCursorValidateProfile: () => void;
   // skills compact
   skills: SkillSummary[];
@@ -62,8 +66,6 @@ interface WorkspaceViewProps {
   selectedSkills: Set<string>;
   skillSearch: string;
   installAgents: string[];
-  installScope: string;
-  installTarget: string;
   skillsCanInstall: boolean;
   onDryRunSkills: () => void;
   onInstallSkills: () => void;
@@ -71,8 +73,6 @@ interface WorkspaceViewProps {
   onSelectAllSkills: () => void;
   onClearSelectionSkills: () => void;
   onToggleInstallAgent: (agent: InstallAgent) => void;
-  onSetInstallScope: (scope: "global" | "project") => void;
-  onSetInstallTarget: (value: string) => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
   // backups
@@ -149,16 +149,20 @@ export function WorkspaceView({
   onPlanWorkspaceRepair,
   onApplyWorkspaceRepair,
   cursorProfileHealth,
-  cursorProjectTarget,
-  onSetCursorProjectTarget,
   onRefreshCursorProfile,
   onCursorDiffGlobal,
   onCursorSyncGlobal,
   onCursorShowUserRules,
   onCursorCopyUserRules,
   onCursorOpenSettings,
-  onCursorDiffProject,
-  onCursorSyncProject,
+  onCursorShowPlaywrightMcp,
+  onCursorCopyPlaywrightMcp,
+  onCursorShowSandboxSafe,
+  onCursorCopySandboxSafe,
+  onCursorShowSandboxPlaywrightSafe,
+  onCursorCopySandboxPlaywrightSafe,
+  onCursorShowSandboxPlaywrightFull,
+  onCursorCopySandboxPlaywrightFull,
   onCursorValidateProfile,
   // skills
   skills,
@@ -166,8 +170,6 @@ export function WorkspaceView({
   selectedSkills,
   skillSearch,
   installAgents,
-  installScope,
-  installTarget,
   skillsCanInstall,
   onDryRunSkills,
   onInstallSkills,
@@ -175,8 +177,6 @@ export function WorkspaceView({
   onSelectAllSkills,
   onClearSelectionSkills,
   onToggleInstallAgent,
-  onSetInstallScope,
-  onSetInstallTarget,
   onSetSkillSearch,
   onOpenInstallScript,
   // backups
@@ -626,13 +626,6 @@ export function WorkspaceView({
                       </span>
                     </div>
                     <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Project</span>
-                      <span className={`ws-dot ${cursorProfileHealth.project_agents_status === "synced" && cursorProfileHealth.project_rules_status === "synced" ? "ws-color-ok" : cursorProfileHealth.project_agents_status === "unknown" ? "ws-color-dim" : "ws-color-warn"}`}>{"\u25CF"}</span>
-                      <span className="ws-runtime-row-value">
-                        agents {cursorProfileHealth.project_agents_status} | rules {cursorProfileHealth.project_rules_status} | skills {cursorProfileHealth.project_skills_status}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
                       <span className="ws-runtime-row-label">MCP</span>
                       <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
                       <span className="ws-runtime-row-value">{cursorProfileHealth.mcp_status}</span>
@@ -657,27 +650,31 @@ export function WorkspaceView({
                     {cursorProfileHealth.next_action}
                   </div>
 
-                  <div className="ws-card-project-target">
-                    <input
-                      className="install-target-input"
-                      type="text"
-                      placeholder="/path/to/project"
-                      value={cursorProjectTarget}
-                      onChange={e => onSetCursorProjectTarget(e.target.value)}
-                      aria-label="Cursor project target path"
-                    />
-                  </div>
-
-                  <div className="ws-section-actions">
-                    <button className="btn btn-sm" onClick={onRefreshCursorProfile} disabled={wsRunning !== null}>refresh</button>
-                    <button className="btn btn-sm" onClick={onCursorDiffGlobal} disabled={wsRunning !== null}>diff global</button>
-                    <button className="btn btn-sm btn-primary" onClick={onCursorSyncGlobal} disabled={wsRunning !== null}>sync global</button>
-                    <button className="btn btn-sm" onClick={onCursorShowUserRules} disabled={wsRunning !== null}>show rules</button>
-                    <button className="btn btn-sm" onClick={onCursorCopyUserRules} disabled={wsRunning !== null}>copy rules</button>
-                    <button className="btn btn-sm" onClick={onCursorOpenSettings} disabled={wsRunning !== null}>open settings</button>
-                    <button className="btn btn-sm" onClick={onCursorDiffProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>dry-run project</button>
-                    <button className="btn btn-sm btn-primary" onClick={onCursorSyncProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>sync project</button>
-                    <button className="btn btn-sm" onClick={onCursorValidateProfile} disabled={wsRunning !== null}>validate</button>
+                  <div className="ws-cursor-action-groups">
+                    <div className="ws-cursor-action-group">
+                      <span className="ws-cursor-action-group-label">Global</span>
+                      <button className="btn btn-sm" onClick={onRefreshCursorProfile} disabled={wsRunning !== null}>refresh</button>
+                      <button className="btn btn-sm" onClick={onCursorDiffGlobal} disabled={wsRunning !== null}>diff</button>
+                      <button className="btn btn-sm btn-primary" onClick={onCursorSyncGlobal} disabled={wsRunning !== null}>sync</button>
+                      <button className="btn btn-sm" onClick={onCursorValidateProfile} disabled={wsRunning !== null}>validate</button>
+                    </div>
+                    <div className="ws-cursor-action-group">
+                      <span className="ws-cursor-action-group-label">Rules</span>
+                      <button className="btn btn-sm" onClick={onCursorShowUserRules} disabled={wsRunning !== null}>show</button>
+                      <button className="btn btn-sm" onClick={onCursorCopyUserRules} disabled={wsRunning !== null}>copy</button>
+                      <button className="btn btn-sm" onClick={onCursorOpenSettings} disabled={wsRunning !== null}>settings</button>
+                    </div>
+                    <div className="ws-cursor-action-group">
+                      <span className="ws-cursor-action-group-label">Templates</span>
+                      <button className="btn btn-sm" onClick={onCursorShowPlaywrightMcp} disabled={wsRunning !== null}>MCP show</button>
+                      <button className="btn btn-sm" onClick={onCursorCopyPlaywrightMcp} disabled={wsRunning !== null}>MCP copy</button>
+                      <button className="btn btn-sm" onClick={onCursorShowSandboxSafe} disabled={wsRunning !== null}>safe show</button>
+                      <button className="btn btn-sm" onClick={onCursorCopySandboxSafe} disabled={wsRunning !== null}>safe copy</button>
+                      <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightSafe} disabled={wsRunning !== null}>pw-safe show</button>
+                      <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightSafe} disabled={wsRunning !== null}>pw-safe copy</button>
+                      <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightFull} disabled={wsRunning !== null}>pw-full show</button>
+                      <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightFull} disabled={wsRunning !== null}>pw-full copy</button>
+                    </div>
                   </div>
                 </>
               )}
@@ -709,7 +706,7 @@ export function WorkspaceView({
                 <button className="btn btn-sm" onClick={onOpenInstallScript}>open script</button>
               </div>
               <div className="ws-card-targets">
-                <span className="ws-card-targets-label">target</span>
+                <span className="ws-card-targets-label">agents (global)</span>
                 <div className="ws-card-target-buttons">
                   {INSTALL_AGENTS.map(a => (
                     <button
@@ -719,29 +716,8 @@ export function WorkspaceView({
                       aria-pressed={installAgents.includes(a)}
                     >{a}</button>
                   ))}
-                  <span className="ws-card-target-sep">|</span>
-                  {(["global", "project"] as const).map(s => (
-                    <button
-                      key={s}
-                      className={`btn btn-sm ${installScope === s ? "btn-active" : ""}`}
-                      onClick={() => onSetInstallScope(s)}
-                      aria-pressed={installScope === s}
-                    >{s}</button>
-                  ))}
                 </div>
               </div>
-              {installScope === "project" && (
-                <div className="ws-card-project-target">
-                  <input
-                    className="install-target-input"
-                    type="text"
-                    placeholder="/path/to/project"
-                    value={installTarget}
-                    onChange={e => onSetInstallTarget(e.target.value)}
-                    aria-label="Project install target path"
-                  />
-                </div>
-              )}
               {workspaceValid && !skillsLoaded && !wsRunning && (
                 <div className="ws-card-warn">Loading skills...</div>
               )}
@@ -753,9 +729,7 @@ export function WorkspaceView({
                       ? "No skills selected."
                       : installAgents.length === 0
                         ? "No agents selected."
-                        : installScope === "project" && !installTarget.trim()
-                          ? "Project scope needs a target path."
-                          : null}
+                        : null}
                 </div>
               )}
 

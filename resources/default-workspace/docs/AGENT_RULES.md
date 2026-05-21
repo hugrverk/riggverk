@@ -24,7 +24,7 @@ When synced, the template is written to tool-specific global rule paths:
 | Auggie | `~/.augment/rules/global.md` |
 | Claude | `~/.claude/CLAUDE.md` |
 
-Cursor project rules are separate from this global rules sync. Use `scripts/install-cursor-workspace.sh --project --target /path/to/project` to install the focused `.cursor/rules/*.mdc` rule set into a project.
+Cursor project rules are separate from this global rules sync. CLI-only: `scripts/install-cursor-workspace.sh --project --target /path/to/project` installs `.cursor/rules/*.mdc` into a project checkout. The app does not expose project sync.
 
 Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md`. This file adds Cursor-specific operating mode defaults (parent Agent as primary implementation architect, subagent guidance) that must not appear in the cross-tool `templates/global-agent-rules.md`. Use `./scripts/install-cursor-workspace.sh --show-user-rules` to view or `--copy-user-rules` to copy to clipboard for pasting into Cursor Settings > Rules > User Rules. Cursor User Rules are not synced as a file-backed target; the script does not write to undocumented Cursor internal storage.
 

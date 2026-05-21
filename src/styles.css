@@ -4157,6 +4157,30 @@ html, body, #root {
   gap: 4px;
 }
 
+.ws-cursor-action-groups {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ws-cursor-action-group {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+}
+
+.ws-cursor-action-group-label {
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  opacity: 0.7;
+  min-width: 52px;
+  flex-shrink: 0;
+}
+
 .ws-section-context {
   font-size: 10px;
   color: var(--text-muted);

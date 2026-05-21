@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
-
-use crate::agent_targets;
+use std::path::Path;
 
 use super::content::safe_canonical_target;
 use super::content::DocumentContent;
@@ -168,70 +166,6 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-fn has_project_marker(target: &Path) -> bool {
-    [
-        ".git",
-        "package.json",
-        "Cargo.toml",
-        "composer.json",
-        "pyproject.toml",
-        "AGENTS.md",
-        ".opencode",
-        ".codex",
-        ".cursor",
-        "wp-content",
-        "wordpress/wp-content",
-    ]
-    .iter()
-    .any(|marker| target.join(marker).exists())
-}
-
-fn validate_project_install_target(raw: &str) -> Result<PathBuf, String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("project scope requires a target path".into());
-    }
-
-    let input = PathBuf::from(trimmed);
-    let canonical = input
-        .canonicalize()
-        .map_err(|_| "project target does not exist".to_string())?;
-
-    if !canonical.is_dir() {
-        return Err("project target is not a directory".into());
-    }
-
-    let target_str = canonical
-        .to_str()
-        .ok_or_else(|| "project target path is not valid UTF-8".to_string())?;
-
-    let home = agent_targets::home_dir()?;
-    let temp_root = std::env::temp_dir()
-        .canonicalize()
-        .unwrap_or_else(|_| std::env::temp_dir());
-    let slash_tmp = PathBuf::from("/tmp")
-        .canonicalize()
-        .unwrap_or_else(|_| PathBuf::from("/tmp"));
-    let broad_paths = [
-        PathBuf::from("/"),
-        PathBuf::from("/Users"),
-        home.clone(),
-        home.join("Projects"),
-        temp_root,
-        slash_tmp,
-    ];
-
-    if broad_paths.contains(&canonical) {
-        return Err(format!("refusing broad project target: {}", target_str));
-    }
-
-    if !has_project_marker(&canonical) {
-        return Err("project target does not look like a project checkout".into());
-    }
-
-    Ok(canonical)
-}
-
 const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "auggie", "cursor"];
 
 fn validate_agent(agent: &str) -> Result<(), String> {
@@ -254,8 +188,6 @@ fn workspace_script_arg(root: &Path, script_rel: &str) -> Result<String, String>
 #[derive(Deserialize)]
 pub struct InstallSkillsRequest {
     agents: Vec<String>,
-    scope: String,
-    target: Option<String>,
     skills: Vec<String>,
     dry_run: bool,
 }
@@ -267,17 +199,6 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
     for a in &request.agents {
         validate_agent(a)?;
-    }
-
-    match request.scope.as_str() {
-        "global" => {}
-        "project" => match &request.target {
-            Some(t) => {
-                validate_project_install_target(t)?;
-            }
-            _ => return Err("project scope requires a target path".into()),
-        },
-        s => return Err(format!("invalid scope: {}", s)),
     }
 
     if request.skills.is_empty() {
@@ -301,16 +222,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
         args.push(agent.clone());
     }
 
-    match request.scope.as_str() {
-        "global" => args.push("--global".into()),
-        "project" => {
-            let target = validate_project_install_target(request.target.as_deref().unwrap_or(""))?;
-            args.push("--project".into());
-            args.push("--target".into());
-            args.push(path_arg(&target)?);
-        }
-        _ => unreachable!(),
-    }
+    args.push("--global".into());
 
     for skill in &request.skills {
         args.push("--skill".into());
@@ -351,7 +263,7 @@ pub fn open_install_skills_script() -> Result<ActionResult, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{discover_skills, validate_project_install_target};
+    use super::discover_skills;
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -486,31 +398,6 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
 
         assert!(exists, "flat skill id must resolve to SKILL.md");
-    }
-
-    #[test]
-    fn project_target_validation_rejects_unmarked_directory() {
-        let root = temp_root("unmarked-project");
-        fs::create_dir_all(&root).expect("create temp dir");
-
-        let result = validate_project_install_target(root.to_str().expect("utf8 temp path"));
-        let _ = fs::remove_dir_all(&root);
-
-        assert_eq!(
-            result.expect_err("unmarked project should be rejected"),
-            "project target does not look like a project checkout"
-        );
-    }
-
-    #[test]
-    fn project_target_validation_accepts_git_marker() {
-        let root = temp_root("marked-project");
-        fs::create_dir_all(root.join(".git")).expect("create git marker");
-
-        let result = validate_project_install_target(root.to_str().expect("utf8 temp path"));
-        let _ = fs::remove_dir_all(&root);
-
-        assert!(result.is_ok());
     }
 
     #[test]
