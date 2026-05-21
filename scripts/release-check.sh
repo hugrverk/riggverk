@@ -299,19 +299,7 @@ if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
 fi
 
 step "default workspace copy list includes generator + base/policy templates"
-for required_asset in \
-  'scripts/generate-opencode-config.py' \
-  'templates/opencode.base.json' \
-  'templates/opencode.policy.json' \
-  'templates/playwright-mcp.config.json' \
-  'scripts/playwright-mcp-lib.sh' \
-  'scripts/check-playwright-mcp.sh'; do
-  if ! grep -qF "$required_asset" src-tauri/src/commands/defaults.rs; then
-    printf 'FAIL: default workspace copy list missing: %s\n' "$required_asset" >&2
-    exit 1
-  fi
-done
-printf '  generator + base/policy: listed in defaults.rs\n'
+python3 scripts/check-default-workspace-copy-list.py
 if ! grep -q 'editable_config_targets' src-tauri/src/commands/content.rs; then
   printf 'FAIL: config template commands must use editable_config_targets\n' >&2
   exit 1

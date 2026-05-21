@@ -125,6 +125,8 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
             &[
                 "scripts/bootstrap.sh",
                 "scripts/generate-opencode-config.py",
+                "scripts/playwright-mcp-lib.sh",
+                "scripts/check-playwright-mcp.sh",
                 "scripts/install-skills.sh",
                 "scripts/install-agent-rules.sh",
                 "scripts/install-opencode-config.sh",
@@ -293,8 +295,8 @@ mod tests {
             .expect("scripts category must exist");
         assert_eq!(
             scripts.files.len(),
-            7,
-            "scripts category must have 7 known paths"
+            9,
+            "scripts category must have 9 known paths"
         );
     }
 
@@ -523,6 +525,25 @@ mod tests {
             content.contains("release-check"),
             "template must reference release-check skill"
         );
+    }
+
+    #[test]
+    fn default_workspace_files_include_playwright_mcp_assets() {
+        let files: Vec<&str> = default_workspace_files()
+            .into_iter()
+            .flat_map(|(_, paths)| paths.iter().copied())
+            .collect();
+        for rel in [
+            "templates/playwright-mcp.config.json",
+            "scripts/playwright-mcp-lib.sh",
+            "scripts/check-playwright-mcp.sh",
+        ] {
+            assert!(
+                files.contains(&rel),
+                "default workspace copy list missing: {}",
+                rel
+            );
+        }
     }
 
     #[test]

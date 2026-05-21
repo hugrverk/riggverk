@@ -1861,6 +1861,8 @@ mod tests {
         for &rel in &[
             "scripts/bootstrap.sh",
             "scripts/generate-opencode-config.py",
+            "scripts/playwright-mcp-lib.sh",
+            "scripts/check-playwright-mcp.sh",
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
             "scripts/install-opencode-config.sh",
