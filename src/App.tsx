@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } fro
 import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
+import { ToolIcon } from "./components/ToolIcon";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
 import { buildBrainSetupBlock } from "./lib/brainSetup";
 import { applyThemeSettings, defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
@@ -1227,10 +1228,7 @@ function App() {
             aria-label="Codex"
             title="Codex"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <path d="M8 8h8M8 12h8M8 16h5" />
-            </svg>
+            <ToolIcon name="codex" />
           </button>
           <button
             className={`nav-icon ${view === "opencode" ? "nav-icon-active" : ""}`}
@@ -1238,10 +1236,7 @@ function App() {
             aria-label="OpenCode"
             title="OpenCode"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <polyline points="4,17 10,11 4,5" />
-              <line x1="12" y1="19" x2="20" y2="19" />
-            </svg>
+            <ToolIcon name="opencode" />
           </button>
           <button
             className={`nav-icon ${view === "cursor" ? "nav-icon-active" : ""}`}
@@ -1249,10 +1244,7 @@ function App() {
             aria-label="Cursor"
             title="Cursor"
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
-            </svg>
+            <ToolIcon name="cursor" />
           </button>
           <button
             className={`nav-icon ${view === "misc" ? "nav-icon-active" : ""}`}
