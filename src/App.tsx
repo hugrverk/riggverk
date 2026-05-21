@@ -8,6 +8,7 @@ import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
+import { pageLabelToTargetPage } from "./lib/targetGroups";
 import { StartView } from "./views/StartView";
 import { WorkspaceView } from "./views/WorkspaceView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
@@ -1162,6 +1163,14 @@ function App() {
   const targetWorkspaceView = (
     <WorkspaceView
       pageLabel={targetPageLabel}
+      targetPage={pageLabelToTargetPage(targetPageLabel)}
+      appSettings={appSettings}
+      agentTargets={agentTargets}
+      targetProfiles={targetProfiles}
+      activeProfileId={activeProfileId}
+      settingsDirty={settingsDirty}
+      onToggleTarget={toggleTarget}
+      onApplyProfile={applyTargetProfile}
       wsLog={wsLog}
       wsLogCompletedAt={wsLogCompletedAt}
       wsRunning={wsRunning}
@@ -1511,14 +1520,9 @@ function App() {
           <SettingsView
             appSettings={appSettings}
             settingsMsg={settingsMsg}
-            agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsDirty={settingsDirty}
             onSetAppearance={setAppearance}
             onSetAccentColor={setAccentColor}
-            onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
             onSave={saveSettings}
             onReset={resetSettings}
             accentResetKey={accentResetKey}

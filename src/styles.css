@@ -1826,6 +1826,25 @@ html, body, #root {
   padding: 2px 0;
 }
 
+.target-settings-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.target-settings-dirty {
+  font-size: 11px;
+  color: var(--dirty);
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(var(--dirty-rgb, 200, 120, 80), 0.35);
+  border-radius: var(--radius);
+  background: rgba(var(--dirty-rgb, 200, 120, 80), 0.08);
+}
+
 .settings-target-path {
   color: var(--text-muted);
   font-size: 11px;

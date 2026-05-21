@@ -1,11 +1,21 @@
 import { useState, useMemo } from "react";
+import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
+import type { TargetPage } from "../lib/targetGroups";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { CursorProfileHealth, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData } from "../types";
+import type { AgentTargetMeta, AppSettings, CursorProfileHealth, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
   pageLabel?: string;
+  targetPage?: TargetPage;
+  appSettings?: AppSettings | null;
+  agentTargets?: AgentTargetMeta[];
+  targetProfiles?: TargetProfileMeta[];
+  activeProfileId?: string | null;
+  settingsDirty?: boolean;
+  onToggleTarget?: (id: string) => void;
+  onApplyProfile?: (profileId: string) => void;
   // operations
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -97,6 +107,14 @@ function runtimeChipLabel(status: string): string {
 
 export function WorkspaceView({
   pageLabel,
+  targetPage,
+  appSettings,
+  agentTargets,
+  targetProfiles,
+  activeProfileId,
+  settingsDirty,
+  onToggleTarget,
+  onApplyProfile,
   // operations
   wsLog,
   wsLogCompletedAt,
@@ -179,6 +197,19 @@ export function WorkspaceView({
         <div className="ws-left" role="region" aria-label={pageLabel ? `${pageLabel} controls` : "Workspace controls"}>
           {pageLabel && (
             <div className="ws-page-label">{pageLabel}</div>
+          )}
+
+          {targetPage && agentTargets && targetProfiles && onToggleTarget && onApplyProfile && (
+            <TargetSettingsPanel
+              page={targetPage}
+              appSettings={appSettings ?? null}
+              agentTargets={agentTargets}
+              targetProfiles={targetProfiles}
+              activeProfileId={activeProfileId ?? null}
+              settingsDirty={settingsDirty ?? false}
+              onToggleTarget={onToggleTarget}
+              onApplyProfile={onApplyProfile}
+            />
           )}
 
           {/* ---- Rules section ---- */}
