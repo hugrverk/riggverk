@@ -199,7 +199,6 @@ function App() {
 
   // install skills state
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const installAgents = useMemo(() => new Set<string>(["opencode"]), []);
   const skillsSelectionTouched = useRef(false);
 
   // skill preview state
@@ -256,7 +255,6 @@ function App() {
       const data = await invoke<StatusData>("get_status");
       if (!isWorkspaceLoadCurrent(generation)) return;
       setStatus(data);
-      setError(null);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setStatus(null);
@@ -648,7 +646,6 @@ function App() {
     fetchStatus,
     isInvalidWorkspaceError,
     workspaceDiagnostics,
-    installAgents,
     selectedSkills,
     setError,
   });

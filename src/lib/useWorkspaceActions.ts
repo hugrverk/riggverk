@@ -11,7 +11,6 @@ interface UseWorkspaceActionsOptions {
   fetchStatus: (generation?: number) => Promise<void>;
   isInvalidWorkspaceError: (e: unknown) => boolean;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
-  installAgents: Set<string>;
   selectedSkills: Set<string>;
   setError: (msg: string | null) => void;
 }
@@ -21,7 +20,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     fetchStatus,
     isInvalidWorkspaceError,
     workspaceDiagnostics,
-    installAgents,
     selectedSkills,
     setError,
   } = opts;
@@ -75,6 +73,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (!isCurrentAction()) return;
       setWsLog(result);
       setWsLogCompletedAt(Date.now());
+      if (result.success) setError(null);
       if (!action.startsWith("open_")) fetchStatus();
     } catch (e) {
       if (!isCurrentAction()) return;
@@ -121,7 +120,10 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (!isCurrentAction()) return;
       setWsLog(result);
       setWsLogCompletedAt(Date.now());
-      if (!dry && result.success) fetchStatus();
+      if (!dry && result.success) {
+        setError(null);
+        fetchStatus();
+      }
     } catch (e) {
       if (!isCurrentAction()) return;
       setWsLog({
@@ -139,11 +141,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       workspaceActionLockRef.current = false;
     }
   }, [selectedSkills, fetchStatus, setError]);
-
-  const runWsInstall = useCallback(
-    (dry: boolean) => runWsInstallForAgents(dry, Array.from(installAgents) as InstallAgent[]),
-    [installAgents, runWsInstallForAgents],
-  );
 
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.
@@ -170,6 +167,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       const actionResult = opts.toActionResult(result);
       setWsLog(actionResult);
       setWsLogCompletedAt(Date.now());
+      if (actionResult.success) setError(null);
       if (opts.refresh) await opts.refresh();
       return result;
     } catch (e: unknown) {
@@ -199,7 +197,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     activityIndex,
     activityCellClass,
     runWsAction,
-    runWsInstall,
     runWsInstallForAgents,
     runWsTask,
     workspaceActionRequestIdRef,

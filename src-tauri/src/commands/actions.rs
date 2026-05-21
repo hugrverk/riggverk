@@ -39,6 +39,16 @@ fn no_enabled_config_targets(action: &str) -> ActionResult {
     )
 }
 
+fn no_enabled_agent_targets(action: &str) -> ActionResult {
+    ActionResult::new(
+        true,
+        action,
+        "no enabled agent targets\n".into(),
+        String::new(),
+        Some(0),
+    )
+}
+
 fn opencode_config_enabled() -> bool {
     settings::load()
         .enabled_target_ids
@@ -491,7 +501,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "diff_opencode_agents" => {
             if !opencode_agents_enabled() {
-                return Ok(no_enabled_config_targets("diff_opencode_agents"));
+                return Ok(no_enabled_agent_targets("diff_opencode_agents"));
             }
             run_runtime_agents_install(
                 &root,
@@ -503,7 +513,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "sync_opencode_agents" => {
             if !opencode_agents_enabled() {
-                return Ok(no_enabled_config_targets("sync_opencode_agents"));
+                return Ok(no_enabled_agent_targets("sync_opencode_agents"));
             }
             run_runtime_agents_install(
                 &root,
@@ -515,7 +525,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "diff_claude_agents" => {
             if !runtime_agent_target_enabled("claude_agents") {
-                return Ok(no_enabled_config_targets("diff_claude_agents"));
+                return Ok(no_enabled_agent_targets("diff_claude_agents"));
             }
             run_runtime_agents_install(
                 &root,
@@ -527,7 +537,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "sync_claude_agents" => {
             if !runtime_agent_target_enabled("claude_agents") {
-                return Ok(no_enabled_config_targets("sync_claude_agents"));
+                return Ok(no_enabled_agent_targets("sync_claude_agents"));
             }
             run_runtime_agents_install(
                 &root,
@@ -539,7 +549,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "diff_auggie_agents" => {
             if !runtime_agent_target_enabled("auggie_agents") {
-                return Ok(no_enabled_config_targets("diff_auggie_agents"));
+                return Ok(no_enabled_agent_targets("diff_auggie_agents"));
             }
             run_runtime_agents_install(
                 &root,
@@ -551,7 +561,7 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
         "sync_auggie_agents" => {
             if !runtime_agent_target_enabled("auggie_agents") {
-                return Ok(no_enabled_config_targets("sync_auggie_agents"));
+                return Ok(no_enabled_agent_targets("sync_auggie_agents"));
             }
             run_runtime_agents_install(
                 &root,
