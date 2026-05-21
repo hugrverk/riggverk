@@ -12,8 +12,8 @@ use commands::{
     list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
     open_backups_folder, open_config_template, open_doc, open_install_skills_script,
     open_opencode_config_source, open_skill, plan_create_workspace, plan_workspace_repair,
-    read_agent_source, read_agent_template, read_brain_setup_seed, read_config_template,
-    read_doc, read_opencode_config_source, read_skill, run_action, run_cursor_profile_action,
+    read_agent_source, read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
+    read_opencode_config_source, read_skill, run_action, run_cursor_profile_action,
     save_agent_source, save_agent_template, save_config_template, save_doc,
     save_opencode_config_source, update_settings, validate_workspace_contract,
 };
