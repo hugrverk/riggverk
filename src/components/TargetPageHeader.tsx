@@ -1,4 +1,5 @@
 import { SectionChip } from "../lib/runtimeUi";
+import { ToolIcon, type ToolIconName } from "./ToolIcon";
 
 export interface TargetPageFact {
   label: string;
@@ -8,15 +9,23 @@ export interface TargetPageFact {
 interface TargetPageHeaderProps {
   title: string;
   summary: string;
+  icon?: ToolIconName;
   facts?: TargetPageFact[];
   warning?: string;
 }
 
-export function TargetPageHeader({ title, summary, facts, warning }: TargetPageHeaderProps) {
+export function TargetPageHeader({ title, summary, icon, facts, warning }: TargetPageHeaderProps) {
   return (
     <header className="target-page-header">
       <div className="target-page-title-row">
-        <h1 className="target-page-title">{title}</h1>
+        <div className="target-page-title-group">
+          {icon && (
+            <span className="target-page-icon" aria-hidden="true">
+              <ToolIcon name={icon} />
+            </span>
+          )}
+          <h1 className="target-page-title">{title}</h1>
+        </div>
         {facts && facts.length > 0 && (
           <div className="target-page-facts" aria-label={`${title} quick facts`}>
             {facts.map(f => (

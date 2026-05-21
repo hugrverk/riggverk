@@ -34,7 +34,7 @@ Shows workspace structure: marker status, file categories, system map (rules/con
 
 - Open the **Library tab** to browse docs
 - Visit the **Settings tab** to enable sync targets
-- Use the **Brain Setup tab** to copy instruction blocks for your AI assistant
+- Use **Library → Brain Setup** to copy instruction blocks for your AI assistant
 - Run a dry-run sync before applying anything
 - Optional: initialize Git (see GIT_VERSIONING.md)
 
@@ -72,13 +72,13 @@ View and edit agent prompt definitions (`agents/*.md`). Each agent shows its mod
 
 View and edit `templates/opencode.json`. The JSON is formatted for readability.
 
-## Brain Setup Tab
+## Brain Setup (Library)
 
-A focused copy-paste setup surface for external AI assistants. Agent Workspace does not automatically control ChatGPT, Claude Web, or other external chat UIs.
+A focused copy-paste setup surface under **Library → Brain Setup**. Agent Workspace does not automatically control ChatGPT, Claude Web, or other external chat UIs.
 
 ### How it works
 
-1. Click **copy brain setup** to copy a durable instruction block.
+1. Use the copy button on the preview block to copy the durable instruction block.
 2. Paste the block into your assistant&rsquo;s Custom Instructions, project instructions, or the first message of a long-running workspace.
 3. Your assistant will route tasks through installed skills, recommend models, check DB/migration status, and enforce verification discipline.
 

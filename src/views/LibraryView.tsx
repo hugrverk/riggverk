@@ -14,8 +14,9 @@ import { RulesContent } from "./library/RulesContent";
 import { SkillsContent } from "./library/SkillsContent";
 import { AgentContent } from "./library/AgentContent";
 import { ConfigContent } from "./library/ConfigContent";
+import { BrainSetupContent } from "./library/BrainSetupContent";
 
-export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
+export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "brain";
 
 const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "docs", label: "Docs" },
@@ -23,6 +24,7 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "skills", label: "Skills" },
   { id: "agents", label: "Runtime agents" },
   { id: "configs", label: "Configs" },
+  { id: "brain", label: "Brain Setup" },
 ];
 
 interface LibraryViewProps {
@@ -112,6 +114,10 @@ interface LibraryViewProps {
   onSelectConfigSource: (sourceType: string) => void;
   configEditorSourceSaveMessage: string;
   configEditorSourceContent: DocumentContent | null;
+
+  // Brain Setup
+  brainSetupText: string;
+  brainSetupSource: string;
 
   // Common
   workspaceValid: boolean;
@@ -391,6 +397,20 @@ function ConfigItemList({
 
 // ── type helpers ──
 
+function BrainItemList({ brainSetupSource }: { brainSetupSource: string }) {
+  return (
+    <div className="lib-sidebar-body">
+      <div className="lib-sidebar-group">
+        <div className="lib-sidebar-group-label">Source</div>
+        <div className="lib-sidebar-item lib-sidebar-item-meta lib-sidebar-item-active">
+          <span className="lib-sidebar-item-title">Brain Setup</span>
+          <span className="lib-sidebar-item-desc">{brainSetupSource}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function sourceTypeLabel(type: LibrarySourceType): string {
   switch (type) {
     case "docs": return "Docs";
@@ -398,6 +418,7 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "skills": return "Skills";
     case "agents": return "Shared runtime agents";
     case "configs": return "Configs";
+    case "brain": return "Brain Setup";
   }
 }
 
@@ -481,6 +502,8 @@ export function LibraryView(props: LibraryViewProps) {
     onSelectConfigSource,
     configEditorSourceSaveMessage,
     configEditorSourceContent,
+    brainSetupText,
+    brainSetupSource,
     workspaceValid,
   } = props;
 
@@ -556,6 +579,14 @@ export function LibraryView(props: LibraryViewProps) {
         onResetAgent={onResetAgent}
       />
     );
+  } else if (sourceType === "brain") {
+    mainContent = (
+      <BrainSetupContent
+        workspaceValid={workspaceValid}
+        brainSetupText={brainSetupText}
+        brainSetupSource={brainSetupSource}
+      />
+    );
   } else if (sourceType === "configs" && configTemplateContent) {
     mainContent = (
       <ConfigContent
@@ -621,6 +652,8 @@ export function LibraryView(props: LibraryViewProps) {
             bundledAgentCount={agentSources.length}
           />
         );
+      case "brain":
+        return <BrainItemList brainSetupSource={brainSetupSource} />;
       default:
         return null;
     }
@@ -644,10 +677,10 @@ export function LibraryView(props: LibraryViewProps) {
 
   return (
     <section className="lib-frame">
-      <div className="lib-topline">
-        <span className="terminal-title">LIBRARY</span>
-        <span className="terminal-host">source files &middot; {sourceTypeTitle.toLowerCase()}</span>
-      </div>
+      <header className="lib-topline">
+        <h1 className="lib-topline-title">Library</h1>
+        <span className="lib-topline-summary">{sourceTypeTitle}</span>
+      </header>
 
       <div className="lib-layout">
         {/* Vertical source rail */}

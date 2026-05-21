@@ -39,6 +39,7 @@ export function ClaudeView(props: ClaudeViewProps) {
   return (
     <PassiveTargetView
       page="claude"
+      icon="claude"
       title="Claude"
       summary="Claude rules at ~/.claude/CLAUDE.md and global skill install."
       controlsAriaLabel="Claude target controls"

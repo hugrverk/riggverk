@@ -1159,6 +1159,13 @@ scan_forbidden '\.agents/skills' '.agents/skills'
 step "routing profile bloat guard"
 scan_forbidden 'RoutingProfile|routing/profiles|get_routing_profiles|save_routing_profiles|read_routing_profiles_file|buildProfileHeader|copyMetadataBlock|profileStatus|RoutingMatrix|routingCompatibility|routingTemplates' 'routing profile bloat (removed profiles must not be reintroduced)'
 
+step "brain setup library integration guard"
+if search_has_match 'RoutingView|view === "routing"|switchView\("routing"\)' src/App.tsx src/views; then
+  printf 'FAIL: stale Brain Setup routing view references in app sources\n' >&2
+  exit 1
+fi
+printf '  no RoutingView or routing view switch in src/\n'
+
 step "repair workspace safety simulation"
 python3 - <<'PY'
 import os, tempfile, shutil

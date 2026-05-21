@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { CopyableBlock } from "./CopyableBlock";
 
 export function Markdown({ content }: { content: string }) {
   const els = useMemo(() => parseMarkdown(content), [content]);
@@ -18,7 +19,12 @@ function parseMarkdown(content: string): React.JSX.Element[] {
       i++;
       while (i < lines.length && !lines[i].trimStart().startsWith("```")) { buf.push(lines[i]); i++; }
       i++;
-      els.push(<pre className="markdown-code" key={els.length}>{buf.join("\n")}</pre>);
+      const codeText = buf.join("\n");
+      els.push(
+        <CopyableBlock key={els.length} text={codeText}>
+          <pre className="markdown-code">{codeText}</pre>
+        </CopyableBlock>,
+      );
       continue;
     }
 

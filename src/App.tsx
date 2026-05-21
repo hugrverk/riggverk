@@ -18,7 +18,6 @@ import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
-const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { DEFAULT_WORKSPACE_PATH } from "./lib/settingsDraft";
 import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics, WorkspaceSetupEvaluation } from "./types";
@@ -35,7 +34,6 @@ type View =
   | "claude"
   | "augment"
   | "library"
-  | "routing"
   | "settings";
 
 function isWorkspaceLoadView(view: View): boolean {
@@ -1180,7 +1178,6 @@ function App() {
     }
   }, [evaluateWorkspaceCandidate]);
 
-  // routing state
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
@@ -1196,9 +1193,8 @@ function App() {
       loadOpenCodeRuntimeHealth();
     }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
-    else if (v === "routing") { loadBrainSetupSeed(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadBrainSetupSeed, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1368,24 +1364,6 @@ function App() {
               <path d="M6.5,2H20v20H6.5A2.5,2.5 0 0,1 4,19.5v-15A2.5,2.5 0 0,1 6.5,2z" />
               <line x1="8" y1="7" x2="16" y2="7" />
               <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-          {/* Routing */}
-          <button
-            className={`nav-icon ${view === "routing" ? "nav-icon-active" : ""}${dirtyTabClass(false)}`}
-            onClick={() => switchView("routing")}
-            aria-label={dirtyTabAriaLabel(false, "Brain Setup")}
-            title="Brain Setup"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <circle cx="6" cy="6" r="2.5" />
-              <circle cx="18" cy="6" r="2.5" />
-              <circle cx="6" cy="18" r="2.5" />
-              <circle cx="18" cy="18" r="2.5" />
-              <line x1="8.5" y1="6" x2="15.5" y2="6" />
-              <line x1="6" y1="8.5" x2="6" y2="15.5" />
-              <line x1="18" y1="8.5" x2="18" y2="15.5" />
-              <line x1="8.5" y1="18" x2="15.5" y2="18" />
             </svg>
           </button>
           {/* Settings */}
@@ -1742,18 +1720,11 @@ function App() {
             onSelectConfigSource={selectConfigSourceType}
             configEditorSourceSaveMessage={configEditorSourceSaveMessage}
             configEditorSourceContent={configEditorSourceContent}
-            // Common
-            workspaceValid={workspaceValid}
-          />
-          </Suspense>
-        )}
-
-        {view === "routing" && (
-          <Suspense fallback={<div className="view-loading">loading…</div>}>
-          <RoutingView
-            workspaceValid={workspaceValid}
+            // Brain Setup
             brainSetupText={brainSetupText}
             brainSetupSource={brainSetupSource}
+            // Common
+            workspaceValid={workspaceValid}
           />
           </Suspense>
         )}

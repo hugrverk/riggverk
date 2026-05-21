@@ -85,6 +85,7 @@ export function CodexView({
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Codex controls">
           <TargetPageHeader
+            icon="codex"
             title="Codex"
             summary="Rules and config for Codex. Sync global agent rules and templates/codex/config.toml."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}

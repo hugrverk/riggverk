@@ -39,6 +39,7 @@ export function AugmentView(props: AugmentViewProps) {
   return (
     <PassiveTargetView
       page="augment"
+      icon="augment"
       title="Augment"
       summary="Augment rules at .augment/rules/global.md and global skill install."
       controlsAriaLabel="Augment target controls"

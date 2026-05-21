@@ -130,12 +130,13 @@ The workspace creation dry-run plan (`plan_create_workspace`) is a read-only eva
 
 ## App Surfaces
 
-The app has four top-level views:
+The app has three top-level views:
 
 - **Workspace** — operations cockpit and app landing page. Shows workspace validity, resolved path, readiness metrics (markers, rule targets, config targets, starter resource counts), and a dynamic workspace system map. Supports path input (type, choose folder, use default), read-only dry-run create that evaluates whether the current path is safe for initialization, create workspace action for safe targets (copies bundled starter files, no overwrite, no scripts). Operations section provides: git pull, diff/sync rules, diff/sync configs, global skills install (with expandable skill selector for individual skill toggles, agent toggles, dry-run and install actions), Cursor global profile sync (agents, user rules show/copy, MCP and sandbox templates show/copy), release-check, and backup management. Skills install lane loads workspace skills on startup when a valid workspace is selected, auto-selects all skills by default, and distinguishes between loading, empty, and unselected states. Integrated terminal output panel. All operation actions report through a single terminal pane. The app does not sync or install into arbitrary project checkouts.
-- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs. Docs provides curated workspace documentation browser and editor with section groups, search, custom context doc creation, and allowlisted key Cursor profile assets. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides editable OpenCode config source templates with metadata. Script-backed setup targets such as Cursor setup are run from Workspace sync actions, not edited as config templates. Library handles source editing; operations (sync, install) happen in Workspace.
+- **Library** — unified source file browser and editor. Switches between source types: Docs, Rules, Skills, Agents, Configs, and Brain Setup. Docs provides curated workspace documentation browser and editor with section groups, search, custom context doc creation, and allowlisted key Cursor profile assets. Rules provides global agent rules template preview/edit with per-target status. Skills provides read-only skill preview with Markdown rendering and metadata display (category, risk, targets, related skills). Agents provides agent source file list with edit/open for each, plus metadata display (role, risk, targets, default skills, runtime-sensitivity warnings). Configs provides editable OpenCode config source templates with metadata. Script-backed setup targets such as Cursor setup are run from Workspace sync actions, not edited as config templates. Library handles source editing; operations (sync, install) happen in Workspace.
 - **Settings** — appearance (dark/light/system), target profiles/presets, and enabled targets separated into rule targets and config targets with real toggle buttons. Changes are stored in a local draft and marked with an unsaved-changes indicator (`*` in nav tab, "modified — save to persist" in the header). Targets do not take effect until saved. Workspace path is managed in the Workspace tab. Navigating away from unsaved Settings prompts for confirmation; returning to Settings preserves the draft until Save or Reset.
-- **Brain Setup** — a focused copy-paste setup surface for external AI assistants. The page helps you generate and copy a durable prompt instruction block for ChatGPT, Claude Web, Codex, or another coding assistant. The block covers skill routing discipline, model/tool recommendations, DB/migration awareness, security rules, and verification discipline. Agent Workspace is a local macOS configuration tool — it does not automatically control external chat UIs from this view, does not run agents, does not change enabled sync targets, and does not mutate runtime config. The visible action is **copy brain setup**. Paste the block into Custom Instructions, project instructions, or the first message of a long-running assistant workspace.
+
+**Brain Setup** (under Library) is a copy-paste instruction surface for external AI assistants. It helps you copy a durable prompt block for ChatGPT, Claude Web, Codex, or another coding assistant — skill routing discipline, model/tool recommendations, security rules, and verification discipline. It does not run agents, change enabled sync targets, or mutate runtime config.
 
 ## Docs security
 
@@ -231,7 +232,7 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 - Run agents or trigger tool actions.
 - Route automatically or generate prompts automatically.
 - Mutate runtime configs, OpenCode config, or agent permission blocks.
-- Install or sync from Brain Setup.
+- Install or sync from Library → Brain Setup.
 - Add MCP, background workers, memory, task queues, chat, or agent execution.
 - Add arbitrary filesystem browsing or new dependencies.
 
@@ -262,7 +263,7 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   ├── views/
 │   │   ├── WorkspaceView.tsx    Workspace operations cockpit and skills install selector
 │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
-│   │   ├── RoutingView.tsx      Brain Setup copy-paste surface
+│   │   ├── library/BrainSetupContent.tsx  Brain Setup copy-paste surface
 │   │   ├── SettingsView.tsx     Settings view
 │   │   └── library/
 │   │       ├── DocContent.tsx   Docs browser/editor content pane

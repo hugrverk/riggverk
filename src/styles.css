@@ -1573,12 +1573,92 @@ code {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 10px 14px;
-  margin: 0 0 12px;
+  margin: 0;
   font-size: 12px;
   line-height: 1.5;
   color: var(--text-muted);
   overflow-x: auto;
   white-space: pre;
+}
+
+/* ── copyable code blocks ── */
+
+.copyable-block {
+  position: relative;
+  margin: 0 0 12px;
+}
+
+.copyable-block-content {
+  min-width: 0;
+}
+
+.copyable-block-fill,
+.copyable-block-terminal {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.copyable-block-terminal .copyable-block-content {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+}
+
+.copyable-block .markdown-code {
+  border: none;
+  border-radius: 0;
+  padding: 32px 40px 12px 14px;
+}
+
+.copyable-block-terminal .brain-setup-pre,
+.copyable-block-terminal .configs-code {
+  flex: 1;
+  min-height: 0;
+  border: none;
+  border-radius: 0;
+  padding: 32px 40px 16px 16px;
+}
+
+.copy-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-panel);
+  color: var(--text-muted);
+  cursor: pointer;
+  opacity: 0.85;
+  transition: opacity 0.1s, color 0.1s, border-color 0.1s, background 0.1s;
+}
+
+.copy-btn:hover {
+  opacity: 1;
+  color: var(--text);
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+
+.copy-btn:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
+}
+
+.copy-btn-copied {
+  color: var(--ok);
 }
 
 .markdown-inline-code {
@@ -1923,6 +2003,26 @@ code {
   margin-bottom: 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
+}
+
+.target-page-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.target-page-icon {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  color: var(--text-muted);
+  opacity: 0.75;
+}
+
+.target-page-icon svg {
+  width: 18px;
+  height: 18px;
 }
 
 .target-page-title {
@@ -4223,26 +4323,29 @@ code {
   flex-direction: column;
   height: 100%;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .lib-topline {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 14px;
+  align-items: baseline;
+  gap: 10px;
+  padding: 12px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
-  min-height: 0;
+  background: var(--bg);
 }
 
-.lib-topline .terminal-title {
-  font-size: 14px;
+.lib-topline-title {
+  margin: 0;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  color: var(--accent);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  color: var(--text-heading);
 }
 
-.lib-topline .terminal-host {
+.lib-topline-summary {
   font-size: 12px;
   color: var(--text-muted);
 }
@@ -4262,6 +4365,7 @@ code {
   max-width: 340px;
   border-right: 1px solid var(--border);
   overflow: hidden;
+  background: var(--bg);
 }
 
 /* vertical source rail */
@@ -4304,22 +4408,9 @@ code {
 }
 
 .lib-source-rail-btn-active {
-  color: var(--accent);
-  background: rgba(var(--accent-rgb), 0.04);
-}
-
-.lib-source-rail-btn-active::after {
-  content: "";
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: 18px;
-  height: 2px;
-  background: var(--accent);
-  border-radius: 1px;
-  opacity: 0.45;
-  pointer-events: none;
+  color: var(--text-heading);
+  background: var(--bg-inset);
+  border-left-color: var(--accent);
 }
 
 .lib-source-rail-label {
@@ -4541,6 +4632,7 @@ code {
   flex-direction: column;
   min-width: 0;
   overflow: hidden;
+  background: var(--bg);
 }
 
 .lib-main-empty {
@@ -4560,6 +4652,7 @@ code {
   padding: 10px 14px;
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+  background: var(--bg);
 }
 
 .lib-editor-meta-left {
@@ -4609,7 +4702,34 @@ code {
   padding: 12px;
 }
 
-/* ── brain setup two-column layout ── */
+/* ── brain setup (library) ── */
+
+.brain-setup-lib-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px 14px;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.brain-setup-lib-summary {
+  margin: 0;
+  max-width: 62ch;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.brain-setup-lib-body .copyable-block-terminal {
+  flex: 1;
+  min-height: 0;
+  margin: 0;
+}
+
+/* ── brain setup two-column layout (legacy) ── */
 
 .brain-setup-page {
   flex: 1;

@@ -1,4 +1,5 @@
 import { TargetPageHeader } from "../components/TargetPageHeader";
+import type { ToolIconName } from "../components/ToolIcon";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -8,6 +9,7 @@ import type { TargetPage } from "../lib/targetGroups";
 
 interface PassiveTargetViewProps {
   page: TargetPage;
+  icon: ToolIconName;
   title: string;
   summary: string;
   controlsAriaLabel: string;
@@ -47,6 +49,7 @@ interface PassiveTargetViewProps {
 
 export function PassiveTargetView({
   page,
+  icon,
   title,
   summary,
   controlsAriaLabel,
@@ -90,6 +93,7 @@ export function PassiveTargetView({
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label={controlsAriaLabel}>
           <TargetPageHeader
+            icon={icon}
             title={title}
             summary={summary}
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}

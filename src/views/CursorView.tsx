@@ -104,6 +104,7 @@ export function CursorView({
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="Cursor controls">
           <TargetPageHeader
+            icon="cursor"
             title="Cursor"
             summary="Global agents can sync automatically. User Rules, MCP, and sandbox profiles remain copy/paste."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}

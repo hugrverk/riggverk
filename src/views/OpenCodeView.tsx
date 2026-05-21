@@ -88,6 +88,7 @@ export function OpenCodeView({
       <div className="ws-shell">
         <div className="ws-left" role="region" aria-label="OpenCode controls">
           <TargetPageHeader
+            icon="opencode"
             title="OpenCode"
             summary="Runtime config, bundled agents, generated snapshot, and OpenCode skills."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}

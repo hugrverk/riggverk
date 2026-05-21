@@ -41,7 +41,7 @@ The app does not:
 
 - **Workspace tab**: View diagnostics, create workspace, sync rules/configs, install skills, verify workspace.
 - **Library tab**: Read and edit docs, rules, skills, agents, and config templates.
-- **Brain Setup tab**: Copy assistant setup instructions for skill routing discipline.
+- **Library → Brain Setup**: Copy assistant setup instructions for skill routing discipline.
 - **Settings tab**: Configure appearance and enabled sync targets.
 
 ## Dry-run before apply

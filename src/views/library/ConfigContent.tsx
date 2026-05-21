@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { CopyableBlock } from "../../components/CopyableBlock";
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { AgentMetadataResponse, AgentTargetMeta, ConfigEditorSourceMeta, DocumentContent } from "../../types";
@@ -181,7 +182,9 @@ export function ConfigContent(props: ConfigContentProps) {
 
       <div className="lib-editor-body">
         {configMode === "preview" ? (
-          <pre className="configs-code">{formattedJson}</pre>
+          <CopyableBlock text={formattedJson} className="copyable-block-terminal copyable-block-fill">
+            <pre className="configs-code">{formattedJson}</pre>
+          </CopyableBlock>
         ) : (
           canEdit && (
             <textarea
