@@ -1083,11 +1083,65 @@ pub fn apply_workspace_repair(app: tauri::AppHandle) -> Result<RepairWorkspaceRe
     Ok(repair_workspace_impl(&app, &root_str, false))
 }
 
+const BRAIN_SETUP_SEED_REL: &str = "templates/context/saved-memory.md";
+
+#[derive(Serialize)]
+pub struct BrainSetupSeedResult {
+    pub status: String,
+    pub source: String,
+    pub content: String,
+}
+
+fn read_brain_setup_seed_under_root(root: &Path) -> Result<BrainSetupSeedResult, String> {
+    let path = root.join(BRAIN_SETUP_SEED_REL);
+    if !path.is_file() {
+        return Ok(BrainSetupSeedResult {
+            status: "missing".into(),
+            source: "generated fallback".into(),
+            content: String::new(),
+        });
+    }
+
+    let canonical = path
+        .canonicalize()
+        .map_err(|e| format!("resolve brain setup seed: {e}"))?;
+    let root_canonical = root
+        .canonicalize()
+        .map_err(|e| format!("resolve workspace root: {e}"))?;
+    if !canonical.starts_with(&root_canonical) {
+        return Err("brain setup seed path escapes workspace".into());
+    }
+
+    let content = fs::read_to_string(&canonical)
+        .map_err(|e| format!("read brain setup seed: {e}"))?;
+    Ok(BrainSetupSeedResult {
+        status: "found".into(),
+        source: "workspace saved-memory.md".into(),
+        content,
+    })
+}
+
+#[tauri::command]
+pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
+    let root = match workspace_root() {
+        Ok(root) => root,
+        Err(_) => {
+            return Ok(BrainSetupSeedResult {
+                status: "invalid_workspace".into(),
+                source: "generated fallback".into(),
+                content: String::new(),
+            });
+        }
+    };
+    read_brain_setup_seed_under_root(&root)
+}
+
 #[cfg(test)]
 mod tests {
     use super::{
         create_workspace_from_source, is_unsafe_target, plan_create_workspace,
-        repair_workspace_core, repo_path_from_settings, validate_workspace_root,
+        read_brain_setup_seed_under_root, repair_workspace_core, repo_path_from_settings,
+        validate_workspace_root, BRAIN_SETUP_SEED_REL,
     };
     use crate::settings::AppSettings;
     use std::fs;
@@ -2462,5 +2516,31 @@ mod tests {
 
         cleanup(&source);
         cleanup(&target);
+    }
+
+    #[test]
+    fn brain_setup_seed_reads_existing_file() {
+        let root = setup_valid_workspace("brain-seed-found");
+        mkdir(&root, "templates/context");
+        write_file(&root, BRAIN_SETUP_SEED_REL, "# saved memory seed\n");
+
+        let result = read_brain_setup_seed_under_root(&root).expect("read seed");
+        assert_eq!(result.status, "found");
+        assert_eq!(result.source, "workspace saved-memory.md");
+        assert!(result.content.contains("saved memory seed"));
+
+        cleanup(&root);
+    }
+
+    #[test]
+    fn brain_setup_seed_missing_returns_safe_status() {
+        let root = setup_valid_workspace("brain-seed-missing");
+
+        let result = read_brain_setup_seed_under_root(&root).expect("read seed");
+        assert_eq!(result.status, "missing");
+        assert_eq!(result.source, "generated fallback");
+        assert!(result.content.is_empty());
+
+        cleanup(&root);
     }
 }

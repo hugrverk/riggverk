@@ -1,18 +1,17 @@
-import { useState, useCallback, useMemo } from "react";
-import { buildBrainSetupBlock } from "../lib/brainSetup";
+import { useState, useCallback } from "react";
 
 interface RoutingViewProps {
   workspaceValid: boolean;
+  brainSetupText: string;
+  brainSetupSource: string;
 }
 
-export function RoutingView({ workspaceValid }: RoutingViewProps) {
+export function RoutingView({ workspaceValid, brainSetupText, brainSetupSource }: RoutingViewProps) {
   const [brainSetupCopied, setBrainSetupCopied] = useState(false);
-
-  const brainSetupBlock = useMemo(() => buildBrainSetupBlock(), []);
 
   const onCopyBrainSetup = useCallback(async () => {
     try {
-      await navigator.clipboard.writeText(brainSetupBlock);
+      await navigator.clipboard.writeText(brainSetupText);
       setBrainSetupCopied(true);
       setTimeout(() => setBrainSetupCopied(false), 2000);
     } catch {
@@ -25,7 +24,7 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
         sel?.addRange(range);
       }
     }
-  }, [brainSetupBlock]);
+  }, [brainSetupText]);
 
   return (
     <section className="lib-frame">
@@ -43,7 +42,6 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
           ) : (
             <div className="brain-setup-page">
               <div className="brain-setup-grid">
-                {/* ── Left column ── */}
                 <div className="brain-setup-left" role="region" aria-label="Brain Setup instructions">
                   <span className="brain-setup-eyebrow">Brain Setup</span>
                   <h1 className="brain-setup-heading">Copy your assistant setup</h1>
@@ -56,6 +54,11 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
                     teaches your assistant how to apply installed skills, recommend tools and models,
                     check DB risk, and require verification before claiming anything passed.
                   </p>
+
+                  <div className="brain-setup-source-row" role="status">
+                    <span className="brain-setup-source-label">Source</span>
+                    <span className="brain-setup-source-value">{brainSetupSource}</span>
+                  </div>
 
                   <div className="brain-setup-copy-row">
                     <button className="btn btn-primary" onClick={onCopyBrainSetup}>
@@ -82,7 +85,6 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
                   </div>
                 </div>
 
-                {/* ── Right column ── */}
                 <div className="brain-setup-right" role="region" aria-label="Prompt preview">
                   <div className="brain-preview-card">
                     <div className="brain-preview-header">
@@ -90,7 +92,7 @@ export function RoutingView({ workspaceValid }: RoutingViewProps) {
                       <span className="brain-preview-hint">This exact text is copied to clipboard.</span>
                     </div>
                     <pre id="brain-setup-block" className="brain-setup-pre">
-                      {brainSetupBlock}
+                      {brainSetupText}
                     </pre>
                   </div>
                 </div>

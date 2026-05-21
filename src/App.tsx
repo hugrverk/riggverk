@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
+import { buildBrainSetupBlock } from "./lib/brainSetup";
 import { applyThemeSettings, defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -17,7 +18,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
@@ -131,6 +132,7 @@ function App() {
   // opencode runtime health
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
+  const [brainSetupSeed, setBrainSetupSeed] = useState<BrainSetupSeedResult | null>(null);
 
   const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -154,6 +156,15 @@ function App() {
       if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${e}`);
     }
   }, [isWorkspaceLoadCurrent]);
+
+  const loadBrainSetupSeed = useCallback(async () => {
+    try {
+      const result = await invoke<BrainSetupSeedResult>("read_brain_setup_seed");
+      setBrainSetupSeed(result);
+    } catch {
+      setBrainSetupSeed(null);
+    }
+  }, []);
 
   const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -932,7 +943,11 @@ function App() {
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); loadBrainSetupSeed(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources, loadBrainSetupSeed]);
+
+  useEffect(() => {
+    loadBrainSetupSeed();
+  }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
   const saveSettings = useCallback(async () => {
     if (!appSettings) return;
@@ -1067,8 +1082,9 @@ function App() {
       loadOpenCodeRuntimeHealth();
     }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
+    else if (v === "routing") { loadBrainSetupSeed(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadBrainSetupSeed, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1136,6 +1152,17 @@ function App() {
     setSettingsMsg({ ok: true, text: "profile applied — save to persist" });
     setAppSettings(prev => prev ? { ...prev, enabled_target_ids: [...profile.target_ids] } : prev);
   }, [targetProfiles]);
+
+  const brainSetupText = useMemo(() => {
+    if (brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()) {
+      return brainSetupSeed.content;
+    }
+    return buildBrainSetupBlock();
+  }, [brainSetupSeed]);
+
+  const brainSetupSource = brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()
+    ? brainSetupSeed.source
+    : "generated fallback";
 
   const activeProfileId = useMemo(() => {
     if (!appSettings) return null;
@@ -1568,7 +1595,11 @@ function App() {
 
         {view === "routing" && (
           <Suspense fallback={<div className="view-loading">loading…</div>}>
-          <RoutingView workspaceValid={workspaceValid} />
+          <RoutingView
+            workspaceValid={workspaceValid}
+            brainSetupText={brainSetupText}
+            brainSetupSource={brainSetupSource}
+          />
           </Suspense>
         )}
 

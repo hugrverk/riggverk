@@ -4056,6 +4056,26 @@ html, body, #root {
   margin: 0;
 }
 
+.brain-setup-source-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 11px;
+}
+
+.brain-setup-source-label {
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  font-weight: 600;
+}
+
+.brain-setup-source-value {
+  color: var(--accent);
+  font-family: var(--font-mono, var(--font));
+}
+
 .brain-setup-copy-row {
   display: flex;
   align-items: center;

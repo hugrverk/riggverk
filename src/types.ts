@@ -245,6 +245,12 @@ export interface RepairWorkspaceResult {
   message: string;
 }
 
+export interface BrainSetupSeedResult {
+  status: string;
+  source: string;
+  content: string;
+}
+
 export interface CursorProfileHealth {
   status: "synced" | "diverged" | "missing" | "partial" | "unknown" | string;
   manifest_status: string;
