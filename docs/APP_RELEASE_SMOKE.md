@@ -90,11 +90,11 @@ Use a safe throwaway folder, e.g. `~/Desktop/agent-workspace-smoke-test`.
 
 Dry-runs only unless testing your own machine:
 
-- [ ] In a created or selected workspace, `scripts/install-agent-rules.sh --quiet --diff --opencode --codex --claude --gemini --auggie` reports synced/diverged
+- [ ] In a created or selected workspace, `scripts/install-agent-rules.sh --quiet --diff --opencode --codex --claude --auggie` reports synced/diverged
 - [ ] In a created or selected workspace, `scripts/install-opencode-config.sh --quiet --diff` reports synced/diverged for config + tui + agents
-- [ ] In a created or selected workspace, `scripts/install-skills.sh --quiet --dry-run --agent codex --agent opencode --agent claude --agent gemini --agent auggie --global` reports planned counts
+- [ ] In a created or selected workspace, `scripts/install-skills.sh --quiet --dry-run --agent codex --agent opencode --agent claude --agent auggie --global` reports planned counts
 - [ ] install-skills dry-run from a created workspace reports the bundled skills
-- [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --gemini --auggie` completes without error
+- [ ] In a created or selected workspace, `scripts/bootstrap.sh --quiet --diff --skip-skills --codex --opencode --claude --auggie` completes without error
 - [ ] Do not run `--apply` actions when testing someone else's machine
 - [ ] Real apply creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwriting diverged target files
 
@@ -105,7 +105,7 @@ Dry-runs only unless testing your own machine:
 - [ ] Search input filters skills by name, id, and description
 - [ ] "all" selects all skills; "clear" deselects all
 - [ ] Checkbox toggles install selection for each skill
-- [ ] Agent toggles (codex, opencode, claude, gemini, auggie) are visible and toggleable
+- [ ] Agent toggles (codex, opencode, claude, auggie) are visible and toggleable
 - [ ] Scope toggles (global/project) with project target path input work
 - [ ] Install plan info shows agent count/names, scope, and project target
 - [ ] "hide selector" collapses the skills selector

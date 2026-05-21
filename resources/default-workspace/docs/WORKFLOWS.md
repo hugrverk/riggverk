@@ -5,7 +5,7 @@ Common workspace workflows with step-by-step instructions.
 ## Set up OpenCode only
 
 1. Open the **Settings tab**
-2. Under Targets, enable only the OpenCode rule and config targets (disable Codex, Claude, Gemini, Auggie)
+2. Under Targets, enable only the OpenCode rule and config targets (disable Codex, Claude, Auggie)
 3. Go to **Workspace tab**, run "Pull" only if the workspace is a Git checkout and you want `git pull --ff-only`
 4. Run "Diff Rules" to preview rule sync
 5. Run "Diff Configs" to preview config sync

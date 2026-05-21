@@ -1,7 +1,7 @@
 export interface StatusData {
   repo_path: string; git_available: boolean; branch: string; dirty: boolean; latest_commit: string;
   rules_codex: string; rules_opencode: string; rules_auggie: string;
-  rules_claude: string; rules_gemini: string;
+  rules_claude: string;
   opencode_config: string; config_statuses: Record<string, string>; host_name: string;
   enabled_rule_target_ids: string[];
   enabled_config_target_ids: string[];
@@ -52,7 +52,7 @@ export interface AgentSourceContent {
   id: string; title: string; path: string; content: string; exists: boolean;
 }
 
-export const INSTALL_AGENTS = ["codex", "opencode", "claude", "gemini", "auggie", "cursor"] as const;
+export const INSTALL_AGENTS = ["codex", "opencode", "claude", "auggie", "cursor"] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
 

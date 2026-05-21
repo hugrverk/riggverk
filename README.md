@@ -94,7 +94,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `workspace_path` | `string` or `null` | `null` | Custom workspace root path. When `null` or missing, falls back to `AGENT_WORKSPACE_PATH` env or built-in default. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules) and config targets (opencode_config, cursor_setup) are filtered by kind in the UI. Claude, Gemini, and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (OpenCode, Cursor, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules_rules) and config targets (opencode_config, cursor_setup) are filtered by kind in the UI. Claude, and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (OpenCode, Cursor, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 
@@ -106,8 +106,8 @@ Settings includes compact target profile buttons for quick target selection:
 |---------|----------------|
 | OpenCode | opencode_rules, opencode_config |
 | Cursor | cursor_setup |
-| All rules | codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules |
-| All supported | codex_rules, opencode_rules, auggie_rules, claude_rules, gemini_rules, opencode_config, cursor_setup |
+| All rules | codex_rules, opencode_rules, auggie_rules, claude_rules_rules |
+| All supported | codex_rules, opencode_rules, auggie_rules, claude_rules_rules, opencode_config, cursor_setup |
 
 Applying a profile updates the local settings draft target selection. The user must click Save to persist. The nav tab shows `*` and the Settings header shows "modified — save to persist" when the draft differs from saved settings. Profiles are metadata only — they do not run sync or write target files. Manual target toggles use real `<button>` elements with `aria-pressed` for keyboard accessibility; the current selection is visible via a filled check-dot indicator beyond color alone. A "custom selection" label appears when the current selection does not match any defined profile.
 
@@ -147,7 +147,7 @@ The app has four top-level views:
 - Sync targets are defined through an internal agent target registry (`agent_targets.rs`). This does not permit arbitrary file sync or arbitrary commands.
 - Config sync targets are managed through an internal allowlisted config target registry (also in `agent_targets.rs`). Config scripts are mapped by enum, not by frontend-supplied paths.
 - Editable config templates use a narrower allowlist. Cursor setup remains a script-backed sync/status target and is not exposed through the Library Configs editor.
-- Supported targets: Codex rules (`.codex/AGENTS.md`), OpenCode rules (`.config/opencode/AGENTS.md`), Auggie rules (`.augment/rules/global.md`), Claude rules (`.claude/CLAUDE.md`), Gemini rules (`.gemini/GEMINI.md`), OpenCode config (`.config/opencode/opencode.json`), OpenCode TUI config (`.config/opencode/tui.json`), and Cursor setup (`.cursor/agents` via the Cursor setup script).
+- Supported targets: Codex rules (`.codex/AGENTS.md`), OpenCode rules (`.config/opencode/AGENTS.md`), Auggie rules (`.augment/rules/global.md`), Claude rules (`.claude/CLAUDE.md`), OpenCode config (`.config/opencode/opencode.json`), OpenCode TUI config (`.config/opencode/tui.json`), and Cursor setup (`.cursor/agents` via the Cursor setup script).
 
 ### Agent rule sync (scripts/install-agent-rules.sh)
 
@@ -159,7 +159,6 @@ The app has four top-level views:
 | `--opencode` | `${OPENCODE_AGENTS_PATH:-$HOME/.config/opencode/AGENTS.md}` |
 | `--auggie` | `${AUGGIE_GLOBAL_PATH:-$HOME/.augment/rules/global.md}` |
 | `--claude` | `${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}` |
-| `--gemini` | `${GEMINI_RULES_PATH:-$HOME/.gemini/GEMINI.md}` |
 
 On apply, existing diverged rule targets are backed up under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwrite. `AGENT_WORKSPACE_BACKUP_DIR` can override the backup root for testing or advanced local use. Diff and dry-run modes do not create backups.
 
@@ -171,7 +170,6 @@ Global destinations:
 - Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)
 - OpenCode: `$HOME/.config/opencode/skills` (override with `OPENCODE_SKILLS_PATH`)
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
-- Gemini: `$HOME/.gemini/skills` (override with `GEMINI_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
 Cursor project installs use `<project>/.cursor/skills`. Cursor subagents are installed by `resources/default-workspace/scripts/install-cursor-workspace.sh` to `~/.cursor/agents` or `<project>/.cursor/agents`; project rules install to `<project>/.cursor/rules/*.mdc`. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` and can be shown or copied to clipboard via `--show-user-rules` / `--copy-user-rules`; they are not auto-written because Cursor does not document a stable file-backed write target. MCP examples are opt-in and must use env placeholders for auth-like values.

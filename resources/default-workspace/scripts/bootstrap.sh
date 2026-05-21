@@ -32,7 +32,6 @@ Options:
   --opencode       Rule target: OpenCode (passed to rules script)
   --auggie         Rule target: Auggie (passed to rules script)
   --claude         Rule target: Claude (passed to rules script)
-  --gemini         Rule target: Gemini (passed to rules script)
   --quiet          Print compact app-friendly output
   --help           Show this help
 
@@ -75,7 +74,6 @@ while [ $# -gt 0 ]; do
     --opencode) rule_flags+=(--opencode) ;;
     --auggie)   rule_flags+=(--auggie) ;;
     --claude)   rule_flags+=(--claude) ;;
-    --gemini)   rule_flags+=(--gemini) ;;
     --agent)
       shift
       if [ $# -eq 0 ]; then

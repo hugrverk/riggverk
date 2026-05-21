@@ -121,16 +121,16 @@ for pattern in "placeholder" "No files are written" "future app flows"; do
   fi
 done
 
-step "bundled default install-skills.sh help mentions all six agents"
-for agent in codex opencode claude gemini auggie cursor; do
+step "bundled default install-skills.sh help mentions all supported agents"
+for agent in codex opencode claude auggie cursor; do
   if ! bash resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
     exit 1
   fi
 done
 
-step "bundled default install-agent-rules.sh help mentions all five rule targets"
-for agent in codex opencode claude gemini auggie; do
+step "bundled default install-agent-rules.sh help mentions all supported rule targets"
+for agent in codex opencode claude auggie; do
   if ! bash resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-agent-rules.sh --help missing rule target: %s\n' "$agent" >&2
     exit 1

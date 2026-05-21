@@ -24,7 +24,6 @@ impl AgentSyncTarget {
             "opencode_rules" => Some("--opencode"),
             "auggie_rules" => Some("--auggie"),
             "claude_rules" => Some("--claude"),
-            "gemini_rules" => Some("--gemini"),
             "cursor_setup" => Some("--cursor"),
             _ => None,
         }
@@ -68,13 +67,6 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             label: "claude rules",
             kind: TargetKind::Rules,
             target_rel: ".claude/CLAUDE.md",
-            source_rel: "templates/global-agent-rules.md",
-        },
-        AgentSyncTarget {
-            id: "gemini_rules",
-            label: "gemini rules",
-            kind: TargetKind::Rules,
-            target_rel: ".gemini/GEMINI.md",
             source_rel: "templates/global-agent-rules.md",
         },
         AgentSyncTarget {
@@ -159,13 +151,12 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
-            description: "Codex, OpenCode, Auggie, Claude, Gemini rules + Cursor setup".into(),
+            description: "Codex, OpenCode, Auggie, Claude rules + Cursor setup".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
                 "auggie_rules".into(),
                 "claude_rules".into(),
-                "gemini_rules".into(),
                 "cursor_setup".into(),
             ],
         },
@@ -179,7 +170,6 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "opencode_rules".into(),
                 "auggie_rules".into(),
                 "claude_rules".into(),
-                "gemini_rules".into(),
                 "opencode_config".into(),
                 "cursor_setup".into(),
             ],

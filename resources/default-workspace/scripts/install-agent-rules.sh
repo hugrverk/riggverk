@@ -18,7 +18,6 @@ Options:
   --opencode       Select OpenCode rule target
   --auggie         Select Auggie rule target
   --claude         Select Claude rule target
-  --gemini         Select Gemini rule target
   --all            Select all rule targets (default)
   --quiet          Print compact app-friendly output
   --help           Show this help
@@ -39,7 +38,6 @@ codex=false
 opencode=false
 auggie=false
 claude=false
-gemini=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -51,8 +49,7 @@ while [ $# -gt 0 ]; do
     --opencode) opencode=true ;;
     --auggie) auggie=true ;;
     --claude) claude=true ;;
-    --gemini) gemini=true ;;
-    --all) codex=true; opencode=true; auggie=true; claude=true; gemini=true ;;
+    --all) codex=true; opencode=true; auggie=true; claude=true ;;
     *)
       printf 'install-agent-rules.sh: unknown option: %s\n' "$1" >&2
       usage >&2
@@ -62,8 +59,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! $codex && ! $opencode && ! $auggie && ! $claude && ! $gemini; then
-  codex=true; opencode=true; auggie=true; claude=true; gemini=true
+if ! $codex && ! $opencode && ! $auggie && ! $claude; then
+  codex=true; opencode=true; auggie=true; claude=true
 fi
 
 backup_root() {
@@ -87,7 +84,6 @@ resolve_target() {
     opencode) printf '%s' "${OPENCODE_AGENTS_PATH:-$HOME/.config/opencode/AGENTS.md}" ;;
     auggie)   printf '%s' "${AUGGIE_GLOBAL_PATH:-$HOME/.augment/rules/global.md}" ;;
     claude)   printf '%s' "${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}" ;;
-    gemini)   printf '%s' "${GEMINI_RULES_PATH:-$HOME/.gemini/GEMINI.md}" ;;
   esac
 }
 
@@ -97,7 +93,6 @@ target_label() {
     opencode) printf 'opencode-rules' ;;
     auggie)   printf 'auggie-rules' ;;
     claude)  printf 'claude-rules' ;;
-    gemini)  printf 'gemini-rules' ;;
   esac
 }
 
@@ -185,6 +180,5 @@ $codex    && handle_target codex    || exit_code=$?
 $opencode && handle_target opencode || exit_code=$?
 $auggie   && handle_target auggie   || exit_code=$?
 $claude   && handle_target claude   || exit_code=$?
-$gemini   && handle_target gemini   || exit_code=$?
 
 exit "$exit_code"

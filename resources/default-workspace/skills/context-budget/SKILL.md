@@ -3,7 +3,7 @@ name: context-budget
 description: Audit skills, rules, docs, agent prompts, and tooling config for token overhead, overlap, and safe simplification without removing essential safety guidance.
 category: workflow
 risk: low
-targets: codex, opencode, claude, gemini, auggie
+targets: codex, opencode, claude, auggie
 related: implementation-plan
 ---
 

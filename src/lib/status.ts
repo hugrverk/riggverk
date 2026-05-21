@@ -14,7 +14,6 @@ export function ruleSyncCount(s: StatusData, enabled: Set<string>): { synced: nu
     { id: "opencode_rules", val: s.rules_opencode },
     { id: "auggie_rules", val: s.rules_auggie },
     { id: "claude_rules", val: s.rules_claude },
-    { id: "gemini_rules", val: s.rules_gemini },
   ].filter(a => enabled.has(a.id));
   return { synced: items.filter(a => a.val === "synced").length, total: items.length };
 }

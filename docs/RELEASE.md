@@ -46,7 +46,7 @@ After code changes that affect the app, manually check:
 - Settings save/reset works.
 - Settings target profile buttons are visible.
 - Applying OpenCode selects `opencode_rules` + `opencode_config`.
-- Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, `claude_rules`, and `gemini_rules`.
+- Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, and `claude_rules`.
 - Applying All supported selects all rule targets plus `opencode_config`.
 - Manual checkbox changes show custom target selection.
 - Save persists selected targets; Reset restores defaults.

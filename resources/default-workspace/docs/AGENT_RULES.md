@@ -23,7 +23,6 @@ When synced, the template is written to tool-specific global rule paths:
 | OpenCode | `~/.config/opencode/AGENTS.md` |
 | Auggie | `~/.augment/rules/global.md` |
 | Claude | `~/.claude/CLAUDE.md` |
-| Gemini | `~/.gemini/GEMINI.md` |
 
 Cursor project rules are separate from this global rules sync. Use `scripts/install-cursor-workspace.sh --project --target /path/to/project` to install the focused `.cursor/rules/*.mdc` rule set into a project.
 

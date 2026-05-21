@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_DIR="$WORKSPACE_ROOT/skills"
 
-VALID_AGENTS="codex opencode claude gemini auggie cursor"
+VALID_AGENTS="codex opencode claude auggie cursor"
 
 usage() {
   cat <<'USAGE'
@@ -14,7 +14,7 @@ Usage: ./scripts/install-skills.sh [options]
 Install workspace skills to agent tool skill folders.
 
 Options:
-  --agent <target>    Agent target: codex, opencode, claude, gemini, auggie, cursor
+  --agent <target>    Agent target: codex, opencode, claude, auggie, cursor
                       Repeatable. Default: opencode.
   --global            Install globally (system-wide)
   --project           Install into a project folder
@@ -160,7 +160,6 @@ agent_global_dest() {
     codex)    printf '%s' "${CODEX_SKILLS_PATH:-${CODEX_HOME:-$HOME/.codex}/skills}" ;;
     opencode) printf '%s' "${OPENCODE_SKILLS_PATH:-$HOME/.config/opencode/skills}" ;;
     claude)   printf '%s' "${CLAUDE_SKILLS_PATH:-$HOME/.claude/skills}" ;;
-    gemini)   printf '%s' "${GEMINI_SKILLS_PATH:-$HOME/.gemini/skills}" ;;
     auggie)   printf '%s' "${AUGGIE_SKILLS_PATH:-$HOME/.augment/skills}" ;;
     cursor)   printf '%s' "${CURSOR_SKILLS_PATH:-$HOME/.cursor/skills}" ;;
   esac
@@ -172,7 +171,6 @@ agent_project_dest() {
     codex)    printf '%s/.codex/skills' "$target" ;;
     opencode) printf '%s/.opencode/skills' "$target" ;;
     claude)   printf '%s/.claude/skills' "$target" ;;
-    gemini)   printf '%s/.gemini/skills' "$target" ;;
     auggie)   printf '%s/.augment/skills' "$target" ;;
     cursor)   printf '%s/.cursor/skills' "$target" ;;
   esac

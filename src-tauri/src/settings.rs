@@ -194,6 +194,28 @@ mod tests {
         assert_eq!(settings.workspace_path, None);
     }
 
+    #[test]
+    fn loaded_stale_enabled_target_ids_drop_unknown_values() {
+        let mut settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: None,
+            enabled_target_ids: vec![
+                "codex_rules".into(),
+                "legacy_removed_rules".into(),
+                "opencode_config".into(),
+                "unknown".into(),
+            ],
+            accent_color: None,
+        };
+
+        normalize(&mut settings);
+
+        assert_eq!(
+            settings.enabled_target_ids,
+            vec!["codex_rules".to_string(), "opencode_config".to_string()]
+        );
+    }
+
     // ── accent_color tests ──
 
     #[test]

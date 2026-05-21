@@ -9,14 +9,12 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "opencode-rules",
     "auggie-rules",
     "claude-rules",
-    "gemini-rules",
     "opencode-config",
     "opencode-agents",
     "codex",
     "opencode",
     "auggie",
     "claude",
-    "gemini",
 ];
 
 const BACKUP_FILE_LIMIT: usize = 50;
@@ -152,7 +150,6 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "opencode-rules" => ".config/opencode/AGENTS.md",
         "auggie-rules" => ".augment/rules/global.md",
         "claude-rules" => ".claude/CLAUDE.md",
-        "gemini-rules" => ".gemini/GEMINI.md",
         "opencode-config" => ".config/opencode/opencode.json",
         "opencode-agents" => ".config/opencode/agents",
         // Legacy backwards-compatible IDs (read-only)
@@ -160,7 +157,6 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "opencode" => ".config/opencode/AGENTS.md",
         "auggie" => ".augment/rules/global.md",
         "claude" => ".claude/CLAUDE.md",
-        "gemini" => ".gemini/GEMINI.md",
         _ => return Err(format!("unknown backup target id: {}", target_id)),
     };
     Ok(PathBuf::from(&home).join(rel))

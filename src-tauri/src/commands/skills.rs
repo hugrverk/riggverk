@@ -232,7 +232,7 @@ fn validate_project_install_target(raw: &str) -> Result<PathBuf, String> {
     Ok(canonical)
 }
 
-const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "gemini", "auggie", "cursor"];
+const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "auggie", "cursor"];
 
 fn validate_agent(agent: &str) -> Result<(), String> {
     if VALID_SKILL_AGENTS.contains(&agent) {
@@ -540,6 +540,7 @@ mod tests {
         assert!(super::validate_agent("opeencode").is_err());
         assert!(super::validate_agent("Claude").is_err());
         assert!(super::validate_agent("gemni").is_err());
+        assert!(super::validate_agent("removed-agent").is_err());
     }
 
     #[test]

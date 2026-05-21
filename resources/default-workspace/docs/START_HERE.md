@@ -6,7 +6,7 @@ This is an agent workspace — a user-owned directory that stores docs, skills, 
 
 ## What the app is and is not
 
-The app is a desktop sync tool for managing agent configuration across tools like OpenCode, Codex, Claude, Gemini, and Auggie. It helps you:
+The app is a desktop sync tool for managing agent configuration across tools like OpenCode, Codex, Claude, and Auggie. It helps you:
 
 - Browse and edit workspace docs, skills, templates, and rules
 - Preview sync operations (dry-run/diff) before writing files
