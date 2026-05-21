@@ -3,8 +3,8 @@
 ## Set up OpenCode only
 
 1. **Workspace** — **install** if not already installed.
-2. Open **Settings** — enable OpenCode rule and config targets; Save.
-3. Open **OpenCode** harness — **Diff Rules**, then **Sync Rules**; **Diff Configs**, then **Sync Configs**.
+2. Open **OpenCode** — enable rule and config targets in the Targets panel; **Save** in Settings to persist.
+3. **Diff Rules**, then **Sync Rules**; **Diff Configs**, then **Sync Configs**.
 
 ## Add a new skill
 

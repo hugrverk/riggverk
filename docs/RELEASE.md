@@ -20,14 +20,13 @@ It does not run apply commands, install skills, create backups, write user confi
 
 ## Manual GUI Smoke
 
-For installed-app release smoke (create workspace, folder picker, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
+For installed-app release smoke (install/repair, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
 
 After code changes that affect the app, manually check:
 
 - App starts and opens the Workspace view.
-- Workspace diagnostics show valid and invalid workspace paths correctly.
-- Workspace create flow requires dry-run first, copies starter files only, and rejects unsafe targets.
-- Pull runs `git pull --ff-only` only inside a Git workspace.
+- Workspace diagnostics show install state for `~/.config/agent-workspace`.
+- **install** / **repair** copy bundled files only; no path chooser in normal UI.
 - Diff/sync rules respect saved enabled rule targets.
 - Diff/sync configs respect saved enabled config targets.
 - Skills dry-run works for global targets with a valid selected workspace.
@@ -43,9 +42,9 @@ After code changes that affect the app, manually check:
 - Library rules, agents, and configs edit/save only workspace source files.
 - Brain Setup displays the copy-paste setup block and does not change enabled sync targets.
 - Copy brain setup writes the full setup block to the clipboard.
-- Settings save/reset works.
-- Settings target profile buttons are visible.
-- Applying OpenCode selects `opencode_rules` + `opencode_config`.
+- Settings save/reset works for appearance and theme colors; target changes from harness pages persist via Settings **Save**.
+- Harness Targets panels show profile chips and target toggles per tool.
+- Applying OpenCode profile selects `opencode_rules` + `opencode_config`.
 - Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, and `claude_rules`.
 - Applying All supported selects all rule targets plus `opencode_config`.
 - Manual checkbox changes show custom target selection.
@@ -54,5 +53,5 @@ After code changes that affect the app, manually check:
 
 ## Remaining Limits
 
-- Release check does not replace manual GUI smoke for view wiring, folder picker behavior, installed bundles, or native file-open behavior.
+- Release check does not replace manual GUI smoke for view wiring, install/repair behavior, installed bundles, or native file-open behavior.
 - The workspace marker directory `.agent-workspace/` and related env vars (`AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.

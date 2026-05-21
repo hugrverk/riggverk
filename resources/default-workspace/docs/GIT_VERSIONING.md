@@ -1,13 +1,13 @@
 # Git Versioning
 
-The workspace is a plain-text directory that can be versioned with Git like any other project. The app does not initialize repositories, create commits, create remotes, manage GitHub auth, or push changes. Its Pull button runs `git pull --ff-only` only when the selected workspace is already a Git checkout.
+The workspace is a plain-text directory that can be versioned with Git like any other project. The app does not initialize repositories, create commits, create remotes, manage GitHub auth, push changes, or run `git pull` for you.
 
 ## Workflow
 
 ### Initial setup
 
 ```bash
-# 1. Create your workspace with the app (or choose an existing path)
+# 1. Install the workspace with the app (Workspace → install)
 # 2. Open a terminal in the workspace directory
 cd /path/to/your/workspace
 
@@ -88,7 +88,7 @@ The app reads workspace files and displays their state. It does not:
 - Run `git init`, `git add`, or `git commit`
 - Create GitHub remotes or manage auth
 - Push to remotes
-- Pull except through the explicit Workspace Pull action (`git pull --ff-only`)
+- Run `git pull` or other Git commands for you
 - Detect Git state beyond basic branch information
 
 Use your normal Git workflow (CLI, GitHub Desktop, IDE) to manage version history.

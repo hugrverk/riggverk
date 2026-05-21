@@ -51,7 +51,7 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance and theme colors. Target profiles and per-tool sync toggles are on harness pages; Save persists enabled targets.
+Appearance and theme colors. Target profiles and per-tool sync toggles are on harness pages; use **Save** here to persist target and color changes.
 
 ## Dry-run before sync
 

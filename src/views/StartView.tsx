@@ -104,7 +104,7 @@ export function StartView({
               <p className="start-overview-copy">
                 A local control panel for your AI-agent workspace. Keeps rules, skills, configs, docs, and
                 install/sync scripts in one versioned folder, then lets you preview and apply changes to Codex,
-                OpenCode, Cursor, Auggie, and Claude. Does not run agents for you. Writes are explicit; sync,
+                OpenCode, Cursor, Augment, and Claude. Does not run agents for you. Writes are explicit; sync,
                 install, and release actions run scripts from the installed workspace.
               </p>
             </div>

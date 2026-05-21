@@ -100,25 +100,9 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules) and config targets (opencode_config, codex_config, cursor_setup) are filtered by kind in the UI. Claude and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (Codex, OpenCode, Cursor, Claude, Augment, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); persisted when you **Save** in Settings. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
-
-### Target profiles
-
-Settings includes compact target profile buttons for quick target selection:
-
-| Profile | Enabled targets |
-|---------|----------------|
-| Codex | codex_rules, codex_config |
-| OpenCode | opencode_rules, opencode_config |
-| Cursor | cursor_setup |
-| Claude | claude_rules |
-| Augment | auggie_rules |
-| All rules | codex_rules, opencode_rules, auggie_rules, claude_rules |
-| All supported | codex_rules, opencode_rules, auggie_rules, claude_rules, opencode_config, codex_config, cursor_setup |
-
-Applying a profile updates the local settings draft target selection. The user must click Save to persist. The nav tab shows `*` and the Settings header shows "modified — save to persist" when the draft differs from saved settings. Profiles are metadata only — they do not run sync or write target files. Manual target toggles use real `<button>` elements with `aria-pressed` for keyboard accessibility; the current selection is visible via a filled check-dot indicator beyond color alone. A "custom selection" label appears when the current selection does not match any defined profile.
 
 ### Settings security
 

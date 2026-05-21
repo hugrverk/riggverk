@@ -34,7 +34,7 @@ Use **repair** to copy only missing bundled files without overwriting your edits
 ## Sync failures
 
 - Confirm the workspace is valid (Workspace page shows INSTALLED).
-- Enable the right targets on the harness page or in Settings, then Save.
+- Enable the right targets on the harness page, then **Save** in Settings to persist.
 - Read terminal output on Workspace or the harness page for script errors.
 
 ## Release-check unavailable
