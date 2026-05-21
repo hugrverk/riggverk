@@ -401,6 +401,22 @@ pub fn run_cursor_profile_action(
         "cursor_show_user_rules" => args.push("--show-user-rules".into()),
         "cursor_copy_user_rules" => args.push("--copy-user-rules".into()),
         "cursor_open_settings" => args.push("--open-cursor-settings".into()),
+        "cursor_show_playwright_mcp" => args.push("--show-playwright-mcp".into()),
+        "cursor_copy_playwright_mcp" => args.push("--copy-playwright-mcp".into()),
+        "cursor_show_sandbox_safe" => args.extend(["--show-sandbox-profile".into(), "safe".into()]),
+        "cursor_copy_sandbox_safe" => args.extend(["--copy-sandbox-profile".into(), "safe".into()]),
+        "cursor_show_sandbox_playwright_safe" => {
+            args.extend(["--show-sandbox-profile".into(), "playwright-safe".into()])
+        }
+        "cursor_copy_sandbox_playwright_safe" => {
+            args.extend(["--copy-sandbox-profile".into(), "playwright-safe".into()])
+        }
+        "cursor_show_sandbox_playwright_full" => {
+            args.extend(["--show-sandbox-profile".into(), "playwright-full".into()])
+        }
+        "cursor_copy_sandbox_playwright_full" => {
+            args.extend(["--copy-sandbox-profile".into(), "playwright-full".into()])
+        }
         "cursor_diff_project" | "cursor_sync_project" => {
             let raw = project_target
                 .as_deref()

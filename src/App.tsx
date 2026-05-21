@@ -1320,6 +1320,14 @@ function App() {
             onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
             onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
             onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
+            onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
+            onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
+            onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
+            onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
+            onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
+            onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
+            onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
+            onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
             onCursorDiffProject={() => runCursorProfileAction("cursor_diff_project", "cursor dry-run project")}
             onCursorSyncProject={() => runCursorProfileAction("cursor_sync_project", "cursor sync project")}
             onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}

@@ -53,6 +53,14 @@ interface WorkspaceViewProps {
   onCursorShowUserRules: () => void;
   onCursorCopyUserRules: () => void;
   onCursorOpenSettings: () => void;
+  onCursorShowPlaywrightMcp: () => void;
+  onCursorCopyPlaywrightMcp: () => void;
+  onCursorShowSandboxSafe: () => void;
+  onCursorCopySandboxSafe: () => void;
+  onCursorShowSandboxPlaywrightSafe: () => void;
+  onCursorCopySandboxPlaywrightSafe: () => void;
+  onCursorShowSandboxPlaywrightFull: () => void;
+  onCursorCopySandboxPlaywrightFull: () => void;
   onCursorDiffProject: () => void;
   onCursorSyncProject: () => void;
   onCursorValidateProfile: () => void;
@@ -157,6 +165,14 @@ export function WorkspaceView({
   onCursorShowUserRules,
   onCursorCopyUserRules,
   onCursorOpenSettings,
+  onCursorShowPlaywrightMcp,
+  onCursorCopyPlaywrightMcp,
+  onCursorShowSandboxSafe,
+  onCursorCopySandboxSafe,
+  onCursorShowSandboxPlaywrightSafe,
+  onCursorCopySandboxPlaywrightSafe,
+  onCursorShowSandboxPlaywrightFull,
+  onCursorCopySandboxPlaywrightFull,
   onCursorDiffProject,
   onCursorSyncProject,
   onCursorValidateProfile,
@@ -675,6 +691,14 @@ export function WorkspaceView({
                     <button className="btn btn-sm" onClick={onCursorShowUserRules} disabled={wsRunning !== null}>show rules</button>
                     <button className="btn btn-sm" onClick={onCursorCopyUserRules} disabled={wsRunning !== null}>copy rules</button>
                     <button className="btn btn-sm" onClick={onCursorOpenSettings} disabled={wsRunning !== null}>open settings</button>
+                    <button className="btn btn-sm" onClick={onCursorShowPlaywrightMcp} disabled={wsRunning !== null}>show MCP</button>
+                    <button className="btn btn-sm" onClick={onCursorCopyPlaywrightMcp} disabled={wsRunning !== null}>copy MCP</button>
+                    <button className="btn btn-sm" onClick={onCursorShowSandboxSafe} disabled={wsRunning !== null}>show sandbox safe</button>
+                    <button className="btn btn-sm" onClick={onCursorCopySandboxSafe} disabled={wsRunning !== null}>copy sandbox safe</button>
+                    <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightSafe} disabled={wsRunning !== null}>show pw-safe</button>
+                    <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightSafe} disabled={wsRunning !== null}>copy pw-safe</button>
+                    <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightFull} disabled={wsRunning !== null}>show pw-full</button>
+                    <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightFull} disabled={wsRunning !== null}>copy pw-full</button>
                     <button className="btn btn-sm" onClick={onCursorDiffProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>dry-run project</button>
                     <button className="btn btn-sm btn-primary" onClick={onCursorSyncProject} disabled={wsRunning !== null || !cursorProjectTarget.trim()}>sync project</button>
                     <button className="btn btn-sm" onClick={onCursorValidateProfile} disabled={wsRunning !== null}>validate</button>
