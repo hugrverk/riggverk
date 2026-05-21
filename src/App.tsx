@@ -8,24 +8,39 @@ import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
+import { StartView } from "./views/StartView";
 import { WorkspaceView } from "./views/WorkspaceView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
-type View = "workspace" | "library" | "routing" | "settings";
+type View =
+  | "start"
+  | "codex"
+  | "opencode"
+  | "cursor"
+  | "misc"
+  | "library"
+  | "routing"
+  | "settings";
+
+const TARGET_VIEWS = new Set<View>(["codex", "opencode", "cursor", "misc"]);
+
+function isTargetView(view: View): boolean {
+  return TARGET_VIEWS.has(view);
+}
 
 /* ---- main app ---- */
 
 function App() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>("workspace");
+  const [view, setView] = useState<View>("start");
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
 
   const [skills, setSkills] = useState<SkillSummary[]>([]);
@@ -110,7 +125,7 @@ function App() {
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
 
   // workspace contract validation
-  const [contractResult, setContractResult] = useState<WorkspaceContractResult | null>(null);
+  const [, setContractResult] = useState<WorkspaceContractResult | null>(null);
 
   // opencode runtime health
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
@@ -163,14 +178,6 @@ function App() {
   }, [isWorkspaceLoadCurrent]);
 
   // default workspace preview state
-  const [defaultWorkspaceSummary, setDefaultWorkspaceSummary] = useState<DefaultWorkspaceSummary | null>(null);
-
-  const loadDefaultWorkspaceSummary = useCallback(async () => {
-    try {
-      setDefaultWorkspaceSummary(await invoke<DefaultWorkspaceSummary>("get_default_workspace_summary"));
-    } catch (e) { setError(`Default workspace: ${e}`); }
-  }, []);
-
   function isInvalidWorkspaceError(e: unknown): boolean {
     return String(e).toLowerCase().includes(INVALID_WORKSPACE_TEXT);
   }
@@ -924,7 +931,7 @@ function App() {
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadWorkspaceResources]);
+  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   const saveSettings = useCallback(async () => {
     if (!appSettings) return;
@@ -1031,13 +1038,6 @@ function App() {
     });
   }, []);
 
-  const setWorkspacePath = useCallback((workspacePath: string | null) => {
-    setSettingsMsg(null);
-    setCreatePlan(null);
-    setCreateResult(null);
-    setAppSettings(prev => prev ? { ...prev, workspace_path: workspacePath } : prev);
-  }, []);
-
   const chooseWorkspaceFolder = useCallback(async () => {
     try {
       const selected = await open({ directory: true, multiple: false });
@@ -1059,10 +1059,15 @@ function App() {
     }
     setView(v);
     setSettingsMsg(null);
-    if (v === "workspace") { loadWorkspaceDiagnostics(); loadDefaultWorkspaceSummary(); loadContract(); loadCursorProfileHealth(); }
+    if (v === "start" || isTargetView(v)) {
+      loadWorkspaceDiagnostics();
+      loadContract();
+      loadCursorProfileHealth();
+      loadOpenCodeRuntimeHealth();
+    }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadDefaultWorkspaceSummary, loadContract, loadCursorProfileHealth, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1144,6 +1149,106 @@ function App() {
     return match ? match.id : null;
   }, [appSettings, targetProfiles]);
 
+  const targetPageLabel = view === "codex"
+    ? "CODEX"
+    : view === "opencode"
+      ? "OPENCODE"
+      : view === "cursor"
+        ? "CURSOR"
+        : view === "misc"
+          ? "MISC"
+          : undefined;
+
+  const targetWorkspaceView = (
+    <WorkspaceView
+      pageLabel={targetPageLabel}
+      wsLog={wsLog}
+      wsLogCompletedAt={wsLogCompletedAt}
+      wsRunning={wsRunning}
+      activityIndex={activityIndex}
+      activityCellClass={activityCellClass}
+      status={status}
+      workspaceValid={workspaceValid}
+      gitAvailable={gitAvailable}
+      ruleTargetsEnabled={ruleTargetsEnabled}
+      configEnabled={configEnabled}
+      canRunReleaseCheck={canRunReleaseCheck}
+      onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
+      onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+      onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
+      onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+      onReleaseCheck={() => runWsAction("release_check", "release-check")}
+      opencodeRuntimeHealth={opencodeRuntimeHealth}
+      onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
+      onPlanWorkspaceRepair={() => runWsTask({
+        label: "plan workspace repair",
+        action: "plan_workspace_repair",
+        task: async () => invoke<RepairWorkspaceResult>("plan_workspace_repair"),
+        toActionResult: (r) => ({
+          success: r.ok,
+          action: "plan_workspace_repair",
+          stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
+          stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
+          exit_code: r.ok ? 0 : 1,
+        }),
+        refresh: loadOpenCodeRuntimeHealth,
+      })}
+      onApplyWorkspaceRepair={() => runWsTask({
+        label: "apply workspace repair",
+        action: "apply_workspace_repair",
+        task: async () => invoke<RepairWorkspaceResult>("apply_workspace_repair"),
+        toActionResult: (r) => ({
+          success: r.ok,
+          action: "apply_workspace_repair",
+          stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
+          stderr: r.errors.join("\n"),
+          exit_code: r.ok ? 0 : 1,
+        }),
+        refresh: loadOpenCodeRuntimeHealth,
+      })}
+      onGenerateOpenCodeConfig={() => runWsTask({
+        label: "generate opencode config",
+        action: "generate_opencode_config_snapshot",
+        task: async () => invoke<ActionResult>("generate_opencode_config_snapshot"),
+        toActionResult: (r) => r,
+        refresh: loadOpenCodeRuntimeHealth,
+      })}
+      cursorProfileHealth={cursorProfileHealth}
+      onRefreshCursorProfile={() => loadCursorProfileHealth()}
+      onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
+      onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
+      onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
+      onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
+      onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
+      onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
+      onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
+      onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
+      onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
+      onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
+      onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
+      onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
+      onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
+      onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
+      skills={skills}
+      skillsLoaded={skillsLoaded}
+      selectedSkills={selectedSkills}
+      skillSearch={skillSearch}
+      installAgents={installAgentsArray}
+      skillsCanInstall={skillsCanInstall}
+      onDryRunSkills={() => runWsInstall(true)}
+      onInstallSkills={() => runWsInstall(false)}
+      onToggleSkill={toggleSkill}
+      onSelectAllSkills={selectAll}
+      onClearSelectionSkills={clearSelection}
+      onToggleInstallAgent={toggleInstallAgent}
+      onSetSkillSearch={setSkillSearch}
+      onOpenInstallScript={openInstallScript}
+      backupCount={backups.length}
+      onRefreshBackups={loadBackups}
+      onOpenBackupsFolder={openBackupsFolder}
+    />
+  );
+
   return (
       <div className="app-shell">
       {error && (
@@ -1156,17 +1261,60 @@ function App() {
       )}
 
       <header className="app-header" data-tauri-drag-region>
-        <nav className="nav-icons">
-          {/* Workspace */}
+        <nav className="nav-icons" aria-label="Main navigation">
           <button
-            className={`nav-icon ${view === "workspace" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("workspace")}
-            aria-label="Workspace"
-            title="Workspace"
+            className={`nav-icon ${view === "start" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("start")}
+            aria-label="Start"
+            title="Start"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" />
+            </svg>
+          </button>
+          <button
+            className={`nav-icon ${view === "codex" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("codex")}
+            aria-label="Codex"
+            title="Codex"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M8 8h8M8 12h8M8 16h5" />
+            </svg>
+          </button>
+          <button
+            className={`nav-icon ${view === "opencode" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("opencode")}
+            aria-label="OpenCode"
+            title="OpenCode"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <polyline points="4,17 10,11 4,5" />
               <line x1="12" y1="19" x2="20" y2="19" />
+            </svg>
+          </button>
+          <button
+            className={`nav-icon ${view === "cursor" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("cursor")}
+            aria-label="Cursor"
+            title="Cursor"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M12 2L2 7l10 5 10-5-10-5z" />
+              <path d="M2 17l10 5 10-5M2 12l10 5 10-5" />
+            </svg>
+          </button>
+          <button
+            className={`nav-icon ${view === "misc" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("misc")}
+            aria-label="Misc targets"
+            title="Misc"
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <circle cx="6" cy="12" r="2" />
+              <circle cx="12" cy="12" r="2" />
+              <circle cx="18" cy="12" r="2" />
             </svg>
           </button>
           {/* Library */}
@@ -1224,22 +1372,22 @@ function App() {
       </header>
 
       <div className="view-area">
-        {view === "workspace" && (
-          <WorkspaceView
+        {view === "start" && (
+          <StartView
             appSettings={appSettings}
-            onSetWorkspacePath={setWorkspacePath}
             onApplyWorkspacePath={applyWorkspacePath}
             onChooseWorkspaceFolder={chooseWorkspaceFolder}
             workspaceDiagnostics={workspaceDiagnostics}
-            onRefreshDiagnostics={() => { loadWorkspaceDiagnostics(); loadCursorProfileHealth(); }}
-            defaultWorkspaceSummary={defaultWorkspaceSummary}
+            onRefreshDiagnostics={() => {
+              loadWorkspaceDiagnostics();
+              fetchStatus();
+            }}
             createPlan={createPlan}
             createPlanRunning={createPlanRunning}
             onPlanCreate={planCreate}
             createResult={createResult}
             createRunning={createRunning}
             onCreateWorkspace={runCreate}
-            // operations
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
@@ -1248,99 +1396,13 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={ruleTargetsEnabled}
-            configEnabled={configEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
             onPull={() => runWsAction("git_pull", "git pull")}
-            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
-            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
-            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
-            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
-            onReleaseCheck={() => runWsAction("release_check", "release-check")}
             onRefreshStatus={fetchStatus}
-            // opencode runtime
-            opencodeRuntimeHealth={opencodeRuntimeHealth}
-            onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
-            onPlanWorkspaceRepair={() => runWsTask({
-              label: "plan workspace repair",
-              action: "plan_workspace_repair",
-              task: async () => {
-                return await invoke<RepairWorkspaceResult>("plan_workspace_repair");
-              },
-              toActionResult: (r) => ({
-                success: r.ok,
-                action: "plan_workspace_repair",
-                stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
-                stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
-                exit_code: r.ok ? 0 : 1,
-              }),
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            onApplyWorkspaceRepair={() => runWsTask({
-              label: "apply workspace repair",
-              action: "apply_workspace_repair",
-              task: async () => {
-                return await invoke<RepairWorkspaceResult>("apply_workspace_repair");
-              },
-              toActionResult: (r) => ({
-                success: r.ok,
-                action: "apply_workspace_repair",
-                stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
-                stderr: r.errors.join("\n"),
-                exit_code: r.ok ? 0 : 1,
-              }),
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            onGenerateOpenCodeConfig={() => runWsTask({
-              label: "generate opencode config",
-              action: "generate_opencode_config_snapshot",
-              task: async () => {
-                return await invoke<ActionResult>("generate_opencode_config_snapshot");
-              },
-              toActionResult: (r) => r,
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            // cursor profile
-            cursorProfileHealth={cursorProfileHealth}
-            onRefreshCursorProfile={() => loadCursorProfileHealth()}
-            onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
-            onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
-            onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
-            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
-            onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
-            onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
-            onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
-            onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
-            onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
-            onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
-            onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
-            onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
-            onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
-            onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
-            // skills
-            skills={skills}
-            skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
-            skillSearch={skillSearch}
-            installAgents={installAgentsArray}
-            skillsCanInstall={skillsCanInstall}
-            onDryRunSkills={() => runWsInstall(true)}
-            onInstallSkills={() => runWsInstall(false)}
-            onToggleSkill={toggleSkill}
-            onSelectAllSkills={selectAll}
-            onClearSelectionSkills={clearSelection}
-            onToggleInstallAgent={toggleInstallAgent}
-            onSetSkillSearch={setSkillSearch}
-            onOpenInstallScript={openInstallScript}
-            // backups
-            backupCount={backups.length}
-            onRefreshBackups={loadBackups}
-            onOpenBackupsFolder={openBackupsFolder}
-            // contract
-            contractResult={contractResult}
-            onRefreshContract={loadContract}
           />
         )}
+
+        {isTargetView(view) && targetWorkspaceView}
 
         {view === "library" && (
           <Suspense fallback={<div className="view-loading">loading library…</div>}>

@@ -98,6 +98,13 @@ html, body, #root {
   gap: 4px;
   height: 100%;
   align-items: center;
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.nav-icons::-webkit-scrollbar {
+  display: none;
 }
 
 .nav-icon {
@@ -2537,6 +2544,27 @@ html, body, #root {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   color: var(--text-heading);
+}
+
+.ws-page-label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+  padding-bottom: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.ws-path-status-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-top: 6px;
+}
+
+.ws-layout-start .ws-left {
+  max-width: 560px;
 }
 
 .ws-status-chip {
