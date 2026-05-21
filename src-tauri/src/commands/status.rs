@@ -52,6 +52,91 @@ fn opencode_config_status(root: &Path, home: &Path) -> String {
     sync_label(&config_target, &config_source)
 }
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RuntimeAgentsHarness {
+    Opencode,
+    Claude,
+    Auggie,
+}
+
+fn runtime_agents_harness_for_target_rel(target_rel: &str) -> RuntimeAgentsHarness {
+    if target_rel.contains("opencode") {
+        RuntimeAgentsHarness::Opencode
+    } else if target_rel.contains(".claude/agents") {
+        RuntimeAgentsHarness::Claude
+    } else if target_rel.contains(".augment/agents") {
+        RuntimeAgentsHarness::Auggie
+    } else {
+        RuntimeAgentsHarness::Opencode
+    }
+}
+
+fn frontmatter_has_name_field(front: &str) -> bool {
+    front
+        .lines()
+        .any(|line| line.trim_start().starts_with("name:"))
+}
+
+/// Expected installed bytes for a bundled runtime agent (matches install-runtime-agents.sh staging).
+fn expected_runtime_agent_content(
+    source: &str,
+    stem: &str,
+    harness: RuntimeAgentsHarness,
+) -> String {
+    if harness == RuntimeAgentsHarness::Opencode {
+        return source.to_string();
+    }
+
+    if !source.starts_with("---") {
+        return source.to_string();
+    }
+
+    let Some(rest) = source.get(3..) else {
+        return source.to_string();
+    };
+    let Some(end_rel) = rest.find("\n---") else {
+        return source.to_string();
+    };
+    let end = 3 + end_rel;
+    let front = &source[..end + 4];
+    let body = &source[end + 4..];
+
+    if frontmatter_has_name_field(front) {
+        return source.to_string();
+    }
+
+    let Some(close) = front.rfind("\n---") else {
+        return source.to_string();
+    };
+
+    let mut expected = String::with_capacity(source.len() + stem.len() + 16);
+    expected.push_str(&front[..close]);
+    expected.push_str("\nname: ");
+    expected.push_str(stem);
+    expected.push('\n');
+    expected.push_str(&front[close..]);
+    expected.push_str(body);
+    expected
+}
+
+fn runtime_agent_matches_installed(source: &Path, target: &Path, target_rel: &str) -> bool {
+    let Ok(source_bytes) = std::fs::read(source) else {
+        return false;
+    };
+    let Ok(target_bytes) = std::fs::read(target) else {
+        return false;
+    };
+
+    let harness = runtime_agents_harness_for_target_rel(target_rel);
+    let source_str = String::from_utf8_lossy(&source_bytes);
+    let stem = source
+        .file_stem()
+        .and_then(|s| s.to_str())
+        .unwrap_or_default();
+    let expected = expected_runtime_agent_content(&source_str, stem, harness);
+    target_bytes == expected.as_bytes()
+}
+
 fn shared_runtime_agents_status(root: &Path, home: &Path, target_rel: &str) -> String {
     let agents_dir = root.join("agents");
     if !agents_dir.is_dir() {
@@ -82,7 +167,7 @@ fn shared_runtime_agents_status(root: &Path, home: &Path, target_rel: &str) -> S
         if !agent_target.exists() {
             return "missing".into();
         }
-        if !file_eq(&agent_target, &agent_source) {
+        if !runtime_agent_matches_installed(&agent_source, &agent_target, target_rel) {
             return "diverged".into();
         }
     }
@@ -284,7 +369,10 @@ pub fn get_status() -> Result<StatusData, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{git_available, git_status, opencode_config_status, shared_runtime_agents_status};
+    use super::{
+        expected_runtime_agent_content, git_available, git_status, opencode_config_status,
+        shared_runtime_agents_status, RuntimeAgentsHarness,
+    };
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -446,6 +534,53 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "synced");
+    }
+
+    #[test]
+    fn expected_runtime_agent_content_injects_name_for_claude() {
+        let source = "---\ndescription: test agent\nmode: subagent\n---\n# body\n";
+        let expected =
+            expected_runtime_agent_content(source, "scout", RuntimeAgentsHarness::Claude);
+        assert_eq!(
+            expected,
+            "---\ndescription: test agent\nmode: subagent\nname: scout\n\n---\n# body\n"
+        );
+    }
+
+    #[test]
+    fn runtime_agents_status_synced_for_claude_name_staging() {
+        let root = temp_root("claude-agent-staged");
+        let home = temp_root("home-claude-agent-staged");
+
+        let source = "---\ndescription: test agent\nmode: subagent\n---\n# body\n";
+        write_file(&root.join("agents/scout.md"), source);
+        let stemmed = "---\ndescription: test agent\nmode: subagent\nname: scout\n\n---\n# body\n";
+        write_file(&home.join(".claude/agents/scout.md"), stemmed);
+
+        let status = shared_runtime_agents_status(&root, &home, ".claude/agents");
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "synced");
+    }
+
+    #[test]
+    fn runtime_agents_status_diverged_when_claude_staging_differs() {
+        let root = temp_root("claude-agent-staged-div");
+        let home = temp_root("home-claude-agent-staged-div");
+
+        write_file(
+            &root.join("agents/scout.md"),
+            "---\ndescription: test agent\nmode: subagent\n---\n# body\n",
+        );
+        write_file(
+            &home.join(".claude/agents/scout.md"),
+            "---\nname: scout\n---\nold\n",
+        );
+
+        let status = shared_runtime_agents_status(&root, &home, ".claude/agents");
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
     }
 
     #[test]

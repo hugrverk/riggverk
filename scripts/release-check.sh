@@ -1121,12 +1121,16 @@ mkdir -p "$tmpdir/$ts/opencode-config"
 mkdir -p "$tmpdir/$ts/codex-rules"
 mkdir -p "$tmpdir/$ts/opencode-rules"
 mkdir -p "$tmpdir/$ts/opencode-agents"
+mkdir -p "$tmpdir/$ts/claude-agents"
+mkdir -p "$tmpdir/$ts/auggie-agents"
 # Write test files
 echo "config" > "$tmpdir/$ts/opencode-config/opencode.json"
 echo "rules" > "$tmpdir/$ts/codex-rules/AGENTS.md"
 echo "rules" > "$tmpdir/$ts/opencode-rules/AGENTS.md"
 echo "agent" > "$tmpdir/$ts/opencode-agents/architect.md"
 echo "agent" > "$tmpdir/$ts/opencode-agents/scout.md"
+echo "agent" > "$tmpdir/$ts/claude-agents/architect.md"
+echo "agent" > "$tmpdir/$ts/auggie-agents/architect.md"
 
 # Verify the timestamp format is readable by app (via Rust test)
 # We're testing that directories matching YYYYMMDD-HHMMSS are found
@@ -1139,7 +1143,7 @@ fi
 
 # Test list_backups would find these if we had Rust code to test
 # For now, verify directory structure matches what backups.rs expects
-for target_dir in opencode-config codex-rules opencode-rules opencode-agents; do
+for target_dir in opencode-config codex-rules opencode-rules opencode-agents claude-agents auggie-agents; do
   if [ ! -d "$tmpdir/$ts/$target_dir" ]; then
     printf 'FAIL: backup schema %s dir not found\n' "$target_dir" >&2
     rm -rf "$tmpdir"
@@ -1147,7 +1151,7 @@ for target_dir in opencode-config codex-rules opencode-rules opencode-agents; do
   fi
 done
 rm -rf "$tmpdir"
-printf '  backup schema verified: YYYYMMDD-HHMMSS + target IDs (opencode-config, codex-rules, opencode-rules, opencode-agents)\n'
+printf '  backup schema verified: YYYYMMDD-HHMMSS + target IDs (opencode-config, codex-rules, opencode-rules, opencode-agents, claude-agents, auggie-agents)\n'
 
 step "tauri app resources config"
 if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
