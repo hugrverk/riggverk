@@ -237,6 +237,11 @@ html, body, #root {
   gap: 8px;
 }
 
+.view-area > section,
+.view-area > * > section {
+  animation: view-enter 0.2s ease-out;
+}
+
 .view-loading {
   display: flex;
   align-items: center;
@@ -569,11 +574,14 @@ html, body, #root {
   font-family: var(--font);
   font-size: 13px;
   cursor: pointer;
-  transition: background 0.1s, border-color 0.1s;
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
 }
 
 .btn:hover:not(:disabled) { background: var(--bg-panel); border-color: var(--border-strong); }
-.btn:active:not(:disabled) { background: #333; }
+.btn:active:not(:disabled) {
+  transform: translateY(1px);
+  background: var(--bg-panel);
+}
 .btn:disabled { opacity: 0.25; cursor: default; }
 .btn:focus-visible {
   outline: 2px solid rgba(var(--accent-rgb), 0.5);
@@ -4566,4 +4574,65 @@ html, body, #root {
   color: var(--text-muted);
   opacity: 0.6;
   border-color: var(--border);
+}
+
+/* ---- motion (subtle; disabled when user prefers reduced motion) ---- */
+
+@keyframes view-enter {
+  from {
+    opacity: 0;
+    transform: translateY(5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes status-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.ws-panel,
+.ws-section,
+.target-settings-panel,
+.cursor-manual-step,
+.brain-preview-card {
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.ws-panel:focus-within,
+.ws-section:focus-within,
+.settings-target-row:focus-visible {
+  border-color: rgba(var(--accent-rgb), 0.28);
+}
+
+.ws-status-chip.ws-status-dim {
+  animation: status-pulse 1.5s ease-in-out infinite;
+}
+
+.settings-target-row,
+.settings-profile-button {
+  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-area > section,
+  .view-area > * > section {
+    animation: none;
+  }
+
+  .ws-status-chip.ws-status-dim {
+    animation: none;
+  }
+
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }
