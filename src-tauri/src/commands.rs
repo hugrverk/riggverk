@@ -32,6 +32,8 @@ pub use skills::{install_skills, list_skills, open_install_skills_script, open_s
 pub use status::get_status;
 pub use workspace::{
     apply_workspace_repair, create_workspace_from_defaults, evaluate_workspace_setup,
-    get_workspace_diagnostics, initialize_workspace_at_path, plan_create_workspace,
-    plan_workspace_repair, read_brain_setup_seed, try_set_active_workspace_path,
+    get_default_workspace_path, get_workspace_diagnostics, initialize_workspace_at_path,
+    install_default_workspace, open_default_workspace_folder, plan_create_workspace,
+    plan_workspace_repair, read_brain_setup_seed, repair_default_workspace,
+    try_set_active_workspace_path,
 };

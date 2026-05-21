@@ -1,42 +1,20 @@
-import { useState } from "react";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
-import type {
-  AppSettings,
-  CreateWorkspacePlan,
-  CreateWorkspaceResult,
-  InitializeWorkspaceResult,
-  StatusData,
-  WorkspaceDiagnostics,
-  WorkspaceSetupEvaluation,
-} from "../types";
+import type { StatusData, WorkspaceDiagnostics } from "../types";
 
-const NO_WORKSPACE_SELECTED = "no workspace selected";
+export type InstalledWorkspaceChip = "CHECKING" | "INSTALLED" | "MISSING" | "NEEDS REPAIR";
 
 interface StartViewProps {
-  appSettings: AppSettings | null;
-  pathDraft: string;
-  onPathDraftChange: (value: string) => void;
-  onCheckPath: () => void;
-  onUseDefaultWorkspace: () => void;
-  onChooseWorkspaceFolder: () => void;
-  onClearActiveWorkspace: () => void;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
-  workspaceSetup: WorkspaceSetupEvaluation | null;
-  setupEvaluating: boolean;
+  installState: InstalledWorkspaceChip;
+  installRunning: boolean;
+  repairRunning: boolean;
   onRefreshDiagnostics: () => void;
-  createPlan: CreateWorkspacePlan | null;
-  createPlanRunning: boolean;
-  onPlanCreate: () => void;
-  createResult: CreateWorkspaceResult | null;
-  createRunning: boolean;
-  onCreateWorkspace: () => void;
-  initResult: InitializeWorkspaceResult | null;
-  initRunning: boolean;
-  onInitializeWorkspace: () => void;
-  onActivateWorkspace: () => void;
+  onInstall: () => void;
+  onRepair: () => void;
+  onOpenFolder: () => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -46,7 +24,6 @@ interface StartViewProps {
   workspaceValid: boolean;
   gitAvailable: boolean;
   canRunReleaseCheck: boolean;
-  onPull: () => void;
   onRefreshStatus: () => void;
   onReleaseCheck: () => void;
   backupCount: number;
@@ -54,192 +31,48 @@ interface StartViewProps {
   onOpenBackupsFolder: () => void;
 }
 
-function PlannedFilesList({ files, label }: { files: string[]; label: string }) {
-  const [open, setOpen] = useState(false);
-  if (files.length === 0) return null;
-
-  return (
-    <div className="ws-setup-files">
-      <button type="button" className="ws-setup-files-toggle btn btn-sm" onClick={() => setOpen(v => !v)}>
-        {open ? "hide" : "show"} {label} ({files.length})
-      </button>
-      {open && (
-        <ul className="ws-setup-files-list" aria-label={label}>
-          {files.map(file => (
-            <li key={file}>{file}</li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
+function chipClass(state: InstalledWorkspaceChip): string {
+  switch (state) {
+    case "INSTALLED":
+      return "ws-status-valid";
+    case "MISSING":
+      return "ws-status-invalid";
+    case "NEEDS REPAIR":
+      return "ws-status-invalid";
+    default:
+      return "ws-status-dim";
+  }
 }
 
-function SetupFlowPanel({
-  setupPhase,
-  createPlan,
-  createPlanRunning,
-  createResult,
-  createRunning,
-  initResult,
-  initRunning,
-  missingFilesToAdd,
-  onPlanCreate,
-  onCreateWorkspace,
-  onInitializeWorkspace,
-  onActivateWorkspace,
-}: {
-  setupPhase: string | null;
-  createPlan: CreateWorkspacePlan | null;
-  createPlanRunning: boolean;
-  createResult: CreateWorkspaceResult | null;
-  createRunning: boolean;
-  initResult: InitializeWorkspaceResult | null;
-  initRunning: boolean;
-  missingFilesToAdd: string[];
-  onPlanCreate: () => void;
-  onCreateWorkspace: () => void;
-  onInitializeWorkspace: () => void;
-  onActivateWorkspace: () => void;
-}) {
-  const [confirmNonEmpty, setConfirmNonEmpty] = useState(false);
-  const createPlanEligible =
-    createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
-  const filesForCreate = createPlan?.planned_files ?? [];
-  const filesToAdd = missingFilesToAdd.length > 0 ? missingFilesToAdd : filesForCreate;
+function statusCopy(state: InstalledWorkspaceChip): string {
+  switch (state) {
+    case "INSTALLED":
+      return "Local runtime workspace is ready.";
+    case "MISSING":
+      return `Install bundled workspace resources to ${DEFAULT_WORKSPACE_PATH}.`;
+    case "NEEDS REPAIR":
+      return "Workspace exists but required files are missing.";
+    default:
+      return "Checking installed workspace\u2026";
+  }
+}
 
-  return (
-    <div className="ws-setup-actions">
-      {!createPlan && !createResult && !initResult && (
-        <div className="ws-setup-action-row">
-          <button className="btn btn-sm btn-primary" onClick={onPlanCreate} disabled={createPlanRunning}>
-            {createPlanRunning ? "checking\u2026" : "check path"}
-          </button>
-          <span className="ws-setup-hint">validate the selected path before activating or initializing</span>
-        </div>
-      )}
-
-      {createPlan && (
-        <div className="ws-setup-plan">
-          <div className={`ws-cmd-row ${createPlan.ok ? "ws-color-ok" : "ws-color-fail"}`}>
-            <span className="ws-cmd-prompt">{setupPhase === "blocked_non_empty" ? "blocked" : createPlan.ok ? "ready" : "blocked"}</span>
-            <span>{createPlan.status}</span>
-          </div>
-          <div className="ws-cmd-row ws-color-dim">selected: {createPlan.target_path || "(empty)"}</div>
-          <div className="ws-cmd-row">{createPlan.reason}</div>
-          {createPlan.warnings.map((w, i) => (
-            <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-          ))}
-
-          {setupPhase === "blocked_non_empty" && (
-            <div className="ws-setup-blocked-note" role="note">
-              <p>
-                This folder already contains files and is missing workspace markers. Initialization adds only
-                missing bundled files and does not overwrite existing files.
-              </p>
-              <PlannedFilesList files={filesToAdd} label="files to add" />
-              <label className="ws-setup-confirm">
-                <input
-                  type="checkbox"
-                  checked={confirmNonEmpty}
-                  onChange={(e) => setConfirmNonEmpty(e.target.checked)}
-                />
-                I understand {filesToAdd.length} missing file(s) may be added here
-              </label>
-              <div className="ws-setup-create-action">
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={onInitializeWorkspace}
-                  disabled={!confirmNonEmpty || initRunning}
-                >
-                  {initRunning ? "initializing\u2026" : "initialize workspace"}
-                </button>
-                <span className="ws-tag">no overwrite</span>
-                <span className="ws-tag">explicit only</span>
-              </div>
-            </div>
-          )}
-
-          {setupPhase === "valid_existing" && (
-            <div className="ws-setup-create-action">
-              <button className="btn btn-sm btn-primary" onClick={onActivateWorkspace}>
-                use this workspace
-              </button>
-              <span className="ws-setup-hint">path is already a valid workspace</span>
-            </div>
-          )}
-
-          {setupPhase === "ready_create" && (
-            <>
-              <PlannedFilesList files={filesForCreate} label="planned files" />
-              {createPlanEligible && (
-                <div className="ws-setup-create-action">
-                  <button
-                    className="btn btn-sm btn-primary"
-                    onClick={onCreateWorkspace}
-                    disabled={createRunning}
-                  >
-                    {createRunning ? "creating\u2026" : "create workspace"}
-                  </button>
-                  <span className="ws-tag">{filesForCreate.length} files</span>
-                  <span className="ws-tag">no overwrite</span>
-                  <span className="ws-tag">no scripts</span>
-                </div>
-              )}
-            </>
-          )}
-
-          {setupPhase === "blocked" && (
-            <p className="ws-setup-hint">Choose another folder or enter a different path, then check again.</p>
-          )}
-        </div>
-      )}
-
-      {(createResult || initResult) && (
-        <div className="ws-setup-result">
-          {(() => {
-            const result = initResult ?? createResult;
-            if (!result) return null;
-            return (
-              <>
-                <div className={`ws-cmd-row ${result.success ? "ws-color-ok" : "ws-color-fail"}`}>
-                  <span className="ws-cmd-prompt">{result.success ? "ok" : "fail"}</span>
-                  <span>{"message" in result ? result.message : ""}</span>
-                </div>
-                <div className="ws-cmd-row ws-color-dim">status: {result.status} | target: {result.target_path}</div>
-                {result.copied_files.length > 0 && (
-                  <div className="ws-cmd-row ws-color-dim">copied {result.copied_files.length} file(s)</div>
-                )}
-              </>
-            );
-          })()}
-        </div>
-      )}
-    </div>
-  );
+export function deriveInstallState(diag: WorkspaceDiagnostics | null): InstalledWorkspaceChip {
+  if (!diag) return "CHECKING";
+  if (diag.valid) return "INSTALLED";
+  if (!diag.resolved_path) return "MISSING";
+  return "NEEDS REPAIR";
 }
 
 export function StartView({
-  appSettings,
-  pathDraft,
-  onPathDraftChange,
-  onCheckPath,
-  onUseDefaultWorkspace,
-  onChooseWorkspaceFolder,
-  onClearActiveWorkspace,
   workspaceDiagnostics,
-  workspaceSetup,
-  setupEvaluating,
+  installState,
+  installRunning,
+  repairRunning,
   onRefreshDiagnostics,
-  createPlan,
-  createPlanRunning,
-  onPlanCreate,
-  createResult,
-  createRunning,
-  onCreateWorkspace,
-  initResult,
-  initRunning,
-  onInitializeWorkspace,
-  onActivateWorkspace,
+  onInstall,
+  onRepair,
+  onOpenFolder,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -249,47 +82,17 @@ export function StartView({
   workspaceValid,
   gitAvailable,
   canRunReleaseCheck,
-  onPull,
   onRefreshStatus,
   onReleaseCheck,
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
 }: StartViewProps) {
-  const diag = workspaceDiagnostics;
-  const noActiveWorkspace = diag?.error === NO_WORKSPACE_SELECTED;
-  const activePath = workspaceValid ? appSettings?.workspace_path ?? null : null;
-  const selectedPath = workspaceSetup?.candidate_path ?? (pathDraft.trim() || null);
-  const setupPhase = workspaceSetup?.setup_phase ?? null;
-  const pathCheckDisabled = !pathDraft.trim() || setupEvaluating;
-
-  const statusText = !diag
-    ? "LOADING"
-    : workspaceValid
-      ? "VALID"
-      : noActiveWorkspace
-        ? "SETUP"
-        : "PENDING";
-
-  const statusClass = !diag
-    ? "ws-status-dim"
-    : workspaceValid
-      ? "ws-status-valid"
-      : noActiveWorkspace
-        ? "ws-status-dim"
-        : "ws-status-invalid";
-
-  const statusDetail = !diag
-    ? "loading"
-    : workspaceValid
-      ? "valid"
-      : noActiveWorkspace
-        ? "choose or create a workspace"
-        : setupPhase === "blocked_non_empty"
-          ? "blocked — confirm initialization or choose another folder"
-          : "check path and initialize";
-
-  const showSetupPanel = !workspaceValid;
+  const resolvedPath = workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? null;
+  const statusDetail = statusCopy(installState);
+  const showInstall = installState === "MISSING";
+  const showRepair = installState === "NEEDS REPAIR";
+  const canOpenFolder = Boolean(resolvedPath) && installState !== "MISSING";
 
   return (
     <section className="ws-layout ws-layout-start">
@@ -302,7 +105,7 @@ export function StartView({
                 A local control panel for your AI-agent workspace. Keeps rules, skills, configs, docs, and
                 install/sync scripts in one versioned folder, then lets you preview and apply changes to Codex,
                 OpenCode, Cursor, Auggie, and Claude. Does not run agents for you. Writes are explicit; sync,
-                install, and release actions run scripts from the selected workspace.
+                install, and release actions run scripts from the installed workspace.
               </p>
             </div>
           </div>
@@ -311,51 +114,28 @@ export function StartView({
             <div className="start-workspace-card-head">
               <div className="start-workspace-card-title">
                 <span className="ws-panel-title">WORKSPACE</span>
-                <span className={`ws-status-chip ${statusClass}`}>{statusText}</span>
+                <span className={`ws-status-chip ${chipClass(installState)}`}>{installState}</span>
               </div>
             </div>
 
-            {activePath && (
+            <div className="start-workspace-path-block">
               <div className="start-workspace-path-row ws-path-row">
-                <span className="ws-path-label">active path</span>
-                <code className="start-workspace-path-value" title={activePath}>{activePath}</code>
+                <span className="ws-path-label">installed path</span>
+                <code className="start-workspace-path-value" title={DEFAULT_WORKSPACE_PATH}>
+                  {DEFAULT_WORKSPACE_PATH}
+                </code>
               </div>
-            )}
-
-            <div className="start-workspace-path-editor ws-path-row" role="group" aria-label="Workspace path setup">
-              <label className="ws-path-label" htmlFor="workspace-path-input">
-                {activePath ? "new path" : "selected path"}
-              </label>
-              <input
-                id="workspace-path-input"
-                className="ws-path-input"
-                type="text"
-                spellCheck={false}
-                autoComplete="off"
-                placeholder={DEFAULT_WORKSPACE_PATH}
-                value={pathDraft}
-                onChange={(e) => onPathDraftChange(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !pathCheckDisabled) onCheckPath();
-                }}
-              />
-              <button
-                className="btn btn-sm btn-primary"
-                onClick={onCheckPath}
-                disabled={pathCheckDisabled}
-                title="Validate this path without making it active"
-              >
-                {setupEvaluating ? "checking\u2026" : "check path"}
-              </button>
+              {resolvedPath && resolvedPath !== DEFAULT_WORKSPACE_PATH && (
+                <div className="start-workspace-path-resolved ws-path-row">
+                  <span className="start-workspace-path-label">resolved</span>
+                  <code className="start-workspace-path-resolved-value" title={resolvedPath}>
+                    {resolvedPath}
+                  </code>
+                </div>
+              )}
             </div>
 
-            {selectedPath && selectedPath !== activePath && (
-              <div className="start-workspace-path-row ws-path-row">
-                <span className="ws-path-label">candidate</span>
-                <code className="start-workspace-path-value" title={selectedPath}>{selectedPath}</code>
-                {setupPhase && <span className="ws-setup-phase-tag">{setupPhase.replaceAll("_", " ")}</span>}
-              </div>
-            )}
+            <p className="start-workspace-status-detail ws-path-status-detail">{statusDetail}</p>
 
             <div className="ws-action-row start-workspace-actions">
               <button
@@ -367,75 +147,33 @@ export function StartView({
               >
                 refresh
               </button>
-              <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
-                choose folder
-              </button>
-              <button
-                className="btn btn-sm"
-                onClick={onUseDefaultWorkspace}
-                disabled={createPlanRunning || createRunning || initRunning}
-              >
-                use default
-              </button>
-              {activePath && (
-                <button className="btn btn-sm" onClick={onClearActiveWorkspace}>
-                  clear active
+              {showInstall && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={onInstall}
+                  disabled={installRunning || repairRunning}
+                >
+                  {installRunning ? "installing\u2026" : "install"}
                 </button>
               )}
-            </div>
-
-            <div className="start-workspace-status-row ws-panel-meta-row">
-              <button
-                className="btn btn-sm btn-primary"
-                disabled={!workspaceValid || !gitAvailable || wsRunning !== null}
-                onClick={onPull}
-              >
-                pull
-              </button>
-              {status ? (
-                <div className="start-workspace-status-meta" aria-label="Workspace git and targets">
-                  <span>branch {status.branch}</span>
-                  <span className="start-workspace-status-sep" aria-hidden="true">|</span>
-                  <span>{status.enabled_rule_target_ids.length} rule targets</span>
-                </div>
-              ) : (
-                <span className="ws-panel-meta-context">waiting for status</span>
+              {showRepair && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={onRepair}
+                  disabled={installRunning || repairRunning}
+                >
+                  {repairRunning ? "repairing\u2026" : "repair"}
+                </button>
               )}
+              <button
+                className="btn btn-sm"
+                onClick={onOpenFolder}
+                disabled={!canOpenFolder || installRunning || repairRunning}
+              >
+                open folder
+              </button>
             </div>
-
-            {showSetupPanel && (
-              <div className="ws-path-status-detail start-workspace-status-detail">{statusDetail}</div>
-            )}
           </div>
-
-          {showSetupPanel && (
-            <div className="ws-setup" role="region" aria-label="Workspace setup">
-              <div className="ws-setup-heading">Workspace Setup</div>
-              <div className="ws-setup-body">
-                {noActiveWorkspace && !workspaceSetup && (
-                  <p className="ws-setup-hint">
-                    Enter a path, click <strong>check path</strong>, choose a folder, or use <strong>use default</strong>{" "}
-                    ({DEFAULT_WORKSPACE_PATH}). The path becomes active only after it validates or you create/initialize
-                    it.
-                  </p>
-                )}
-                <SetupFlowPanel
-                  setupPhase={setupPhase}
-                  createPlan={createPlan}
-                  createPlanRunning={createPlanRunning}
-                  createResult={createResult}
-                  createRunning={createRunning}
-                  initResult={initResult}
-                  initRunning={initRunning}
-                  missingFilesToAdd={workspaceSetup?.missing_files_to_add ?? []}
-                  onPlanCreate={onPlanCreate}
-                  onCreateWorkspace={onCreateWorkspace}
-                  onInitializeWorkspace={onInitializeWorkspace}
-                  onActivateWorkspace={onActivateWorkspace}
-                />
-              </div>
-            </div>
-          )}
 
           {workspaceValid && (
             <div className="start-block start-skills ws-section" role="region" aria-label="Skills install location">

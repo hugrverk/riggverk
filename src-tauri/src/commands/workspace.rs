@@ -3,8 +3,13 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
+use super::process::{run_cmd, ActionResult};
 use crate::agent_targets;
-use crate::path_utils::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
+use crate::path_utils::{
+    default_installed_workspace_path, is_legacy_default_workspace_path,
+    normalize_user_workspace_path, normalize_user_workspace_path_for_save,
+    DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
+};
 use crate::settings;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -114,19 +119,24 @@ pub(crate) fn workspace_has_cursor_mdc_rule(base: &Path) -> bool {
 
 pub(crate) const NO_WORKSPACE_SELECTED: &str = "no workspace selected";
 
-/// Workspace path from saved settings or AGENT_WORKSPACE_PATH only (no built-in default).
+/// Resolved workspace candidate path: env override, valid saved custom path, or canonical install path.
 pub(crate) fn configured_workspace_path(settings: &settings::AppSettings) -> Option<PathBuf> {
-    if let Some(ref custom) = settings.workspace_path {
-        if let Some(normalized) = normalize_user_workspace_path(custom) {
-            return Some(PathBuf::from(normalized));
-        }
-    }
     if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
-        if !p.is_empty() {
-            return Some(PathBuf::from(p));
+        let trimmed = p.trim();
+        if !trimmed.is_empty() {
+            return Some(PathBuf::from(trimmed));
         }
     }
-    None
+    if let Some(ref custom) = settings.workspace_path {
+        if !is_legacy_default_workspace_path(custom) {
+            if let Some(normalized) = normalize_user_workspace_path(custom) {
+                if persisted_workspace_path_is_valid(&normalized) {
+                    return Some(PathBuf::from(normalized));
+                }
+            }
+        }
+    }
+    default_installed_workspace_path().ok()
 }
 
 #[allow(dead_code)]
@@ -180,6 +190,10 @@ pub(crate) fn scrub_stale_workspace_path(settings: &mut settings::AppSettings) -
     let Some(path) = settings.workspace_path.clone() else {
         return false;
     };
+    if is_legacy_default_workspace_path(&path) {
+        settings.workspace_path = None;
+        return true;
+    }
     if persisted_workspace_path_is_valid(&path) {
         return false;
     }
@@ -1325,6 +1339,59 @@ pub fn apply_workspace_repair(app: tauri::AppHandle) -> Result<RepairWorkspaceRe
     Ok(repair_workspace_impl(&app, &root_str, false))
 }
 
+#[derive(Serialize)]
+pub struct DefaultWorkspacePathInfo {
+    pub display_path: String,
+    pub resolved_path: String,
+}
+
+#[tauri::command]
+pub fn get_default_workspace_path() -> Result<DefaultWorkspacePathInfo, String> {
+    let path = default_installed_workspace_path()?;
+    Ok(DefaultWorkspacePathInfo {
+        display_path: DEFAULT_INSTALLED_WORKSPACE_DISPLAY.to_string(),
+        resolved_path: path.to_string_lossy().into_owned(),
+    })
+}
+
+#[tauri::command]
+pub fn install_default_workspace(
+    app: tauri::AppHandle,
+) -> Result<InitializeWorkspaceResult, String> {
+    let path = default_installed_workspace_path()?;
+    initialize_workspace_at_path(app, Some(path.to_string_lossy().into_owned()), false)
+}
+
+#[tauri::command]
+pub fn repair_default_workspace(app: tauri::AppHandle) -> Result<RepairWorkspaceResult, String> {
+    let path = default_installed_workspace_path()?;
+    Ok(repair_workspace_impl(
+        &app,
+        path.to_string_lossy().as_ref(),
+        false,
+    ))
+}
+
+#[tauri::command]
+pub fn open_default_workspace_folder() -> Result<ActionResult, String> {
+    let path = default_installed_workspace_path()?;
+    if !path.exists() {
+        return Err("installed workspace folder does not exist".to_string());
+    }
+    if !path.is_dir() {
+        return Err("installed workspace path is not a directory".to_string());
+    }
+    let path_str = path_arg(&path)?;
+    let (success, stdout, stderr, code) = run_cmd("open", &[&path_str], &path);
+    Ok(ActionResult::new(
+        success,
+        "open_default_workspace_folder",
+        stdout,
+        stderr,
+        code,
+    ))
+}
+
 const BRAIN_SETUP_SEED_REL: &str = "templates/context/saved-memory.md";
 
 #[derive(Serialize)]
@@ -1749,10 +1816,11 @@ mod tests {
 
     #[test]
     fn diagnostics_candidate_and_create_plan_use_same_normalized_path() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let root = setup_valid_workspace("diag-plan-sync");
+        let path = root.to_string_lossy().into_owned();
         let settings = AppSettings {
             appearance: "dark".into(),
-            workspace_path: Some("~/Desktop/test".into()),
+            workspace_path: Some(path.clone()),
             enabled_target_ids: vec![],
             accent_color: None,
             background_color: None,
@@ -1763,17 +1831,15 @@ mod tests {
             .into_owned();
         let plan =
             plan_create_workspace(settings.workspace_path.clone()).expect("plan should succeed");
-        let expected = std::path::PathBuf::from(home)
-            .join("Desktop/test")
-            .to_string_lossy()
-            .into_owned();
 
-        assert_eq!(candidate, expected);
+        assert_eq!(candidate, path);
         assert_eq!(plan.target_path, candidate);
+        cleanup(&root);
     }
 
     #[test]
     fn configured_workspace_path_ignores_legacy_relative_paths() {
+        let home = std::env::var("HOME").expect("HOME required for test");
         let settings = AppSettings {
             appearance: "dark".into(),
             workspace_path: Some("workspace/local".into()),
@@ -1783,16 +1849,42 @@ mod tests {
             foreground_color: None,
         };
 
-        assert!(configured_workspace_path(&settings).is_none());
+        let candidate = configured_workspace_path(&settings).expect("canonical fallback");
+        assert_eq!(
+            candidate,
+            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+        );
     }
 
     #[test]
-    fn default_settings_have_no_configured_workspace_path() {
-        assert!(configured_workspace_path(&AppSettings::default()).is_none());
+    fn default_settings_use_installed_workspace_candidate() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let expected = std::path::PathBuf::from(home).join(".config/.agent-workspace");
+        let candidate = configured_workspace_path(&AppSettings::default())
+            .expect("canonical default should resolve when HOME is set");
+        assert_eq!(candidate, expected);
     }
 
     #[test]
-    fn unconfigured_workspace_diagnostics_do_not_use_builtin_default() {
+    fn legacy_agent_workspace_saved_setting_falls_back_to_canonical_default() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some("~/Agent Workspace".into()),
+            enabled_target_ids: vec![],
+            accent_color: None,
+            background_color: None,
+            foreground_color: None,
+        };
+        let candidate = configured_workspace_path(&settings).expect("candidate");
+        assert_eq!(
+            candidate,
+            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+        );
+    }
+
+    #[test]
+    fn unconfigured_workspace_diagnostics_when_home_unavailable() {
         let settings = AppSettings::default();
         let diag = workspace_diagnostics_for_unconfigured(&settings);
 

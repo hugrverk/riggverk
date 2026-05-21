@@ -1,5 +1,38 @@
 use std::path::PathBuf;
 
+/// Display form of the canonical installed workspace path.
+pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/.agent-workspace";
+
+pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {
+    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
+    if home.is_empty() {
+        return Err("HOME is empty".to_string());
+    }
+    Ok(PathBuf::from(home).join(".config/.agent-workspace"))
+}
+
+/// Previous built-in default (`~/Agent Workspace`). Treated as deprecated, not a custom path.
+pub(crate) fn is_legacy_default_workspace_path(raw: &str) -> bool {
+    let trimmed = raw.trim();
+    if trimmed == "~/Agent Workspace" {
+        return true;
+    }
+    let Some(normalized) = normalize_user_workspace_path(trimmed) else {
+        return false;
+    };
+    let Ok(home) = std::env::var("HOME") else {
+        return false;
+    };
+    if home.is_empty() {
+        return false;
+    }
+    let legacy = PathBuf::from(home)
+        .join("Agent Workspace")
+        .to_string_lossy()
+        .into_owned();
+    normalized == legacy
+}
+
 pub(crate) fn normalize_user_workspace_path(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -47,7 +80,11 @@ pub(crate) fn normalize_user_workspace_path_for_save(raw: &str) -> Result<Option
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
+    use super::{
+        default_installed_workspace_path, is_legacy_default_workspace_path,
+        normalize_user_workspace_path, normalize_user_workspace_path_for_save,
+        DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
+    };
     use std::sync::{Mutex, OnceLock};
 
     fn env_lock() -> &'static Mutex<()> {
@@ -106,6 +143,34 @@ mod tests {
                 "workspace path must be absolute or start with ~/"
             );
         }
+    }
+
+    #[test]
+    fn default_installed_workspace_path_resolves_under_home_config() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let path = default_installed_workspace_path().expect("default path");
+        assert_eq!(
+            path,
+            std::path::PathBuf::from(home).join(".config/.agent-workspace")
+        );
+        assert_eq!(
+            DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
+            "~/.config/.agent-workspace"
+        );
+    }
+
+    #[test]
+    fn legacy_default_workspace_path_is_detected() {
+        let home = std::env::var("HOME").expect("HOME required for test");
+        let legacy = std::path::PathBuf::from(home)
+            .join("Agent Workspace")
+            .to_string_lossy()
+            .into_owned();
+        assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
+        assert!(is_legacy_default_workspace_path(&legacy));
+        assert!(!is_legacy_default_workspace_path(
+            "~/.config/.agent-workspace"
+        ));
     }
 
     #[test]

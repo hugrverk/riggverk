@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { open } from "@tauri-apps/plugin-dialog";
 import type { ActionResult } from "./components/TerminalOutput";
 import { ToolIcon } from "./components/ToolIcon";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
@@ -15,12 +14,11 @@ import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { AugmentView } from "./views/AugmentView";
 import { OpenCodeView } from "./views/OpenCodeView";
-import { StartView } from "./views/StartView";
+import { deriveInstallState, StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import { DEFAULT_WORKSPACE_PATH } from "./lib/settingsDraft";
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics, WorkspaceSetupEvaluation } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const NO_WORKSPACE_TEXT = "no workspace selected";
@@ -250,57 +248,8 @@ function App() {
     return serializeSettingsForCompare(appSettings) !== savedSettingsRef.current;
   }, [appSettings]);
 
-  // create workspace plan state
-  const [createPlan, setCreatePlan] = useState<CreateWorkspacePlan | null>(null);
-  const [createPlanRunning, setCreatePlanRunning] = useState(false);
-
-  // create workspace result state
-  const [createResult, setCreateResult] = useState<CreateWorkspaceResult | null>(null);
-  const [createRunning, setCreateRunning] = useState(false);
-
-  const [workspacePathDraft, setWorkspacePathDraft] = useState("");
-  const [workspaceSetup, setWorkspaceSetup] = useState<WorkspaceSetupEvaluation | null>(null);
-  const [initResult, setInitResult] = useState<InitializeWorkspaceResult | null>(null);
-  const [initRunning, setInitRunning] = useState(false);
-
-  useEffect(() => {
-    if (workspaceDiagnostics?.valid && appSettings?.workspace_path) {
-      setWorkspacePathDraft(appSettings.workspace_path);
-    }
-  }, [appSettings?.workspace_path, workspaceDiagnostics?.valid]);
-
-  const workspaceSetupTarget = useCallback((): string => {
-    const trimmed = workspacePathDraft.trim();
-    if (trimmed) return trimmed;
-    if (workspaceSetup?.candidate_path) return workspaceSetup.candidate_path;
-    if (createPlan?.target_path) return createPlan.target_path;
-    return DEFAULT_WORKSPACE_PATH;
-  }, [workspacePathDraft, workspaceSetup?.candidate_path, createPlan?.target_path]);
-
-  const evaluateWorkspaceCandidate = useCallback(async (targetPath?: string) => {
-    const path = (targetPath ?? workspacePathDraft.trim()) || DEFAULT_WORKSPACE_PATH;
-    setCreatePlanRunning(true);
-    setCreatePlan(null);
-    setCreateResult(null);
-    setInitResult(null);
-    setWorkspaceSetup(null);
-    try {
-      const evaluation = await invoke<WorkspaceSetupEvaluation>("evaluate_workspace_setup", {
-        targetPath: path,
-      });
-      setWorkspaceSetup(evaluation);
-      setCreatePlan(evaluation.plan);
-      setWorkspacePathDraft(evaluation.candidate_path || path);
-    } catch (e) {
-      setError(`Workspace setup: ${e}`);
-    } finally {
-      setCreatePlanRunning(false);
-    }
-  }, [workspacePathDraft]);
-
-  const planCreate = useCallback(async () => {
-    await evaluateWorkspaceCandidate(workspaceSetupTarget());
-  }, [evaluateWorkspaceCandidate, workspaceSetupTarget]);
+  const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
+  const [workspaceRepairRunning, setWorkspaceRepairRunning] = useState(false);
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -669,15 +618,10 @@ function App() {
       const s = await invoke<AppSettings>("try_set_active_workspace_path", { path });
       if (!isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
-      setWorkspacePathDraft(s.workspace_path ?? path);
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
       setSettingsMsg(null);
-      setWorkspaceSetup(null);
-      setCreatePlan(null);
-      setCreateResult(null);
-      setInitResult(null);
       await Promise.all([
         loadWorkspaceDiagnostics(generation).catch(() => {}),
         loadWorkspaceResources(generation),
@@ -739,57 +683,47 @@ function App() {
     setConfigTemplateContent(null);
   }, [workspaceActionRequestIdRef, resetTerminalOutput]);
 
-  const runCreate = useCallback(async () => {
-    setCreateRunning(true);
-    setCreateResult(null);
-    setInitResult(null);
+  const runInstallDefaultWorkspace = useCallback(async () => {
+    setWorkspaceInstallRunning(true);
     try {
-      const result = await invoke<InitializeWorkspaceResult>("initialize_workspace_at_path", {
-        targetPath: workspaceSetupTarget(),
-        confirmNonEmpty: false,
-      });
-      setInitResult(result);
+      const result = await invoke<InitializeWorkspaceResult>("install_default_workspace");
       if (result.success) {
-        setSettingsMsg({ ok: true, text: "workspace created" });
+        setSettingsMsg({ ok: true, text: "workspace installed" });
         await persistActiveWorkspace(result.target_path);
       } else {
-        setCreateResult({
-          success: result.success,
-          status: result.status,
-          target_path: result.target_path,
-          message: result.message,
-          copied_files: result.copied_files,
-          skipped_files: [],
-          warnings: result.warnings,
-          created_dirs: [],
-        });
+        setError(`Install workspace: ${result.message}`);
       }
-    } catch (e) { setError(`Create: ${e}`); }
-    finally { setCreateRunning(false); }
-  }, [persistActiveWorkspace, workspaceSetupTarget]);
+    } catch (e) {
+      setError(`Install workspace: ${e}`);
+    } finally {
+      setWorkspaceInstallRunning(false);
+    }
+  }, [persistActiveWorkspace]);
 
-  const runInitializeNonEmpty = useCallback(async () => {
-    setInitRunning(true);
-    setInitResult(null);
-    setCreateResult(null);
+  const runRepairDefaultWorkspace = useCallback(async () => {
+    setWorkspaceRepairRunning(true);
     try {
-      const result = await invoke<InitializeWorkspaceResult>("initialize_workspace_at_path", {
-        targetPath: workspaceSetupTarget(),
-        confirmNonEmpty: true,
-      });
-      setInitResult(result);
-      if (result.success) {
-        setSettingsMsg({ ok: true, text: "workspace initialized" });
+      const result = await invoke<RepairWorkspaceResult>("repair_default_workspace");
+      if (result.ok) {
+        setSettingsMsg({ ok: true, text: "workspace repaired" });
         await persistActiveWorkspace(result.target_path);
+      } else {
+        setError(`Repair workspace: ${result.message}`);
       }
-    } catch (e) { setError(`Initialize: ${e}`); }
-    finally { setInitRunning(false); }
-  }, [persistActiveWorkspace, workspaceSetupTarget]);
+    } catch (e) {
+      setError(`Repair workspace: ${e}`);
+    } finally {
+      setWorkspaceRepairRunning(false);
+    }
+  }, [persistActiveWorkspace]);
 
-  const activateExistingWorkspace = useCallback(async () => {
-    const path = workspaceSetup?.candidate_path ?? workspaceSetupTarget();
-    await persistActiveWorkspace(path);
-  }, [persistActiveWorkspace, workspaceSetup?.candidate_path, workspaceSetupTarget]);
+  const openDefaultWorkspaceFolder = useCallback(async () => {
+    try {
+      await invoke("open_default_workspace_folder");
+    } catch (e) {
+      setError(`Open folder: ${e}`);
+    }
+  }, []);
 
   const selectAgent = useCallback(async (id: string) => {
     if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
@@ -1059,43 +993,8 @@ function App() {
     } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
   }, [appSettings, beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
-  const clearActiveWorkspace = useCallback(async () => {
-    if (!appSettings) return;
-    const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
-    try {
-      const nextSettings = { ...appSettings, workspace_path: null };
-      const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setAppSettings(s);
-      setWorkspacePathDraft("");
-      appliedWorkspacePathRef.current = null;
-      savedSettingsRef.current = serializeSettingsForCompare(s);
-      setWorkspaceSetup(null);
-      setCreatePlan(null);
-      setCreateResult(null);
-      setInitResult(null);
-      await loadWorkspaceDiagnostics(generation).catch(() => {});
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Clear workspace: ${e}`);
-    }
-  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics]);
-
-  const checkWorkspacePathFromDraft = useCallback(async () => {
-    const trimmed = workspacePathDraft.trim();
-    if (!trimmed) return;
-    await evaluateWorkspaceCandidate(trimmed);
-  }, [workspacePathDraft, evaluateWorkspaceCandidate]);
-
-  const useDefaultWorkspace = useCallback(async () => {
-    setWorkspacePathDraft(DEFAULT_WORKSPACE_PATH);
-    await evaluateWorkspaceCandidate(DEFAULT_WORKSPACE_PATH);
-  }, [evaluateWorkspaceCandidate]);
-
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
-    setCreatePlan(null);
-    setCreateResult(null);
     const nextWorkspacePath = defaults.workspace_path ?? null;
     const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
       && nextWorkspacePath !== appliedWorkspacePathRef.current;
@@ -1163,21 +1062,6 @@ function App() {
     });
   }, []);
 
-  const chooseWorkspaceFolder = useCallback(async () => {
-    try {
-      const selected = await open({ directory: true, multiple: false });
-      if (selected) {
-        const path = Array.isArray(selected) ? selected[0] : selected;
-        if (path) {
-          setWorkspacePathDraft(path);
-          await evaluateWorkspaceCandidate(path);
-        }
-      }
-    } catch (e) {
-      setError(`Choose folder: ${e}`);
-    }
-  }, [evaluateWorkspaceCandidate]);
-
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
@@ -1237,6 +1121,7 @@ function App() {
     [agentTargets],
   );
   const workspaceValid = workspaceDiagnostics?.valid === true;
+  const installState = deriveInstallState(workspaceDiagnostics);
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
   const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
@@ -1401,30 +1286,17 @@ function App() {
       <div className="view-area">
         {view === "start" && (
           <StartView
-            appSettings={appSettings}
-            pathDraft={workspacePathDraft}
-            onPathDraftChange={setWorkspacePathDraft}
-            onCheckPath={checkWorkspacePathFromDraft}
-            onUseDefaultWorkspace={useDefaultWorkspace}
-            onChooseWorkspaceFolder={chooseWorkspaceFolder}
-            onClearActiveWorkspace={clearActiveWorkspace}
             workspaceDiagnostics={workspaceDiagnostics}
-            workspaceSetup={workspaceSetup}
-            setupEvaluating={createPlanRunning}
+            installState={installState}
+            installRunning={workspaceInstallRunning}
+            repairRunning={workspaceRepairRunning}
             onRefreshDiagnostics={() => {
               loadWorkspaceDiagnostics();
               fetchStatus();
             }}
-            createPlan={createPlan}
-            createPlanRunning={createPlanRunning}
-            onPlanCreate={planCreate}
-            createResult={createResult}
-            createRunning={createRunning}
-            onCreateWorkspace={runCreate}
-            initResult={initResult}
-            initRunning={initRunning}
-            onInitializeWorkspace={runInitializeNonEmpty}
-            onActivateWorkspace={activateExistingWorkspace}
+            onInstall={runInstallDefaultWorkspace}
+            onRepair={runRepairDefaultWorkspace}
+            onOpenFolder={openDefaultWorkspaceFolder}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
@@ -1434,7 +1306,6 @@ function App() {
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
-            onPull={() => runWsAction("git_pull", "git pull")}
             onRefreshStatus={fetchStatus}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             backupCount={backups.length}

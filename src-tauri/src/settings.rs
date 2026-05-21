@@ -3,7 +3,10 @@ use std::fs;
 use std::path::PathBuf;
 
 use super::agent_targets;
-use crate::path_utils::{normalize_user_workspace_path, normalize_user_workspace_path_for_save};
+use crate::path_utils::{
+    is_legacy_default_workspace_path, normalize_user_workspace_path,
+    normalize_user_workspace_path_for_save,
+};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AppSettings {
@@ -55,7 +58,11 @@ fn normalize(settings: &mut AppSettings) {
     }
 
     if let Some(ref val) = settings.workspace_path {
-        settings.workspace_path = normalize_user_workspace_path(val);
+        if is_legacy_default_workspace_path(val) {
+            settings.workspace_path = None;
+        } else {
+            settings.workspace_path = normalize_user_workspace_path(val);
+        }
     }
 
     settings.enabled_target_ids =
@@ -82,7 +89,11 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
     }
 
     if let Some(ref val) = settings.workspace_path {
-        settings.workspace_path = normalize_user_workspace_path_for_save(val)?;
+        if is_legacy_default_workspace_path(val) {
+            settings.workspace_path = None;
+        } else {
+            settings.workspace_path = normalize_user_workspace_path_for_save(val)?;
+        }
     }
 
     settings.enabled_target_ids =
@@ -140,6 +151,7 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
 #[cfg(test)]
 mod tests {
     use super::{normalize, normalize_for_save, validate_hex_color, AppSettings};
+    use crate::path_utils::is_legacy_default_workspace_path;
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -207,6 +219,14 @@ mod tests {
                 "workspace path must be absolute or start with ~/"
             );
         }
+    }
+
+    #[test]
+    fn loaded_legacy_agent_workspace_default_becomes_none() {
+        let mut settings = settings_with_path(Some("~/Agent Workspace"));
+        normalize(&mut settings);
+        assert_eq!(settings.workspace_path, None);
+        assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
     }
 
     #[test]

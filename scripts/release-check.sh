@@ -1324,6 +1324,32 @@ if search_quiet 'MiscView|TargetMiscSkillsPanel|view === "misc"|switchView\("mis
 fi
 printf '  claude/augment pages present; no Misc route remnants\n'
 
+step "regression: deprecated ~/Agent Workspace default not in active app UI"
+if search_has_match '~/Agent Workspace' \
+  src/lib/settingsDraft.ts \
+  src/views/StartView.tsx \
+  src/App.tsx; then
+  printf 'FAIL: deprecated ~/Agent Workspace path found in active frontend sources\n' >&2
+  exit 1
+fi
+if ! search_has_match 'DEFAULT_INSTALLED_WORKSPACE_DISPLAY' src-tauri/src/path_utils.rs; then
+  printf 'FAIL: canonical installed workspace constant missing in path_utils.rs\n' >&2
+  exit 1
+fi
+if ! search_has_match '~/.config/.agent-workspace' src/lib/settingsDraft.ts src/views/StartView.tsx; then
+  printf 'FAIL: frontend must reference ~/.config/.agent-workspace\n' >&2
+  exit 1
+fi
+if search_has_match 'choose folder|check path|use default|clear active' src/views/StartView.tsx src/App.tsx; then
+  printf 'FAIL: deprecated workspace path chooser controls still in Start UI\n' >&2
+  exit 1
+fi
+if ! search_has_match 'install_default_workspace' src-tauri/src/lib.rs src/App.tsx; then
+  printf 'FAIL: install_default_workspace must be wired in backend and frontend\n' >&2
+  exit 1
+fi
+printf '  canonical install path model verified\n'
+
 step "app checks"
 npm run build
 

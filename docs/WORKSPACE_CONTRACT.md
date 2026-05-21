@@ -122,8 +122,10 @@ Workspace validation is read-only. It checks for required markers and reports th
 
 The workspace path is resolved in this order:
 
-1. `workspace_path` in app settings (if non-empty).
-2. `AGENT_WORKSPACE_PATH` environment variable.
-3. Built-in default path.
+1. `AGENT_WORKSPACE_PATH` environment variable (when set and non-empty; dev/test override).
+2. `workspace_path` in app settings (when set to a valid non-legacy custom path).
+3. Canonical installed path: `~/.config/.agent-workspace`.
+
+The previous default `~/Agent Workspace` is deprecated. Saved settings that still point at the old path are normalized away on load. The app does not delete or modify an existing `~/Agent Workspace` folder automatically.
 
 Validation passes when all markers exist at the resolved canonical path. It fails with a descriptive error when any marker is missing or when the path cannot be resolved.

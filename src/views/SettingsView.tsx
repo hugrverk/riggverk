@@ -208,7 +208,7 @@ export function SettingsView({
         <div className="settings-left ws-left" role="region" aria-label="Settings">
           <TargetPageHeader
             title="Settings"
-            summary="Appearance and theme colors. Workspace path and target toggles live on Start and harness pages."
+            summary="Appearance and theme colors. Workspace install and target toggles live on Start and harness pages."
             facts={settingsDirty ? [{ label: "unsaved", tone: "warn" }] : [{ label: "saved", tone: "ok" }]}
           />
 
@@ -298,7 +298,7 @@ export function SettingsView({
                   </div>
                 )}
                 <p className="settings-path-hint">
-                  Workspace path is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
+                  Workspace install is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
                 </p>
               </HarnessActionCard>
             </>
