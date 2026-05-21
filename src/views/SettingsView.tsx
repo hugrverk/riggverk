@@ -203,18 +203,17 @@ export function SettingsView({
   };
 
   return (
-    <section className="settings-layout target-page-layout">
-      <div className="settings-shell ws-shell">
-        <div className="settings-left ws-left" role="region" aria-label="Settings">
-          <TargetPageHeader
-            title="Settings"
-            summary="Appearance and theme colors. Workspace install and target toggles live on Start and harness pages."
-            facts={settingsDirty ? [{ label: "unsaved", tone: "warn" }] : [{ label: "saved", tone: "ok" }]}
-          />
+    <section className="settings-layout" aria-label="Settings">
+      <div className="settings-body">
+        <TargetPageHeader
+          title="Settings"
+          summary="Appearance and theme colors. Workspace install and target toggles live on Start and harness pages."
+          facts={settingsDirty ? [{ label: "unsaved", tone: "warn" }] : [{ label: "saved", tone: "ok" }]}
+        />
 
-          {appSettings && (
-            <>
-              <HarnessActionCard
+        {appSettings && (
+          <div className="settings-cards">
+            <HarnessActionCard
                 title="Appearance"
                 ariaLabel="Appearance mode"
                 description="Light, dark, or follow system."
@@ -301,9 +300,8 @@ export function SettingsView({
                   Workspace install is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
                 </p>
               </HarnessActionCard>
-            </>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </section>
   );

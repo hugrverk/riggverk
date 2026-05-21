@@ -1705,16 +1705,11 @@ code {
   overflow: hidden;
 }
 
-.settings-shell {
+.settings-body {
   flex: 1;
   min-height: 0;
-  display: flex;
-  overflow: hidden;
-}
-
-.settings-left {
-  flex: 1;
-  min-width: 0;
+  width: 100%;
+  max-width: none;
   overflow-y: auto;
   padding: 12px 14px 16px;
   display: flex;
@@ -1722,10 +1717,22 @@ code {
   gap: 10px;
 }
 
-.settings-body {
-  flex: 1;
-  overflow-y: auto;
-  padding: 0;
+.settings-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 10px;
+  width: 100%;
+}
+
+.settings-cards .harness-action-card {
+  margin-bottom: 0;
+  height: 100%;
+}
+
+@media (max-width: 640px) {
+  .settings-cards {
+    grid-template-columns: 1fr;
+  }
 }
 
 .settings-section {
@@ -4310,12 +4317,20 @@ code {
 }
 
 .target-page-layout .ws-section,
-.target-page-layout .harness-action-card {
+.target-page-layout .harness-action-card,
+.settings-layout .harness-action-card {
   margin-bottom: 0;
   padding: 10px 14px 12px;
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg-inset);
+}
+
+.settings-layout .target-page-header {
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
 .harness-action-card-desc {
