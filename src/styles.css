@@ -18,6 +18,7 @@
   --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   --header-height: 44px;
   --traffic-light-reserve: 80px;
+  --nav-leading-gap: 10px;
   --nav-icon-size: 32px;
 }
 
@@ -125,7 +126,8 @@ html, body, #root {
   align-items: center;
   flex: 0 1 auto;
   min-width: 0;
-  max-width: max(0px, calc(100% - var(--traffic-light-reserve) - 24px));
+  padding-left: var(--nav-leading-gap);
+  max-width: max(0px, calc(100% - var(--traffic-light-reserve) - var(--nav-leading-gap) - 24px));
   overflow-x: auto;
   scrollbar-width: none;
 }
@@ -2897,46 +2899,14 @@ html, body, #root {
 
 /* ── Start / workspace landing ── */
 
-.ws-layout.ws-layout-start {
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
 .ws-layout-start .ws-shell {
-  grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
-  gap: 14px;
+  grid-template-columns: minmax(0, 1.45fr) minmax(380px, 2fr);
 }
 
 .ws-layout-start .ws-left,
 .ws-layout-start .start-left {
   max-width: none;
   gap: 0;
-}
-
-.ws-layout-start .ws-right {
-  position: sticky;
-  top: 0;
-  align-self: start;
-  max-height: min(480px, calc(100vh - 88px));
-}
-
-.ws-layout-start .ws-terminal-panel {
-  min-height: 240px;
-  max-height: min(480px, calc(100vh - 88px));
-}
-
-.ws-layout-start .ws-terminal-body {
-  min-height: 160px;
-  padding: 10px 14px;
-}
-
-.ws-layout-start .log-empty {
-  font-size: 11px;
-}
-
-.ws-layout-start .ws-idle-context {
-  margin-top: 8px;
-  font-size: 11px;
 }
 
 .start-overview {
@@ -3246,21 +3216,6 @@ html, body, #root {
   margin-top: 2px;
 }
 
-@media (max-width: 960px) {
-  .ws-layout-start .ws-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .ws-layout-start .ws-right {
-    position: static;
-    max-height: none;
-  }
-
-  .ws-layout-start .ws-terminal-panel {
-    min-height: 280px;
-    max-height: none;
-  }
-}
 
 @media (prefers-reduced-motion: reduce) {
   .start-destination-chip {
