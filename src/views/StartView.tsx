@@ -296,10 +296,7 @@ export function StartView({
       <div className="ws-shell">
         <div className="ws-left start-left" role="region" aria-label="Workspace start">
           <div className="start-overview" role="region" aria-label="About Agent Workspace">
-            <div className="start-overview-header">
-              <p className="start-overview-eyebrow">local control panel</p>
-              <h1 className="start-overview-title">Agent Workspace</h1>
-            </div>
+            <h1 className="start-overview-title">Agent Workspace</h1>
             <div className="start-overview-body">
               <p className="start-overview-copy">
                 A local control panel for your AI-agent workspace. Keeps rules, skills, configs, docs, and

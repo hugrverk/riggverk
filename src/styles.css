@@ -15,7 +15,8 @@
   --warn: #fbbf24;
   --dirty: #f59e0b;
   --radius: 4px;
-  --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   --header-height: 44px;
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
@@ -65,10 +66,40 @@ html, body, #root {
   height: 100%;
   background: var(--bg);
   color: var(--text);
-  font-family: var(--font);
+  font-family: var(--font-ui);
   font-size: 15px;
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Monospace: terminals, logs, code, paths, CLI output */
+.font-mono,
+.panel.log-panel,
+.log-output,
+.log-empty,
+.log-no-output,
+.log-prompt,
+.ws-idle-context,
+.ws-terminal-body,
+.ws-terminal-body pre,
+.configs-code,
+.health-output-pane,
+.brain-setup-pre,
+.brain-setup-source-value,
+.configs-bundle-val,
+.cursor-manual-step-body code,
+.target-cell-path,
+.settings-target-path,
+.start-workspace-path-value,
+.ws-path-input,
+.ws-path-value,
+.ws-setup-value,
+.ws-setup-files-list,
+.terminal-host,
+.skills-install-output,
+pre,
+code {
+  font-family: var(--font-mono);
 }
 
 #root {
@@ -146,7 +177,6 @@ html, body, #root {
   border-radius: 4px;
   background: transparent;
   color: var(--text-muted);
-  font-family: var(--font);
   cursor: pointer;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
   position: relative;
@@ -281,7 +311,6 @@ html, body, #root {
   min-height: 120px;
   color: var(--text-muted);
   font-size: 12px;
-  font-family: var(--font);
 }
 
 /* ---- sync text ---- */
@@ -399,7 +428,6 @@ html, body, #root {
 }
 
 .target-cell-muted { color: var(--text-muted); }
-.target-cell-path { font-size: 10px; font-family: var(--font); opacity: 0.72; }
 
 .target-cell.sync-text {
   font-size: 10px;
@@ -610,7 +638,6 @@ html, body, #root {
   border-radius: 3px;
   background: transparent;
   color: var(--text);
-  font-family: var(--font);
   font-size: 13px;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease, transform 0.08s ease;
@@ -659,7 +686,6 @@ html, body, #root {
   background: var(--bg-inset);
   border: 1px solid var(--border);
   border-color: var(--border);
-  font-family: var(--font);
   font-size: 14px;
   padding: 18px 20px 30px;
   min-height: 0;
@@ -715,7 +741,6 @@ html, body, #root {
   color: var(--text-muted);
   opacity: 0.55;
   line-height: 1.5;
-  font-family: var(--font);
 }
 
 .ws-idle-hint {
@@ -765,7 +790,6 @@ html, body, #root {
   border-radius: 3px;
   background: transparent;
   color: var(--text-muted);
-  font-family: var(--font);
   font-size: 11px;
   cursor: pointer;
   transition: background 0.1s, color 0.1s, border-color 0.1s;
@@ -864,7 +888,6 @@ html, body, #root {
   margin: 0 10px 0 12px;
   user-select: none;
   background: transparent;
-  font-family: var(--font);
   padding: 0;
   line-height: 1;
 }
@@ -889,7 +912,6 @@ html, body, #root {
   cursor: pointer;
   border: none;
   background: none;
-  font-family: var(--font);
   font-size: inherit;
   text-align: left;
   color: inherit;
@@ -1019,7 +1041,6 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font);
 }
 
 .skills-install-actions {
@@ -1039,7 +1060,6 @@ html, body, #root {
   flex: 1;
   min-height: 0;
   padding: 8px 14px;
-  font-family: var(--font);
   font-size: 12px;
   overflow-y: auto;
   background: var(--bg-inset);
@@ -1079,7 +1099,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
-  font-family: var(--font);
   font-size: 11px;
   color: var(--text);
   width: 130px;
@@ -1113,7 +1132,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 3px 8px;
-  font-family: var(--font);
   font-size: 12px;
   color: var(--text);
   width: 200px;
@@ -1148,7 +1166,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
-  font-family: var(--font);
   font-size: 11px;
   color: var(--text);
   width: 180px;
@@ -1205,7 +1222,6 @@ html, body, #root {
   border-bottom: 1px solid var(--border);
   background: transparent;
   color: var(--text);
-  font-family: var(--font);
   font-size: 12px;
   cursor: pointer;
   transition: background 0.1s;
@@ -1310,7 +1326,6 @@ html, body, #root {
   border: none;
   border-radius: 0;
   padding: 12px 18px;
-  font-family: var(--font);
   font-size: 13px;
   line-height: 1.6;
   color: var(--text);
@@ -1417,7 +1432,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
-  font-family: var(--font);
   font-size: 11px;
   color: var(--text);
   flex: 1;
@@ -1593,7 +1607,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   padding: 14px 18px;
-  font-family: var(--font);
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-muted);
@@ -1659,7 +1672,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 5px 10px;
-  font-family: var(--font);
   font-size: 13px;
   color: var(--text);
   width: 320px;
@@ -1790,7 +1802,6 @@ html, body, #root {
   padding: 4px 6px;
   cursor: pointer;
   font-size: 13px;
-  font-family: var(--font);
   color: var(--text);
   background: transparent;
   border: 1px solid transparent;
@@ -1887,12 +1898,16 @@ html, body, #root {
 
 .target-page-layout .ws-left {
   max-width: 640px;
+  gap: 12px;
 }
 
 .target-page-header {
-  margin-bottom: 10px;
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+  margin-bottom: 0;
+  padding: 12px 14px 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg);
 }
 
 .target-page-title-row {
@@ -1901,15 +1916,18 @@ html, body, #root {
   justify-content: space-between;
   gap: 8px;
   flex-wrap: wrap;
-  margin-bottom: 4px;
+  margin-bottom: 10px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--border);
 }
 
 .target-page-title {
   margin: 0;
-  font-size: 13px;
+  font-size: 18px;
   font-weight: 600;
-  letter-spacing: 0.04em;
-  text-transform: uppercase;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+  text-transform: none;
   color: var(--text-heading);
 }
 
@@ -1921,8 +1939,9 @@ html, body, #root {
 
 .target-page-summary {
   margin: 0;
+  max-width: 62ch;
   font-size: 12px;
-  line-height: 1.45;
+  line-height: 1.55;
   color: var(--text-muted);
 }
 
@@ -1948,16 +1967,30 @@ html, body, #root {
 }
 
 .target-panel {
-  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
   margin-bottom: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  overflow: hidden;
 }
 
 .target-panel-header {
-  padding: 8px 14px 4px;
+  padding: 10px 14px 8px;
+  border-bottom: 1px solid var(--border);
 }
 
 .target-panel-title {
   margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-heading);
+}
+
+.target-page-layout .ws-section-title,
+.target-page-layout .target-panel-title {
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.06em;
@@ -2139,7 +2172,7 @@ html, body, #root {
 }
 
 .cursor-manual-step-body code {
-  font-family: var(--font-mono, var(--font));
+  font-family: var(--font-mono);
   font-size: 11px;
   color: var(--text);
 }
@@ -2250,7 +2283,6 @@ html, body, #root {
   border-radius: var(--radius);
   background: var(--bg-inset);
   color: var(--text);
-  font-family: var(--font);
   font-size: 12px;
   cursor: pointer;
   flex-shrink: 0;
@@ -2353,7 +2385,6 @@ html, body, #root {
   border-right: 1px solid var(--border);
   background: var(--bg-inset);
   padding: 18px 20px 48px;
-  font-family: var(--font);
   font-size: 14px;
   position: relative;
 }
@@ -2407,7 +2438,6 @@ html, body, #root {
   overflow-y: auto;
   min-height: 0;
   padding: 18px 22px;
-  font-family: var(--font);
   font-size: 12px;
   line-height: 1.6;
   color: var(--text-muted);
@@ -2482,7 +2512,7 @@ html, body, #root {
 .configs-bundle-val {
   color: var(--text);
   opacity: 0.8;
-  font-family: var(--font-mono, var(--font));
+  font-family: var(--font-mono);
 }
 
 .configs-bundle-val-sm {
@@ -2590,7 +2620,6 @@ html, body, #root {
   overflow-y: auto;
   background: var(--bg-inset);
   padding: 18px 20px;
-  font-family: var(--font);
   font-size: 14px;
   position: relative;
 }
@@ -2643,7 +2672,6 @@ html, body, #root {
   cursor: pointer;
   background: transparent;
   color: var(--text);
-  font-family: var(--font);
   font-size: inherit;
   text-align: left;
   width: 100%;
@@ -2918,24 +2946,10 @@ html, body, #root {
   background: var(--bg);
 }
 
-.start-overview-header {
-  margin-bottom: 10px;
+.start-overview-title {
+  margin: 0 0 10px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--border);
-}
-
-.start-overview-eyebrow {
-  margin: 0 0 4px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-  color: var(--accent);
-  opacity: 0.9;
-}
-
-.start-overview-title {
-  margin: 0;
   font-size: 18px;
   font-weight: 600;
   letter-spacing: -0.02em;
@@ -3045,7 +3059,6 @@ html, body, #root {
   flex: 1;
   margin: 0;
   padding: 4px 8px;
-  font-family: var(--font);
   font-size: 11px;
   line-height: 1.35;
   color: var(--text);
@@ -3064,7 +3077,6 @@ html, body, #root {
   white-space: nowrap;
   color: var(--text-muted);
   opacity: 0.55;
-  font-family: var(--font);
 }
 
 .start-workspace-actions {
@@ -3197,7 +3209,6 @@ html, body, #root {
   padding: 2px 8px;
   border-radius: var(--radius);
   border: 1px solid var(--border);
-  font-family: var(--font);
 }
 
 .start-verify-backup-chip-ok {
@@ -3231,7 +3242,6 @@ html, body, #root {
   padding: 2px 8px;
   border-radius: 3px;
   border: 1px solid var(--border);
-  font-family: var(--font);
 }
 
 .ws-status-valid {
@@ -3275,7 +3285,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
-  font-family: var(--font);
   font-size: 11px;
   min-width: 0;
   overflow: hidden;
@@ -3380,7 +3389,6 @@ html, body, #root {
 }
 
 .ws-setup-value {
-  font-family: var(--font);
   color: var(--text);
   font-size: 12px;
 }
@@ -3633,7 +3641,6 @@ html, body, #root {
   font-size: 11px;
   color: var(--text-muted);
   opacity: 0.55;
-  font-family: var(--font);
 }
 
 .ws-lane-warn {
@@ -3695,7 +3702,6 @@ html, body, #root {
 
 .ws-status-val {
   color: var(--text);
-  font-family: var(--font);
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -3727,7 +3733,6 @@ html, body, #root {
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 6px 10px;
-  font-family: var(--font);
   font-size: 12px;
   line-height: 1.4;
 }
@@ -3967,7 +3972,6 @@ html, body, #root {
   background: none;
   padding: 3px 6px;
   cursor: pointer;
-  font-family: var(--font);
   outline-offset: 2px;
   border-radius: 3px;
 }
@@ -4089,7 +4093,6 @@ html, body, #root {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-family: var(--font);
 }
 
 .ws-detail-dim {
@@ -4275,7 +4278,6 @@ html, body, #root {
   gap: 2px;
   padding: 10px 6px;
   font-size: 11px;
-  font-family: var(--font);
   color: var(--text-muted);
   background: transparent;
   border: none;
@@ -4367,7 +4369,6 @@ html, body, #root {
   width: 100%;
   padding: 7px 10px;
   font-size: 12px;
-  font-family: var(--font);
   color: var(--text);
   background: transparent;
   border: none;
@@ -4503,7 +4504,6 @@ html, body, #root {
   min-width: 0;
   padding: 4px 8px;
   font-size: 12px;
-  font-family: var(--font);
   color: var(--text);
   background: var(--bg-inset);
   border: 1px solid var(--border);
@@ -4686,7 +4686,7 @@ html, body, #root {
 
 .brain-setup-source-value {
   color: var(--accent);
-  font-family: var(--font-mono, var(--font));
+  font-family: var(--font-mono);
 }
 
 .brain-setup-copy-row {
@@ -4770,7 +4770,6 @@ html, body, #root {
 
 .brain-setup-pre {
   padding: 16px 20px;
-  font-family: var(--font);
   font-size: 10px;
   line-height: 1.55;
   color: var(--text-muted);
@@ -4923,6 +4922,14 @@ html, body, #root {
   padding: 8px 14px;
 }
 
+.target-page-layout .ws-section {
+  margin-bottom: 0;
+  padding: 10px 14px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+}
+
 .ws-section-header {
   display: flex;
   align-items: center;
@@ -4990,7 +4997,6 @@ html, body, #root {
   padding: 2px 8px;
   border-radius: 3px;
   border: 1px solid var(--border);
-  font-family: var(--font);
   flex-shrink: 0;
 }
 
@@ -5138,7 +5144,6 @@ html, body, #root {
   padding: 2px 8px;
   border-radius: 3px;
   border: 1px solid var(--border);
-  font-family: var(--font);
 }
 
 .ws-runtime-status-synced {
