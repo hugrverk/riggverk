@@ -129,11 +129,13 @@ pub(crate) fn configured_workspace_path(settings: &settings::AppSettings) -> Opt
     None
 }
 
+#[allow(dead_code)]
 pub(super) fn repo_path() -> PathBuf {
     let settings = settings::load();
     repo_path_from_settings(&settings)
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
     configured_workspace_path(settings).unwrap_or_default()
 }
@@ -163,7 +165,8 @@ pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> 
 
 pub(super) fn workspace_root() -> Result<PathBuf, String> {
     let settings = settings::load();
-    let path = configured_workspace_path(&settings).ok_or_else(|| NO_WORKSPACE_SELECTED.to_string())?;
+    let path =
+        configured_workspace_path(&settings).ok_or_else(|| NO_WORKSPACE_SELECTED.to_string())?;
     validate_workspace_root(path)
 }
 
@@ -227,7 +230,9 @@ pub struct WorkspaceDiagnostics {
     release_check_available: bool,
 }
 
-fn workspace_diagnostics_for_unconfigured(settings: &settings::AppSettings) -> WorkspaceDiagnostics {
+fn workspace_diagnostics_for_unconfigured(
+    settings: &settings::AppSettings,
+) -> WorkspaceDiagnostics {
     let enabled = &settings.enabled_target_ids;
     let total_rules = agent_targets::rule_targets().len();
     let total_configs = agent_targets::config_targets().len();
@@ -753,9 +758,7 @@ pub fn initialize_workspace_at_path(
                     success: false,
                     status: "validation_failed".into(),
                     target_path,
-                    message: format!(
-                        "Files were copied but workspace validation failed: {e}"
-                    ),
+                    message: format!("Files were copied but workspace validation failed: {e}"),
                     copied_files: repair.copied_files,
                     warnings: repair.warnings,
                 }),
@@ -1381,8 +1384,9 @@ mod tests {
         configured_workspace_path, create_workspace_from_source, is_unsafe_target,
         persisted_workspace_path_is_valid, plan_create_workspace, read_brain_setup_seed_under_root,
         repair_workspace_core, repo_path_from_settings, scrub_stale_workspace_path,
-        try_set_active_workspace_path, validate_workspace_root, workspace_diagnostics_for_unconfigured,
-        workspace_setup_phase, CreateWorkspacePlan, NO_WORKSPACE_SELECTED, BRAIN_SETUP_SEED_REL,
+        try_set_active_workspace_path, validate_workspace_root,
+        workspace_diagnostics_for_unconfigured, workspace_setup_phase, CreateWorkspacePlan,
+        BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
     };
     use crate::settings::AppSettings;
     use std::fs;

@@ -12,7 +12,8 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
-import { MiscView } from "./views/MiscView";
+import { ClaudeView } from "./views/ClaudeView";
+import { AugmentView } from "./views/AugmentView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
@@ -31,13 +32,14 @@ type View =
   | "codex"
   | "opencode"
   | "cursor"
-  | "misc"
+  | "claude"
+  | "augment"
   | "library"
   | "routing"
   | "settings";
 
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "misc";
+  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude" || view === "augment";
 }
 
 /* ---- main app ---- */
@@ -1339,12 +1341,20 @@ function App() {
             <ToolIcon name="cursor" />
           </button>
           <button
-            className={`nav-icon ${view === "misc" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("misc")}
-            aria-label="Misc targets"
-            title="Misc"
+            className={`nav-icon ${view === "claude" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("claude")}
+            aria-label="Claude"
+            title="Claude"
           >
             <ToolIcon name="claude" />
+          </button>
+          <button
+            className={`nav-icon ${view === "augment" ? "nav-icon-active" : ""}`}
+            onClick={() => switchView("augment")}
+            aria-label="Augment"
+            title="Augment"
+          >
+            <ToolIcon name="augment" />
           </button>
           {/* Library */}
           <button
@@ -1588,8 +1598,8 @@ function App() {
           />
         )}
 
-        {view === "misc" && (
-          <MiscView
+        {view === "claude" && (
+          <ClaudeView
             appSettings={appSettings}
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
@@ -1610,10 +1620,35 @@ function App() {
             onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
             onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
             {...targetSkillsShared}
-            onDryRunAuggieSkills={() => runWsInstallForAgents(true, ["auggie"], "install skills dry-run (auggie)")}
-            onInstallAuggieSkills={() => runWsInstallForAgents(false, ["auggie"], "install skills (auggie)")}
-            onDryRunClaudeSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
-            onInstallClaudeSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
+            onDryRunSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
+            onInstallSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
+          />
+        )}
+
+        {view === "augment" && (
+          <AugmentView
+            appSettings={appSettings}
+            agentTargets={agentTargets}
+            targetProfiles={targetProfiles}
+            activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
+            onToggleTarget={toggleTarget}
+            onApplyProfile={applyTargetProfile}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            ruleTargetsEnabled={ruleTargetsEnabled}
+            canRunReleaseCheck={canRunReleaseCheck}
+            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
+            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            {...targetSkillsShared}
+            onDryRunSkills={() => runWsInstallForAgents(true, ["auggie"], "install skills dry-run (auggie)")}
+            onInstallSkills={() => runWsInstallForAgents(false, ["auggie"], "install skills (auggie)")}
           />
         )}
 

@@ -162,6 +162,18 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec!["cursor_setup".into()],
         },
         TargetProfileMeta {
+            id: "claude".into(),
+            label: "Claude".into(),
+            description: "Claude rules at ~/.claude/CLAUDE.md".into(),
+            target_ids: vec!["claude_rules".into()],
+        },
+        TargetProfileMeta {
+            id: "augment".into(),
+            label: "Augment".into(),
+            description: "Augment rules at ~/.augment/rules/global.md".into(),
+            target_ids: vec!["auggie_rules".into()],
+        },
+        TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
             description: "Codex, OpenCode, Auggie, Claude rules + Cursor setup".into(),

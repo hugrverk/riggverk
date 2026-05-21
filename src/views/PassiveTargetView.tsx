@@ -1,11 +1,18 @@
-import { TargetMiscSkillsPanel } from "../components/TargetMiscSkillsPanel";
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
+import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { TargetPage } from "../lib/targetGroups";
 
-interface MiscViewProps {
+interface PassiveTargetViewProps {
+  page: TargetPage;
+  title: string;
+  summary: string;
+  controlsAriaLabel: string;
+  targetName: string;
+  installAgents: InstallAgent[];
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
@@ -29,10 +36,8 @@ interface MiscViewProps {
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
   skillSearch: string;
-  onDryRunAuggieSkills: () => void;
-  onInstallAuggieSkills: () => void;
-  onDryRunClaudeSkills: () => void;
-  onInstallClaudeSkills: () => void;
+  onDryRunSkills: () => void;
+  onInstallSkills: () => void;
   onToggleSkill: (name: string) => void;
   onSelectAllSkills: () => void;
   onClearSelectionSkills: () => void;
@@ -40,7 +45,13 @@ interface MiscViewProps {
   onOpenInstallScript: () => void;
 }
 
-export function MiscView({
+export function PassiveTargetView({
+  page,
+  title,
+  summary,
+  controlsAriaLabel,
+  targetName,
+  installAgents,
   appSettings,
   agentTargets,
   targetProfiles,
@@ -64,31 +75,29 @@ export function MiscView({
   skillsLoaded,
   selectedSkills,
   skillSearch,
-  onDryRunAuggieSkills,
-  onInstallAuggieSkills,
-  onDryRunClaudeSkills,
-  onInstallClaudeSkills,
+  onDryRunSkills,
+  onInstallSkills,
   onToggleSkill,
   onSelectAllSkills,
   onClearSelectionSkills,
   onSetSkillSearch,
   onOpenInstallScript,
-}: MiscViewProps) {
+}: PassiveTargetViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
 
   return (
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
-        <div className="ws-left" role="region" aria-label="Misc target controls">
+        <div className="ws-left" role="region" aria-label={controlsAriaLabel}>
           <TargetPageHeader
-            title="Misc"
-            summary="Passive rule and skill targets for Auggie and Claude."
+            title={title}
+            summary={summary}
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
-            warning={!workspaceValid ? "Select a valid workspace on Start before syncing passive targets." : undefined}
+            warning={!workspaceValid ? `Select a valid workspace on Start before syncing ${title} targets.` : undefined}
           />
 
           <TargetSettingsPanel
-            page="misc"
+            page={page}
             appSettings={appSettings}
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
@@ -99,7 +108,7 @@ export function MiscView({
           />
 
           {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="Passive rules sync">
+            <div className="ws-section" role="region" aria-label={`${title} rules sync`}>
               <div className="ws-section-header">
                 <span className="ws-section-title">Rules</span>
               </div>
@@ -125,17 +134,17 @@ export function MiscView({
             </div>
           )}
 
-          <TargetMiscSkillsPanel
+          <TargetSkillsPanel
+            targetName={targetName}
+            installAgents={installAgents}
             skills={skills}
             skillsLoaded={skillsLoaded}
             selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             wsRunning={wsRunning}
             workspaceValid={workspaceValid}
-            onDryRunAuggie={onDryRunAuggieSkills}
-            onInstallAuggie={onInstallAuggieSkills}
-            onDryRunClaude={onDryRunClaudeSkills}
-            onInstallClaude={onInstallClaudeSkills}
+            onDryRun={onDryRunSkills}
+            onInstall={onInstallSkills}
             onToggleSkill={onToggleSkill}
             onSelectAllSkills={onSelectAllSkills}
             onClearSelectionSkills={onClearSelectionSkills}

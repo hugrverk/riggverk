@@ -1202,6 +1202,22 @@ print('  lib.rs: no repair_workspace reference')
 "
 printf '  repair command surface is safe (plan/apply only)\n'
 
+step "claude and augment target pages"
+for required in \
+  src/views/ClaudeView.tsx \
+  src/views/AugmentView.tsx \
+  src/assets/augment.svg; do
+  if [ ! -f "$repo_root/$required" ]; then
+    printf 'FAIL: missing %s\n' "$required" >&2
+    exit 1
+  fi
+done
+if search_quiet 'MiscView|TargetMiscSkillsPanel|view === "misc"|switchView\("misc"\)' src; then
+  printf 'FAIL: Misc top-level route remnants found in src\n' >&2
+  exit 1
+fi
+printf '  claude/augment pages present; no Misc route remnants\n'
+
 step "app checks"
 npm run build
 

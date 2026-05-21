@@ -102,7 +102,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `workspace_path` | `string` or `null` | `null` | Custom workspace root path. When `null` or missing, falls back to `AGENT_WORKSPACE_PATH` env or built-in default. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules) and config targets (opencode_config, codex_config, cursor_setup) are filtered by kind in the UI. Claude and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (Codex, OpenCode, Cursor, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Rule targets (codex_rules, opencode_rules, auggie_rules, claude_rules) and config targets (opencode_config, codex_config, cursor_setup) are filtered by kind in the UI. Claude and Cursor setup targets are available but not enabled by default — enable them via target profiles or manual checkboxes. Quick-select via target profiles (Codex, OpenCode, Cursor, Claude, Augment, All rules, All supported). Profiles update the enabled target selection in the settings draft; Save is still required to persist. Profiles do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 
@@ -115,6 +115,8 @@ Settings includes compact target profile buttons for quick target selection:
 | Codex | codex_rules, codex_config |
 | OpenCode | opencode_rules, opencode_config |
 | Cursor | cursor_setup |
+| Claude | claude_rules |
+| Augment | auggie_rules |
 | All rules | codex_rules, opencode_rules, auggie_rules, claude_rules |
 | All supported | codex_rules, opencode_rules, auggie_rules, claude_rules, opencode_config, codex_config, cursor_setup |
 

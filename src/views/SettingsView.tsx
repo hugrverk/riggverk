@@ -269,7 +269,7 @@ export function SettingsView({
                 <button className="btn" onClick={onReset}>reset defaults</button>
               </div>
               <div className="settings-path-hint">
-                Workspace path is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, and Misc.
+                Workspace path is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
               </div>
               {settingsMsg && (
                 <div className={`settings-msg ${settingsMsg.ok ? "log-ok" : "log-fail"}`}>

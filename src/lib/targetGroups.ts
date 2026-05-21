@@ -1,15 +1,17 @@
 import type { AgentTargetMeta, TargetProfileMeta } from "../types";
 
-export type TargetPage = "codex" | "opencode" | "cursor" | "misc";
+export type TargetPage = "codex" | "opencode" | "cursor" | "claude" | "augment";
 
 export const PAGE_TARGET_IDS: Record<TargetPage, readonly string[]> = {
   codex: ["codex_rules", "codex_config"],
   opencode: ["opencode_rules", "opencode_config"],
   cursor: ["cursor_setup"],
-  misc: ["auggie_rules", "claude_rules"],
+  claude: ["claude_rules"],
+  augment: ["auggie_rules"],
 };
 
 const CROSS_PROFILE_IDS = new Set(["all_rules", "all_supported"]);
+const PASSIVE_PAGES = new Set<TargetPage>(["claude", "augment"]);
 
 export function filterTargetsForPage(targets: AgentTargetMeta[], page: TargetPage): AgentTargetMeta[] {
   const ids = new Set(PAGE_TARGET_IDS[page]);
@@ -18,7 +20,7 @@ export function filterTargetsForPage(targets: AgentTargetMeta[], page: TargetPag
 
 export function filterProfilesForPage(profiles: TargetProfileMeta[], page: TargetPage): TargetProfileMeta[] {
   const pageProfile = profiles.filter(p => p.id === page);
-  const crossProfiles = page === "misc"
+  const crossProfiles = PASSIVE_PAGES.has(page)
     ? profiles.filter(p => CROSS_PROFILE_IDS.has(p.id))
     : [];
   return [...pageProfile, ...crossProfiles];
@@ -29,7 +31,8 @@ export function pageLabelToTargetPage(label: string | undefined): TargetPage | u
     case "CODEX": return "codex";
     case "OPENCODE": return "opencode";
     case "CURSOR": return "cursor";
-    case "MISC": return "misc";
+    case "CLAUDE": return "claude";
+    case "AUGMENT": return "augment";
     default: return undefined;
   }
 }

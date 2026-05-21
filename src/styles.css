@@ -2060,26 +2060,6 @@ html, body, #root {
   line-height: 1.35;
 }
 
-.target-skills-misc-rows {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 6px;
-}
-
-.target-skills-misc-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 6px;
-}
-
-.target-skills-misc-shared {
-  padding-top: 2px;
-  border-top: 1px solid var(--border);
-  margin-top: 2px;
-}
-
 .ws-repair-box {
   margin-top: 8px;
   padding: 8px;
