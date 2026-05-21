@@ -20,7 +20,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 
 - **`generate-opencode-config.py`** — generates `templates/opencode.json` from `templates/opencode.base.json` and `templates/opencode.policy.json`. Supports `--check` (verify snapshot currency) and `--write` (regenerate snapshot). Paths are workspace-relative.
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
-- **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
+- **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path, installs `~/.config/playwright-mcp/config.json`, and optionally merges Playwright MCP into `~/.cursor/mcp.json` (`--apply-cursor`). Uses pinned `@playwright/mcp@0.0.48`, Chromium (not Chrome channel), and a shared user-global browser cache — not `@latest` or `PLAYWRIGHT_BROWSERS_PATH=0`.
 - **`install-codex-config.sh`** — syncs Codex config template without running Codex.
 - **`install-cursor-workspace.sh`** — installs Cursor subagents globally to `~/.cursor/agents` (app default). CLI-only: `--project --target` for project agents/rules.
 - **`install-skills.sh`** — installs skills to native agent skill folders. App uses `--global` only. CLI-only: `--project --target` for per-project installs.

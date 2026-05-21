@@ -24,10 +24,13 @@
       "command": [
         "npx",
         "-y",
-        "@playwright/mcp@latest",
-        "--headless",
-        "--browser=chrome"
+        "@playwright/mcp@0.0.48",
+        "--config",
+        "__PLAYWRIGHT_MCP_CONFIG_PATH__"
       ],
+      "environment": {
+        "PLAYWRIGHT_BROWSERS_PATH": "__PLAYWRIGHT_BROWSERS_PATH__"
+      },
       "enabled": true
     }
   },

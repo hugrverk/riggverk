@@ -1,6 +1,7 @@
 # Optional Playwright MCP snippet for Codex config review.
 # Requires the runtime environment to provide npx and browser dependencies.
+# Install scripts render __PLAYWRIGHT_*__ placeholders to user-local paths.
 
 [mcp_servers.playwright]
 command = "npx"
-args = ["-y", "@playwright/mcp@latest"]
+args = ["-y", "@playwright/mcp@0.0.48", "--config", "__PLAYWRIGHT_MCP_CONFIG_PATH__"]

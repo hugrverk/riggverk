@@ -302,7 +302,10 @@ step "default workspace copy list includes generator + base/policy templates"
 for required_asset in \
   'scripts/generate-opencode-config.py' \
   'templates/opencode.base.json' \
-  'templates/opencode.policy.json'; do
+  'templates/opencode.policy.json' \
+  'templates/playwright-mcp.config.json' \
+  'scripts/playwright-mcp-lib.sh' \
+  'scripts/check-playwright-mcp.sh'; do
   if ! grep -qF "$required_asset" src-tauri/src/commands/defaults.rs; then
     printf 'FAIL: default workspace copy list missing: %s\n' "$required_asset" >&2
     exit 1
@@ -516,6 +519,11 @@ for source_file in \
   python3 -m json.tool "$source_file" >/dev/null
 done
 printf '  opencode.base.json + opencode.policy.json: valid strict JSON\n'
+python3 -m json.tool resources/default-workspace/templates/playwright-mcp.config.json >/dev/null
+printf '  playwright-mcp.config.json: valid strict JSON\n'
+
+step "bundled default Playwright MCP guardrails"
+bash resources/default-workspace/scripts/check-playwright-mcp.sh
 
 step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check

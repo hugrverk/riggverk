@@ -1815,6 +1815,7 @@ mod tests {
             "templates/opencode.json",
             "templates/opencode.base.json",
             "templates/opencode.policy.json",
+            "templates/playwright-mcp.config.json",
             "templates/tui.json",
             "templates/codex/README.md",
             "templates/codex/config.toml",

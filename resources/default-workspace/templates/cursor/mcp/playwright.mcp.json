@@ -4,8 +4,13 @@
       "command": "npx",
       "args": [
         "-y",
-        "@playwright/mcp@latest"
-      ]
+        "@playwright/mcp@0.0.48",
+        "--config",
+        "__PLAYWRIGHT_MCP_CONFIG_PATH__"
+      ],
+      "env": {
+        "PLAYWRIGHT_BROWSERS_PATH": "__PLAYWRIGHT_BROWSERS_PATH__"
+      }
     }
   }
 }

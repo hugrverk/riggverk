@@ -26,19 +26,32 @@ The template defines:
 - Share settings (recommended: disabled)
 - Model selection via `model` and `small_model`
 - Default primary agent via `default_agent`
-- Playwright MCP through on-demand `npx`, without adding repository dependencies
+- Playwright MCP through on-demand `npx` with a pinned package version, user-local MCP config, and shared browser cache (not `@latest`)
 - Permission model (which operations are allowed, denied, or require asking)
 - File-scope read/edit deny rules for secrets and credentials
 - Watcher ignore patterns
 
 Playwright MCP is defined in `templates/opencode.base.json` and included in the generated `templates/opencode.json`.
 
-Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate.
+Defaults:
+
+- Package: `@playwright/mcp@0.0.48` (override with `PLAYWRIGHT_MCP_VERSION` when installing)
+- MCP config: `~/.config/playwright-mcp/config.json` from `templates/playwright-mcp.config.json`
+- Browser: **Chromium** via MCP config (`browserName: chromium`, `isolated: true`) — not the Chrome channel
+- Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux)
+
+On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Testing.app** inside the cache. That is expected and is not the same as requiring Chrome Stable/Beta/Dev/Canary.
+
+Do **not** set `PLAYWRIGHT_BROWSERS_PATH=0`. That forces project-local browsers under `node_modules` and defeats the shared-cache default.
+
+`./scripts/install-opencode-config.sh --apply` installs the Playwright MCP config and renders user-specific paths into the OpenCode MCP entry. Use `--apply-cursor` to merge only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; backups are written first).
+
+Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs.
 
 Local MCP checks:
 
 ```
-npx -y @playwright/mcp@latest --help
+npx -y @playwright/mcp@0.0.48 --help
 opencode mcp list
 ```
 

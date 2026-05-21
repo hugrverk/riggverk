@@ -3,9 +3,16 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/playwright-mcp-lib.sh
+. "$WORKSPACE_ROOT/scripts/playwright-mcp-lib.sh"
+
 SOURCE_FILE="$WORKSPACE_ROOT/templates/opencode.json"
 TUI_SOURCE_FILE="$WORKSPACE_ROOT/templates/tui.json"
 AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/agents"
+PLAYWRIGHT_MCP_SOURCE="$WORKSPACE_ROOT/templates/playwright-mcp.config.json"
+PLAYWRIGHT_MCP_TARGET=""
+CURSOR_MCP_TARGET="${CURSOR_MCP_CONFIG_PATH:-$HOME/.cursor/mcp.json}"
+CURSOR_MCP_TEMPLATE="$WORKSPACE_ROOT/templates/cursor/mcp/playwright.mcp.json"
 
 usage() {
   cat <<'USAGE'
@@ -19,6 +26,8 @@ Agents:  agents/*.md              ->  ~/.config/opencode/agents/*.md
 
 Options:
   --apply          Write target files
+  --apply-cursor   With --apply, merge Playwright MCP into ~/.cursor/mcp.json
+  --cursor         Alias for --apply-cursor
   --diff           Show diff without writing
   --quiet          Print compact app-friendly output
   --help           Show this help
@@ -27,6 +36,10 @@ Environment override:
   OPENCODE_CONFIG_PATH
   OPENCODE_TUI_CONFIG_PATH
   OPENCODE_AGENTS_DIR
+  PLAYWRIGHT_MCP_VERSION
+  PLAYWRIGHT_MCP_CONFIG_PATH
+  PLAYWRIGHT_BROWSERS_PATH
+  CURSOR_MCP_CONFIG_PATH
   AGENT_WORKSPACE_BACKUP_DIR
 
 Default mode is dry-run. Use --apply to write files.
@@ -43,13 +56,40 @@ if [ ! -f "$TUI_SOURCE_FILE" ]; then
   exit 1
 fi
 
+if [ ! -f "$PLAYWRIGHT_MCP_SOURCE" ]; then
+  printf 'install-opencode-config.sh: Playwright MCP template not found: %s\n' "$PLAYWRIGHT_MCP_SOURCE" >&2
+  exit 1
+fi
+
+if [ ! -f "$CURSOR_MCP_TEMPLATE" ]; then
+  printf 'install-opencode-config.sh: Cursor Playwright MCP template not found: %s\n' "$CURSOR_MCP_TEMPLATE" >&2
+  exit 1
+fi
+
+if ! resolve_playwright_paths; then
+  printf 'install-opencode-config.sh: unable to derive PLAYWRIGHT_BROWSERS_PATH on this platform; set PLAYWRIGHT_BROWSERS_PATH (see docs/OPENCODE_CONFIG.md)\n' >&2
+  exit 1
+fi
+PLAYWRIGHT_MCP_TARGET="$PLAYWRIGHT_MCP_CONFIG_PATH_RESOLVED"
+
+rendered_opencode="$(mktemp)"
+trap 'rm -f "$rendered_opencode"' EXIT
+render_json_with_playwright_paths \
+  "$SOURCE_FILE" \
+  "$rendered_opencode" \
+  "$PLAYWRIGHT_MCP_CONFIG_PATH_RESOLVED" \
+  "$PLAYWRIGHT_BROWSERS_PATH_RESOLVED" \
+  "$PLAYWRIGHT_MCP_VERSION"
+
 apply=false
+apply_cursor=false
 diff_mode=false
 quiet=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --apply) apply=true ;;
+    --apply-cursor|--cursor) apply_cursor=true ;;
     --diff) diff_mode=true ;;
     --quiet) quiet=true ;;
     --help) usage; exit 0 ;;
@@ -149,13 +189,24 @@ if $diff_mode; then
 
   # Config diffs
   if [ -f "$TARGET" ]; then
-    if ! cmp -s "$SOURCE_FILE" "$TARGET"; then
+    if ! cmp -s "$rendered_opencode" "$TARGET"; then
       printf '\n--- opencode config diffs (%s)\n' "$TARGET"
-      diff -u "$TARGET" "$SOURCE_FILE" || true
+      diff -u "$TARGET" "$rendered_opencode" || true
       has_diffs=true
     fi
   else
     printf '\n--- opencode config missing (no target file at %s)\n' "$TARGET"
+    has_diffs=true
+  fi
+
+  if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+    if ! cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
+      printf '\n--- playwright mcp config diffs (%s)\n' "$PLAYWRIGHT_MCP_TARGET"
+      diff -u "$PLAYWRIGHT_MCP_TARGET" "$PLAYWRIGHT_MCP_SOURCE" || true
+      has_diffs=true
+    fi
+  else
+    printf '\n--- playwright mcp config missing (no target file at %s)\n' "$PLAYWRIGHT_MCP_TARGET"
     has_diffs=true
   fi
 
@@ -196,18 +247,64 @@ fi
 
 if $apply; then
   # Validate config JSONs
-  validate_json "$SOURCE_FILE" || {
-    printf 'install-opencode-config.sh: source JSON is invalid\n' >&2
+  validate_json "$rendered_opencode" || {
+    printf 'install-opencode-config.sh: rendered opencode JSON is invalid\n' >&2
     exit 1
   }
   validate_json "$TUI_SOURCE_FILE" || {
     printf 'install-opencode-config.sh: TUI source JSON is invalid\n' >&2
     exit 1
   }
+  validate_json "$PLAYWRIGHT_MCP_SOURCE" || {
+    printf 'install-opencode-config.sh: Playwright MCP template JSON is invalid\n' >&2
+    exit 1
+  }
+
+  if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+    if cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
+      if ! $quiet; then printf '  playwright mcp config already synced\n'; fi
+    else
+      ts="$(date -u +%Y%m%d-%H%M%S)"
+      backup_dir="$BACKUP_ROOT/$ts/playwright-mcp"
+      mkdir -p "$backup_dir"
+      cp "$PLAYWRIGHT_MCP_TARGET" "$backup_dir/config.json"
+      if ! $quiet; then printf '  playwright mcp config backed up to %s/config.json\n' "$backup_dir"; fi
+      mkdir -p "$(dirname "$PLAYWRIGHT_MCP_TARGET")"
+      cp "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"
+      if ! $quiet; then printf '  playwright mcp config synced\n'; fi
+    fi
+  else
+    mkdir -p "$(dirname "$PLAYWRIGHT_MCP_TARGET")"
+    if ! $quiet; then printf '  playwright mcp config creating new\n'; fi
+    cp "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"
+    if ! $quiet; then printf '  playwright mcp config synced\n'; fi
+  fi
+
+  if $apply_cursor; then
+    if [ -f "$CURSOR_MCP_TARGET" ]; then
+      ts="$(date -u +%Y%m%d-%H%M%S)"
+      backup_dir="$BACKUP_ROOT/$ts/cursor-mcp"
+      mkdir -p "$backup_dir"
+      cp "$CURSOR_MCP_TARGET" "$backup_dir/mcp.json"
+      if ! $quiet; then printf '  cursor mcp backed up to %s/mcp.json\n' "$backup_dir"; fi
+    fi
+    mkdir -p "$(dirname "$CURSOR_MCP_TARGET")"
+    merge_cursor_playwright_mcp \
+      "$CURSOR_MCP_TEMPLATE" \
+      "$CURSOR_MCP_TARGET" \
+      "$PLAYWRIGHT_MCP_CONFIG_PATH_RESOLVED" \
+      "$PLAYWRIGHT_BROWSERS_PATH_RESOLVED" \
+      "$PLAYWRIGHT_MCP_VERSION"
+    validate_json "$CURSOR_MCP_TARGET" || {
+      printf 'install-opencode-config.sh: Cursor MCP JSON is invalid after merge\n' >&2
+      exit 1
+    }
+    if ! $quiet; then printf '  cursor mcp updated (playwright server only)\n'; fi
+  fi
 
   # ── Apply config ──
   if [ -f "$TARGET" ]; then
-    if cmp -s "$SOURCE_FILE" "$TARGET"; then
+    if cmp -s "$rendered_opencode" "$TARGET"; then
       if ! $quiet; then printf '  opencode config already synced\n'; fi
     else
       ts="$(date -u +%Y%m%d-%H%M%S)"
@@ -216,13 +313,13 @@ if $apply; then
       backup_file="$backup_dir/opencode.json"
       cp "$TARGET" "$backup_file"
       if ! $quiet; then printf '  opencode config backed up to %s\n' "$backup_file"; fi
-      cp "$SOURCE_FILE" "$TARGET"
+      cp "$rendered_opencode" "$TARGET"
       if ! $quiet; then printf '  opencode config synced\n'; fi
     fi
   else
     mkdir -p "$(dirname "$TARGET")"
     if ! $quiet; then printf '  opencode config creating new\n'; fi
-    cp "$SOURCE_FILE" "$TARGET"
+    cp "$rendered_opencode" "$TARGET"
     if ! $quiet; then printf '  opencode config synced\n'; fi
   fi
 
@@ -281,7 +378,7 @@ all_synced=true
 
 # Config check
 if [ -f "$TARGET" ]; then
-  if cmp -s "$SOURCE_FILE" "$TARGET"; then
+  if cmp -s "$rendered_opencode" "$TARGET"; then
     if ! $quiet; then printf '  opencode config synced\n'; fi
   else
     if ! $quiet; then printf '  opencode config diverged (use --apply to sync)\n'; fi
@@ -289,6 +386,18 @@ if [ -f "$TARGET" ]; then
   fi
 else
   if ! $quiet; then printf '  opencode config missing (use --apply to create)\n'; fi
+  all_synced=false
+fi
+
+if [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
+  if cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
+    if ! $quiet; then printf '  playwright mcp config synced\n'; fi
+  else
+    if ! $quiet; then printf '  playwright mcp config diverged (use --apply to sync)\n'; fi
+    all_synced=false
+  fi
+else
+  if ! $quiet; then printf '  playwright mcp config missing (use --apply to create)\n'; fi
   all_synced=false
 fi
 
