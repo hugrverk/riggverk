@@ -157,11 +157,20 @@ fi
 step "bundled default cursor setup"
 python3 -m json.tool resources/default-workspace/templates/cursor/manifest.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/mcp/mcp.example.json >/dev/null
-printf '  Cursor manifest + MCP example valid JSON\n'
+python3 -m json.tool resources/default-workspace/templates/cursor/mcp/playwright.mcp.json >/dev/null
+for profile in safe playwright-safe playwright-full; do
+  python3 -m json.tool "resources/default-workspace/templates/cursor/sandbox/$profile.json" >/dev/null
+done
+printf '  Cursor manifest, MCP examples, and sandbox profiles valid JSON\n'
 for required in \
   resources/default-workspace/templates/cursor/manifest.json \
   resources/default-workspace/templates/cursor/mcp/README.md \
-  resources/default-workspace/templates/cursor/mcp/mcp.example.json; do
+  resources/default-workspace/templates/cursor/mcp/mcp.example.json \
+  resources/default-workspace/templates/cursor/mcp/playwright.mcp.json \
+  resources/default-workspace/templates/cursor/sandbox/README.md \
+  resources/default-workspace/templates/cursor/sandbox/safe.json \
+  resources/default-workspace/templates/cursor/sandbox/playwright-safe.json \
+  resources/default-workspace/templates/cursor/sandbox/playwright-full.json; do
   if [ ! -s "$required" ]; then
     printf 'FAIL: Cursor profile asset missing or empty: %s\n' "$required" >&2
     exit 1
@@ -177,8 +186,8 @@ if [ "$cursor_always" -ge "$cursor_rules" ]; then
   printf 'FAIL: not all Cursor rules may be always-apply\n' >&2
   exit 1
 fi
-if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp; then
-  printf 'FAIL: Cursor MCP examples contain token-like literals\n' >&2
+if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp resources/default-workspace/templates/cursor/sandbox; then
+  printf 'FAIL: Cursor MCP or sandbox templates contain token-like literals\n' >&2
   exit 1
 fi
 python3 - <<'PY'
@@ -193,6 +202,23 @@ for name in manifest["agents"]:
 for name in manifest["rules"]:
     if not (root / "rules" / name).is_file():
         raise SystemExit(f"FAIL: manifest-listed Cursor rule missing: {name}")
+for name in manifest["mcp_examples"]:
+    if not (root / "mcp" / name).is_file():
+        raise SystemExit(f"FAIL: manifest-listed Cursor MCP example missing: {name}")
+for name in manifest["sandbox_profiles"]:
+    if not (root / "sandbox" / name).is_file():
+        raise SystemExit(f"FAIL: manifest-listed Cursor sandbox profile missing: {name}")
+for path in (root / "sandbox").glob("*.json"):
+    data = json.loads(path.read_text())
+    commands = data.get("command_allowlist", [])
+    if any(str(command).lower() in {"npx", "npm", "node", "playwright", "chrome", "chromium"} for command in commands):
+        raise SystemExit(f"FAIL: sandbox profile command-allowlists Playwright MCP support command: {path}")
+    if data.get("profile", "").startswith("playwright") and data.get("playwright_mcp", {}).get("requires_command_allowlist") is not False:
+        raise SystemExit(f"FAIL: Playwright profile must not require command allowlist entries: {path}")
+    if data.get("profile") != "playwright-full":
+        for item in data.get("mcp_allowlist", []):
+            if str(item).endswith(":*"):
+                raise SystemExit(f"FAIL: broad MCP allowlist outside full profile: {path}")
 allowed = {"name", "description", "model", "readonly", "is_background"}
 blocked = {"permission", "mode", "temperature", "steps", "hidden"}
 for path in (root / "agents").glob("*.md"):

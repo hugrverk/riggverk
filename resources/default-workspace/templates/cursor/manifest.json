@@ -9,6 +9,7 @@
   "agents_dir": "templates/cursor/agents",
   "rules_dir": "templates/cursor/rules",
   "mcp_examples_dir": "templates/cursor/mcp",
+  "sandbox_profiles_dir": "templates/cursor/sandbox",
   "recommended_pinned_skills": [
     "diagnose",
     "implementation-plan",
@@ -35,12 +36,19 @@
   ],
   "mcp_examples": [
     "README.md",
-    "mcp.example.json"
+    "mcp.example.json",
+    "playwright.mcp.json"
+  ],
+  "sandbox_profiles": [
+    "README.md",
+    "safe.json",
+    "playwright-safe.json",
+    "playwright-full.json"
   ],
   "notes": [
     "User Rules are manually managed in Cursor Settings; this profile does not define a global User Rules file path.",
     "Project Rules are installed to .cursor/rules in explicit project targets.",
-    "MCP examples are opt-in templates and must be reviewed before use.",
+    "MCP examples and sandbox profiles are opt-in templates and must be reviewed before use.",
     "Secrets must be supplied via Cursor-supported environment interpolation such as ${env:VARIABLE_NAME}."
   ]
 }

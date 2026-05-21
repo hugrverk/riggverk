@@ -257,6 +257,8 @@ export interface CursorProfileHealth {
   project_rules_status: string;
   project_skills_status: string;
   mcp_status: string;
+  sandbox_status: string;
+  sandbox_profiles_count: number;
   warnings: string[];
   next_action: string;
 }

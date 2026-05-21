@@ -21,6 +21,8 @@ pub struct CursorProfileHealth {
     project_rules_status: String,
     project_skills_status: String,
     mcp_status: String,
+    sandbox_status: String,
+    sandbox_profiles_count: usize,
     warnings: Vec<String>,
     next_action: String,
 }
@@ -207,6 +209,54 @@ fn mcp_status(root: &Path, project: Option<&Path>, warnings: &mut Vec<String>) -
     }
 }
 
+fn sandbox_status(root: &Path, warnings: &mut Vec<String>) -> (String, usize) {
+    let dir = cursor_root(root).join("sandbox");
+    if !dir.is_dir() {
+        return ("missing".into(), 0);
+    }
+    let mut count = 0;
+    for name in ["safe.json", "playwright-safe.json", "playwright-full.json"] {
+        let path = dir.join(name);
+        if !path.is_file() {
+            warnings.push(format!("Cursor sandbox profile missing: {name}"));
+            return ("partial".into(), count);
+        }
+        count += 1;
+        let content = match std::fs::read_to_string(&path) {
+            Ok(content) => content,
+            Err(_) => return ("unreadable".into(), count),
+        };
+        let parsed: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(parsed) => parsed,
+            Err(_) => return ("invalid".into(), count),
+        };
+        if mcp_has_unsafe_literals(&content) {
+            warnings.push(format!(
+                "Cursor sandbox profile contains suspicious auth-like literals: {name}"
+            ));
+            return ("unsafe".into(), count);
+        }
+        let commands = parsed
+            .get("command_allowlist")
+            .and_then(|v| v.as_array())
+            .cloned()
+            .unwrap_or_default();
+        for command in commands {
+            let value = command.as_str().unwrap_or("").to_ascii_lowercase();
+            if matches!(
+                value.as_str(),
+                "npx" | "npm" | "node" | "playwright" | "chrome" | "chromium"
+            ) {
+                warnings.push(format!(
+                    "Cursor sandbox profile command-allowlists an MCP support command: {name}"
+                ));
+                return ("unsafe".into(), count);
+            }
+        }
+    }
+    ("templates".into(), count)
+}
+
 fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
     let path = cursor_root(root).join("manifest.json");
     if !path.exists() {
@@ -220,7 +270,7 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
         Ok(parsed) => parsed,
         Err(_) => return "invalid".into(),
     };
-    for key in ["agents", "rules", "mcp_examples"] {
+    for key in ["agents", "rules", "mcp_examples", "sandbox_profiles"] {
         if !parsed.get(key).is_some_and(|v| v.is_array()) {
             warnings.push(format!("Cursor manifest missing array: {key}"));
             return "partial".into();
@@ -276,10 +326,11 @@ pub fn get_cursor_profile_health(
         };
 
     let mcp_status = mcp_status(&root, project.as_deref(), &mut warnings);
+    let (sandbox_status, sandbox_profiles_count) = sandbox_status(&root, &mut warnings);
 
     let status = if manifest_status == "missing" || expected_global_agents_count == 0 {
         "missing"
-    } else if manifest_status != "valid" {
+    } else if manifest_status != "valid" || sandbox_status == "partial" {
         "partial"
     } else if global_agents_status == "synced"
         && project.as_ref().is_none_or(|_| {
@@ -317,6 +368,8 @@ pub fn get_cursor_profile_health(
         project_rules_status,
         project_skills_status,
         mcp_status,
+        sandbox_status,
+        sandbox_profiles_count,
         warnings,
         next_action,
     })
@@ -378,13 +431,15 @@ pub fn run_cursor_profile_action(
                 ok,
                 action,
                 format!(
-                    "manifest: {}\nglobal agents: {}/{} {}\nuser rules: {}\nmcp: {}\n",
+                    "manifest: {}\nglobal agents: {}/{} {}\nuser rules: {}\nmcp: {}\nsandbox profiles: {} {}\n",
                     health.manifest_status,
                     health.global_agents_count,
                     health.expected_global_agents_count,
                     health.global_agents_status,
                     health.user_rules_status,
-                    health.mcp_status
+                    health.mcp_status,
+                    health.sandbox_profiles_count,
+                    health.sandbox_status
                 ),
                 health.warnings.join("\n"),
                 if ok { Some(0) } else { Some(1) },

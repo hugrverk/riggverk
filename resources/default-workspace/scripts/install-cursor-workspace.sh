@@ -7,6 +7,8 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
 RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules"
 USER_RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/user-rules.md"
+MCP_SOURCE="$WORKSPACE_ROOT/templates/cursor/mcp/playwright.mcp.json"
+SANDBOX_SOURCE="$WORKSPACE_ROOT/templates/cursor/sandbox"
 
 apply=false
 quiet=false
@@ -16,6 +18,10 @@ project_rules=false
 show_user_rules=false
 copy_user_rules=false
 open_cursor_settings=false
+show_playwright_mcp=false
+copy_playwright_mcp=false
+show_sandbox_profile=""
+copy_sandbox_profile=""
 target=""
 
 usage() {
@@ -33,13 +39,20 @@ Options:
   --user-rules             Operate on Cursor User Rules (versioned copy, not auto-installed)
   --show-user-rules        Print the versioned Cursor User Rules file
   --copy-user-rules        Copy Cursor User Rules to clipboard (macOS only, uses pbcopy)
+  --show-playwright-mcp    Print the versioned Playwright MCP template
+  --copy-playwright-mcp    Copy Playwright MCP template to clipboard (macOS only)
+  --show-sandbox-profile <safe|playwright-safe|playwright-full>
+                           Print a versioned Cursor sandbox/profile template
+  --copy-sandbox-profile <safe|playwright-safe|playwright-full>
+                           Copy a sandbox/profile template to clipboard (macOS only)
   --open-cursor-settings   Open Cursor Settings in the app (macOS only)
   --quiet                  Print compact app-friendly output
   --help                   Show this help
 
 Cursor User Rules are set in Cursor Settings > Rules > User Rules. This script
 can show or copy the versioned rules file to clipboard but does not write to
-undocumented Cursor internal storage paths.
+undocumented Cursor internal storage paths. Sandbox/profile and MCP templates
+are show/copy/manual only.
 USAGE
 }
 
@@ -69,6 +82,13 @@ validate_project_target() {
   done
   has_project_marker "$resolved" || die "project target does not look like a project checkout: $resolved"
   printf '%s' "$resolved"
+}
+
+sandbox_profile_path() {
+  case "$1" in
+    safe|playwright-safe|playwright-full) printf '%s/%s.json' "$SANDBOX_SOURCE" "$1" ;;
+    *) die "unknown sandbox profile: $1" ;;
+  esac
 }
 
 ensure_dest_root() {
@@ -168,6 +188,18 @@ while [ $# -gt 0 ]; do
     --user-rules) show_user_rules=true ;;
     --show-user-rules) show_user_rules=true ;;
     --copy-user-rules) copy_user_rules=true ;;
+    --show-playwright-mcp) show_playwright_mcp=true ;;
+    --copy-playwright-mcp) copy_playwright_mcp=true ;;
+    --show-sandbox-profile)
+      shift
+      [ $# -gt 0 ] || die "--show-sandbox-profile requires a profile name"
+      show_sandbox_profile="$1"
+      ;;
+    --copy-sandbox-profile)
+      shift
+      [ $# -gt 0 ] || die "--copy-sandbox-profile requires a profile name"
+      copy_sandbox_profile="$1"
+      ;;
     --open-cursor-settings) open_cursor_settings=true ;;
     --global-agents) global_agents=true ;;
     --project-agents) project_agents=true ;;
@@ -184,7 +216,7 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! $global_agents && ! $project_agents && ! $project_rules && ! $show_user_rules && ! $copy_user_rules && ! $open_cursor_settings; then
+if ! $global_agents && ! $project_agents && ! $project_rules && ! $show_user_rules && ! $copy_user_rules && ! $show_playwright_mcp && ! $copy_playwright_mcp && [ -z "$show_sandbox_profile" ] && [ -z "$copy_sandbox_profile" ] && ! $open_cursor_settings; then
   global_agents=true
 fi
 
@@ -211,6 +243,44 @@ if $copy_user_rules; then
     else
       die "user rules source not found: $USER_RULES_SOURCE"
     fi
+  else
+    die "pbcopy not available. Copy the file manually."
+  fi
+  exit 0
+fi
+
+if $show_playwright_mcp; then
+  [ -f "$MCP_SOURCE" ] || die "Playwright MCP template not found: $MCP_SOURCE"
+  cat "$MCP_SOURCE"
+  exit 0
+fi
+
+if $copy_playwright_mcp; then
+  if command -v pbcopy >/dev/null 2>&1; then
+    [ -f "$MCP_SOURCE" ] || die "Playwright MCP template not found: $MCP_SOURCE"
+    pbcopy < "$MCP_SOURCE"
+    printf 'Cursor Playwright MCP template copied to clipboard.\n'
+    printf 'Review before pasting into a Cursor-supported MCP config surface.\n'
+  else
+    die "pbcopy not available. Copy the file manually."
+  fi
+  exit 0
+fi
+
+if [ -n "$show_sandbox_profile" ]; then
+  profile_path="$(sandbox_profile_path "$show_sandbox_profile")"
+  [ -f "$profile_path" ] || die "sandbox profile not found: $profile_path"
+  cat "$profile_path"
+  exit 0
+fi
+
+if [ -n "$copy_sandbox_profile" ]; then
+  if command -v pbcopy >/dev/null 2>&1; then
+    profile_path="$(sandbox_profile_path "$copy_sandbox_profile")"
+    [ -f "$profile_path" ] || die "sandbox profile not found: $profile_path"
+    pbcopy < "$profile_path"
+    printf 'Cursor sandbox profile copied to clipboard.\n'
+    printf 'Review before pasting into Cursor-supported settings surfaces.\n'
   else
     die "pbcopy not available. Copy the file manually."
   fi

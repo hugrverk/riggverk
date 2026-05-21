@@ -677,6 +677,13 @@ export function WorkspaceView({
                       <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
                       <span className="ws-runtime-row-value">{cursorProfileHealth.mcp_status}</span>
                     </div>
+                    <div className="ws-runtime-row">
+                      <span className="ws-runtime-row-label">Sandbox</span>
+                      <span className={`ws-dot ${cursorProfileHealth.sandbox_status.includes("unsafe") || cursorProfileHealth.sandbox_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.sandbox_status === "templates" ? "ws-color-ok" : "ws-color-warn"}`}>{"\u25CF"}</span>
+                      <span className="ws-runtime-row-value">
+                        {cursorProfileHealth.sandbox_profiles_count} templates | {cursorProfileHealth.sandbox_status}
+                      </span>
+                    </div>
                   </div>
 
                   {cursorProfileHealth.warnings.length > 0 && (

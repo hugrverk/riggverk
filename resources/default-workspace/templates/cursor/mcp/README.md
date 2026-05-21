@@ -10,3 +10,4 @@ Rules:
 - Use Cursor environment interpolation for auth-like values, for example `${env:EXAMPLE_API_KEY}`.
 - Prefer local stdio examples for starter templates.
 - Keep project-specific MCP config in the target project, not in this profile repo.
+- Playwright MCP support belongs in MCP config plus an MCP tool allowlist profile, not in a command allowlist. See `templates/cursor/sandbox/`.

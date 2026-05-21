@@ -10,7 +10,7 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 
 - **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting
 - **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 24 starter skills are bundled.
-- **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), and Cursor setup assets (`templates/cursor/`, including five focused Cursor agent adapters, scoped project rules, a manifest, and MCP examples)
+- **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), and Cursor setup assets (`templates/cursor/`, including five focused Cursor agent adapters, scoped project rules, a manifest, MCP examples, and sandbox/profile templates)
 - **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
 - **.agent-workspace/** — workspace identity marker (do not delete)
 

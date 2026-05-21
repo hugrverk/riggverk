@@ -107,6 +107,36 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "templates/cursor/mcp/mcp.example.json",
         },
         DocEntry {
+            id: "templates/cursor/mcp/playwright.mcp.json",
+            section: "Cursor",
+            title: "Cursor Playwright MCP",
+            rel_path: "templates/cursor/mcp/playwright.mcp.json",
+        },
+        DocEntry {
+            id: "templates/cursor/sandbox/README.md",
+            section: "Cursor",
+            title: "Cursor Sandbox Profiles",
+            rel_path: "templates/cursor/sandbox/README.md",
+        },
+        DocEntry {
+            id: "templates/cursor/sandbox/safe.json",
+            section: "Cursor",
+            title: "Cursor Sandbox Safe",
+            rel_path: "templates/cursor/sandbox/safe.json",
+        },
+        DocEntry {
+            id: "templates/cursor/sandbox/playwright-safe.json",
+            section: "Cursor",
+            title: "Cursor Sandbox Playwright Safe",
+            rel_path: "templates/cursor/sandbox/playwright-safe.json",
+        },
+        DocEntry {
+            id: "templates/cursor/sandbox/playwright-full.json",
+            section: "Cursor",
+            title: "Cursor Sandbox Playwright Full",
+            rel_path: "templates/cursor/sandbox/playwright-full.json",
+        },
+        DocEntry {
             id: "templates/cursor/rules/core-safety.mdc",
             section: "Cursor Rules",
             title: "Core Safety",

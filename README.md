@@ -172,7 +172,7 @@ Global destinations:
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
-Cursor project installs use `<project>/.cursor/skills`. Cursor subagents are installed by `resources/default-workspace/scripts/install-cursor-workspace.sh` to `~/.cursor/agents` or `<project>/.cursor/agents`; project rules install to `<project>/.cursor/rules/*.mdc`. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` and can be shown or copied to clipboard via `--show-user-rules` / `--copy-user-rules`; they are not auto-written because Cursor does not document a stable file-backed write target. MCP examples are opt-in and must use env placeholders for auth-like values.
+Cursor project installs use `<project>/.cursor/skills`. Cursor subagents are installed by `resources/default-workspace/scripts/install-cursor-workspace.sh` to `~/.cursor/agents` or `<project>/.cursor/agents`; project rules install to `<project>/.cursor/rules/*.mdc`. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` and can be shown or copied to clipboard via `--show-user-rules` / `--copy-user-rules`; they are not auto-written because Cursor does not document a stable file-backed write target. MCP examples and sandbox/profile templates are opt-in and must use env placeholders for auth-like values. Playwright MCP support uses MCP config and MCP allowlists, not command allowlists.
 - Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 
 ## Workspace Contract Validator
