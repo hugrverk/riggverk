@@ -1112,8 +1112,8 @@ fn read_brain_setup_seed_under_root(root: &Path) -> Result<BrainSetupSeedResult,
         return Err("brain setup seed path escapes workspace".into());
     }
 
-    let content = fs::read_to_string(&canonical)
-        .map_err(|e| format!("read brain setup seed: {e}"))?;
+    let content =
+        fs::read_to_string(&canonical).map_err(|e| format!("read brain setup seed: {e}"))?;
     Ok(BrainSetupSeedResult {
         status: "found".into(),
         source: "workspace saved-memory.md".into(),
