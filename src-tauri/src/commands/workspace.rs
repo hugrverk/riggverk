@@ -2266,6 +2266,8 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
+            "scripts/check-codex-profile.py",
+            "scripts/check-cursor-profile.py",
         ] {
             write_file(&root, rel, "#!/usr/bin/env bash\necho script\n");
         }
@@ -2282,14 +2284,20 @@ mod tests {
             "skills/frontend-design/SKILL.md",
             "skills/grill-me/SKILL.md",
             "skills/grill-with-docs/SKILL.md",
+            "skills/handoff/SKILL.md",
             "skills/implementation-plan/SKILL.md",
             "skills/improve-codebase-architecture/SKILL.md",
+            "skills/nextjs-product-slice/SKILL.md",
+            "skills/prototype/SKILL.md",
             "skills/release-check/SKILL.md",
             "skills/screenshot-review/SKILL.md",
             "skills/security-review/SKILL.md",
+            "skills/supabase-rls-review/SKILL.md",
             "skills/tdd/SKILL.md",
             "skills/to-prd/SKILL.md",
             "skills/triage/SKILL.md",
+            "skills/woocommerce-pdp-review/SKILL.md",
+            "skills/wordpress-woocommerce/SKILL.md",
             "skills/write-a-skill/SKILL.md",
             "skills/zoom-out/SKILL.md",
         ] {

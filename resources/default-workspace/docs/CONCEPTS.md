@@ -14,7 +14,7 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 | Skills | `skills/` | Reusable agent instruction files |
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Sync, install, and bootstrap operations |
-| Agents | `agents/` | Agent prompt definitions |
+| Shared runtime agents | `agents/` | OpenCode runtime agent prompts (six bundled agents) |
 
 ## Skills
 

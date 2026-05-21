@@ -21,7 +21,7 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "docs", label: "Docs" },
   { id: "rules", label: "Rules" },
   { id: "skills", label: "Skills" },
-  { id: "agents", label: "Agents" },
+  { id: "agents", label: "Runtime agents" },
   { id: "configs", label: "Configs" },
 ];
 
@@ -396,7 +396,7 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "docs": return "Docs";
     case "rules": return "Rules";
     case "skills": return "Skills";
-    case "agents": return "Agents";
+    case "agents": return "Shared runtime agents";
     case "configs": return "Configs";
   }
 }

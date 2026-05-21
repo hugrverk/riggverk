@@ -297,8 +297,18 @@ from pathlib import Path
 
 root = Path("resources/default-workspace/templates/cursor")
 manifest = json.loads((root / "manifest.json").read_text())
+manifest_agents = set(manifest["agents"])
+cursor_agents_dir = root / "agents"
+on_disk = {p.name for p in cursor_agents_dir.glob("*.md")}
+if manifest_agents != on_disk:
+    missing = sorted(manifest_agents - on_disk)
+    extra = sorted(on_disk - manifest_agents)
+    raise SystemExit(
+        "FAIL: Cursor manifest agents must match templates/cursor/agents/*.md exactly; "
+        f"missing={missing or 'none'} extra={extra or 'none'}"
+    )
 for name in manifest["agents"]:
-    if not (root / "agents" / name).is_file():
+    if not (cursor_agents_dir / name).is_file():
         raise SystemExit(f"FAIL: manifest-listed Cursor agent missing: {name}")
 for name in manifest["rules"]:
     if not (root / "rules" / name).is_file():
@@ -667,6 +677,40 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
   fi
 done
 printf '  6 bundled agents verified non-empty\n'
+python3 - <<'PY'
+import json
+from pathlib import Path
+
+required = {
+    "architect.md",
+    "scout.md",
+    "inspector.md",
+    "sentinel.md",
+    "scribe.md",
+    "verifier.md",
+}
+agents_dir = Path("resources/default-workspace/agents")
+on_disk = {p.name for p in agents_dir.glob("*.md")}
+if on_disk != required:
+    missing = sorted(required - on_disk)
+    extra = sorted(on_disk - required)
+    raise SystemExit(
+        "FAIL: shared runtime agents dir must contain exactly "
+        f"{sorted(required)}; missing={missing or 'none'} extra={extra or 'none'}"
+    )
+
+meta_path = Path("resources/default-workspace/metadata/agents.json")
+meta = json.loads(meta_path.read_text())
+keys = set(meta.get("agents", {}).keys())
+if keys != required:
+    missing = sorted(required - keys)
+    extra = sorted(keys - required)
+    raise SystemExit(
+        "FAIL: metadata/agents.json keys must match shared runtime agents exactly; "
+        f"missing={missing or 'none'} extra={extra or 'none'}"
+    )
+PY
+printf '  shared runtime agents dir + metadata/agents.json keys verified (6)\n'
 # Agents are model-agnostic — model selection is centralized in templates/opencode.json
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if grep -q "^model:" "resources/default-workspace/agents/$agent"; then
@@ -800,6 +844,11 @@ for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.m
     apply_ok=false
   fi
 done
+agent_count="$(find "$tmpdir/agents" -maxdepth 1 -name '*.md' -type f | wc -l | tr -d ' ')"
+if [ "$agent_count" -ne 6 ]; then
+  printf 'FAIL: install-opencode-config.sh --apply wrote %s agents, expected 6\n' "$agent_count" >&2
+  apply_ok=false
+fi
 if ! $apply_ok; then rm -rf "$tmpdir"; exit 1; fi
 if ! grep -q '"default_agent": "architect"' "$tmpdir/opencode.json"; then
   printf 'FAIL: smoke opencode.json missing default_agent architect\n' >&2

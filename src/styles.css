@@ -1896,8 +1896,12 @@ code {
 
 /* ── target page system ── */
 
+.target-page-layout .ws-shell {
+  grid-template-columns: minmax(0, 1.45fr) minmax(380px, 2fr);
+}
+
 .target-page-layout .ws-left {
-  max-width: 640px;
+  max-width: none;
   gap: 12px;
 }
 
