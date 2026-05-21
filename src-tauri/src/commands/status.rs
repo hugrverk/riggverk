@@ -46,57 +46,39 @@ fn sync_label(path: &Path, source: &Path) -> String {
     }
 }
 
-/// Compute opencode_config status: config file + all bundled agents must be synced for "synced" status
 fn opencode_config_status(root: &Path, home: &Path) -> String {
     let config_target = home.join(".config/opencode/opencode.json");
     let config_source = root.join("templates/opencode.json");
+    sync_label(&config_target, &config_source)
+}
 
-    // Check config file
-    if !config_target.exists() {
-        return "missing".into();
-    }
-    if !config_source.exists() {
-        return "missing".into();
-    }
-    if !file_eq(&config_target, &config_source) {
-        return "diverged".into();
-    }
-
-    // Check bundled agents (agents/*.md in workspace)
+fn shared_runtime_agents_status(root: &Path, home: &Path, target_rel: &str) -> String {
     let agents_dir = root.join("agents");
     if !agents_dir.is_dir() {
         return "diverged".into();
     }
 
-    // Read bundled agent files from workspace
-    let agents_source_dir = match std::fs::read_dir(&agents_dir) {
-        Ok(entries) => entries,
+    let bundled_agents: Vec<String> = match std::fs::read_dir(&agents_dir) {
+        Ok(entries) => entries
+            .filter_map(|e| e.ok())
+            .filter(|e| {
+                e.path().extension().map(|ext| ext == "md").unwrap_or(false)
+                    && e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+            })
+            .filter(|e| !e.file_name().to_string_lossy().starts_with('.'))
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect(),
         Err(_) => return "diverged".into(),
     };
-
-    let bundled_agents: Vec<String> = agents_source_dir
-        .filter_map(|e| e.ok())
-        .filter(|e| {
-            e.path().extension().map(|ext| ext == "md").unwrap_or(false)
-                && e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
-        })
-        .filter(|e| {
-            let name = e.file_name();
-            !name.to_string_lossy().starts_with('.')
-        })
-        .map(|e| e.file_name().to_string_lossy().into_owned())
-        .collect();
 
     if bundled_agents.is_empty() {
         return "diverged".into();
     }
 
-    // Check each bundled agent
-    let agents_target_dir = home.join(".config/opencode/agents");
+    let agents_target_dir = home.join(target_rel);
     for agent_name in bundled_agents {
         let agent_target = agents_target_dir.join(&agent_name);
         let agent_source = agents_dir.join(&agent_name);
-
         if !agent_target.exists() {
             return "missing".into();
         }
@@ -159,10 +141,15 @@ pub struct StatusData {
     rules_auggie: String,
     rules_claude: String,
     opencode_config: String,
+    opencode_agents: String,
+    claude_agents: String,
+    auggie_agents: String,
     config_statuses: std::collections::HashMap<String, String>,
+    agents_statuses: std::collections::HashMap<String, String>,
     host_name: String,
     enabled_rule_target_ids: Vec<String>,
     enabled_config_target_ids: Vec<String>,
+    enabled_agent_target_ids: Vec<String>,
     enabled_target_ids: Vec<String>,
 }
 
@@ -220,20 +207,54 @@ pub fn get_status() -> Result<StatusData, String> {
         .map(|t| t.id.to_string())
         .collect();
 
+    let agent_target_ids: Vec<String> = agent_targets::runtime_agent_targets()
+        .iter()
+        .chain(
+            agent_targets::targets()
+                .iter()
+                .filter(|t| t.id == "cursor_setup"),
+        )
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .map(|t| t.id.to_string())
+        .collect();
+
     let mut config_statuses = std::collections::HashMap::new();
     for t in &config_targets {
         let status = if t.id == "opencode_config" {
             opencode_config_status(&root, &home)
-        } else if t.id == "cursor_setup" {
-            cursor_setup_status(&root, &home)
         } else {
             sync_label(&home.join(t.target_rel), &root.join(t.source_rel))
         };
         config_statuses.insert(t.id.to_string(), status);
     }
 
+    let mut agents_statuses = std::collections::HashMap::new();
+    for t in agent_targets::targets()
+        .iter()
+        .filter(|t| matches!(t.kind, agent_targets::TargetKind::Agents))
+    {
+        let status = if t.id == "cursor_setup" {
+            cursor_setup_status(&root, &home)
+        } else {
+            shared_runtime_agents_status(&root, &home, t.target_rel)
+        };
+        agents_statuses.insert(t.id.to_string(), status);
+    }
+
     let opencode_config_val = config_statuses
         .get("opencode_config")
+        .cloned()
+        .unwrap_or_else(|| "—".into());
+    let opencode_agents_val = agents_statuses
+        .get("opencode_agents")
+        .cloned()
+        .unwrap_or_else(|| "—".into());
+    let claude_agents_val = agents_statuses
+        .get("claude_agents")
+        .cloned()
+        .unwrap_or_else(|| "—".into());
+    let auggie_agents_val = agents_statuses
+        .get("auggie_agents")
         .cloned()
         .unwrap_or_else(|| "—".into());
 
@@ -248,17 +269,22 @@ pub fn get_status() -> Result<StatusData, String> {
         rules_auggie: sync("auggie_rules"),
         rules_claude: sync("claude_rules"),
         opencode_config: opencode_config_val,
+        opencode_agents: opencode_agents_val,
+        claude_agents: claude_agents_val,
+        auggie_agents: auggie_agents_val,
         config_statuses,
+        agents_statuses,
         host_name: host,
         enabled_rule_target_ids: rule_ids,
         enabled_config_target_ids: config_ids,
+        enabled_agent_target_ids: agent_target_ids,
         enabled_target_ids: enabled,
     })
 }
 
 #[cfg(test)]
 mod tests {
-    use super::{git_available, git_status, opencode_config_status};
+    use super::{git_available, git_status, opencode_config_status, shared_runtime_agents_status};
     use std::fs;
     use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
@@ -281,28 +307,14 @@ mod tests {
     // ── opencode_config_status tests ──
 
     #[test]
-    fn opencode_config_status_synced_when_config_and_agents_match() {
+    fn opencode_config_status_synced_when_config_matches() {
         let root = temp_root("opencode-synced");
         let home = temp_root("home-synced");
 
         write_file(&root.join("templates/opencode.json"), r#"{"key":"val"}"#);
         write_file(
-            &root.join("agents/architect.md"),
-            "# architect\nmode: primary",
-        );
-        write_file(&root.join("agents/scout.md"), "# scout\nmode: subagent");
-
-        write_file(
             &home.join(".config/opencode/opencode.json"),
             r#"{"key":"val"}"#,
-        );
-        write_file(
-            &home.join(".config/opencode/agents/architect.md"),
-            "# architect\nmode: primary",
-        );
-        write_file(
-            &home.join(".config/opencode/agents/scout.md"),
-            "# scout\nmode: subagent",
         );
 
         let status = opencode_config_status(&root, &home);
@@ -339,7 +351,7 @@ mod tests {
         let status = opencode_config_status(&root, &home);
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
-        assert_eq!(status, "missing");
+        assert_eq!(status, "diverged");
     }
 
     #[test]
@@ -360,116 +372,95 @@ mod tests {
     }
 
     #[test]
-    fn opencode_config_status_missing_when_an_agent_is_missing() {
+    fn runtime_agents_status_missing_when_an_agent_is_missing() {
         let root = temp_root("opencode-agent-missing");
         let home = temp_root("home-agent-missing");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
         write_file(&root.join("agents/architect.md"), "architect");
         write_file(&root.join("agents/scout.md"), "scout");
-
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
             &home.join(".config/opencode/agents/architect.md"),
             "architect",
         );
-        // scout.md is NOT written to home target
 
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "missing");
     }
 
     #[test]
-    fn opencode_config_status_diverged_when_agent_content_differs() {
+    fn runtime_agents_status_diverged_when_agent_content_differs() {
         let root = temp_root("opencode-agent-div");
         let home = temp_root("home-agent-div");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
         write_file(&root.join("agents/architect.md"), "updated agent");
-
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
             &home.join(".config/opencode/agents/architect.md"),
             "old agent",
         );
 
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "diverged");
     }
 
     #[test]
-    fn opencode_config_status_diverged_when_no_agents_dir() {
+    fn runtime_agents_status_diverged_when_no_agents_dir() {
         let root = temp_root("opencode-no-agents-dir");
         let home = temp_root("home-no-agents-dir");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
-        // No agents/ directory at all
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
-
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "diverged");
     }
 
     #[test]
-    fn opencode_config_status_diverged_when_agents_dir_empty() {
+    fn runtime_agents_status_diverged_when_agents_dir_empty() {
         let root = temp_root("opencode-empty-agents");
         let home = temp_root("home-empty-agents");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
         fs::create_dir_all(root.join("agents")).expect("create agents dir");
-        // No .md files in agents dir
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
 
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "diverged");
     }
 
     #[test]
-    fn opencode_config_status_ignores_dotfiles_in_agents() {
+    fn runtime_agents_status_ignores_dotfiles_in_agents() {
         let root = temp_root("opencode-dotfile");
         let home = temp_root("home-dotfile");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
         write_file(&root.join("agents/architect.md"), "architect");
-        // Dotfile should be ignored
         write_file(&root.join("agents/.DS_Store"), "garbage");
-
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
             &home.join(".config/opencode/agents/architect.md"),
             "architect",
         );
 
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "synced");
     }
 
     #[test]
-    fn opencode_config_status_ignores_non_md_files_in_agents() {
+    fn runtime_agents_status_ignores_non_md_files_in_agents() {
         let root = temp_root("opencode-nonmd");
         let home = temp_root("home-nonmd");
 
-        write_file(&root.join("templates/opencode.json"), r#"{}"#);
         write_file(&root.join("agents/architect.md"), "architect");
         write_file(&root.join("agents/notes.txt"), "not an agent");
-
-        write_file(&home.join(".config/opencode/opencode.json"), r#"{}"#);
         write_file(
             &home.join(".config/opencode/agents/architect.md"),
             "architect",
         );
 
-        let status = opencode_config_status(&root, &home);
+        let status = shared_runtime_agents_status(&root, &home, ".config/opencode/agents");
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&home);
         assert_eq!(status, "synced");

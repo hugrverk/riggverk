@@ -2,9 +2,16 @@ export interface StatusData {
   repo_path: string; git_available: boolean; branch: string; dirty: boolean; latest_commit: string;
   rules_codex: string; rules_opencode: string; rules_auggie: string;
   rules_claude: string;
-  opencode_config: string; config_statuses: Record<string, string>; host_name: string;
+  opencode_config: string;
+  opencode_agents: string;
+  claude_agents: string;
+  auggie_agents: string;
+  config_statuses: Record<string, string>;
+  agents_statuses: Record<string, string>;
+  host_name: string;
   enabled_rule_target_ids: string[];
   enabled_config_target_ids: string[];
+  enabled_agent_target_ids: string[];
   enabled_target_ids: string[];
 }
 
@@ -61,7 +68,7 @@ export interface InstallSkillsRequest {
 }
 
 export interface AgentTargetMeta {
-  id: string; label: string; kind: "rules" | "config"; target_rel: string; source_rel: string;
+  id: string; label: string; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
 }
 
 export interface ConfigEditorSourceMeta {

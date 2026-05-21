@@ -4,10 +4,10 @@ export type TargetPage = "codex" | "opencode" | "cursor" | "claude" | "augment";
 
 export const PAGE_TARGET_IDS: Record<TargetPage, readonly string[]> = {
   codex: ["codex_rules", "codex_config"],
-  opencode: ["opencode_rules", "opencode_config"],
+  opencode: ["opencode_rules", "opencode_agents", "opencode_config"],
   cursor: ["cursor_setup"],
-  claude: ["claude_rules"],
-  augment: ["auggie_rules"],
+  claude: ["claude_rules", "claude_agents"],
+  augment: ["auggie_rules", "auggie_agents"],
 };
 
 const CROSS_PROFILE_IDS = new Set(["all_rules", "all_supported"]);

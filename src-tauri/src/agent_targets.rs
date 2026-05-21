@@ -5,6 +5,8 @@ use std::path::PathBuf;
 pub enum TargetKind {
     #[serde(rename = "rules")]
     Rules,
+    #[serde(rename = "agents")]
+    Agents,
     #[serde(rename = "config")]
     Config,
 }
@@ -24,7 +26,6 @@ impl AgentSyncTarget {
             "opencode_rules" => Some("--opencode"),
             "auggie_rules" => Some("--auggie"),
             "claude_rules" => Some("--claude"),
-            "cursor_setup" => Some("--cursor"),
             _ => None,
         }
     }
@@ -70,8 +71,29 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/global-agent-rules.md",
         },
         AgentSyncTarget {
+            id: "opencode_agents",
+            label: "opencode agents",
+            kind: TargetKind::Agents,
+            target_rel: ".config/opencode/agents",
+            source_rel: "agents",
+        },
+        AgentSyncTarget {
+            id: "claude_agents",
+            label: "claude agents",
+            kind: TargetKind::Agents,
+            target_rel: ".claude/agents",
+            source_rel: "agents",
+        },
+        AgentSyncTarget {
+            id: "auggie_agents",
+            label: "augment agents",
+            kind: TargetKind::Agents,
+            target_rel: ".augment/agents",
+            source_rel: "agents",
+        },
+        AgentSyncTarget {
             id: "opencode_config",
-            label: "opencode config + agents",
+            label: "opencode config",
             kind: TargetKind::Config,
             target_rel: ".config/opencode/opencode.json",
             source_rel: "templates/opencode.json",
@@ -86,9 +108,9 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor global agents",
-            kind: TargetKind::Rules,
+            kind: TargetKind::Agents,
             target_rel: ".cursor/agents",
-            source_rel: "templates/cursor/README.md",
+            source_rel: "templates/cursor/agents",
         },
     ]
 }
@@ -97,6 +119,14 @@ pub fn rule_targets() -> Vec<AgentSyncTarget> {
     targets()
         .into_iter()
         .filter(|t| matches!(t.kind, TargetKind::Rules))
+        .collect()
+}
+
+pub fn runtime_agent_targets() -> Vec<AgentSyncTarget> {
+    targets()
+        .into_iter()
+        .filter(|t| matches!(t.kind, TargetKind::Agents))
+        .filter(|t| t.id != "cursor_setup")
         .collect()
 }
 
@@ -146,14 +176,18 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "codex".into(),
             label: "Codex".into(),
-            description: "Codex rules + config profile".into(),
+            description: "Codex rules + config (Codex custom agents use TOML, not shared runtime .md)".into(),
             target_ids: vec!["codex_rules".into(), "codex_config".into()],
         },
         TargetProfileMeta {
             id: "opencode".into(),
             label: "OpenCode".into(),
-            description: "OpenCode rules + config + agents".into(),
-            target_ids: vec!["opencode_rules".into(), "opencode_config".into()],
+            description: "OpenCode rules + shared runtime agents + config".into(),
+            target_ids: vec![
+                "opencode_rules".into(),
+                "opencode_agents".into(),
+                "opencode_config".into(),
+            ],
         },
         TargetProfileMeta {
             id: "cursor".into(),
@@ -164,14 +198,14 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "claude".into(),
             label: "Claude".into(),
-            description: "Claude rules at ~/.claude/CLAUDE.md".into(),
-            target_ids: vec!["claude_rules".into()],
+            description: "Claude rules + shared runtime agents".into(),
+            target_ids: vec!["claude_rules".into(), "claude_agents".into()],
         },
         TargetProfileMeta {
             id: "augment".into(),
             label: "Augment".into(),
-            description: "Augment rules at ~/.augment/rules/global.md".into(),
-            target_ids: vec!["auggie_rules".into()],
+            description: "Augment rules + shared runtime agents".into(),
+            target_ids: vec!["auggie_rules".into(), "auggie_agents".into()],
         },
         TargetProfileMeta {
             id: "all_rules".into(),
@@ -188,13 +222,16 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "all_supported".into(),
             label: "All supported".into(),
-            description: "All supported rule targets + OpenCode config + agents + Cursor setup"
+            description: "All supported rules, shared runtime agents, configs, and Cursor global agents"
                 .into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
                 "auggie_rules".into(),
                 "claude_rules".into(),
+                "opencode_agents".into(),
+                "claude_agents".into(),
+                "auggie_agents".into(),
                 "opencode_config".into(),
                 "codex_config".into(),
                 "cursor_setup".into(),
@@ -265,8 +302,16 @@ pub enum ConfigScriptMode {
 #[derive(Clone, Copy)]
 pub enum OpenCodeInstallScope {
     Full,
+    #[allow(dead_code)] // used by install-opencode-config.sh --agents-only wiring tests
     AgentsOnly,
     ConfigOnly,
+}
+
+pub fn runtime_agents_install_args(mode: ConfigScriptMode) -> Vec<&'static str> {
+    match mode {
+        ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
+        ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
+    }
 }
 
 pub fn opencode_install_args(
@@ -289,7 +334,7 @@ pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
     vec![
         ConfigSyncTarget {
             id: "opencode_config",
-            label: "opencode config + agents",
+            label: "opencode config",
             source_rel: "templates/opencode.json",
             target_rel: ".config/opencode/opencode.json",
             script: ConfigScript::OpenCode,
@@ -538,19 +583,16 @@ mod tests {
     }
 
     #[test]
-    fn cursor_in_rule_targets() {
-        // Cursor setup is now a first-class sync/rules target, not a config target.
+    fn cursor_setup_is_agents_not_rules() {
         let rules = rule_targets();
-        let cursor = rules.iter().find(|t| t.id == "cursor_setup");
         assert!(
-            cursor.is_some(),
-            "cursor_setup must appear in rule_targets()"
+            rules.iter().all(|t| t.id != "cursor_setup"),
+            "cursor_setup must not appear in rule_targets()"
         );
-        let t = cursor.unwrap();
-        assert!(
-            matches!(t.kind, TargetKind::Rules),
-            "cursor_setup kind must be Rules"
-        );
+        let all = targets();
+        let cursor = all.iter().find(|t| t.id == "cursor_setup");
+        assert!(cursor.is_some(), "cursor_setup must exist");
+        assert!(matches!(cursor.unwrap().kind, TargetKind::Agents));
     }
 
     #[test]

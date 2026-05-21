@@ -11,6 +11,8 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "claude-rules",
     "opencode-config",
     "opencode-agents",
+    "claude-agents",
+    "auggie-agents",
     "codex",
     "opencode",
     "auggie",
@@ -152,6 +154,8 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "claude-rules" => ".claude/CLAUDE.md",
         "opencode-config" => ".config/opencode/opencode.json",
         "opencode-agents" => ".config/opencode/agents",
+        "claude-agents" => ".claude/agents",
+        "auggie-agents" => ".augment/agents",
         // Legacy backwards-compatible IDs (read-only)
         "codex" => ".codex/AGENTS.md",
         "opencode" => ".config/opencode/AGENTS.md",

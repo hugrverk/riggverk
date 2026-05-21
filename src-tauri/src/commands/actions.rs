@@ -45,6 +45,72 @@ fn opencode_config_enabled() -> bool {
         .contains(&"opencode_config".to_string())
 }
 
+fn codex_config_enabled() -> bool {
+    settings::load()
+        .enabled_target_ids
+        .contains(&"codex_config".to_string())
+}
+
+fn run_codex_config_install(
+    root: &std::path::Path,
+    action: &str,
+    mode: agent_targets::ConfigScriptMode,
+) -> Result<ActionResult, String> {
+    if !codex_config_enabled() {
+        return Ok(no_enabled_config_targets(action));
+    }
+    let script_str = workspace_script_arg(root, "scripts/install-codex-config.sh")?;
+    let mut all_args: Vec<&str> = vec![&script_str];
+    match mode {
+        agent_targets::ConfigScriptMode::Diff => {
+            all_args.extend(["--quiet", "--diff"]);
+        }
+        agent_targets::ConfigScriptMode::Apply => {
+            all_args.extend(["--quiet", "--apply"]);
+        }
+    }
+    let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    Ok(ActionResult::new(ok, action, out, err, code))
+}
+
+fn opencode_agents_enabled() -> bool {
+    let enabled = settings::load().enabled_target_ids;
+    enabled.contains(&"opencode_agents".to_string())
+        || enabled.contains(&"opencode_config".to_string())
+}
+
+fn runtime_agent_target_enabled(target_id: &str) -> bool {
+    settings::load()
+        .enabled_target_ids
+        .contains(&target_id.to_string())
+}
+
+fn run_runtime_agents_install(
+    root: &std::path::Path,
+    action: &str,
+    harness_flag: &'static str,
+    mode: agent_targets::ConfigScriptMode,
+) -> Result<ActionResult, String> {
+    let script_str = workspace_script_arg(root, "scripts/install-runtime-agents.sh")?;
+    let mut all_args: Vec<&str> = vec![&script_str, harness_flag];
+    all_args.extend(agent_targets::runtime_agents_install_args(mode));
+    let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    Ok(ActionResult::new(ok, action, out, err, code))
+}
+
+fn run_single_rule_install(
+    root: &std::path::Path,
+    action: &str,
+    rule_flag: &'static str,
+    apply: bool,
+) -> Result<ActionResult, String> {
+    let script_str = workspace_script_arg(root, "scripts/install-agent-rules.sh")?;
+    let mode_flag = if apply { "--apply" } else { "--diff" };
+    let all_args: Vec<&str> = vec![&script_str, "--quiet", mode_flag, rule_flag];
+    let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    Ok(ActionResult::new(ok, action, out, err, code))
+}
+
 fn run_opencode_install(
     root: &std::path::Path,
     action: &str,
@@ -395,18 +461,116 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             ))
         }
 
-        "diff_opencode_agents" => run_opencode_install(
+        "diff_codex_rules" => run_single_rule_install(&root, "diff_codex_rules", "--codex", false),
+
+        "sync_codex_rules" => run_single_rule_install(&root, "sync_codex_rules", "--codex", true),
+
+        "diff_opencode_rules" => {
+            run_single_rule_install(&root, "diff_opencode_rules", "--opencode", false)
+        }
+
+        "sync_opencode_rules" => {
+            run_single_rule_install(&root, "sync_opencode_rules", "--opencode", true)
+        }
+
+        "diff_claude_rules" => {
+            run_single_rule_install(&root, "diff_claude_rules", "--claude", false)
+        }
+
+        "sync_claude_rules" => {
+            run_single_rule_install(&root, "sync_claude_rules", "--claude", true)
+        }
+
+        "diff_auggie_rules" => {
+            run_single_rule_install(&root, "diff_auggie_rules", "--auggie", false)
+        }
+
+        "sync_auggie_rules" => {
+            run_single_rule_install(&root, "sync_auggie_rules", "--auggie", true)
+        }
+
+        "diff_opencode_agents" => {
+            if !opencode_agents_enabled() {
+                return Ok(no_enabled_config_targets("diff_opencode_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "diff_opencode_agents",
+                "--opencode",
+                agent_targets::ConfigScriptMode::Diff,
+            )
+        }
+
+        "sync_opencode_agents" => {
+            if !opencode_agents_enabled() {
+                return Ok(no_enabled_config_targets("sync_opencode_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "sync_opencode_agents",
+                "--opencode",
+                agent_targets::ConfigScriptMode::Apply,
+            )
+        }
+
+        "diff_claude_agents" => {
+            if !runtime_agent_target_enabled("claude_agents") {
+                return Ok(no_enabled_config_targets("diff_claude_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "diff_claude_agents",
+                "--claude",
+                agent_targets::ConfigScriptMode::Diff,
+            )
+        }
+
+        "sync_claude_agents" => {
+            if !runtime_agent_target_enabled("claude_agents") {
+                return Ok(no_enabled_config_targets("sync_claude_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "sync_claude_agents",
+                "--claude",
+                agent_targets::ConfigScriptMode::Apply,
+            )
+        }
+
+        "diff_auggie_agents" => {
+            if !runtime_agent_target_enabled("auggie_agents") {
+                return Ok(no_enabled_config_targets("diff_auggie_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "diff_auggie_agents",
+                "--auggie",
+                agent_targets::ConfigScriptMode::Diff,
+            )
+        }
+
+        "sync_auggie_agents" => {
+            if !runtime_agent_target_enabled("auggie_agents") {
+                return Ok(no_enabled_config_targets("sync_auggie_agents"));
+            }
+            run_runtime_agents_install(
+                &root,
+                "sync_auggie_agents",
+                "--auggie",
+                agent_targets::ConfigScriptMode::Apply,
+            )
+        }
+
+        "diff_codex_config" => run_codex_config_install(
             &root,
-            "diff_opencode_agents",
+            "diff_codex_config",
             agent_targets::ConfigScriptMode::Diff,
-            agent_targets::OpenCodeInstallScope::AgentsOnly,
         ),
 
-        "sync_opencode_agents" => run_opencode_install(
+        "sync_codex_config" => run_codex_config_install(
             &root,
-            "sync_opencode_agents",
+            "sync_codex_config",
             agent_targets::ConfigScriptMode::Apply,
-            agent_targets::OpenCodeInstallScope::AgentsOnly,
         ),
 
         "diff_opencode_config" => run_opencode_install(

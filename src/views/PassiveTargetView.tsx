@@ -32,9 +32,13 @@ interface PassiveTargetViewProps {
   workspaceValid: boolean;
   gitAvailable: boolean;
   ruleTargetsEnabled: boolean;
+  agentsTargetsEnabled?: boolean;
+  agentsStatusLabel?: string;
   canRunReleaseCheck: boolean;
   onDiffRules: () => void;
   onSyncRules: () => void;
+  onDiffAgents?: () => void;
+  onSyncAgents?: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -72,9 +76,13 @@ export function PassiveTargetView({
   workspaceValid,
   gitAvailable,
   ruleTargetsEnabled,
+  agentsTargetsEnabled = false,
+  agentsStatusLabel,
   canRunReleaseCheck,
   onDiffRules,
   onSyncRules,
+  onDiffAgents,
+  onSyncAgents,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -112,6 +120,31 @@ export function PassiveTargetView({
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />
+
+          {workspaceValid && onDiffAgents && onSyncAgents && (
+            <HarnessActionCard
+              title="Agents"
+              ariaLabel={`${title} shared runtime agents sync`}
+              description={`Sync bundled runtime agents from agents/ to ${title} paths.`}
+              statusChip={{
+                label: agentsTargetsEnabled ? (agentsStatusLabel ?? "ready") : "off",
+                tone: agentsTargetsEnabled ? "ok" : "muted",
+              }}
+              secondaryActions={[
+                {
+                  label: "diff agents",
+                  onClick: onDiffAgents,
+                  disabled: busy || !agentsTargetsEnabled,
+                  title: !agentsTargetsEnabled ? "Enable agents target in Targets" : undefined,
+                },
+              ]}
+              primaryAction={{
+                label: "sync agents",
+                onClick: onSyncAgents,
+                disabled: busy || !agentsTargetsEnabled,
+              }}
+            />
+          )}
 
           {workspaceValid && (
             <HarnessActionCard

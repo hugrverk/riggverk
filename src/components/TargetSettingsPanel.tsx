@@ -27,6 +27,7 @@ export function TargetSettingsPanel({
   const pageTargets = filterTargetsForPage(agentTargets, page);
   const pageProfiles = filterProfilesForPage(targetProfiles, page);
   const ruleTargets = pageTargets.filter(t => t.kind === "rules");
+  const agentTargetsOnPage = pageTargets.filter(t => t.kind === "agents");
   const configTargets = pageTargets.filter(t => t.kind === "config");
 
   const profileMatchesPage = activeProfileId !== null && pageProfiles.some(p => p.id === activeProfileId);
@@ -84,6 +85,31 @@ export function TargetSettingsPanel({
             <div className="target-panel-group-label">rules</div>
             <div className="settings-target-list">
               {ruleTargets.map(t => {
+                const enabled = appSettings.enabled_target_ids.includes(t.id);
+                return (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
+                    onClick={() => onToggleTarget(t.id)}
+                    aria-pressed={enabled}
+                    title={`${t.target_rel} ← ${t.source_rel}`}
+                  >
+                    <span className={`settings-target-dot ${enabled ? "settings-target-dot-on" : ""}`} />
+                    <span className="cell-value">{t.label}</span>
+                    <span className="settings-target-path">{t.target_rel}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        )}
+
+        {agentTargetsOnPage.length > 0 && (
+          <div className="target-panel-group">
+            <div className="target-panel-group-label">agents</div>
+            <div className="settings-target-list">
+              {agentTargetsOnPage.map(t => {
                 const enabled = appSettings.enabled_target_ids.includes(t.id);
                 return (
                   <button

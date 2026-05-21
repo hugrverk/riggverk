@@ -1,4 +1,5 @@
 ---
+name: scout
 description: Use proactively before implementation when repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, or risk boundaries are unclear. Read-only. Return concise file map, constraints, and recommended patch targets.
 mode: subagent
 temperature: 0.1

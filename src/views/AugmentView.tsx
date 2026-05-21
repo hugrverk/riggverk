@@ -19,9 +19,13 @@ interface AugmentViewProps {
   workspaceValid: boolean;
   gitAvailable: boolean;
   ruleTargetsEnabled: boolean;
+  agentsTargetsEnabled: boolean;
+  agentsStatusLabel?: string;
   canRunReleaseCheck: boolean;
   onDiffRules: () => void;
   onSyncRules: () => void;
+  onDiffAgents: () => void;
+  onSyncAgents: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -41,7 +45,7 @@ export function AugmentView(props: AugmentViewProps) {
       page="augment"
       icon="augment"
       title="Augment"
-      summary="Augment rules at .augment/rules/global.md and global skill install."
+      summary="Augment rules, shared runtime agents, and global skill install."
       controlsAriaLabel="Augment target controls"
       targetName="Augment"
       installAgents={["auggie"]}

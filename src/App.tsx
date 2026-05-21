@@ -1114,8 +1114,17 @@ function App() {
     });
   }, [runWsTask, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
 
+  const enabledTargetIds = status?.enabled_target_ids ?? [];
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
-  const codexConfigEnabled = (status?.enabled_config_target_ids ?? []).includes("codex_config");
+  const codexConfigEnabled = enabledTargetIds.includes("codex_config");
+  const opencodeConfigEnabled = enabledTargetIds.includes("opencode_config");
+  const opencodeAgentsEnabled = enabledTargetIds.includes("opencode_agents") || opencodeConfigEnabled;
+  const codexRulesEnabled = enabledTargetIds.includes("codex_rules");
+  const opencodeRulesEnabled = enabledTargetIds.includes("opencode_rules");
+  const claudeRulesEnabled = enabledTargetIds.includes("claude_rules");
+  const auggieRulesEnabled = enabledTargetIds.includes("auggie_rules");
+  const claudeAgentsEnabled = enabledTargetIds.includes("claude_agents");
+  const auggieAgentsEnabled = enabledTargetIds.includes("auggie_agents");
   const configTargets = useMemo(
     () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
     [agentTargets],
@@ -1124,7 +1133,6 @@ function App() {
   const installState = deriveInstallState(workspaceDiagnostics);
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
-  const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
   const targetSkillsShared = {
     skills,
     skillsLoaded,
@@ -1331,14 +1339,14 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={ruleTargetsEnabled}
+            ruleTargetsEnabled={codexRulesEnabled}
             configEnabled={configEnabled}
             codexConfigEnabled={codexConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
-            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
-            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
-            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+            onDiffRules={() => runWsAction("diff_codex_rules", "diff codex rules")}
+            onSyncRules={() => runWsAction("sync_codex_rules", "sync codex rules")}
+            onDiffConfigs={() => runWsAction("diff_codex_config", "diff codex config")}
+            onSyncConfigs={() => runWsAction("sync_codex_config", "sync codex config")}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["codex"], "install skills dry-run (codex)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["codex"], "install skills (codex)")}
@@ -1362,9 +1370,25 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            configEnabled={configEnabled}
+            ruleTargetsEnabled={opencodeRulesEnabled}
+            opencodeAgentsEnabled={opencodeAgentsEnabled}
+            opencodeConfigEnabled={opencodeConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
             opencodeRuntimeHealth={opencodeRuntimeHealth}
+            onDiffRules={() => runWsTask({
+              label: "diff opencode rules",
+              action: "diff_opencode_rules",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_rules" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
+            onSyncRules={() => runWsTask({
+              label: "sync opencode rules",
+              action: "sync_opencode_rules",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_rules" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
             onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
             onGenerateOpenCodeConfig={() => runWsTask({
               label: "generate opencode config",
@@ -1486,10 +1510,26 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={ruleTargetsEnabled}
+            ruleTargetsEnabled={claudeRulesEnabled}
+            agentsTargetsEnabled={claudeAgentsEnabled}
+            agentsStatusLabel={status?.claude_agents}
             canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
-            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            onDiffRules={() => runWsAction("diff_claude_rules", "diff claude rules")}
+            onSyncRules={() => runWsAction("sync_claude_rules", "sync claude rules")}
+            onDiffAgents={() => runWsTask({
+              label: "diff claude agents",
+              action: "diff_claude_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_claude_agents" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
+            onSyncAgents={() => runWsTask({
+              label: "sync claude agents",
+              action: "sync_claude_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_claude_agents" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
@@ -1513,10 +1553,26 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={ruleTargetsEnabled}
+            ruleTargetsEnabled={auggieRulesEnabled}
+            agentsTargetsEnabled={auggieAgentsEnabled}
+            agentsStatusLabel={status?.auggie_agents}
             canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
-            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            onDiffRules={() => runWsAction("diff_auggie_rules", "diff augment rules")}
+            onSyncRules={() => runWsAction("sync_auggie_rules", "sync augment rules")}
+            onDiffAgents={() => runWsTask({
+              label: "diff augment agents",
+              action: "diff_auggie_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_auggie_agents" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
+            onSyncAgents={() => runWsTask({
+              label: "sync augment agents",
+              action: "sync_auggie_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_auggie_agents" }),
+              toActionResult: (r) => r,
+              refresh: fetchStatus,
+            })}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["auggie"], "install skills dry-run (auggie)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["auggie"], "install skills (auggie)")}

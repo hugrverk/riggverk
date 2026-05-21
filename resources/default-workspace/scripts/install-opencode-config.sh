@@ -240,22 +240,14 @@ if $diff_mode; then
     has_diffs=true
   fi
 
-  # Agent diffs
+  # Agent diffs (shared runtime installer)
   if should_sync_agents; then
-  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
-    agent_name="$(agent_basename "$agent_src")"
-    agent_target="$TARGET_AGENTS_DIR/$agent_name"
-    if [ -f "$agent_target" ]; then
-      if ! cmp -s "$agent_src" "$agent_target"; then
-        printf '\n--- agent diff (%s)\n' "$agent_name"
-        diff -u "$agent_target" "$agent_src" || true
-        has_diffs=true
-      fi
-    else
-      printf '\n--- agent missing: %s (no target at %s)\n' "$agent_name" "$agent_target"
+    agent_args=(--opencode --diff)
+    if $quiet; then agent_args+=(--quiet); fi
+    if ! OPENCODE_AGENTS_DIR="$TARGET_AGENTS_DIR" AGENT_WORKSPACE_BACKUP_DIR="$BACKUP_ROOT" \
+      bash "$WORKSPACE_ROOT/scripts/install-runtime-agents.sh" "${agent_args[@]}"; then
       has_diffs=true
     fi
-  done < <(list_agent_files)
   fi
 
   if ! $has_diffs; then
@@ -375,30 +367,12 @@ if $apply; then
     if ! $quiet; then printf '  tui config synced\n'; fi
   fi
 
-  # ── Apply agents ──
+  # ── Apply agents (shared runtime installer) ──
   if should_sync_agents; then
-  mkdir -p "$TARGET_AGENTS_DIR"
-  ts="$(date -u +%Y%m%d-%H%M%S)"
-  while IFS= read -r agent_src || [ -n "$agent_src" ]; do
-    agent_name="$(agent_basename "$agent_src")"
-    agent_target="$TARGET_AGENTS_DIR/$agent_name"
-    if [ -f "$agent_target" ]; then
-      if cmp -s "$agent_src" "$agent_target"; then
-        if ! $quiet; then printf '  agent %s already synced\n' "$agent_name"; fi
-      else
-        backup_dir="$BACKUP_ROOT/$ts/opencode-agents"
-        mkdir -p "$backup_dir"
-        backup_file="$backup_dir/$agent_name"
-        cp "$agent_target" "$backup_file"
-        if ! $quiet; then printf '  agent %s backed up to %s\n' "$agent_name" "$backup_file"; fi
-        cp "$agent_src" "$agent_target"
-        if ! $quiet; then printf '  agent %s synced\n' "$agent_name"; fi
-      fi
-    else
-      cp "$agent_src" "$agent_target"
-      if ! $quiet; then printf '  agent %s created\n' "$agent_name"; fi
-    fi
-  done < <(list_agent_files)
+    agent_args=(--opencode --apply)
+    if $quiet; then agent_args+=(--quiet); fi
+    OPENCODE_AGENTS_DIR="$TARGET_AGENTS_DIR" AGENT_WORKSPACE_BACKUP_DIR="$BACKUP_ROOT" \
+      bash "$WORKSPACE_ROOT/scripts/install-runtime-agents.sh" "${agent_args[@]}"
   fi
 
   if ! $quiet; then
@@ -455,21 +429,14 @@ elif should_sync_config; then
   all_synced=false
 fi
 
-# Agent checks
+# Agent checks (shared runtime installer dry-run)
 if should_sync_agents; then
-while IFS= read -r agent_src || [ -n "$agent_src" ]; do
-  agent_name="$(agent_basename "$agent_src")"
-  agent_target="$TARGET_AGENTS_DIR/$agent_name"
-  if [ -f "$agent_target" ]; then
-    if ! cmp -s "$agent_src" "$agent_target"; then
-      if ! $quiet; then printf '  agent %s diverged (use --apply to sync)\n' "$agent_name"; fi
-      all_synced=false
-    fi
-  else
-    if ! $quiet; then printf '  agent %s missing (use --apply to create)\n' "$agent_name"; fi
+  agent_args=(--opencode)
+  if $quiet; then agent_args+=(--quiet); fi
+  if ! OPENCODE_AGENTS_DIR="$TARGET_AGENTS_DIR" AGENT_WORKSPACE_BACKUP_DIR="$BACKUP_ROOT" \
+    bash "$WORKSPACE_ROOT/scripts/install-runtime-agents.sh" "${agent_args[@]}"; then
     all_synced=false
   fi
-done < <(list_agent_files)
 fi
 
 if $all_synced; then

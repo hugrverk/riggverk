@@ -1,4 +1,5 @@
 ---
+name: architect
 description: Default autonomous implementation architect/orchestrator. Use for most user tasks. Break work into bounded slices, inspect repository reality first, delegate investigation/review/docs/security/QA work to subagents when useful, implement safe patches, verify, commit when requested or when the prompt asks for a complete slice, and report exact changes.
 mode: primary
 temperature: 0.2

@@ -1,4 +1,5 @@
 ---
+name: sentinel
 description: Use automatically for auth, permissions, uploads, forms, checkout, account pages, API routes, server actions, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.
 mode: subagent
 temperature: 0.1
