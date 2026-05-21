@@ -1859,6 +1859,30 @@ html, body, #root {
   line-height: 1.45;
 }
 
+.ws-repair-box {
+  margin-top: 8px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.ws-repair-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.ws-repair-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.ws-repair-actions {
+  display: flex;
+  gap: 6px;
+}
+
 .target-settings-dirty {
   font-size: 11px;
   color: var(--dirty);

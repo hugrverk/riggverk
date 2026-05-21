@@ -10,6 +10,7 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { pageLabelToTargetPage } from "./lib/targetGroups";
 import { CodexView } from "./views/CodexView";
+import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 import { WorkspaceView } from "./views/WorkspaceView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
@@ -31,10 +32,10 @@ type View =
   | "routing"
   | "settings";
 
-const TARGET_VIEWS = new Set<View>(["opencode", "cursor", "misc"]);
+const LEGACY_TARGET_VIEWS = new Set<View>(["cursor", "misc"]);
 
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || TARGET_VIEWS.has(view);
+  return view === "start" || view === "codex" || view === "opencode" || LEGACY_TARGET_VIEWS.has(view);
 }
 
 /* ---- main app ---- */
@@ -1182,48 +1183,10 @@ function App() {
       workspaceValid={workspaceValid}
       gitAvailable={gitAvailable}
       ruleTargetsEnabled={ruleTargetsEnabled}
-      configEnabled={configEnabled}
       canRunReleaseCheck={canRunReleaseCheck}
       onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
       onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
-      onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
-      onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
       onReleaseCheck={() => runWsAction("release_check", "release-check")}
-      opencodeRuntimeHealth={opencodeRuntimeHealth}
-      onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
-      onPlanWorkspaceRepair={() => runWsTask({
-        label: "plan workspace repair",
-        action: "plan_workspace_repair",
-        task: async () => invoke<RepairWorkspaceResult>("plan_workspace_repair"),
-        toActionResult: (r) => ({
-          success: r.ok,
-          action: "plan_workspace_repair",
-          stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
-          stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
-          exit_code: r.ok ? 0 : 1,
-        }),
-        refresh: loadOpenCodeRuntimeHealth,
-      })}
-      onApplyWorkspaceRepair={() => runWsTask({
-        label: "apply workspace repair",
-        action: "apply_workspace_repair",
-        task: async () => invoke<RepairWorkspaceResult>("apply_workspace_repair"),
-        toActionResult: (r) => ({
-          success: r.ok,
-          action: "apply_workspace_repair",
-          stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
-          stderr: r.errors.join("\n"),
-          exit_code: r.ok ? 0 : 1,
-        }),
-        refresh: loadOpenCodeRuntimeHealth,
-      })}
-      onGenerateOpenCodeConfig={() => runWsTask({
-        label: "generate opencode config",
-        action: "generate_opencode_config_snapshot",
-        task: async () => invoke<ActionResult>("generate_opencode_config_snapshot"),
-        toActionResult: (r) => r,
-        refresh: loadOpenCodeRuntimeHealth,
-      })}
       cursorProfileHealth={cursorProfileHealth}
       onRefreshCursorProfile={() => loadCursorProfileHealth()}
       onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
@@ -1441,7 +1404,66 @@ function App() {
           />
         )}
 
-        {(view === "opencode" || view === "cursor" || view === "misc") && targetWorkspaceView}
+        {view === "opencode" && (
+          <OpenCodeView
+            appSettings={appSettings}
+            agentTargets={agentTargets}
+            targetProfiles={targetProfiles}
+            activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
+            onToggleTarget={toggleTarget}
+            onApplyProfile={applyTargetProfile}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            configEnabled={configEnabled}
+            canRunReleaseCheck={canRunReleaseCheck}
+            opencodeRuntimeHealth={opencodeRuntimeHealth}
+            onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
+            onGenerateOpenCodeConfig={() => runWsTask({
+              label: "generate opencode config",
+              action: "generate_opencode_config_snapshot",
+              task: async () => invoke<ActionResult>("generate_opencode_config_snapshot"),
+              toActionResult: (r) => r,
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
+            onPlanWorkspaceRepair={() => runWsTask({
+              label: "plan workspace repair",
+              action: "plan_workspace_repair",
+              task: async () => invoke<RepairWorkspaceResult>("plan_workspace_repair"),
+              toActionResult: (r) => ({
+                success: r.ok,
+                action: "plan_workspace_repair",
+                stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
+                stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
+                exit_code: r.ok ? 0 : 1,
+              }),
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
+            onApplyWorkspaceRepair={() => runWsTask({
+              label: "apply workspace repair",
+              action: "apply_workspace_repair",
+              task: async () => invoke<RepairWorkspaceResult>("apply_workspace_repair"),
+              toActionResult: (r) => ({
+                success: r.ok,
+                action: "apply_workspace_repair",
+                stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
+                stderr: r.errors.join("\n"),
+                exit_code: r.ok ? 0 : 1,
+              }),
+              refresh: loadOpenCodeRuntimeHealth,
+            })}
+            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
+            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+          />
+        )}
+
+        {(view === "cursor" || view === "misc") && targetWorkspaceView}
 
         {view === "library" && (
           <Suspense fallback={<div className="view-loading">loading library…</div>}>

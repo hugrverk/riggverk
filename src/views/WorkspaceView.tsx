@@ -2,8 +2,9 @@ import { useState, useMemo } from "react";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { TargetPage } from "../lib/targetGroups";
+import { runtimeChipLabel, runtimeChipTone, SectionChip } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, CursorProfileHealth, InstallAgent, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, CursorProfileHealth, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -26,20 +27,10 @@ interface WorkspaceViewProps {
   workspaceValid: boolean;
   gitAvailable: boolean;
   ruleTargetsEnabled: boolean;
-  configEnabled: boolean;
   canRunReleaseCheck: boolean;
   onDiffRules: () => void;
   onSyncRules: () => void;
-  onDiffConfigs: () => void;
-  onSyncConfigs: () => void;
   onReleaseCheck: () => void;
-  // opencode runtime
-  opencodeRuntimeHealth: OpenCodeRuntimeHealth | null;
-  onRefreshOpenCodeRuntimeHealth: () => void;
-  onGenerateOpenCodeConfig: () => void;
-  // workspace repair
-  onPlanWorkspaceRepair: () => void;
-  onApplyWorkspaceRepair: () => void;
   // cursor profile
   cursorProfileHealth: CursorProfileHealth | null;
   onRefreshCursorProfile: () => void;
@@ -78,33 +69,6 @@ interface WorkspaceViewProps {
   onOpenBackupsFolder: () => void;
 }
 
-// Shared helpers for standardized panels
-function SectionChip({ label, tone }: { label: string; tone: "ok" | "warn" | "fail" | "muted" }) {
-  return <span className={`ws-section-chip ws-section-chip-${tone}`}>{label}</span>;
-}
-
-function runtimeChipTone(status: string): "ok" | "warn" | "fail" | "muted" {
-  switch (status) {
-    case "synced": return "ok";
-    case "diverged": return "warn";
-    case "partial": return "warn";
-    case "missing": return "fail";
-    case "invalid": return "fail";
-    default: return "muted";
-  }
-}
-
-function runtimeChipLabel(status: string): string {
-  switch (status) {
-    case "synced": return "Synced";
-    case "diverged": return "Diverged";
-    case "partial": return "Partial";
-    case "missing": return "Missing";
-    case "invalid": return "Invalid";
-    default: return "Unknown";
-  }
-}
-
 export function WorkspaceView({
   pageLabel,
   targetPage,
@@ -125,19 +89,10 @@ export function WorkspaceView({
   workspaceValid,
   gitAvailable,
   ruleTargetsEnabled,
-  configEnabled,
   canRunReleaseCheck,
   onDiffRules,
   onSyncRules,
-  onDiffConfigs,
-  onSyncConfigs,
   onReleaseCheck,
-  // opencode runtime
-  opencodeRuntimeHealth,
-  onRefreshOpenCodeRuntimeHealth,
-  onGenerateOpenCodeConfig,
-  onPlanWorkspaceRepair,
-  onApplyWorkspaceRepair,
   cursorProfileHealth,
   onRefreshCursorProfile,
   onCursorDiffGlobal,
@@ -222,158 +177,6 @@ export function WorkspaceView({
                 <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
               </div>
-            </div>
-          )}
-
-          {/* ---- OpenCode Runtime section ---- */}
-          {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="OpenCode Runtime health">
-              <div className="ws-section-header">
-                <span className="ws-section-title">OPENCODE RUNTIME</span>
-                {opencodeRuntimeHealth ? (
-                  <SectionChip label={runtimeChipLabel(opencodeRuntimeHealth.status)} tone={runtimeChipTone(opencodeRuntimeHealth.status)} />
-                ) : (
-                  <span className="ws-section-chip ws-section-chip-muted">loading</span>
-                )}
-              </div>
-
-              {opencodeRuntimeHealth && (
-                <>
-                  {/* Summary line */}
-                  <div className="ws-runtime-summary" aria-live="polite">
-                    {opencodeRuntimeHealth.summary}
-                  </div>
-
-                  {/* Runtime detail rows */}
-                  <div className="ws-runtime-rows">
-                    {/* Config row */}
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Config</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "pass" ? "ws-color-ok" : opencodeRuntimeHealth.checks.find(c => c.id === "configs_match")?.status === "warn" ? "ws-color-warn" : "ws-color-dim"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {runtimeChipLabel(opencodeRuntimeHealth.status).toLowerCase()}
-                      </span>
-                    </div>
-
-                    {/* TUI row */}
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">TUI</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.tui_status === "synced" ? "ws-color-ok" : opencodeRuntimeHealth.tui_status === "diverged" ? "ws-color-warn" : opencodeRuntimeHealth.tui_status === "missing" ? "ws-color-fail" : "ws-color-dim"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {runtimeChipLabel(opencodeRuntimeHealth.tui_status).toLowerCase()}
-                      </span>
-                    </div>
-
-                    {/* Agents row */}
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Agents</span>
-                      <span className={`ws-dot ${opencodeRuntimeHealth.agent_mismatches.length === 0 ? "ws-color-ok" : "ws-color-warn"}`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {opencodeRuntimeHealth.installed_bundled_agent_count}/{opencodeRuntimeHealth.bundled_agent_count} bundled
-                        {opencodeRuntimeHealth.agent_mismatches.length > 0
-                          ? ` (${opencodeRuntimeHealth.agent_mismatches.length} diverged)`
-                          : ""}
-                        {opencodeRuntimeHealth.extra_installed_agent_count > 0
-                          ? ` (+${opencodeRuntimeHealth.extra_installed_agent_count} extra)`
-                          : ""}
-                      </span>
-                    </div>
-
-                    {/* Generated snapshot row */}
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Generated</span>
-                      <span className={`ws-dot ${
-                        opencodeRuntimeHealth.generated_snapshot_status === "current" ? "ws-color-ok"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "valid" ? "ws-color-ok"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "ws-color-fail"
-                        : opencodeRuntimeHealth.generated_snapshot_status === "missing" ? "ws-color-fail"
-                        : "ws-color-dim"
-                      }`}>
-                        {"\u25CF"}
-                      </span>
-                      <span className="ws-runtime-row-value">
-                        {opencodeRuntimeHealth.generated_snapshot_status}
-                        {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
-                          <span className="ws-runtime-row-detail"> — Regenerate before sync</span>
-                        )}
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* Stale generated snapshot warning */}
-                  {opencodeRuntimeHealth.generated_snapshot_status === "stale" && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-fail">
-                      {opencodeRuntimeHealth.generated_snapshot_detail || "Regenerate opencode.json before sync"}
-                    </div>
-                  )}
-
-                  {/* Warnings for agent mismatches */}
-                  {opencodeRuntimeHealth.agent_mismatches.length > 0 && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
-                      {opencodeRuntimeHealth.agent_mismatches.length} agent(s) diverged or missing.
-                    </div>
-                  )}
-
-                  {/* Warnings for extra agents */}
-                  {opencodeRuntimeHealth.warnings.length > 0 && opencodeRuntimeHealth.agent_mismatches.length === 0 && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
-                      {opencodeRuntimeHealth.warnings[0]}
-                      {opencodeRuntimeHealth.warnings.length > 1 && (
-                        <> (+{opencodeRuntimeHealth.warnings.length - 1} more)</>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Next action */}
-                  <div className={`ws-runtime-next-action ws-runtime-next-action-${opencodeRuntimeHealth.status === "synced" ? "ok" : opencodeRuntimeHealth.status === "diverged" ? "warn" : opencodeRuntimeHealth.status === "missing" ? "fail" : "ok"}`}>
-                    {opencodeRuntimeHealth.next_action}
-                  </div>
-
-                  <div className="ws-section-actions">
-                    <button className="btn btn-sm" onClick={onRefreshOpenCodeRuntimeHealth} aria-label="Refresh OpenCode runtime health">
-                      refresh
-                    </button>
-                    <button className="btn btn-sm" disabled={!workspaceValid || !configEnabled || wsRunning !== null} onClick={onDiffConfigs}>
-                      diff
-                    </button>
-                    <button
-                      className={`btn btn-sm ${opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "btn-warn" : ""}`}
-                      disabled={!workspaceValid || wsRunning !== null}
-                      onClick={onGenerateOpenCodeConfig}
-                      title="Generate opencode.json from Base and Policy."
-                    >
-                      generate
-                    </button>
-                    <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !configEnabled || wsRunning !== null || opencodeRuntimeHealth.generated_snapshot_status === "stale"} onClick={onSyncConfigs} title={opencodeRuntimeHealth.generated_snapshot_status === "stale" ? "Regenerate opencode.json snapshot before sync" : undefined}>
-                      sync
-                    </button>
-                  </div>
-
-                  {/* Workspace repair affordance */}
-                  {(opencodeRuntimeHealth.generated_snapshot_status === "valid" || opencodeRuntimeHealth.generated_snapshot_status === "missing" || opencodeRuntimeHealth.warnings.some(w => w.includes("Repair"))) && (
-                    <div className="ws-section-box" style={{marginTop:"8px",padding:"8px",border:"1px solid var(--color-border)",borderRadius:"6px"}}>
-                      <div style={{fontSize:"12px",fontWeight:600,marginBottom:"4px"}}>Workspace Repair</div>
-                      <div style={{fontSize:"11px",color:"var(--color-dim)",marginBottom:"6px"}}>
-                        Missing bundled scripts or templates can be repaired.
-                      </div>
-                      <div style={{display:"flex",gap:"6px"}}>
-                        <button className="btn btn-sm" disabled={wsRunning !== null} onClick={onPlanWorkspaceRepair}>
-                          check
-                        </button>
-                        <button className="btn btn-sm btn-primary" disabled={wsRunning !== null} onClick={onApplyWorkspaceRepair}>
-                          repair
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
             </div>
           )}
 
