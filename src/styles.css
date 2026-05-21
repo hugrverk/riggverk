@@ -95,11 +95,18 @@ html, body, #root {
 .app-header {
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 0 24px 0 var(--traffic-light-reserve);
+  gap: 0;
+  padding: 0 24px 0 0;
   height: var(--header-height);
   border-bottom: 1px solid var(--border);
   flex-shrink: 0;
+}
+
+/* Draggable titlebar band (Tauri macOS overlay). Interactive nav stays outside this region. */
+.app-header-drag-leading {
+  flex-shrink: 0;
+  width: var(--traffic-light-reserve);
+  align-self: stretch;
 }
 
 .nav-icons {
@@ -107,6 +114,8 @@ html, body, #root {
   gap: 4px;
   height: 100%;
   align-items: center;
+  flex: 1;
+  min-width: 0;
   max-width: 100%;
   overflow-x: auto;
   scrollbar-width: none;
@@ -131,6 +140,8 @@ html, body, #root {
   transition: background 0.1s, color 0.1s, border-color 0.1s;
   position: relative;
   flex-shrink: 0;
+  -webkit-app-region: no-drag;
+  app-region: no-drag;
 }
 
 .nav-icon:hover { color: var(--text); background: var(--bg-panel); }
@@ -3757,7 +3768,39 @@ html, body, #root {
 /* ── path input ── */
 
 .ws-path-row {
-  padding: 8px 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 10px;
+  min-width: 0;
+}
+
+.ws-path-input {
+  flex: 1;
+  min-width: 0;
+  color: var(--text);
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 6px 10px;
+  font-family: var(--font);
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.ws-path-input::placeholder {
+  color: var(--text-muted);
+  opacity: 0.55;
+}
+
+.ws-path-input:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
+  border-color: rgba(var(--accent-rgb), 0.35);
+}
+
+.start-workspace-path-editor {
+  flex-wrap: wrap;
 }
 
 /* ── diagnostics list ── */

@@ -20,7 +20,10 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] Fresh launch with no saved workspace shows setup-needed state, not missing-marker diagnostics for `~/Agent Workspace`
 - [ ] Toolbar icons stay on the same compact row as macOS traffic lights (no global top padding on the app shell)
 - [ ] Error/info banner renders below the toolbar and does not overlap macOS traffic-light buttons
-- [ ] "use default" saves `~/Agent Workspace` explicitly; until then no built-in default path is active
+- [ ] "use default" saves `~/Agent Workspace` explicitly, runs create dry-run, and offers create when safe
+- [ ] Workspace path field supports type + apply path + choose folder (not read-only "not selected" only)
+- [ ] After create workspace, saved path persists and workspace validates
+- [ ] Window drags from the header band left of toolbar icons (Tauri); toolbar buttons remain clickable
 - [ ] Start view and main content scroll when content exceeds window height (Tauri build)
 - [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)
 - [ ] Bundled default workspace preview appears in Workspace tab (not only in dev source checkout)
@@ -32,8 +35,8 @@ Folder picker and workspace path:
 - [ ] Click "choose folder" in Workspace tab — native folder dialog opens
 - [ ] Select a folder — workspace path is saved and diagnostics refresh
 - [ ] Cancel the picker — path remains unchanged
-- [ ] Type a path manually — draft updates
-- [ ] Empty/cleared path falls back to env var or built-in default
+- [ ] Type a path manually — apply path saves and refreshes diagnostics
+- [ ] Fresh launch with no saved path shows setup actions (not marker errors for an implicit default)
 - [ ] Invalid workspace path shows missing markers and "invalid workspace"
 - [ ] Workspace view shows compact validity note and first-run guide when no valid workspace selected
 - [ ] First-run guide shows 5 numbered steps (choose path, dry-run, create, library, dry-run sync) and security hints

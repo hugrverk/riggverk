@@ -2084,8 +2084,6 @@ mod tests {
 
         let result =
             create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
-        cleanup(&source);
-        cleanup(&parent);
 
         assert!(
             result.success,
@@ -2093,6 +2091,10 @@ mod tests {
             result.message
         );
         assert_eq!(result.status, "created");
+        assert!(
+            validate_workspace_root(PathBuf::from(&result.target_path)).is_ok(),
+            "created workspace path must pass validation"
+        );
         assert!(!result.copied_files.is_empty(), "should have copied files");
         assert!(result
             .copied_files
@@ -2112,6 +2114,9 @@ mod tests {
             .copied_files
             .iter()
             .any(|f| f == "skills/diagnose/SKILL.md"));
+
+        cleanup(&source);
+        cleanup(&parent);
     }
 
     #[test]

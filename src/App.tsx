@@ -258,17 +258,31 @@ function App() {
   const [createResult, setCreateResult] = useState<CreateWorkspaceResult | null>(null);
   const [createRunning, setCreateRunning] = useState(false);
 
+  const [workspacePathDraft, setWorkspacePathDraft] = useState("");
+
+  useEffect(() => {
+    setWorkspacePathDraft(appSettings?.workspace_path ?? "");
+  }, [appSettings?.workspace_path]);
+
+  const workspaceSetupTarget = useCallback((): string => {
+    const trimmed = workspacePathDraft.trim();
+    if (trimmed) return trimmed;
+    if (appSettings?.workspace_path) return appSettings.workspace_path;
+    return DEFAULT_WORKSPACE_PATH;
+  }, [appSettings?.workspace_path, workspacePathDraft]);
+
   const planCreate = useCallback(async () => {
     setCreatePlanRunning(true);
     setCreatePlan(null);
     setCreateResult(null);
     try {
-      const target = appSettings?.workspace_path ?? DEFAULT_WORKSPACE_PATH;
-      const plan = await invoke<CreateWorkspacePlan>("plan_create_workspace", { targetPath: target });
+      const plan = await invoke<CreateWorkspacePlan>("plan_create_workspace", {
+        targetPath: workspaceSetupTarget(),
+      });
       setCreatePlan(plan);
     } catch (e) { setError(`Plan: ${e}`); }
     finally { setCreatePlanRunning(false); }
-  }, [appSettings]);
+  }, [workspaceSetupTarget]);
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -685,14 +699,16 @@ function App() {
     setCreateRunning(true);
     setCreateResult(null);
     try {
-      const target = appSettings?.workspace_path ?? DEFAULT_WORKSPACE_PATH;
+      const target = workspaceSetupTarget();
       const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
       setCreateResult(result);
       if (result.success && appSettings) {
         const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
-        const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
+        const nextSettings = { ...appSettings, workspace_path: result.target_path };
+        const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
         if (!isWorkspaceLoadCurrent(generation)) return;
         setAppSettings(s);
+        setWorkspacePathDraft(s.workspace_path ?? result.target_path);
         appliedWorkspacePathRef.current = s.workspace_path ?? null;
         savedSettingsRef.current = serializeSettingsForCompare(s);
         applyThemeSettings(s);
@@ -705,7 +721,7 @@ function App() {
       }
     } catch (e) { setError(`Create: ${e}`); }
     finally { setCreateRunning(false); }
-  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources, workspaceSetupTarget]);
 
   const selectAgent = useCallback(async (id: string) => {
     if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
@@ -985,6 +1001,7 @@ function App() {
       const s = await invoke<AppSettings>("update_settings", { settings: nextSettings });
       if (!isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
+      setWorkspacePathDraft(s.workspace_path ?? "");
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       applyThemeSettings(s);
@@ -999,6 +1016,18 @@ function App() {
       setError(`Apply workspace path: ${e}`);
     }
   }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+
+  const applyWorkspacePathFromDraft = useCallback(async () => {
+    const trimmed = workspacePathDraft.trim();
+    if (!trimmed) return;
+    await applyWorkspacePath(trimmed);
+  }, [workspacePathDraft, applyWorkspacePath]);
+
+  const useDefaultWorkspace = useCallback(async () => {
+    setWorkspacePathDraft(DEFAULT_WORKSPACE_PATH);
+    await applyWorkspacePath(DEFAULT_WORKSPACE_PATH);
+    await planCreate();
+  }, [applyWorkspacePath, planCreate]);
 
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
@@ -1206,7 +1235,8 @@ function App() {
 
   return (
       <div className="app-shell">
-      <header className="app-header" data-tauri-drag-region>
+      <header className="app-header">
+        <div className="app-header-drag-leading" data-tauri-drag-region aria-hidden="true" />
         <nav className="nav-icons" aria-label="Main navigation">
           <button
             className={`nav-icon ${view === "start" ? "nav-icon-active" : ""}`}
@@ -1317,7 +1347,10 @@ function App() {
         {view === "start" && (
           <StartView
             appSettings={appSettings}
-            onApplyWorkspacePath={applyWorkspacePath}
+            pathDraft={workspacePathDraft}
+            onPathDraftChange={setWorkspacePathDraft}
+            onApplyPath={applyWorkspacePathFromDraft}
+            onUseDefaultWorkspace={useDefaultWorkspace}
             onChooseWorkspaceFolder={chooseWorkspaceFolder}
             workspaceDiagnostics={workspaceDiagnostics}
             onRefreshDiagnostics={() => {
