@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { InstallSkillsRequest, WorkspaceDiagnostics } from "../types";
+import type { InstallAgent, InstallSkillsRequest, WorkspaceDiagnostics } from "../types";
+import { INSTALL_AGENTS } from "../types";
 import { wait } from "./timing";
 
 const MIN_RUNNING_MS = 700;
@@ -92,18 +93,27 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     }
   }, [fetchStatus, workspaceDiagnostics, isInvalidWorkspaceError, setError]);
 
-  const runWsInstall = useCallback(async (dry: boolean) => {
+  const runWsInstallForAgents = useCallback(async (
+    dry: boolean,
+    agents: InstallAgent[],
+    label?: string,
+  ) => {
     if (workspaceActionLockRef.current) return;
+    const allowed = new Set<string>(INSTALL_AGENTS);
+    const normalized = agents.filter((a): a is InstallAgent => allowed.has(a));
+    if (normalized.length === 0) return;
+
     workspaceActionLockRef.current = true;
     const requestId = workspaceActionRequestIdRef.current + 1;
     workspaceActionRequestIdRef.current = requestId;
     const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
-    const label = dry ? "install skills dry-run" : "install skills";
+    const runningLabel = label ?? (dry ? "install skills dry-run" : "install skills");
     const startedAt = performance.now();
-    setWsRunning(label); setError(null);
+    setWsRunning(runningLabel);
+    setError(null);
     try {
       const req: InstallSkillsRequest = {
-        agents: Array.from(installAgents),
+        agents: normalized,
         skills: Array.from(selectedSkills),
         dry_run: dry,
       };
@@ -114,7 +124,13 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (!dry && result.success) fetchStatus();
     } catch (e) {
       if (!isCurrentAction()) return;
-      setWsLog({ success: false, action: dry ? "install_skills:dry-run" : "install_skills", stdout: "", stderr: String(e), exit_code: null });
+      setWsLog({
+        success: false,
+        action: dry ? "install_skills:dry-run" : "install_skills",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
       setError(`Install: ${e}`);
     } finally {
       const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
@@ -122,7 +138,12 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (isCurrentAction()) setWsRunning(null);
       workspaceActionLockRef.current = false;
     }
-  }, [installAgents, selectedSkills, fetchStatus, setError]);
+  }, [selectedSkills, fetchStatus, setError]);
+
+  const runWsInstall = useCallback(
+    (dry: boolean) => runWsInstallForAgents(dry, Array.from(installAgents) as InstallAgent[]),
+    [installAgents, runWsInstallForAgents],
+  );
 
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.
@@ -179,6 +200,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     activityCellClass,
     runWsAction,
     runWsInstall,
+    runWsInstallForAgents,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
