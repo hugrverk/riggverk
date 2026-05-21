@@ -1,8 +1,9 @@
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
+import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { runtimeChipLabel, runtimeChipTone, SectionChip } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface OpenCodeViewProps {
   appSettings: AppSettings | null;
@@ -29,6 +30,17 @@ interface OpenCodeViewProps {
   onApplyWorkspaceRepair: () => void;
   onDiffConfigs: () => void;
   onSyncConfigs: () => void;
+  skills: SkillSummary[];
+  skillsLoaded: boolean;
+  selectedSkills: Set<string>;
+  skillSearch: string;
+  onDryRunSkills: () => void;
+  onInstallSkills: () => void;
+  onToggleSkill: (name: string) => void;
+  onSelectAllSkills: () => void;
+  onClearSelectionSkills: () => void;
+  onSetSkillSearch: (value: string) => void;
+  onOpenInstallScript: () => void;
 }
 
 export function OpenCodeView({
@@ -56,6 +68,17 @@ export function OpenCodeView({
   onApplyWorkspaceRepair,
   onDiffConfigs,
   onSyncConfigs,
+  skills,
+  skillsLoaded,
+  selectedSkills,
+  skillSearch,
+  onDryRunSkills,
+  onInstallSkills,
+  onToggleSkill,
+  onSelectAllSkills,
+  onClearSelectionSkills,
+  onSetSkillSearch,
+  onOpenInstallScript,
 }: OpenCodeViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
 
@@ -223,6 +246,24 @@ export function OpenCodeView({
               )}
             </div>
           )}
+
+          <TargetSkillsPanel
+            targetName="OpenCode"
+            installAgents={["opencode"]}
+            skills={skills}
+            skillsLoaded={skillsLoaded}
+            selectedSkills={selectedSkills}
+            skillSearch={skillSearch}
+            wsRunning={wsRunning}
+            workspaceValid={workspaceValid}
+            onDryRun={onDryRunSkills}
+            onInstall={onInstallSkills}
+            onToggleSkill={onToggleSkill}
+            onSelectAllSkills={onSelectAllSkills}
+            onClearSelectionSkills={onClearSelectionSkills}
+            onSetSkillSearch={onSetSkillSearch}
+            onOpenInstallScript={onOpenInstallScript}
+          />
 
           {!workspaceValid && (
             <div className="ws-card-warn">Select a valid workspace on Start before running OpenCode actions.</div>

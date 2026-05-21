@@ -19,7 +19,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
@@ -197,7 +197,7 @@ function App() {
 
   // install skills state
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const [installAgents, setInstallAgents] = useState<Set<string>>(new Set(["opencode"]));
+  const installAgents = useMemo(() => new Set<string>(["opencode"]), []);
   const skillsSelectionTouched = useRef(false);
 
   // skill preview state
@@ -634,7 +634,7 @@ function App() {
     activityIndex,
     activityCellClass,
     runWsAction,
-    runWsInstall,
+    runWsInstallForAgents,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
@@ -894,14 +894,6 @@ function App() {
   const selectAll = useCallback(() => { skillsSelectionTouched.current = true; setSelectedSkills(new Set(skills.map(s => s.name))); }, [skills]);
   const clearSelection = useCallback(() => { skillsSelectionTouched.current = true; setSelectedSkills(new Set()); }, []);
 
-  const toggleInstallAgent = useCallback((agent: InstallAgent) => {
-    setInstallAgents(prev => {
-      const next = new Set(prev);
-      if (next.has(agent)) next.delete(agent); else next.add(agent);
-      return next;
-    });
-  }, []);
-
   const openSkill = useCallback((id: string) => {
     invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));
   }, []);
@@ -1151,8 +1143,17 @@ function App() {
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
   const ruleTargetsEnabled = (status?.enabled_rule_target_ids?.length ?? 0) > 0;
-  const installAgentsArray = useMemo(() => Array.from(installAgents), [installAgents]);
-  const skillsCanInstall = selectedSkills.size > 0 && installAgents.size > 0 && !wsRunning;
+  const targetSkillsShared = {
+    skills,
+    skillsLoaded,
+    selectedSkills,
+    skillSearch,
+    onToggleSkill: toggleSkill,
+    onSelectAllSkills: selectAll,
+    onClearSelectionSkills: clearSelection,
+    onSetSkillSearch: setSkillSearch,
+    onOpenInstallScript: openInstallScript,
+  };
 
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
@@ -1336,20 +1337,6 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             onPull={() => runWsAction("git_pull", "git pull")}
             onRefreshStatus={fetchStatus}
-            skills={skills}
-            skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
-            skillSearch={skillSearch}
-            installAgents={installAgentsArray}
-            skillsCanInstall={skillsCanInstall}
-            onDryRunSkills={() => runWsInstall(true)}
-            onInstallSkills={() => runWsInstall(false)}
-            onToggleSkill={toggleSkill}
-            onSelectAllSkills={selectAll}
-            onClearSelectionSkills={clearSelection}
-            onToggleInstallAgent={toggleInstallAgent}
-            onSetSkillSearch={setSkillSearch}
-            onOpenInstallScript={openInstallScript}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
@@ -1382,6 +1369,9 @@ function App() {
             onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
             onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
             onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+            {...targetSkillsShared}
+            onDryRunSkills={() => runWsInstallForAgents(true, ["codex"], "install skills dry-run (codex)")}
+            onInstallSkills={() => runWsInstallForAgents(false, ["codex"], "install skills (codex)")}
           />
         )}
 
@@ -1441,6 +1431,9 @@ function App() {
             })}
             onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
             onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+            {...targetSkillsShared}
+            onDryRunSkills={() => runWsInstallForAgents(true, ["opencode"], "install skills dry-run (opencode)")}
+            onInstallSkills={() => runWsInstallForAgents(false, ["opencode"], "install skills (opencode)")}
           />
         )}
 
@@ -1478,6 +1471,9 @@ function App() {
             onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
             onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
             onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
+            {...targetSkillsShared}
+            onDryRunSkills={() => runWsInstallForAgents(true, ["cursor"], "install skills dry-run (cursor)")}
+            onInstallSkills={() => runWsInstallForAgents(false, ["cursor"], "install skills (cursor)")}
           />
         )}
 
@@ -1502,6 +1498,11 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
             onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            {...targetSkillsShared}
+            onDryRunAuggieSkills={() => runWsInstallForAgents(true, ["auggie"], "install skills dry-run (auggie)")}
+            onInstallAuggieSkills={() => runWsInstallForAgents(false, ["auggie"], "install skills (auggie)")}
+            onDryRunClaudeSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
+            onInstallClaudeSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
           />
         )}
 

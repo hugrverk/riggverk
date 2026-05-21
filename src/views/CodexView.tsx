@@ -1,7 +1,8 @@
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
+import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface CodexViewProps {
   appSettings: AppSettings | null;
@@ -27,6 +28,17 @@ interface CodexViewProps {
   onSyncRules: () => void;
   onDiffConfigs: () => void;
   onSyncConfigs: () => void;
+  skills: SkillSummary[];
+  skillsLoaded: boolean;
+  selectedSkills: Set<string>;
+  skillSearch: string;
+  onDryRunSkills: () => void;
+  onInstallSkills: () => void;
+  onToggleSkill: (name: string) => void;
+  onSelectAllSkills: () => void;
+  onClearSelectionSkills: () => void;
+  onSetSkillSearch: (value: string) => void;
+  onOpenInstallScript: () => void;
 }
 
 export function CodexView({
@@ -53,6 +65,17 @@ export function CodexView({
   onSyncRules,
   onDiffConfigs,
   onSyncConfigs,
+  skills,
+  skillsLoaded,
+  selectedSkills,
+  skillSearch,
+  onDryRunSkills,
+  onInstallSkills,
+  onToggleSkill,
+  onSelectAllSkills,
+  onClearSelectionSkills,
+  onSetSkillSearch,
+  onOpenInstallScript,
 }: CodexViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
 
@@ -135,6 +158,24 @@ export function CodexView({
               )}
             </div>
           )}
+
+          <TargetSkillsPanel
+            targetName="Codex"
+            installAgents={["codex"]}
+            skills={skills}
+            skillsLoaded={skillsLoaded}
+            selectedSkills={selectedSkills}
+            skillSearch={skillSearch}
+            wsRunning={wsRunning}
+            workspaceValid={workspaceValid}
+            onDryRun={onDryRunSkills}
+            onInstall={onInstallSkills}
+            onToggleSkill={onToggleSkill}
+            onSelectAllSkills={onSelectAllSkills}
+            onClearSelectionSkills={onClearSelectionSkills}
+            onSetSkillSearch={onSetSkillSearch}
+            onOpenInstallScript={onOpenInstallScript}
+          />
 
           {!workspaceValid && (
             <div className="ws-card-warn">Select a valid workspace on Start before running Codex actions.</div>
