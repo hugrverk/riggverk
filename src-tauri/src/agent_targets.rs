@@ -78,7 +78,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         },
         AgentSyncTarget {
             id: "codex_config",
-            label: "codex config + profiles",
+            label: "codex config",
             kind: TargetKind::Config,
             target_rel: ".codex/config.toml",
             source_rel: "templates/codex/config.toml",
@@ -264,7 +264,7 @@ pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
         },
         ConfigSyncTarget {
             id: "codex_config",
-            label: "codex config + profiles",
+            label: "codex config",
             source_rel: "templates/codex/config.toml",
             target_rel: ".codex/config.toml",
             script: ConfigScript::Codex,

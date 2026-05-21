@@ -1,8 +1,13 @@
 # Codex Config
 
-Codex config/profile templates live under `templates/codex/`.
+Versioned Codex config template for settings sync.
 
 This workspace supports Codex as config sync only. It does not run Codex, start agents, manage project-specific Codex settings, or store project registries.
+
+Files:
+
+- `config.toml` is the canonical global config template. Profiles are defined under `[profiles.<name>]` in this file; Codex does not load separate profile files from `~/.codex/profiles`.
+- `mcp/` contains optional MCP snippets. Review before use.
 
 Preview or apply sync:
 
@@ -11,9 +16,8 @@ Preview or apply sync:
 ./scripts/install-codex-config.sh --apply
 ```
 
-Default targets:
+Default target:
 
 - Codex config: `~/.codex/config.toml` or `CODEX_CONFIG_PATH`
-- Codex profiles: `~/.codex/profiles` or `CODEX_PROFILES_PATH`
 
-Review the templates against your installed Codex version before applying.
+Review the template against your installed Codex version before applying.

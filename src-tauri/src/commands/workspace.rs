@@ -1818,8 +1818,6 @@ mod tests {
             "templates/tui.json",
             "templates/codex/README.md",
             "templates/codex/config.toml",
-            "templates/codex/profiles/safe.toml",
-            "templates/codex/profiles/workspace-write.toml",
             "templates/codex/mcp/README.md",
             "templates/codex/mcp/playwright.toml",
             "templates/cursor/README.md",

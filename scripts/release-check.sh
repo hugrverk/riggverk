@@ -124,8 +124,6 @@ root = Path("resources/default-workspace/templates/codex")
 required = [
     root / "README.md",
     root / "config.toml",
-    root / "profiles/safe.toml",
-    root / "profiles/workspace-write.toml",
     root / "mcp/README.md",
     root / "mcp/playwright.toml",
 ]
@@ -141,8 +139,15 @@ for path in required:
 config = tomllib.loads((root / "config.toml").read_text())
 if config.get("profile") != "safe":
     raise SystemExit("FAIL: Codex config must default to safe profile")
+profiles = config.get("profiles")
+if not isinstance(profiles, dict):
+    raise SystemExit("FAIL: Codex config must define [profiles.*] sections")
+for name in ("safe", "workspace-write"):
+    profile = profiles.get(name)
+    if not isinstance(profile, dict):
+        raise SystemExit(f"FAIL: Codex config missing [profiles.{name}]")
 PY
-printf '  Codex config/profile templates valid\n'
+printf '  Codex config template valid\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do

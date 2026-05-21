@@ -21,7 +21,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`generate-opencode-config.py`** — generates `templates/opencode.json` from `templates/opencode.base.json` and `templates/opencode.policy.json`. Supports `--check` (verify snapshot currency) and `--write` (regenerate snapshot). Paths are workspace-relative.
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, Claude, and Auggie rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
 - **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path.
-- **`install-codex-config.sh`** — syncs Codex config/profile templates without running Codex.
+- **`install-codex-config.sh`** — syncs Codex config template without running Codex.
 - **`install-cursor-workspace.sh`** — installs Cursor subagents from `templates/cursor/agents/*.md` to `~/.cursor/agents` or `<project>/.cursor/agents`, and project rules to `<project>/.cursor/rules`.
 - **`install-skills.sh`** — installs skills to native agent skill folders. Supports `--list`, `--dry-run`, `--agent` (all supported agents), `--global`/`--project`, `--skill`, and `--all`.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
