@@ -11,8 +11,6 @@ interface UseWorkspaceActionsOptions {
   isInvalidWorkspaceError: (e: unknown) => boolean;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   installAgents: Set<string>;
-  installScope: "global" | "project";
-  installTarget: string;
   selectedSkills: Set<string>;
   setError: (msg: string | null) => void;
 }
@@ -23,8 +21,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     isInvalidWorkspaceError,
     workspaceDiagnostics,
     installAgents,
-    installScope,
-    installTarget,
     selectedSkills,
     setError,
   } = opts;
@@ -97,7 +93,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
   }, [fetchStatus, workspaceDiagnostics, isInvalidWorkspaceError, setError]);
 
   const runWsInstall = useCallback(async (dry: boolean) => {
-    if (installScope === "project" && installTarget.trim() === "") return;
     if (workspaceActionLockRef.current) return;
     workspaceActionLockRef.current = true;
     const requestId = workspaceActionRequestIdRef.current + 1;
@@ -109,8 +104,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     try {
       const req: InstallSkillsRequest = {
         agents: Array.from(installAgents),
-        scope: installScope,
-        target: installScope === "project" ? installTarget : undefined,
         skills: Array.from(selectedSkills),
         dry_run: dry,
       };
@@ -129,7 +122,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (isCurrentAction()) setWsRunning(null);
       workspaceActionLockRef.current = false;
     }
-  }, [installAgents, installScope, installTarget, selectedSkills, fetchStatus, setError]);
+  }, [installAgents, selectedSkills, fetchStatus, setError]);
 
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.
