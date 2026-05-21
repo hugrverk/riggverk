@@ -16,7 +16,9 @@ Run this checklist before sharing a built app bundle with another user.
 ## 2. Build / Install Smoke
 
 - [ ] App bundle was built successfully (or dev mode confirmed working)
-- [ ] App launches without generic error banner
+- [ ] App launches without generic error banner (no "Contract: invalid workspace path" on first launch)
+- [ ] Error/info banner does not overlap macOS traffic-light buttons (Tauri overlay title bar)
+- [ ] Start view and main content scroll when content exceeds window height (Tauri build)
 - [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)
 - [ ] Bundled default workspace preview appears in Workspace tab (not only in dev source checkout)
 

@@ -35,7 +35,22 @@ pub struct WorkspaceContractResult {
 /// Read-only. No scripts run. No config sync. No installs.
 #[tauri::command]
 pub fn validate_workspace_contract() -> Result<WorkspaceContractResult, String> {
-    let root = workspace_root()?;
+    let root = match workspace_root() {
+        Ok(root) => root,
+        Err(message) => {
+            return Ok(WorkspaceContractResult {
+                valid: false,
+                warnings: vec![],
+                errors: vec![message.clone()],
+                checks: vec![ContractCheck {
+                    id: "ws-root".into(),
+                    label: "Workspace root resolves".into(),
+                    status: CheckStatus::Fail,
+                    detail: message,
+                }],
+            });
+        }
+    };
 
     let mut checks: Vec<ContractCheck> = Vec::new();
     let mut warnings: Vec<String> = Vec::new();

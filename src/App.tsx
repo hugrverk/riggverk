@@ -142,7 +142,8 @@ function App() {
       setContractResult(result);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Contract: ${e}`);
+      if (!isInvalidWorkspaceError(e)) setError(`Contract: ${e}`);
+      setContractResult(null);
     }
   }, [isWorkspaceLoadCurrent]);
 

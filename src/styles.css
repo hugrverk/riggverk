@@ -18,7 +18,13 @@
   --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   --header-height: 44px;
   --traffic-light-reserve: 104px;
+  --macos-titlebar-inset: 0px;
   --nav-icon-size: 32px;
+}
+
+/* Overlay title bar (Tauri macOS): keep top chrome below traffic lights. */
+:root[data-tauri] {
+  --macos-titlebar-inset: 28px;
 }
 
 [data-theme="light"] {
@@ -70,12 +76,22 @@ html, body, #root {
   -webkit-font-smoothing: antialiased;
 }
 
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
 /* ---- app shell ---- */
 
 .app-shell {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding-top: var(--macos-titlebar-inset);
 }
 
 /* ---- header ---- */
@@ -2881,10 +2897,14 @@ html, body, #root {
 
 /* ── Start / workspace landing ── */
 
+.ws-layout.ws-layout-start {
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 .ws-layout-start .ws-shell {
   grid-template-columns: minmax(0, 1.45fr) minmax(280px, 1fr);
   gap: 14px;
-  align-items: start;
 }
 
 .ws-layout-start .ws-left,

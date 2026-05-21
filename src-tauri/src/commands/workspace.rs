@@ -160,6 +160,23 @@ pub(super) fn workspace_root() -> Result<PathBuf, String> {
     validate_workspace_root(repo_path())
 }
 
+/// Returns true when a persisted workspace path resolves to a valid workspace.
+pub(crate) fn persisted_workspace_path_is_valid(path: &str) -> bool {
+    validate_workspace_root(PathBuf::from(path)).is_ok()
+}
+
+/// Clear a stale persisted workspace path that no longer validates.
+pub(crate) fn scrub_stale_workspace_path(settings: &mut settings::AppSettings) -> bool {
+    let Some(path) = settings.workspace_path.clone() else {
+        return false;
+    };
+    if persisted_workspace_path_is_valid(&path) {
+        return false;
+    }
+    settings.workspace_path = None;
+    true
+}
+
 pub(super) fn path_arg(path: &Path) -> Result<String, String> {
     path.to_str()
         .map(|s| s.to_string())
@@ -1139,9 +1156,10 @@ pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_workspace_from_source, is_unsafe_target, plan_create_workspace,
-        read_brain_setup_seed_under_root, repair_workspace_core, repo_path_from_settings,
-        validate_workspace_root, BRAIN_SETUP_SEED_REL,
+        create_workspace_from_source, is_unsafe_target, persisted_workspace_path_is_valid,
+        plan_create_workspace, read_brain_setup_seed_under_root, repair_workspace_core,
+        repo_path_from_settings, scrub_stale_workspace_path, validate_workspace_root,
+        BRAIN_SETUP_SEED_REL,
     };
     use crate::settings::AppSettings;
     use std::fs;
@@ -1543,6 +1561,42 @@ mod tests {
             .into_owned();
 
         assert_ne!(candidate, "workspace/local");
+    }
+
+    #[test]
+    fn scrub_stale_workspace_path_clears_invalid_persisted_path() {
+        let mut settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+            enabled_target_ids: vec![],
+            accent_color: None,
+            background_color: None,
+            foreground_color: None,
+        };
+
+        assert!(scrub_stale_workspace_path(&mut settings));
+        assert_eq!(settings.workspace_path, None);
+    }
+
+    #[test]
+    fn scrub_stale_workspace_path_keeps_valid_workspace() {
+        let root = setup_valid_workspace("scrub-valid");
+        let path = root.to_string_lossy().into_owned();
+        let mut settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some(path),
+            enabled_target_ids: vec![],
+            accent_color: None,
+            background_color: None,
+            foreground_color: None,
+        };
+
+        assert!(!scrub_stale_workspace_path(&mut settings));
+        assert!(settings.workspace_path.is_some());
+        assert!(persisted_workspace_path_is_valid(
+            settings.workspace_path.as_ref().expect("path")
+        ));
+        cleanup(&root);
     }
 
     #[test]
