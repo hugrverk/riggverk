@@ -9,6 +9,7 @@ import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { pageLabelToTargetPage } from "./lib/targetGroups";
+import { CodexView } from "./views/CodexView";
 import { StartView } from "./views/StartView";
 import { WorkspaceView } from "./views/WorkspaceView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
@@ -30,10 +31,10 @@ type View =
   | "routing"
   | "settings";
 
-const TARGET_VIEWS = new Set<View>(["codex", "opencode", "cursor", "misc"]);
+const TARGET_VIEWS = new Set<View>(["opencode", "cursor", "misc"]);
 
-function isTargetView(view: View): boolean {
-  return TARGET_VIEWS.has(view);
+function isWorkspaceLoadView(view: View): boolean {
+  return view === "start" || view === "codex" || TARGET_VIEWS.has(view);
 }
 
 /* ---- main app ---- */
@@ -1060,7 +1061,7 @@ function App() {
     }
     setView(v);
     setSettingsMsg(null);
-    if (v === "start" || isTargetView(v)) {
+    if (isWorkspaceLoadView(v)) {
       loadWorkspaceDiagnostics();
       loadContract();
       loadCursorProfileHealth();
@@ -1105,6 +1106,7 @@ function App() {
   }, [runWsTask, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
 
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
+  const codexConfigEnabled = (status?.enabled_config_target_ids ?? []).includes("codex_config");
   const configTargets = useMemo(
     () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
     [agentTargets],
@@ -1411,7 +1413,35 @@ function App() {
           />
         )}
 
-        {isTargetView(view) && targetWorkspaceView}
+        {view === "codex" && (
+          <CodexView
+            appSettings={appSettings}
+            agentTargets={agentTargets}
+            targetProfiles={targetProfiles}
+            activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
+            onToggleTarget={toggleTarget}
+            onApplyProfile={applyTargetProfile}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            ruleTargetsEnabled={ruleTargetsEnabled}
+            configEnabled={configEnabled}
+            codexConfigEnabled={codexConfigEnabled}
+            canRunReleaseCheck={canRunReleaseCheck}
+            onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
+            onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
+            onDiffConfigs={() => runWsAction("diff_configs", "diff configs")}
+            onSyncConfigs={() => runWsAction("sync_configs", "sync configs")}
+          />
+        )}
+
+        {(view === "opencode" || view === "cursor" || view === "misc") && targetWorkspaceView}
 
         {view === "library" && (
           <Suspense fallback={<div className="view-loading">loading library…</div>}>
