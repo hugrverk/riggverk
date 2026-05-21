@@ -78,7 +78,7 @@ Cursor support is script-backed and scoped: skills install to Cursor skill folde
 
 The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
-This repository is the public Agent Workspace app source. Private workspace repositories can store user-owned docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults. Repair flows for existing workspaces copy only missing bundled files and never overwrite user edits.
+This repository (`agent-workspace`) is the shared private app/runtime repo for PRIVATE and his colleague. User-owned workspace folders store docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults from `resources/default-workspace/`. Repair flows for existing workspaces copy only missing bundled files and never overwrite user edits.
 
 ## Script location
 
@@ -112,7 +112,7 @@ When the plan reports a safe target (`missing_directory` or `empty_existing_dire
 
 Canonical skill files live at `skills/<skill>/SKILL.md` — one directory per skill, directly under `skills/`.
 
-Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the public workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills must follow the root-level layout. Domain workflow skills in bundled defaults are shared with colleagues; PRIVATE-only context stays outside this tree.
+Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills must follow the root-level layout. Domain workflow skills in bundled defaults are shared with colleagues; PRIVATE-only context stays in `private-context`, not in this tree.
 
 This is generic app behavior, not specific to any particular workspace or group.
 

@@ -115,7 +115,7 @@ The app creates backups when applying changes that would overwrite existing file
 
 ## Release check
 
-Run "release-check" in the Workspace VERIFY lane only when the selected workspace has `scripts/release-check.sh`. The public bundled starter does not include that script; the app development checkout does.
+Run "release-check" in the Workspace VERIFY lane only when the selected workspace has `scripts/release-check.sh`. The bundled default starter does not include that script; the `agent-workspace` app checkout does.
 
 The app repository release-check validates bundled default docs, scripts, starter metadata, forbidden source patterns, the frontend build, and Rust format/check/clippy/tests. It is not a GUI smoke test and it is not a comprehensive secret scanner.
 

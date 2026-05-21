@@ -125,7 +125,7 @@ git diff --check
 step "release-check syntax"
 bash -n scripts/release-check.sh
 
-step "public app repo hygiene"
+step "app repo hygiene"
 if grep -q "Matt Poc""ock" LICENSE; then
   printf 'FAIL: LICENSE contains stale copyright holder\n' >&2
   exit 1
@@ -150,6 +150,18 @@ if grep -q "both the app source and private workspace d""ata" README.md; then
   printf 'FAIL: app README contains stale private workspace transition copy\n' >&2
   exit 1
 fi
+for stale_pattern in \
+  'public app source' \
+  'public Agent Workspace' \
+  'public starter' \
+  'public workspace contract' \
+  'public app contract' \
+  'public bundled starter'; do
+  if search_has_match -F "$stale_pattern" README.md docs/WORKSPACE_CONTRACT.md resources/default-workspace/docs/; then
+    printf 'FAIL: stale public-product wording found: %s\n' "$stale_pattern" >&2
+    exit 1
+  fi
+done
 
 step "bundled default workspace scripts"
 bash -n resources/default-workspace/scripts/bootstrap.sh

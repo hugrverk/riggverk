@@ -88,7 +88,7 @@ The default template is conservative:
 - Destructive commands (`sudo`, `rm -rf`, `git reset --hard`, `git clean -fdx`, pipe-to-bash) are denied globally and in each agent
 - Cargo verification commands (`cargo fmt`, `cargo check`, `cargo clippy`, `cargo test`) are allow-listed where verification is expected
 - `git checkout` and `git pull` are ask-gated because they can change working-tree state at runtime
-- `npm run dev` and other dev server commands are ask-gated in the public starter template
+- `npm run dev` and other dev server commands are ask-gated in the bundled default starter template
 
 ## TUI config
 

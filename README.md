@@ -47,7 +47,7 @@ The app operates on a workspace folder — a user-owned data directory containin
 
 Workspace validation uses `.agent-workspace/workspace.json` and required workspace markers (scripts, templates, Cursor setup assets, README, skills directory).
 
-This repository is the public app source repo. User workspace content lives in separate user-owned workspace folders outside this checkout.
+This repository is the shared private app/runtime repo for PRIVATE and his colleague. User workspace content lives in separate user-owned workspace folders outside this checkout.
 
 ### Repo boundaries
 
@@ -188,7 +188,7 @@ CLI-only (outside app workflow): `install-skills.sh` and `install-cursor-workspa
 
 ## Workspace Contract Validator
 
-The app includes a read-only Workspace Contract Validator that checks an active workspace against the public app contract. It validates skills, agent metadata, and agents without executing scripts or modifying files.
+The app includes a read-only Workspace Contract Validator that checks an active workspace against the workspace contract. It validates skills, agent metadata, and agents without executing scripts or modifying files.
 
 ### What it checks
 
@@ -198,7 +198,7 @@ The app includes a read-only Workspace Contract Validator that checks an active 
 | Skills directory | `skills/` exists and contains root-level skills at `skills/<skill>/SKILL.md` |
 | Skill metadata | Every `SKILL.md` has required `name` and `description` fields |
 | Skill uniqueness | No duplicate skill names (deterministic failure) |
-| Legacy skills | No legacy nested skills at `skills/<group>/<skill>/SKILL.md` (fails — public contract is root-level only; nested skills are ignored by skill discovery) |
+| Legacy skills | No legacy nested skills at `skills/<group>/<skill>/SKILL.md` (fails — workspace contract is root-level only; nested skills are ignored by skill discovery) |
 | Agent metadata | `metadata/agents.json` is optional; validates JSON, size, and structure when present |
 | Metadata notes | All notes fields in agent metadata are string arrays |
 | Metadata keys | All agent keys in metadata map to known agent files (warns on unknown keys) |
