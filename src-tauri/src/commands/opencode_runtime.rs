@@ -826,9 +826,10 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
 #[tauri::command]
 pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     use crate::agent_targets;
-    use crate::commands::workspace::repo_path;
+    use crate::commands::workspace::configured_workspace_path;
+    use crate::settings;
 
-    let workspace_root = repo_path();
+    let workspace_root = configured_workspace_path(&settings::load()).unwrap_or_default();
     let home = agent_targets::home_dir()?;
 
     // If workspace root doesn't exist or isn't valid, still compute health

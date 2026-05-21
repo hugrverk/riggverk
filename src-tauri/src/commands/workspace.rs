@@ -112,25 +112,30 @@ pub(crate) fn workspace_has_cursor_mdc_rule(base: &Path) -> bool {
     }
 }
 
+pub(crate) const NO_WORKSPACE_SELECTED: &str = "no workspace selected";
+
+/// Workspace path from saved settings or AGENT_WORKSPACE_PATH only (no built-in default).
+pub(crate) fn configured_workspace_path(settings: &settings::AppSettings) -> Option<PathBuf> {
+    if let Some(ref custom) = settings.workspace_path {
+        if let Some(normalized) = normalize_user_workspace_path(custom) {
+            return Some(PathBuf::from(normalized));
+        }
+    }
+    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    None
+}
+
 pub(super) fn repo_path() -> PathBuf {
     let settings = settings::load();
     repo_path_from_settings(&settings)
 }
 
 fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
-    if let Some(ref custom) = settings.workspace_path {
-        if let Some(normalized) = normalize_user_workspace_path(custom) {
-            return PathBuf::from(normalized);
-        }
-    }
-    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
-        if !p.is_empty() {
-            return PathBuf::from(p);
-        }
-    }
-    agent_targets::home_dir()
-        .map(|h| h.join("Agent Workspace"))
-        .unwrap_or_else(|_| PathBuf::from("Agent Workspace"))
+    configured_workspace_path(settings).unwrap_or_default()
 }
 
 pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
@@ -157,7 +162,26 @@ pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> 
 }
 
 pub(super) fn workspace_root() -> Result<PathBuf, String> {
-    validate_workspace_root(repo_path())
+    let settings = settings::load();
+    let path = configured_workspace_path(&settings).ok_or_else(|| NO_WORKSPACE_SELECTED.to_string())?;
+    validate_workspace_root(path)
+}
+
+/// Returns true when a persisted workspace path resolves to a valid workspace.
+pub(crate) fn persisted_workspace_path_is_valid(path: &str) -> bool {
+    validate_workspace_root(PathBuf::from(path)).is_ok()
+}
+
+/// Clear a stale persisted workspace path that no longer validates.
+pub(crate) fn scrub_stale_workspace_path(settings: &mut settings::AppSettings) -> bool {
+    let Some(path) = settings.workspace_path.clone() else {
+        return false;
+    };
+    if persisted_workspace_path_is_valid(&path) {
+        return false;
+    }
+    settings.workspace_path = None;
+    true
 }
 
 pub(super) fn path_arg(path: &Path) -> Result<String, String> {
@@ -203,10 +227,48 @@ pub struct WorkspaceDiagnostics {
     release_check_available: bool,
 }
 
+fn workspace_diagnostics_for_unconfigured(settings: &settings::AppSettings) -> WorkspaceDiagnostics {
+    let enabled = &settings.enabled_target_ids;
+    let total_rules = agent_targets::rule_targets().len();
+    let total_configs = agent_targets::config_targets().len();
+    let enabled_rules = agent_targets::rule_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+    let enabled_configs = agent_targets::config_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+    let (backup_root, backup_root_exists) = match super::backups::backup_root() {
+        Ok(path) => {
+            let exists = path.exists();
+            (path.to_string_lossy().into_owned(), exists)
+        }
+        Err(_) => (String::new(), false),
+    };
+
+    WorkspaceDiagnostics {
+        candidate_path: String::new(),
+        resolved_path: None,
+        valid: false,
+        error: Some(NO_WORKSPACE_SELECTED.into()),
+        markers: Vec::new(),
+        enabled_rule_targets: enabled_rules,
+        total_rule_targets: total_rules,
+        enabled_config_targets: enabled_configs,
+        total_config_targets: total_configs,
+        backup_root,
+        backup_root_exists,
+        release_check_available: false,
+    }
+}
+
 #[tauri::command]
 pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     let settings = settings::load();
-    let candidate = repo_path();
+    let Some(candidate) = configured_workspace_path(&settings) else {
+        return Ok(workspace_diagnostics_for_unconfigured(&settings));
+    };
     let candidate_str = candidate.to_string_lossy().into_owned();
 
     let (valid, resolved_path, error, markers) = match candidate.canonicalize() {
@@ -324,7 +386,7 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     })
 }
 
-#[derive(Serialize)]
+#[derive(Serialize, Clone, Debug, PartialEq)]
 pub struct CreateWorkspacePlan {
     pub ok: bool,
     pub status: String,
@@ -559,6 +621,183 @@ fn is_unsafe_target(target: &Path) -> bool {
 #[tauri::command]
 pub fn plan_create_workspace(target_path: Option<String>) -> Result<CreateWorkspacePlan, String> {
     Ok(evaluate_create_plan(target_path))
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct WorkspaceSetupEvaluation {
+    pub candidate_path: String,
+    pub setup_phase: String,
+    pub plan: CreateWorkspacePlan,
+    pub missing_files_to_add: Vec<String>,
+}
+
+pub(crate) fn workspace_setup_phase(plan: &CreateWorkspacePlan) -> &'static str {
+    match plan.status.as_str() {
+        "valid_existing_workspace" => "valid_existing",
+        "missing_directory" | "empty_existing_directory" => "ready_create",
+        "non_empty_non_workspace" => "blocked_non_empty",
+        "missing_target" | "invalid_target" => "no_target",
+        _ => "blocked",
+    }
+}
+
+#[tauri::command]
+pub fn evaluate_workspace_setup(
+    app: tauri::AppHandle,
+    target_path: Option<String>,
+) -> Result<WorkspaceSetupEvaluation, String> {
+    let plan = evaluate_create_plan(target_path);
+    let candidate_path = plan.target_path.clone();
+    let mut missing_files_to_add = Vec::new();
+
+    if plan.status == "non_empty_non_workspace" && !candidate_path.is_empty() {
+        let preview = repair_workspace_impl(&app, &candidate_path, true);
+        missing_files_to_add = preview.copied_files;
+    }
+
+    Ok(WorkspaceSetupEvaluation {
+        setup_phase: workspace_setup_phase(&plan).to_string(),
+        candidate_path,
+        plan,
+        missing_files_to_add,
+    })
+}
+
+#[derive(Serialize, Clone, Debug, PartialEq)]
+pub struct InitializeWorkspaceResult {
+    pub success: bool,
+    pub status: String,
+    pub target_path: String,
+    pub message: String,
+    pub copied_files: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
+fn initialize_result_from_create(create: CreateWorkspaceResult) -> InitializeWorkspaceResult {
+    InitializeWorkspaceResult {
+        success: create.success,
+        status: create.status,
+        target_path: create.target_path,
+        message: create.message,
+        copied_files: create.copied_files,
+        warnings: create.warnings,
+    }
+}
+
+fn initialize_result_from_repair(repair: RepairWorkspaceResult) -> InitializeWorkspaceResult {
+    InitializeWorkspaceResult {
+        success: repair.ok,
+        status: if repair.dry_run {
+            "repair_dry_run".into()
+        } else if repair.ok {
+            "initialized".into()
+        } else {
+            "initialize_failed".into()
+        },
+        target_path: repair.target_path,
+        message: repair.message,
+        copied_files: repair.copied_files,
+        warnings: repair.warnings,
+    }
+}
+
+#[tauri::command]
+pub fn initialize_workspace_at_path(
+    app: tauri::AppHandle,
+    target_path: Option<String>,
+    confirm_non_empty: bool,
+) -> Result<InitializeWorkspaceResult, String> {
+    let plan = evaluate_create_plan(target_path);
+    let target_path = plan.target_path.clone();
+
+    if target_path.is_empty() {
+        return Ok(InitializeWorkspaceResult {
+            success: false,
+            status: plan.status,
+            target_path,
+            message: plan.reason,
+            copied_files: vec![],
+            warnings: plan.warnings,
+        });
+    }
+
+    match plan.status.as_str() {
+        "missing_directory" | "empty_existing_directory" => {
+            let source_root = super::defaults::resolve_default_workspace_root(&app)?;
+            Ok(initialize_result_from_create(create_workspace_from_source(
+                &source_root,
+                Some(target_path),
+            )))
+        }
+        "non_empty_non_workspace" => {
+            if !confirm_non_empty {
+                return Err(
+                    "Confirmation required before adding workspace files to a non-empty folder."
+                        .into(),
+                );
+            }
+            let repair = repair_workspace_impl(&app, &target_path, false);
+            if !repair.ok {
+                return Ok(initialize_result_from_repair(repair));
+            }
+            match validate_workspace_root(PathBuf::from(&target_path)) {
+                Ok(canonical) => Ok(InitializeWorkspaceResult {
+                    success: true,
+                    status: "initialized".into(),
+                    target_path: canonical.to_string_lossy().into_owned(),
+                    message: repair.message,
+                    copied_files: repair.copied_files,
+                    warnings: repair.warnings,
+                }),
+                Err(e) => Ok(InitializeWorkspaceResult {
+                    success: false,
+                    status: "validation_failed".into(),
+                    target_path,
+                    message: format!(
+                        "Files were copied but workspace validation failed: {e}"
+                    ),
+                    copied_files: repair.copied_files,
+                    warnings: repair.warnings,
+                }),
+            }
+        }
+        "valid_existing_workspace" => match validate_workspace_root(PathBuf::from(&target_path)) {
+            Ok(canonical) => Ok(InitializeWorkspaceResult {
+                success: true,
+                status: "valid_existing_workspace".into(),
+                target_path: canonical.to_string_lossy().into_owned(),
+                message: "Path is already a valid workspace.".into(),
+                copied_files: vec![],
+                warnings: vec![],
+            }),
+            Err(e) => Ok(InitializeWorkspaceResult {
+                success: false,
+                status: "validation_failed".into(),
+                target_path,
+                message: e,
+                copied_files: vec![],
+                warnings: vec![],
+            }),
+        },
+        _ => Ok(InitializeWorkspaceResult {
+            success: false,
+            status: plan.status,
+            target_path,
+            message: plan.reason,
+            copied_files: vec![],
+            warnings: plan.warnings,
+        }),
+    }
+}
+
+#[tauri::command]
+pub fn try_set_active_workspace_path(path: String) -> Result<settings::AppSettings, String> {
+    let normalized = normalize_user_workspace_path_for_save(&path)?
+        .ok_or_else(|| "workspace path must be absolute or start with ~/".to_string())?;
+    let canonical = validate_workspace_root(PathBuf::from(&normalized))?;
+    let mut settings = settings::load();
+    settings.workspace_path = Some(canonical.to_string_lossy().into_owned());
+    settings::save(settings)
 }
 
 #[derive(Serialize)]
@@ -1139,9 +1378,11 @@ pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_workspace_from_source, is_unsafe_target, plan_create_workspace,
-        read_brain_setup_seed_under_root, repair_workspace_core, repo_path_from_settings,
-        validate_workspace_root, BRAIN_SETUP_SEED_REL,
+        configured_workspace_path, create_workspace_from_source, is_unsafe_target,
+        persisted_workspace_path_is_valid, plan_create_workspace, read_brain_setup_seed_under_root,
+        repair_workspace_core, repo_path_from_settings, scrub_stale_workspace_path,
+        try_set_active_workspace_path, validate_workspace_root, workspace_diagnostics_for_unconfigured,
+        workspace_setup_phase, CreateWorkspacePlan, NO_WORKSPACE_SELECTED, BRAIN_SETUP_SEED_REL,
     };
     use crate::settings::AppSettings;
     use std::fs;
@@ -1528,7 +1769,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnostics_ignore_legacy_relative_workspace_path() {
+    fn configured_workspace_path_ignores_legacy_relative_paths() {
         let settings = AppSettings {
             appearance: "dark".into(),
             workspace_path: Some("workspace/local".into()),
@@ -1538,11 +1779,59 @@ mod tests {
             foreground_color: None,
         };
 
-        let candidate = repo_path_from_settings(&settings)
-            .to_string_lossy()
-            .into_owned();
+        assert!(configured_workspace_path(&settings).is_none());
+    }
 
-        assert_ne!(candidate, "workspace/local");
+    #[test]
+    fn default_settings_have_no_configured_workspace_path() {
+        assert!(configured_workspace_path(&AppSettings::default()).is_none());
+    }
+
+    #[test]
+    fn unconfigured_workspace_diagnostics_do_not_use_builtin_default() {
+        let settings = AppSettings::default();
+        let diag = workspace_diagnostics_for_unconfigured(&settings);
+
+        assert_eq!(diag.error.as_deref(), Some(NO_WORKSPACE_SELECTED));
+        assert!(diag.candidate_path.is_empty());
+        assert!(diag.markers.is_empty());
+        assert!(!diag.valid);
+    }
+
+    #[test]
+    fn scrub_stale_workspace_path_clears_invalid_persisted_path() {
+        let mut settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+            enabled_target_ids: vec![],
+            accent_color: None,
+            background_color: None,
+            foreground_color: None,
+        };
+
+        assert!(scrub_stale_workspace_path(&mut settings));
+        assert_eq!(settings.workspace_path, None);
+    }
+
+    #[test]
+    fn scrub_stale_workspace_path_keeps_valid_workspace() {
+        let root = setup_valid_workspace("scrub-valid");
+        let path = root.to_string_lossy().into_owned();
+        let mut settings = AppSettings {
+            appearance: "dark".into(),
+            workspace_path: Some(path),
+            enabled_target_ids: vec![],
+            accent_color: None,
+            background_color: None,
+            foreground_color: None,
+        };
+
+        assert!(!scrub_stale_workspace_path(&mut settings));
+        assert!(settings.workspace_path.is_some());
+        assert!(persisted_workspace_path_is_valid(
+            settings.workspace_path.as_ref().expect("path")
+        ));
+        cleanup(&root);
     }
 
     #[test]
@@ -1664,6 +1953,53 @@ mod tests {
         assert!(!plan.ok);
         assert!(!plan.warnings.is_empty());
         assert!(!plan.planned_files.is_empty());
+    }
+
+    #[test]
+    fn workspace_setup_phase_maps_non_empty_to_blocked() {
+        let plan = CreateWorkspacePlan {
+            ok: false,
+            status: "non_empty_non_workspace".into(),
+            target_path: "/tmp/example".into(),
+            reason: "blocked".into(),
+            warnings: vec![],
+            planned_files: vec![],
+        };
+        assert_eq!(workspace_setup_phase(&plan), "blocked_non_empty");
+    }
+
+    #[test]
+    fn workspace_setup_phase_maps_valid_existing() {
+        let plan = CreateWorkspacePlan {
+            ok: true,
+            status: "valid_existing_workspace".into(),
+            target_path: "/tmp/example".into(),
+            reason: "valid".into(),
+            warnings: vec![],
+            planned_files: vec![],
+        };
+        assert_eq!(workspace_setup_phase(&plan), "valid_existing");
+    }
+
+    #[test]
+    fn try_set_active_workspace_path_rejects_invalid_directory() {
+        let path = std::env::temp_dir()
+            .join("agent-workspace-not-a-valid-root")
+            .to_string_lossy()
+            .into_owned();
+        let result = try_set_active_workspace_path(path);
+        assert!(result.is_err(), "invalid path must not become active");
+    }
+
+    #[test]
+    fn active_workspace_activation_requires_valid_root() {
+        let root = setup_valid_workspace("activate-valid");
+        let path = root.to_string_lossy().into_owned();
+        assert!(
+            validate_workspace_root(PathBuf::from(&path)).is_ok(),
+            "only valid workspace roots may be activated"
+        );
+        cleanup(&root);
     }
 
     #[test]
@@ -1972,8 +2308,6 @@ mod tests {
 
         let result =
             create_workspace_from_source(&source, Some(target.to_string_lossy().into_owned()));
-        cleanup(&source);
-        cleanup(&parent);
 
         assert!(
             result.success,
@@ -1981,6 +2315,10 @@ mod tests {
             result.message
         );
         assert_eq!(result.status, "created");
+        assert!(
+            validate_workspace_root(PathBuf::from(&result.target_path)).is_ok(),
+            "created workspace path must pass validation"
+        );
         assert!(!result.copied_files.is_empty(), "should have copied files");
         assert!(result
             .copied_files
@@ -2000,6 +2338,9 @@ mod tests {
             .copied_files
             .iter()
             .any(|f| f == "skills/diagnose/SKILL.md"));
+
+        cleanup(&source);
+        cleanup(&parent);
     }
 
     #[test]

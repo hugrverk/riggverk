@@ -1,13 +1,31 @@
+import { useState } from "react";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
-import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, StatusData, WorkspaceDiagnostics } from "../types";
+import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
+import type {
+  AppSettings,
+  CreateWorkspacePlan,
+  CreateWorkspaceResult,
+  InitializeWorkspaceResult,
+  StatusData,
+  WorkspaceDiagnostics,
+  WorkspaceSetupEvaluation,
+} from "../types";
+
+const NO_WORKSPACE_SELECTED = "no workspace selected";
 
 interface StartViewProps {
   appSettings: AppSettings | null;
-  onApplyWorkspacePath: (value: string | null) => void;
+  pathDraft: string;
+  onPathDraftChange: (value: string) => void;
+  onCheckPath: () => void;
+  onUseDefaultWorkspace: () => void;
   onChooseWorkspaceFolder: () => void;
+  onClearActiveWorkspace: () => void;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
+  workspaceSetup: WorkspaceSetupEvaluation | null;
+  setupEvaluating: boolean;
   onRefreshDiagnostics: () => void;
   createPlan: CreateWorkspacePlan | null;
   createPlanRunning: boolean;
@@ -15,6 +33,10 @@ interface StartViewProps {
   createResult: CreateWorkspaceResult | null;
   createRunning: boolean;
   onCreateWorkspace: () => void;
+  initResult: InitializeWorkspaceResult | null;
+  initRunning: boolean;
+  onInitializeWorkspace: () => void;
+  onActivateWorkspace: () => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -32,11 +54,181 @@ interface StartViewProps {
   onOpenBackupsFolder: () => void;
 }
 
+function PlannedFilesList({ files, label }: { files: string[]; label: string }) {
+  const [open, setOpen] = useState(false);
+  if (files.length === 0) return null;
+
+  return (
+    <div className="ws-setup-files">
+      <button type="button" className="ws-setup-files-toggle btn btn-sm" onClick={() => setOpen(v => !v)}>
+        {open ? "hide" : "show"} {label} ({files.length})
+      </button>
+      {open && (
+        <ul className="ws-setup-files-list" aria-label={label}>
+          {files.map(file => (
+            <li key={file}>{file}</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function SetupFlowPanel({
+  setupPhase,
+  createPlan,
+  createPlanRunning,
+  createResult,
+  createRunning,
+  initResult,
+  initRunning,
+  missingFilesToAdd,
+  onPlanCreate,
+  onCreateWorkspace,
+  onInitializeWorkspace,
+  onActivateWorkspace,
+}: {
+  setupPhase: string | null;
+  createPlan: CreateWorkspacePlan | null;
+  createPlanRunning: boolean;
+  createResult: CreateWorkspaceResult | null;
+  createRunning: boolean;
+  initResult: InitializeWorkspaceResult | null;
+  initRunning: boolean;
+  missingFilesToAdd: string[];
+  onPlanCreate: () => void;
+  onCreateWorkspace: () => void;
+  onInitializeWorkspace: () => void;
+  onActivateWorkspace: () => void;
+}) {
+  const [confirmNonEmpty, setConfirmNonEmpty] = useState(false);
+  const createPlanEligible =
+    createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
+  const filesForCreate = createPlan?.planned_files ?? [];
+  const filesToAdd = missingFilesToAdd.length > 0 ? missingFilesToAdd : filesForCreate;
+
+  return (
+    <div className="ws-setup-actions">
+      {!createPlan && !createResult && !initResult && (
+        <div className="ws-setup-action-row">
+          <button className="btn btn-sm btn-primary" onClick={onPlanCreate} disabled={createPlanRunning}>
+            {createPlanRunning ? "checking\u2026" : "check path"}
+          </button>
+          <span className="ws-setup-hint">validate the selected path before activating or initializing</span>
+        </div>
+      )}
+
+      {createPlan && (
+        <div className="ws-setup-plan">
+          <div className={`ws-cmd-row ${createPlan.ok ? "ws-color-ok" : "ws-color-fail"}`}>
+            <span className="ws-cmd-prompt">{setupPhase === "blocked_non_empty" ? "blocked" : createPlan.ok ? "ready" : "blocked"}</span>
+            <span>{createPlan.status}</span>
+          </div>
+          <div className="ws-cmd-row ws-color-dim">selected: {createPlan.target_path || "(empty)"}</div>
+          <div className="ws-cmd-row">{createPlan.reason}</div>
+          {createPlan.warnings.map((w, i) => (
+            <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
+          ))}
+
+          {setupPhase === "blocked_non_empty" && (
+            <div className="ws-setup-blocked-note" role="note">
+              <p>
+                This folder already contains files and is missing workspace markers. Initialization adds only
+                missing bundled files and does not overwrite existing files.
+              </p>
+              <PlannedFilesList files={filesToAdd} label="files to add" />
+              <label className="ws-setup-confirm">
+                <input
+                  type="checkbox"
+                  checked={confirmNonEmpty}
+                  onChange={(e) => setConfirmNonEmpty(e.target.checked)}
+                />
+                I understand {filesToAdd.length} missing file(s) may be added here
+              </label>
+              <div className="ws-setup-create-action">
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={onInitializeWorkspace}
+                  disabled={!confirmNonEmpty || initRunning}
+                >
+                  {initRunning ? "initializing\u2026" : "initialize workspace"}
+                </button>
+                <span className="ws-tag">no overwrite</span>
+                <span className="ws-tag">explicit only</span>
+              </div>
+            </div>
+          )}
+
+          {setupPhase === "valid_existing" && (
+            <div className="ws-setup-create-action">
+              <button className="btn btn-sm btn-primary" onClick={onActivateWorkspace}>
+                use this workspace
+              </button>
+              <span className="ws-setup-hint">path is already a valid workspace</span>
+            </div>
+          )}
+
+          {setupPhase === "ready_create" && (
+            <>
+              <PlannedFilesList files={filesForCreate} label="planned files" />
+              {createPlanEligible && (
+                <div className="ws-setup-create-action">
+                  <button
+                    className="btn btn-sm btn-primary"
+                    onClick={onCreateWorkspace}
+                    disabled={createRunning}
+                  >
+                    {createRunning ? "creating\u2026" : "create workspace"}
+                  </button>
+                  <span className="ws-tag">{filesForCreate.length} files</span>
+                  <span className="ws-tag">no overwrite</span>
+                  <span className="ws-tag">no scripts</span>
+                </div>
+              )}
+            </>
+          )}
+
+          {setupPhase === "blocked" && (
+            <p className="ws-setup-hint">Choose another folder or enter a different path, then check again.</p>
+          )}
+        </div>
+      )}
+
+      {(createResult || initResult) && (
+        <div className="ws-setup-result">
+          {(() => {
+            const result = initResult ?? createResult;
+            if (!result) return null;
+            return (
+              <>
+                <div className={`ws-cmd-row ${result.success ? "ws-color-ok" : "ws-color-fail"}`}>
+                  <span className="ws-cmd-prompt">{result.success ? "ok" : "fail"}</span>
+                  <span>{"message" in result ? result.message : ""}</span>
+                </div>
+                <div className="ws-cmd-row ws-color-dim">status: {result.status} | target: {result.target_path}</div>
+                {result.copied_files.length > 0 && (
+                  <div className="ws-cmd-row ws-color-dim">copied {result.copied_files.length} file(s)</div>
+                )}
+              </>
+            );
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function StartView({
   appSettings,
-  onApplyWorkspacePath,
+  pathDraft,
+  onPathDraftChange,
+  onCheckPath,
+  onUseDefaultWorkspace,
   onChooseWorkspaceFolder,
+  onClearActiveWorkspace,
   workspaceDiagnostics,
+  workspaceSetup,
+  setupEvaluating,
   onRefreshDiagnostics,
   createPlan,
   createPlanRunning,
@@ -44,6 +236,10 @@ export function StartView({
   createResult,
   createRunning,
   onCreateWorkspace,
+  initResult,
+  initRunning,
+  onInitializeWorkspace,
+  onActivateWorkspace,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -61,30 +257,39 @@ export function StartView({
   onOpenBackupsFolder,
 }: StartViewProps) {
   const diag = workspaceDiagnostics;
-  const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
-  const defaultLabel = "~/Agent Workspace";
-  const displayPath = appSettings?.workspace_path ?? defaultLabel;
-  const diagnosticsPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
-
-  const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
+  const noActiveWorkspace = diag?.error === NO_WORKSPACE_SELECTED;
+  const activePath = workspaceValid ? appSettings?.workspace_path ?? null : null;
+  const selectedPath = workspaceSetup?.candidate_path ?? (pathDraft.trim() || null);
+  const setupPhase = workspaceSetup?.setup_phase ?? null;
+  const pathCheckDisabled = !pathDraft.trim() || setupEvaluating;
 
   const statusText = !diag
     ? "LOADING"
-    : diag.valid
+    : workspaceValid
       ? "VALID"
-      : "INVALID";
+      : noActiveWorkspace
+        ? "SETUP"
+        : "PENDING";
 
   const statusClass = !diag
     ? "ws-status-dim"
-    : diag.valid
+    : workspaceValid
       ? "ws-status-valid"
-      : "ws-status-invalid";
+      : noActiveWorkspace
+        ? "ws-status-dim"
+        : "ws-status-invalid";
 
   const statusDetail = !diag
     ? "loading"
-    : diag.valid
+    : workspaceValid
       ? "valid"
-      : "setup needed";
+      : noActiveWorkspace
+        ? "choose or create a workspace"
+        : setupPhase === "blocked_non_empty"
+          ? "blocked — confirm initialization or choose another folder"
+          : "check path and initialize";
+
+  const showSetupPanel = !workspaceValid;
 
   return (
     <section className="ws-layout ws-layout-start">
@@ -102,32 +307,6 @@ export function StartView({
                 OpenCode, Cursor, Auggie, and Claude. Does not run agents for you. Writes are explicit; sync,
                 install, and release actions run scripts from the selected workspace.
               </p>
-              <dl className="start-overview-facts">
-                <div className="start-overview-fact">
-                  <dt>scope</dt>
-                  <dd>rules, skills, configs, docs, scripts</dd>
-                </div>
-                <div className="start-overview-fact">
-                  <dt>storage</dt>
-                  <dd>versioned workspace folder</dd>
-                </div>
-                <div className="start-overview-fact">
-                  <dt>targets</dt>
-                  <dd>Codex, OpenCode, Cursor, Auggie, Claude</dd>
-                </div>
-                <div className="start-overview-fact">
-                  <dt>agents</dt>
-                  <dd>does not run agents</dd>
-                </div>
-                <div className="start-overview-fact">
-                  <dt>writes</dt>
-                  <dd>explicit only</dd>
-                </div>
-                <div className="start-overview-fact">
-                  <dt>scripts</dt>
-                  <dd>from selected workspace</dd>
-                </div>
-              </dl>
             </div>
           </div>
 
@@ -137,19 +316,50 @@ export function StartView({
                 <span className="ws-panel-title">WORKSPACE</span>
                 <span className={`ws-status-chip ${statusClass}`}>{statusText}</span>
               </div>
-              <div className="start-workspace-path-block">
-                <span className="start-workspace-path-label">path</span>
-                <code className="start-workspace-path-value" title={displayPath}>
-                  {displayPath}
-                </code>
-              </div>
             </div>
-            {diag && diagnosticsPath !== displayPath && diagnosticsPath !== "\u2014" && (
-              <div className="start-workspace-path-resolved" title={`resolved: ${diagnosticsPath}`}>
-                <span className="start-workspace-path-label">resolved</span>
-                <span className="start-workspace-path-resolved-value">{diagnosticsPath}</span>
+
+            {activePath && (
+              <div className="start-workspace-path-row ws-path-row">
+                <span className="ws-path-label">active path</span>
+                <code className="start-workspace-path-value" title={activePath}>{activePath}</code>
               </div>
             )}
+
+            <div className="start-workspace-path-editor ws-path-row" role="group" aria-label="Workspace path setup">
+              <label className="ws-path-label" htmlFor="workspace-path-input">
+                {activePath ? "new path" : "selected path"}
+              </label>
+              <input
+                id="workspace-path-input"
+                className="ws-path-input"
+                type="text"
+                spellCheck={false}
+                autoComplete="off"
+                placeholder={DEFAULT_WORKSPACE_PATH}
+                value={pathDraft}
+                onChange={(e) => onPathDraftChange(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter" && !pathCheckDisabled) onCheckPath();
+                }}
+              />
+              <button
+                className="btn btn-sm btn-primary"
+                onClick={onCheckPath}
+                disabled={pathCheckDisabled}
+                title="Validate this path without making it active"
+              >
+                {setupEvaluating ? "checking\u2026" : "check path"}
+              </button>
+            </div>
+
+            {selectedPath && selectedPath !== activePath && (
+              <div className="start-workspace-path-row ws-path-row">
+                <span className="ws-path-label">candidate</span>
+                <code className="start-workspace-path-value" title={selectedPath}>{selectedPath}</code>
+                {setupPhase && <span className="ws-setup-phase-tag">{setupPhase.replaceAll("_", " ")}</span>}
+              </div>
+            )}
+
             <div className="ws-action-row start-workspace-actions">
               <button
                 className="btn btn-sm"
@@ -160,22 +370,23 @@ export function StartView({
               >
                 refresh
               </button>
-              {diag && !diag.valid ? (
-                <button
-                  className="btn btn-sm btn-primary"
-                  onClick={onPlanCreate}
-                  disabled={createPlanRunning}
-                >
-                  {createPlanRunning ? "planning\u2026" : "dry-run create"}
-                </button>
-              ) : null}
               <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
                 choose folder
               </button>
-              <button className="btn btn-sm" onClick={() => onApplyWorkspacePath(null)}>
+              <button
+                className="btn btn-sm"
+                onClick={onUseDefaultWorkspace}
+                disabled={createPlanRunning || createRunning || initRunning}
+              >
                 use default
               </button>
+              {activePath && (
+                <button className="btn btn-sm" onClick={onClearActiveWorkspace}>
+                  clear active
+                </button>
+              )}
             </div>
+
             <div className="start-workspace-status-row ws-panel-meta-row">
               <button
                 className="btn btn-sm btn-primary"
@@ -187,138 +398,44 @@ export function StartView({
               {status ? (
                 <div className="start-workspace-status-meta" aria-label="Workspace git and targets">
                   <span>branch {status.branch}</span>
-                  <span className="start-workspace-status-sep" aria-hidden="true">
-                    |
-                  </span>
+                  <span className="start-workspace-status-sep" aria-hidden="true">|</span>
                   <span>{status.enabled_rule_target_ids.length} rule targets</span>
-                  <span className="start-workspace-status-sep" aria-hidden="true">
-                    |
-                  </span>
-                  <span>{status.enabled_config_target_ids.length} config targets</span>
                 </div>
               ) : (
                 <span className="ws-panel-meta-context">waiting for status</span>
               )}
             </div>
-            <div className="start-trust-note" role="note">
-              <span className="start-trust-note-label">Trust boundary</span>
-              <span className="start-trust-note-copy">
-                Sync, install, and release actions run scripts from the selected workspace. Use workspaces you
-                control.
-              </span>
-            </div>
-            {diag && !diag.valid && (
+
+            {showSetupPanel && (
               <div className="ws-path-status-detail start-workspace-status-detail">{statusDetail}</div>
             )}
           </div>
 
-          {diag && !diag.valid && (
+          {showSetupPanel && (
             <div className="ws-setup" role="region" aria-label="Workspace setup">
               <div className="ws-setup-heading">Workspace Setup</div>
               <div className="ws-setup-body">
-                <div className="ws-setup-path">
-                  <span className="ws-setup-label">candidate path:</span>
-                  <span className="ws-setup-value">{displayPath}</span>
-                </div>
-                {diag.error && (
-                  <div className="ws-setup-error">diagnostics: {diag.error}</div>
+                {noActiveWorkspace && !workspaceSetup && (
+                  <p className="ws-setup-hint">
+                    Enter a path, click <strong>check path</strong>, choose a folder, or use <strong>use default</strong>{" "}
+                    ({DEFAULT_WORKSPACE_PATH}). The path becomes active only after it validates or you create/initialize
+                    it.
+                  </p>
                 )}
-                {missingMarkers.length > 0 && (
-                  <div className="ws-setup-error">
-                    {missingMarkers.length} required marker(s) missing
-                  </div>
-                )}
-
-                <div className="ws-setup-actions">
-                  {!createPlan && !createResult && (
-                    <div className="ws-setup-action-row">
-                      <button
-                        className="btn btn-sm btn-primary"
-                        onClick={onPlanCreate}
-                        disabled={createPlanRunning}
-                      >
-                        {createPlanRunning ? "planning\u2026" : "dry-run create"}
-                      </button>
-                      <span className="ws-setup-hint">
-                        evaluate if the path is safe for workspace initialization
-                      </span>
-                    </div>
-                  )}
-
-                  {createPlan && (
-                    <div className="ws-setup-plan">
-                      <div className={`ws-cmd-row ${createPlan.ok ? "ws-color-ok" : "ws-color-fail"}`}>
-                        <span className="ws-cmd-prompt">{createPlan.ok ? "safe" : "blocked"}</span>
-                        <span>{createPlan.status}</span>
-                      </div>
-                      <div className="ws-cmd-row ws-color-dim">
-                        target: {createPlan.target_path || "(empty)"}
-                      </div>
-                      <div className="ws-cmd-row">{createPlan.reason}</div>
-                      {createPlan.warnings.length > 0 && (
-                        <div className="ws-cmd-warnings">
-                          {createPlan.warnings.map((w, i) => (
-                            <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-                          ))}
-                        </div>
-                      )}
-                      {createPlan.planned_files.length > 0 && (
-                        <div className="ws-cmd-row ws-color-dim">
-                          {createPlan.planned_files.length} files planned
-                        </div>
-                      )}
-
-                      {createPlanEligible && (
-                        <div className="ws-setup-create-action">
-                          <button
-                            className="btn btn-sm btn-primary"
-                            onClick={onCreateWorkspace}
-                            disabled={createRunning}
-                          >
-                            {createRunning ? "creating\u2026" : "create workspace"}
-                          </button>
-                          <span className="ws-tag">{createPlan.planned_files.length} files</span>
-                          <span className="ws-tag">no overwrite</span>
-                          <span className="ws-tag">no scripts</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {createResult && (
-                    <div className="ws-setup-result">
-                      <div className={`ws-cmd-row ${createResult.success ? "ws-color-ok" : "ws-color-fail"}`}>
-                        <span className="ws-cmd-prompt">{createResult.success ? "ok" : "fail"}</span>
-                        <span>{createResult.message}</span>
-                      </div>
-                      <div className="ws-cmd-row ws-color-dim">
-                        status: {createResult.status} | target: {createResult.target_path}
-                      </div>
-                      {createResult.copied_files.length > 0 && (
-                        <div className="ws-cmd-row ws-color-dim">
-                          copied {createResult.copied_files.length} file(s)
-                        </div>
-                      )}
-                      {createResult.warnings.length > 0 && (
-                        <div className="ws-cmd-warnings">
-                          {createResult.warnings.map((w, i) => (
-                            <div key={i} className="ws-cmd-row ws-color-fail">{w}</div>
-                          ))}
-                        </div>
-                      )}
-                      {createResult.success && (
-                        <div className="ws-setup-hint-row">
-                          <div className="ws-setup-hint">
-                            Next: open <strong>Library &gt; Start Here</strong>
-                          </div>
-                          <div className="ws-setup-hint ws-setup-hint-dim">
-                            Optional: initialize Git in the workspace (see GIT_VERSIONING.md)
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
+                <SetupFlowPanel
+                  setupPhase={setupPhase}
+                  createPlan={createPlan}
+                  createPlanRunning={createPlanRunning}
+                  createResult={createResult}
+                  createRunning={createRunning}
+                  initResult={initResult}
+                  initRunning={initRunning}
+                  missingFilesToAdd={workspaceSetup?.missing_files_to_add ?? []}
+                  onPlanCreate={onPlanCreate}
+                  onCreateWorkspace={onCreateWorkspace}
+                  onInitializeWorkspace={onInitializeWorkspace}
+                  onActivateWorkspace={onActivateWorkspace}
+                />
               </div>
             </div>
           )}
@@ -330,15 +447,8 @@ export function StartView({
                 <span className="start-block-badge">on target pages</span>
               </div>
               <p className="start-block-copy">
-                Skills install moved to target pages. Open a harness page to preview and install skills for that
-                tool only.
+                Skills install moved to target pages. Open a harness page to preview and install skills for that tool only.
               </p>
-              <div className="start-destination-chips" aria-label="Skills install destinations">
-                <span className="start-destination-chip">Codex</span>
-                <span className="start-destination-chip">OpenCode</span>
-                <span className="start-destination-chip">Cursor</span>
-                <span className="start-destination-chip">Misc</span>
-              </div>
             </div>
           )}
 
@@ -351,41 +461,6 @@ export function StartView({
             onRefreshBackups={onRefreshBackups}
             onOpenBackupsFolder={onOpenBackupsFolder}
           />
-
-          {!workspaceValid && (
-            <div className="ws-guide" role="region" aria-label="First run guide">
-              <div className="ws-guide-heading">First Run</div>
-              <div className="ws-guide-body">
-                <p className="ws-guide-intro">
-                  Agent Workspace manages agent rules, skills, and configs.
-                  It <strong>never</strong> writes files automatically — all writes are explicit.
-                </p>
-                <ol className="ws-guide-steps">
-                  <li><span className="ws-guide-step-label">Choose or use default workspace path</span>
-                    <span className="ws-guide-step-hint">— the app needs a workspace folder to operate</span>
-                  </li>
-                  <li><span className="ws-guide-step-label">Dry-run create</span>
-                    <span className="ws-guide-step-hint">— preview what would happen before writing files</span>
-                  </li>
-                  <li><span className="ws-guide-step-label">Create workspace</span>
-                    <span className="ws-guide-step-hint">— copies starter files only (no scripts execute)</span>
-                  </li>
-                  <li><span className="ws-guide-step-label">Open Library tab</span>
-                    <span className="ws-guide-step-hint">— browse the Start Here guide, Concepts, and reference docs</span>
-                  </li>
-                  <li><span className="ws-guide-step-label">Run dry-run sync before apply</span>
-                    <span className="ws-guide-step-hint">— preview rule/config changes before writing to your tools</span>
-                  </li>
-                </ol>
-                <div className="ws-guide-footer">
-                  <div className="ws-guide-hint">
-                    Tip: The workspace is plain text. Version it with Git (see <em>GIT_VERSIONING.md</em>).
-                    Never store secrets or tokens in workspace files.
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
 
         <WorkspaceTerminal
