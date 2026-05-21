@@ -31,6 +31,7 @@ pub use settings_commands::{
 pub use skills::{install_skills, list_skills, open_install_skills_script, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
-    apply_workspace_repair, create_workspace_from_defaults, get_workspace_diagnostics,
-    plan_create_workspace, plan_workspace_repair, read_brain_setup_seed,
+    apply_workspace_repair, create_workspace_from_defaults, evaluate_workspace_setup,
+    get_workspace_diagnostics, initialize_workspace_at_path, plan_create_workspace,
+    plan_workspace_repair, read_brain_setup_seed, try_set_active_workspace_path,
 };

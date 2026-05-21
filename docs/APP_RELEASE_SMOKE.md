@@ -20,9 +20,11 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] Fresh launch with no saved workspace shows setup-needed state, not missing-marker diagnostics for `~/Agent Workspace`
 - [ ] Toolbar icons stay on the same compact row as macOS traffic lights (no global top padding on the app shell)
 - [ ] Error/info banner renders below the toolbar and does not overlap macOS traffic-light buttons
-- [ ] "use default" saves `~/Agent Workspace` explicitly, runs create dry-run, and offers create when safe
-- [ ] Workspace path field supports type + apply path + choose folder (not read-only "not selected" only)
-- [ ] After create workspace, saved path persists and workspace validates
+- [ ] "use default" checks path without activating; offers create or explicit initialize for non-empty folders
+- [ ] Workspace path field supports type + check path + choose folder; active path only after valid/init
+- [ ] Non-empty non-workspace folder shows as blocked candidate, not active path
+- [ ] Initialize into non-empty folder requires checkbox confirmation and lists files to add
+- [ ] After create/initialize, path persists as active and workspace validates
 - [ ] Window drags from the header band left of toolbar icons (Tauri); toolbar buttons remain clickable
 - [ ] Start view and main content scroll when content exceeds window height (Tauri build)
 - [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)

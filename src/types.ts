@@ -160,6 +160,22 @@ export interface CreateWorkspacePlan {
   planned_files: string[];
 }
 
+export interface WorkspaceSetupEvaluation {
+  candidate_path: string;
+  setup_phase: string;
+  plan: CreateWorkspacePlan;
+  missing_files_to_add: string[];
+}
+
+export interface InitializeWorkspaceResult {
+  success: boolean;
+  status: string;
+  target_path: string;
+  message: string;
+  copied_files: string[];
+  warnings: string[];
+}
+
 export interface CreateWorkspaceResult {
   success: boolean;
   status: string;
