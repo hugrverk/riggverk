@@ -13,7 +13,7 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DesignMdCatalogStatus, DesignMdContent, DesignMdEntry, DesignMdInstallPlan, DesignMdInstallResult, DesignMdInstallStatus, DesignMdSyncResult, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DefaultWorkspaceSummary, DocSummary, DocumentContent, InstallAgent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
@@ -194,19 +194,6 @@ function App() {
 
   // library source type state
   const [librarySourceType, setLibrarySourceType] = useState<LibrarySourceType>("docs");
-
-  // Design MD state
-  const [designMdCatalogStatus, setDesignMdCatalogStatus] = useState<DesignMdCatalogStatus | null>(null);
-  const [designMdEntries, setDesignMdEntries] = useState<DesignMdEntry[]>([]);
-  const [activeDesignMdSlug, setActiveDesignMdSlug] = useState<string | null>(null);
-  const [activeDesignMdContent, setActiveDesignMdContent] = useState<DesignMdContent | null>(null);
-  const [designMdSearch, setDesignMdSearch] = useState("");
-  const [designMdSyncResult, setDesignMdSyncResult] = useState<DesignMdSyncResult | null>(null);
-  const [designMdSyncRunning, setDesignMdSyncRunning] = useState(false);
-  const [designMdInstallTarget, setDesignMdInstallTarget] = useState("");
-  const [designMdInstallPlan, setDesignMdInstallPlan] = useState<DesignMdInstallPlan | null>(null);
-  const [designMdInstallResult, setDesignMdInstallResult] = useState<DesignMdInstallResult | null>(null);
-  const [designMdInstallStatus, setDesignMdInstallStatus] = useState<DesignMdInstallStatus | null>(null);
 
   // agent source state
   const [agentSources, setAgentSources] = useState<AgentMetadataResponse[]>([]);
@@ -788,227 +775,6 @@ function App() {
     }
   }, [docDirty, createDocTitle, createDocSlug, loadDocs]);
 
-  // ── Design MD callbacks ──
-
-  const loadDesignMdStatus = useCallback(async () => {
-    try {
-      const status = await invoke<DesignMdCatalogStatus>("get_design_md_catalog_status");
-      setDesignMdCatalogStatus(status);
-      if (status.exists && status.entry_count > 0) {
-        // If cached, load entries too
-        loadDesignMdEntries().catch(() => {});
-      }
-    } catch (e) { setError(`Design MD status: ${e}`); }
-  }, []);
-
-  const selectDesignMdEntry = useCallback(async (slug: string) => {
-    setActiveDesignMdSlug(slug);
-    // Clear install plan/result when selection changes
-    setDesignMdInstallPlan(null);
-    setDesignMdInstallResult(null);
-    try {
-      const content = await invoke<DesignMdContent>("read_design_md_entry", { slug });
-      setActiveDesignMdContent(content);
-    } catch (e) { setError(`Read entry: ${e}`); }
-  }, []);
-
-  const syncDesignMdCatalog = useCallback(async () => {
-    setDesignMdSyncRunning(true);
-    setDesignMdSyncResult(null);
-    // Clear install state on re-sync (entries may change)
-    setDesignMdInstallPlan(null);
-    setDesignMdInstallResult(null);
-    try {
-      const result = await invoke<DesignMdSyncResult>("sync_design_md_catalog");
-      setDesignMdSyncResult(result);
-      if (result.success) {
-        const status = await invoke<DesignMdCatalogStatus>("get_design_md_catalog_status");
-        setDesignMdCatalogStatus(status);
-        const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
-        setDesignMdEntries(entries);
-        if (entries.length > 0 && !activeDesignMdSlug) {
-          selectDesignMdEntry(entries[0].slug).catch(() => {});
-        }
-      }
-    } catch (e) { setError(`Sync catalog: ${e}`); }
-    finally { setDesignMdSyncRunning(false); }
-  }, [activeDesignMdSlug, selectDesignMdEntry]);
-
-  const loadDesignMdEntries = useCallback(async () => {
-    try {
-      const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
-      setDesignMdEntries(entries);
-      if (entries.length > 0 && !activeDesignMdSlug) {
-        selectDesignMdEntry(entries[0].slug).catch(() => {});
-      }
-    } catch (e) { setError(`Design MD entries: ${e}`); }
-  }, [activeDesignMdSlug, selectDesignMdEntry]);
-
-  const chooseDesignMdInstallTarget = useCallback(async () => {
-    try {
-      const selected = await open({ directory: true, multiple: false });
-      if (selected) {
-        const path = Array.isArray(selected) ? selected[0] : selected;
-        if (path) {
-          setDesignMdInstallTarget(path);
-          setDesignMdInstallPlan(null);
-          setDesignMdInstallResult(null);
-        }
-      }
-    } catch (e) { setError(`Choose folder: ${e}`); }
-  }, []);
-
-  const planDesignMdInstallWs = useCallback(() => {
-    if (!activeDesignMdSlug || !designMdInstallTarget) return;
-    runWsTask({
-      label: designMdInstallPlan?.ok ? "plan install" : "dry run",
-      action: "plan_install_design_md",
-      task: async () => {
-        setDesignMdInstallPlan(null);
-        setDesignMdInstallResult(null);
-        const plan = await invoke<DesignMdInstallPlan>("plan_install_design_md", {
-          slug: activeDesignMdSlug,
-          targetDir: designMdInstallTarget,
-        });
-        setDesignMdInstallPlan(plan);
-        return plan;
-      },
-      toActionResult: (plan) => ({
-        success: plan.ok,
-        action: "dry run",
-        stdout: plan.ok
-          ? `Design MD dry run\naction: ${plan.action}\ntarget: ${plan.target_file}${plan.backup_path ? `\nbackup: ${plan.backup_path}` : ""}`
-          : `blocked: ${plan.reason}`,
-        stderr: plan.warnings.join("; "),
-        exit_code: plan.ok ? 0 : 1,
-      }),
-    });
-  }, [runWsTask, activeDesignMdSlug, designMdInstallTarget, designMdInstallPlan?.ok]);
-
-  const installDesignMdWs = useCallback(() => {
-    if (!activeDesignMdSlug || !designMdInstallTarget || !designMdInstallPlan?.ok) return;
-    runWsTask({
-      label: "install design.md",
-      action: "install_design_md",
-      task: async () => {
-        setDesignMdInstallResult(null);
-        const result = await invoke<DesignMdInstallResult>("install_design_md", {
-          slug: activeDesignMdSlug,
-          targetDir: designMdInstallTarget,
-        });
-        setDesignMdInstallResult(result);
-        setDesignMdInstallPlan(null);
-        return result;
-      },
-      toActionResult: (r) => ({
-        success: r.success,
-        action: "install_design_md",
-        stdout: r.success
-          ? `DESIGN.md installed\ntarget: ${r.target_file}${r.backup_path ? `\nbackup: ${r.backup_path}` : ""}`
-          : `install failed: ${r.message}`,
-        stderr: r.warnings.join("; "),
-        exit_code: r.success ? 0 : 1,
-      }),
-    });
-  }, [runWsTask, activeDesignMdSlug, designMdInstallTarget, designMdInstallPlan?.ok]);
-
-  const openDesignMdTargetFolderWs = useCallback(() => {
-    if (!designMdInstallTarget) return;
-    runWsTask({
-      label: "open folder",
-      action: "open_design_md_target_folder",
-      task: async () => {
-        return await invoke<ActionResult>("open_design_md_target_folder", { targetDir: designMdInstallTarget });
-      },
-      toActionResult: (r) => ({
-        ...r,
-        stdout: r.success ? `opened project folder\ntarget: ${designMdInstallTarget}` : r.stdout || "",
-      }),
-    });
-  }, [runWsTask, designMdInstallTarget]);
-
-  const openInstalledDesignMdWs = useCallback(() => {
-    if (!designMdInstallTarget) return;
-    runWsTask({
-      label: "open design.md",
-      action: "open_installed_design_md",
-      task: async () => {
-        return await invoke<ActionResult>("open_installed_design_md", { targetDir: designMdInstallTarget });
-      },
-      toActionResult: (r) => ({
-        ...r,
-        stdout: r.success ? "opened DESIGN.md" : r.stdout || "",
-      }),
-    });
-  }, [runWsTask, designMdInstallTarget]);
-
-  const syncDesignMdCatalogWs = useCallback(() => {
-    runWsTask({
-      label: "sync design-md",
-      action: "sync_design_md_catalog",
-      task: async () => {
-        setDesignMdSyncRunning(true);
-        setDesignMdSyncResult(null);
-        setDesignMdInstallPlan(null);
-        setDesignMdInstallResult(null);
-        const result = await invoke<DesignMdSyncResult>("sync_design_md_catalog");
-        setDesignMdSyncResult(result);
-        setDesignMdSyncRunning(false);
-        if (result.success) {
-          const status = await invoke<DesignMdCatalogStatus>("get_design_md_catalog_status");
-          setDesignMdCatalogStatus(status);
-          const entries = await invoke<DesignMdEntry[]>("list_design_md_entries");
-          setDesignMdEntries(entries);
-          if (entries.length > 0 && !activeDesignMdSlug) {
-            selectDesignMdEntry(entries[0].slug).catch(() => {});
-          }
-        }
-        return result;
-      },
-      toActionResult: (r) => ({
-        success: r.success,
-        action: "sync_design_md_catalog",
-        stdout: r.success
-          ? `Design MD catalog synced\naction: ${r.action}\nentries: ${r.entry_count}${r.current_commit ? `\ncommit: ${r.current_commit.slice(0, 7)}` : ""}`
-          : "",
-        stderr: !r.success ? `Design MD sync failed\naction: ${r.action}\n${r.stderr.slice(0, 200)}` : r.stderr.slice(0, 200),
-        exit_code: r.success ? 0 : 1,
-      }),
-    });
-  }, [runWsTask, activeDesignMdSlug, selectDesignMdEntry]);
-
-  const loadDesignMdInstallStatus = useCallback(async () => {
-    if (!activeDesignMdSlug || !designMdInstallTarget) return;
-    try {
-      const status = await invoke<DesignMdInstallStatus>("get_design_md_install_status", {
-        slug: activeDesignMdSlug,
-        targetDir: designMdInstallTarget,
-      });
-      setDesignMdInstallStatus(status);
-    } catch (e) { /* status check errors are non-critical */ }
-  }, [activeDesignMdSlug, designMdInstallTarget]);
-
-  // Refresh install status when slug, target, plan, or install result changes
-  useEffect(() => {
-    if (activeDesignMdSlug && designMdInstallTarget) {
-      loadDesignMdInstallStatus();
-    }
-  }, [activeDesignMdSlug, designMdInstallTarget, designMdInstallPlan, designMdInstallResult, loadDesignMdInstallStatus]);
-
-  // Clear stale install status when target changes to empty
-  useEffect(() => {
-    if (!designMdInstallTarget) {
-      setDesignMdInstallStatus(null);
-    }
-  }, [designMdInstallTarget]);
-
-  // Load Design MD status when source switches to it
-  useEffect(() => {
-    if (view === "library" && librarySourceType === "designMd" && !designMdCatalogStatus) {
-      loadDesignMdStatus();
-    }
-  }, [view, librarySourceType, designMdCatalogStatus, loadDesignMdStatus]);
-
   const loadAgentTemplate = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
       const template = await invoke<DocumentContent>("read_agent_template");
@@ -1583,25 +1349,6 @@ function App() {
             // contract
             contractResult={contractResult}
             onRefreshContract={loadContract}
-            // Design MD
-            designMdCatalogStatus={designMdCatalogStatus}
-            designMdEntries={designMdEntries}
-            activeDesignMdSlug={activeDesignMdSlug}
-            activeDesignMdContent={activeDesignMdContent}
-            designMdSearch={designMdSearch}
-            onSetDesignMdSearch={setDesignMdSearch}
-            designMdSyncResult={designMdSyncResult}
-            onSyncDesignMdCatalog={syncDesignMdCatalogWs}
-            onSelectDesignMdEntry={selectDesignMdEntry}
-            designMdInstallTarget={designMdInstallTarget}
-            designMdInstallPlan={designMdInstallPlan}
-            designMdInstallResult={designMdInstallResult}
-            designMdInstallStatus={designMdInstallStatus}
-            onChooseDesignMdInstallTarget={chooseDesignMdInstallTarget}
-            onPlanDesignMdInstall={planDesignMdInstallWs}
-            onInstallDesignMd={installDesignMdWs}
-            onOpenDesignMdTargetFolder={openDesignMdTargetFolderWs}
-            onOpenInstalledDesignMd={openInstalledDesignMdWs}
           />
         )}
 
@@ -1697,17 +1444,6 @@ function App() {
             configEditorSourceContent={configEditorSourceContent}
             // Common
             workspaceValid={workspaceValid}
-            // Design MD
-            designMdCatalogStatus={designMdCatalogStatus}
-            designMdEntries={designMdEntries}
-            activeDesignMdSlug={activeDesignMdSlug}
-            activeDesignMdContent={activeDesignMdContent}
-            designMdSearch={designMdSearch}
-            onSetDesignMdSearch={setDesignMdSearch}
-            designMdSyncResult={designMdSyncResult}
-            designMdSyncRunning={designMdSyncRunning}
-            onSyncDesignMdCatalog={syncDesignMdCatalog}
-            onSelectDesignMdEntry={selectDesignMdEntry}
           />
           </Suspense>
         )}

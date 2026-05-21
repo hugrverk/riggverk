@@ -4,7 +4,6 @@ mod content;
 mod contract;
 mod cursor_profile;
 mod defaults;
-mod design_md;
 mod opencode_runtime;
 mod process;
 mod settings_commands;
@@ -25,11 +24,6 @@ pub use content::{
 pub use contract::validate_workspace_contract;
 pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
 pub use defaults::get_default_workspace_summary;
-pub use design_md::{
-    get_design_md_catalog_status, get_design_md_install_status, install_design_md,
-    list_design_md_entries, open_design_md_target_folder, open_installed_design_md,
-    plan_install_design_md, read_design_md_entry, read_design_md_preview, sync_design_md_catalog,
-};
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,

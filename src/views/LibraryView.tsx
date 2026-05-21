@@ -5,10 +5,6 @@ import type {
   AgentSourceContent,
   AgentTargetMeta,
   ConfigEditorSourceMeta,
-  DesignMdCatalogStatus,
-  DesignMdContent,
-  DesignMdEntry,
-  DesignMdSyncResult,
   DocSummary,
   DocumentContent,
   SkillSummary,
@@ -18,10 +14,8 @@ import { RulesContent } from "./library/RulesContent";
 import { SkillsContent } from "./library/SkillsContent";
 import { AgentContent } from "./library/AgentContent";
 import { ConfigContent } from "./library/ConfigContent";
-import { DesignMdContent as DesignMdContentPanel } from "./library/DesignMdContent";
-import { designMdDisplayTitle, designMdHasInspiredTitle, designMdSearchText } from "../lib/designMdDisplay";
 
-export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "designMd";
+export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs";
 
 const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "docs", label: "Docs" },
@@ -29,7 +23,6 @@ const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
   { id: "skills", label: "Skills" },
   { id: "agents", label: "Agents" },
   { id: "configs", label: "Configs" },
-  { id: "designMd", label: "Design MD" },
 ];
 
 interface LibraryViewProps {
@@ -122,18 +115,6 @@ interface LibraryViewProps {
 
   // Common
   workspaceValid: boolean;
-
-  // Design MD
-  designMdCatalogStatus: DesignMdCatalogStatus | null;
-  designMdEntries: DesignMdEntry[];
-  activeDesignMdSlug: string | null;
-  activeDesignMdContent: DesignMdContent | null;
-  designMdSearch: string;
-  onSetDesignMdSearch: (value: string) => void;
-  designMdSyncResult: DesignMdSyncResult | null;
-  designMdSyncRunning: boolean;
-  onSyncDesignMdCatalog: () => void;
-  onSelectDesignMdEntry: (slug: string) => void;
 }
 
 // ── sidebar item list components ──
@@ -408,128 +389,6 @@ function ConfigItemList({
   );
 }
 
-// ── Design MD sidebar ──
-
-function DesignMdSidebarInner({
-  catalogStatus,
-  entries,
-  activeSlug,
-  onSelect,
-  search,
-  onSearch,
-  syncRunning,
-  onSync,
-  syncResult,
-}: {
-  catalogStatus: DesignMdCatalogStatus | null;
-  entries: DesignMdEntry[];
-  activeSlug: string | null;
-  onSelect: (slug: string) => void;
-  search: string;
-  onSearch: (v: string) => void;
-  syncRunning: boolean;
-  onSync: () => void;
-  syncResult: DesignMdSyncResult | null;
-}) {
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return entries;
-    return entries.filter((e) => designMdSearchText(e).includes(q));
-  }, [entries, search]);
-
-  const notSynced = !catalogStatus || !catalogStatus.exists;
-
-  return (
-    <div className="lib-sidebar-body">
-      <div className="lib-sidebar-search">
-        {notSynced ? (
-          <button
-            className="btn btn-primary btn-sm design-md-sync-wide"
-            onClick={onSync}
-            disabled={syncRunning}
-          >
-            {syncRunning ? "syncing..." : "sync catalog"}
-          </button>
-        ) : (
-          <>
-            <input
-              className="lib-search-input"
-              type="text"
-              placeholder="search entries..."
-              value={search}
-              onChange={(e) => onSearch(e.target.value)}
-              aria-label="Search Design MD entries"
-            />
-            {search && (
-              <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear search">clear</button>
-            )}
-            <button
-              className="btn btn-sm"
-              onClick={onSync}
-              disabled={syncRunning}
-              title="Re-sync catalog"
-              aria-label="Re-sync catalog"
-            >
-              {syncRunning ? "..." : "sync"}
-            </button>
-          </>
-        )}
-      </div>
-      {syncResult && (
-        <div className={`design-md-sync-result ${syncResult.success ? "design-md-sync-result-ok" : "design-md-sync-result-fail"}`}>
-          <span className="design-md-sync-result-key">sync</span>
-          <span className="design-md-sync-result-val">{syncResult.action}</span>
-          <span className="design-md-sync-result-key">entries</span>
-          <span className="design-md-sync-result-val">{syncResult.entry_count}</span>
-          {syncResult.current_commit && (
-            <>
-              <span className="design-md-sync-result-key">commit</span>
-              <span className="design-md-sync-result-val">{syncResult.current_commit.slice(0, 7)}</span>
-            </>
-          )}
-          {!syncResult.success && syncResult.stderr && (
-            <span className="design-md-sync-stderr">
-              {syncResult.stderr.slice(0, 120)}
-            </span>
-          )}
-        </div>
-      )}
-      {notSynced ? (
-        <div className="lib-sidebar-empty">Catalog not synced</div>
-      ) : filtered.length === 0 ? (
-        <div className="lib-sidebar-empty">
-          {search ? "No matches" : "No Design MD entries found"}
-        </div>
-      ) : (
-        <div className="lib-sidebar-list">
-          {filtered.map((e) => (
-            (() => {
-              const displayTitle = designMdDisplayTitle(e.slug);
-              const inspired = designMdHasInspiredTitle(e.title);
-              return (
-            <button
-              key={e.slug}
-              className={`lib-sidebar-item ${activeSlug === e.slug ? "lib-sidebar-item-active" : ""}`}
-              onClick={() => onSelect(e.slug)}
-              aria-current={activeSlug === e.slug ? "true" : undefined}
-            >
-              <span className="lib-sidebar-item-title">{displayTitle}</span>
-              <span className="lib-sidebar-item-desc">{e.description || e.slug}</span>
-              {inspired && (
-                <span className="lib-sidebar-item-meta-row">
-                  <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">inspired</span>
-                </span>
-              )}
-            </button>
-              );
-            })()
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
 // ── type helpers ──
 
 function sourceTypeLabel(type: LibrarySourceType): string {
@@ -539,7 +398,6 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "skills": return "Skills";
     case "agents": return "Agents";
     case "configs": return "Configs";
-    case "designMd": return "Design MD";
   }
 }
 
@@ -624,16 +482,6 @@ export function LibraryView(props: LibraryViewProps) {
     configEditorSourceSaveMessage,
     configEditorSourceContent,
     workspaceValid,
-    designMdCatalogStatus,
-    designMdEntries,
-    activeDesignMdSlug,
-    activeDesignMdContent,
-    designMdSearch,
-    onSetDesignMdSearch,
-    designMdSyncResult,
-    designMdSyncRunning,
-    onSyncDesignMdCatalog,
-    onSelectDesignMdEntry,
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
@@ -732,26 +580,6 @@ export function LibraryView(props: LibraryViewProps) {
         configEditorSourceContent={configEditorSourceContent}
       />
     );
-  } else if (sourceType === "designMd" && activeDesignMdContent) {
-    mainContent = (
-      <DesignMdContentPanel
-        activeContent={activeDesignMdContent}
-      />
-    );
-  } else if (sourceType === "designMd" && !designMdCatalogStatus?.exists) {
-    // Catalog not synced — show prompt
-    mainContent = (
-      <div className="lib-main-empty design-md-empty-stack">
-        <span><span className="log-prompt">$</span> Design MD catalog not synced</span>
-        <button
-          className="btn btn-primary btn-sm"
-          onClick={onSyncDesignMdCatalog}
-          disabled={designMdSyncRunning}
-        >
-          {designMdSyncRunning ? "syncing..." : "sync catalog"}
-        </button>
-      </div>
-    );
   }
 
   const sourceTypeTitle = sourceTypeLabel(sourceType);
@@ -793,20 +621,6 @@ export function LibraryView(props: LibraryViewProps) {
             bundledAgentCount={agentSources.length}
           />
         );
-      case "designMd":
-        return (
-          <DesignMdSidebarInner
-            catalogStatus={designMdCatalogStatus}
-            entries={designMdEntries}
-            activeSlug={activeDesignMdSlug}
-            onSelect={onSelectDesignMdEntry}
-            search={designMdSearch}
-            onSearch={onSetDesignMdSearch}
-            syncRunning={designMdSyncRunning}
-            onSync={onSyncDesignMdCatalog}
-            syncResult={designMdSyncResult}
-          />
-        );
       default:
         return null;
     }
@@ -824,7 +638,6 @@ export function LibraryView(props: LibraryViewProps) {
       case "skills": return skillsCount > 0 ? String(skillsCount) : null;
       case "agents": return agentsCount > 0 ? String(agentsCount) : null;
       case "configs": return configCount > 0 ? String(configCount) : null;
-      case "designMd": return designMdEntries.length > 0 ? String(designMdEntries.length) : null;
       default: return null;
     }
   }

@@ -13,6 +13,5 @@ export function isLibrarySourceTypeDirty(
     case "agents": return agentDirty;
     case "configs": return configDirty;
     case "skills": return false;
-    case "designMd": return false;
   }
 }
