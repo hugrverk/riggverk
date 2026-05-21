@@ -10,6 +10,7 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { pageLabelToTargetPage } from "./lib/targetGroups";
 import { CodexView } from "./views/CodexView";
+import { CursorView } from "./views/CursorView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 import { WorkspaceView } from "./views/WorkspaceView";
@@ -32,10 +33,10 @@ type View =
   | "routing"
   | "settings";
 
-const LEGACY_TARGET_VIEWS = new Set<View>(["cursor", "misc"]);
+const LEGACY_TARGET_VIEWS = new Set<View>(["misc"]);
 
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || view === "opencode" || LEGACY_TARGET_VIEWS.has(view);
+  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || LEGACY_TARGET_VIEWS.has(view);
 }
 
 /* ---- main app ---- */
@@ -1187,22 +1188,6 @@ function App() {
       onDiffRules={() => runWsAction("diff_agent_rules", "diff rules")}
       onSyncRules={() => runWsAction("sync_agent_rules", "sync rules")}
       onReleaseCheck={() => runWsAction("release_check", "release-check")}
-      cursorProfileHealth={cursorProfileHealth}
-      onRefreshCursorProfile={() => loadCursorProfileHealth()}
-      onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
-      onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
-      onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
-      onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
-      onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
-      onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
-      onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
-      onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
-      onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
-      onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
-      onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
-      onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
-      onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
-      onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
       skills={skills}
       skillsLoaded={skillsLoaded}
       selectedSkills={selectedSkills}
@@ -1463,7 +1448,44 @@ function App() {
           />
         )}
 
-        {(view === "cursor" || view === "misc") && targetWorkspaceView}
+        {view === "cursor" && (
+          <CursorView
+            appSettings={appSettings}
+            agentTargets={agentTargets}
+            targetProfiles={targetProfiles}
+            activeProfileId={activeProfileId}
+            settingsDirty={settingsDirty}
+            onToggleTarget={toggleTarget}
+            onApplyProfile={applyTargetProfile}
+            wsLog={wsLog}
+            wsLogCompletedAt={wsLogCompletedAt}
+            wsRunning={wsRunning}
+            activityIndex={activityIndex}
+            activityCellClass={activityCellClass}
+            status={status}
+            workspaceValid={workspaceValid}
+            gitAvailable={gitAvailable}
+            canRunReleaseCheck={canRunReleaseCheck}
+            cursorProfileHealth={cursorProfileHealth}
+            onRefreshCursorProfile={() => loadCursorProfileHealth()}
+            onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
+            onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
+            onCursorShowUserRules={() => runCursorProfileAction("cursor_show_user_rules", "cursor show user rules")}
+            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
+            onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
+            onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
+            onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
+            onCursorShowSandboxSafe={() => runCursorProfileAction("cursor_show_sandbox_safe", "cursor show sandbox safe")}
+            onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
+            onCursorShowSandboxPlaywrightSafe={() => runCursorProfileAction("cursor_show_sandbox_playwright_safe", "cursor show sandbox playwright-safe")}
+            onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
+            onCursorShowSandboxPlaywrightFull={() => runCursorProfileAction("cursor_show_sandbox_playwright_full", "cursor show sandbox playwright-full")}
+            onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
+            onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
+          />
+        )}
+
+        {view === "misc" && targetWorkspaceView}
 
         {view === "library" && (
           <Suspense fallback={<div className="view-loading">loading library…</div>}>

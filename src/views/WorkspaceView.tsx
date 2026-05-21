@@ -2,9 +2,9 @@ import { useState, useMemo } from "react";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { TargetPage } from "../lib/targetGroups";
-import { runtimeChipLabel, runtimeChipTone, SectionChip } from "../lib/runtimeUi";
+import { SectionChip } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, CursorProfileHealth, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 import { INSTALL_AGENTS } from "../types";
 
 interface WorkspaceViewProps {
@@ -31,23 +31,6 @@ interface WorkspaceViewProps {
   onDiffRules: () => void;
   onSyncRules: () => void;
   onReleaseCheck: () => void;
-  // cursor profile
-  cursorProfileHealth: CursorProfileHealth | null;
-  onRefreshCursorProfile: () => void;
-  onCursorDiffGlobal: () => void;
-  onCursorSyncGlobal: () => void;
-  onCursorShowUserRules: () => void;
-  onCursorCopyUserRules: () => void;
-  onCursorOpenSettings: () => void;
-  onCursorShowPlaywrightMcp: () => void;
-  onCursorCopyPlaywrightMcp: () => void;
-  onCursorShowSandboxSafe: () => void;
-  onCursorCopySandboxSafe: () => void;
-  onCursorShowSandboxPlaywrightSafe: () => void;
-  onCursorCopySandboxPlaywrightSafe: () => void;
-  onCursorShowSandboxPlaywrightFull: () => void;
-  onCursorCopySandboxPlaywrightFull: () => void;
-  onCursorValidateProfile: () => void;
   // skills compact
   skills: SkillSummary[];
   skillsLoaded: boolean;
@@ -93,22 +76,6 @@ export function WorkspaceView({
   onDiffRules,
   onSyncRules,
   onReleaseCheck,
-  cursorProfileHealth,
-  onRefreshCursorProfile,
-  onCursorDiffGlobal,
-  onCursorSyncGlobal,
-  onCursorShowUserRules,
-  onCursorCopyUserRules,
-  onCursorOpenSettings,
-  onCursorShowPlaywrightMcp,
-  onCursorCopyPlaywrightMcp,
-  onCursorShowSandboxSafe,
-  onCursorCopySandboxSafe,
-  onCursorShowSandboxPlaywrightSafe,
-  onCursorCopySandboxPlaywrightSafe,
-  onCursorShowSandboxPlaywrightFull,
-  onCursorCopySandboxPlaywrightFull,
-  onCursorValidateProfile,
   // skills
   skills,
   skillsLoaded,
@@ -177,92 +144,6 @@ export function WorkspaceView({
                 <button className="btn btn-sm" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onDiffRules}>diff</button>
                 <button className="btn btn-sm btn-primary" disabled={!workspaceValid || !ruleTargetsEnabled || wsRunning !== null} onClick={onSyncRules}>sync</button>
               </div>
-            </div>
-          )}
-
-          {/* ---- Cursor Profile section ---- */}
-          {workspaceValid && (
-            <div className="ws-section" role="region" aria-label="Cursor Profile health">
-              <div className="ws-section-header">
-                <span className="ws-section-title">CURSOR PROFILE</span>
-                {cursorProfileHealth ? (
-                  <SectionChip label={runtimeChipLabel(cursorProfileHealth.status)} tone={runtimeChipTone(cursorProfileHealth.status)} />
-                ) : (
-                  <span className="ws-section-chip ws-section-chip-muted">loading</span>
-                )}
-              </div>
-
-              {cursorProfileHealth && (
-                <>
-                  <div className="ws-runtime-summary" aria-live="polite">
-                    manifest {cursorProfileHealth.manifest_status} | user rules {cursorProfileHealth.user_rules_status}
-                  </div>
-
-                  <div className="ws-runtime-rows">
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Global agents</span>
-                      <span className={`ws-dot ${cursorProfileHealth.global_agents_status === "synced" ? "ws-color-ok" : cursorProfileHealth.global_agents_status === "missing" ? "ws-color-fail" : "ws-color-warn"}`}>{"\u25CF"}</span>
-                      <span className="ws-runtime-row-value">
-                        {cursorProfileHealth.global_agents_count}/{cursorProfileHealth.expected_global_agents_count} {cursorProfileHealth.global_agents_status}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">MCP</span>
-                      <span className={`ws-dot ${cursorProfileHealth.mcp_status.includes("unsafe") || cursorProfileHealth.mcp_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.mcp_status === "templates-only" ? "ws-color-ok" : cursorProfileHealth.mcp_status.includes("present") ? "ws-color-warn" : "ws-color-dim"}`}>{"\u25CF"}</span>
-                      <span className="ws-runtime-row-value">
-                        {cursorProfileHealth.mcp_status === "templates-only"
-                          ? "templates only"
-                          : cursorProfileHealth.mcp_status}
-                      </span>
-                    </div>
-                    <div className="ws-runtime-row">
-                      <span className="ws-runtime-row-label">Sandbox</span>
-                      <span className={`ws-dot ${cursorProfileHealth.sandbox_status.includes("unsafe") || cursorProfileHealth.sandbox_status.includes("invalid") ? "ws-color-fail" : cursorProfileHealth.sandbox_status === "templates" ? "ws-color-ok" : "ws-color-warn"}`}>{"\u25CF"}</span>
-                      <span className="ws-runtime-row-value">
-                        {cursorProfileHealth.sandbox_profiles_count} templates | {cursorProfileHealth.sandbox_status}
-                      </span>
-                    </div>
-                  </div>
-
-                  {cursorProfileHealth.warnings.length > 0 && (
-                    <div className="ws-runtime-next-action ws-runtime-next-action-warn">
-                      {cursorProfileHealth.warnings[0]}
-                      {cursorProfileHealth.warnings.length > 1 && <> (+{cursorProfileHealth.warnings.length - 1} more)</>}
-                    </div>
-                  )}
-
-                  <div className={`ws-runtime-next-action ws-runtime-next-action-${cursorProfileHealth.status === "synced" ? "ok" : cursorProfileHealth.status === "missing" ? "fail" : "warn"}`}>
-                    {cursorProfileHealth.next_action}
-                  </div>
-
-                  <div className="ws-cursor-action-groups">
-                    <div className="ws-cursor-action-group">
-                      <span className="ws-cursor-action-group-label">Global</span>
-                      <button className="btn btn-sm" onClick={onRefreshCursorProfile} disabled={wsRunning !== null}>refresh</button>
-                      <button className="btn btn-sm" onClick={onCursorDiffGlobal} disabled={wsRunning !== null}>diff</button>
-                      <button className="btn btn-sm btn-primary" onClick={onCursorSyncGlobal} disabled={wsRunning !== null}>sync</button>
-                      <button className="btn btn-sm" onClick={onCursorValidateProfile} disabled={wsRunning !== null}>validate</button>
-                    </div>
-                    <div className="ws-cursor-action-group">
-                      <span className="ws-cursor-action-group-label">Rules</span>
-                      <button className="btn btn-sm" onClick={onCursorShowUserRules} disabled={wsRunning !== null}>show</button>
-                      <button className="btn btn-sm" onClick={onCursorCopyUserRules} disabled={wsRunning !== null}>copy</button>
-                      <button className="btn btn-sm" onClick={onCursorOpenSettings} disabled={wsRunning !== null}>settings</button>
-                    </div>
-                    <div className="ws-cursor-action-group">
-                      <span className="ws-cursor-action-group-label">Templates</span>
-                      <button className="btn btn-sm" onClick={onCursorShowPlaywrightMcp} disabled={wsRunning !== null}>MCP show</button>
-                      <button className="btn btn-sm" onClick={onCursorCopyPlaywrightMcp} disabled={wsRunning !== null}>MCP copy</button>
-                      <button className="btn btn-sm" onClick={onCursorShowSandboxSafe} disabled={wsRunning !== null}>safe show</button>
-                      <button className="btn btn-sm" onClick={onCursorCopySandboxSafe} disabled={wsRunning !== null}>safe copy</button>
-                      <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightSafe} disabled={wsRunning !== null}>pw-safe show</button>
-                      <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightSafe} disabled={wsRunning !== null}>pw-safe copy</button>
-                      <button className="btn btn-sm" onClick={onCursorShowSandboxPlaywrightFull} disabled={wsRunning !== null}>pw-full show</button>
-                      <button className="btn btn-sm" onClick={onCursorCopySandboxPlaywrightFull} disabled={wsRunning !== null}>pw-full copy</button>
-                    </div>
-                  </div>
-                </>
-              )}
             </div>
           )}
 
