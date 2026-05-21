@@ -1039,6 +1039,31 @@ for domain_skill in wordpress-woocommerce woocommerce-pdp-review nextjs-product-
   fi
 done
 
+step "bundled default private context boundary"
+for forbidden_file in \
+  saved-memory.md \
+  USER_CONTEXT.md \
+  skill-routing-brain-setup.md; do
+  if find resources/default-workspace -type f -name "$forbidden_file" | grep -q .; then
+    printf 'FAIL: bundled default must not contain PRIVATE-only context file: %s\n' "$forbidden_file" >&2
+    exit 1
+  fi
+done
+if find resources/default-workspace -type d -name private-context 2>/dev/null | grep -q .; then
+  printf 'FAIL: bundled default must not contain private-context directory\n' >&2
+  exit 1
+fi
+if search_has_match '(^|[^/])saved-memory\.md|docs/USER_CONTEXT\.md|skill-routing-brain-setup\.md|templates/context/' \
+  resources/default-workspace; then
+  printf 'FAIL: bundled default references PRIVATE-only context paths\n' >&2
+  exit 1
+fi
+if search_has_match "PRIVATE's private|PRIVATE-specific personal|private-context repo" resources/default-workspace; then
+  printf 'FAIL: bundled default contains PRIVATE-only context markers\n' >&2
+  exit 1
+fi
+printf '  private context boundary ok\n'
+
 step "bundled default no private names"
 private_name_pattern="$(printf '%s|' "C""arl" "Dis""chornan" "Disch""örnan" "Hantverks""registret" "Auggie cred""its" "personal mod""el")"
 private_name_pattern="${private_name_pattern%|}"

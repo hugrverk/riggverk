@@ -92,7 +92,9 @@ Script-backed actions will remain allowlisted regardless of where the scripts li
 
 ## Bundled default workspace resources
 
-The app source carries a generic starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 24 starter skills.
+The app source carries a shared starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 28 shared skills (24 generic plus 4 domain workflow skills for PRIVATE and his colleague).
+
+PRIVATE-only saved memory and personal context live in a separate private repo (`private-context`), not in bundled defaults. Deprecated migration source: `ux-workspace`.
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
@@ -100,7 +102,7 @@ A newly created default workspace includes real sync and install scripts plus fi
 
 These resources are not automatically copied into the active workspace. A repair flow (`plan_workspace_repair` / `apply_workspace_repair`) copies only missing bundled files into an existing workspace. Repair never overwrites user edits, never executes scripts, and rejects unsafe paths.
 
-The default workspace content is read-only source material. It does not contain user data, secrets, or private preferences. User workspaces remain user-owned and are separate from the bundled defaults.
+The default workspace content is read-only source material. It does not contain user data, secrets, PRIVATE-only saved memory (`saved-memory.md`, `USER_CONTEXT.md`, `skill-routing-brain-setup.md`), or other private-context files. User workspaces remain user-owned and are separate from the bundled defaults.
 
 The app can display a read-only summary of bundled default resources in the Workspace tab, showing known file paths and existence status without executing scripts or copying files. The app can also run a read-only workspace creation dry-run plan that evaluates whether a given path is safe and viable for initialization using the bundled defaults — no files or directories are created.
 
@@ -110,7 +112,7 @@ When the plan reports a safe target (`missing_directory` or `empty_existing_dire
 
 Canonical skill files live at `skills/<skill>/SKILL.md` — one directory per skill, directly under `skills/`.
 
-Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the public workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills, including private workspace skills, must follow the root-level layout.
+Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the public workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills must follow the root-level layout. Domain workflow skills in bundled defaults are shared with colleagues; PRIVATE-only context stays outside this tree.
 
 This is generic app behavior, not specific to any particular workspace or group.
 

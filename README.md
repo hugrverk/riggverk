@@ -49,9 +49,17 @@ Workspace validation uses `.agent-workspace/workspace.json` and required workspa
 
 This repository is the public app source repo. User workspace content lives in separate user-owned workspace folders outside this checkout.
 
+### Repo boundaries
+
+| Repo | Role |
+| --- | --- |
+| `agent-workspace` (this repo) | Shared app, runtime tools, 28 bundled skills, agents, templates, and install scripts for PRIVATE and his colleague |
+| `private-context` | PRIVATE-only saved memory and personal context (not bundled into defaults) |
+| `ux-workspace` | Deprecated migration source; do not use for new work |
+
 See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the full workspace contract.
 
-The app source includes a generic starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, starter skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
+The app source includes a shared starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, 28 skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
 Bundled defaults are read-only source material previewed in the Workspace tab. They can be applied to create a new workspace via the **create workspace** button, which copies bundled default files into a safe empty or missing target directory. The Workspace tab shows a **Workspace Setup** panel when the active path is invalid (e.g. default path does not exist). Click **dry-run create** to evaluate safety, then **create workspace** to initialize. No files are created automatically on launch — all create actions are explicit user operations. Create does not overwrite existing files, does not run scripts, and only accepts targets that pass the planner safety checks.
 
