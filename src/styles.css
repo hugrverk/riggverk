@@ -18,13 +18,7 @@
   --font: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
   --header-height: 44px;
   --traffic-light-reserve: 104px;
-  --macos-titlebar-inset: 0px;
   --nav-icon-size: 32px;
-}
-
-/* Overlay title bar (Tauri macOS): keep top chrome below traffic lights. */
-:root[data-tauri] {
-  --macos-titlebar-inset: 28px;
 }
 
 [data-theme="light"] {
@@ -91,7 +85,6 @@ html, body, #root {
   flex: 1;
   min-height: 0;
   height: 100%;
-  padding-top: var(--macos-titlebar-inset);
 }
 
 /* ---- header ---- */
@@ -545,6 +538,7 @@ html, body, #root {
 
 /* ---- error ---- */
 
+/* Global alerts render below the compact toolbar (never above traffic lights). */
 .error-banner {
   background: var(--fail);
   color: #111;
@@ -552,11 +546,17 @@ html, body, #root {
   border-radius: var(--radius);
   font-size: 13px;
   font-weight: 500;
-  margin: 8px 20px;
+  margin: 0 20px 8px;
+  padding-left: max(14px, var(--traffic-light-reserve));
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
+  flex-shrink: 0;
+}
+
+:root:not([data-tauri]) .error-banner {
+  padding-left: 14px;
 }
 
 .error-banner-text {

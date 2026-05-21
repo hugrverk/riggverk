@@ -2,6 +2,9 @@ import type { AppSettings } from "../types";
 
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 
+/** Suggested default folder when the user clicks "use default" (not used until saved). */
+export const DEFAULT_WORKSPACE_PATH = "~/Agent Workspace";
+
 export function defaultSettings(): AppSettings {
   return {
     appearance: "dark",

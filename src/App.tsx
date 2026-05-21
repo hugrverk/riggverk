@@ -19,9 +19,11 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 import type { LibrarySourceType } from "./views/LibraryView";
 const RoutingView = lazy(() => import("./views/RoutingView").then(m => ({ default: m.RoutingView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
+import { DEFAULT_WORKSPACE_PATH } from "./lib/settingsDraft";
 import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CreateWorkspacePlan, CreateWorkspaceResult, CursorProfileHealth, DocSummary, DocumentContent, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
+const NO_WORKSPACE_TEXT = "no workspace selected";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
 type View =
@@ -193,7 +195,8 @@ function App() {
 
   // default workspace preview state
   function isInvalidWorkspaceError(e: unknown): boolean {
-    return String(e).toLowerCase().includes(INVALID_WORKSPACE_TEXT);
+    const message = String(e).toLowerCase();
+    return message.includes(INVALID_WORKSPACE_TEXT) || message.includes(NO_WORKSPACE_TEXT);
   }
 
   // install skills state
@@ -260,7 +263,7 @@ function App() {
     setCreatePlan(null);
     setCreateResult(null);
     try {
-      const target = appSettings?.workspace_path ?? "~/Agent Workspace";
+      const target = appSettings?.workspace_path ?? DEFAULT_WORKSPACE_PATH;
       const plan = await invoke<CreateWorkspacePlan>("plan_create_workspace", { targetPath: target });
       setCreatePlan(plan);
     } catch (e) { setError(`Plan: ${e}`); }
@@ -682,7 +685,7 @@ function App() {
     setCreateRunning(true);
     setCreateResult(null);
     try {
-      const target = appSettings?.workspace_path ?? "~/Agent Workspace";
+      const target = appSettings?.workspace_path ?? DEFAULT_WORKSPACE_PATH;
       const result = await invoke<CreateWorkspaceResult>("create_workspace_from_defaults", { targetPath: target });
       setCreateResult(result);
       if (result.success && appSettings) {
@@ -1203,15 +1206,6 @@ function App() {
 
   return (
       <div className="app-shell">
-      {error && (
-        <div className="error-banner" role="alert">
-          <span className="error-banner-text">{error}</span>
-          <button className="error-banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">
-            &times;
-          </button>
-        </div>
-      )}
-
       <header className="app-header" data-tauri-drag-region>
         <nav className="nav-icons" aria-label="Main navigation">
           <button
@@ -1309,6 +1303,15 @@ function App() {
           </button>
         </nav>
       </header>
+
+      {error && (
+        <div className="error-banner" role="alert">
+          <span className="error-banner-text">{error}</span>
+          <button className="error-banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">
+            &times;
+          </button>
+        </div>
+      )}
 
       <div className="view-area">
         {view === "start" && (

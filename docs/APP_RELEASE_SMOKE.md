@@ -17,7 +17,10 @@ Run this checklist before sharing a built app bundle with another user.
 
 - [ ] App bundle was built successfully (or dev mode confirmed working)
 - [ ] App launches without generic error banner (no "Contract: invalid workspace path" on first launch)
-- [ ] Error/info banner does not overlap macOS traffic-light buttons (Tauri overlay title bar)
+- [ ] Fresh launch with no saved workspace shows setup-needed state, not missing-marker diagnostics for `~/Agent Workspace`
+- [ ] Toolbar icons stay on the same compact row as macOS traffic lights (no global top padding on the app shell)
+- [ ] Error/info banner renders below the toolbar and does not overlap macOS traffic-light buttons
+- [ ] "use default" saves `~/Agent Workspace` explicitly; until then no built-in default path is active
 - [ ] Start view and main content scroll when content exceeds window height (Tauri build)
 - [ ] Product-facing title "Agent Workspace" is visible (window title, or branding)
 - [ ] Bundled default workspace preview appears in Workspace tab (not only in dev source checkout)

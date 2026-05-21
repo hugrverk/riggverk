@@ -1,7 +1,10 @@
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
+import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppSettings, CreateWorkspacePlan, CreateWorkspaceResult, StatusData, WorkspaceDiagnostics } from "../types";
+
+const NO_WORKSPACE_SELECTED = "no workspace selected";
 
 interface StartViewProps {
   appSettings: AppSettings | null;
@@ -62,8 +65,9 @@ export function StartView({
 }: StartViewProps) {
   const diag = workspaceDiagnostics;
   const missingMarkers = diag?.markers.filter(m => !m.exists) ?? [];
-  const defaultLabel = "~/Agent Workspace";
-  const displayPath = appSettings?.workspace_path ?? defaultLabel;
+  const noWorkspaceSelected = diag?.error === NO_WORKSPACE_SELECTED;
+  const displayPath = appSettings?.workspace_path ?? "not selected";
+  const suggestedDefaultPath = DEFAULT_WORKSPACE_PATH;
   const diagnosticsPath = diag?.resolved_path ?? diag?.candidate_path ?? "\u2014";
 
   const createPlanEligible = createPlan && (createPlan.status === "missing_directory" || createPlan.status === "empty_existing_directory");
@@ -172,7 +176,11 @@ export function StartView({
               <button className="btn btn-sm" onClick={onChooseWorkspaceFolder}>
                 choose folder
               </button>
-              <button className="btn btn-sm" onClick={() => onApplyWorkspacePath(null)}>
+              <button
+                className="btn btn-sm"
+                onClick={() => onApplyWorkspacePath(suggestedDefaultPath)}
+                title={`Use suggested default (${suggestedDefaultPath})`}
+              >
                 use default
               </button>
             </div>
@@ -212,13 +220,24 @@ export function StartView({
             )}
           </div>
 
-          {diag && !diag.valid && (
+          {diag && !diag.valid && noWorkspaceSelected && (
+            <div className="ws-setup" role="region" aria-label="Workspace setup">
+              <div className="ws-setup-heading">Workspace Setup</div>
+              <div className="ws-setup-body">
+                <p className="ws-setup-hint">
+                  Choose a workspace folder or use default ({suggestedDefaultPath}) to evaluate or create a workspace.
+                </p>
+              </div>
+            </div>
+          )}
+
+          {diag && !diag.valid && !noWorkspaceSelected && (
             <div className="ws-setup" role="region" aria-label="Workspace setup">
               <div className="ws-setup-heading">Workspace Setup</div>
               <div className="ws-setup-body">
                 <div className="ws-setup-path">
                   <span className="ws-setup-label">candidate path:</span>
-                  <span className="ws-setup-value">{displayPath}</span>
+                  <span className="ws-setup-value">{diag.candidate_path || displayPath}</span>
                 </div>
                 {diag.error && (
                   <div className="ws-setup-error">diagnostics: {diag.error}</div>

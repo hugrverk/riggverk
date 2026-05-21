@@ -112,25 +112,30 @@ pub(crate) fn workspace_has_cursor_mdc_rule(base: &Path) -> bool {
     }
 }
 
+pub(crate) const NO_WORKSPACE_SELECTED: &str = "no workspace selected";
+
+/// Workspace path from saved settings or AGENT_WORKSPACE_PATH only (no built-in default).
+pub(crate) fn configured_workspace_path(settings: &settings::AppSettings) -> Option<PathBuf> {
+    if let Some(ref custom) = settings.workspace_path {
+        if let Some(normalized) = normalize_user_workspace_path(custom) {
+            return Some(PathBuf::from(normalized));
+        }
+    }
+    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
+        if !p.is_empty() {
+            return Some(PathBuf::from(p));
+        }
+    }
+    None
+}
+
 pub(super) fn repo_path() -> PathBuf {
     let settings = settings::load();
     repo_path_from_settings(&settings)
 }
 
 fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
-    if let Some(ref custom) = settings.workspace_path {
-        if let Some(normalized) = normalize_user_workspace_path(custom) {
-            return PathBuf::from(normalized);
-        }
-    }
-    if let Ok(p) = std::env::var("AGENT_WORKSPACE_PATH") {
-        if !p.is_empty() {
-            return PathBuf::from(p);
-        }
-    }
-    agent_targets::home_dir()
-        .map(|h| h.join("Agent Workspace"))
-        .unwrap_or_else(|_| PathBuf::from("Agent Workspace"))
+    configured_workspace_path(settings).unwrap_or_default()
 }
 
 pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
@@ -157,7 +162,9 @@ pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> 
 }
 
 pub(super) fn workspace_root() -> Result<PathBuf, String> {
-    validate_workspace_root(repo_path())
+    let settings = settings::load();
+    let path = configured_workspace_path(&settings).ok_or_else(|| NO_WORKSPACE_SELECTED.to_string())?;
+    validate_workspace_root(path)
 }
 
 /// Returns true when a persisted workspace path resolves to a valid workspace.
@@ -220,10 +227,48 @@ pub struct WorkspaceDiagnostics {
     release_check_available: bool,
 }
 
+fn workspace_diagnostics_for_unconfigured(settings: &settings::AppSettings) -> WorkspaceDiagnostics {
+    let enabled = &settings.enabled_target_ids;
+    let total_rules = agent_targets::rule_targets().len();
+    let total_configs = agent_targets::config_targets().len();
+    let enabled_rules = agent_targets::rule_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+    let enabled_configs = agent_targets::config_targets()
+        .iter()
+        .filter(|t| enabled.contains(&t.id.to_string()))
+        .count();
+    let (backup_root, backup_root_exists) = match super::backups::backup_root() {
+        Ok(path) => {
+            let exists = path.exists();
+            (path.to_string_lossy().into_owned(), exists)
+        }
+        Err(_) => (String::new(), false),
+    };
+
+    WorkspaceDiagnostics {
+        candidate_path: String::new(),
+        resolved_path: None,
+        valid: false,
+        error: Some(NO_WORKSPACE_SELECTED.into()),
+        markers: Vec::new(),
+        enabled_rule_targets: enabled_rules,
+        total_rule_targets: total_rules,
+        enabled_config_targets: enabled_configs,
+        total_config_targets: total_configs,
+        backup_root,
+        backup_root_exists,
+        release_check_available: false,
+    }
+}
+
 #[tauri::command]
 pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     let settings = settings::load();
-    let candidate = repo_path();
+    let Some(candidate) = configured_workspace_path(&settings) else {
+        return Ok(workspace_diagnostics_for_unconfigured(&settings));
+    };
     let candidate_str = candidate.to_string_lossy().into_owned();
 
     let (valid, resolved_path, error, markers) = match candidate.canonicalize() {
@@ -1156,9 +1201,10 @@ pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        create_workspace_from_source, is_unsafe_target, persisted_workspace_path_is_valid,
-        plan_create_workspace, read_brain_setup_seed_under_root, repair_workspace_core,
-        repo_path_from_settings, scrub_stale_workspace_path, validate_workspace_root,
+        configured_workspace_path, create_workspace_from_source, is_unsafe_target,
+        persisted_workspace_path_is_valid, plan_create_workspace, read_brain_setup_seed_under_root,
+        repair_workspace_core, repo_path_from_settings, scrub_stale_workspace_path,
+        validate_workspace_root, workspace_diagnostics_for_unconfigured, NO_WORKSPACE_SELECTED,
         BRAIN_SETUP_SEED_REL,
     };
     use crate::settings::AppSettings;
@@ -1546,7 +1592,7 @@ mod tests {
     }
 
     #[test]
-    fn diagnostics_ignore_legacy_relative_workspace_path() {
+    fn configured_workspace_path_ignores_legacy_relative_paths() {
         let settings = AppSettings {
             appearance: "dark".into(),
             workspace_path: Some("workspace/local".into()),
@@ -1556,11 +1602,23 @@ mod tests {
             foreground_color: None,
         };
 
-        let candidate = repo_path_from_settings(&settings)
-            .to_string_lossy()
-            .into_owned();
+        assert!(configured_workspace_path(&settings).is_none());
+    }
 
-        assert_ne!(candidate, "workspace/local");
+    #[test]
+    fn default_settings_have_no_configured_workspace_path() {
+        assert!(configured_workspace_path(&AppSettings::default()).is_none());
+    }
+
+    #[test]
+    fn unconfigured_workspace_diagnostics_do_not_use_builtin_default() {
+        let settings = AppSettings::default();
+        let diag = workspace_diagnostics_for_unconfigured(&settings);
+
+        assert_eq!(diag.error.as_deref(), Some(NO_WORKSPACE_SELECTED));
+        assert!(diag.candidate_path.is_empty());
+        assert!(diag.markers.is_empty());
+        assert!(!diag.valid);
     }
 
     #[test]
