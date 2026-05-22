@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from "react";
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { HarnessActionCard } from "../components/HarnessActionCard";
-import { contrastRatio, hasPoorContrast, isValidThemeHex } from "../lib/settingsDraft";
+import { contrastRatio, hasPoorContrast, isValidThemeHex, type SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 
 interface SettingsMessage {
@@ -12,12 +12,12 @@ interface SettingsMessage {
 interface SettingsViewProps {
   appSettings: AppSettings | null;
   settingsMsg: SettingsMessage | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onSetAppearance: (appearance: AppSettings["appearance"]) => void;
   onSetAccentColor: (value: string | null) => void;
   onSetBackgroundColor: (value: string | null) => void;
   onSetForegroundColor: (value: string | null) => void;
-  onSave: () => void;
+  onRetrySave?: () => void;
   onReset: () => void;
   colorResetKey: number;
 }
@@ -115,15 +115,28 @@ function ColorControl({
   );
 }
 
+function headerFactsForStatus(status: SettingsSaveStatus): { label: string; tone: "ok" | "warn" | "fail" }[] {
+  switch (status) {
+    case "error":
+      return [{ label: "error", tone: "fail" }];
+    case "saving":
+      return [{ label: "saving", tone: "warn" }];
+    case "pending":
+      return [{ label: "saving", tone: "warn" }];
+    default:
+      return [{ label: "saved", tone: "ok" }];
+  }
+}
+
 export function SettingsView({
   appSettings,
   settingsMsg,
-  settingsDirty,
+  settingsSaveStatus,
   onSetAppearance,
   onSetAccentColor,
   onSetBackgroundColor,
   onSetForegroundColor,
-  onSave,
+  onRetrySave,
   onReset,
   colorResetKey,
 }: SettingsViewProps) {
@@ -165,7 +178,7 @@ export function SettingsView({
   ]);
 
   const colorsValid = accentValid && backgroundValid && foregroundValid;
-  const canSave = settingsDirty && colorsValid;
+  const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
   const contrastWarning = hasPoorContrast(
     appSettings?.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
@@ -202,13 +215,17 @@ export function SettingsView({
     }
   };
 
+  const actionsDescription = showRetry
+    ? "Autosave failed. Retry or reset defaults."
+    : "Changes save automatically. Reset restores defaults.";
+
   return (
     <section className="settings-layout" aria-label="Settings">
       <div className="settings-body">
         <TargetPageHeader
           title="Settings"
           summary="Appearance and theme colors. Workspace install and target toggles live on Start and harness pages."
-          facts={settingsDirty ? [{ label: "unsaved", tone: "warn" }] : [{ label: "saved", tone: "ok" }]}
+          facts={headerFactsForStatus(settingsSaveStatus)}
         />
 
         {appSettings && (
@@ -277,21 +294,25 @@ export function SettingsView({
               <HarnessActionCard
                 title="Actions"
                 ariaLabel="Settings actions"
-                description="Save persists to app storage. Reset restores defaults."
-                statusChip={settingsMsg
-                  ? { label: settingsMsg.ok ? "ok" : "error", tone: settingsMsg.ok ? "ok" : "fail" }
-                  : undefined}
+                description={actionsDescription}
+                statusChip={settingsSaveStatus === "error"
+                  ? { label: "error", tone: "fail" }
+                  : settingsSaveStatus === "saving" || settingsSaveStatus === "pending"
+                    ? { label: "saving", tone: "warn" }
+                    : { label: "saved", tone: "ok" }}
                 secondaryActions={[
                   { label: "reset defaults", onClick: onReset },
                 ]}
-                primaryAction={{
-                  label: "save",
-                  onClick: onSave,
-                  disabled: !canSave,
-                  title: !settingsDirty ? "No changes to save" : (!colorsValid ? "Fix invalid colors first" : undefined),
-                }}
+                primaryAction={showRetry
+                  ? {
+                      label: "retry save",
+                      onClick: onRetrySave!,
+                      disabled: !colorsValid,
+                      title: !colorsValid ? "Fix invalid colors first" : undefined,
+                    }
+                  : undefined}
               >
-                {settingsMsg && (
+                {settingsMsg && !settingsMsg.ok && (
                   <div className={`settings-msg ${settingsMsg.ok ? "log-ok" : "log-fail"}`} role="status">
                     <span className="log-prompt">$</span> {settingsMsg.text}
                   </div>

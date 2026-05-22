@@ -6,6 +6,7 @@ import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { TargetPage } from "../lib/targetGroups";
 
 interface PassiveTargetViewProps {
@@ -20,7 +21,7 @@ interface PassiveTargetViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
@@ -64,7 +65,7 @@ export function PassiveTargetView({
   agentTargets,
   targetProfiles,
   activeProfileId,
-  settingsDirty,
+  settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
   wsLog,
@@ -116,7 +117,7 @@ export function PassiveTargetView({
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />

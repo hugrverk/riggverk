@@ -1,5 +1,6 @@
 import { PassiveTargetView } from "./PassiveTargetView";
 import type { ActionResult } from "../components/TerminalOutput";
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface AugmentViewProps {
@@ -7,7 +8,7 @@ interface AugmentViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;

@@ -4,6 +4,7 @@ import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface CodexViewProps {
@@ -11,7 +12,7 @@ interface CodexViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
@@ -48,7 +49,7 @@ export function CodexView({
   agentTargets,
   targetProfiles,
   activeProfileId,
-  settingsDirty,
+  settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
   wsLog,
@@ -100,7 +101,7 @@ export function CodexView({
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />

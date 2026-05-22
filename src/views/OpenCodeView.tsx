@@ -15,6 +15,7 @@ import {
 } from "../lib/opencodeRuntimeUi";
 import { runtimeChipLabel } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface OpenCodeViewProps {
@@ -22,7 +23,7 @@ interface OpenCodeViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
@@ -80,7 +81,7 @@ export function OpenCodeView({
   agentTargets,
   targetProfiles,
   activeProfileId,
-  settingsDirty,
+  settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
   wsLog,
@@ -151,7 +152,7 @@ export function OpenCodeView({
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />

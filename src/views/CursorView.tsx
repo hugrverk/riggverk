@@ -5,6 +5,7 @@ import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, CursorProfileHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
 interface CursorViewProps {
@@ -12,7 +13,7 @@ interface CursorViewProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
@@ -73,7 +74,7 @@ export function CursorView({
   agentTargets,
   targetProfiles,
   activeProfileId,
-  settingsDirty,
+  settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
   wsLog,
@@ -131,7 +132,7 @@ export function CursorView({
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />

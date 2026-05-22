@@ -4,7 +4,13 @@ import type { ActionResult } from "./components/TerminalOutput";
 import { ToolIcon } from "./components/ToolIcon";
 import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
 import { buildBrainSetupBlock } from "./lib/brainSetup";
-import { applyThemeSettings, defaultSettings, serializeSettingsForCompare } from "./lib/settingsDraft";
+import {
+  applyThemeSettings,
+  defaultSettings,
+  serializeSettingsForCompare,
+  SETTINGS_AUTOSAVE_DEBOUNCE_MS,
+  type SettingsSaveStatus,
+} from "./lib/settingsDraft";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
@@ -241,10 +247,27 @@ function App() {
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
   const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
   const savedSettingsRef = useRef<string | null>(null);
+  const settingsLoadedRef = useRef(false);
+  const settingsAutosaveInFlightRef = useRef<string | null>(null);
+  const settingsAutosaveSkipRef = useRef(false);
+  const appSettingsRef = useRef<AppSettings | null>(null);
+  const [settingsSaving, setSettingsSaving] = useState(false);
+  const [settingsAutoSaveError, setSettingsAutoSaveError] = useState<string | null>(null);
 
   const settingsDirty = useMemo(() => {
     if (!appSettings || savedSettingsRef.current === null) return false;
     return serializeSettingsForCompare(appSettings) !== savedSettingsRef.current;
+  }, [appSettings]);
+
+  const settingsSaveStatus: SettingsSaveStatus = useMemo(() => {
+    if (settingsAutoSaveError) return "error";
+    if (settingsSaving) return "saving";
+    if (settingsDirty) return "pending";
+    return "saved";
+  }, [settingsAutoSaveError, settingsSaving, settingsDirty]);
+
+  useEffect(() => {
+    appSettingsRef.current = appSettings;
   }, [appSettings]);
 
   const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
@@ -618,8 +641,10 @@ function App() {
       setAppSettings(s);
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
+      settingsAutosaveSkipRef.current = true;
       applyThemeSettings(s);
       setSettingsMsg(null);
+      setSettingsAutoSaveError(null);
       await Promise.all([
         loadWorkspaceDiagnostics(generation).catch(() => {}),
         loadWorkspaceResources(generation),
@@ -952,6 +977,8 @@ function App() {
       setTargetProfiles(profiles);
       applyThemeSettings(s);
       setSettingsMsg(null);
+      setSettingsAutoSaveError(null);
+      settingsLoadedRef.current = true;
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
@@ -961,63 +988,108 @@ function App() {
     loadBrainSetupSeed();
   }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
-  const saveSettings = useCallback(async () => {
-    if (!appSettings) return;
-    const nextWorkspacePath = appSettings.workspace_path ?? null;
+  const persistAppSettings = useCallback(async (
+    settings: AppSettings,
+    options?: { bumpColorResetKey?: boolean; announce?: boolean },
+  ): Promise<boolean> => {
+    const serialized = serializeSettingsForCompare(settings);
+    if (settingsAutosaveInFlightRef.current === serialized) return false;
+
+    const nextWorkspacePath = settings.workspace_path ?? null;
     const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
       && nextWorkspacePath !== appliedWorkspacePathRef.current;
     const generation = workspacePathChanged
       ? beginWorkspaceLoadGeneration(resetWorkspaceBoundState)
       : workspaceLoadGenerationRef.current;
+
+    settingsAutosaveInFlightRef.current = serialized;
+    setSettingsSaving(true);
+
     try {
-      const s = await invoke<AppSettings>("update_settings", { settings: appSettings });
-      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return;
-      setAppSettings(s);
-      appliedWorkspacePathRef.current = s.workspace_path ?? null;
-      savedSettingsRef.current = serializeSettingsForCompare(s);
-      applyThemeSettings(s);
-      setColorResetKey(k => k + 1);
-      setSettingsMsg({ ok: true, text: "settings saved" });
-      if (workspacePathChanged) {
-        await Promise.all([
-          loadWorkspaceDiagnostics(generation).catch(() => {}),
-          loadWorkspaceResources(generation),
-        ]);
-      } else {
-        fetchStatus(generation);
-        loadWorkspaceDiagnostics(generation);
+      const s = await invoke<AppSettings>("update_settings", { settings });
+      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return false;
+
+      const latest = appSettingsRef.current;
+      const latestSerialized = latest ? serializeSettingsForCompare(latest) : null;
+      const stillCurrent = latestSerialized === serialized;
+
+      if (stillCurrent) {
+        setAppSettings(s);
+        appliedWorkspacePathRef.current = s.workspace_path ?? null;
+        savedSettingsRef.current = serializeSettingsForCompare(s);
+        applyThemeSettings(s);
+        if (options?.bumpColorResetKey) setColorResetKey(k => k + 1);
+        setSettingsAutoSaveError(null);
+        if (options?.announce) {
+          setSettingsMsg({ ok: true, text: "settings saved" });
+        } else {
+          setSettingsMsg(null);
+        }
       }
-    } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
-  }, [appSettings, beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+
+      if (stillCurrent) {
+        if (workspacePathChanged) {
+          await Promise.all([
+            loadWorkspaceDiagnostics(generation).catch(() => {}),
+            loadWorkspaceResources(generation),
+          ]);
+        } else {
+          fetchStatus(generation);
+          loadWorkspaceDiagnostics(generation);
+        }
+      }
+      return stillCurrent;
+    } catch (e) {
+      const msg = String(e);
+      setSettingsAutoSaveError(msg);
+      setSettingsMsg({ ok: false, text: msg });
+      return false;
+    } finally {
+      if (settingsAutosaveInFlightRef.current === serialized) {
+        settingsAutosaveInFlightRef.current = null;
+      }
+      setSettingsSaving(false);
+    }
+  }, [beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+
+  const retrySaveSettings = useCallback(async () => {
+    const current = appSettingsRef.current;
+    if (!current) return;
+    await persistAppSettings(current, { announce: true });
+  }, [persistAppSettings]);
 
   const resetSettings = useCallback(async () => {
     const defaults = defaultSettings();
-    const nextWorkspacePath = defaults.workspace_path ?? null;
-    const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
-      && nextWorkspacePath !== appliedWorkspacePathRef.current;
-    const generation = workspacePathChanged
-      ? beginWorkspaceLoadGeneration(resetWorkspaceBoundState)
-      : workspaceLoadGenerationRef.current;
-    try {
-      const s = await invoke<AppSettings>("update_settings", { settings: defaults });
-      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return;
-      setAppSettings(s);
-      appliedWorkspacePathRef.current = s.workspace_path ?? null;
-      savedSettingsRef.current = serializeSettingsForCompare(s);
-      applyThemeSettings(s);
-      setColorResetKey(k => k + 1);
+    settingsAutosaveSkipRef.current = true;
+    const ok = await persistAppSettings(defaults, { bumpColorResetKey: true });
+    if (ok) {
       setSettingsMsg({ ok: true, text: "reset to defaults" });
-      if (workspacePathChanged) {
-        await Promise.all([
-          loadWorkspaceDiagnostics(generation).catch(() => {}),
-          loadWorkspaceResources(generation),
-        ]);
-      } else {
-        fetchStatus(generation);
-        loadWorkspaceDiagnostics(generation);
-      }
-    } catch (e) { setSettingsMsg({ ok: false, text: String(e) }); }
-  }, [beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+    }
+  }, [persistAppSettings]);
+
+  useEffect(() => {
+    if (!settingsLoadedRef.current) return;
+    const current = appSettingsRef.current;
+    if (!current || savedSettingsRef.current === null) return;
+
+    const serialized = serializeSettingsForCompare(current);
+    if (serialized === savedSettingsRef.current) return;
+    if (settingsAutosaveSkipRef.current) {
+      settingsAutosaveSkipRef.current = false;
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      const latest = appSettingsRef.current;
+      if (!latest || savedSettingsRef.current === null) return;
+      const payload = serializeSettingsForCompare(latest);
+      if (payload === savedSettingsRef.current) return;
+      if (settingsAutosaveInFlightRef.current === payload) return;
+      void persistAppSettings(latest);
+    }, SETTINGS_AUTOSAVE_DEBOUNCE_MS);
+
+    return () => window.clearTimeout(timer);
+  }, [appSettings, persistAppSettings]);
 
   const setAppearance = useCallback((appearance: AppSettings["appearance"]) => {
     setSettingsMsg(null);
@@ -1062,11 +1134,10 @@ function App() {
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
-      const isSettingsDirty = view === "settings" && settingsDirty;
-      if ((isLibraryDirty || isSettingsDirty) && !confirmLeaveDirtyEditor()) return;
+      if (isLibraryDirty && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
-    setSettingsMsg(null);
+    if (v !== "settings") setSettingsMsg(null);
     if (isWorkspaceLoadView(v)) {
       loadWorkspaceDiagnostics();
       loadContract();
@@ -1074,8 +1145,8 @@ function App() {
       loadOpenCodeRuntimeHealth();
     }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
-    else if (v === "settings") { if (!settingsDirty) loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
+    else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1158,7 +1229,7 @@ function App() {
   const applyTargetProfile = useCallback((profileId: string) => {
     const profile = targetProfiles.find(p => p.id === profileId);
     if (!profile) return;
-    setSettingsMsg({ ok: true, text: "profile applied — save to persist" });
+    setSettingsMsg(null);
     setAppSettings(prev => prev ? { ...prev, enabled_target_ids: [...profile.target_ids] } : prev);
   }, [targetProfiles]);
 
@@ -1258,9 +1329,9 @@ function App() {
           </button>
           {/* Settings */}
           <button
-            className={`nav-icon ${view === "settings" ? "nav-icon-active" : ""}${dirtyTabClass(settingsDirty)}`}
+            className={`nav-icon ${view === "settings" ? "nav-icon-active" : ""}${dirtyTabClass(settingsSaveStatus === "error")}`}
             onClick={() => switchView("settings")}
-            aria-label={dirtyTabAriaLabel(settingsDirty, "Settings")}
+            aria-label={dirtyTabAriaLabel(settingsSaveStatus === "error", "Settings")}
             title="Settings"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -1325,7 +1396,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
@@ -1356,7 +1427,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
@@ -1460,7 +1531,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
@@ -1496,7 +1567,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
@@ -1539,7 +1610,7 @@ function App() {
             agentTargets={agentTargets}
             targetProfiles={targetProfiles}
             activeProfileId={activeProfileId}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
@@ -1680,12 +1751,12 @@ function App() {
           <SettingsView
             appSettings={appSettings}
             settingsMsg={settingsMsg}
-            settingsDirty={settingsDirty}
+            settingsSaveStatus={settingsSaveStatus}
             onSetAppearance={setAppearance}
             onSetAccentColor={setAccentColor}
             onSetBackgroundColor={setBackgroundColor}
             onSetForegroundColor={setForegroundColor}
-            onSave={saveSettings}
+            onRetrySave={retrySaveSettings}
             onReset={resetSettings}
             colorResetKey={colorResetKey}
           />

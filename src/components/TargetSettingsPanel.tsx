@@ -1,3 +1,4 @@
+import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { AgentTargetMeta, AppSettings, TargetProfileMeta } from "../types";
 import { filterProfilesForPage, filterTargetsForPage, type TargetPage } from "../lib/targetGroups";
 
@@ -7,7 +8,7 @@ interface TargetSettingsPanelProps {
   agentTargets: AgentTargetMeta[];
   targetProfiles: TargetProfileMeta[];
   activeProfileId: string | null;
-  settingsDirty: boolean;
+  settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
 }
@@ -18,7 +19,7 @@ export function TargetSettingsPanel({
   agentTargets,
   targetProfiles,
   activeProfileId,
-  settingsDirty,
+  settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
 }: TargetSettingsPanelProps) {
@@ -36,11 +37,18 @@ export function TargetSettingsPanel({
 
   const activeProfile = pageProfiles.find(p => p.id === activeProfileId);
 
+  const autosaveNotice =
+    settingsSaveStatus === "saving" || settingsSaveStatus === "pending"
+      ? "Autosaving target changes…"
+      : settingsSaveStatus === "error"
+        ? "Could not save target changes — open Settings to retry."
+        : null;
+
   return (
     <div className="target-panel target-settings-panel" role="region" aria-label={`${page} target settings`}>
-      {settingsDirty && (
+      {autosaveNotice && (
         <div className="target-settings-dirty" role="status">
-          Unsaved target changes — save in Settings to persist.
+          {autosaveNotice}
         </div>
       )}
 

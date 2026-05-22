@@ -1,5 +1,10 @@
 import type { AppSettings } from "../types";
 
+/** AppSettings persistence state for autosave UI. */
+export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
+
+export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
+
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
 
 /** Canonical installed workspace path (display form; backend owns resolution). */
