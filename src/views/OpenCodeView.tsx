@@ -3,7 +3,17 @@ import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
-import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
+import {
+  configCheckStatusLabel,
+  configCheckTone,
+  opencodeAgentsNextAction,
+  opencodeAgentsStatus,
+  opencodeAgentsTone,
+  opencodeConfigNextAction,
+  opencodeConfigStatus,
+  opencodeConfigTone,
+} from "../lib/opencodeRuntimeUi";
+import { runtimeChipLabel } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
 
@@ -51,17 +61,10 @@ interface OpenCodeViewProps {
   onOpenInstallScript: () => void;
 }
 
-function configCheckTone(health: OpenCodeRuntimeHealth, id: string): "ok" | "warn" | "fail" | "muted" {
-  const check = health.checks.find(c => c.id === id);
-  if (!check) return "muted";
-  if (check.status === "pass") return "ok";
-  if (check.status === "warn") return "warn";
-  return "fail";
-}
-
 function snapshotTone(status: string): "ok" | "warn" | "fail" | "muted" {
   if (status === "current" || status === "valid") return "ok";
-  if (status === "stale" || status === "missing") return "fail";
+  if (status === "stale") return "warn";
+  if (status === "missing") return "fail";
   return "muted";
 }
 
@@ -70,12 +73,6 @@ function tuiTone(status: string): "ok" | "warn" | "fail" | "muted" {
   if (status === "diverged") return "warn";
   if (status === "missing") return "fail";
   return "muted";
-}
-
-function agentsTone(health: OpenCodeRuntimeHealth): "ok" | "warn" | "fail" | "muted" {
-  if (health.agent_mismatches.length > 0) return "warn";
-  if (health.installed_bundled_agent_count < health.bundled_agent_count) return "fail";
-  return "ok";
 }
 
 export function OpenCodeView({
@@ -133,6 +130,8 @@ export function OpenCodeView({
 
   const agentMismatchCount = health?.agent_mismatches.length ?? 0;
   const agentExtra = health?.extra_installed_agent_count ?? 0;
+  const agentsStatus = health ? opencodeAgentsStatus(health) : null;
+  const configStatus = health ? opencodeConfigStatus(health) : null;
 
   return (
     <section className="ws-layout target-page-layout">
@@ -179,8 +178,8 @@ export function OpenCodeView({
               title="Agents"
               ariaLabel="OpenCode bundled agents sync"
               description="Bundled runtime agents installed to ~/.config/opencode/agents. Does not change opencode.json or TUI."
-              statusChip={health
-                ? { label: runtimeChipLabel(health.status), tone: agentsTone(health) }
+              statusChip={health && agentsStatus
+                ? { label: runtimeChipLabel(agentsStatus), tone: opencodeAgentsTone(health) }
                 : { label: "loading", tone: "muted" }}
               details={health ? [
                 {
@@ -199,12 +198,8 @@ export function OpenCodeView({
                   tone: "muted" as const,
                 }] : []),
               ] : undefined}
-              nextAction={agentMismatchCount > 0
-                ? `${agentMismatchCount} agent(s) diverged or missing — sync agents or diff first.`
-                : health && health.installed_bundled_agent_count < health.bundled_agent_count
-                  ? "Some bundled agents are missing — sync agents."
-                  : undefined}
-              nextActionTone={agentMismatchCount > 0 ? "warn" : health?.status === "missing" ? "fail" : "ok"}
+              nextAction={health ? opencodeAgentsNextAction(health) : undefined}
+              nextActionTone={agentsStatus === "diverged" || agentsStatus === "missing" ? "warn" : "ok"}
               secondaryActions={[
                 { label: "refresh", onClick: onRefreshOpenCodeRuntimeHealth, disabled: busy },
                 { label: "diff agents", onClick: onDiffOpenCodeAgents, disabled: busy || !opencodeAgentsEnabled },
@@ -223,13 +218,13 @@ export function OpenCodeView({
               title="Config"
               ariaLabel="OpenCode config sync"
               description="OpenCode config, TUI config, and Playwright MCP paths. Uses generated templates/opencode.json snapshot. Does not install bundled agents."
-              statusChip={health
-                ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
+              statusChip={health && configStatus
+                ? { label: runtimeChipLabel(configStatus), tone: opencodeConfigTone(health) }
                 : { label: "loading", tone: "muted" }}
               details={health ? [
                 {
                   label: "Config",
-                  value: runtimeChipLabel(configCheckTone(health, "configs_match")).toLowerCase(),
+                  value: runtimeChipLabel(configCheckStatusLabel(health, "configs_match")).toLowerCase(),
                   tone: configCheckTone(health, "configs_match"),
                 },
                 {
@@ -246,6 +241,8 @@ export function OpenCodeView({
                     : undefined,
                 },
               ] : undefined}
+              nextAction={health ? opencodeConfigNextAction(health) : undefined}
+              nextActionTone={configStatus === "stale" || configStatus === "diverged" ? "warn" : configStatus === "missing" || configStatus === "invalid" ? "fail" : "ok"}
               warning={staleSnapshot
                 ? (health?.generated_snapshot_detail || "Generated opencode.json is stale — regenerate before sync.")
                 : undefined}

@@ -1413,6 +1413,22 @@ if ! search_has_match 'install_default_workspace' src-tauri/src/lib.rs src/App.t
 fi
 printf '  canonical install path model verified\n'
 
+step "opencode runtime UI status mapping"
+if search_has_match 'runtimeChipLabel\(configCheckTone' src/views/OpenCodeView.tsx src/lib; then
+  printf 'FAIL: OpenCode config row must not pass UI tones into runtimeChipLabel\n' >&2
+  exit 1
+fi
+if search_has_match 'runtimeChipLabel\(health\.status\)' src/views/OpenCodeView.tsx; then
+  printf 'FAIL: OpenCode cards must not use global health.status for status chips\n' >&2
+  exit 1
+fi
+if ! search_has_match 'opencodeAgentsStatus|opencodeConfigStatus|configCheckStatusLabel' src/views/OpenCodeView.tsx src/lib/opencodeRuntimeUi.ts; then
+  printf 'FAIL: scoped OpenCode status helpers missing\n' >&2
+  exit 1
+fi
+npx --yes tsx scripts/test-opencode-runtime-ui.ts
+printf '  OpenCode status mapping guards + self-tests ok\n'
+
 step "app checks"
 npm run build
 
