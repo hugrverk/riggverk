@@ -18,6 +18,14 @@ The script is read-only except for normal ignored build artifacts created by fro
 
 It does not run apply commands, install skills, create backups, write user config folders, inspect `.env` files, or manage `.agents/skills`.
 
+## Backend runtime smoke (optional)
+
+```bash
+./scripts/smoke-tauri-runtime.sh
+```
+
+Isolated temp `HOME` and workspace path; exercises the same Rust command handlers the app uses (`get_status`, diagnostics, OpenCode/Cursor health, Brain Setup). Not part of `release-check.sh` (extra install steps). Does not automate the Tauri webview.
+
 ## Manual GUI Smoke
 
 For installed-app release smoke (install/repair, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
@@ -54,4 +62,5 @@ After code changes that affect the app, manually check:
 ## Remaining Limits
 
 - Release check does not replace manual GUI smoke for view wiring, install/repair behavior, installed bundles, or native file-open behavior.
+- `smoke-tauri-runtime.sh` does not drive the Tauri webview; native UI automation is not wired (Vite-only browser tools lack `invoke`).
 - The workspace marker directory `.agent-workspace/` and related env vars (`AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.

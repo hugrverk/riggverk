@@ -3,6 +3,9 @@ mod commands;
 mod path_utils;
 mod settings;
 
+#[cfg(test)]
+mod smoke_runtime;
+
 use commands::{
     apply_workspace_repair, create_doc, generate_opencode_config_snapshot, get_agent_targets,
     get_backup_details, get_cursor_profile_health, get_opencode_runtime_health, get_settings,

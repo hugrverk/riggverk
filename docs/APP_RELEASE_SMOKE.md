@@ -2,6 +2,18 @@
 
 Manual smoke checklist for Agent Workspace app builds. Complements `scripts/release-check.sh` (automated syntax, bundled-default checks, forbidden-source scans, app build, Cargo checks). `scripts/release-check.sh` does not test GUI behavior, installed-app bundles, or folder-picker interactions.
 
+## Automated backend runtime smoke
+
+For Tauri IPC-backed status without manual clicking or a live webview:
+
+```bash
+./scripts/smoke-tauri-runtime.sh
+```
+
+**Covers:** temp `HOME` + `AGENT_WORKSPACE_PATH`, workspace diagnostics, `get_status` sync fields, OpenCode runtime health, Cursor profile health, Brain Setup seed (no bundled private context).
+
+**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or real `~/.config/agent-workspace` install/repair. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend).
+
 Run this checklist before sharing a built app bundle with another user.
 
 ## 1. Preflight
