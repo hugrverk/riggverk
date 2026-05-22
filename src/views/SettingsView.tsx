@@ -1,7 +1,13 @@
 import { useState, useEffect, useRef } from "react";
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { HarnessActionCard } from "../components/HarnessActionCard";
-import { contrastRatio, hasPoorContrast, isValidThemeHex, type SettingsSaveStatus } from "../lib/settingsDraft";
+import {
+  contrastRatio,
+  hasPoorContrast,
+  isValidThemeHex,
+  themeColorDefaults,
+  type SettingsSaveStatus,
+} from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
 
 interface SettingsMessage {
@@ -180,6 +186,18 @@ export function SettingsView({
   const colorsValid = accentValid && backgroundValid && foregroundValid;
   const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
+  const handleSetAppearance = (mode: AppSettings["appearance"]) => {
+    setBackgroundTouched(false);
+    setForegroundTouched(false);
+    setBackgroundDraft("");
+    setForegroundDraft("");
+    onSetAppearance(mode);
+  };
+
+  const appearanceDefaults = appSettings
+    ? themeColorDefaults(appSettings.appearance)
+    : themeColorDefaults("dark");
+
   const contrastWarning = hasPoorContrast(
     appSettings?.foreground_color ?? (isValidThemeHex(foregroundDraft) ? foregroundDraft : null),
     appSettings?.background_color ?? (isValidThemeHex(backgroundDraft) ? backgroundDraft : null),
@@ -242,7 +260,7 @@ export function SettingsView({
                       type="button"
                       className={`btn btn-sm ${appSettings.appearance === m ? "btn-active" : ""}`}
                       aria-pressed={appSettings.appearance === m}
-                      onClick={() => onSetAppearance(m)}
+                      onClick={() => handleSetAppearance(m)}
                     >
                       {m}
                     </button>
@@ -272,7 +290,7 @@ export function SettingsView({
                   label="Background"
                   draft={backgroundDraft}
                   saved={appSettings.background_color}
-                  defaultPicker="#212121"
+                  defaultPicker={appearanceDefaults.background}
                   touched={backgroundTouched}
                   onDraftChange={applyBackground}
                   onReset={() => { setBackgroundTouched(false); applyBackground(""); }}
@@ -283,7 +301,7 @@ export function SettingsView({
                   label="Foreground"
                   draft={foregroundDraft}
                   saved={appSettings.foreground_color}
-                  defaultPicker="#e0e0e0"
+                  defaultPicker={appearanceDefaults.foreground}
                   touched={foregroundTouched}
                   onDraftChange={applyForeground}
                   onReset={() => { setForegroundTouched(false); applyForeground(""); }}

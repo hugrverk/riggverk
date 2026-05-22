@@ -57,6 +57,22 @@ export function contrastRatio(foreground: string, background: string): number {
   return (lighter + 0.05) / (darker + 0.05);
 }
 
+export function themeColorDefaults(appearance: AppSettings["appearance"]): {
+  background: string;
+  foreground: string;
+} {
+  switch (appearance) {
+    case "light":
+      return { background: "#f5f5f5", foreground: "#1a1a1a" };
+    case "dark":
+      return { background: "#212121", foreground: "#e0e0e0" };
+    case "system":
+      return window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? { background: "#212121", foreground: "#e0e0e0" }
+        : { background: "#f5f5f5", foreground: "#1a1a1a" };
+  }
+}
+
 export function hasPoorContrast(foreground: string | null, background: string | null): boolean {
   if (!foreground || !background) return false;
   if (!isValidThemeHex(foreground) || !isValidThemeHex(background)) return false;

@@ -1095,7 +1095,12 @@ function App() {
     setSettingsMsg(null);
     setAppSettings(prev => {
       if (!prev) return prev;
-      const next = { ...prev, appearance };
+      const next = {
+        ...prev,
+        appearance,
+        background_color: null,
+        foreground_color: null,
+      };
       applyThemeSettings(next);
       return next;
     });
