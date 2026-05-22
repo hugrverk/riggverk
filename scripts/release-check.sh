@@ -1444,6 +1444,22 @@ if ! search_has_match 'test_configs_match_pass_when_template_has_playwright_plac
 fi
 printf '  OpenCode health uses rendered/staged config comparison\n'
 
+step "regression: dashboard opencode_config status uses rendered compare"
+if ! search_has_match 'opencode_config_sync_status|render_expected_opencode_config' src-tauri/src/commands/status.rs; then
+  printf 'FAIL: get_status opencode_config must compare rendered workspace config\n' >&2
+  exit 1
+fi
+if search_has_match 'fn opencode_config_status' src-tauri/src/commands/status.rs \
+  && search_has_match 'sync_label\(&config_target, &config_source\)' src-tauri/src/commands/status.rs; then
+  printf 'FAIL: opencode_config_status must not byte-compare raw templates/opencode.json\n' >&2
+  exit 1
+fi
+if ! search_has_match 'opencode_config_status_synced_when_installed_matches_rendered_template' src-tauri/src/commands/status.rs; then
+  printf 'FAIL: missing regression test for rendered opencode_config status\n' >&2
+  exit 1
+fi
+printf '  dashboard opencode_config status uses rendered/staged config comparison\n'
+
 step "app checks"
 npm run build
 

@@ -47,9 +47,7 @@ fn sync_label(path: &Path, source: &Path) -> String {
 }
 
 fn opencode_config_status(root: &Path, home: &Path) -> String {
-    let config_target = home.join(".config/opencode/opencode.json");
-    let config_source = root.join("templates/opencode.json");
-    sync_label(&config_target, &config_source)
+    super::opencode_runtime::opencode_config_sync_status(root, home)
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -451,6 +449,61 @@ mod tests {
         write_file(
             &home.join(".config/opencode/opencode.json"),
             r#"{"updated":false}"#,
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "diverged");
+    }
+
+    #[test]
+    fn opencode_config_status_synced_when_installed_matches_rendered_template() {
+        use super::super::opencode_runtime::render_expected_opencode_config;
+
+        let root = temp_root("opencode-rendered-sync");
+        let home = temp_root("home-rendered-sync");
+
+        write_file(
+            &root.join("templates/opencode.json"),
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(
+                r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+            )
+            .expect("parse template"),
+            &home,
+        )
+        .expect("render expected");
+        write_file(
+            &home.join(".config/opencode/opencode.json"),
+            &serde_json::to_string_pretty(&rendered).expect("serialize installed"),
+        );
+
+        let status = opencode_config_status(&root, &home);
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+        assert_eq!(status, "synced");
+        assert!(!super::file_eq(
+            &root.join("templates/opencode.json"),
+            &home.join(".config/opencode/opencode.json")
+        ));
+    }
+
+    #[test]
+    fn opencode_config_status_diverged_when_installed_is_unrendered_template() {
+        let root = temp_root("opencode-rendered-div");
+        let home = temp_root("home-rendered-div");
+
+        write_file(
+            &root.join("templates/opencode.json"),
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+        write_file(
+            &home.join(".config/opencode/opencode.json"),
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
         );
 
         let status = opencode_config_status(&root, &home);

@@ -222,6 +222,41 @@ fn installed_config_matches_rendered(
         .map(|expected| expected == *installed_json)
 }
 
+/// Sync status for `get_status` / dashboard (same staged output as `install-opencode-config.sh`).
+pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path) -> String {
+    let template_path = workspace_root.join("templates/opencode.json");
+    let installed_path = home_dir.join(".config/opencode/opencode.json");
+
+    if !installed_path.is_file() {
+        return "missing".into();
+    }
+    if !template_path.is_file() {
+        return "diverged".into();
+    }
+
+    let template_json: serde_json::Value = match std::fs::read_to_string(&template_path) {
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => return "diverged".into(),
+        },
+        Err(_) => return "diverged".into(),
+    };
+
+    let installed_json: serde_json::Value = match std::fs::read_to_string(&installed_path) {
+        Ok(content) => match serde_json::from_str(&content) {
+            Ok(v) => v,
+            Err(_) => return "diverged".into(),
+        },
+        Err(_) => return "diverged".into(),
+    };
+
+    match render_expected_opencode_config(&template_json, home_dir) {
+        Some(expected) if expected == installed_json => "synced".into(),
+        Some(_) => "diverged".into(),
+        None => "diverged".into(),
+    }
+}
+
 /// Try to run a generator --check script from the workspace root.
 /// Returns `Some(status, detail)` if a generator was found and executed,
 /// `None` if no generator script exists or `python3` is unavailable.
@@ -1989,6 +2024,57 @@ mod tests {
         cleanup(&ws);
 
         assert!(result.success, "generator must be called with --write");
+    }
+
+    #[test]
+    fn test_opencode_config_sync_status_matches_rendered_installed() {
+        let ws = temp_root("sync-status-ws");
+        let home = temp_root("sync-status-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(
+                r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+            )
+            .expect("parse template"),
+            &home,
+        )
+        .expect("render expected");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&rendered).expect("serialize"),
+        );
+
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "synced");
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_opencode_config_sync_status_diverged_for_unrendered_installed() {
+        let ws = temp_root("sync-status-div-ws");
+        let home = temp_root("sync-status-div-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+
+        assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     #[test]
