@@ -119,14 +119,14 @@ export function StartView({
             </div>
 
             <div className="start-workspace-path-block">
-              <div className="start-workspace-path-row ws-path-row">
-                <span className="ws-path-label">installed path</span>
+              <div className="start-workspace-path-entry">
+                <span className="start-workspace-path-label">installed path</span>
                 <code className="start-workspace-path-value" title={DEFAULT_WORKSPACE_PATH}>
                   {DEFAULT_WORKSPACE_PATH}
                 </code>
               </div>
               {resolvedPath && resolvedPath !== DEFAULT_WORKSPACE_PATH && (
-                <div className="start-workspace-path-resolved ws-path-row">
+                <div className="start-workspace-path-entry start-workspace-path-entry-resolved">
                   <span className="start-workspace-path-label">resolved</span>
                   <code className="start-workspace-path-resolved-value" title={resolvedPath}>
                     {resolvedPath}

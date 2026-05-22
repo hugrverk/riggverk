@@ -89,6 +89,7 @@ html, body, #root {
 .target-cell-path,
 .settings-target-path,
 .start-workspace-path-value,
+.start-workspace-path-resolved-value,
 .terminal-host,
 .skills-install-output,
 pre,
@@ -2979,17 +2980,21 @@ code {
   flex-wrap: wrap;
 }
 
-.start-workspace-path-block,
-.start-workspace-path-resolved {
+.start-workspace-path-block {
   display: flex;
-  align-items: baseline;
-  gap: 8px;
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 14px 6px;
   min-width: 0;
 }
 
-.start-workspace-path-resolved {
-  padding: 0 14px 8px;
-  font-size: 10px;
+.start-workspace-path-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 3px;
+  min-width: 0;
+  width: 100%;
 }
 
 .start-workspace-path-label {
@@ -3002,30 +3007,32 @@ code {
   opacity: 0.65;
 }
 
-.start-workspace-path-value {
+.start-workspace-path-value,
+.start-workspace-path-resolved-value {
   display: block;
-  min-width: 0;
-  flex: 1;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
   margin: 0;
   padding: 4px 8px;
   font-size: 11px;
   line-height: 1.35;
-  color: var(--text);
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  overflow-wrap: anywhere;
+  word-break: break-all;
+  white-space: normal;
+}
+
+.start-workspace-path-value {
+  color: var(--text);
 }
 
 .start-workspace-path-resolved-value {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  font-size: 10px;
   color: var(--text-muted);
-  opacity: 0.55;
+  opacity: 0.75;
 }
 
 .start-workspace-actions {
