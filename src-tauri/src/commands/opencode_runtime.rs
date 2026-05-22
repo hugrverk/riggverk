@@ -107,6 +107,121 @@ fn file_eq(a: &Path, b: &Path) -> bool {
     }
 }
 
+const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = "0.0.48";
+const PLAYWRIGHT_MCP_CONFIG_PLACEHOLDER: &str = "__PLAYWRIGHT_MCP_CONFIG_PATH__";
+const PLAYWRIGHT_BROWSERS_PLACEHOLDER: &str = "__PLAYWRIGHT_BROWSERS_PATH__";
+
+/// Default browser cache path (mirrors `playwright-mcp-lib.sh`).
+fn default_playwright_browsers_path(home_dir: &Path) -> Option<std::path::PathBuf> {
+    #[cfg(target_os = "macos")]
+    {
+        Some(home_dir.join("Library/Caches/ms-playwright"))
+    }
+    #[cfg(target_os = "linux")]
+    {
+        let xdg = std::env::var_os("XDG_CACHE_HOME")
+            .filter(|v| !v.is_empty())
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| home_dir.join(".cache"));
+        Some(xdg.join("ms-playwright"))
+    }
+    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
+    {
+        let _ = home_dir;
+        None
+    }
+}
+
+/// Default Playwright MCP config path (mirrors `playwright-mcp-lib.sh`).
+fn default_playwright_mcp_config_path(home_dir: &Path) -> std::path::PathBuf {
+    if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
+        if !path.is_empty() {
+            return std::path::PathBuf::from(path);
+        }
+    }
+    home_dir.join(".config/playwright-mcp/config.json")
+}
+
+/// Resolve Playwright paths for rendering (mirrors `resolve_playwright_paths`).
+fn resolve_playwright_paths(home_dir: &Path) -> Option<(std::path::PathBuf, std::path::PathBuf)> {
+    let browsers_path = std::env::var_os("PLAYWRIGHT_BROWSERS_PATH")
+        .filter(|v| !v.is_empty())
+        .map(std::path::PathBuf::from)
+        .or_else(|| default_playwright_browsers_path(home_dir))?;
+    let config_path = default_playwright_mcp_config_path(home_dir);
+    Some((config_path, browsers_path))
+}
+
+/// Transform JSON values the same way as `render_json_with_playwright_paths` in Python.
+fn transform_playwright_json(
+    value: &serde_json::Value,
+    config_path: &str,
+    browsers_path: &str,
+    version: &str,
+) -> serde_json::Value {
+    let package = format!("@playwright/mcp@{version}");
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, item) in map {
+                out.insert(
+                    key.clone(),
+                    transform_playwright_json(item, config_path, browsers_path, version),
+                );
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(|item| transform_playwright_json(item, config_path, browsers_path, version))
+                .collect(),
+        ),
+        serde_json::Value::String(text) => {
+            if text == PLAYWRIGHT_MCP_CONFIG_PLACEHOLDER {
+                serde_json::Value::String(config_path.to_string())
+            } else if text == PLAYWRIGHT_BROWSERS_PLACEHOLDER {
+                serde_json::Value::String(browsers_path.to_string())
+            } else if text.starts_with("@playwright/mcp@") {
+                serde_json::Value::String(package)
+            } else {
+                value.clone()
+            }
+        }
+        _ => value.clone(),
+    }
+}
+
+/// Render workspace `templates/opencode.json` the way `install-opencode-config.sh` would before sync.
+pub(crate) fn render_expected_opencode_config(
+    template_json: &serde_json::Value,
+    home_dir: &Path,
+) -> Option<serde_json::Value> {
+    let version = std::env::var("PLAYWRIGHT_MCP_VERSION")
+        .ok()
+        .filter(|v| !v.is_empty())
+        .unwrap_or_else(|| PLAYWRIGHT_MCP_VERSION_DEFAULT.to_string());
+    let (config_path, browsers_path) = resolve_playwright_paths(home_dir)?;
+    let config_path = config_path.to_string_lossy().into_owned();
+    let browsers_path = browsers_path.to_string_lossy().into_owned();
+    Some(transform_playwright_json(
+        template_json,
+        &config_path,
+        &browsers_path,
+        &version,
+    ))
+}
+
+/// Compare installed OpenCode config to rendered workspace template (not raw template bytes).
+fn installed_config_matches_rendered(
+    template_json: &serde_json::Value,
+    installed_json: &serde_json::Value,
+    home_dir: &Path,
+) -> Option<bool> {
+    render_expected_opencode_config(template_json, home_dir)
+        .map(|expected| expected == *installed_json)
+}
+
 /// Try to run a generator --check script from the workspace root.
 /// Returns `Some(status, detail)` if a generator was found and executed,
 /// `None` if no generator script exists or `python3` is unavailable.
@@ -311,7 +426,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     };
 
     // If both configs exist and parse, check validity and compare
-    if let (Some(ref _t_json), Some(ref i_json)) = (&template_json, &installed_json) {
+    if let (Some(ref t_json), Some(ref i_json)) = (&template_json, &installed_json) {
         checks.push(OpenCodeRuntimeCheck {
             id: "template_config_valid".into(),
             label: "Template config is valid JSON".into(),
@@ -412,20 +527,25 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
             // Missing qwen limits are informational warnings, not divergence
         }
 
-        // Check config match (byte comparison)
-        let configs_match = file_eq(&template_config_path, &installed_config_path);
+        // Compare installed config to rendered workspace config (same staging as install script).
+        let configs_match_result = installed_config_matches_rendered(t_json, i_json, home_dir);
+        let configs_match = configs_match_result.unwrap_or(false);
         checks.push(OpenCodeRuntimeCheck {
             id: "configs_match".into(),
-            label: "Installed config matches template".into(),
+            label: "Installed config matches rendered workspace config".into(),
             status: if configs_match {
                 "pass".into()
             } else {
                 "warn".into()
             },
             detail: if configs_match {
-                "exact match".into()
+                "rendered workspace config matches installed".into()
+            } else if configs_match_result.is_none() {
+                "unable to render expected config for comparison (set PLAYWRIGHT_BROWSERS_PATH)"
+                    .into()
             } else {
-                "installed runtime differs from workspace bundle. Run diff before sync.".into()
+                "installed config differs from rendered workspace config. Run diff before sync."
+                    .into()
             },
         });
         if !configs_match {
@@ -1056,6 +1176,161 @@ mod tests {
             .find(|c| c.id == "template_config_valid")
             .unwrap();
         assert_eq!(invalid_check.status, "fail");
+    }
+
+    #[test]
+    fn test_configs_match_pass_when_template_has_playwright_placeholders() {
+        let ws = temp_root("rendered-match-ws");
+        let home = temp_root("rendered-match-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"mcp":{"playwright":{"command":["npx","-y","@playwright/mcp@0.0.48","--config","__PLAYWRIGHT_MCP_CONFIG_PATH__"],"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(
+                r#"{"mcp":{"playwright":{"command":["npx","-y","@playwright/mcp@0.0.48","--config","__PLAYWRIGHT_MCP_CONFIG_PATH__"],"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+            )
+            .expect("parse template"),
+            &home,
+        )
+        .expect("render expected config");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&rendered).expect("serialize installed"),
+        );
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "synced");
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "pass");
+        assert!(!file_eq(
+            &ws.join("templates/opencode.json"),
+            &home.join(".config/opencode/opencode.json")
+        ));
+    }
+
+    #[test]
+    fn test_configs_match_warn_when_rendered_expected_differs() {
+        let ws = temp_root("rendered-diff-ws");
+        let home = temp_root("rendered-diff-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"mcp":{"playwright":{"command":["npx","-y","@playwright/mcp@0.0.48","--config","__PLAYWRIGHT_MCP_CONFIG_PATH__"],"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}},"version":2}"#,
+        );
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"mcp":{"playwright":{"command":["npx","-y","@playwright/mcp@0.0.48","--config","/wrong/config.json"],"environment":{"PLAYWRIGHT_BROWSERS_PATH":"/wrong/browsers"}}},"version":2}"#,
+        );
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "diverged");
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "warn");
+        assert!(match_check.detail.contains("rendered workspace config"));
+    }
+
+    #[test]
+    fn test_tui_status_independent_when_config_rendered_match() {
+        let ws = temp_root("tui-indep-ws");
+        let home = temp_root("tui-indep-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(
+                r#"{"mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+            )
+            .expect("parse template"),
+            &home,
+        )
+        .expect("render expected");
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&rendered).expect("serialize"),
+        );
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"dark"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "pass");
+        assert_eq!(health.tui_status, "diverged");
+        assert_eq!(health.status, "diverged");
+        assert_eq!(health.installed_bundled_agent_count, 1);
+    }
+
+    #[test]
+    fn test_agents_status_independent_when_config_rendered_match() {
+        let ws = temp_root("agents-indep-ws");
+        let home = temp_root("agents-indep-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "agents/architect.md", "# architect v2");
+        write_file(&ws, "agents/scout.md", "# scout");
+
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(
+            &home,
+            ".config/opencode/agents/architect.md",
+            "# architect v1",
+        );
+        write_file(&home, ".config/opencode/agents/scout.md", "# scout");
+        add_tui(&ws, &home);
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "pass");
+        assert_eq!(health.agent_mismatches.len(), 1);
+        assert_eq!(health.status, "diverged");
     }
 
     #[test]

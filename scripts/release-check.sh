@@ -1429,6 +1429,21 @@ fi
 npx --yes tsx scripts/test-opencode-runtime-ui.ts
 printf '  OpenCode status mapping guards + self-tests ok\n'
 
+step "regression: OpenCode health compares rendered config"
+if search_has_match 'file_eq\(&template_config_path, &installed_config_path\)' src-tauri/src/commands/opencode_runtime.rs; then
+  printf 'FAIL: configs_match must not byte-compare raw templates/opencode.json\n' >&2
+  exit 1
+fi
+if ! search_has_match 'render_expected_opencode_config|installed_config_matches_rendered' src-tauri/src/commands/opencode_runtime.rs; then
+  printf 'FAIL: OpenCode health must compare installed config to rendered workspace config\n' >&2
+  exit 1
+fi
+if ! search_has_match 'test_configs_match_pass_when_template_has_playwright_placeholders' src-tauri/src/commands/opencode_runtime.rs; then
+  printf 'FAIL: missing regression test for rendered OpenCode config health comparison\n' >&2
+  exit 1
+fi
+printf '  OpenCode health uses rendered/staged config comparison\n'
+
 step "app checks"
 npm run build
 
