@@ -1507,6 +1507,22 @@ if ! search_has_match 'install_default_workspace' src-tauri/src/lib.rs src/App.t
 fi
 printf '  canonical install path model verified\n'
 
+step "Start page bundled resource update"
+if ! search_has_match 'needsBundledResourcesUpdate|update resources|bundled_resources_status' src/views/StartView.tsx src/types.ts; then
+  printf 'FAIL: Start page must expose bundled resource update for valid stale workspaces\n' >&2
+  exit 1
+fi
+if ! search_has_match 'missing_bundled_count|missing_bundled_file_paths' src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: workspace diagnostics must report missing bundled default files\n' >&2
+  exit 1
+fi
+if search_has_match 'showRepair = installState === "INSTALLED"' src/views/StartView.tsx; then
+  printf 'FAIL: repair button must not be tied to INSTALLED state\n' >&2
+  exit 1
+fi
+npx --yes tsx scripts/test-start-view-bundled.ts
+printf '  Start bundled resource update guards + self-tests ok\n'
+
 step "opencode runtime UI status mapping"
 if search_has_match 'runtimeChipLabel\(configCheckTone' src/views/OpenCodeView.tsx src/lib; then
   printf 'FAIL: OpenCode config row must not pass UI tones into runtimeChipLabel\n' >&2
