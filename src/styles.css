@@ -5593,6 +5593,32 @@ code {
   min-height: 0;
 }
 
+.repo-dashboard-latest-hero {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repo-dashboard-latest-headline {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-heading);
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.repo-dashboard-latest-lead {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.repo-dashboard-latest-body {
+  max-height: min(240px, 32vh);
+  overflow: auto;
+  margin: 0;
+}
+
 .repo-dashboard-latest .repo-dashboard-list,
 .repo-dashboard-latest .repo-dashboard-item {
   min-height: 0;

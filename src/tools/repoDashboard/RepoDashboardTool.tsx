@@ -74,42 +74,37 @@ function LatestChangeCard({
   if (latestMerge) {
     return (
       <div className="repo-dashboard-latest-content">
-        <div className="repo-dashboard-item">
-          <div className="repo-dashboard-item-title font-mono">
+        <div className="repo-dashboard-latest-hero">
+          <span className="repo-dashboard-source-pill">gh merge</span>
+          <h3 className="font-mono repo-dashboard-latest-headline">
             #{latestMerge.number} {latestMerge.title}
-          </div>
-          <div className="repo-dashboard-item-meta">
-            <span className="repo-dashboard-source-pill">gh merge</span>
-            <span>by {latestMerge.author}</span>
-            <span>/ {new Date(latestMerge.merged_at).toLocaleString()}</span>
-          </div>
+          </h3>
+          <p className="repo-dashboard-latest-lead text-muted small">
+            GitHub merged PR via gh CLI · {latestMerge.author} ·{" "}
+            {new Date(latestMerge.merged_at).toLocaleString()}
+          </p>
         </div>
+        <dl className="repo-dashboard-latest-facts font-mono">
+          <div>
+            <dt>Source</dt>
+            <dd>GitHub merged PR (gh)</dd>
+          </div>
+          <div>
+            <dt>Branch</dt>
+            <dd>{branchLabel}</dd>
+          </div>
+          <div>
+            <dt>Default</dt>
+            <dd>{snapshot.default_branch ?? "—"}</dd>
+          </div>
+          <div>
+            <dt>HEAD files</dt>
+            <dd>{changedCount} changed (local git show HEAD)</dd>
+          </div>
+        </dl>
         {latestMerge.body ? (
-          <pre className="repo-dashboard-code font-mono">{latestMerge.body.slice(0, 4000)}</pre>
-        ) : (
-          <dl className="repo-dashboard-latest-facts font-mono">
-            <div>
-              <dt>Source</dt>
-              <dd>GitHub merged PR (gh)</dd>
-            </div>
-            <div>
-              <dt>Author</dt>
-              <dd>{latestMerge.author}</dd>
-            </div>
-            <div>
-              <dt>Merged</dt>
-              <dd>{new Date(latestMerge.merged_at).toLocaleString()}</dd>
-            </div>
-            <div>
-              <dt>Branch</dt>
-              <dd>{branchLabel}</dd>
-            </div>
-            <div>
-              <dt>HEAD files</dt>
-              <dd>{changedCount} changed (local git)</dd>
-            </div>
-          </dl>
-        )}
+          <pre className="repo-dashboard-code font-mono repo-dashboard-latest-body">{latestMerge.body.slice(0, 4000)}</pre>
+        ) : null}
       </div>
     );
   }
@@ -117,14 +112,13 @@ function LatestChangeCard({
   if (latestCommit) {
     return (
       <div className="repo-dashboard-latest-content">
-        <div className="repo-dashboard-item">
-          <div className="repo-dashboard-item-title font-mono">{latestCommit.subject}</div>
-          <div className="repo-dashboard-item-meta">
-            <span className="repo-dashboard-source-pill">local commit</span>
-            <span>{latestCommit.short_sha}</span>
-            <span>/ {authorLabel(latestCommit)}</span>
-            <span>/ {new Date(latestCommit.authored_at * 1000).toLocaleString()}</span>
-          </div>
+        <div className="repo-dashboard-latest-hero">
+          <span className="repo-dashboard-source-pill">local commit</span>
+          <h3 className="font-mono repo-dashboard-latest-headline">{latestCommit.subject}</h3>
+          <p className="repo-dashboard-latest-lead text-muted small">
+            Latest local commit · {latestCommit.short_sha} · {authorLabel(latestCommit)} ·{" "}
+            {new Date(latestCommit.authored_at * 1000).toLocaleString()}
+          </p>
         </div>
         <dl className="repo-dashboard-latest-facts font-mono">
           <div>
@@ -132,16 +126,12 @@ function LatestChangeCard({
             <dd>Latest local commit</dd>
           </div>
           <div>
-            <dt>Author</dt>
-            <dd>{authorLabel(latestCommit)}</dd>
-          </div>
-          <div>
-            <dt>Date</dt>
-            <dd>{new Date(latestCommit.authored_at * 1000).toLocaleString()}</dd>
-          </div>
-          <div>
             <dt>Branch</dt>
             <dd>{branchLabel}</dd>
+          </div>
+          <div>
+            <dt>Default</dt>
+            <dd>{snapshot.default_branch ?? "—"}</dd>
           </div>
           <div>
             <dt>HEAD files</dt>
@@ -152,7 +142,7 @@ function LatestChangeCard({
     );
   }
 
-  return <p className="text-muted small">No latest change found.</p>;
+  return <p className="text-muted small">No latest change found in loaded snapshot.</p>;
 }
 
 function RepoDashboardPage({
