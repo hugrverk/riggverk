@@ -130,7 +130,7 @@ Final report:
 TEXT_BLOCK_END
 
 Notes:
-- Before constructing this prompt, inspect the active context standards (docs/USER_CONTEXT.md, docs/PROMPTING.md, docs/SKILLS.md, templates/context/saved-memory.md) and relevant project defaults. Weave selected skills into executable instructions, not just metadata.
+- Before constructing this prompt, inspect the active Agent Workspace standards (docs/AGENT_RULES.md, docs/SKILLS.md, docs/WORKFLOWS.md) and relevant project defaults. Weave selected skills into executable instructions, not just metadata.
 - Replace TEXT_BLOCK_START and TEXT_BLOCK_END with a real fenced code block when using the template.
 - Add more slices only when needed.
 - Keep slices small enough to verify independently.
