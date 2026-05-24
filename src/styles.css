@@ -5390,10 +5390,88 @@ code {
 
 .repo-dashboard-scroll-panel .repo-dashboard-list,
 .repo-dashboard-scroll-panel .repo-dashboard-latest-content,
-.repo-dashboard-scroll-panel .repo-dashboard-code {
+.repo-dashboard-scroll-panel .repo-dashboard-code,
+.repo-dashboard-scroll-panel .repo-dashboard-commit-list {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.repo-dashboard-statstrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.repo-dashboard-stat {
+  white-space: nowrap;
+}
+
+.repo-dashboard-stat strong {
+  color: var(--text-heading);
+  font-weight: 500;
+}
+
+.repo-dashboard-stat-author {
+  border-left: 1px solid var(--border);
+  padding-left: 10px;
+}
+
+.repo-dashboard-commit-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.repo-dashboard-commit {
+  display: grid;
+  grid-template-columns: 62px minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  gap: 2px 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--border);
+  align-items: baseline;
+}
+
+.repo-dashboard-commit:last-child {
+  border-bottom: none;
+}
+
+.repo-dashboard-commit-sha {
+  grid-row: 1 / span 2;
+  font-size: 11px;
+  color: var(--text-muted);
+  align-self: center;
+}
+
+.repo-dashboard-commit-subject {
+  font-size: 12px;
+  color: var(--text-heading);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.repo-dashboard-commit-meta {
+  font-size: 11px;
+  grid-column: 2;
+}
+
+.repo-dashboard-heat-aside {
+  min-width: 0;
+  overflow: hidden;
+}
+
+.repo-dashboard-heat-aside .repo-dashboard-heatbox {
+  border: none;
+  background: transparent;
+  padding: 0;
 }
 
 .repo-dashboard-overview {

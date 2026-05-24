@@ -17,6 +17,7 @@ import {
   buildLineChartData,
   buildRemainingByType,
   buildSourceHealth,
+  commitDateRangeLabel,
   countByAuthor,
   eventsFromCommits,
   WORK_TYPE_COLORS,
@@ -180,6 +181,50 @@ function RepoDashboardPage({
         <div className="repo-dashboard-page-main">{main}</div>
         {aside ? <aside className="repo-dashboard-page-aside">{aside}</aside> : null}
       </div>
+    </div>
+  );
+}
+
+function ActivitySummaryStrip({ snapshot }: { snapshot: RepoDashboardSnapshot }) {
+  const range = commitDateRangeLabel(snapshot.commits);
+  const authors = countByAuthor(snapshot.commits);
+  const remoteSync =
+    snapshot.ahead != null && snapshot.behind != null
+      ? `+${snapshot.ahead}/-${snapshot.behind}`
+      : "n/a";
+
+  return (
+    <div className="repo-dashboard-statstrip font-mono" role="group" aria-label="Activity summary">
+      <span className="repo-dashboard-stat">
+        <strong>{snapshot.commits.length}</strong> commits loaded
+      </span>
+      <span className="repo-dashboard-stat">branch {snapshot.branch || "—"}</span>
+      <span className="repo-dashboard-stat">remote {remoteSync}</span>
+      {range ? <span className="repo-dashboard-stat">{range}</span> : null}
+      {authors.slice(0, 5).map(([name, count]) => (
+        <span key={name} className="repo-dashboard-stat repo-dashboard-stat-author">
+          {name} <strong>{count}</strong>
+        </span>
+      ))}
+    </div>
+  );
+}
+
+function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
+  if (!commits.length) {
+    return <p className="text-muted small">No commits in loaded range.</p>;
+  }
+  return (
+    <div className="repo-dashboard-commit-list">
+      {commits.map(commit => (
+        <div key={commit.sha} className="repo-dashboard-commit">
+          <span className="repo-dashboard-commit-sha font-mono">{commit.short_sha}</span>
+          <span className="repo-dashboard-commit-subject font-mono">{commit.subject}</span>
+          <span className="repo-dashboard-commit-meta text-muted">
+            {authorLabel(commit)} · {new Date(commit.authored_at * 1000).toLocaleString()}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -649,38 +694,20 @@ export function RepoDashboardTool() {
           {snapshot && !loading && section === "activity" && (
             <RepoDashboardPage
               title="Activity"
-              description={`Up to ${COMMITS_LOAD_LIMIT} most recent commits from local git${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " (limit reached)" : ""}.`}
+              description={`Recent commit history from local git (up to ${COMMITS_LOAD_LIMIT}${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? ", limit reached" : ""}).`}
+              toolbar={<ActivitySummaryStrip snapshot={snapshot} />}
               main={
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <h3 className="font-mono repo-dashboard-panel-title">Commits</h3>
-                  <div className="repo-dashboard-list">
-                    {snapshot.commits.slice(0, 120).map(commit => (
-                      <div key={commit.sha} className="repo-dashboard-item">
-                        <div className="repo-dashboard-item-title font-mono">{commit.subject}</div>
-                        <div className="repo-dashboard-item-meta">
-                          <span>{commit.short_sha}</span>
-                          <span>/ {authorLabel(commit)}</span>
-                          <span>/ {new Date(commit.authored_at * 1000).toLocaleString()}</span>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
+                  <CommitHistoryList commits={snapshot.commits.slice(0, 120)} />
                 </div>
               }
               aside={
-                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <h3 className="font-mono repo-dashboard-panel-title">By author</h3>
-                  {countByAuthor(snapshot.commits).map(([name, count]) => (
-                    <div key={name} className="repo-dashboard-row">
-                      <span>{name}</span>
-                      <span className="prompt-loops-pill">{count}</span>
-                    </div>
-                  ))}
-                  <h3 className="font-mono repo-dashboard-panel-title repo-dashboard-subheading">Heatmap</h3>
-                  {heatmap.length ? <ActivityHeatmap cells={heatmap} /> : (
-                    <p className="text-muted small">No activity data.</p>
-                  )}
-                </div>
+                heatmap.length ? (
+                  <div className="repo-dashboard-card repo-dashboard-heat-aside">
+                    <h3 className="font-mono repo-dashboard-panel-title">Commit heatmap</h3>
+                    <ActivityHeatmap cells={heatmap} />
+                  </div>
+                ) : undefined
               }
             />
           )}
