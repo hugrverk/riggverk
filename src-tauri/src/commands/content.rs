@@ -83,6 +83,24 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/TROUBLESHOOTING.md",
         },
         DocEntry {
+            id: "docs/prompt-templates/standard-prompt.md",
+            section: "Prompt Templates",
+            title: "Standard Prompt Template",
+            rel_path: "docs/prompt-templates/standard-prompt.md",
+        },
+        DocEntry {
+            id: "docs/prompt-templates/masterprompt.md",
+            section: "Prompt Templates",
+            title: "Masterprompt Template",
+            rel_path: "docs/prompt-templates/masterprompt.md",
+        },
+        DocEntry {
+            id: "docs/prompt-templates/batchprompt.md",
+            section: "Prompt Templates",
+            title: "Batchprompt Template",
+            rel_path: "docs/prompt-templates/batchprompt.md",
+        },
+        DocEntry {
             id: "templates/cursor/README.md",
             section: "Cursor",
             title: "Cursor Profile Readme",
@@ -711,6 +729,11 @@ mod tests {
         write_file(&root, "docs/START_HERE.md", "# start\n");
         write_file(&root, "docs/GIT_VERSIONING.md", "# git\n");
         write_file(&root, "docs/AGENT_RULES.md", "# rules\n");
+        write_file(
+            &root,
+            "docs/prompt-templates/batchprompt.md",
+            "# batch prompt\n",
+        );
 
         let docs = existing_curated_docs(&root);
         cleanup(&root);
@@ -724,6 +747,10 @@ mod tests {
         assert_eq!(by_id.get("docs/START_HERE.md"), Some(&"Start"));
         assert_eq!(by_id.get("docs/GIT_VERSIONING.md"), Some(&"Guides"));
         assert_eq!(by_id.get("docs/AGENT_RULES.md"), Some(&"Reference"));
+        assert_eq!(
+            by_id.get("docs/prompt-templates/batchprompt.md"),
+            Some(&"Prompt Templates")
+        );
     }
 
     #[test]

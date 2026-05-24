@@ -84,6 +84,9 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "docs/OPENCODE_CONFIG.md",
                 "docs/CODEX_CONFIG.md",
                 "docs/TROUBLESHOOTING.md",
+                "docs/prompt-templates/standard-prompt.md",
+                "docs/prompt-templates/masterprompt.md",
+                "docs/prompt-templates/batchprompt.md",
             ],
         ),
         (
@@ -408,6 +411,9 @@ mod tests {
             "docs/OPENCODE_CONFIG.md",
             "docs/CODEX_CONFIG.md",
             "docs/TROUBLESHOOTING.md",
+            "docs/prompt-templates/standard-prompt.md",
+            "docs/prompt-templates/masterprompt.md",
+            "docs/prompt-templates/batchprompt.md",
         ] {
             write_file(&root, rel);
         }
@@ -574,6 +580,25 @@ mod tests {
             assert!(
                 files.contains(&rel),
                 "default workspace copy list missing: {}",
+                rel
+            );
+        }
+    }
+
+    #[test]
+    fn default_workspace_files_include_prompt_template_docs() {
+        let files: Vec<&str> = default_workspace_files()
+            .into_iter()
+            .flat_map(|(_, paths)| paths.iter().copied())
+            .collect();
+        for rel in [
+            "docs/prompt-templates/standard-prompt.md",
+            "docs/prompt-templates/masterprompt.md",
+            "docs/prompt-templates/batchprompt.md",
+        ] {
+            assert!(
+                files.contains(&rel),
+                "default workspace copy list missing prompt template doc: {}",
                 rel
             );
         }

@@ -49,6 +49,12 @@ def main() -> int:
         "templates/opencode.policy.json",
         "templates/playwright-mcp.config.json",
     }
+    docs = section_paths("Docs")
+    required_docs = {
+        "docs/prompt-templates/standard-prompt.md",
+        "docs/prompt-templates/masterprompt.md",
+        "docs/prompt-templates/batchprompt.md",
+    }
 
     ok = True
     for rel in sorted(required_scripts):
@@ -59,11 +65,15 @@ def main() -> int:
         if rel not in templates:
             print(f"FAIL: Templates section missing: {rel}", file=sys.stderr)
             ok = False
+    for rel in sorted(required_docs):
+        if rel not in docs:
+            print(f"FAIL: Docs section missing: {rel}", file=sys.stderr)
+            ok = False
 
     if not ok:
         return 1
 
-    print("  default_workspace_files(): generator, opencode base/policy, playwright mcp assets listed")
+    print("  default_workspace_files(): generator, opencode base/policy, playwright mcp, prompt-template docs listed")
     return 0
 
 
