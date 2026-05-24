@@ -104,6 +104,21 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
 
       <section className="prompt-loops-main">
         <header className="prompt-loops-topbar">
+          <label className="prompt-loops-group-select-wrap font-mono">
+            <select
+              className="repo-dashboard-field prompt-loops-group-select"
+              value={groupIndex}
+              onChange={e => {
+                setGroupIndex(Number(e.target.value));
+                setItemIndex(0);
+              }}
+              aria-label="Prompt group"
+            >
+              {PROMPT_LOOP_GROUPS.map((g, index) => (
+                <option key={g.key} value={index}>{g.group}</option>
+              ))}
+            </select>
+          </label>
           <div className="prompt-loops-titleline font-mono">
             <strong>{group.group}</strong>
             <span className="text-muted"> / {items.length} prompt{items.length === 1 ? "" : "s"}</span>
