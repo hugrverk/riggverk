@@ -180,6 +180,11 @@ pub(super) fn workspace_root() -> Result<PathBuf, String> {
     validate_workspace_root(path)
 }
 
+/// Repair/update target: configured workspace when valid, else canonical install path.
+pub(crate) fn repair_workspace_target_path() -> Result<PathBuf, String> {
+    workspace_root().or_else(|_| default_installed_workspace_path())
+}
+
 /// Returns true when a persisted workspace path resolves to a valid workspace.
 pub(crate) fn persisted_workspace_path_is_valid(path: &str) -> bool {
     validate_workspace_root(PathBuf::from(path)).is_ok()
@@ -1477,7 +1482,7 @@ pub fn install_default_workspace(
 
 #[tauri::command]
 pub fn repair_default_workspace(app: tauri::AppHandle) -> Result<RepairWorkspaceResult, String> {
-    let path = default_installed_workspace_path()?;
+    let path = repair_workspace_target_path()?;
     Ok(repair_workspace_impl(
         &app,
         path.to_string_lossy().as_ref(),
@@ -1487,7 +1492,7 @@ pub fn repair_default_workspace(app: tauri::AppHandle) -> Result<RepairWorkspace
 
 #[tauri::command]
 pub fn open_default_workspace_folder() -> Result<ActionResult, String> {
-    let path = default_installed_workspace_path()?;
+    let path = repair_workspace_target_path()?;
     if !path.exists() {
         return Err("installed workspace folder does not exist".to_string());
     }
@@ -1563,7 +1568,8 @@ mod tests {
     use super::{
         configured_workspace_path, create_workspace_from_source, is_unsafe_target,
         missing_bundled_file_paths, persisted_workspace_path_is_valid, plan_create_workspace,
-        read_brain_setup_seed_under_root, repair_workspace_core, repo_path_from_settings,
+        read_brain_setup_seed_under_root, repair_workspace_core, repair_workspace_target_path,
+        repo_path_from_settings,
         scrub_stale_workspace_path, try_set_active_workspace_path, validate_workspace_root,
         workspace_diagnostics_for_unconfigured, workspace_setup_phase, CreateWorkspacePlan,
         BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
@@ -1982,6 +1988,25 @@ mod tests {
         let candidate = configured_workspace_path(&AppSettings::default())
             .expect("canonical default should resolve when HOME is set");
         assert_eq!(candidate, expected);
+    }
+
+    #[test]
+    fn repair_workspace_target_prefers_agent_workspace_path_override() {
+        let target = setup_valid_workspace("repair-target-override");
+        let target_str = target.to_string_lossy().into_owned();
+        let previous = std::env::var("AGENT_WORKSPACE_PATH").ok();
+        std::env::set_var("AGENT_WORKSPACE_PATH", &target_str);
+        let resolved = repair_workspace_target_path().expect("resolve repair target");
+        if let Some(prev) = previous {
+            std::env::set_var("AGENT_WORKSPACE_PATH", prev);
+        } else {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+        }
+        assert_eq!(
+            resolved.canonicalize().expect("canonical resolved"),
+            target.canonicalize().expect("canonical target")
+        );
+        cleanup(&target);
     }
 
     #[test]
