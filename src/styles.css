@@ -75,7 +75,6 @@
 .prompt-loops-nav-btn:focus-visible,
 .prompt-loops-card:focus-visible,
 .prompt-loops-search input:focus-visible,
-.prompt-loops-btn:focus-visible,
 .repo-dashboard-nav-btn:focus-visible,
 .repo-dashboard-field:focus-visible,
 .repo-dashboard-btn:focus-visible,
@@ -4686,12 +4685,6 @@ code {
   scrollbar-color: var(--border-strong) transparent;
 }
 
-.tools-placeholder {
-  margin: 16px;
-  padding: 16px;
-  font-size: 13px;
-}
-
 .text-muted {
   color: var(--text-muted);
 }
@@ -4978,39 +4971,6 @@ code {
 
 .prompt-loops-detail-meta {
   font-size: 12px;
-}
-
-.prompt-loops-detail-actions {
-  display: flex;
-  gap: 6px;
-  flex-shrink: 0;
-  align-items: center;
-}
-
-.prompt-loops-btn {
-  height: 30px;
-  padding: 0 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-panel);
-  color: var(--text);
-  cursor: pointer;
-  font-size: 11px;
-  border-radius: var(--radius);
-  transition: background 0.1s, border-color 0.1s;
-}
-
-.prompt-loops-btn:hover {
-  background: var(--bg-inset);
-}
-
-.prompt-loops-btn-primary {
-  color: var(--text-heading);
-  border-color: rgba(var(--accent-rgb), 0.35);
-  background: var(--accent-dim);
-}
-
-.prompt-loops-btn-primary:hover {
-  background: rgba(var(--accent-rgb), 0.18);
 }
 
 .prompt-loops-prompt-wrap {
@@ -5673,10 +5633,6 @@ code {
   font-family: var(--font-mono);
   font-size: 13px;
   font-weight: 500;
-}
-
-.repo-dashboard-subheading {
-  margin-top: 16px;
 }
 
 .repo-dashboard-kpi {

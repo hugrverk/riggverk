@@ -169,30 +169,4 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
   );
 }
 
-export function TypeColorBar({
-  type,
-  count,
-  max,
-  color,
-  active,
-  onSelect,
-}: {
-  type: string;
-  count: number;
-  max: number;
-  color: string;
-  active: boolean;
-  onSelect: () => void;
-}) {
-  return (
-    <button type="button" className={`repo-dashboard-type-row${active ? " active" : ""}`} onClick={onSelect}>
-      <span>{type}</span>
-      <div className="repo-dashboard-bar">
-        <div className="repo-dashboard-bar-fill" style={{ width: `${Math.max(2, (count / max) * 100)}%`, background: color }} />
-      </div>
-      <span>{count}</span>
-    </button>
-  );
-}
-
 export { ACTIVITY_BLUE, ACTIVITY_GREEN };
