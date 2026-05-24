@@ -5,7 +5,7 @@ import type {
   RepoDashboardWorkType,
 } from "../../types";
 
-export type ActivityActor = "uxsmedjan" | "PRIVATE" | "other";
+export type ActivityActor = "primary" | "secondary" | "other";
 
 export interface ActivityEvent {
   actor: ActivityActor;
@@ -14,9 +14,9 @@ export interface ActivityEvent {
 
 export interface LineChartSeries {
   days: string[];
-  uxsmedjan: number[];
-  PRIVATE: number[];
-  totals: { uxsmedjan: number; PRIVATE: number; other: number };
+  primary: number[];
+  secondary: number[];
+  totals: { primary: number; secondary: number; other: number };
 }
 
 export interface HeatmapCell {
@@ -95,8 +95,8 @@ export const ACTIVITY_GREEN = "#56d364";
 
 export function normalizeAuthor(value: string): ActivityActor {
   const v = value.toLowerCase();
-  if (/hellq|PRIVATE|hellquist413/.test(v)) return "PRIVATE";
-  if (/uxsmedjan|uxsme|PRIVATE|PRIVATE|c\.PRIVATE/.test(v)) return "uxsmedjan";
+  if (/hellq|PRIVATE|hellquist413/.test(v)) return "secondary";
+  if (/uxsmedjan|uxsme|PRIVATE|PRIVATE|c\.PRIVATE/.test(v)) return "primary";
   return "other";
 }
 
@@ -119,7 +119,7 @@ function dayStart(d: Date): Date {
 }
 
 export function buildLineChartData(events: ActivityEvent[]): LineChartSeries | null {
-  const tracked = events.filter(e => e.actor === "uxsmedjan" || e.actor === "PRIVATE");
+  const tracked = events.filter(e => e.actor === "primary" || e.actor === "secondary");
   if (!tracked.length) return null;
 
   const sorted = [...tracked].sort((a, b) => a.date.getTime() - b.date.getTime());
@@ -130,9 +130,9 @@ export function buildLineChartData(events: ActivityEvent[]): LineChartSeries | n
     days.push(isoDay(cursor));
   }
 
-  const raw: Record<"uxsmedjan" | "PRIVATE", Record<string, number>> = {
-    uxsmedjan: {},
-    PRIVATE: {},
+  const raw: Record<"primary" | "secondary", Record<string, number>> = {
+    primary: {},
+    secondary: {},
   };
 
   for (const event of tracked) {
@@ -141,24 +141,24 @@ export function buildLineChartData(events: ActivityEvent[]): LineChartSeries | n
     raw[event.actor][key] = (raw[event.actor][key] ?? 0) + 1;
   }
 
-  const uxsmedjan: number[] = [];
-  const PRIVATE: number[] = [];
+  const primary: number[] = [];
+  const secondary: number[] = [];
   let uTotal = 0;
   let hTotal = 0;
   for (const day of days) {
-    uTotal += raw.uxsmedjan[day] ?? 0;
-    hTotal += raw.PRIVATE[day] ?? 0;
-    uxsmedjan.push(uTotal);
-    PRIVATE.push(hTotal);
+    uTotal += raw.primary[day] ?? 0;
+    hTotal += raw.secondary[day] ?? 0;
+    primary.push(uTotal);
+    secondary.push(hTotal);
   }
 
   const other = events.filter(e => e.actor === "other").length;
 
   return {
     days,
-    uxsmedjan,
-    PRIVATE,
-    totals: { uxsmedjan: uTotal, PRIVATE: hTotal, other },
+    primary,
+    secondary,
+    totals: { primary: uTotal, secondary: hTotal, other },
   };
 }
 

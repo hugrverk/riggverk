@@ -663,7 +663,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
                   <p className="text-muted small repo-dashboard-footnote">
                     Up to {COMMITS_LOAD_LIMIT} recent commits.
                     {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older history not loaded." : ""}
-                    {" "}Blue = uxsmedjan · Green = PRIVATE.
+                    {" "}Blue = primary author · Green = secondary author.
                   </p>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
@@ -748,7 +748,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
           {snapshot && !loading && section === "activity" && (
             <RepoDashboardPage
               title="Activity"
-              description={`Recent commit history from local git (up to ${COMMITS_LOAD_LIMIT}${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? ", limit reached" : ""}).`}
+              description={`Recent commit history from local git (up to ${COMMITS_LOAD_LIMIT}${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? ", limit reached" : ""}; list shows 120).`}
               toolbar={<ActivitySummaryStrip snapshot={snapshot} />}
               main={
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">

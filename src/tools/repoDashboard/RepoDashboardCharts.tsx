@@ -12,14 +12,14 @@ interface ActivityLineChartProps {
 }
 
 export function ActivityLineChart({ data }: ActivityLineChartProps) {
-  const { days, uxsmedjan, PRIVATE, totals } = data;
+  const { days, primary, secondary, totals } = data;
   const w = 820;
   const h = 180;
   const L = 38;
   const R = 36;
   const T = 14;
   const B = 36;
-  const max = Math.max(1, ...uxsmedjan, ...PRIVATE);
+  const max = Math.max(1, ...primary, ...secondary);
   const x = (i: number) =>
     days.length === 1 ? L + (w - L - R) / 2 : L + (i * (w - L - R)) / (days.length - 1);
   const y = (v: number) => T + ((max - v) * (h - T - B)) / max;
@@ -49,8 +49,8 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
         ))}
         <line className="repo-dashboard-axis" x1={L} y1={h - B} x2={w - R} y2={h - B} />
         <line className="repo-dashboard-axis" x1={L} y1={T} x2={L} y2={h - B} />
-        <path className="repo-dashboard-series-blue" d={path(uxsmedjan)} />
-        <path className="repo-dashboard-series-green" d={path(PRIVATE)} />
+        <path className="repo-dashboard-series-blue" d={path(primary)} />
+        <path className="repo-dashboard-series-green" d={path(secondary)} />
         {days.map((day, i) =>
           i % every === 0 || i === days.length - 1 ? (
             <text
@@ -67,10 +67,10 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
       </svg>
       <div className="repo-dashboard-legend font-mono">
         <span className="repo-dashboard-blue">
-          <i /> uxsmedjan {totals.uxsmedjan}
+          <i /> Primary {totals.primary}
         </span>
         <span className="repo-dashboard-green">
-          <i /> PRIVATE {totals.PRIVATE}
+          <i /> Secondary {totals.secondary}
         </span>
         <span className="text-muted">other/unmapped {totals.other}</span>
         <span className="text-muted">
