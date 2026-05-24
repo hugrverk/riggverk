@@ -71,7 +71,11 @@ fi
 
 if [ "$show_diff" -eq 1 ]; then
   if [ -f "$target_config" ]; then
-    diff -u "$target_config" "$source_config" || true
+    if cmp -s "$source_config" "$target_config"; then
+      printf 'codex-config synced\n'
+    else
+      diff -u "$target_config" "$source_config" || true
+    fi
   else
     printf 'Codex config missing: %s\n' "$target_config"
   fi
