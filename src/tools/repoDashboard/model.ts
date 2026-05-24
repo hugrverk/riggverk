@@ -25,6 +25,48 @@ export interface HeatmapCell {
   level: 0 | 1 | 2 | 3 | 4;
 }
 
+export interface HeatmapMonthLabel {
+  col: number;
+  label: string;
+}
+
+export function buildHeatmapWeeks(cells: HeatmapCell[]): HeatmapCell[][] {
+  const weeks: HeatmapCell[][] = [];
+  for (let i = 0; i < cells.length; i += 7) {
+    weeks.push(cells.slice(i, i + 7));
+  }
+  return weeks;
+}
+
+export function buildHeatmapMonthLabels(
+  weeks: HeatmapCell[][],
+  minGapCols = 3,
+): HeatmapMonthLabel[] {
+  const monthFirstCol = new Map<string, HeatmapMonthLabel>();
+
+  weeks.forEach((week, col) => {
+    for (const cell of week) {
+      const d = new Date(`${cell.date}T12:00:00`);
+      if (Number.isNaN(d.getTime())) continue;
+      const key = `${d.getFullYear()}-${d.getMonth()}`;
+      const label = d.toLocaleString("en-US", { month: "short" });
+      const existing = monthFirstCol.get(key);
+      if (!existing || (d.getDate() === 1 && col < existing.col)) {
+        monthFirstCol.set(key, { col, label });
+      }
+    }
+  });
+
+  const sorted = [...monthFirstCol.values()].sort((a, b) => a.col - b.col);
+  const filtered: HeatmapMonthLabel[] = [];
+  for (const item of sorted) {
+    if (!filtered.length || item.col - filtered[filtered.length - 1].col >= minGapCols) {
+      filtered.push(item);
+    }
+  }
+  return filtered;
+}
+
 export interface SourceHealthRow {
   label: string;
   value: string;

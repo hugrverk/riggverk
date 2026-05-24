@@ -1,5 +1,11 @@
+import { useMemo } from "react";
 import type { LineChartSeries } from "./model";
-import { ACTIVITY_BLUE, ACTIVITY_GREEN } from "./model";
+import {
+  ACTIVITY_BLUE,
+  ACTIVITY_GREEN,
+  buildHeatmapMonthLabels,
+  buildHeatmapWeeks,
+} from "./model";
 
 interface ActivityLineChartProps {
   data: LineChartSeries;
@@ -73,36 +79,66 @@ interface ActivityHeatmapProps {
   cells: { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }[];
 }
 
+const CELL = 12;
+const GAP = 3;
+const DAY_LABEL_W = 28;
+
 export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
-  const weeks = Math.ceil(cells.length / 7);
-  const rows: typeof cells[] = [];
-  for (let w = 0; w < weeks; w++) {
-    rows.push(cells.slice(w * 7, w * 7 + 7));
-  }
+  const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
+  const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
+  const monthByCol = useMemo(
+    () => new Map(monthLabels.map(m => [m.col, m.label])),
+    [monthLabels],
+  );
 
   return (
     <div className="repo-dashboard-heatbox">
-      <div className="repo-dashboard-heatarea">
-        <div className="repo-dashboard-heatbody">
-          <div className="repo-dashboard-days font-mono">
-            <span />
-            <span>Mon</span>
-            <span />
-            <span>Wed</span>
-            <span />
-            <span>Fri</span>
-            <span />
+      <div
+        className="repo-dashboard-heat-scroll"
+        role="img"
+        aria-label={`Commit activity from ${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`}
+      >
+        <div className="repo-dashboard-heat-wrap">
+          <div
+            className="repo-dashboard-heat-months font-mono"
+            style={{ paddingLeft: `${DAY_LABEL_W + GAP}px` }}
+            aria-hidden="true"
+          >
+            {weeks.map((_, col) => (
+              <span
+                key={col}
+                className="repo-dashboard-heat-month-label"
+                style={{ width: CELL }}
+              >
+                {monthByCol.get(col) ?? ""}
+              </span>
+            ))}
           </div>
-          <div className="repo-dashboard-heat">
-            {rows.flatMap((week, wi) =>
-              week.map(cell => (
-                <div
-                  key={`${wi}-${cell.date}`}
-                  className={`repo-dashboard-heat-cell l${cell.level}`}
-                  title={`${cell.date}: ${cell.count} commits`}
-                />
-              )),
-            )}
+          <div className="repo-dashboard-heatbody">
+            <div className="repo-dashboard-days font-mono" aria-hidden="true">
+              <span />
+              <span>Mon</span>
+              <span />
+              <span>Wed</span>
+              <span />
+              <span>Fri</span>
+              <span />
+            </div>
+            <div className="repo-dashboard-heat-grid">
+              {weeks.map((week, wi) => (
+                <div key={wi} className="repo-dashboard-heat-week" style={{ gap: GAP }}>
+                  {week.map(cell => (
+                    <div
+                      key={cell.date}
+                      className={`repo-dashboard-heat-cell l${cell.level}`}
+                      style={{ width: CELL, height: CELL }}
+                      title={`${cell.date}: ${cell.count} commits`}
+                      aria-label={`${cell.date}: ${cell.count} commits`}
+                    />
+                  ))}
+                </div>
+              ))}
+            </div>
           </div>
         </div>
       </div>
@@ -110,7 +146,7 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
         <span>{cells[0]?.date ?? ""} → {cells[cells.length - 1]?.date ?? ""}</span>
         <span>Less</span>
         {[0, 1, 2, 3, 4].map(level => (
-          <span key={level} className={`repo-dashboard-heat-mini l${level}`} />
+          <span key={level} className={`repo-dashboard-heat-mini l${level}`} aria-hidden="true" />
         ))}
         <span>More</span>
       </div>
