@@ -79,4 +79,4 @@ These fields are operator guidance only. They do not change runtime behavior, sk
 ./scripts/install-skills.sh --dry-run --agent cursor --global
 ```
 
-The app installs skills globally. CLI-only: per-project install via `--project --target`.
+The app installs skills globally only. Cursor skill installation targets `~/.cursor/skills` as part of the global Cursor profile model.

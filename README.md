@@ -198,12 +198,10 @@ Global destinations:
 - Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)
 - OpenCode: `$HOME/.config/opencode/skills` (override with `OPENCODE_SKILLS_PATH`)
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
+- Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
 The app installs skills globally only (Codex, OpenCode, Claude, Auggie, Cursor home skill folders). Cursor’s primary workflow applies one global Playwright profile from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), `~/.cursor/mcp.json` (playwright server merge), and `~/.cursor/permissions.json` (`playwright:*` MCP allowlist; shell/terminal stays restricted). User Rules remain manual (`templates/cursor/user-rules.md`). The global profile never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Legacy sandbox JSON templates are debug/copy-only.
-
-CLI-only (outside app workflow): `install-skills.sh` and `install-cursor-workspace.sh` still accept `--project --target <path>` for explicit project paths when run manually from a terminal. The app never exposes those options.
-- Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 
 ## Workspace Contract Validator
 

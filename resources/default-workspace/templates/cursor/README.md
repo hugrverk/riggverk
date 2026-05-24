@@ -30,7 +30,7 @@ The machine-readable profile is `global-profile.json`. Permissions template: `pe
 ## Other assets
 
 - `user-rules.md` — copy manually into Cursor Settings → Rules → User Rules
-- `rules/*.mdc` — project rules (CLI-only `--project-rules`; not part of global profile apply)
+- `rules/*.mdc` — reference project-rule templates only; not installed by the app or global profile
 - `mcp/` — Playwright MCP template used by global profile merge
 - `sandbox/` — legacy debug/copy templates only (not primary UX)
 

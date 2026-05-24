@@ -108,6 +108,27 @@ def main() -> None:
     if "Repair or update the workspace on Start" in rust_text:
         fail("cursor_profile.rs must not direct stale-resource repair to Start")
 
+    docs_text = "\n".join(
+        path.read_text(encoding="utf-8")
+        for path in [
+            ROOT / "README.md",
+            ROOT / "resources/default-workspace/README.md",
+            ROOT / "resources/default-workspace/docs/AGENT_RULES.md",
+            ROOT / "resources/default-workspace/docs/SKILLS.md",
+            ROOT / "resources/default-workspace/templates/cursor/README.md",
+            ROOT / "resources/default-workspace/templates/cursor/mcp/README.md",
+        ]
+    )
+    stale_doc_phrases = [
+        "CLI-only: `--project --target",
+        "install-cursor-workspace.sh --project --target",
+        "project rules (CLI-only",
+        "See `templates/cursor/sandbox/`",
+    ]
+    for phrase in stale_doc_phrases:
+        if phrase in docs_text:
+            fail(f"Cursor docs contain stale/deprecated phrase: {phrase}")
+
     print("Cursor action/script and manifest compatibility checks passed")
 
 
