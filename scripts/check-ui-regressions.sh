@@ -53,5 +53,19 @@ if ! rg -n 'Global app text size' src/views/SettingsView.tsx >/tmp/agent-workspa
   fail "Settings must expose a labeled global app text size control"
 fi
 
+if rg -n -U '\.repo-dashboard-heat-(scroll|wrap|box|grid)[^{]*\{[^}]*overflow-y:\s*(auto|scroll)' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "heatmap wrappers must not use vertical overflow scrolling"
+fi
+if ! rg -n 'repo-dashboard-heat-density-' src/tools/repoDashboard/RepoDashboardCharts.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "ActivityHeatmap must expose compact/default density classes"
+fi
+if ! rg -n 'ActivityHeatmapDensity|density=' src/tools/repoDashboard/RepoDashboardCharts.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "ActivityHeatmap must support a density prop"
+fi
+if ! rg -n 'repo-dashboard-heat-density-compact|flex: 1 1 0' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap CSS must include compact density and responsive week columns"
+fi
+
 rm -f /tmp/agent-workspace-ui-regressions.txt
 printf 'UI regression checks passed\n'

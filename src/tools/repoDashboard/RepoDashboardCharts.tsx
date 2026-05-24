@@ -81,44 +81,45 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
   );
 }
 
+export type ActivityHeatmapDensity = "default" | "compact";
+
 interface ActivityHeatmapProps {
   cells: { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }[];
+  density?: ActivityHeatmapDensity;
 }
 
-const CELL = 13;
-const GAP = 3;
-const DAY_LABEL_W = 30;
-const WEEK_W = CELL + GAP;
-
-export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapProps) {
   const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
   const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
+  const weekCount = Math.max(weeks.length, 1);
 
-  const gridWidth = weeks.length * WEEK_W - GAP;
+  const rangeLabel = `${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`;
 
   return (
-    <div className="repo-dashboard-heatbox">
+    <div
+      className={`repo-dashboard-heatbox repo-dashboard-heat-density-${density}`}
+      data-heatmap-density={density}
+    >
       <div
         className="repo-dashboard-heat-scroll"
         role="img"
-        aria-label={`Commit activity from ${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`}
+        aria-label={`Commit activity from ${rangeLabel}`}
       >
         <div
           className="repo-dashboard-heat-wrap"
           style={
             {
-              "--heat-week-w": `${WEEK_W}px`,
-              "--heat-day-w": `${DAY_LABEL_W}px`,
+              "--heat-week-count": String(weekCount),
             } as Record<string, string>
           }
         >
           <div className="repo-dashboard-heat-months font-mono" aria-hidden="true">
-            <div className="repo-dashboard-heat-month-rail" style={{ width: gridWidth }}>
+            <div className="repo-dashboard-heat-month-rail">
               {monthLabels.map(({ col, label }) => (
                 <span
                   key={`${col}-${label}`}
                   className="repo-dashboard-heat-month-label"
-                  style={{ left: `${col * WEEK_W}px` }}
+                  style={{ left: `${(col / weekCount) * 100}%` }}
                 >
                   {label}
                 </span>
@@ -137,12 +138,11 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
             </div>
             <div className="repo-dashboard-heat-grid">
               {weeks.map((week, wi) => (
-                <div key={wi} className="repo-dashboard-heat-week" style={{ gap: GAP }}>
+                <div key={wi} className="repo-dashboard-heat-week">
                   {week.map(cell => (
                     <div
                       key={cell.date}
                       className={`repo-dashboard-heat-cell l${cell.level}`}
-                      style={{ width: CELL, height: CELL }}
                       title={`${cell.date}: ${cell.count} commits`}
                       aria-label={`${cell.date}: ${cell.count} commits`}
                     />
@@ -157,10 +157,10 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
         <span className="repo-dashboard-hleg-range">
           {cells[0]?.date ?? ""} → {cells[cells.length - 1]?.date ?? ""}
         </span>
-        <span className="repo-dashboard-hleg-scale">
+        <span className="repo-dashboard-hleg-scale" aria-hidden="true">
           <span>Less</span>
           {[0, 1, 2, 3, 4].map(level => (
-            <span key={level} className={`repo-dashboard-heat-mini l${level}`} aria-hidden="true" />
+            <span key={level} className={`repo-dashboard-heat-mini l${level}`} />
           ))}
           <span>More</span>
         </span>
