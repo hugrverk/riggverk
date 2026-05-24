@@ -188,15 +188,6 @@ fn enabled_rule_flags() -> Vec<&'static str> {
         .collect()
 }
 
-fn bootstrap_rule_args() -> Vec<&'static str> {
-    let flags = enabled_rule_flags();
-    if flags.is_empty() {
-        vec!["--skip-rules"]
-    } else {
-        flags
-    }
-}
-
 fn enabled_rule_targets() -> Vec<agent_targets::AgentSyncTarget> {
     let enabled = settings::load().enabled_target_ids;
     agent_targets::rule_targets()
@@ -220,42 +211,6 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
 
     match action.as_str() {
-        "bootstrap_preview" => {
-            let rule_args = bootstrap_rule_args();
-            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
-            let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--skip-skills"];
-            all_args.extend(&rule_args);
-            if cursor_is_selected() {
-                all_args.push("--cursor");
-            }
-            let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
-            Ok(ActionResult::new(ok, "bootstrap_preview", out, err, code))
-        }
-
-        "bootstrap_diff" => {
-            let rule_args = bootstrap_rule_args();
-            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
-            let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--diff", "--skip-skills"];
-            all_args.extend(&rule_args);
-            if cursor_is_selected() {
-                all_args.push("--cursor");
-            }
-            let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
-            Ok(ActionResult::new(ok, "bootstrap_diff", out, err, code))
-        }
-
-        "bootstrap_apply" => {
-            let rule_args = bootstrap_rule_args();
-            let script_str = workspace_script_arg(&root, "scripts/bootstrap.sh")?;
-            let mut all_args: Vec<&str> = vec![&script_str, "--quiet", "--apply", "--skip-skills"];
-            all_args.extend(&rule_args);
-            if cursor_is_selected() {
-                all_args.push("--cursor");
-            }
-            let (ok, out, err, code) = run_cmd("bash", &all_args, &root);
-            Ok(ActionResult::new(ok, "bootstrap_apply", out, err, code))
-        }
-
         "verify_state" => {
             let home = agent_targets::home_dir()?;
             let targets = enabled_rule_targets();
