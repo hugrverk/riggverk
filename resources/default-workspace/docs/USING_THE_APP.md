@@ -6,7 +6,7 @@ A practical walkthrough of each app area.
 
 The landing page and operations terminal. Shows whether the runtime workspace at `~/.config/agent-workspace` is installed, missing, or needs repair.
 
-- **install** / **repair** — copy bundled defaults into the canonical path (never overwrites existing files)
+- **install** / **repair** / **update resources** — copy bundled defaults into the canonical path (never overwrites existing files). **update resources** appears when the workspace is valid but newer bundled files are missing (for example prompt templates after an app upgrade).
 - **refresh** — reload diagnostics and status
 - **open folder** — open the installed workspace in Finder
 - **VERIFY** — release-check and backup management when the workspace is valid
@@ -27,7 +27,7 @@ Browse and edit workspace content in a three-panel layout:
 
 ### Docs
 
-Curated docs grouped under Start, Guides, Reference, Prompt Templates, and Context. Prompt Templates contains imported reference templates from `ux-context`. Use "open" for your system editor or edit in-app.
+Curated docs grouped under Start, Guides, Reference, Prompt Templates, and Context. Prompt Templates ships as `docs/prompt-templates/*.md` after install, repair, or update resources. Use "open" for your system editor or edit in-app.
 
 ### Rules
 
@@ -52,6 +52,13 @@ Copy a durable instruction block for external assistants (skill routing, securit
 ## Settings
 
 Appearance, global text size, and theme colors. Settings autosave. Target profiles and per-tool sync toggles are on harness pages.
+
+## Tools
+
+In-app utilities separate from harness sync:
+
+- **Prompt Loops** — copy/paste prompt templates with skill-weaving for agent runs.
+- **Repo Dashboard** — local git/gh snapshot of a checkout (activity, work items, sources).
 
 ## Dry-run before sync
 

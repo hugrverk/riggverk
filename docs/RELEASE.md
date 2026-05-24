@@ -50,7 +50,7 @@ After code changes that affect the app, manually check:
 - Library rules, agents, and configs edit/save only workspace source files.
 - Brain Setup displays the copy-paste setup block and does not change enabled sync targets.
 - Copy brain setup writes the full setup block to the clipboard.
-- Settings save/reset works for appearance and theme colors; target changes from harness pages persist via Settings **Save**.
+- Settings save/reset works for appearance and theme colors; target changes from harness pages autosave (debounced).
 - Harness Targets panels show profile chips and target toggles per tool.
 - Applying OpenCode profile selects `opencode_rules` + `opencode_config`.
 - Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, and `claude_rules`.

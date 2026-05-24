@@ -1341,7 +1341,7 @@ function App() {
           <button
             className={`nav-icon ${view === "start" ? "nav-icon-active" : ""}`}
             onClick={() => switchView("start")}
-            aria-label="Start"
+            aria-label="Workspace"
             title="Start"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">

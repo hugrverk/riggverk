@@ -55,20 +55,20 @@ The app source includes a shared starter workspace under `resources/default-work
 
 Bundled defaults are copied only when you click **install** or **repair** on the Workspace (Start) page. The app installs the local runtime workspace at `~/.config/agent-workspace` — it does not ask you to choose a folder. No files are created automatically on launch. Install and repair are explicit user actions; they do not overwrite existing files, do not run scripts, and only write under the canonical install path (or `AGENT_WORKSPACE_PATH` for dev/test overrides).
 
-Existing installs that are missing newer bundled files (for example prompt-template docs added in a later app release) can be fixed with **repair** on the Workspace page. Repair copies only missing files from the app's bundled default workspace and never overwrites existing user edits. Library → Docs shows a repair hint when bundled curated docs are absent on disk.
+Existing installs that are missing newer bundled files (for example prompt-template docs added in a later app release) can be fixed on the Workspace page:
+
+- **repair** — when the workspace is invalid or missing required markers; copies only missing bundled files and never overwrites existing user edits.
+- **update resources** — when the workspace is valid but newer bundled files are absent (for example empty or missing prompt-template docs); same non-destructive copy rules as repair.
+
+Library → Docs shows a hint when bundled curated docs are absent on disk.
 
 ### Workspace startup
 
-On app startup, the Workspace view loads settings, diagnostics, the default workspace summary (bundled resource preview), and workspace resources (skills list, docs list, agent sources, workspace contract, and status). When a valid workspace path has been saved from a previous session, the Workspace view immediately shows the active skill count and auto-selects all workspace skills without requiring the user to open the Library first.
-
-The Skills install lane distinguishes three states:
-- **Loading** — skills are being fetched (no false "No skills selected" before data arrives).
-- **No skills found** — the workspace contains no skill files.
-- **No skills selected** — skills exist but the user has cleared the selection.
+On app startup, the Workspace page loads settings, install/repair diagnostics, and workspace contract status. Skills are loaded in the background for harness pages; skill count, selection, and install live on each tool harness (Codex, OpenCode, Cursor, Claude, Augment), not on Workspace.
 
 ### Skill selection
 
-Skill selection is per-workspace. When the active workspace changes (for example after install or a dev override), the skill selection resets and all available skills for the new workspace are auto-selected by default. If the user manually clears the selection within a workspace, that choice is respected until the workspace changes again.
+Skill selection is per-workspace on harness pages. When the active workspace changes (for example after install or a dev override), the selection resets and all available skills for the new workspace are auto-selected by default. If you clear the selection within a workspace, that choice is respected until the workspace changes again. Harness Skills cards show **Loading**, **No skills in workspace**, or **Select skills to install** states.
 
 ### Installed workspace path
 
@@ -93,7 +93,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `app_font_size` | `"small"` `"medium"` `"large"` | `"medium"` | Global app text size (Settings → Text size). Scales UI typography via root CSS variables. |
 | `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); persisted when you **Save** in Settings. `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); changes **autosave** (debounced). `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 

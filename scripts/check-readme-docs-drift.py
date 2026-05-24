@@ -62,6 +62,27 @@ def main() -> None:
     if "app_font_size" not in app_text:
         fail("README.md must document app_font_size setting")
 
+    if "Save in Settings" in app_text or "Save** in Settings" in app_text:
+        fail("README.md must not say target toggles require Save in Settings")
+
+    if "bundled resource preview" in app_text:
+        fail("README.md must not claim bundled resource preview UI on Workspace")
+
+    if "update resources" not in app_text:
+        fail("README.md must document update resources on Workspace page")
+
+    for path in (
+        ROOT / "resources/default-workspace/docs/USING_THE_APP.md",
+        ROOT / "resources/default-workspace/docs/WORKFLOWS.md",
+        ROOT / "resources/default-workspace/docs/TROUBLESHOOTING.md",
+    ):
+        text = read(path)
+        rel = path.relative_to(ROOT)
+        if "Save in Settings" in text:
+            fail(f"{rel} must not say target toggles require Save in Settings")
+        if "ux-context" in text:
+            fail(f"{rel} must not reference ux-context for prompt templates")
+
     sandbox_primary_patterns = [
         "playwright-safe as the primary",
         "playwright-full as the primary",

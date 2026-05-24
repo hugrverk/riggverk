@@ -22,7 +22,7 @@ workspace) and bundled default resources (shipped with the app, not strictly req
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
 | `scripts/install-codex-config.sh` | file | Codex config sync script |
 | `scripts/install-skills.sh` | file | Skill install script |
-| `scripts/install-cursor-workspace.sh` | file | Cursor subagent and project-rule setup script |
+| `scripts/install-cursor-workspace.sh` | file | Cursor global profile and CLI-only project setup script |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
 | `templates/codex/config.toml` | file | Codex config template |
@@ -72,13 +72,13 @@ The app supports editing allowlisted config templates. OpenCode config sources a
 
 The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
 
-Cursor support is script-backed and scoped: skills install to Cursor skill folders, focused subagents install to Cursor agent folders, and project rules install to `.cursor/rules/*.mdc` inside an explicit project target. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (a Cursor-only template separate from the cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path; Cursor User Rules are settings-managed unless official docs document otherwise. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup. MCP examples and sandbox/profile templates are opt-in only and must use environment interpolation for auth-like values. The app does not auto-write undocumented Cursor sandbox paths.
+Cursor support is script-backed and scoped: skills install to Cursor skill folders; the app applies a **global profile** only (`~/.cursor/agents`, `~/.cursor/skills`, `~/.cursor/mcp.json`, `~/.cursor/permissions.json`) and never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Project rules and project-target installs exist only for manual CLI use (`install-cursor-workspace.sh --project`, `--project-rules`). Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (separate from cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup. Legacy sandbox JSON under `templates/cursor/sandbox/` is debug/copy-only. MCP examples must use environment interpolation for auth-like values.
 
-## Transition state
+## Workspace lifecycle
 
 The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
 
-This repository (`agent-workspace`) is the shared private app/runtime repo for PRIVATE and his colleague. User-owned workspace folders store docs, skills, templates, and config without containing app source code. Workspace create is implemented for safe empty or missing targets using bundled defaults from `resources/default-workspace/`. Repair flows for existing workspaces copy only missing bundled files and never overwrite user edits.
+User-owned workspace folders store docs, skills, templates, and config without containing app source code. Workspace create uses bundled defaults from `resources/default-workspace/`. Repair and **update resources** copy only missing (or zero-byte) bundled files and never overwrite non-empty user edits.
 
 ## Script location
 
