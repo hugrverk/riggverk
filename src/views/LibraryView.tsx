@@ -430,8 +430,8 @@ function BrainItemList({ brainSetupSource }: { brainSetupSource: string }) {
       <div className="lib-sidebar-group">
         <div className="lib-sidebar-group-label">Source</div>
         <div className="lib-sidebar-item lib-sidebar-item-meta lib-sidebar-item-active">
-          <span className="lib-sidebar-item-title">Brain Setup</span>
-          <span className="lib-sidebar-item-desc">{brainSetupSource}</span>
+          <span className="lib-sidebar-item-title">{brainSetupSource}</span>
+          <span className="lib-sidebar-item-desc">copy into assistant instructions</span>
         </div>
       </div>
     </div>
@@ -443,7 +443,7 @@ function sourceTypeLabel(type: LibrarySourceType): string {
     case "docs": return "Docs";
     case "rules": return "Rules";
     case "skills": return "Skills";
-    case "agents": return "Shared runtime agents";
+    case "agents": return "Runtime agents";
     case "configs": return "Configs";
     case "brain": return "Brain Setup";
   }

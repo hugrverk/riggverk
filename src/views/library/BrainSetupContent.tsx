@@ -23,8 +23,7 @@ export function BrainSetupContent({
     <>
       <div className="lib-editor-meta-strip">
         <div className="lib-editor-meta-left">
-          <span className="lib-editor-meta-title">Brain Setup</span>
-          <span className="lib-editor-meta-path">source: {brainSetupSource}</span>
+          <span className="lib-editor-meta-path font-mono">source: {brainSetupSource}</span>
         </div>
       </div>
       <div className="brain-setup-lib-body">
