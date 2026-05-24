@@ -94,24 +94,9 @@ export function RepoDashboardTool() {
     pickerTimerRef.current = window.setTimeout(() => setPickerStatus(null), 2500);
   }, []);
 
-  useEffect(() => {
-    invoke<AppSettings>("get_settings")
-      .then(settings => {
-        setSavedEntries(settings.repo_dashboard_entries ?? []);
-        const active = settings.repo_dashboard_entries?.find(
-          e => e.id === settings.active_repo_dashboard_id,
-        );
-        if (active?.path) {
-          setRepoPath(active.path);
-          setDefaultBranch(active.default_branch ?? "");
-        }
-      })
-      .catch(() => {});
-  }, []);
-
-  const refresh = useCallback(async () => {
-    const path = repoPath.trim();
-    if (!path) {
+  const refreshFor = useCallback(async (path: string, branch: string) => {
+    const trimmedPath = path.trim();
+    if (!trimmedPath) {
       setError("Enter a local repository path");
       return;
     }
@@ -119,8 +104,8 @@ export function RepoDashboardTool() {
     setError(null);
     try {
       const data = await invoke<RepoDashboardSnapshot>("get_repo_dashboard_snapshot", {
-        repoPath: path,
-        defaultBranch: defaultBranch.trim() || null,
+        repoPath: trimmedPath,
+        defaultBranch: branch.trim() || null,
         includeGh: true,
       });
       setSnapshot(data);
@@ -131,7 +116,28 @@ export function RepoDashboardTool() {
     } finally {
       setLoading(false);
     }
-  }, [repoPath, defaultBranch]);
+  }, []);
+
+  const refresh = useCallback(async () => {
+    await refreshFor(repoPath, defaultBranch);
+  }, [repoPath, defaultBranch, refreshFor]);
+
+  useEffect(() => {
+    invoke<AppSettings>("get_settings")
+      .then(settings => {
+        setSavedEntries(settings.repo_dashboard_entries ?? []);
+        const active = settings.repo_dashboard_entries?.find(
+          e => e.id === settings.active_repo_dashboard_id,
+        );
+        if (active?.path) {
+          const branch = active.default_branch ?? "";
+          setRepoPath(active.path);
+          setDefaultBranch(branch);
+          void refreshFor(active.path, branch);
+        }
+      })
+      .catch(() => {});
+  }, [refreshFor]);
 
   const saveCurrentRepo = useCallback(async () => {
     const path = repoPath.trim();
@@ -183,11 +189,12 @@ export function RepoDashboardTool() {
         setRepoPath(selected);
         setError(null);
         showPickerStatus("folder selected");
+        void refreshFor(selected, defaultBranch);
       }
     } catch {
       showPickerStatus("folder picker unavailable");
     }
-  }, [repoPath, showPickerStatus]);
+  }, [repoPath, defaultBranch, refreshFor, showPickerStatus]);
 
   const workItems = useMemo(
     () => (snapshot ? mergeWorkItems(snapshot.docs, snapshot.gh.open_issues) : []),
@@ -283,8 +290,10 @@ export function RepoDashboardTool() {
                   onChange={e => {
                     const entry = savedEntries?.find(x => x.id === e.target.value);
                     if (entry) {
+                      const branch = entry.default_branch ?? "";
                       setRepoPath(entry.path);
-                      setDefaultBranch(entry.default_branch ?? "");
+                      setDefaultBranch(branch);
+                      void refreshFor(entry.path, branch);
                     }
                   }}
                   aria-label="Saved repositories"
