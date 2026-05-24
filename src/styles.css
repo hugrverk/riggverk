@@ -5315,6 +5315,12 @@ code {
   gap: 10px;
 }
 
+.repo-dashboard-workspace > .repo-dashboard-page,
+.repo-dashboard-workspace > .repo-dashboard-overview {
+  flex: 1;
+  min-height: 0;
+}
+
 .repo-dashboard-page {
   display: flex;
   flex-direction: column;
@@ -5391,10 +5397,15 @@ code {
 .repo-dashboard-scroll-panel .repo-dashboard-list,
 .repo-dashboard-scroll-panel .repo-dashboard-latest-content,
 .repo-dashboard-scroll-panel .repo-dashboard-code,
-.repo-dashboard-scroll-panel .repo-dashboard-commit-list {
+.repo-dashboard-scroll-panel .repo-dashboard-commit-list,
+.repo-dashboard-scroll-panel .repo-dashboard-plan-groups {
   flex: 1;
   min-height: 0;
   overflow: auto;
+}
+
+.repo-dashboard-scroll-panel .repo-dashboard-list {
+  max-height: none;
 }
 
 .repo-dashboard-statstrip {

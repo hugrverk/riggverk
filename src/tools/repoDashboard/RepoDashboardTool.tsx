@@ -686,6 +686,7 @@ export function RepoDashboardTool() {
                           type="button"
                           className={`repo-dashboard-remitem ${row.type}${typeFilter === row.type ? " active" : ""}`}
                           style={{ color: WORK_TYPE_COLORS[row.type] }}
+                          aria-pressed={typeFilter === row.type}
                           onClick={() => {
                             setTypeFilter(row.type);
                             setSection("sources");
