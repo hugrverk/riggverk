@@ -262,80 +262,89 @@ export function RepoDashboardTool() {
 
       <section className="repo-dashboard-main">
         <header className="repo-dashboard-topbar">
-          <div className="repo-dashboard-titleline font-mono">
-            <strong>{SECTIONS.find(s => s.id === section)?.label ?? "Overview"}</strong>
-            <span className="text-muted">
-              {lastSynced ? ` / synced ${lastSynced.toLocaleString()}` : " / not synced"}
-            </span>
+          <div className="repo-dashboard-topbar-head">
+            <h2 className="repo-dashboard-section-title">
+              {SECTIONS.find(s => s.id === section)?.label ?? "Overview"}
+            </h2>
+            <p className="repo-dashboard-sync-note text-muted small" aria-live="polite">
+              {lastSynced ? `Synced ${lastSynced.toLocaleString()}` : "Not synced"}
+              {pickerStatus ? ` · ${pickerStatus}` : ""}
+              {saveStatus ? ` · ${saveStatus}` : ""}
+            </p>
           </div>
           <div className="repo-dashboard-controls">
             {savedEntries && savedEntries.length > 0 && (
-              <select
-                className="repo-dashboard-field font-mono"
-                value={selectedSavedId}
-                onChange={e => {
-                  const entry = savedEntries?.find(x => x.id === e.target.value);
-                  if (entry) {
-                    setRepoPath(entry.path);
-                    setDefaultBranch(entry.default_branch ?? "");
-                  }
-                }}
-                aria-label="Saved repositories"
-              >
-                <option value="">saved…</option>
-                {savedEntries.map(entry => (
-                  <option key={entry.id} value={entry.id}>{entry.label}</option>
-                ))}
-              </select>
+              <label className="repo-dashboard-control">
+                <span className="repo-dashboard-control-label">Saved</span>
+                <select
+                  className="repo-dashboard-field"
+                  value={selectedSavedId}
+                  onChange={e => {
+                    const entry = savedEntries?.find(x => x.id === e.target.value);
+                    if (entry) {
+                      setRepoPath(entry.path);
+                      setDefaultBranch(entry.default_branch ?? "");
+                    }
+                  }}
+                  aria-label="Saved repositories"
+                >
+                  <option value="">Choose…</option>
+                  {savedEntries.map(entry => (
+                    <option key={entry.id} value={entry.id}>{entry.label}</option>
+                  ))}
+                </select>
+              </label>
             )}
-            <div className="repo-dashboard-path-row">
+            <label className="repo-dashboard-control repo-dashboard-control-grow">
+              <span className="repo-dashboard-control-label">Path</span>
+              <div className="repo-dashboard-path-row">
+                <input
+                  className="repo-dashboard-field repo-dashboard-field-path"
+                  value={repoPath}
+                  onChange={e => setRepoPath(e.target.value)}
+                  placeholder="/path/to/repo"
+                  aria-label="Local repository path"
+                />
+                <button
+                  type="button"
+                  className="repo-dashboard-btn"
+                  onClick={() => void chooseRepoFolder()}
+                  disabled={loading}
+                  aria-label="Choose repository folder"
+                >
+                  Browse
+                </button>
+              </div>
+            </label>
+            <label className="repo-dashboard-control">
+              <span className="repo-dashboard-control-label">Branch</span>
               <input
-                className="repo-dashboard-field repo-dashboard-field-path font-mono"
-                value={repoPath}
-                onChange={e => setRepoPath(e.target.value)}
-                placeholder="/path/to/repo"
-                aria-label="Local repository path"
+                className="repo-dashboard-field repo-dashboard-field-branch"
+                value={defaultBranch}
+                onChange={e => setDefaultBranch(e.target.value)}
+                placeholder="main"
+                aria-label="Default branch override"
               />
+            </label>
+            <div className="repo-dashboard-control-actions">
               <button
                 type="button"
-                className="repo-dashboard-btn font-mono"
-                onClick={() => void chooseRepoFolder()}
-                disabled={loading}
-                aria-label="Choose repository folder"
+                className="repo-dashboard-btn"
+                onClick={() => void saveCurrentRepo()}
+                disabled={loading || !repoPath.trim()}
+                aria-label="Save repository path to settings"
               >
-                browse
+                Save
+              </button>
+              <button
+                type="button"
+                className="repo-dashboard-btn repo-dashboard-btn-primary"
+                onClick={() => void refresh()}
+                disabled={loading}
+              >
+                {loading ? "Refreshing…" : "Refresh"}
               </button>
             </div>
-            <input
-              className="repo-dashboard-field font-mono"
-              value={defaultBranch}
-              onChange={e => setDefaultBranch(e.target.value)}
-              placeholder="default branch"
-              aria-label="Default branch override"
-            />
-            <button
-              type="button"
-              className="repo-dashboard-btn font-mono"
-              onClick={() => void saveCurrentRepo()}
-              disabled={loading || !repoPath.trim()}
-              aria-label="Save repository path to settings"
-            >
-              save
-            </button>
-            <button
-              type="button"
-              className="repo-dashboard-btn font-mono"
-              onClick={() => void refresh()}
-              disabled={loading}
-            >
-              {loading ? "refreshing…" : "refresh"}
-            </button>
-            {pickerStatus && (
-              <span className="text-muted small font-mono" role="status">{pickerStatus}</span>
-            )}
-            {saveStatus && (
-              <span className="text-muted small font-mono" role="status">{saveStatus}</span>
-            )}
           </div>
         </header>
 
