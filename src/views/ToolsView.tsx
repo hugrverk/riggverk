@@ -13,13 +13,10 @@ export function ToolsView() {
   const [tab, setTab] = useState<ToolsTab>("prompt-loops");
 
   return (
-    <div className="tools-view">
+    <section className="tools-view" aria-label="Tools">
       <header className="tools-header">
-        <div className="tools-title">
-          <span className="tools-title-dot" aria-hidden="true" />
-          <span className="font-mono">tools</span>
-        </div>
-        <nav className="tools-tabs" aria-label="Tools">
+        <h1 className="tools-header-title">Tools</h1>
+        <nav className="tools-tabs" aria-label="Tool">
           {TABS.map(({ id, label }) => (
             <button
               key={id}
@@ -37,6 +34,6 @@ export function ToolsView() {
         {tab === "prompt-loops" && <PromptLoopsTool />}
         {tab === "repo-dashboard" && <RepoDashboardTool />}
       </div>
-    </div>
+    </section>
   );
 }
