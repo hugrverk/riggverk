@@ -6,6 +6,8 @@ mod cursor_profile;
 mod defaults;
 mod opencode_runtime;
 mod process;
+mod repo_dashboard;
+mod repo_dashboard_commands;
 mod settings_commands;
 mod skills;
 mod status;
@@ -24,6 +26,7 @@ pub use content::{
 pub use contract::validate_workspace_contract;
 pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
+pub use repo_dashboard_commands::get_repo_dashboard_snapshot;
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };
