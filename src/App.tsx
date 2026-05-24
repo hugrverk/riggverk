@@ -25,7 +25,7 @@ import { ToolsView } from "./views/ToolsView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const NO_WORKSPACE_TEXT = "no workspace selected";
@@ -57,6 +57,7 @@ function App() {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [docs, setDocs] = useState<DocSummary[]>([]);
+  const [docsHealth, setDocsHealth] = useState<DocsHealth | null>(null);
   const [activeDoc, setActiveDoc] = useState<DocumentContent | null>(null);
   const activeDocIdRef = useRef<string | null>(null);
 
@@ -374,9 +375,12 @@ function App() {
 
   const loadDocs = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
-      const list = await invoke<DocSummary[]>("list_docs");
+      const listPromise = invoke<DocSummary[]>("list_docs");
+      const healthPromise = invoke<DocsHealth>("get_docs_health").catch(() => null);
+      const [list, health] = await Promise.all([listPromise, healthPromise]);
       if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs(list);
+      setDocsHealth(health);
       if (list.length === 0) {
         activeDocIdRef.current = null;
         setActiveDoc(null);
@@ -397,6 +401,7 @@ function App() {
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
       setDocs([]);
+      setDocsHealth(null);
       setActiveDoc(null);
       if (!isInvalidWorkspaceError(e)) setError(`Docs: ${e}`);
     }
@@ -1226,6 +1231,7 @@ function App() {
         await Promise.all([
           loadWorkspaceDiagnostics(generation),
           loadCursorProfileHealth(generation),
+          loadDocs(generation),
           fetchStatus(generation),
         ]);
       },
@@ -1235,6 +1241,7 @@ function App() {
     repairWorkspaceToActionResult,
     loadWorkspaceDiagnostics,
     loadCursorProfileHealth,
+    loadDocs,
     fetchStatus,
     workspaceLoadGenerationRef,
   ]);
@@ -1720,6 +1727,8 @@ function App() {
             onSetSourceType={setGuardedLibrarySourceType}
             // Docs
             docs={docs}
+            docsHealth={docsHealth}
+            onGoToWorkspaceRepair={() => setView("start")}
             activeDoc={activeDoc}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}

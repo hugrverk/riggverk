@@ -23,6 +23,12 @@ export interface DocSummary {
   id: string; title: string; path: string; section: string; source: string;
 }
 
+export interface DocsHealth {
+  missing_count: number;
+  missing_prompt_template_docs: boolean;
+  missing_sample: string[];
+}
+
 export interface SkillSummary {
   id: string; name: string; description: string; path: string;
   category: string; risk: string; targets: string[]; related: string[];

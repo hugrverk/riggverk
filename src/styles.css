@@ -3820,6 +3820,26 @@ code {
   padding: 4px 0;
 }
 
+.lib-docs-stale-banner {
+  margin: 0 8px 10px;
+  padding: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.lib-docs-stale-title {
+  font-size: 12px;
+  font-weight: 600;
+  margin: 0 0 4px;
+}
+
+.lib-docs-stale-hint {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+  line-height: 1.4;
+}
+
 .lib-sidebar-group {
   margin-bottom: 4px;
 }

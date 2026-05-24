@@ -5,6 +5,7 @@ import type {
   AgentSourceContent,
   AgentTargetMeta,
   ConfigEditorSourceMeta,
+  DocsHealth,
   DocSummary,
   DocumentContent,
   SkillSummary,
@@ -33,6 +34,8 @@ interface LibraryViewProps {
 
   // Docs
   docs: DocSummary[];
+  docsHealth: DocsHealth | null;
+  onGoToWorkspaceRepair: () => void;
   activeDoc: DocumentContent | null;
   onSelectDoc: (id: string) => void;
   onOpenDoc: (id: string) => void;
@@ -127,18 +130,25 @@ interface LibraryViewProps {
 
 function DocItemList({
   docs,
+  docsHealth,
   activeId,
   onSelect,
   workspaceValid,
   onNewDoc,
+  onGoToWorkspaceRepair,
 }: {
   docs: DocSummary[];
+  docsHealth: DocsHealth | null;
   activeId: string | null;
   onSelect: (id: string) => void;
   workspaceValid: boolean;
   onNewDoc: () => void;
+  onGoToWorkspaceRepair: () => void;
 }) {
-  if (docs.length === 0) {
+  const missingCount = docsHealth?.missing_count ?? 0;
+  const showStaleBanner = workspaceValid && missingCount > 0;
+
+  if (docs.length === 0 && !showStaleBanner) {
     return (
       <div className="lib-sidebar-body">
         <div className="lib-sidebar-empty">
@@ -162,8 +172,25 @@ function DocItemList({
     groups.set(d.section, existing);
   }
 
+  const staleHint = docsHealth?.missing_prompt_template_docs
+    ? "Prompt Templates and other bundled docs are missing from this workspace."
+    : `${missingCount} bundled doc(s) are missing from this workspace.`;
+
   return (
     <div className="lib-sidebar-body">
+      {showStaleBanner && (
+        <div className="lib-docs-stale-banner" role="status">
+          <p className="lib-docs-stale-title">Bundled docs need update</p>
+          <p className="lib-docs-stale-hint">{staleHint} Use repair on the Workspace page to copy missing files without overwriting your edits.</p>
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            onClick={onGoToWorkspaceRepair}
+          >
+            open workspace repair
+          </button>
+        </div>
+      )}
       {Array.from(groups.entries()).map(([section, items]) => (
         <div key={section} className="lib-sidebar-group">
           <div className="lib-sidebar-group-label">{section}</div>
@@ -429,6 +456,8 @@ export function LibraryView(props: LibraryViewProps) {
     sourceType,
     onSetSourceType,
     docs,
+    docsHealth,
+    onGoToWorkspaceRepair,
     activeDoc,
     onSelectDoc,
     onOpenDoc,
@@ -622,10 +651,12 @@ export function LibraryView(props: LibraryViewProps) {
         return (
           <DocItemList
             docs={docs}
+            docsHealth={docsHealth}
             activeId={activeDoc?.id ?? null}
             onSelect={onSelectDoc}
             workspaceValid={workspaceValid}
             onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
+            onGoToWorkspaceRepair={onGoToWorkspaceRepair}
           />
         );
       case "rules":

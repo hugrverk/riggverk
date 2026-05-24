@@ -2955,6 +2955,39 @@ mod tests {
     }
 
     #[test]
+    fn repair_copies_missing_prompt_template_docs() {
+        let source = setup_source_root("repair-prompt-docs-ws");
+        let target = temp_root("repair-prompt-docs-tgt");
+        fs::create_dir_all(&target).expect("create target dir");
+        write_file(&target, ".agent-workspace/workspace.json", "{}");
+        write_file(&target, "README.md", "# workspace\n");
+
+        let result = repair_workspace_core(&source, &target, false);
+        assert!(result.ok, "repair should succeed: {}", result.message);
+
+        let copied: Vec<&str> = result.copied_files.iter().map(|s| s.as_str()).collect();
+        for rel in [
+            "docs/prompt-templates/standard-prompt.md",
+            "docs/prompt-templates/masterprompt.md",
+            "docs/prompt-templates/batchprompt.md",
+        ] {
+            assert!(
+                copied.contains(&rel) || target.join(rel).is_file(),
+                "prompt template doc should be copied or already exist: {}",
+                rel
+            );
+            assert!(
+                target.join(rel).is_file(),
+                "prompt template doc must exist on disk after repair: {}",
+                rel
+            );
+        }
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
     fn repair_refreshes_stale_cursor_bundle_files() {
         let bundled =
             PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");

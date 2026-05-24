@@ -8,7 +8,7 @@ mod smoke_runtime;
 
 use commands::{
     apply_workspace_repair, create_doc, generate_opencode_config_snapshot, get_agent_targets,
-    get_backup_details, get_cursor_profile_health, get_opencode_runtime_health,
+    get_backup_details, get_cursor_profile_health, get_docs_health, get_opencode_runtime_health,
     get_repo_dashboard_snapshot, get_settings, get_status, get_target_profiles,
     get_workspace_diagnostics, install_default_workspace, install_skills, list_agent_metadata,
     list_agent_sources, list_backups, list_docs, list_opencode_config_editor_sources, list_skills,
@@ -47,6 +47,7 @@ pub fn run() {
             open_skill,
             read_skill,
             list_docs,
+            get_docs_health,
             read_doc,
             save_doc,
             create_doc,
