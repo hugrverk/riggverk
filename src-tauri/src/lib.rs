@@ -21,11 +21,18 @@ use commands::{
     save_doc, save_opencode_config_source, try_set_active_workspace_path, update_settings,
     validate_workspace_contract,
 };
+use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .setup(|app| {
+            if let Some(window) = app.get_webview_window("main") {
+                window.maximize()?;
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_workspace_diagnostics,

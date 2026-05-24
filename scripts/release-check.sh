@@ -1207,6 +1207,12 @@ if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
   printf 'FAIL: tauri conf missing bundled default workspace resource path\n' >&2
   exit 1
 fi
+if ! search_quiet 'get_webview_window\("main"\)' src-tauri/src/lib.rs \
+  || ! search_quiet 'window\.maximize\(\)' src-tauri/src/lib.rs; then
+  printf 'FAIL: Tauri startup must maximize the main window\n' >&2
+  exit 1
+fi
+printf '  main window startup maximize hook verified\n'
 
 step "bundled default skills non-empty"
 skill_files="$(find resources/default-workspace/skills -type f -name SKILL.md)"
