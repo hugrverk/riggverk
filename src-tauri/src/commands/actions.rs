@@ -95,6 +95,12 @@ fn runtime_agent_target_enabled(target_id: &str) -> bool {
         .contains(&target_id.to_string())
 }
 
+fn target_enabled(target_id: &str) -> bool {
+    settings::load()
+        .enabled_target_ids
+        .contains(&target_id.to_string())
+}
+
 fn run_runtime_agents_install(
     root: &std::path::Path,
     action: &str,
@@ -111,13 +117,31 @@ fn run_runtime_agents_install(
 fn run_single_rule_install(
     root: &std::path::Path,
     action: &str,
+    target_id: &'static str,
     rule_flag: &'static str,
     apply: bool,
 ) -> Result<ActionResult, String> {
+    if !target_enabled(target_id) {
+        return Ok(ActionResult::new(
+            true,
+            action,
+            format!("{} is disabled in Targets\n", target_id),
+            String::new(),
+            Some(0),
+        ));
+    }
     let script_str = workspace_script_arg(root, "scripts/install-agent-rules.sh")?;
     let mode_flag = if apply { "--apply" } else { "--diff" };
     let all_args: Vec<&str> = vec![&script_str, "--quiet", mode_flag, rule_flag];
     let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    if out.trim().is_empty() && err.trim().is_empty() {
+        let message = if ok {
+            format!("{} completed with no script output\n", action)
+        } else {
+            format!("{} failed with no script output (exit {:?})\n", action, code)
+        };
+        return Ok(ActionResult::new(ok, action, out, message, code));
+    }
     Ok(ActionResult::new(ok, action, out, err, code))
 }
 
@@ -471,32 +495,48 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             ))
         }
 
-        "diff_codex_rules" => run_single_rule_install(&root, "diff_codex_rules", "--codex", false),
+        "diff_codex_rules" => {
+            run_single_rule_install(&root, "diff_codex_rules", "codex_rules", "--codex", false)
+        }
 
-        "sync_codex_rules" => run_single_rule_install(&root, "sync_codex_rules", "--codex", true),
+        "sync_codex_rules" => {
+            run_single_rule_install(&root, "sync_codex_rules", "codex_rules", "--codex", true)
+        }
 
         "diff_opencode_rules" => {
-            run_single_rule_install(&root, "diff_opencode_rules", "--opencode", false)
+            run_single_rule_install(
+                &root,
+                "diff_opencode_rules",
+                "opencode_rules",
+                "--opencode",
+                false,
+            )
         }
 
         "sync_opencode_rules" => {
-            run_single_rule_install(&root, "sync_opencode_rules", "--opencode", true)
+            run_single_rule_install(
+                &root,
+                "sync_opencode_rules",
+                "opencode_rules",
+                "--opencode",
+                true,
+            )
         }
 
         "diff_claude_rules" => {
-            run_single_rule_install(&root, "diff_claude_rules", "--claude", false)
+            run_single_rule_install(&root, "diff_claude_rules", "claude_rules", "--claude", false)
         }
 
         "sync_claude_rules" => {
-            run_single_rule_install(&root, "sync_claude_rules", "--claude", true)
+            run_single_rule_install(&root, "sync_claude_rules", "claude_rules", "--claude", true)
         }
 
         "diff_auggie_rules" => {
-            run_single_rule_install(&root, "diff_auggie_rules", "--auggie", false)
+            run_single_rule_install(&root, "diff_auggie_rules", "auggie_rules", "--auggie", false)
         }
 
         "sync_auggie_rules" => {
-            run_single_rule_install(&root, "sync_auggie_rules", "--auggie", true)
+            run_single_rule_install(&root, "sync_auggie_rules", "auggie_rules", "--auggie", true)
         }
 
         "diff_opencode_agents" => {

@@ -128,7 +128,7 @@ handle_target() {
   if $diff_mode; then
     if [ -f "$target" ]; then
       if cmp -s "$SOURCE_FILE" "$target"; then
-        if ! $quiet; then printf '  %s synced\n' "$label"; fi
+        printf '%s synced\n' "$label"
       else
         printf '\n--- %s diffs (%s)\n' "$label" "$target"
         diff -u "$target" "$SOURCE_FILE" || true
