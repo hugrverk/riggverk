@@ -71,7 +71,10 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
   return (
     <div className="prompt-loops-tool">
       <aside className="prompt-loops-sidebar">
-        {toolsSwitcher}
+        <div className="tool-context-brand font-mono">
+          <span className="tools-title-dot" aria-hidden="true" />
+          <span>kretsverket.prompt.loops</span>
+        </div>
         <nav className="prompt-loops-nav" aria-label="Prompt groups">
           {PROMPT_LOOP_GROUPS.map((g, index) => (
             <button
@@ -89,10 +92,13 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
             </button>
           ))}
         </nav>
-        <footer className="prompt-loops-sidebar-foot font-mono">
-          <div><span className="prompt-loops-pill">1–4</span> group</div>
-          <div><span className="prompt-loops-pill">/</span> search</div>
-          <div><span className="prompt-loops-pill">↑↓</span> navigate</div>
+        <footer className="tool-sidebar-footer font-mono">
+          {toolsSwitcher}
+          <div className="tool-sidebar-hints">
+            <div><span className="prompt-loops-pill">1–4</span> group</div>
+            <div><span className="prompt-loops-pill">/</span> search</div>
+            <div><span className="prompt-loops-pill">↑↓</span> navigate</div>
+          </div>
         </footer>
       </aside>
 

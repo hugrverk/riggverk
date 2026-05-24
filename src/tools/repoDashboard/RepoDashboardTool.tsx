@@ -478,8 +478,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
   return (
     <div className="repo-dashboard-tool">
       <aside className="repo-dashboard-sidebar">
-        {toolsSwitcher}
-        <div className="repo-dashboard-brand font-mono">
+        <div className="tool-context-brand font-mono">
           <span className="tools-title-dot" aria-hidden="true" />
           <span>kretsverket.repo.state</span>
         </div>
@@ -497,11 +496,10 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             </button>
           ))}
         </nav>
-        <footer className="repo-dashboard-sidebar-foot font-mono">
-          <div><span className="prompt-loops-pill">local git</span> first</div>
-          <div><span className="prompt-loops-pill">no PAT</span> stored</div>
+        <footer className="tool-sidebar-footer font-mono">
+          {toolsSwitcher}
           {snapshot?.gh.available && (
-            <div className="text-muted">
+            <div className="tool-sidebar-status text-muted">
               gh: {snapshot.gh.authenticated ? "enhanced" : "local-only"}
             </div>
           )}
@@ -593,12 +591,6 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
               </button>
             </div>
           </div>
-          <p className="repo-dashboard-section-kicker font-mono text-muted small">
-            {SECTIONS.find(s => s.id === section)?.label ?? "Overview"}
-            {section !== "overview" && SECTIONS.find(s => s.id === section)?.purpose
-              ? ` — ${SECTIONS.find(s => s.id === section)?.purpose}`
-              : ""}
-          </p>
         </header>
 
         <div className="repo-dashboard-workspace">
