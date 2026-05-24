@@ -9,6 +9,15 @@ use crate::path_utils::{
 };
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
+pub struct RepoDashboardEntry {
+    pub id: String,
+    pub label: String,
+    pub path: String,
+    #[serde(default)]
+    pub default_branch: Option<String>,
+}
+
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AppSettings {
     pub appearance: String,
     pub workspace_path: Option<String>,
@@ -20,6 +29,10 @@ pub struct AppSettings {
     pub background_color: Option<String>,
     #[serde(default)]
     pub foreground_color: Option<String>,
+    #[serde(default)]
+    pub repo_dashboard_entries: Vec<RepoDashboardEntry>,
+    #[serde(default)]
+    pub active_repo_dashboard_id: Option<String>,
 }
 
 impl Default for AppSettings {
@@ -31,6 +44,8 @@ impl Default for AppSettings {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         }
     }
 }
@@ -80,6 +95,15 @@ fn normalize(settings: &mut AppSettings) {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
+
+    for entry in &mut settings.repo_dashboard_entries {
+        normalize_loaded_repo_dashboard_entry(entry);
+    }
+    settings.active_repo_dashboard_id = settings
+        .active_repo_dashboard_id
+        .as_ref()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty());
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -111,6 +135,14 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .foreground_color
         .as_deref()
         .and_then(validate_hex_color);
+
+    normalize_repo_dashboard_entries(&mut settings.repo_dashboard_entries)?;
+
+    settings.active_repo_dashboard_id = settings
+        .active_repo_dashboard_id
+        .as_ref()
+        .map(|id| id.trim().to_string())
+        .filter(|id| !id.is_empty());
 
     Ok(())
 }
@@ -148,6 +180,41 @@ pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
     Ok(settings)
 }
 
+fn normalize_loaded_repo_dashboard_entry(entry: &mut RepoDashboardEntry) {
+    if entry.label.trim().is_empty() {
+        entry.label = "Repository".into();
+    }
+    if let Some(path) = normalize_user_workspace_path(&entry.path) {
+        entry.path = path;
+    }
+    entry.default_branch = entry
+        .default_branch
+        .as_ref()
+        .map(|b| b.trim().to_string())
+        .filter(|b| !b.is_empty());
+}
+
+fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Result<(), String> {
+    for entry in entries.iter_mut() {
+        entry.label = entry.label.trim().to_string();
+        if entry.label.is_empty() {
+            entry.label = "Repository".into();
+        }
+        entry.id = entry.id.trim().to_string();
+        if entry.id.is_empty() {
+            return Err("repo dashboard entry id cannot be empty".into());
+        }
+        entry.path = normalize_user_workspace_path_for_save(&entry.path)?
+            .ok_or_else(|| format!("repo dashboard path is required for {}", entry.id))?;
+        entry.default_branch = entry
+            .default_branch
+            .as_ref()
+            .map(|b| b.trim().to_string())
+            .filter(|b| !b.is_empty());
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::{normalize, normalize_for_save, validate_hex_color, AppSettings};
@@ -161,6 +228,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         }
     }
 
@@ -252,6 +321,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
 
         normalize(&mut settings);
@@ -308,6 +379,8 @@ mod tests {
             accent_color: Some("#FFAA00".into()),
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -322,6 +395,8 @@ mod tests {
             accent_color: Some("bad".into()),
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);
