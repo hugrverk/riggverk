@@ -14,9 +14,13 @@ pub struct CursorProfileHealth {
     global_agents_status: String,
     global_agents_count: usize,
     expected_global_agents_count: usize,
+    global_skills_status: String,
+    global_skills_count: usize,
+    expected_global_skills_count: usize,
     mcp_status: String,
-    sandbox_status: String,
-    sandbox_profiles_count: usize,
+    permissions_status: String,
+    shell_posture_status: String,
+    legacy_sandbox_status: String,
     warnings: Vec<String>,
     next_action: String,
 }
@@ -81,6 +85,47 @@ fn sync_dir_status(
     (status.into(), installed, sources.len())
 }
 
+fn sync_skill_dirs_status(
+    source_root: &Path,
+    target_root: &Path,
+    skill_names: &[String],
+) -> (String, usize, usize) {
+    if skill_names.is_empty() {
+        return ("missing".into(), 0, 0);
+    }
+    if !target_root.exists() {
+        return ("missing".into(), 0, skill_names.len());
+    }
+    let mut installed = 0;
+    let mut missing = 0;
+    let mut diverged = 0;
+    for name in skill_names {
+        let source = source_root.join(name).join("SKILL.md");
+        let target = target_root.join(name).join("SKILL.md");
+        if !source.is_file() {
+            diverged += 1;
+            continue;
+        }
+        if !target.is_file() {
+            missing += 1;
+        } else if file_eq(&source, &target) {
+            installed += 1;
+        } else {
+            diverged += 1;
+        }
+    }
+    let status = if missing == 0 && diverged == 0 {
+        "synced"
+    } else if installed == 0 && diverged == 0 {
+        "missing"
+    } else if missing > 0 && diverged == 0 {
+        "partial"
+    } else {
+        "diverged"
+    };
+    (status.into(), installed, skill_names.len())
+}
+
 const DOC_ONLY_KEYS: &[&str] = &[
     "description",
     "notes",
@@ -109,7 +154,7 @@ fn leaf_key_is_auth_like(key: &str) -> bool {
 }
 
 fn value_has_credential_literal(value: &str) -> bool {
-    if value.contains("sk-")
+    value.contains("sk-")
         || value.contains("Bearer ")
         || value.contains("Basic ")
         || value.contains("ghp_")
@@ -122,10 +167,6 @@ fn value_has_credential_literal(value: &str) -> bool {
         || value.contains("xoxa-")
         || value.contains("xoxr-")
         || value.contains("xoxs-")
-    {
-        return true;
-    }
-    false
 }
 
 fn scan_json_for_unsafe(value: &serde_json::Value, key: Option<&str>) -> bool {
@@ -164,73 +205,305 @@ fn json_has_unsafe_literals(content: &str) -> bool {
     scan_json_for_unsafe(&parsed, None)
 }
 
-fn mcp_status(root: &Path, warnings: &mut Vec<String>) -> String {
-    let example = cursor_root(root).join("mcp/mcp.example.json");
-    if !example.is_file() {
-        return "example-missing".into();
-    }
-    match std::fs::read_to_string(&example) {
-        Ok(content) => {
-            if serde_json::from_str::<serde_json::Value>(&content).is_err() {
-                warnings.push("Cursor MCP example is invalid JSON.".into());
-                return "example-invalid".into();
-            }
-            if json_has_unsafe_literals(&content) {
-                warnings.push("Cursor MCP example contains suspicious auth-like literals.".into());
-                return "example-unsafe".into();
-            }
+fn terminal_allowlist_unsafe(value: &serde_json::Value) -> bool {
+    let Some(items) = value.as_array() else {
+        return false;
+    };
+    for item in items {
+        let text = item.as_str().unwrap_or("").trim().to_ascii_lowercase();
+        if text.is_empty() {
+            continue;
         }
-        Err(_) => return "example-unreadable".into(),
+        if text == "*:*" || text == "*" {
+            return true;
+        }
+        let first = text.split_whitespace().next().unwrap_or("");
+        if matches!(
+            first,
+            "npx" | "npm" | "node" | "playwright" | "chrome" | "chromium" | "google-chrome"
+        ) {
+            return true;
+        }
+        if text.starts_with("*npx") || text.starts_with("*npm") || text.starts_with("*node") {
+            return true;
+        }
     }
-    "templates-only".into()
+    false
 }
 
-fn sandbox_status(root: &Path, warnings: &mut Vec<String>) -> (String, usize) {
+fn mcp_allowlist_unsafe(value: &serde_json::Value) -> bool {
+    let Some(items) = value.as_array() else {
+        return false;
+    };
+    for item in items {
+        let text = item.as_str().unwrap_or("").trim().to_ascii_lowercase();
+        if text == "*:*" || text == "*" {
+            return true;
+        }
+    }
+    false
+}
+
+fn manifest_recommended_skills(root: &Path) -> Vec<String> {
+    let path = cursor_root(root).join("manifest.json");
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return Vec::new();
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return Vec::new();
+    };
+    parsed
+        .get("recommended_pinned_skills")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+fn permissions_template_required(root: &Path) -> Vec<String> {
+    let path = cursor_root(root).join("permissions/global-playwright.json");
+    let Ok(content) = std::fs::read_to_string(&path) else {
+        return vec!["playwright:*".into()];
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return vec!["playwright:*".into()];
+    };
+    parsed
+        .get("mcpAllowlist")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(str::to_string))
+                .collect()
+        })
+        .unwrap_or_else(|| vec!["playwright:*".into()])
+}
+
+fn global_permissions_status(
+    home: &Path,
+    root: &Path,
+    warnings: &mut Vec<String>,
+) -> (String, String) {
+    let template_required = permissions_template_required(root);
+    let path = home.join(".cursor/permissions.json");
+    if !path.is_file() {
+        return ("missing".into(), "restricted-template".into());
+    }
+    let content = match std::fs::read_to_string(&path) {
+        Ok(content) => content,
+        Err(_) => return ("unreadable".into(), "unknown".into()),
+    };
+    if serde_json::from_str::<serde_json::Value>(&content).is_err() {
+        warnings.push("~/.cursor/permissions.json is invalid JSON.".into());
+        return ("invalid".into(), "unknown".into());
+    }
+    if json_has_unsafe_literals(&content) {
+        warnings.push("~/.cursor/permissions.json contains suspicious auth-like literals.".into());
+        return ("unsafe".into(), "unsafe".into());
+    }
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        return ("invalid".into(), "unknown".into());
+    };
+    if let Some(terminal) = parsed.get("terminalAllowlist") {
+        if terminal_allowlist_unsafe(terminal) {
+            warnings.push(
+                "~/.cursor/permissions.json terminalAllowlist includes unsafe shell entries."
+                    .into(),
+            );
+            return ("unsafe".into(), "unsafe".into());
+        }
+    }
+    if let Some(mcp) = parsed.get("mcpAllowlist") {
+        if mcp_allowlist_unsafe(mcp) {
+            warnings.push("~/.cursor/permissions.json mcpAllowlist is overly broad.".into());
+            return ("unsafe".into(), "unsafe".into());
+        }
+        let existing: Vec<String> = mcp
+            .as_array()
+            .map(|items| {
+                items
+                    .iter()
+                    .filter_map(|item| item.as_str().map(str::to_string))
+                    .collect()
+            })
+            .unwrap_or_default();
+        if template_required
+            .iter()
+            .all(|required| existing.iter().any(|entry| entry == required))
+        {
+            let shell = if parsed.get("terminalAllowlist").is_some() {
+                "restricted-with-user-terminal-entries"
+            } else {
+                "restricted"
+            };
+            return ("synced".into(), shell.into());
+        }
+        if existing.is_empty() {
+            return ("missing".into(), "restricted".into());
+        }
+        return ("partial".into(), "restricted".into());
+    }
+    ("missing".into(), "restricted".into())
+}
+
+fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
+    home.join(".config/playwright-mcp/config.json")
+}
+
+fn default_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
+    if cfg!(target_os = "macos") {
+        Some(home.join("Library/Caches/ms-playwright"))
+    } else if cfg!(target_os = "linux") {
+        let cache = std::env::var_os("XDG_CACHE_HOME")
+            .map(PathBuf::from)
+            .unwrap_or_else(|| home.join(".cache"));
+        Some(cache.join("ms-playwright"))
+    } else {
+        None
+    }
+}
+
+fn transform_playwright_template_value(
+    value: &serde_json::Value,
+    config_path: &str,
+    browsers_path: &str,
+) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut out = serde_json::Map::new();
+            for (key, child) in map {
+                out.insert(
+                    key.clone(),
+                    transform_playwright_template_value(child, config_path, browsers_path),
+                );
+            }
+            serde_json::Value::Object(out)
+        }
+        serde_json::Value::Array(items) => serde_json::Value::Array(
+            items
+                .iter()
+                .map(|item| transform_playwright_template_value(item, config_path, browsers_path))
+                .collect(),
+        ),
+        serde_json::Value::String(text) => {
+            if text == "__PLAYWRIGHT_MCP_CONFIG_PATH__" {
+                serde_json::Value::String(config_path.to_string())
+            } else if text == "__PLAYWRIGHT_BROWSERS_PATH__" {
+                serde_json::Value::String(browsers_path.to_string())
+            } else if text.starts_with("@playwright/mcp@") {
+                serde_json::Value::String("@playwright/mcp@0.0.48".into())
+            } else {
+                serde_json::Value::String(text.clone())
+            }
+        }
+        other => other.clone(),
+    }
+}
+
+fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> String {
+    let template_path = cursor_root(root).join("mcp/playwright.mcp.json");
+    if !template_path.is_file() {
+        return "template-missing".into();
+    }
+    let template_content = match std::fs::read_to_string(&template_path) {
+        Ok(content) => content,
+        Err(_) => return "template-unreadable".into(),
+    };
+    if json_has_unsafe_literals(&template_content) {
+        warnings.push("Playwright MCP template contains suspicious auth-like literals.".into());
+        return "template-unsafe".into();
+    }
+    let Ok(template_parsed) = serde_json::from_str::<serde_json::Value>(&template_content) else {
+        return "template-invalid".into();
+    };
+    let Some(browsers_path) = default_playwright_browsers_path(home) else {
+        return "unsupported-platform".into();
+    };
+    let config_path = default_playwright_mcp_config_path(home);
+    let expected = template_parsed
+        .get("mcpServers")
+        .and_then(|v| v.get("playwright"))
+        .cloned()
+        .map(|value| {
+            transform_playwright_template_value(
+                &value,
+                &config_path.to_string_lossy(),
+                &browsers_path.to_string_lossy(),
+            )
+        });
+    let Some(expected) = expected else {
+        return "template-invalid".into();
+    };
+
+    let target = home.join(".cursor/mcp.json");
+    if !target.is_file() {
+        return "missing".into();
+    }
+    let content = match std::fs::read_to_string(&target) {
+        Ok(content) => content,
+        Err(_) => return "unreadable".into(),
+    };
+    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+        warnings.push("~/.cursor/mcp.json is invalid JSON.".into());
+        return "invalid".into();
+    };
+    let actual = parsed
+        .get("mcpServers")
+        .and_then(|v| v.get("playwright"))
+        .cloned();
+    if actual == Some(expected) {
+        "synced".into()
+    } else if actual.is_some() {
+        "diverged".into()
+    } else {
+        "partial".into()
+    }
+}
+
+fn legacy_sandbox_status(root: &Path, warnings: &mut Vec<String>) -> String {
     let dir = cursor_root(root).join("sandbox");
     if !dir.is_dir() {
-        return ("missing".into(), 0);
+        return "missing".into();
     }
-    let mut count = 0;
     for name in ["safe.json", "playwright-safe.json", "playwright-full.json"] {
         let path = dir.join(name);
         if !path.is_file() {
-            warnings.push(format!("Cursor sandbox profile missing: {name}"));
-            return ("partial".into(), count);
+            return "partial".into();
         }
-        count += 1;
         let content = match std::fs::read_to_string(&path) {
             Ok(content) => content,
-            Err(_) => return ("unreadable".into(), count),
-        };
-        let parsed: serde_json::Value = match serde_json::from_str(&content) {
-            Ok(parsed) => parsed,
-            Err(_) => return ("invalid".into(), count),
+            Err(_) => return "unreadable".into(),
         };
         if json_has_unsafe_literals(&content) {
             warnings.push(format!(
-                "Cursor sandbox profile contains suspicious auth-like literals: {name}"
+                "Legacy sandbox profile contains suspicious auth-like literals: {name}"
             ));
-            return ("unsafe".into(), count);
+            return "unsafe".into();
         }
-        let commands = parsed
-            .get("command_allowlist")
-            .and_then(|v| v.as_array())
-            .cloned()
-            .unwrap_or_default();
-        for command in commands {
-            let value = command.as_str().unwrap_or("").to_ascii_lowercase();
-            if matches!(
-                value.as_str(),
-                "npx" | "npm" | "node" | "playwright" | "chrome" | "chromium"
-            ) {
-                warnings.push(format!(
-                    "Cursor sandbox profile command-allowlists an MCP support command: {name}"
-                ));
-                return ("unsafe".into(), count);
+        let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
+            return "invalid".into();
+        };
+        if let Some(commands) = parsed.get("command_allowlist").and_then(|v| v.as_array()) {
+            for command in commands {
+                let value = command.as_str().unwrap_or("").to_ascii_lowercase();
+                if matches!(
+                    value.as_str(),
+                    "npx" | "npm" | "node" | "playwright" | "chrome" | "chromium"
+                ) {
+                    warnings.push(format!(
+                        "Legacy sandbox profile command-allowlists an MCP support command: {name}"
+                    ));
+                    return "unsafe".into();
+                }
             }
         }
     }
-    ("templates".into(), count)
+    "legacy-templates".into()
 }
 
 fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
@@ -246,8 +519,19 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
         Ok(parsed) => parsed,
         Err(_) => return "invalid".into(),
     };
-    for key in ["agents", "rules", "mcp_examples", "sandbox_profiles"] {
-        if !parsed.get(key).is_some_and(|v| v.is_array()) {
+    for key in [
+        "agents",
+        "rules",
+        "mcp_examples",
+        "permissions_templates",
+        "global_profile",
+    ] {
+        if key == "global_profile" {
+            if !parsed.get(key).is_some_and(|v| v.is_string()) {
+                warnings.push(format!("Cursor manifest missing string: {key}"));
+                return "partial".into();
+            }
+        } else if !parsed.get(key).is_some_and(|v| v.is_array()) {
             warnings.push(format!("Cursor manifest missing array: {key}"));
             return "partial".into();
         }
@@ -272,33 +556,55 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let (global_agents_status, global_agents_count, expected_global_agents_count) =
         sync_dir_status(&cursor.join("agents"), &home.join(".cursor/agents"), "md");
 
-    let mcp_status = mcp_status(&root, &mut warnings);
-    let (sandbox_status, sandbox_profiles_count) = sandbox_status(&root, &mut warnings);
+    let recommended_skills = manifest_recommended_skills(&root);
+    let (global_skills_status, global_skills_count, expected_global_skills_count) =
+        sync_skill_dirs_status(
+            &root.join("skills"),
+            &home.join(".cursor/skills"),
+            &recommended_skills,
+        );
 
-    let status = if manifest_status == "missing" || expected_global_agents_count == 0 {
-        "missing"
-    } else if manifest_status != "valid" || sandbox_status == "partial" {
+    let mcp_status = global_mcp_status(&home, &root, &mut warnings);
+    let (permissions_status, shell_posture_status) =
+        global_permissions_status(&home, &root, &mut warnings);
+    let legacy_sandbox_status = legacy_sandbox_status(&root, &mut warnings);
+
+    let surfaces = [
+        global_agents_status.as_str(),
+        global_skills_status.as_str(),
+        mcp_status.as_str(),
+        permissions_status.as_str(),
+    ];
+    let status = if manifest_status != "valid" {
         "partial"
-    } else if global_agents_status == "synced" && !mcp_status.ends_with("unsafe") {
+    } else if surfaces.iter().any(|s| *s == "unsafe") {
+        "unsafe"
+    } else if surfaces.iter().all(|s| *s == "synced") {
         "synced"
-    } else if global_agents_status == "missing" {
+    } else if surfaces.iter().all(|s| *s == "missing") {
         "missing"
-    } else {
+    } else if surfaces
+        .iter()
+        .any(|s| *s == "diverged" || *s == "partial" || *s == "invalid")
+    {
         "diverged"
+    } else {
+        "partial"
     }
     .to_string();
 
-    let mcp_note = if mcp_status == "templates-only" {
-        " MCP templates are in the workspace; copy them into Cursor settings manually."
-    } else {
-        ""
-    };
     let next_action = match status.as_str() {
-        "synced" => format!("Cursor global profile is synced.{mcp_note}"),
-        "missing" => format!("Sync global agents from Workspace.{mcp_note}"),
-        "partial" => format!("Fix missing Cursor profile assets before syncing.{mcp_note}"),
-        "diverged" => format!("Run diff global, then sync global agents.{mcp_note}"),
-        _ => format!("Refresh after checking the workspace templates.{mcp_note}"),
+        "synced" => {
+            "Global Cursor profile is synced. Playwright MCP can auto-run; shell stays restricted."
+                .into()
+        }
+        "missing" => {
+            "Run apply global profile to sync ~/.cursor agents, skills, MCP, and permissions."
+                .into()
+        }
+        "unsafe" => "Fix unsafe ~/.cursor permissions before applying the global profile.".into(),
+        "diverged" => "Run diff global profile, then apply global profile.".into(),
+        _ => "Validate the workspace templates, then apply the global profile.".into(),
     };
 
     Ok(CursorProfileHealth {
@@ -308,9 +614,13 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
         global_agents_status,
         global_agents_count,
         expected_global_agents_count,
+        global_skills_status,
+        global_skills_count,
+        expected_global_skills_count,
         mcp_status,
-        sandbox_status,
-        sandbox_profiles_count,
+        permissions_status,
+        shell_posture_status,
+        legacy_sandbox_status,
         warnings,
         next_action,
     })
@@ -332,13 +642,17 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
     let mut args = vec![script];
 
     match action.as_str() {
-        "cursor_diff_global_agents" => args.extend(["--quiet".into(), "--global-agents".into()]),
-        "cursor_sync_global_agents" => {
-            args.extend(["--quiet".into(), "--apply".into(), "--global-agents".into()])
+        "cursor_diff_global_profile" => {
+            args.extend(["--quiet".into(), "--diff-global-profile".into()])
         }
-        "cursor_show_user_rules" => args.push("--show-user-rules".into()),
-        "cursor_copy_user_rules" => args.push("--copy-user-rules".into()),
+        "cursor_apply_global_profile" => {
+            args.extend(["--quiet".into(), "--apply-global-profile".into()])
+        }
+        "cursor_validate_global_profile" => {
+            args.extend(["--quiet".into(), "--validate-global-profile".into()])
+        }
         "cursor_open_settings" => args.push("--open-cursor-settings".into()),
+        "cursor_copy_user_rules" => args.push("--copy-user-rules".into()),
         "cursor_show_playwright_mcp" => args.push("--show-playwright-mcp".into()),
         "cursor_copy_playwright_mcp" => args.push("--copy-playwright-mcp".into()),
         "cursor_show_sandbox_safe" => args.extend(["--show-sandbox-profile".into(), "safe".into()]),
@@ -355,32 +669,29 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
         "cursor_copy_sandbox_playwright_full" => {
             args.extend(["--copy-sandbox-profile".into(), "playwright-full".into()])
         }
+        "cursor_diff_global_agents" => args.extend(["--quiet".into(), "--global-agents".into()]),
+        "cursor_sync_global_agents" => {
+            args.extend(["--quiet".into(), "--apply".into(), "--global-agents".into()])
+        }
         "cursor_validate_profile" => {
-            let manifest = cursor_root(&root).join("manifest.json");
-            if !manifest.is_file() {
-                return Ok(ActionResult::new(
-                    false,
-                    action,
-                    String::new(),
-                    "Cursor manifest missing.\n".into(),
-                    Some(1),
-                ));
-            }
             let health = get_cursor_profile_health()?;
-            let ok = matches!(health.status.as_str(), "synced" | "diverged" | "missing");
+            let ok = !matches!(health.status.as_str(), "unsafe" | "partial")
+                && health.manifest_status == "valid";
             return Ok(ActionResult::new(
                 ok,
                 action,
                 format!(
-                    "manifest: {}\nglobal agents: {}/{} {}\nuser rules: {}\nmcp: {}\nsandbox profiles: {} {}\n",
+                    "manifest: {}\nagents: {}/{} {}\nskills: {}/{} {}\nmcp: {}\npermissions: {}\nshell: {}\n",
                     health.manifest_status,
                     health.global_agents_count,
                     health.expected_global_agents_count,
                     health.global_agents_status,
-                    health.user_rules_status,
+                    health.global_skills_count,
+                    health.expected_global_skills_count,
+                    health.global_skills_status,
                     health.mcp_status,
-                    health.sandbox_profiles_count,
-                    health.sandbox_status
+                    health.permissions_status,
+                    health.shell_posture_status,
                 ),
                 health.warnings.join("\n"),
                 if ok { Some(0) } else { Some(1) },
@@ -398,9 +709,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn playwright_safe_documentation_text_is_not_unsafe() {
+    fn global_playwright_permissions_template_is_not_unsafe() {
         let content = include_str!(
-            "../../../resources/default-workspace/templates/cursor/sandbox/playwright-safe.json"
+            "../../../resources/default-workspace/templates/cursor/permissions/global-playwright.json"
         );
         assert!(!json_has_unsafe_literals(content));
     }
@@ -415,5 +726,30 @@ mod tests {
     fn env_placeholder_auth_values_are_allowed() {
         let content = r#"{"env":{"EXAMPLE_API_KEY":"${env:EXAMPLE_API_KEY}"}}"#;
         assert!(!json_has_unsafe_literals(content));
+    }
+
+    #[test]
+    fn terminal_allowlist_npx_is_unsafe() {
+        let value: serde_json::Value =
+            serde_json::from_str(r#"["npx -y @playwright/mcp"]"#).unwrap();
+        assert!(terminal_allowlist_unsafe(&value));
+    }
+
+    #[test]
+    fn mcp_allowlist_run_everything_is_unsafe() {
+        let value: serde_json::Value = serde_json::from_str(r#"["*:*"]"#).unwrap();
+        assert!(mcp_allowlist_unsafe(&value));
+    }
+
+    #[test]
+    fn restricted_shell_posture_without_terminal_allowlist() {
+        let value: serde_json::Value =
+            serde_json::from_str(r#"{"mcpAllowlist":["playwright:*"]}"#).unwrap();
+        assert!(!terminal_allowlist_unsafe(
+            &value
+                .get("terminalAllowlist")
+                .cloned()
+                .unwrap_or(serde_json::Value::Null)
+        ));
     }
 }

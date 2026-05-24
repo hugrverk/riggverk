@@ -2270,6 +2270,8 @@ mod tests {
             "templates/codex/mcp/playwright.toml",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
+            "templates/cursor/global-profile.json",
+            "templates/cursor/permissions/global-playwright.json",
             "templates/cursor/user-rules.md",
             "templates/cursor/mcp/README.md",
             "templates/cursor/mcp/mcp.example.json",
@@ -2315,6 +2317,8 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
+            "scripts/cursor-global-profile-lib.sh",
+            "scripts/test_cursor_global_profile.py",
             "scripts/check-codex-profile.py",
             "scripts/check-cursor-profile.py",
         ] {

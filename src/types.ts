@@ -369,15 +369,19 @@ export interface BrainSetupSeedResult {
 }
 
 export interface CursorProfileHealth {
-  status: "synced" | "diverged" | "missing" | "partial" | "unknown" | string;
+  status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "unknown" | string;
   manifest_status: string;
   user_rules_status: "manual" | "template-missing" | "unknown" | string;
   global_agents_status: string;
   global_agents_count: number;
   expected_global_agents_count: number;
+  global_skills_status: string;
+  global_skills_count: number;
+  expected_global_skills_count: number;
   mcp_status: string;
-  sandbox_status: string;
-  sandbox_profiles_count: number;
+  permissions_status: string;
+  shell_posture_status: string;
+  legacy_sandbox_status: string;
   warnings: string[];
   next_action: string;
 }

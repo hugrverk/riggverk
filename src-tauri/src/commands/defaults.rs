@@ -88,6 +88,8 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "templates/codex/mcp/playwright.toml",
                 "templates/cursor/README.md",
                 "templates/cursor/manifest.json",
+                "templates/cursor/global-profile.json",
+                "templates/cursor/permissions/global-playwright.json",
                 "templates/cursor/user-rules.md",
                 "templates/cursor/mcp/README.md",
                 "templates/cursor/mcp/mcp.example.json",
@@ -135,6 +137,8 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
                 "scripts/install-opencode-config.sh",
                 "scripts/install-codex-config.sh",
                 "scripts/install-cursor-workspace.sh",
+                "scripts/cursor-global-profile-lib.sh",
+                "scripts/test_cursor_global_profile.py",
                 "scripts/check-codex-profile.py",
                 "scripts/check-cursor-profile.py",
             ],
@@ -299,8 +303,8 @@ mod tests {
             .expect("scripts category must exist");
         assert_eq!(
             scripts.files.len(),
-            11,
-            "scripts category must have 11 known paths"
+            13,
+            "scripts category must have 13 known paths"
         );
     }
 
@@ -407,6 +411,8 @@ mod tests {
             "templates/codex/mcp/playwright.toml",
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
+            "templates/cursor/global-profile.json",
+            "templates/cursor/permissions/global-playwright.json",
             "templates/cursor/user-rules.md",
             "templates/cursor/mcp/README.md",
             "templates/cursor/mcp/mcp.example.json",
@@ -452,6 +458,8 @@ mod tests {
             "scripts/check-playwright-mcp.sh",
             "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
+            "scripts/cursor-global-profile-lib.sh",
+            "scripts/test_cursor_global_profile.py",
             "scripts/check-codex-profile.py",
             "scripts/check-cursor-profile.py",
         ] {
@@ -571,6 +579,8 @@ mod tests {
             "templates/cursor/agents/browser-qa.md",
             "templates/cursor/agents/repo-scout.md",
             "templates/cursor/manifest.json",
+            "templates/cursor/global-profile.json",
+            "templates/cursor/permissions/global-playwright.json",
             "templates/cursor/mcp/mcp.example.json",
             "templates/cursor/mcp/playwright.mcp.json",
             "templates/cursor/sandbox/README.md",

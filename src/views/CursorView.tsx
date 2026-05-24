@@ -27,16 +27,16 @@ interface CursorViewProps {
   canRunReleaseCheck: boolean;
   cursorProfileHealth: CursorProfileHealth | null;
   onRefreshCursorProfile: () => void;
-  onCursorDiffGlobal: () => void;
-  onCursorSyncGlobal: () => void;
-  onCursorCopyUserRules: () => void;
+  onCursorDiffGlobalProfile: () => void;
+  onCursorApplyGlobalProfile: () => void;
+  onCursorValidateGlobalProfile: () => void;
   onCursorOpenSettings: () => void;
+  onCursorCopyUserRules: () => void;
   onCursorShowPlaywrightMcp: () => void;
   onCursorCopyPlaywrightMcp: () => void;
   onCursorCopySandboxSafe: () => void;
   onCursorCopySandboxPlaywrightSafe: () => void;
   onCursorCopySandboxPlaywrightFull: () => void;
-  onCursorValidateProfile: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -50,22 +50,18 @@ interface CursorViewProps {
   onOpenInstallScript: () => void;
 }
 
-function mcpTone(status: string): "ok" | "warn" | "fail" | "muted" {
-  if (status.includes("unsafe") || status.includes("invalid")) return "fail";
-  if (status === "templates-only") return "ok";
-  if (status.includes("present")) return "warn";
-  return "muted";
-}
+type Tone = "ok" | "warn" | "fail" | "muted";
 
-function sandboxTone(status: string): "ok" | "warn" | "fail" | "muted" {
-  if (status.includes("unsafe") || status.includes("invalid")) return "fail";
-  if (status === "templates") return "ok";
+function surfaceTone(status: string): Tone {
+  if (status === "synced") return "ok";
+  if (status === "missing" || status.includes("unsafe") || status.includes("invalid")) return "fail";
+  if (status === "unsupported-platform" || status.includes("template")) return "muted";
   return "warn";
 }
 
-function globalAgentsTone(status: string): "ok" | "warn" | "fail" | "muted" {
-  if (status === "synced") return "ok";
-  if (status === "missing") return "fail";
+function shellTone(status: string): Tone {
+  if (status.startsWith("restricted")) return "ok";
+  if (status.includes("unsafe")) return "fail";
   return "warn";
 }
 
@@ -88,16 +84,16 @@ export function CursorView({
   canRunReleaseCheck,
   cursorProfileHealth,
   onRefreshCursorProfile,
-  onCursorDiffGlobal,
-  onCursorSyncGlobal,
-  onCursorCopyUserRules,
+  onCursorDiffGlobalProfile,
+  onCursorApplyGlobalProfile,
+  onCursorValidateGlobalProfile,
   onCursorOpenSettings,
+  onCursorCopyUserRules,
   onCursorShowPlaywrightMcp,
   onCursorCopyPlaywrightMcp,
   onCursorCopySandboxSafe,
   onCursorCopySandboxPlaywrightSafe,
   onCursorCopySandboxPlaywrightFull,
-  onCursorValidateProfile,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -121,7 +117,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Sync Cursor adapter agents from templates/cursor/agents. User Rules, MCP, and sandbox profiles are copy/manual."
+            summary="Apply one global Playwright profile to ~/.cursor (agents, skills, MCP, permissions). No project files are written. Playwright MCP can run autonomously; shell stays restricted."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
@@ -139,107 +135,90 @@ export function CursorView({
 
           {workspaceValid && (
             <HarnessActionCard
-              title="Global agents"
-              ariaLabel="Cursor global agents sync"
-              description="Sync workspace agent templates to ~/.cursor/agents. Extra agents already in that folder are preserved."
+              title="Global Cursor profile"
+              ariaLabel="Cursor global Playwright profile"
+              description="Syncs ~/.cursor/agents, ~/.cursor/skills, ~/.cursor/mcp.json (playwright server merge), and ~/.cursor/permissions.json (playwright:* MCP allowlist). Backups are created before overwriting existing files."
               statusChip={health
                 ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
                 : { label: "loading", tone: "muted" }}
-              details={health ? [{
-                label: "Agents",
-                value: `${health.global_agents_count}/${health.expected_global_agents_count} ${health.global_agents_status}`,
-                tone: globalAgentsTone(health.global_agents_status),
-              }] : undefined}
+              details={health ? [
+                {
+                  label: "Agents",
+                  value: `${health.global_agents_count}/${health.expected_global_agents_count} ${health.global_agents_status}`,
+                  tone: surfaceTone(health.global_agents_status),
+                },
+                {
+                  label: "Skills",
+                  value: `${health.global_skills_count}/${health.expected_global_skills_count} ${health.global_skills_status}`,
+                  tone: surfaceTone(health.global_skills_status),
+                },
+                {
+                  label: "MCP",
+                  value: health.mcp_status,
+                  tone: surfaceTone(health.mcp_status),
+                },
+                {
+                  label: "Permissions",
+                  value: health.permissions_status,
+                  tone: surfaceTone(health.permissions_status),
+                },
+                {
+                  label: "Shell",
+                  value: health.shell_posture_status,
+                  tone: shellTone(health.shell_posture_status),
+                },
+              ] : undefined}
               warning={health && health.warnings.length > 0 ? health.warnings[0] : undefined}
               nextAction={health?.next_action}
-              nextActionTone={health?.status === "synced" ? "ok" : health?.status === "missing" ? "fail" : "warn"}
+              nextActionTone={health?.status === "synced" ? "ok" : health?.status === "unsafe" ? "fail" : "warn"}
               secondaryActions={[
                 { label: "refresh", onClick: onRefreshCursorProfile, disabled: busy },
-                { label: "diff global", onClick: onCursorDiffGlobal, disabled: busy },
-                { label: "validate", onClick: onCursorValidateProfile, disabled: busy },
-              ]}
-              primaryAction={{
-                label: "sync global",
-                onClick: onCursorSyncGlobal,
-                disabled: busy,
-              }}
-            />
-          )}
-
-          {workspaceValid && (
-            <HarnessActionCard
-              title="User Rules"
-              ariaLabel="Cursor user rules manual copy"
-              description="Copy-only. The app does not write Cursor User Rules — paste into Cursor Settings → Rules → User Rules."
-              statusChip={{ label: "manual", tone: "muted" }}
-              details={health ? [{
-                label: "Status",
-                value: health.user_rules_status,
-                tone: health.user_rules_status === "synced" ? "ok" : "muted",
-              }] : undefined}
-              secondaryActions={[
+                { label: "diff global", onClick: onCursorDiffGlobalProfile, disabled: busy },
+                { label: "validate", onClick: onCursorValidateGlobalProfile, disabled: busy },
                 { label: "open settings", onClick: onCursorOpenSettings, disabled: busy },
               ]}
               primaryAction={{
-                label: "copy user rules",
-                onClick: onCursorCopyUserRules,
+                label: "apply global",
+                onClick: onCursorApplyGlobalProfile,
                 disabled: busy,
               }}
             />
           )}
 
           {workspaceValid && (
-            <HarnessActionCard
-              title="MCP"
-              ariaLabel="Cursor Playwright MCP manual merge"
-              description="Template/manual merge. Copy the Playwright MCP JSON, then merge keys into .cursor/mcp.json or Cursor Settings → MCP. Do not replace the whole file."
-              statusChip={{ label: "manual", tone: "muted" }}
-              details={health ? [{
-                label: "MCP",
-                value: health.mcp_status === "templates-only" ? "templates only" : health.mcp_status,
-                tone: mcpTone(health.mcp_status),
-              }] : undefined}
-              secondaryActions={[
-                { label: "show in terminal", onClick: onCursorShowPlaywrightMcp, disabled: busy },
-              ]}
-              primaryAction={{
-                label: "copy playwright mcp",
-                onClick: onCursorCopyPlaywrightMcp,
-                disabled: busy,
-              }}
-            />
-          )}
-
-          {workspaceValid && (
-            <HarnessActionCard
-              title="Sandbox profiles"
-              ariaLabel="Cursor sandbox profiles manual copy"
-              description="Copy-only. Paste one JSON profile at a time into Cursor sandbox / Auto-Run UI where supported."
-              statusChip={{ label: "manual", tone: "muted" }}
-              details={health ? [{
-                label: "Templates",
-                value: `${health.sandbox_profiles_count} · ${health.sandbox_status}`,
-                tone: sandboxTone(health.sandbox_status),
-              }] : undefined}
-            >
-              <div className="harness-sandbox-actions">
-                <div className="harness-sandbox-row">
-                  <span className="harness-sandbox-label">safe</span>
-                  <span className="harness-manual-badge">minimal</span>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
+            <details className="harness-advanced-panel">
+              <summary>Advanced / debug</summary>
+              <div className="harness-advanced-body">
+                <p className="harness-advanced-note">
+                  User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
+                </p>
+                <div className="harness-advanced-actions">
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
+                    copy user rules
+                  </button>
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
+                    show mcp template
+                  </button>
+                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
+                    copy mcp template
+                  </button>
                 </div>
-                <div className="harness-sandbox-row">
-                  <span className="harness-sandbox-label">playwright-safe</span>
-                  <span className="harness-manual-badge">tighter</span>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
-                </div>
-                <div className="harness-sandbox-row">
-                  <span className="harness-sandbox-label">playwright-full</span>
-                  <span className="harness-manual-badge">review</span>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
+                <div className="harness-sandbox-actions">
+                  <div className="harness-sandbox-row">
+                    <span className="harness-sandbox-label">legacy safe</span>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
+                  </div>
+                  <div className="harness-sandbox-row">
+                    <span className="harness-sandbox-label">legacy playwright-safe</span>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
+                  </div>
+                  <div className="harness-sandbox-row">
+                    <span className="harness-sandbox-label">legacy playwright-full</span>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
+                  </div>
                 </div>
               </div>
-            </HarnessActionCard>
+            </details>
           )}
 
           <TargetSkillsPanel

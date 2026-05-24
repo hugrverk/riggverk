@@ -1563,16 +1563,16 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             cursorProfileHealth={cursorProfileHealth}
             onRefreshCursorProfile={() => loadCursorProfileHealth()}
-            onCursorDiffGlobal={() => runCursorProfileAction("cursor_diff_global_agents", "cursor diff global")}
-            onCursorSyncGlobal={() => runCursorProfileAction("cursor_sync_global_agents", "cursor sync global")}
-            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
+            onCursorDiffGlobalProfile={() => runCursorProfileAction("cursor_diff_global_profile", "cursor diff global profile")}
+            onCursorApplyGlobalProfile={() => runCursorProfileAction("cursor_apply_global_profile", "cursor apply global profile")}
+            onCursorValidateGlobalProfile={() => runCursorProfileAction("cursor_validate_global_profile", "cursor validate global profile")}
             onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
+            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
             onCursorShowPlaywrightMcp={() => runCursorProfileAction("cursor_show_playwright_mcp", "cursor show playwright mcp")}
             onCursorCopyPlaywrightMcp={() => runCursorProfileAction("cursor_copy_playwright_mcp", "cursor copy playwright mcp")}
             onCursorCopySandboxSafe={() => runCursorProfileAction("cursor_copy_sandbox_safe", "cursor copy sandbox safe")}
             onCursorCopySandboxPlaywrightSafe={() => runCursorProfileAction("cursor_copy_sandbox_playwright_safe", "cursor copy sandbox playwright-safe")}
             onCursorCopySandboxPlaywrightFull={() => runCursorProfileAction("cursor_copy_sandbox_playwright_full", "cursor copy sandbox playwright-full")}
-            onCursorValidateProfile={() => runCursorProfileAction("cursor_validate_profile", "cursor validate profile")}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["cursor"], "install skills dry-run (cursor)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["cursor"], "install skills (cursor)")}

@@ -4263,6 +4263,41 @@ code {
   margin-top: 4px;
 }
 
+.harness-advanced-panel {
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-elevated, var(--bg));
+}
+
+.harness-advanced-panel summary {
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+.harness-advanced-body {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.harness-advanced-note {
+  margin: 0;
+  font-size: 10px;
+  color: var(--text-muted);
+  line-height: 1.4;
+}
+
+.harness-advanced-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
 .harness-sandbox-actions {
   display: flex;
   flex-direction: column;
