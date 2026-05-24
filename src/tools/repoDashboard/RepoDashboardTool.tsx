@@ -185,6 +185,8 @@ export function RepoDashboardTool() {
 
   const latestMerge = snapshot?.gh.merged_prs[0] ?? null;
   const latestCommit = snapshot?.latest_commit ?? null;
+  const selectedSavedId =
+    savedEntries?.find(e => e.path === repoPath.trim())?.id ?? "";
 
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
@@ -238,7 +240,7 @@ export function RepoDashboardTool() {
             {savedEntries && savedEntries.length > 0 && (
               <select
                 className="repo-dashboard-field font-mono"
-                value=""
+                value={selectedSavedId}
                 onChange={e => {
                   const entry = savedEntries?.find(x => x.id === e.target.value);
                   if (entry) {
@@ -304,7 +306,7 @@ export function RepoDashboardTool() {
           )}
 
           {!loading && !error && !snapshot && (
-            <div className="repo-dashboard-card">
+            <div className="repo-dashboard-card" role="status">
               <h2 className="font-mono">Not synced</h2>
               <p className="text-muted small">
                 Enter a local checkout path and press refresh. Uses local git and docs by default.
