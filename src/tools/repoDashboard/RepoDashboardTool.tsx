@@ -508,6 +508,18 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
 
       <section className="repo-dashboard-main">
         <header className="repo-dashboard-topbar">
+          <label className="repo-dashboard-section-select-wrap font-mono">
+            <select
+              className="repo-dashboard-field repo-dashboard-section-select"
+              value={section}
+              onChange={e => setSection(e.target.value as RepoDashboardSection)}
+              aria-label="Dashboard section"
+            >
+              {SECTIONS.map(({ id, label }) => (
+                <option key={id} value={id}>{label}</option>
+              ))}
+            </select>
+          </label>
           <div className="repo-dashboard-repo-strip">
             {savedEntries && savedEntries.length > 0 && (
               <select
@@ -667,9 +679,9 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
               <div className="repo-dashboard-overview-lower">
                 <div className="repo-dashboard-heat-stack">
                   <div className="repo-dashboard-card repo-dashboard-heat-card">
-                    <h2 className="font-mono">Activity heatmap</h2>
+                    <h2 className="font-mono">Commit activity</h2>
                     {heatmap.length ? (
-                      <ActivityHeatmap cells={heatmap} />
+                      <ActivityHeatmap cells={heatmap} density="default" />
                     ) : (
                       <p className="text-muted small">No activity data.</p>
                     )}
@@ -746,8 +758,8 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
               aside={
                 heatmap.length ? (
                   <div className="repo-dashboard-card repo-dashboard-heat-aside">
-                    <h3 className="font-mono repo-dashboard-panel-title">Commit heatmap</h3>
-                    <ActivityHeatmap cells={heatmap} />
+                    <h3 className="font-mono repo-dashboard-panel-title">Commit activity</h3>
+                    <ActivityHeatmap cells={heatmap} density="default" />
                   </div>
                 ) : undefined
               }

@@ -4845,6 +4845,10 @@ code {
   overflow: hidden;
 }
 
+.prompt-loops-group-select-wrap {
+  display: none;
+}
+
 .prompt-loops-topbar {
   border-bottom: 1px solid var(--border);
   display: grid;
@@ -5068,6 +5072,20 @@ code {
     display: none;
   }
 
+  .prompt-loops-group-select-wrap {
+    display: block;
+    grid-column: 1 / -1;
+  }
+
+  .prompt-loops-group-select {
+    width: 100%;
+    max-width: 320px;
+  }
+
+  .prompt-loops-topbar {
+    grid-template-columns: 1fr;
+  }
+
   .prompt-loops-workspace {
     grid-template-columns: 1fr;
   }
@@ -5281,7 +5299,7 @@ code {
 .repo-dashboard-workspace {
   min-height: 0;
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
   padding: 10px 12px 14px;
   display: flex;
   flex-direction: column;
@@ -5449,7 +5467,7 @@ code {
 
 .repo-dashboard-heat-aside {
   min-width: 0;
-  overflow: hidden;
+  overflow: auto;
 }
 
 .repo-dashboard-heat-aside .repo-dashboard-heatbox {
@@ -6125,6 +6143,10 @@ code {
   font-size: 12px;
 }
 
+.repo-dashboard-section-select-wrap {
+  display: none;
+}
+
 @media (max-width: 1100px) {
   .repo-dashboard-tool {
     grid-template-columns: 1fr;
@@ -6132,6 +6154,16 @@ code {
 
   .repo-dashboard-sidebar {
     display: none;
+  }
+
+  .repo-dashboard-section-select-wrap {
+    display: block;
+    padding: 8px 12px 0;
+  }
+
+  .repo-dashboard-section-select {
+    width: 100%;
+    max-width: 280px;
   }
 
   .repo-dashboard-grid.cols,
