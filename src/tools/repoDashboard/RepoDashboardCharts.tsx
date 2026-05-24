@@ -16,9 +16,9 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
   const w = 820;
   const h = 180;
   const L = 38;
-  const R = 18;
+  const R = 36;
   const T = 14;
-  const B = 32;
+  const B = 36;
   const max = Math.max(1, ...uxsmedjan, ...PRIVATE);
   const x = (i: number) =>
     days.length === 1 ? L + (w - L - R) / 2 : L + (i * (w - L - R)) / (days.length - 1);
@@ -32,7 +32,13 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
 
   return (
     <div className="repo-dashboard-chart">
-      <svg viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Cumulative activity chart">
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        preserveAspectRatio="xMidYMid meet"
+        overflow="visible"
+        role="img"
+        aria-label="Cumulative activity chart"
+      >
         {gridValues.map(v => (
           <g key={v}>
             <line className="repo-dashboard-gridline" x1={L} y1={y(v)} x2={w - R} y2={y(v)} />
@@ -79,17 +85,16 @@ interface ActivityHeatmapProps {
   cells: { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }[];
 }
 
-const CELL = 12;
+const CELL = 13;
 const GAP = 3;
-const DAY_LABEL_W = 28;
+const DAY_LABEL_W = 30;
+const WEEK_W = CELL + GAP;
 
 export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
   const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
   const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
-  const monthByCol = useMemo(
-    () => new Map(monthLabels.map(m => [m.col, m.label])),
-    [monthLabels],
-  );
+
+  const gridWidth = weeks.length * WEEK_W - GAP;
 
   return (
     <div className="repo-dashboard-heatbox">
@@ -98,21 +103,27 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
         role="img"
         aria-label={`Commit activity from ${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`}
       >
-        <div className="repo-dashboard-heat-wrap">
-          <div
-            className="repo-dashboard-heat-months font-mono"
-            style={{ paddingLeft: `${DAY_LABEL_W + GAP}px` }}
-            aria-hidden="true"
-          >
-            {weeks.map((_, col) => (
-              <span
-                key={col}
-                className="repo-dashboard-heat-month-label"
-                style={{ width: CELL }}
-              >
-                {monthByCol.get(col) ?? ""}
-              </span>
-            ))}
+        <div
+          className="repo-dashboard-heat-wrap"
+          style={
+            {
+              "--heat-week-w": `${WEEK_W}px`,
+              "--heat-day-w": `${DAY_LABEL_W}px`,
+            } as Record<string, string>
+          }
+        >
+          <div className="repo-dashboard-heat-months font-mono" aria-hidden="true">
+            <div className="repo-dashboard-heat-month-rail" style={{ width: gridWidth }}>
+              {monthLabels.map(({ col, label }) => (
+                <span
+                  key={`${col}-${label}`}
+                  className="repo-dashboard-heat-month-label"
+                  style={{ left: `${col * WEEK_W}px` }}
+                >
+                  {label}
+                </span>
+              ))}
+            </div>
           </div>
           <div className="repo-dashboard-heatbody">
             <div className="repo-dashboard-days font-mono" aria-hidden="true">
@@ -143,12 +154,16 @@ export function ActivityHeatmap({ cells }: ActivityHeatmapProps) {
         </div>
       </div>
       <div className="repo-dashboard-hleg font-mono">
-        <span>{cells[0]?.date ?? ""} → {cells[cells.length - 1]?.date ?? ""}</span>
-        <span>Less</span>
-        {[0, 1, 2, 3, 4].map(level => (
-          <span key={level} className={`repo-dashboard-heat-mini l${level}`} aria-hidden="true" />
-        ))}
-        <span>More</span>
+        <span className="repo-dashboard-hleg-range">
+          {cells[0]?.date ?? ""} → {cells[cells.length - 1]?.date ?? ""}
+        </span>
+        <span className="repo-dashboard-hleg-scale">
+          <span>Less</span>
+          {[0, 1, 2, 3, 4].map(level => (
+            <span key={level} className={`repo-dashboard-heat-mini l${level}`} aria-hidden="true" />
+          ))}
+          <span>More</span>
+        </span>
       </div>
     </div>
   );

@@ -7,6 +7,8 @@ import type {
   RepoDashboardWorkItem,
   RepoDashboardWorkStatus,
   RepoDashboardWorkType,
+  RepoGhPullRequest,
+  RepoCommitEntry,
 } from "../../types";
 import { mergeWorkItems } from "./docsParser";
 import {
@@ -49,6 +51,113 @@ function repoEntryIdFromPath(path: string): string {
 
 function repoEntryLabelFromPath(path: string): string {
   return path.replace(/\/+$/, "").split("/").pop() || "Repository";
+}
+
+type SyncVisualState = "idle" | "loading" | "synced" | "stale";
+
+const STALE_MS = 10 * 60 * 1000;
+
+function syncVisualState(loading: boolean, lastSynced: Date | null): SyncVisualState {
+  if (loading) return "loading";
+  if (!lastSynced) return "idle";
+  if (Date.now() - lastSynced.getTime() > STALE_MS) return "stale";
+  return "synced";
+}
+
+function LatestChangeCard({
+  snapshot,
+  latestMerge,
+  latestCommit,
+}: {
+  snapshot: RepoDashboardSnapshot;
+  latestMerge: RepoGhPullRequest | null;
+  latestCommit: RepoCommitEntry | null;
+}) {
+  const branchLabel = snapshot.branch || snapshot.default_branch || "—";
+  const changedCount = snapshot.changed_files.length;
+
+  if (latestMerge) {
+    return (
+      <div className="repo-dashboard-latest-content">
+        <div className="repo-dashboard-item">
+          <div className="repo-dashboard-item-title font-mono">
+            #{latestMerge.number} {latestMerge.title}
+          </div>
+          <div className="repo-dashboard-item-meta">
+            <span className="repo-dashboard-source-pill">gh merge</span>
+            <span>by {latestMerge.author}</span>
+            <span>/ {new Date(latestMerge.merged_at).toLocaleString()}</span>
+          </div>
+        </div>
+        {latestMerge.body ? (
+          <pre className="repo-dashboard-code font-mono">{latestMerge.body.slice(0, 4000)}</pre>
+        ) : (
+          <dl className="repo-dashboard-latest-facts font-mono">
+            <div>
+              <dt>Source</dt>
+              <dd>GitHub merged PR (gh)</dd>
+            </div>
+            <div>
+              <dt>Author</dt>
+              <dd>{latestMerge.author}</dd>
+            </div>
+            <div>
+              <dt>Merged</dt>
+              <dd>{new Date(latestMerge.merged_at).toLocaleString()}</dd>
+            </div>
+            <div>
+              <dt>Branch</dt>
+              <dd>{branchLabel}</dd>
+            </div>
+            <div>
+              <dt>HEAD files</dt>
+              <dd>{changedCount} changed (local git)</dd>
+            </div>
+          </dl>
+        )}
+      </div>
+    );
+  }
+
+  if (latestCommit) {
+    return (
+      <div className="repo-dashboard-latest-content">
+        <div className="repo-dashboard-item">
+          <div className="repo-dashboard-item-title font-mono">{latestCommit.subject}</div>
+          <div className="repo-dashboard-item-meta">
+            <span className="repo-dashboard-source-pill">local commit</span>
+            <span>{latestCommit.short_sha}</span>
+            <span>/ {authorLabel(latestCommit)}</span>
+            <span>/ {new Date(latestCommit.authored_at * 1000).toLocaleString()}</span>
+          </div>
+        </div>
+        <dl className="repo-dashboard-latest-facts font-mono">
+          <div>
+            <dt>Source</dt>
+            <dd>Latest local commit</dd>
+          </div>
+          <div>
+            <dt>Author</dt>
+            <dd>{authorLabel(latestCommit)}</dd>
+          </div>
+          <div>
+            <dt>Date</dt>
+            <dd>{new Date(latestCommit.authored_at * 1000).toLocaleString()}</dd>
+          </div>
+          <div>
+            <dt>Branch</dt>
+            <dd>{branchLabel}</dd>
+          </div>
+          <div>
+            <dt>HEAD files</dt>
+            <dd>{changedCount} changed at HEAD</dd>
+          </div>
+        </dl>
+      </div>
+    );
+  }
+
+  return <p className="text-muted small">No latest change found.</p>;
 }
 
 function WorkItemsList({ items }: { items: RepoDashboardWorkItem[] }) {
@@ -226,6 +335,15 @@ export function RepoDashboardTool() {
   const latestCommit = snapshot?.latest_commit ?? null;
   const selectedSavedId =
     savedEntries?.find(e => e.path === repoPath.trim())?.id ?? "";
+  const syncState = syncVisualState(loading, lastSynced);
+  const syncLabel =
+    syncState === "loading"
+      ? "Syncing…"
+      : syncState === "synced"
+        ? `Synced ${lastSynced?.toLocaleTimeString() ?? ""}`
+        : syncState === "stale"
+          ? "Stale — refresh"
+          : "Not synced";
 
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
@@ -270,92 +388,92 @@ export function RepoDashboardTool() {
 
       <section className="repo-dashboard-main">
         <header className="repo-dashboard-topbar">
-          <div className="repo-dashboard-topbar-head">
-            <h2 className="repo-dashboard-section-title">
-              {SECTIONS.find(s => s.id === section)?.label ?? "Overview"}
-            </h2>
-            <p className="repo-dashboard-sync-note text-muted small" aria-live="polite">
-              {lastSynced ? `Synced ${lastSynced.toLocaleString()}` : "Not synced"}
+          <div className="repo-dashboard-repo-strip">
+            {savedEntries && savedEntries.length > 0 && (
+              <select
+                className="repo-dashboard-field repo-dashboard-field-saved"
+                value={selectedSavedId}
+                onChange={e => {
+                  const entry = savedEntries?.find(x => x.id === e.target.value);
+                  if (entry) {
+                    const branch = entry.default_branch ?? "";
+                    setRepoPath(entry.path);
+                    setDefaultBranch(branch);
+                    void refreshFor(entry.path, branch);
+                  }
+                }}
+                aria-label="Saved repositories"
+                title="Saved repository"
+              >
+                <option value="">Saved repo…</option>
+                {savedEntries.map(entry => (
+                  <option key={entry.id} value={entry.id}>{entry.label}</option>
+                ))}
+              </select>
+            )}
+            <div className="repo-dashboard-path-group">
+              <input
+                className="repo-dashboard-field repo-dashboard-field-path"
+                value={repoPath}
+                onChange={e => setRepoPath(e.target.value)}
+                placeholder="Local repository path"
+                aria-label="Local repository path"
+                spellCheck={false}
+              />
+              <button
+                type="button"
+                className="repo-dashboard-btn"
+                onClick={() => void chooseRepoFolder()}
+                disabled={loading}
+                aria-label="Choose repository folder"
+                title="Browse folder"
+              >
+                Browse
+              </button>
+            </div>
+            <input
+              className="repo-dashboard-field repo-dashboard-field-branch"
+              value={defaultBranch}
+              onChange={e => setDefaultBranch(e.target.value)}
+              placeholder="Branch"
+              aria-label="Default branch override"
+              title="Default branch"
+            />
+            <span
+              className={`repo-dashboard-sync-pill repo-dashboard-sync-pill-${syncState}`}
+              role="status"
+              aria-live="polite"
+            >
+              {syncLabel}
               {pickerStatus ? ` · ${pickerStatus}` : ""}
               {saveStatus ? ` · ${saveStatus}` : ""}
-            </p>
-          </div>
-          <div className="repo-dashboard-controls">
-            {savedEntries && savedEntries.length > 0 && (
-              <label className="repo-dashboard-control">
-                <span className="repo-dashboard-control-label">Saved</span>
-                <select
-                  className="repo-dashboard-field"
-                  value={selectedSavedId}
-                  onChange={e => {
-                    const entry = savedEntries?.find(x => x.id === e.target.value);
-                    if (entry) {
-                      const branch = entry.default_branch ?? "";
-                      setRepoPath(entry.path);
-                      setDefaultBranch(branch);
-                      void refreshFor(entry.path, branch);
-                    }
-                  }}
-                  aria-label="Saved repositories"
-                >
-                  <option value="">Choose…</option>
-                  {savedEntries.map(entry => (
-                    <option key={entry.id} value={entry.id}>{entry.label}</option>
-                  ))}
-                </select>
-              </label>
-            )}
-            <label className="repo-dashboard-control repo-dashboard-control-grow">
-              <span className="repo-dashboard-control-label">Path</span>
-              <div className="repo-dashboard-path-row">
-                <input
-                  className="repo-dashboard-field repo-dashboard-field-path"
-                  value={repoPath}
-                  onChange={e => setRepoPath(e.target.value)}
-                  placeholder="/path/to/repo"
-                  aria-label="Local repository path"
-                />
-                <button
-                  type="button"
-                  className="repo-dashboard-btn"
-                  onClick={() => void chooseRepoFolder()}
-                  disabled={loading}
-                  aria-label="Choose repository folder"
-                >
-                  Browse
-                </button>
-              </div>
-            </label>
-            <label className="repo-dashboard-control">
-              <span className="repo-dashboard-control-label">Branch</span>
-              <input
-                className="repo-dashboard-field repo-dashboard-field-branch"
-                value={defaultBranch}
-                onChange={e => setDefaultBranch(e.target.value)}
-                placeholder="main"
-                aria-label="Default branch override"
-              />
-            </label>
-            <div className="repo-dashboard-control-actions">
+            </span>
+            <div className="repo-dashboard-strip-actions">
               <button
                 type="button"
                 className="repo-dashboard-btn"
                 onClick={() => void saveCurrentRepo()}
                 disabled={loading || !repoPath.trim()}
                 aria-label="Save repository path to settings"
+                title="Save to settings"
               >
                 Save
               </button>
               <button
                 type="button"
-                className="repo-dashboard-btn repo-dashboard-btn-primary"
+                className={`repo-dashboard-btn repo-dashboard-btn-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
                 onClick={() => void refresh()}
                 disabled={loading}
+                aria-label="Refresh dashboard"
+                title="Refresh dashboard"
               >
-                {loading ? "Refreshing…" : "Refresh"}
+                {loading ? "…" : "Refresh"}
               </button>
             </div>
           </div>
+          <p className="repo-dashboard-section-kicker font-mono text-muted small">
+            {SECTIONS.find(s => s.id === section)?.label ?? "Overview"}
+          </p>
         </header>
 
         <div className="repo-dashboard-workspace">
@@ -381,31 +499,31 @@ export function RepoDashboardTool() {
           )}
 
           {snapshot && !loading && section === "overview" && (
-            <>
+            <div className="repo-dashboard-overview">
               <div className="repo-dashboard-kpis">
-                <button type="button" className="repo-dashboard-card repo-dashboard-kpi" onClick={() => setSection("latest")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("latest")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.gh.merged_prs.length || (latestCommit ? 1 : 0)}</div>
                   <div className="repo-dashboard-kpi-label">latest change</div>
                 </button>
-                <button type="button" className="repo-dashboard-card repo-dashboard-kpi" onClick={() => setSection("history")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("history")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.commits.length}</div>
                   <div className="repo-dashboard-kpi-label">commits loaded</div>
                 </button>
-                <button type="button" className="repo-dashboard-card repo-dashboard-kpi" onClick={() => setSection("work")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.gh.open_issues.length}</div>
                   <div className="repo-dashboard-kpi-label">open issues (gh)</div>
                 </button>
-                <button type="button" className="repo-dashboard-card repo-dashboard-kpi" onClick={() => setSection("work")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
                   <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.status === "open").length}</div>
                   <div className="repo-dashboard-kpi-label">open items</div>
                 </button>
-                <button type="button" className="repo-dashboard-card repo-dashboard-kpi" onClick={() => setSection("planning")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("planning")}>
                   <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.needsPlan).length}</div>
                   <div className="repo-dashboard-kpi-label">needs planning</div>
                 </button>
               </div>
 
-              <div className="repo-dashboard-grid cols repo-dashboard-overview-row">
+              <div className="repo-dashboard-grid cols repo-dashboard-overview-charts">
                 <div className="repo-dashboard-card repo-dashboard-activity-card">
                   <h2 className="font-mono">Repo activity (loaded history)</h2>
                   {lineChart ? (
@@ -421,83 +539,80 @@ export function RepoDashboardTool() {
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
                   <h2 className="font-mono">Latest merge / commit</h2>
-                  {latestMerge ? (
-                    <div className="repo-dashboard-item">
-                      <div className="repo-dashboard-item-title font-mono">#{latestMerge.number} {latestMerge.title}</div>
-                      <div className="repo-dashboard-item-meta">
-                        <span>by {latestMerge.author}</span>
-                        <span>/ merged {new Date(latestMerge.merged_at).toLocaleString()}</span>
-                      </div>
-                      {latestMerge.body && <pre className="repo-dashboard-code font-mono">{latestMerge.body.slice(0, 4000)}</pre>}
-                    </div>
-                  ) : latestCommit ? (
-                    <div className="repo-dashboard-item">
-                      <div className="repo-dashboard-item-title font-mono">{latestCommit.subject}</div>
-                      <div className="repo-dashboard-item-meta">
-                        <span>{latestCommit.short_sha}</span>
-                        <span>/ {authorLabel(latestCommit)}</span>
-                        <span>/ {new Date(latestCommit.authored_at * 1000).toLocaleString()}</span>
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-muted small">No latest change found.</p>
-                  )}
+                  <LatestChangeCard
+                    snapshot={snapshot}
+                    latestMerge={latestMerge}
+                    latestCommit={latestCommit}
+                  />
                 </div>
               </div>
 
-              <div className="repo-dashboard-grid heatrow repo-dashboard-activity-section">
-                <div className="repo-dashboard-card repo-dashboard-heat-card">
-                  <h2 className="font-mono">Activity heatmap</h2>
-                  {heatmap.length ? <ActivityHeatmap cells={heatmap} /> : <p className="text-muted small">No activity data.</p>}
-                  <h2 className="font-mono repo-dashboard-subheading">Remaining by type</h2>
-                  <div className="repo-dashboard-rem">
-                    {remaining.map(row => (
-                      <button
-                        key={row.type}
-                        type="button"
-                        className={`repo-dashboard-remitem ${row.type}${typeFilter === row.type ? " active" : ""}`}
-                        style={{ color: WORK_TYPE_COLORS[row.type] }}
-                        onClick={() => {
-                          setTypeFilter(row.type);
-                          setSection("planning");
-                        }}
-                      >
-                        <div className="repo-dashboard-remtitle">
-                          <span>{row.type}</span>
-                          <strong>{row.open}</strong>
-                        </div>
-                        <div className="repo-dashboard-bar">
-                          <div
-                            className="repo-dashboard-bar-fill"
-                            style={{
-                              width: `${Math.max(2, (row.open / Math.max(1, ...remaining.map(r => r.open))) * 100)}%`,
-                              background: WORK_TYPE_COLORS[row.type],
-                            }}
-                          />
-                        </div>
-                        <div className="repo-dashboard-remmeta">
-                          <span>{row.pctLeft}% left</span>
-                          <span>{row.done} done</span>
-                          <span>{row.needsPlan} plan</span>
-                        </div>
-                      </button>
-                    ))}
+              <div className="repo-dashboard-overview-lower">
+                <div className="repo-dashboard-heat-stack">
+                  <div className="repo-dashboard-card repo-dashboard-heat-card">
+                    <h2 className="font-mono">Activity heatmap</h2>
+                    {heatmap.length ? (
+                      <ActivityHeatmap cells={heatmap} />
+                    ) : (
+                      <p className="text-muted small">No activity data.</p>
+                    )}
+                  </div>
+                  <div className="repo-dashboard-card repo-dashboard-rem-card">
+                    <h2 className="font-mono">Remaining by type</h2>
+                    <div className="repo-dashboard-rem">
+                      {remaining.map(row => (
+                        <button
+                          key={row.type}
+                          type="button"
+                          className={`repo-dashboard-remitem ${row.type}${typeFilter === row.type ? " active" : ""}`}
+                          style={{ color: WORK_TYPE_COLORS[row.type] }}
+                          onClick={() => {
+                            setTypeFilter(row.type);
+                            setSection("planning");
+                          }}
+                        >
+                          <div className="repo-dashboard-remtitle">
+                            <span>{row.type}</span>
+                            <strong>{row.open}</strong>
+                          </div>
+                          <div className="repo-dashboard-bar">
+                            <div
+                              className="repo-dashboard-bar-fill"
+                              style={{
+                                width: `${Math.max(2, (row.open / Math.max(1, ...remaining.map(r => r.open))) * 100)}%`,
+                                background: WORK_TYPE_COLORS[row.type],
+                              }}
+                            />
+                          </div>
+                          <div className="repo-dashboard-remmeta">
+                            <span>{row.pctLeft}% left</span>
+                            <span>{row.done} done</span>
+                            <span>{row.needsPlan} plan</span>
+                          </div>
+                        </button>
+                      ))}
+                    </div>
                   </div>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-health-card">
                   <h2 className="font-mono">Source health</h2>
-                  {health.map(row => (
-                    <div key={row.label} className="repo-dashboard-row">
-                      <span className="small">{row.label}</span>
-                      <span className="prompt-loops-pill">{row.value}</span>
-                    </div>
-                  ))}
+                  <p className="text-muted small repo-dashboard-health-note">
+                    Local git first{snapshot.gh.available ? " · gh when authenticated" : ""}.
+                  </p>
+                  <div className="repo-dashboard-health-grid">
+                    {health.map(row => (
+                      <div key={row.label} className="repo-dashboard-health-chip">
+                        <span className="repo-dashboard-health-label">{row.label}</span>
+                        <span className="prompt-loops-pill">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
                   {snapshot.warnings.length > 0 && (
                     <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">{snapshot.warnings.join("\n")}</pre>
                   )}
                 </div>
               </div>
-            </>
+            </div>
           )}
 
           {snapshot && !loading && section === "history" && (
@@ -537,29 +652,13 @@ export function RepoDashboardTool() {
 
           {snapshot && !loading && section === "latest" && (
             <div className="repo-dashboard-grid cols">
-              <div className="repo-dashboard-card repo-dashboard-latest">
+              <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail">
                 <h2 className="font-mono">Latest merge / commit</h2>
-                {latestMerge ? (
-                  <div className="repo-dashboard-item">
-                    <div className="repo-dashboard-item-title font-mono">#{latestMerge.number} {latestMerge.title}</div>
-                    <div className="repo-dashboard-item-meta">
-                      <span>by {latestMerge.author}</span>
-                      <span>/ merged {new Date(latestMerge.merged_at).toLocaleString()}</span>
-                    </div>
-                    {latestMerge.body && <pre className="repo-dashboard-code font-mono">{latestMerge.body.slice(0, 4000)}</pre>}
-                  </div>
-                ) : latestCommit ? (
-                  <div className="repo-dashboard-item">
-                    <div className="repo-dashboard-item-title font-mono">{latestCommit.subject}</div>
-                    <div className="repo-dashboard-item-meta">
-                      <span>{latestCommit.short_sha}</span>
-                      <span>/ {authorLabel(latestCommit)}</span>
-                    </div>
-                    <pre className="repo-dashboard-code font-mono">{latestCommit.subject}</pre>
-                  </div>
-                ) : (
-                  <p className="text-muted small">No latest change found.</p>
-                )}
+                <LatestChangeCard
+                  snapshot={snapshot}
+                  latestMerge={latestMerge}
+                  latestCommit={latestCommit}
+                />
               </div>
               <div className="repo-dashboard-card">
                 <h2 className="font-mono">Changed files at HEAD (local git)</h2>
