@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { PromptLoopsTool } from "../tools/promptLoops/PromptLoopsTool";
+import { RepoDashboardTool } from "../tools/repoDashboard/RepoDashboardTool";
 
 export type ToolsTab = "prompt-loops" | "repo-dashboard";
 
@@ -34,11 +35,7 @@ export function ToolsView() {
       </header>
       <div className="tools-body">
         {tab === "prompt-loops" && <PromptLoopsTool />}
-        {tab === "repo-dashboard" && (
-          <div className="tools-placeholder panel">
-            <p className="font-mono text-muted">Repo Dashboard — loading…</p>
-          </div>
-        )}
+        {tab === "repo-dashboard" && <RepoDashboardTool />}
       </div>
     </div>
   );
