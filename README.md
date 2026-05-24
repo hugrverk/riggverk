@@ -188,7 +188,7 @@ On apply, existing diverged rule targets are backed up under `~/Library/Applicat
 | `--claude` | `${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}` |
 | `--auggie` | `${AUGGIE_AGENTS_DIR:-$HOME/.augment/agents}` |
 
-Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses adapter agents in `templates/cursor/agents/` via `install-cursor-workspace.sh --global-agents`.
+Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses the global Playwright profile via `install-cursor-workspace.sh --apply-global-profile` (agents, skills, MCP, permissions under `~/.cursor/`).
 
 ## Skill installation
 
@@ -200,7 +200,7 @@ Global destinations:
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
-The app installs skills globally only (Codex, OpenCode, Claude, Auggie, Cursor home skill folders). Cursor subagents are synced globally from Workspace via `install-cursor-workspace.sh --global-agents` to `~/.cursor/agents`. Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` and can be shown or copied from Workspace; they are not auto-written because Cursor does not document a stable file-backed write target. MCP examples and sandbox/profile templates are opt-in and must use env placeholders for auth-like values. Playwright MCP support uses MCP config and MCP allowlists, not command allowlists.
+The app installs skills globally only (Codex, OpenCode, Claude, Auggie, Cursor home skill folders). Cursor’s primary workflow applies one global Playwright profile from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), `~/.cursor/mcp.json` (playwright server merge), and `~/.cursor/permissions.json` (`playwright:*` MCP allowlist; shell/terminal stays restricted). User Rules remain manual (`templates/cursor/user-rules.md`). The global profile never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Legacy sandbox JSON templates are debug/copy-only.
 
 CLI-only (outside app workflow): `install-skills.sh` and `install-cursor-workspace.sh` still accept `--project --target <path>` for explicit project paths when run manually from a terminal. The app never exposes those options.
 - Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)

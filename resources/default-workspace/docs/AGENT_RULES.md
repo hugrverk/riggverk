@@ -42,7 +42,7 @@ Bundled runtime agent prompts live in `agents/*.md` (six agents). They are **not
 
 Codex custom agents use **TOML** files under `~/.codex/agents/` (see Codex docs), not this shared `.md` set. The app syncs Codex **rules** and **config** only.
 
-Cursor adapter agents are a separate five-file set under `templates/cursor/agents/` and sync via `scripts/install-cursor-workspace.sh --global-agents` to `~/.cursor/agents/`.
+Cursor adapter agents are a separate five-file set under `templates/cursor/agents/`. The primary Cursor workflow applies the global Playwright profile via `scripts/install-cursor-workspace.sh --apply-global-profile` to `~/.cursor/agents`, `~/.cursor/skills`, `~/.cursor/mcp.json`, and `~/.cursor/permissions.json` (MCP merge + `playwright:*` allowlist; no project writes; shell stays restricted).
 
 ## Sync workflow
 
