@@ -243,6 +243,7 @@ export function RepoDashboardTool() {
               type="button"
               className={`repo-dashboard-nav-btn${section === id ? " repo-dashboard-nav-btn-active" : ""}`}
               onClick={() => setSection(id)}
+              aria-current={section === id ? "page" : undefined}
             >
               <span>{index + 1}. {label}</span>
               <span className="prompt-loops-count">{sectionCount(id)}</span>
