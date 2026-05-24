@@ -23,19 +23,13 @@ import {
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
 
-export type RepoDashboardSection =
-  | "overview"
-  | "history"
-  | "latest"
-  | "work"
-  | "planning";
+export type RepoDashboardSection = "overview" | "activity" | "work" | "sources";
 
-const SECTIONS: { id: RepoDashboardSection; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "history", label: "Git history" },
-  { id: "latest", label: "Latest merge" },
-  { id: "work", label: "Work state" },
-  { id: "planning", label: "Planning gaps" },
+const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] = [
+  { id: "overview", label: "Overview", purpose: "Repo snapshot and activity summary" },
+  { id: "activity", label: "Activity", purpose: "Loaded recent commit history" },
+  { id: "work", label: "Work", purpose: "Tracked work items from docs and gh" },
+  { id: "sources", label: "Sources", purpose: "Latest change, planning gaps, and source docs" },
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
@@ -345,12 +339,16 @@ export function RepoDashboardTool() {
           ? "Stale — refresh"
           : "Not synced";
 
+  const planningCount = workItems.filter(i => i.needsPlan || i.status === "open").length;
+
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
-    if (id === "history") return String(snapshot.commits.length);
-    if (id === "latest") return latestMerge || latestCommit ? "1" : "0";
+    if (id === "activity") return String(snapshot.commits.length);
     if (id === "work") return String(workItems.length);
-    if (id === "planning") return String(workItems.filter(i => i.needsPlan || i.status === "open").length);
+    if (id === "sources") {
+      const latest = latestMerge || latestCommit ? 1 : 0;
+      return String(latest + planningCount);
+    }
     return String(snapshot.gh.merged_prs.length || snapshot.commits.length);
   };
 
@@ -501,11 +499,11 @@ export function RepoDashboardTool() {
           {snapshot && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
               <div className="repo-dashboard-kpis">
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("latest")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.gh.merged_prs.length || (latestCommit ? 1 : 0)}</div>
                   <div className="repo-dashboard-kpi-label">latest change</div>
                 </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("history")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("activity")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.commits.length}</div>
                   <div className="repo-dashboard-kpi-label">commits loaded</div>
                 </button>
@@ -517,7 +515,7 @@ export function RepoDashboardTool() {
                   <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.status === "open").length}</div>
                   <div className="repo-dashboard-kpi-label">open items</div>
                 </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("planning")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
                   <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.needsPlan).length}</div>
                   <div className="repo-dashboard-kpi-label">needs planning</div>
                 </button>
@@ -568,7 +566,7 @@ export function RepoDashboardTool() {
                           style={{ color: WORK_TYPE_COLORS[row.type] }}
                           onClick={() => {
                             setTypeFilter(row.type);
-                            setSection("planning");
+                            setSection("sources");
                           }}
                         >
                           <div className="repo-dashboard-remtitle">
@@ -615,7 +613,7 @@ export function RepoDashboardTool() {
             </div>
           )}
 
-          {snapshot && !loading && section === "history" && (
+          {snapshot && !loading && section === "activity" && (
             <div className="repo-dashboard-grid cols">
               <div className="repo-dashboard-card">
                 <h2 className="font-mono">Commit history (recent)</h2>
@@ -650,7 +648,7 @@ export function RepoDashboardTool() {
             </div>
           )}
 
-          {snapshot && !loading && section === "latest" && (
+          {snapshot && !loading && section === "sources" && (
             <div className="repo-dashboard-grid cols">
               <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail">
                 <h2 className="font-mono">Latest merge / commit</h2>
@@ -678,6 +676,24 @@ export function RepoDashboardTool() {
                   ))}
                   {!snapshot.changed_files.length && <p className="text-muted small">No changed files for HEAD.</p>}
                 </div>
+              </div>
+              <div className="repo-dashboard-card">
+                <h2 className="font-mono">Roadmap / features / gaps left</h2>
+                <WorkItemsList
+                  items={workItems.filter(i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter))}
+                />
+              </div>
+              <div className="repo-dashboard-card">
+                <h2 className="font-mono">Source docs</h2>
+                {snapshot.docs.map(doc => (
+                  <div key={doc.path} className="repo-dashboard-row">
+                    <span>{doc.path}</span>
+                    <span className="prompt-loops-pill">{doc.found ? "found" : "missing"}</span>
+                  </div>
+                ))}
+                {snapshot.gh.message && (
+                  <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
+                )}
               </div>
             </div>
           )}
@@ -726,28 +742,6 @@ export function RepoDashboardTool() {
             </div>
           )}
 
-          {snapshot && !loading && section === "planning" && (
-            <div className="repo-dashboard-grid cols">
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Roadmap / features / gaps left</h2>
-                <WorkItemsList
-                  items={workItems.filter(i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter))}
-                />
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Source docs</h2>
-                {snapshot.docs.map(doc => (
-                  <div key={doc.path} className="repo-dashboard-row">
-                    <span>{doc.path}</span>
-                    <span className="prompt-loops-pill">{doc.found ? "found" : "missing"}</span>
-                  </div>
-                ))}
-                {snapshot.gh.message && (
-                  <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
-                )}
-              </div>
-            </div>
-          )}
         </div>
       </section>
     </div>
