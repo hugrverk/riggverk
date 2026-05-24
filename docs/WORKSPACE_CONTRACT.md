@@ -102,9 +102,9 @@ These resources are not automatically copied into the active workspace. A repair
 
 The default workspace content is read-only source material. It does not contain user data or secrets. User workspaces remain user-owned and are separate from the bundled defaults.
 
-The app can display a read-only summary of bundled default resources in the Workspace tab, showing known file paths and existence status without executing scripts or copying files. The app can also run a read-only workspace creation dry-run plan that evaluates whether a given path is safe and viable for initialization using the bundled defaults — no files or directories are created.
+The Workspace (Start) page shows install/repair diagnostics and a missing-bundled-files count. It does not render a full bundled-file preview list. **Install** creates the canonical runtime workspace; **repair** and **update resources** copy only missing bundled files into the resolved workspace path (`AGENT_WORKSPACE_PATH`, valid saved `workspace_path`, or the canonical install path). Those actions never overwrite existing user files and never execute scripts.
 
-When the plan reports a safe target (`missing_directory` or `empty_existing_directory`), the app can create a new workspace by copying only allowlisted bundled default files into the target directory. Create does not overwrite existing files, does not execute scripts, does not write outside the target directory, and rejects unsafe, non-empty, valid-existing, and missing-parent targets. Created workspaces remain user-owned — the app does not take ownership or enforce schema beyond the initial copy.
+Workspace creation planning exists in the backend for tests and future use; the app UI does not expose a path chooser or create-workspace flow.
 
 ## Skill layout
 
