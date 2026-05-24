@@ -5884,6 +5884,12 @@ code {
   background: var(--bg-panel);
 }
 
+.repo-dashboard-seg:focus-visible,
+.repo-dashboard-remitem:focus-visible {
+  outline: 2px solid rgba(var(--accent-rgb), 0.5);
+  outline-offset: 1px;
+}
+
 .repo-dashboard-chart {
   border: 1px solid var(--border);
   background: var(--bg-inset);
