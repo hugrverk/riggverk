@@ -1102,6 +1102,9 @@ fn utc_backup_timestamp() -> String {
 }
 
 fn backup_workspace_bundle_file(dst: &Path, rel: &str) -> Result<(), String> {
+    #[cfg(test)]
+    let backup_root = std::env::temp_dir().join("agent-workspace-test-backups");
+    #[cfg(not(test))]
     let backup_root = super::backups::backup_root()?;
     let ts = utc_backup_timestamp();
     let safe_name = rel.replace('/', "__");
