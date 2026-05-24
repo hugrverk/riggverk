@@ -356,6 +356,7 @@ export interface RepairWorkspaceResult {
   dry_run: boolean;
   target_path: string;
   copied_files: string[];
+  refreshed_files: string[];
   skipped_files: string[];
   errors: string[];
   warnings: string[];
@@ -369,7 +370,8 @@ export interface BrainSetupSeedResult {
 }
 
 export interface CursorProfileHealth {
-  status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "unknown" | string;
+  status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "stale" | "unknown" | string;
+  workspace_resources_status: "current" | "stale" | "missing" | "unreadable" | string;
   manifest_status: string;
   user_rules_status: "manual" | "template-missing" | "unknown" | string;
   global_agents_status: string;

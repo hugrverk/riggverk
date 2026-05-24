@@ -109,6 +109,9 @@ export function CursorView({
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
   const health = cursorProfileHealth;
+  const workspaceResourcesStale = health?.workspace_resources_status === "stale"
+    || health?.workspace_resources_status === "missing";
+  const globalProfileActionsBlocked = workspaceResourcesStale || health?.status === "stale";
 
   return (
     <section className="ws-layout target-page-layout">
@@ -143,6 +146,11 @@ export function CursorView({
                 : { label: "loading", tone: "muted" }}
               details={health ? [
                 {
+                  label: "Workspace",
+                  value: health.workspace_resources_status,
+                  tone: health.workspace_resources_status === "current" ? "ok" : "warn",
+                },
+                {
                   label: "Agents",
                   value: `${health.global_agents_count}/${health.expected_global_agents_count} ${health.global_agents_status}`,
                   tone: surfaceTone(health.global_agents_status),
@@ -173,14 +181,31 @@ export function CursorView({
               nextActionTone={health?.status === "synced" ? "ok" : health?.status === "unsafe" ? "fail" : "warn"}
               secondaryActions={[
                 { label: "refresh", onClick: onRefreshCursorProfile, disabled: busy },
-                { label: "diff global", onClick: onCursorDiffGlobalProfile, disabled: busy },
-                { label: "validate", onClick: onCursorValidateGlobalProfile, disabled: busy },
+                {
+                  label: "diff global",
+                  onClick: onCursorDiffGlobalProfile,
+                  disabled: busy || globalProfileActionsBlocked,
+                  title: globalProfileActionsBlocked
+                    ? "Repair or update the workspace on Start before diffing the global profile."
+                    : undefined,
+                },
+                {
+                  label: "validate",
+                  onClick: onCursorValidateGlobalProfile,
+                  disabled: busy || globalProfileActionsBlocked,
+                  title: globalProfileActionsBlocked
+                    ? "Repair or update the workspace on Start before validating the global profile."
+                    : undefined,
+                },
                 { label: "open settings", onClick: onCursorOpenSettings, disabled: busy },
               ]}
               primaryAction={{
                 label: "apply global",
                 onClick: onCursorApplyGlobalProfile,
-                disabled: busy,
+                disabled: busy || globalProfileActionsBlocked,
+                title: globalProfileActionsBlocked
+                  ? "Repair or update the workspace on Start before applying the global profile."
+                  : undefined,
               }}
             />
           )}

@@ -9,6 +9,7 @@ use super::workspace::{path_arg, workspace_root};
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
     status: String,
+    workspace_resources_status: String,
     manifest_status: String,
     user_rules_status: String,
     global_agents_status: String,
@@ -506,6 +507,74 @@ fn legacy_sandbox_status(root: &Path, warnings: &mut Vec<String>) -> String {
     "legacy-templates".into()
 }
 
+const CURSOR_SCRIPT_GLOBAL_FLAGS: &[&str] = &[
+    "--apply-global-profile",
+    "--diff-global-profile",
+    "--validate-global-profile",
+];
+
+fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String {
+    let script = root.join("scripts/install-cursor-workspace.sh");
+    if !script.is_file() {
+        warnings.push(
+            "Workspace install-cursor-workspace.sh is missing. Repair the workspace on Start."
+                .into(),
+        );
+        return "missing".into();
+    }
+    let content = match std::fs::read_to_string(&script) {
+        Ok(content) => content,
+        Err(_) => {
+            warnings.push("Cannot read installed install-cursor-workspace.sh.".into());
+            return "unreadable".into();
+        }
+    };
+    let mut missing_flags = Vec::new();
+    for flag in CURSOR_SCRIPT_GLOBAL_FLAGS {
+        if !content.contains(flag) {
+            missing_flags.push(*flag);
+        }
+    }
+    if !missing_flags.is_empty() {
+        warnings.push(format!(
+            "Installed workspace Cursor script is stale (missing {}). Use Repair on the Workspace page to update bundled scripts and templates.",
+            missing_flags.join(", ")
+        ));
+        return "stale".into();
+    }
+
+    let manifest_path = cursor_root(root).join("manifest.json");
+    if !manifest_path.is_file() {
+        warnings.push(
+            "Workspace Cursor manifest.json is missing. Repair the workspace on Start.".into(),
+        );
+        return "stale".into();
+    }
+    let manifest_content = match std::fs::read_to_string(&manifest_path) {
+        Ok(content) => content,
+        Err(_) => return "unreadable".into(),
+    };
+    let parsed: serde_json::Value = match serde_json::from_str(&manifest_content) {
+        Ok(parsed) => parsed,
+        Err(_) => {
+            warnings.push("Installed workspace Cursor manifest.json is invalid.".into());
+            return "stale".into();
+        }
+    };
+    if !parsed
+        .get("permissions_templates")
+        .is_some_and(|v| v.is_array() && !v.as_array().map(|a| a.is_empty()).unwrap_or(true))
+    {
+        warnings.push(
+            "Installed workspace Cursor manifest is stale (missing permissions_templates). Repair the workspace on Start."
+                .into(),
+        );
+        return "stale".into();
+    }
+
+    "current".into()
+}
+
 fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
     let path = cursor_root(root).join("manifest.json");
     if !path.exists() {
@@ -546,6 +615,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let mut warnings = Vec::new();
     let cursor = cursor_root(&root);
 
+    let workspace_resources_status = workspace_resources_status(&root, &mut warnings);
     let manifest_status = manifest_status(&root, &mut warnings);
     let user_rules_status = if cursor.join("user-rules.md").is_file() {
         "manual"
@@ -575,25 +645,32 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
         mcp_status.as_str(),
         permissions_status.as_str(),
     ];
-    let status = if manifest_status != "valid" {
-        "partial"
-    } else if surfaces.contains(&"unsafe") {
-        "unsafe"
-    } else if surfaces.iter().all(|s| *s == "synced") {
-        "synced"
-    } else if surfaces.iter().all(|s| *s == "missing") {
-        "missing"
-    } else if surfaces
-        .iter()
-        .any(|s| *s == "diverged" || *s == "partial" || *s == "invalid")
-    {
-        "diverged"
-    } else {
-        "partial"
-    }
-    .to_string();
+    let status =
+        if workspace_resources_status == "stale" || workspace_resources_status == "missing" {
+            "stale"
+        } else if manifest_status != "valid" {
+            "partial"
+        } else if surfaces.contains(&"unsafe") {
+            "unsafe"
+        } else if surfaces.iter().all(|s| *s == "synced") {
+            "synced"
+        } else if surfaces.iter().all(|s| *s == "missing") {
+            "missing"
+        } else if surfaces
+            .iter()
+            .any(|s| *s == "diverged" || *s == "partial" || *s == "invalid")
+        {
+            "diverged"
+        } else {
+            "partial"
+        }
+        .to_string();
 
     let next_action = match status.as_str() {
+        "stale" => {
+            "Repair or update the workspace on Start first. Installed Cursor scripts/templates are behind the app."
+                .into()
+        }
         "synced" => {
             "Global Cursor profile is synced. Playwright MCP can auto-run; shell stays restricted."
                 .into()
@@ -609,6 +686,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
 
     Ok(CursorProfileHealth {
         status,
+        workspace_resources_status,
         manifest_status,
         user_rules_status,
         global_agents_status,
@@ -635,9 +713,43 @@ fn cursor_script_arg(root: &Path) -> Result<String, String> {
     path_arg(&canonical)
 }
 
+fn block_when_workspace_resources_stale(
+    action: &str,
+    health: &CursorProfileHealth,
+) -> Option<ActionResult> {
+    let needs_current = matches!(
+        action,
+        "cursor_diff_global_profile"
+            | "cursor_apply_global_profile"
+            | "cursor_validate_global_profile"
+            | "cursor_diff_global_agents"
+            | "cursor_sync_global_agents"
+    );
+    if !needs_current {
+        return None;
+    }
+    if health.workspace_resources_status == "current" {
+        return None;
+    }
+    Some(ActionResult::new(
+        false,
+        action.to_string(),
+        String::new(),
+        format!(
+            "Workspace Cursor resources are {}. Repair or update the workspace on Start before running this action.",
+            health.workspace_resources_status
+        ),
+        Some(1),
+    ))
+}
+
 #[tauri::command]
 pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
+    let health = get_cursor_profile_health()?;
+    if let Some(blocked) = block_when_workspace_resources_stale(&action, &health) {
+        return Ok(blocked);
+    }
     let script = cursor_script_arg(&root)?;
     let mut args = vec![script];
 
@@ -674,9 +786,9 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
             args.extend(["--quiet".into(), "--apply".into(), "--global-agents".into()])
         }
         "cursor_validate_profile" => {
-            let health = get_cursor_profile_health()?;
-            let ok = !matches!(health.status.as_str(), "unsafe" | "partial")
-                && health.manifest_status == "valid";
+            let ok = !matches!(health.status.as_str(), "unsafe" | "partial" | "stale")
+                && health.manifest_status == "valid"
+                && health.workspace_resources_status == "current";
             return Ok(ActionResult::new(
                 ok,
                 action,
@@ -751,5 +863,63 @@ mod tests {
                 .cloned()
                 .unwrap_or(serde_json::Value::Null)
         ));
+    }
+
+    #[test]
+    fn workspace_resources_stale_when_script_lacks_global_flags() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("cursor-stale-ws-{nonce}"));
+        let scripts = root.join("scripts");
+        fs::create_dir_all(&scripts).expect("scripts dir");
+        fs::write(
+            scripts.join("install-cursor-workspace.sh"),
+            "#!/usr/bin/env bash\n# legacy script without global profile flags\n",
+        )
+        .expect("write stale script");
+        let mut warnings = Vec::new();
+        let status = workspace_resources_status(&root, &mut warnings);
+        let _ = fs::remove_dir_all(&root);
+        assert_eq!(status, "stale");
+        assert!(warnings
+            .iter()
+            .any(|w| w.contains("--apply-global-profile")));
+    }
+
+    #[test]
+    fn workspace_resources_current_when_script_and_manifest_ok() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let mut warnings = Vec::new();
+        let status = workspace_resources_status(&root, &mut warnings);
+        assert_eq!(status, "current", "warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn block_apply_when_workspace_resources_stale() {
+        let health = CursorProfileHealth {
+            status: "stale".into(),
+            workspace_resources_status: "stale".into(),
+            manifest_status: "partial".into(),
+            user_rules_status: "manual".into(),
+            global_agents_status: "missing".into(),
+            global_agents_count: 0,
+            expected_global_agents_count: 5,
+            global_skills_status: "missing".into(),
+            global_skills_count: 0,
+            expected_global_skills_count: 6,
+            mcp_status: "missing".into(),
+            permissions_status: "missing".into(),
+            shell_posture_status: "restricted".into(),
+            legacy_sandbox_status: "legacy-templates".into(),
+            warnings: vec!["stale workspace".into()],
+            next_action: "repair".into(),
+        };
+        let blocked = block_when_workspace_resources_stale("cursor_apply_global_profile", &health);
+        assert!(blocked.is_some());
+        assert!(!blocked.unwrap().success);
     }
 }
