@@ -1569,10 +1569,9 @@ mod tests {
         configured_workspace_path, create_workspace_from_source, is_unsafe_target,
         missing_bundled_file_paths, persisted_workspace_path_is_valid, plan_create_workspace,
         read_brain_setup_seed_under_root, repair_workspace_core, repair_workspace_target_path,
-        repo_path_from_settings,
-        scrub_stale_workspace_path, try_set_active_workspace_path, validate_workspace_root,
-        workspace_diagnostics_for_unconfigured, workspace_setup_phase, CreateWorkspacePlan,
-        BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
+        repo_path_from_settings, scrub_stale_workspace_path, try_set_active_workspace_path,
+        validate_workspace_root, workspace_diagnostics_for_unconfigured, workspace_setup_phase,
+        CreateWorkspacePlan, BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
     };
     use crate::settings::AppSettings;
     use std::fs;
