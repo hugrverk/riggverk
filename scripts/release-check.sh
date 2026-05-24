@@ -1306,6 +1306,17 @@ else
 fi
 printf '  no project-target app surfaces in src/ or src-tauri/\n'
 
+step "regression: Cursor page repair for stale workspace resources"
+if ! search_has_match 'onRepairWorkspace' src/App.tsx; then
+  printf 'FAIL: App.tsx must wire onRepairWorkspace into CursorView\n' >&2
+  exit 1
+fi
+if search_has_match 'Repair or update the workspace on Start' src/views/CursorView.tsx; then
+  printf 'FAIL: CursorView must not direct stale-resource repair to Start\n' >&2
+  exit 1
+fi
+printf '  Cursor stale-resource repair UX verified\n'
+
 step "forbidden source scans"
 scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
 scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'

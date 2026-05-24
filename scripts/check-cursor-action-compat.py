@@ -10,6 +10,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPT = ROOT / "resources/default-workspace/scripts/install-cursor-workspace.sh"
 RUST = ROOT / "src-tauri/src/commands/cursor_profile.rs"
+CURSOR_VIEW = ROOT / "src/views/CursorView.tsx"
+CURSOR_UI = ROOT / "src/lib/cursorWorkspaceResources.ts"
 MANIFEST = ROOT / "resources/default-workspace/templates/cursor/manifest.json"
 
 # action id -> argv tail after script path (from run_cursor_profile_action)
@@ -90,6 +92,21 @@ def main() -> None:
                 fail("manifest global_profile must be a string path")
         elif not isinstance(manifest[key], list) or not manifest[key]:
             fail(f"manifest {key} must be a non-empty array")
+
+    view_text = CURSOR_VIEW.read_text(encoding="utf-8")
+    ui_text = CURSOR_UI.read_text(encoding="utf-8")
+    if "repair workspace" not in view_text:
+        fail("CursorView.tsx must expose a repair workspace action for stale resources")
+    if "isCursorWorkspaceResourcesStale" not in view_text:
+        fail("CursorView.tsx must use isCursorWorkspaceResourcesStale for stale-resource UX")
+    if "Repair or update the workspace on Start" in view_text:
+        fail("CursorView.tsx must not direct stale-resource repair to Start")
+    if "CURSOR_STALE_RESOURCES_MESSAGE" not in ui_text:
+        fail("cursorWorkspaceResources.ts must define CURSOR_STALE_RESOURCES_MESSAGE")
+    if "Repair workspace resources, then apply the global profile." not in rust_text:
+        fail("cursor_profile.rs stale next_action must mention repair workspace resources")
+    if "Repair or update the workspace on Start" in rust_text:
+        fail("cursor_profile.rs must not direct stale-resource repair to Start")
 
     print("Cursor action/script and manifest compatibility checks passed")
 
