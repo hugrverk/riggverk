@@ -36,6 +36,7 @@ const SECTIONS: { id: RepoDashboardSection; label: string }[] = [
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
+const COMMITS_LOAD_LIMIT = 500;
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
 
@@ -339,13 +340,17 @@ export function RepoDashboardTool() {
 
               <div className="repo-dashboard-grid cols">
                 <div className="repo-dashboard-card">
-                  <h2 className="font-mono">Repo activity since inception</h2>
+                  <h2 className="font-mono">Repo activity (loaded history)</h2>
                   {lineChart ? (
                     <ActivityLineChart data={lineChart} />
                   ) : (
                     <p className="text-muted small">No matching activity.</p>
                   )}
-                  <p className="text-muted small">Cumulative activity. Blue = uxsmedjan. Green = PRIVATE.</p>
+                  <p className="text-muted small">
+                    Cumulative activity from up to {COMMITS_LOAD_LIMIT} most recent commits.
+                    {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older commits are not loaded." : ""}
+                    {" "}Blue = uxsmedjan. Green = PRIVATE.
+                  </p>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
                   <h2 className="font-mono">Latest merge / commit</h2>
@@ -431,7 +436,11 @@ export function RepoDashboardTool() {
           {snapshot && !loading && section === "history" && (
             <div className="repo-dashboard-grid cols">
               <div className="repo-dashboard-card">
-                <h2 className="font-mono">Commit history</h2>
+                <h2 className="font-mono">Commit history (recent)</h2>
+                <p className="text-muted small">
+                  Showing up to {COMMITS_LOAD_LIMIT} most recent commits
+                  {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " (limit reached)." : "."}
+                </p>
                 <div className="repo-dashboard-list">
                   {snapshot.commits.slice(0, 120).map(commit => (
                     <div key={commit.sha} className="repo-dashboard-item">
