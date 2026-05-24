@@ -83,6 +83,19 @@ def main() -> None:
         if "ux-context" in text:
             fail(f"{rel} must not reference ux-context for prompt templates")
 
+    contract = read(ROOT / "docs/WORKSPACE_CONTRACT.md")
+    for stale in (
+        "read-only summary of bundled default resources in the Workspace tab",
+        "read-only workspace creation dry-run plan",
+    ):
+        if stale in contract:
+            fail(f"WORKSPACE_CONTRACT.md must not claim stale Workspace UI: {stale}")
+
+    workspace_rs = read(ROOT / "src-tauri/src/commands/workspace.rs")
+    repair_fn = workspace_rs.split("pub fn repair_default_workspace", 1)
+    if len(repair_fn) < 2 or "repair_workspace_target_path" not in repair_fn[1].split("}", 1)[0]:
+        fail("repair_default_workspace must resolve path via repair_workspace_target_path")
+
     sandbox_primary_patterns = [
         "playwright-safe as the primary",
         "playwright-full as the primary",
