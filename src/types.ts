@@ -88,6 +88,7 @@ export interface TargetProfileMeta {
 
 export interface AppSettings {
   appearance: "dark" | "light" | "system";
+  app_font_size: "small" | "medium" | "large";
   workspace_path: string | null;
   enabled_target_ids: string[];
   accent_color: string | null;

@@ -1108,6 +1108,16 @@ function App() {
     });
   }, []);
 
+  const setAppFontSize = useCallback((appFontSize: AppSettings["app_font_size"]) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const next = { ...prev, app_font_size: appFontSize };
+      applyThemeSettings(next);
+      return next;
+    });
+  }, []);
+
   const setAccentColor = useCallback((accentColor: string | null) => {
     setSettingsMsg(null);
     setAppSettings(prev => {
@@ -1816,6 +1826,7 @@ function App() {
             settingsMsg={settingsMsg}
             settingsSaveStatus={settingsSaveStatus}
             onSetAppearance={setAppearance}
+            onSetAppFontSize={setAppFontSize}
             onSetAccentColor={setAccentColor}
             onSetBackgroundColor={setBackgroundColor}
             onSetForegroundColor={setForegroundColor}

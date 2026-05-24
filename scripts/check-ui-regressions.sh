@@ -43,5 +43,15 @@ if ! rg -n -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: 
   fail "Brain Setup Library content must define a local scroll container"
 fi
 
+if ! rg -n 'data-app-font-size' src/lib/settingsDraft.ts >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "app font-size setting must set a root data attribute"
+fi
+if ! rg -n -- '--app-font-size|--app-font-scale' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "app font-size setting must drive CSS variables"
+fi
+if ! rg -n 'Global app text size' src/views/SettingsView.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Settings must expose a labeled global app text size control"
+fi
+
 rm -f /tmp/agent-workspace-ui-regressions.txt
 printf 'UI regression checks passed\n'

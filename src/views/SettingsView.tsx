@@ -20,6 +20,7 @@ interface SettingsViewProps {
   settingsMsg: SettingsMessage | null;
   settingsSaveStatus: SettingsSaveStatus;
   onSetAppearance: (appearance: AppSettings["appearance"]) => void;
+  onSetAppFontSize: (fontSize: AppSettings["app_font_size"]) => void;
   onSetAccentColor: (value: string | null) => void;
   onSetBackgroundColor: (value: string | null) => void;
   onSetForegroundColor: (value: string | null) => void;
@@ -139,6 +140,7 @@ export function SettingsView({
   settingsMsg,
   settingsSaveStatus,
   onSetAppearance,
+  onSetAppFontSize,
   onSetAccentColor,
   onSetBackgroundColor,
   onSetForegroundColor,
@@ -248,7 +250,7 @@ export function SettingsView({
 
         {appSettings && (
           <div className="settings-cards">
-            <HarnessActionCard
+              <HarnessActionCard
                 title="Appearance"
                 ariaLabel="Appearance mode"
                 description="Light, dark, or follow system."
@@ -263,6 +265,26 @@ export function SettingsView({
                       onClick={() => handleSetAppearance(m)}
                     >
                       {m}
+                    </button>
+                  ))}
+                </div>
+              </HarnessActionCard>
+
+              <HarnessActionCard
+                title="Text size"
+                ariaLabel="Global app text size"
+                description="Applies across the app and saves automatically."
+              >
+                <div className="settings-options" role="group" aria-label="Global app text size">
+                  {(["small", "medium", "large"] as const).map(size => (
+                    <button
+                      key={size}
+                      type="button"
+                      className={`btn btn-sm ${appSettings.app_font_size === size ? "btn-active" : ""}`}
+                      aria-pressed={appSettings.app_font_size === size}
+                      onClick={() => onSetAppFontSize(size)}
+                    >
+                      {size}
                     </button>
                   ))}
                 </div>

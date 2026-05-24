@@ -20,6 +20,8 @@ pub struct RepoDashboardEntry {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct AppSettings {
     pub appearance: String,
+    #[serde(default = "default_app_font_size")]
+    pub app_font_size: String,
     pub workspace_path: Option<String>,
     #[serde(default = "agent_targets::default_enabled_ids")]
     pub enabled_target_ids: Vec<String>,
@@ -39,6 +41,7 @@ impl Default for AppSettings {
     fn default() -> Self {
         Self {
             appearance: "dark".into(),
+            app_font_size: default_app_font_size(),
             workspace_path: None,
             enabled_target_ids: agent_targets::default_enabled_ids(),
             accent_color: None,
@@ -47,6 +50,17 @@ impl Default for AppSettings {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
         }
+    }
+}
+
+fn default_app_font_size() -> String {
+    "medium".into()
+}
+
+fn normalize_app_font_size(value: &str) -> String {
+    match value {
+        "small" | "medium" | "large" => value.to_string(),
+        _ => default_app_font_size(),
     }
 }
 
@@ -71,6 +85,7 @@ fn normalize(settings: &mut AppSettings) {
         "dark" | "light" | "system" => {}
         _ => settings.appearance = "dark".into(),
     }
+    settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -111,6 +126,7 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         "dark" | "light" | "system" => {}
         _ => settings.appearance = "dark".into(),
     }
+    settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -223,6 +239,7 @@ mod tests {
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: path.map(|s| s.to_string()),
             enabled_target_ids: vec![],
             accent_color: None,
@@ -311,6 +328,7 @@ mod tests {
     fn loaded_stale_enabled_target_ids_drop_unknown_values() {
         let mut settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: None,
             enabled_target_ids: vec![
                 "codex_rules".into(),
@@ -331,6 +349,33 @@ mod tests {
             settings.enabled_target_ids,
             vec!["codex_rules".to_string(), "opencode_config".to_string()]
         );
+    }
+
+    #[test]
+    fn app_font_size_defaults_to_medium() {
+        assert_eq!(AppSettings::default().app_font_size, "medium");
+    }
+
+    #[test]
+    fn app_font_size_accepts_constrained_values() {
+        for value in ["small", "medium", "large"] {
+            let mut settings = settings_with_path(None);
+            settings.app_font_size = value.into();
+
+            normalize(&mut settings);
+
+            assert_eq!(settings.app_font_size, value);
+        }
+    }
+
+    #[test]
+    fn app_font_size_invalid_becomes_medium() {
+        let mut settings = settings_with_path(None);
+        settings.app_font_size = "huge".into();
+
+        normalize(&mut settings);
+
+        assert_eq!(settings.app_font_size, "medium");
     }
 
     // ── accent_color tests ──
@@ -374,6 +419,7 @@ mod tests {
     fn accent_color_normalized_in_settings() {
         let mut s = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: None,
             enabled_target_ids: vec![],
             accent_color: Some("#FFAA00".into()),
@@ -390,6 +436,7 @@ mod tests {
     fn accent_color_invalid_becomes_none_in_settings() {
         let mut s = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: None,
             enabled_target_ids: vec![],
             accent_color: Some("bad".into()),

@@ -1869,6 +1869,7 @@ mod tests {
         let path = root.to_string_lossy().into_owned();
         let settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: Some(path.clone()),
             enabled_target_ids: vec![],
             accent_color: None,
@@ -1893,6 +1894,7 @@ mod tests {
         let home = std::env::var("HOME").expect("HOME required for test");
         let settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: Some("workspace/local".into()),
             enabled_target_ids: vec![],
             accent_color: None,
@@ -1923,6 +1925,7 @@ mod tests {
         let home = std::env::var("HOME").expect("HOME required for test");
         let settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: Some("~/Agent Workspace".into()),
             enabled_target_ids: vec![],
             accent_color: None,
@@ -1953,6 +1956,7 @@ mod tests {
     fn scrub_stale_workspace_path_clears_invalid_persisted_path() {
         let mut settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
             enabled_target_ids: vec![],
             accent_color: None,
@@ -1972,6 +1976,7 @@ mod tests {
         let path = root.to_string_lossy().into_owned();
         let mut settings = AppSettings {
             appearance: "dark".into(),
+            app_font_size: "medium".into(),
             workspace_path: Some(path),
             enabled_target_ids: vec![],
             accent_color: None,

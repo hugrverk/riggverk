@@ -22,6 +22,8 @@
   --radius: 4px;
   --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
   --font-mono: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+  --app-font-size: 15px;
+  --app-font-scale: 1;
   --header-height: 44px;
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
@@ -103,7 +105,7 @@ html, body, #root {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 15px;
+  font-size: var(--app-font-size);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -138,6 +140,7 @@ code {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+  zoom: var(--app-font-scale);
 }
 
 /* ---- app shell ---- */

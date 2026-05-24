@@ -6,6 +6,7 @@ export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
 export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
 
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "auggie_rules", "opencode_config"];
+export const APP_FONT_SIZE_VALUES = ["small", "medium", "large"] as const;
 
 /** Canonical installed workspace path (display form; backend owns resolution). */
 export const DEFAULT_WORKSPACE_PATH = "~/.config/agent-workspace";
@@ -13,6 +14,7 @@ export const DEFAULT_WORKSPACE_PATH = "~/.config/agent-workspace";
 export function defaultSettings(): AppSettings {
   return {
     appearance: "dark",
+    app_font_size: "medium",
     workspace_path: null,
     enabled_target_ids: DEFAULT_TARGET_IDS,
     accent_color: null,
@@ -21,6 +23,12 @@ export function defaultSettings(): AppSettings {
     repo_dashboard_entries: [],
     active_repo_dashboard_id: null,
   };
+}
+
+export function normalizeAppFontSize(value: unknown): AppSettings["app_font_size"] {
+  return APP_FONT_SIZE_VALUES.includes(value as AppSettings["app_font_size"])
+    ? value as AppSettings["app_font_size"]
+    : "medium";
 }
 
 export function serializeSettingsForCompare(settings: AppSettings): string {
@@ -84,6 +92,10 @@ export function hasPoorContrast(foreground: string | null, background: string | 
 export function applyThemeSettings(settings: AppSettings): void {
   const root = document.documentElement;
   root.setAttribute("data-theme", settings.appearance);
+  const appFontSize = normalizeAppFontSize(settings.app_font_size);
+  root.setAttribute("data-app-font-size", appFontSize);
+  root.style.setProperty("--app-font-size", appFontSize === "small" ? "14px" : appFontSize === "large" ? "16px" : "15px");
+  root.style.setProperty("--app-font-scale", appFontSize === "small" ? "0.94" : appFontSize === "large" ? "1.07" : "1");
 
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
     root.style.setProperty("--accent", settings.accent_color);
