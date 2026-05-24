@@ -122,7 +122,7 @@ Primary navigation:
 
 ### Tools
 
-**Prompt Loops** ports the standalone Kretsverket prompt-loop library into a native React view. Groups: standard, masterprompt, batchprompt, and rewrite. Supports search and copy prompt (active item).
+**Prompt Loops** ports the standalone Kretsverket prompt-loop library into a native React view. Groups: standard, masterprompt, batchprompt, and rewrite. Tool switching lives in the left sidebar (with Repo Dashboard). Each prompt box has an in-box copy control. Templates require operator metadata above the copy/paste block; generated prompts must weave exact skill names (e.g. `Use diagnose...`) into executable English instructions, not only list them under Relevant skills. Run `npx tsx scripts/check-prompt-loops-templates.ts` to validate the contract.
 
 **Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). It does **not** store GitHub PATs, does **not** call the GitHub API directly, and does **not** accept frontend-supplied shell commands.
 
