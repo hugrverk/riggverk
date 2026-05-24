@@ -61,9 +61,26 @@ Baseline: `main` @ `5d68b429b7f4452d03a5455863df1275a1c06289`, clean tree, synce
 
 | # | SHA | Message | Issues |
 |---|-----|---------|--------|
-| 1 | (pending) | docs(audit): extend ledger for batch 2 follow-up audit | ledger |
-| 2 | (pending) | fix(workspace): align repair path with configured workspace | AW-REPAIR-001 |
-| 3 | (pending) | docs: align WORKSPACE_CONTRACT with Workspace UI | AW-DOC-010 |
-| 4 | (pending) | fix(repo-dashboard): generic author labels and list cap copy | RD-* |
-| 5 | (pending) | chore: remove dead bootstrap actions and unused CSS | AW-DEAD-001, AW-CSS-001 |
-| 6 | (pending) | chore(release-check): guard contract and repair path drift | RC-GAP-001 |
+| 1 | e66a2ddd | docs(audit): extend ledger for batch 2 follow-up audit | ledger |
+| 2 | cecde237 | fix(workspace): align repair path with configured workspace | AW-REPAIR-001 |
+| 3 | c0e62567 | docs: align WORKSPACE_CONTRACT with Workspace UI | AW-DOC-010 |
+| 4 | b01befba | fix(repo-dashboard): generic author labels and list cap copy | RD-* |
+| 5 | 78a151e4 | chore: remove dead bootstrap actions and unused CSS | AW-DEAD-001, AW-CSS-001 |
+| 6 | ca9e1db8 | chore(release-check): guard contract and repair path drift | RC-GAP-001 |
+| 7 | c7481370 | chore: cargo fmt workspace test imports | fmt |
+
+Baseline `5d68b429` → end `c7481370` (7 commits).
+
+### Verification (batch 2)
+
+- [x] `npm run typecheck` — pass
+- [x] `npm run build` — pass
+- [x] `cargo fmt --check` — pass
+- [x] `cargo check` — pass
+- [x] `cargo clippy --all-targets -- -D warnings` — pass
+- [x] `cargo test` — 340 passed
+- [x] `./scripts/release-check.sh` — pass
+- [x] `bash ./scripts/check-ui-regressions.sh` — pass
+- [x] `python3 scripts/check-readme-docs-drift.py` — pass
+- [x] `npx tsx scripts/check-prompt-loops-templates.ts` — pass
+- [x] `git diff --check` — pass
