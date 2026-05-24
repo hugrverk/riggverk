@@ -2361,6 +2361,9 @@ mod tests {
             "docs/OPENCODE_CONFIG.md",
             "docs/CODEX_CONFIG.md",
             "docs/TROUBLESHOOTING.md",
+            "docs/prompt-templates/standard-prompt.md",
+            "docs/prompt-templates/masterprompt.md",
+            "docs/prompt-templates/batchprompt.md",
         ] {
             write_file(&root, rel, "doc content\n");
         }

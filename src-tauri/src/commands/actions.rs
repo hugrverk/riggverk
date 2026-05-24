@@ -147,7 +147,10 @@ fn run_single_rule_install(
         let message = if ok {
             format!("{} completed with no script output\n", action)
         } else {
-            format!("{} failed with no script output (exit {:?})\n", action, code)
+            format!(
+                "{} failed with no script output (exit {:?})\n",
+                action, code
+            )
         };
         return Ok(ActionResult::new(ok, action, out, message, code));
     }
@@ -512,37 +515,41 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             run_single_rule_install(&root, "sync_codex_rules", "codex_rules", "--codex", true)
         }
 
-        "diff_opencode_rules" => {
-            run_single_rule_install(
-                &root,
-                "diff_opencode_rules",
-                "opencode_rules",
-                "--opencode",
-                false,
-            )
-        }
+        "diff_opencode_rules" => run_single_rule_install(
+            &root,
+            "diff_opencode_rules",
+            "opencode_rules",
+            "--opencode",
+            false,
+        ),
 
-        "sync_opencode_rules" => {
-            run_single_rule_install(
-                &root,
-                "sync_opencode_rules",
-                "opencode_rules",
-                "--opencode",
-                true,
-            )
-        }
+        "sync_opencode_rules" => run_single_rule_install(
+            &root,
+            "sync_opencode_rules",
+            "opencode_rules",
+            "--opencode",
+            true,
+        ),
 
-        "diff_claude_rules" => {
-            run_single_rule_install(&root, "diff_claude_rules", "claude_rules", "--claude", false)
-        }
+        "diff_claude_rules" => run_single_rule_install(
+            &root,
+            "diff_claude_rules",
+            "claude_rules",
+            "--claude",
+            false,
+        ),
 
         "sync_claude_rules" => {
             run_single_rule_install(&root, "sync_claude_rules", "claude_rules", "--claude", true)
         }
 
-        "diff_auggie_rules" => {
-            run_single_rule_install(&root, "diff_auggie_rules", "auggie_rules", "--auggie", false)
-        }
+        "diff_auggie_rules" => run_single_rule_install(
+            &root,
+            "diff_auggie_rules",
+            "auggie_rules",
+            "--auggie",
+            false,
+        ),
 
         "sync_auggie_rules" => {
             run_single_rule_install(&root, "sync_auggie_rules", "auggie_rules", "--auggie", true)
