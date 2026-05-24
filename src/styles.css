@@ -5315,6 +5315,87 @@ code {
   gap: 10px;
 }
 
+.repo-dashboard-page {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+}
+
+.repo-dashboard-page-head {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.repo-dashboard-page-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-page-desc {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.repo-dashboard-page-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.repo-dashboard-page-body {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+  flex: 1;
+  align-content: start;
+}
+
+.repo-dashboard-page-body.has-aside {
+  grid-template-columns: minmax(0, 1.15fr) minmax(260px, 0.85fr);
+  align-items: stretch;
+}
+
+.repo-dashboard-page-main,
+.repo-dashboard-page-aside {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
+  min-width: 0;
+}
+
+.repo-dashboard-panel-title {
+  margin: 0 0 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-scroll-panel {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  max-height: min(560px, calc(100vh - 220px));
+  overflow: hidden;
+}
+
+.repo-dashboard-scroll-panel .repo-dashboard-list,
+.repo-dashboard-scroll-panel .repo-dashboard-latest-content,
+.repo-dashboard-scroll-panel .repo-dashboard-code {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
 .repo-dashboard-overview {
   display: flex;
   flex-direction: column;
@@ -5863,7 +5944,8 @@ code {
   .repo-dashboard-overview-lower,
   .repo-dashboard-kpis,
   .repo-dashboard-rem,
-  .repo-dashboard-health-grid {
+  .repo-dashboard-health-grid,
+  .repo-dashboard-page-body.has-aside {
     grid-template-columns: 1fr;
   }
 

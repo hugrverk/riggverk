@@ -1,6 +1,6 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   AppSettings,
   RepoDashboardSnapshot,
@@ -152,6 +152,36 @@ function LatestChangeCard({
   }
 
   return <p className="text-muted small">No latest change found.</p>;
+}
+
+function RepoDashboardPage({
+  title,
+  description,
+  toolbar,
+  main,
+  aside,
+}: {
+  title: string;
+  description?: string;
+  toolbar?: ReactNode;
+  main: ReactNode;
+  aside?: ReactNode;
+}) {
+  return (
+    <div className="repo-dashboard-page">
+      <header className="repo-dashboard-page-head">
+        <h2 className="font-mono repo-dashboard-page-title">{title}</h2>
+        {description ? (
+          <p className="text-muted small repo-dashboard-page-desc">{description}</p>
+        ) : null}
+        {toolbar ? <div className="repo-dashboard-page-toolbar">{toolbar}</div> : null}
+      </header>
+      <div className={`repo-dashboard-page-body${aside ? " has-aside" : ""}`}>
+        <div className="repo-dashboard-page-main">{main}</div>
+        {aside ? <aside className="repo-dashboard-page-aside">{aside}</aside> : null}
+      </div>
+    </div>
+  );
 }
 
 function WorkItemsList({ items }: { items: RepoDashboardWorkItem[] }) {
@@ -471,6 +501,9 @@ export function RepoDashboardTool() {
           </div>
           <p className="repo-dashboard-section-kicker font-mono text-muted small">
             {SECTIONS.find(s => s.id === section)?.label ?? "Overview"}
+            {section !== "overview" && SECTIONS.find(s => s.id === section)?.purpose
+              ? ` — ${SECTIONS.find(s => s.id === section)?.purpose}`
+              : ""}
           </p>
         </header>
 
@@ -614,132 +647,158 @@ export function RepoDashboardTool() {
           )}
 
           {snapshot && !loading && section === "activity" && (
-            <div className="repo-dashboard-grid cols">
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Commit history (recent)</h2>
-                <p className="text-muted small">
-                  Showing up to {COMMITS_LOAD_LIMIT} most recent commits
-                  {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " (limit reached)." : "."}
-                </p>
-                <div className="repo-dashboard-list">
-                  {snapshot.commits.slice(0, 120).map(commit => (
-                    <div key={commit.sha} className="repo-dashboard-item">
-                      <div className="repo-dashboard-item-title font-mono">{commit.subject}</div>
-                      <div className="repo-dashboard-item-meta">
-                        <span>{commit.short_sha}</span>
-                        <span>/ {authorLabel(commit)}</span>
-                        <span>/ {new Date(commit.authored_at * 1000).toLocaleString()}</span>
+            <RepoDashboardPage
+              title="Activity"
+              description={`Up to ${COMMITS_LOAD_LIMIT} most recent commits from local git${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " (limit reached)" : ""}.`}
+              main={
+                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                  <h3 className="font-mono repo-dashboard-panel-title">Commits</h3>
+                  <div className="repo-dashboard-list">
+                    {snapshot.commits.slice(0, 120).map(commit => (
+                      <div key={commit.sha} className="repo-dashboard-item">
+                        <div className="repo-dashboard-item-title font-mono">{commit.subject}</div>
+                        <div className="repo-dashboard-item-meta">
+                          <span>{commit.short_sha}</span>
+                          <span>/ {authorLabel(commit)}</span>
+                          <span>/ {new Date(commit.authored_at * 1000).toLocaleString()}</span>
+                        </div>
                       </div>
+                    ))}
+                  </div>
+                </div>
+              }
+              aside={
+                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                  <h3 className="font-mono repo-dashboard-panel-title">By author</h3>
+                  {countByAuthor(snapshot.commits).map(([name, count]) => (
+                    <div key={name} className="repo-dashboard-row">
+                      <span>{name}</span>
+                      <span className="prompt-loops-pill">{count}</span>
                     </div>
                   ))}
+                  <h3 className="font-mono repo-dashboard-panel-title repo-dashboard-subheading">Heatmap</h3>
+                  {heatmap.length ? <ActivityHeatmap cells={heatmap} /> : (
+                    <p className="text-muted small">No activity data.</p>
+                  )}
                 </div>
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Who did what</h2>
-                {countByAuthor(snapshot.commits).map(([name, count]) => (
-                  <div key={name} className="repo-dashboard-row">
-                    <span>{name}</span>
-                    <span className="prompt-loops-pill">{count}</span>
-                  </div>
-                ))}
-                <h2 className="font-mono repo-dashboard-subheading">Activity heatmap</h2>
-                {heatmap.length ? <ActivityHeatmap cells={heatmap} /> : null}
-              </div>
-            </div>
+              }
+            />
           )}
 
           {snapshot && !loading && section === "sources" && (
-            <div className="repo-dashboard-grid cols">
-              <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail">
-                <h2 className="font-mono">Latest merge / commit</h2>
-                <LatestChangeCard
-                  snapshot={snapshot}
-                  latestMerge={latestMerge}
-                  latestCommit={latestCommit}
-                />
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Changed files at HEAD (local git)</h2>
-                <p className="text-muted small">
-                  {latestMerge
-                    ? "Latest merge above may come from gh; file list below is from local git show HEAD, not the PR diff."
-                    : "From local git show HEAD — not a GitHub PR file list."}
-                </p>
-                <div className="repo-dashboard-list">
-                  {snapshot.changed_files.map(file => (
-                    <div key={file.path} className="repo-dashboard-item">
-                      <div className="repo-dashboard-item-title font-mono">{file.path}</div>
-                      <div className="repo-dashboard-item-meta">
-                        <span>{file.status}</span>
-                      </div>
-                    </div>
-                  ))}
-                  {!snapshot.changed_files.length && <p className="text-muted small">No changed files for HEAD.</p>}
-                </div>
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Roadmap / features / gaps left</h2>
-                <WorkItemsList
-                  items={workItems.filter(i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter))}
-                />
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Source docs</h2>
-                {snapshot.docs.map(doc => (
-                  <div key={doc.path} className="repo-dashboard-row">
-                    <span>{doc.path}</span>
-                    <span className="prompt-loops-pill">{doc.found ? "found" : "missing"}</span>
+            <RepoDashboardPage
+              title="Sources"
+              description="Latest change from gh or local git, planning gaps, and tracked source docs."
+              main={
+                <>
+                  <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail repo-dashboard-scroll-panel">
+                    <h3 className="font-mono repo-dashboard-panel-title">Latest merge / commit</h3>
+                    <LatestChangeCard
+                      snapshot={snapshot}
+                      latestMerge={latestMerge}
+                      latestCommit={latestCommit}
+                    />
                   </div>
-                ))}
-                {snapshot.gh.message && (
-                  <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
-                )}
-              </div>
-            </div>
+                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                    <h3 className="font-mono repo-dashboard-panel-title">Changed files at HEAD (local git)</h3>
+                    <p className="text-muted small">
+                      {latestMerge
+                        ? "Merge title may come from gh; files below are from local git show HEAD, not the PR diff."
+                        : "From local git show HEAD — not a GitHub PR file list."}
+                    </p>
+                    <div className="repo-dashboard-list">
+                      {snapshot.changed_files.map(file => (
+                        <div key={file.path} className="repo-dashboard-item">
+                          <div className="repo-dashboard-item-title font-mono">{file.path}</div>
+                          <div className="repo-dashboard-item-meta">
+                            <span>{file.status}</span>
+                          </div>
+                        </div>
+                      ))}
+                      {!snapshot.changed_files.length && (
+                        <p className="text-muted small">No changed files for HEAD.</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              }
+              aside={
+                <>
+                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                    <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
+                    <WorkItemsList
+                      items={workItems.filter(
+                        i =>
+                          (i.needsPlan || i.status === "open") &&
+                          (typeFilter === "all" || i.type === typeFilter),
+                      )}
+                    />
+                  </div>
+                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                    <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
+                    {snapshot.docs.map(doc => (
+                      <div key={doc.path} className="repo-dashboard-row">
+                        <span>{doc.path}</span>
+                        <span className="prompt-loops-pill">{doc.found ? "found" : "missing"}</span>
+                      </div>
+                    ))}
+                    {snapshot.gh.message && (
+                      <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
+                    )}
+                  </div>
+                </>
+              }
+            />
           )}
 
           {snapshot && !loading && section === "work" && (
-            <div className="repo-dashboard-grid cols">
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Work filters</h2>
-                <div className="repo-dashboard-toolbar">
-                  {(["all", "open", "started", "done"] as WorkFilter[]).map(filter => (
+            <RepoDashboardPage
+              title="Work"
+              description="Parsed docs markers and optional gh issues. Local git first."
+              toolbar={
+                <>
+                  <div className="repo-dashboard-toolbar" role="group" aria-label="Status filter">
+                    {(["all", "open", "started", "done"] as WorkFilter[]).map(filter => (
+                      <button
+                        key={filter}
+                        type="button"
+                        className={`repo-dashboard-seg${workFilter === filter ? " active" : ""}`}
+                        aria-pressed={workFilter === filter}
+                        onClick={() => setWorkFilter(filter)}
+                      >
+                        {filter}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Type filter">
+                    {WORK_TYPES.map(type => (
+                      <button
+                        key={type}
+                        type="button"
+                        className={`repo-dashboard-seg ${type}${typeFilter === type ? " active" : ""}`}
+                        aria-pressed={typeFilter === type}
+                        onClick={() => setTypeFilter(typeFilter === type ? "all" : type)}
+                      >
+                        {type}
+                      </button>
+                    ))}
                     <button
-                      key={filter}
                       type="button"
-                      className={`repo-dashboard-seg${workFilter === filter ? " active" : ""}`}
-                      onClick={() => setWorkFilter(filter)}
+                      className={`repo-dashboard-seg${typeFilter === "all" ? " active" : ""}`}
+                      aria-pressed={typeFilter === "all"}
+                      onClick={() => setTypeFilter("all")}
                     >
-                      {filter}
+                      all types
                     </button>
-                  ))}
+                  </div>
+                </>
+              }
+              main={
+                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                  <WorkItemsList items={filteredWorkItems} />
                 </div>
-                <h2 className="font-mono repo-dashboard-subheading">Type filter</h2>
-                <div className="repo-dashboard-toolbar wrap">
-                  {WORK_TYPES.map(type => (
-                    <button
-                      key={type}
-                      type="button"
-                      className={`repo-dashboard-seg ${type}${typeFilter === type ? " active" : ""}`}
-                      onClick={() => setTypeFilter(typeFilter === type ? "all" : type)}
-                    >
-                      {type}
-                    </button>
-                  ))}
-                  <button
-                    type="button"
-                    className={`repo-dashboard-seg${typeFilter === "all" ? " active" : ""}`}
-                    onClick={() => setTypeFilter("all")}
-                  >
-                    all types
-                  </button>
-                </div>
-              </div>
-              <div className="repo-dashboard-card">
-                <h2 className="font-mono">Items</h2>
-                <WorkItemsList items={filteredWorkItems} />
-              </div>
-            </div>
+              }
+            />
           )}
 
         </div>
