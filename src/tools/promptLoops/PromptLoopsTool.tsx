@@ -85,8 +85,9 @@ export function PromptLoopsTool() {
                 setGroupIndex(index);
                 setItemIndex(0);
               }}
+              aria-current={index === groupIndex ? "true" : undefined}
             >
-              <span>{g.group}</span>
+              <span className="prompt-loops-nav-label">{g.group}</span>
               <span className="prompt-loops-count">{g.items.length}</span>
             </button>
           ))}
@@ -130,6 +131,7 @@ export function PromptLoopsTool() {
                   type="button"
                   className={`prompt-loops-card${index === itemIndex ? " prompt-loops-card-active" : ""}`}
                   onClick={() => setItemIndex(index)}
+                  aria-current={index === itemIndex ? "true" : undefined}
                 >
                   <div className="prompt-loops-card-head">
                     <div className="prompt-loops-card-title">{item.title}</div>
