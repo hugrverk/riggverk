@@ -577,7 +577,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     ];
     let status = if manifest_status != "valid" {
         "partial"
-    } else if surfaces.iter().any(|s| *s == "unsafe") {
+    } else if surfaces.contains(&"unsafe") {
         "unsafe"
     } else if surfaces.iter().all(|s| *s == "synced") {
         "synced"

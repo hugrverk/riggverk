@@ -357,19 +357,19 @@ for path in (root / "agents").glob("*.md"):
         raise SystemExit(f"FAIL: Cursor agent has unsupported frontmatter {sorted(bad)}: {path}")
 PY
 printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF "--diff-global-profile"; then
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--diff-global-profile'; then
   printf 'FAIL: install-cursor-workspace.sh --help missing --diff-global-profile\n' >&2
   exit 1
 fi
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF "--apply-global-profile"; then
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--apply-global-profile'; then
   printf 'FAIL: install-cursor-workspace.sh --help missing --apply-global-profile\n' >&2
   exit 1
 fi
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF "~/.cursor/permissions.json"; then
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '~/.cursor/permissions.json'; then
   printf 'FAIL: install-cursor-workspace.sh --help missing ~/.cursor/permissions.json\n' >&2
   exit 1
 fi
-if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | grep -qF "No project files are written"; then
+if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'no project writes'; then
   : "ok"
 else
   printf 'FAIL: install-cursor-workspace.sh --help must state no project writes for global profile\n' >&2
