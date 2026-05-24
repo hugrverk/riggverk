@@ -1,0 +1,134 @@
+#!/usr/bin/env python3
+"""Unit tests for global Cursor profile merge and safety checks."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+import sys
+import tempfile
+import unittest
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+SCRIPTS = ROOT / "scripts"
+PERMISSIONS_TEMPLATE = ROOT / "templates" / "cursor" / "permissions" / "global-playwright.json"
+MCP_TEMPLATE = ROOT / "templates" / "cursor" / "mcp" / "playwright.mcp.json"
+PLAYWRIGHT_LIB = SCRIPTS / "playwright-mcp-lib.sh"
+CURSOR_LIB = SCRIPTS / "cursor-global-profile-lib.sh"
+
+
+def merge_permissions(template: Path, target: Path) -> None:
+    env = {"WORKSPACE_ROOT": str(ROOT), "HOME": str(target.parent.parent)}
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{CURSOR_LIB}" && merge_cursor_permissions "{template}" "{target}"',
+        ],
+        check=True,
+        env=env,
+    )
+
+
+def merge_mcp(template: Path, target: Path, config_path: str, browsers_path: str) -> None:
+    env = {"WORKSPACE_ROOT": str(ROOT), "HOME": str(target.parent.parent)}
+    subprocess.run(
+        [
+            "bash",
+            "-c",
+            (
+                f'source "{PLAYWRIGHT_LIB}" && '
+                f'merge_cursor_playwright_mcp "{template}" "{target}" '
+                f'"{config_path}" "{browsers_path}" "0.0.48"'
+            ),
+        ],
+        check=True,
+        env=env,
+    )
+
+
+def permissions_unsafe(path: Path) -> bool:
+    env = {"WORKSPACE_ROOT": str(ROOT)}
+    proc = subprocess.run(
+        [
+            "bash",
+            "-c",
+            f'source "{CURSOR_LIB}" && permissions_json_unsafe "{path}"',
+        ],
+        env=env,
+    )
+    return proc.returncode != 0
+
+
+class GlobalProfileMergeTests(unittest.TestCase):
+    def test_permissions_merge_preserves_unrelated_keys(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / ".cursor" / "permissions.json"
+            target.parent.mkdir(parents=True)
+            target.write_text(
+                json.dumps(
+                    {
+                        "mcpAllowlist": ["github:*"],
+                        "terminalAllowlist": ["git status"],
+                        "custom": True,
+                    }
+                ),
+                encoding="utf-8",
+            )
+            merge_permissions(PERMISSIONS_TEMPLATE, target)
+            data = json.loads(target.read_text(encoding="utf-8"))
+            self.assertIn("github:*", data["mcpAllowlist"])
+            self.assertIn("playwright:*", data["mcpAllowlist"])
+            self.assertEqual(data["terminalAllowlist"], ["git status"])
+            self.assertTrue(data["custom"])
+
+    def test_permissions_merge_creates_file(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / ".cursor" / "permissions.json"
+            target.parent.mkdir(parents=True)
+            merge_permissions(PERMISSIONS_TEMPLATE, target)
+            data = json.loads(target.read_text(encoding="utf-8"))
+            self.assertEqual(data["mcpAllowlist"], ["playwright:*"])
+            self.assertNotIn("terminalAllowlist", data)
+
+    def test_mcp_merge_preserves_other_servers(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            target = Path(tmp) / ".cursor" / "mcp.json"
+            target.parent.mkdir(parents=True)
+            target.write_text(
+                json.dumps({"mcpServers": {"github": {"url": "https://example.com"}}}),
+                encoding="utf-8",
+            )
+            merge_mcp(
+                MCP_TEMPLATE,
+                target,
+                str(Path(tmp) / "pw-config.json"),
+                str(Path(tmp) / "browsers"),
+            )
+            data = json.loads(target.read_text(encoding="utf-8"))
+            self.assertIn("github", data["mcpServers"])
+            self.assertIn("playwright", data["mcpServers"])
+            self.assertEqual(data["mcpServers"]["playwright"]["command"], "npx")
+
+    def test_unsafe_terminal_allowlist_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "permissions.json"
+            path.write_text(
+                json.dumps({"terminalAllowlist": ["npx -y @playwright/mcp"]}),
+                encoding="utf-8",
+            )
+            self.assertTrue(permissions_unsafe(path))
+
+    def test_unsafe_mcp_run_everything_detected(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "permissions.json"
+            path.write_text(json.dumps({"mcpAllowlist": ["*:*"]}), encoding="utf-8")
+            self.assertTrue(permissions_unsafe(path))
+
+    def test_safe_permissions_template_passes(self) -> None:
+        self.assertFalse(permissions_unsafe(PERMISSIONS_TEMPLATE))
+
+
+if __name__ == "__main__":
+    sys.exit(unittest.main())
