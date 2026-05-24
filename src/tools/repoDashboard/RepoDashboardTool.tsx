@@ -119,9 +119,9 @@ export function RepoDashboardTool() {
     setError(null);
     try {
       const data = await invoke<RepoDashboardSnapshot>("get_repo_dashboard_snapshot", {
-        repo_path: path,
-        default_branch: defaultBranch.trim() || null,
-        include_gh: true,
+        repoPath: path,
+        defaultBranch: defaultBranch.trim() || null,
+        includeGh: true,
       });
       setSnapshot(data);
       setLastSynced(new Date());
