@@ -5,7 +5,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::agent_targets;
 
 use super::process::{run_cmd, ActionResult};
-use super::workspace::{path_arg, workspace_root};
+use super::workspace::{path_arg, workspace_install_file_missing, workspace_root};
 
 struct DocEntry {
     id: &'static str,
@@ -157,10 +157,10 @@ pub(crate) fn missing_curated_doc_rel_paths(root: &Path) -> Vec<&'static str> {
     curated_doc_registry()
         .iter()
         .filter_map(|entry| {
-            if root.join(entry.rel_path).is_file() {
-                None
-            } else {
+            if workspace_install_file_missing(&root.join(entry.rel_path)) {
                 Some(entry.rel_path)
+            } else {
+                None
             }
         })
         .collect()
@@ -341,7 +341,7 @@ pub fn get_docs_health() -> Result<DocsHealth, String> {
     let missing = missing_curated_doc_rel_paths(&root);
     let missing_prompt_template_docs = PROMPT_TEMPLATE_DOC_REL_PATHS
         .iter()
-        .any(|rel| !root.join(rel).is_file());
+        .any(|rel| workspace_install_file_missing(&root.join(rel)));
     let missing_sample: Vec<String> = missing.iter().take(8).map(|s| (*s).to_string()).collect();
     Ok(DocsHealth {
         missing_count: missing.len(),

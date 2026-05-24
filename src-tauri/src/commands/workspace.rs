@@ -251,6 +251,15 @@ pub struct WorkspaceDiagnostics {
 
 const MISSING_BUNDLED_SAMPLE_CAP: usize = 5;
 
+/// Installed workspace file is absent or zero bytes (treat empty placeholders as missing).
+pub(crate) fn workspace_install_file_missing(path: &Path) -> bool {
+    match fs::metadata(path) {
+        Ok(meta) if meta.is_file() => meta.len() == 0,
+        Ok(_) => false,
+        Err(_) => true,
+    }
+}
+
 /// Paths from `default_workspace_files()` that are absent under `root`.
 pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
     let mut missing = Vec::new();
@@ -259,7 +268,7 @@ pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
             if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
                 continue;
             }
-            if !root.join(rel).is_file() {
+            if workspace_install_file_missing(&root.join(rel)) {
                 missing.push(rel.to_string());
             }
         }
@@ -283,7 +292,7 @@ fn bundled_resources_fields(root: &Path) -> (String, usize, Vec<String>) {
 }
 
 fn empty_bundled_resources_fields() -> (String, usize, Vec<String>) {
-    ("current".to_string(), 0, Vec::new())
+    ("unknown".to_string(), 0, Vec::new())
 }
 
 fn workspace_diagnostics_for_unconfigured(
@@ -1216,8 +1225,8 @@ fn repair_workspace_core(
             if !src.is_file() {
                 continue; // source file missing from bundle — skip
             }
-            if dst.exists() {
-                continue; // already present — skip
+            if dst.exists() && !workspace_install_file_missing(&dst) {
+                continue; // non-empty file already present — skip
             }
             if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
                 continue; // safety filter
@@ -3043,6 +3052,30 @@ mod tests {
         );
         let after = fs::read_to_string(target.join(custom_rel)).expect("read custom doc");
         assert_eq!(after, user_content, "custom context doc must be unchanged");
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_replaces_zero_byte_prompt_template_doc() {
+        let source = setup_source_root("repair-empty-prompt-src");
+        let target = setup_valid_workspace("repair-empty-prompt-tgt");
+        let rel = "docs/prompt-templates/standard-prompt.md";
+        write_file(&target, rel, "");
+
+        let result = repair_workspace_core(&source, &target, false);
+        assert!(result.ok, "repair should succeed: {}", result.message);
+        assert!(
+            result.copied_files.iter().any(|p| p == rel),
+            "repair must replace zero-byte prompt template: {:?}",
+            result.copied_files
+        );
+        let content = fs::read_to_string(target.join(rel)).expect("read prompt template");
+        assert!(
+            !content.is_empty(),
+            "prompt template must be non-empty after repair"
+        );
 
         cleanup(&source);
         cleanup(&target);
