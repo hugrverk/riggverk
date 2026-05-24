@@ -1240,7 +1240,6 @@ function App() {
   ]);
 
   const enabledTargetIds = status?.enabled_target_ids ?? [];
-  const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const codexConfigEnabled = enabledTargetIds.includes("codex_config");
   const opencodeConfigEnabled = enabledTargetIds.includes("opencode_config");
   const opencodeAgentsEnabled = enabledTargetIds.includes("opencode_agents") || opencodeConfigEnabled;
@@ -1476,7 +1475,6 @@ function App() {
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
             ruleTargetsEnabled={codexRulesEnabled}
-            configEnabled={configEnabled}
             codexConfigEnabled={codexConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
             onDiffRules={() => runWsAction("diff_codex_rules", "diff codex rules")}

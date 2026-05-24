@@ -24,7 +24,6 @@ interface CodexViewProps {
   workspaceValid: boolean;
   gitAvailable: boolean;
   ruleTargetsEnabled: boolean;
-  configEnabled: boolean;
   codexConfigEnabled: boolean;
   canRunReleaseCheck: boolean;
   onDiffRules: () => void;
@@ -60,7 +59,6 @@ export function CodexView({
   workspaceValid,
   gitAvailable,
   ruleTargetsEnabled,
-  configEnabled,
   codexConfigEnabled,
   canRunReleaseCheck,
   onDiffRules,
@@ -88,7 +86,7 @@ export function CodexView({
           <TargetPageHeader
             icon="codex"
             title="Codex"
-            summary="Sync Codex rules and config, then install skills to Codex paths."
+            summary="Sync Codex rules, review config diffs manually, and install skills to Codex paths."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Codex actions." : undefined}
           />
@@ -108,7 +106,7 @@ export function CodexView({
             <HarnessActionCard
               title="Rules"
               ariaLabel="Codex rules sync"
-              description="Sync enabled rule targets (global agent rules) to Codex paths."
+              description="Diff or sync the global agent rules template to ~/.codex/AGENTS.md."
               statusChip={{ label: ruleTargetsEnabled ? "ready" : "off", tone: ruleTargetsEnabled ? "ok" : "muted" }}
               secondaryActions={[
                 {
@@ -134,12 +132,14 @@ export function CodexView({
               statusChip={{ label: codexConfigEnabled ? "manual review" : "off", tone: codexConfigEnabled ? "warn" : "muted" }}
               warning={codexConfigEnabled
                 ? "Review the diff and update Codex config manually. The app will not overwrite ~/.codex/config.toml."
-                : undefined}
+                : "Codex config is off by default. Enable only when you need a manual diff against the bundled template."
+              }
               secondaryActions={[
                 {
                   label: "diff config",
                   onClick: onDiffConfigs,
-                  disabled: busy || !configEnabled,
+                  disabled: busy || !codexConfigEnabled,
+                  title: !codexConfigEnabled ? "Enable codex config target for manual diff" : undefined,
                 },
               ]}
             />
