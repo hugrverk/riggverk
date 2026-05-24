@@ -242,6 +242,48 @@ pub struct WorkspaceDiagnostics {
     backup_root: String,
     backup_root_exists: bool,
     release_check_available: bool,
+    /// `current` when all bundled default files exist; `missing` when any are absent.
+    bundled_resources_status: String,
+    missing_bundled_count: usize,
+    /// Sample of missing bundled paths (workspace-relative, capped).
+    missing_bundled_sample: Vec<String>,
+}
+
+const MISSING_BUNDLED_SAMPLE_CAP: usize = 5;
+
+/// Paths from `default_workspace_files()` that are absent under `root`.
+pub(crate) fn missing_bundled_file_paths(root: &Path) -> Vec<String> {
+    let mut missing = Vec::new();
+    for (_label, paths) in super::defaults::default_workspace_files() {
+        for &rel in paths {
+            if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+                continue;
+            }
+            if !root.join(rel).is_file() {
+                missing.push(rel.to_string());
+            }
+        }
+    }
+    missing
+}
+
+fn bundled_resources_fields(root: &Path) -> (String, usize, Vec<String>) {
+    let missing = missing_bundled_file_paths(root);
+    let status = if missing.is_empty() {
+        "current".to_string()
+    } else {
+        "missing".to_string()
+    };
+    let count = missing.len();
+    let sample: Vec<String> = missing
+        .into_iter()
+        .take(MISSING_BUNDLED_SAMPLE_CAP)
+        .collect();
+    (status, count, sample)
+}
+
+fn empty_bundled_resources_fields() -> (String, usize, Vec<String>) {
+    ("current".to_string(), 0, Vec::new())
 }
 
 fn workspace_diagnostics_for_unconfigured(
@@ -266,6 +308,8 @@ fn workspace_diagnostics_for_unconfigured(
         Err(_) => (String::new(), false),
     };
 
+    let (bundled_resources_status, missing_bundled_count, missing_bundled_sample) =
+        empty_bundled_resources_fields();
     WorkspaceDiagnostics {
         candidate_path: String::new(),
         resolved_path: None,
@@ -279,6 +323,9 @@ fn workspace_diagnostics_for_unconfigured(
         backup_root,
         backup_root_exists,
         release_check_available: false,
+        bundled_resources_status,
+        missing_bundled_count,
+        missing_bundled_sample,
     }
 }
 
@@ -389,6 +436,11 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         .map(|p| release_check_available(Path::new(p)))
         .unwrap_or(false);
 
+    let (bundled_resources_status, missing_bundled_count, missing_bundled_sample) = resolved_path
+        .as_ref()
+        .map(|p| bundled_resources_fields(Path::new(p)))
+        .unwrap_or_else(empty_bundled_resources_fields);
+
     Ok(WorkspaceDiagnostics {
         candidate_path: candidate_str,
         resolved_path,
@@ -402,6 +454,9 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
         backup_root,
         backup_root_exists,
         release_check_available,
+        bundled_resources_status,
+        missing_bundled_count,
+        missing_bundled_sample,
     })
 }
 
@@ -1498,9 +1553,9 @@ pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
 mod tests {
     use super::{
         configured_workspace_path, create_workspace_from_source, is_unsafe_target,
-        persisted_workspace_path_is_valid, plan_create_workspace, read_brain_setup_seed_under_root,
-        repair_workspace_core, repo_path_from_settings, scrub_stale_workspace_path,
-        try_set_active_workspace_path, validate_workspace_root,
+        missing_bundled_file_paths, persisted_workspace_path_is_valid, plan_create_workspace,
+        read_brain_setup_seed_under_root, repair_workspace_core, repo_path_from_settings,
+        scrub_stale_workspace_path, try_set_active_workspace_path, validate_workspace_root,
         workspace_diagnostics_for_unconfigured, workspace_setup_phase, CreateWorkspacePlan,
         BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
     };
@@ -2949,6 +3004,45 @@ mod tests {
             target.join("templates/opencode.policy.json").is_file(),
             "policy.json must exist on disk after repair"
         );
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn missing_bundled_paths_detect_prompt_templates_on_valid_workspace() {
+        let root = setup_valid_workspace("valid-missing-prompt-docs");
+        let missing = missing_bundled_file_paths(&root);
+        for rel in [
+            "docs/prompt-templates/standard-prompt.md",
+            "docs/prompt-templates/masterprompt.md",
+            "docs/prompt-templates/batchprompt.md",
+        ] {
+            assert!(
+                missing.iter().any(|p| p == rel),
+                "valid workspace without prompt templates must report missing: {}",
+                rel
+            );
+        }
+        cleanup(&root);
+    }
+
+    #[test]
+    fn repair_does_not_overwrite_custom_context_doc() {
+        let source = setup_source_root("repair-custom-doc-src");
+        let target = setup_valid_workspace("repair-custom-doc-tgt");
+        let custom_rel = "docs/context/my-note.md";
+        let user_content = "# My custom note\n\nuser-owned content\n";
+        write_file(&target, custom_rel, user_content);
+
+        let result = repair_workspace_core(&source, &target, false);
+        assert!(result.ok, "repair should succeed: {}", result.message);
+        assert!(
+            !result.copied_files.iter().any(|p| p == custom_rel),
+            "repair must not copy over custom context doc"
+        );
+        let after = fs::read_to_string(target.join(custom_rel)).expect("read custom doc");
+        assert_eq!(after, user_content, "custom context doc must be unchanged");
 
         cleanup(&source);
         cleanup(&target);

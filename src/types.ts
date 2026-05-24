@@ -225,6 +225,8 @@ export interface WorkspaceMarkerStatus {
   exists: boolean;
 }
 
+export type BundledResourcesStatus = "current" | "missing";
+
 export interface WorkspaceDiagnostics {
   candidate_path: string;
   resolved_path: string | null;
@@ -238,6 +240,9 @@ export interface WorkspaceDiagnostics {
   backup_root: string;
   backup_root_exists: boolean;
   release_check_available: boolean;
+  bundled_resources_status: BundledResourcesStatus;
+  missing_bundled_count: number;
+  missing_bundled_sample: string[];
 }
 
 export interface DefaultWorkspaceFile {
