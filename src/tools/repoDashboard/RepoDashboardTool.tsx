@@ -219,23 +219,71 @@ function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
   );
 }
 
-function WorkItemsList({ items }: { items: RepoDashboardWorkItem[] }) {
+function WorkItemsList({
+  items,
+  emptyMessage = "No matching items found.",
+}: {
+  items: RepoDashboardWorkItem[];
+  emptyMessage?: string;
+}) {
   if (!items.length) {
-    return <p className="text-muted small">No matching items found.</p>;
+    return <p className="text-muted small" role="status">{emptyMessage}</p>;
   }
   return (
     <div className="repo-dashboard-list">
       {items.slice(0, 120).map(item => (
-        <div key={`${item.path}-${item.line ?? item.text}`} className="repo-dashboard-item">
-          <div className="repo-dashboard-item-title font-mono">{item.text}</div>
-          <div className="repo-dashboard-item-meta">
+        <div key={`${item.path}-${item.line ?? item.text}`} className="repo-dashboard-work-item">
+          <div className="repo-dashboard-work-head">
             <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
-            <span>{item.source}</span>
-            <span>/ {item.status}</span>
-            <span>/ {item.path}{item.line ? `:${item.line}` : ""}</span>
+            <span className="repo-dashboard-work-status">{item.status}</span>
             {item.needsPlan && <span className="repo-dashboard-chip todo">needs planning</span>}
           </div>
+          <div className="repo-dashboard-work-text font-mono">{item.text}</div>
+          <div className="repo-dashboard-work-loc text-muted">
+            {item.source} · {item.path}{item.line ? `:${item.line}` : ""}
+          </div>
         </div>
+      ))}
+    </div>
+  );
+}
+
+function PlanningGapsPanel({
+  items,
+  typeFilter,
+}: {
+  items: RepoDashboardWorkItem[];
+  typeFilter: RepoDashboardWorkType | "all";
+}) {
+  const filtered = items.filter(
+    i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter),
+  );
+  const groups = WORK_TYPES.map(type => ({
+    type,
+    items: filtered.filter(i => i.type === type),
+  })).filter(g => g.items.length);
+
+  if (!filtered.length) {
+    return (
+      <p className="text-muted small" role="status">
+        No open or needs-planning items for the current type filter.
+      </p>
+    );
+  }
+
+  return (
+    <div className="repo-dashboard-plan-groups">
+      {groups.map(({ type, items: groupItems }) => (
+        <section key={type} className="repo-dashboard-plan-group">
+          <h4 className="font-mono repo-dashboard-plan-group-title">
+            <span className={`repo-dashboard-chip ${type}`}>{type}</span>
+            <span className="text-muted">{groupItems.length}</span>
+          </h4>
+          <WorkItemsList
+            items={groupItems}
+            emptyMessage=""
+          />
+        </section>
       ))}
     </div>
   );
@@ -375,6 +423,12 @@ export function RepoDashboardTool() {
     if (typeFilter !== "all") list = list.filter(i => i.type === typeFilter);
     return list;
   }, [workItems, workFilter, typeFilter]);
+
+  const workStatusCounts = useMemo(() => {
+    const counts = { all: workItems.length, open: 0, started: 0, done: 0 };
+    for (const item of workItems) counts[item.status] += 1;
+    return counts;
+  }, [workItems]);
 
   const lineChart = useMemo(
     () => (snapshot ? buildLineChartData(eventsFromCommits(snapshot.commits)) : null),
@@ -743,13 +797,10 @@ export function RepoDashboardTool() {
                 <>
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
-                    <WorkItemsList
-                      items={workItems.filter(
-                        i =>
-                          (i.needsPlan || i.status === "open") &&
-                          (typeFilter === "all" || i.type === typeFilter),
-                      )}
-                    />
+                    <p className="text-muted small repo-dashboard-page-desc">
+                      Open or needs-planning items grouped by type — actionable decisions, not raw dump.
+                    </p>
+                    <PlanningGapsPanel items={workItems} typeFilter={typeFilter} />
                   </div>
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
@@ -784,6 +835,7 @@ export function RepoDashboardTool() {
                         onClick={() => setWorkFilter(filter)}
                       >
                         {filter}
+                        {filter !== "all" ? ` (${workStatusCounts[filter]})` : ` (${workStatusCounts.all})`}
                       </button>
                     ))}
                   </div>
@@ -808,11 +860,23 @@ export function RepoDashboardTool() {
                       all types
                     </button>
                   </div>
+                  <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
+                    Showing {filteredWorkItems.length} of {workItems.length} items
+                    {workFilter !== "all" ? ` · status: ${workFilter}` : ""}
+                    {typeFilter !== "all" ? ` · type: ${typeFilter}` : ""}
+                  </p>
                 </>
               }
               main={
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <WorkItemsList items={filteredWorkItems} />
+                  <WorkItemsList
+                    items={filteredWorkItems}
+                    emptyMessage={
+                      workFilter !== "all" || typeFilter !== "all"
+                        ? "No items match the active filters. Try clearing status or type."
+                        : "No work items parsed from docs or gh in this snapshot."
+                    }
+                  />
                 </div>
               }
             />
