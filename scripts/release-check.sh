@@ -1476,6 +1476,10 @@ fi
 npx --yes tsx scripts/test-opencode-runtime-ui.ts
 printf '  OpenCode status mapping guards + self-tests ok\n'
 
+step "Prompt Loops template contract"
+npx --yes tsx scripts/check-prompt-loops-templates.ts
+printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
+
 step "regression: OpenCode health compares rendered config"
 if search_has_match 'file_eq\(&template_config_path, &installed_config_path\)' src-tauri/src/commands/opencode_runtime.rs; then
   printf 'FAIL: configs_match must not byte-compare raw templates/opencode.json\n' >&2
