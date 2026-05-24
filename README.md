@@ -63,7 +63,7 @@ The app source includes a shared starter workspace under `resources/default-work
 
 Bundled defaults are copied only when you click **install** or **repair** on the Workspace (Start) page. The app installs the local runtime workspace at `~/.config/agent-workspace` — it does not ask you to choose a folder. No files are created automatically on launch. Install and repair are explicit user actions; they do not overwrite existing files, do not run scripts, and only write under the canonical install path (or `AGENT_WORKSPACE_PATH` for dev/test overrides).
 
-Existing installs that are missing newer bundled files can be fixed with **repair** on the Workspace page. Repair copies only missing files from the app's bundled default workspace and never overwrites existing user edits.
+Existing installs that are missing newer bundled files (for example prompt-template docs added in a later app release) can be fixed with **repair** on the Workspace page. Repair copies only missing files from the app's bundled default workspace and never overwrites existing user edits. Library → Docs shows a repair hint when bundled curated docs are absent on disk.
 
 ### Workspace startup
 
@@ -116,7 +116,7 @@ Primary navigation:
 
 - **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
 - **Harness pages** (Codex, OpenCode, Cursor, Claude, Augment) — per-tool diff/sync/install actions and skills install for that tool.
-- **Library** — browse and edit workspace sources: Docs, Rules, Skills, Agents, Configs, and Brain Setup.
+- **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, legacy sandbox profiles, adapter agents, project rules) stay in the workspace for scripts but are not listed as normal Library docs.
 - **Tools** — native Kretsverket utilities: **Prompt Loops** (copy-ready prompt templates) and **Repo Dashboard** (local-git-first repository insight).
 - **Settings** — appearance and theme colors. Target profiles and sync toggles live on harness pages.
 
