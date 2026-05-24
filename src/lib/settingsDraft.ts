@@ -18,6 +18,8 @@ export function defaultSettings(): AppSettings {
     accent_color: null,
     background_color: null,
     foreground_color: null,
+    repo_dashboard_entries: [],
+    active_repo_dashboard_id: null,
   };
 }
 

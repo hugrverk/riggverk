@@ -117,7 +117,27 @@ Primary navigation:
 - **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
 - **Harness pages** (Codex, OpenCode, Cursor, Claude, Augment) — per-tool diff/sync/install actions and skills install for that tool.
 - **Library** — browse and edit workspace sources: Docs, Rules, Skills, Agents, Configs, and Brain Setup.
+- **Tools** — native Kretsverket utilities: **Prompt Loops** (copy-ready prompt templates) and **Repo Dashboard** (local-git-first repository insight).
 - **Settings** — appearance and theme colors. Target profiles and sync toggles live on harness pages.
+
+### Tools
+
+**Prompt Loops** ports the standalone Kretsverket prompt-loop library into a native React view. Groups: standard, masterprompt, batchprompt, and rewrite. Supports search and copy prompt (active item).
+
+**Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). It does **not** store GitHub PATs, does **not** call the GitHub API directly, and does **not** accept frontend-supplied shell commands.
+
+Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode. The **Changed files** panel always reflects local `git show HEAD`, not a GitHub PR file list, even when merge metadata comes from `gh`.
+
+Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control via app settings. Only non-secret metadata is persisted. Commit history and activity charts load up to 500 recent commits (not full repository history).
+
+Supported data quality states:
+
+| State | Meaning |
+| --- | --- |
+| Not synced | No path refreshed yet |
+| Local-git-only | Git and docs from disk; `gh` unavailable or not authenticated |
+| Enhanced | Local git plus optional `gh` PR/issue metadata |
+| Warnings | Partial data (missing docs, no remote, git errors) with evidence in source health |
 
 **Brain Setup** (under Library) is a copy-paste instruction surface for external AI assistants. It helps you copy a durable prompt block for ChatGPT, Claude Web, Codex, or another coding assistant — skill routing discipline, model/tool recommendations, security rules, and verification discipline. It does not run agents, change enabled sync targets, or mutate runtime config.
 
@@ -142,6 +162,7 @@ Primary navigation:
 - Sync targets are defined through an internal agent target registry (`agent_targets.rs`). This does not permit arbitrary file sync or arbitrary commands.
 - Config sync targets are managed through an internal allowlisted config target registry (also in `agent_targets.rs`). Config scripts are mapped by enum, not by frontend-supplied paths.
 - Editable config templates use a narrower allowlist. Cursor setup remains a script-backed sync/status target and is not exposed through the Library Configs editor.
+- **Repo Dashboard** uses a dedicated backend module with fixed `git` and optional fixed `gh` invocations. Repo path is validated and normalized; command strings never come from the frontend.
 - Supported targets: Codex rules + config; OpenCode rules + shared runtime agents + config/TUI; Claude rules + shared runtime agents; Augment rules + shared runtime agents; Cursor adapter global agents (`templates/cursor/agents/`). Rules, agents, config, and skills are separate sync surfaces on harness pages.
 
 ### Agent rule sync (scripts/install-agent-rules.sh)

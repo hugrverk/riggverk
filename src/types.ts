@@ -93,6 +93,98 @@ export interface AppSettings {
   accent_color: string | null;
   background_color: string | null;
   foreground_color: string | null;
+  repo_dashboard_entries?: RepoDashboardEntry[];
+  active_repo_dashboard_id?: string | null;
+}
+
+export interface RepoDashboardEntry {
+  id: string;
+  label: string;
+  path: string;
+  default_branch?: string | null;
+}
+
+export type RepoDashboardWorkType =
+  | "roadmap"
+  | "feature"
+  | "gap"
+  | "todo"
+  | "fix"
+  | "note";
+
+export type RepoDashboardWorkStatus = "open" | "started" | "done";
+
+export interface RepoDashboardWorkItem {
+  source: "docs" | "issue";
+  path: string;
+  line?: number;
+  text: string;
+  type: RepoDashboardWorkType;
+  status: RepoDashboardWorkStatus;
+  needsPlan: boolean;
+  url?: string;
+}
+
+export interface RepoCommitEntry {
+  sha: string;
+  short_sha: string;
+  author_name: string;
+  author_email: string;
+  authored_at: number;
+  subject: string;
+  is_merge: boolean;
+}
+
+export interface RepoChangedFile {
+  path: string;
+  status: string;
+}
+
+export interface RepoDocFile {
+  path: string;
+  found: boolean;
+  content: string;
+  error?: string | null;
+}
+
+export interface RepoGhPullRequest {
+  number: number;
+  title: string;
+  merged_at: string;
+  author: string;
+  body?: string | null;
+}
+
+export interface RepoGhIssue {
+  number: number;
+  title: string;
+  state: string;
+  labels: string[];
+}
+
+export interface RepoGhEnhancement {
+  available: boolean;
+  authenticated: boolean;
+  message?: string | null;
+  merged_prs: RepoGhPullRequest[];
+  open_issues: RepoGhIssue[];
+}
+
+export interface RepoDashboardSnapshot {
+  repo_path: string;
+  git_available: boolean;
+  is_repo: boolean;
+  branch: string;
+  default_branch: string | null;
+  dirty: boolean;
+  ahead: number | null;
+  behind: number | null;
+  latest_commit: RepoCommitEntry | null;
+  commits: RepoCommitEntry[];
+  changed_files: RepoChangedFile[];
+  docs: RepoDocFile[];
+  gh: RepoGhEnhancement;
+  warnings: string[];
 }
 
 export interface BackupRunSummary {

@@ -1772,6 +1772,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
         let candidate = repo_path_from_settings(&settings)
             .to_string_lossy()
@@ -1794,6 +1796,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
 
         let candidate = configured_workspace_path(&settings).expect("canonical fallback");
@@ -1822,6 +1826,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
         assert_eq!(
@@ -1850,6 +1856,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
 
         assert!(scrub_stale_workspace_path(&mut settings));
@@ -1867,6 +1875,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            repo_dashboard_entries: Vec::new(),
+            active_repo_dashboard_id: None,
         };
 
         assert!(!scrub_stale_workspace_path(&mut settings));
