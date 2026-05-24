@@ -126,9 +126,9 @@ Primary navigation:
 
 **Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). It does **not** store GitHub PATs, does **not** call the GitHub API directly, and does **not** accept frontend-supplied shell commands.
 
-Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode.
+Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode. The **Changed files** panel always reflects local `git show HEAD`, not a GitHub PR file list, even when merge metadata comes from `gh`.
 
-Repo dashboard entries (label, path, optional default branch) may be saved in app settings. Only non-secret metadata is persisted.
+Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control via app settings. Only non-secret metadata is persisted. Commit history and activity charts load up to 500 recent commits (not full repository history).
 
 Supported data quality states:
 
