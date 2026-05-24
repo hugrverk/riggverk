@@ -122,7 +122,7 @@ Primary navigation:
 
 ### Tools
 
-**Prompt Loops** ports the standalone Kretsverket prompt-loop library into a native React view. Groups: standard, masterprompt, batchprompt, and rewrite. Supports search, copy prompt, and copy group.
+**Prompt Loops** ports the standalone Kretsverket prompt-loop library into a native React view. Groups: standard, masterprompt, batchprompt, and rewrite. Supports search and copy prompt (active item).
 
 **Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). It does **not** store GitHub PATs, does **not** call the GitHub API directly, and does **not** accept frontend-supplied shell commands.
 
