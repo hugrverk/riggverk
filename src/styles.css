@@ -4942,6 +4942,16 @@ code {
   background: var(--bg-inset);
 }
 
+.prompt-loops-btn-primary {
+  color: var(--text-heading);
+  border-color: rgba(var(--accent-rgb), 0.35);
+  background: var(--accent-dim);
+}
+
+.prompt-loops-btn-primary:hover {
+  background: rgba(var(--accent-rgb), 0.18);
+}
+
 .prompt-loops-prompt {
   white-space: pre-wrap;
   word-break: break-word;

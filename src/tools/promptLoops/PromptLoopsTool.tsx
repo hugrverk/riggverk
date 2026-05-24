@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CopyButton } from "../../components/CopyButton";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -42,13 +41,6 @@ export function PromptLoopsTool() {
       showStatus("copy failed");
     }
   }, [showStatus]);
-
-  const copyGroup = useCallback(() => {
-    const text = group.items
-      .map((item, index) => `# ${index + 1} — ${item.title}\n\n${item.prompt}`)
-      .join("\n\n---\n\n");
-    void copyText(text, "group copied");
-  }, [group, copyText]);
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
@@ -160,17 +152,11 @@ export function PromptLoopsTool() {
                   <div className="prompt-loops-detail-actions">
                     <button
                       type="button"
-                      className="prompt-loops-btn font-mono"
+                      className="prompt-loops-btn prompt-loops-btn-primary font-mono"
                       onClick={() => void copyText(activeItem.prompt, "prompt copied")}
                     >
                       copy prompt
                     </button>
-                    {group.items.length > 1 && (
-                      <button type="button" className="prompt-loops-btn font-mono" onClick={copyGroup}>
-                        copy group
-                      </button>
-                    )}
-                    <CopyButton getText={() => activeItem.prompt} className="prompt-loops-copy-icon" />
                   </div>
                 </div>
                 <pre className="prompt-loops-prompt font-mono">{activeItem.prompt}</pre>
