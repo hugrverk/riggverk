@@ -27,7 +27,7 @@ Browse and edit workspace content in a three-panel layout:
 
 ### Docs
 
-Curated docs grouped under Start, Guides, Reference, and Context. Use "open" for your system editor or edit in-app.
+Curated docs grouped under Start, Guides, Reference, Prompt Templates, and Context. Prompt Templates contains imported reference templates from `ux-context`. Use "open" for your system editor or edit in-app.
 
 ### Rules
 
@@ -51,14 +51,15 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance and theme colors. Target profiles and per-tool sync toggles are on harness pages; use **Save** here to persist target and color changes.
+Appearance, global text size, and theme colors. Settings autosave. Target profiles and per-tool sync toggles are on harness pages.
 
 ## Dry-run before sync
 
 | Operation | Preview | Apply |
 |-----------|---------|-------|
 | Rules sync | Diff Rules | Sync Rules |
-| Config sync | Diff Configs | Sync Configs |
+| OpenCode config sync | Diff Configs | Sync Configs |
+| Codex config | Diff Config | Manual review only |
 | Skills install | Dry-run Skills | Install Skills |
 
 ## Backups

@@ -10,7 +10,7 @@ The app helps you:
 
 - Browse and edit workspace docs, skills, templates, and rules
 - Preview sync operations (dry-run/diff) before writing files
-- Sync agent rules and config to tool folders from harness pages
+- Sync agent rules and safe config targets to tool folders from harness pages
 - Install skills per tool from harness pages
 - Run release verification when the workspace includes release-check
 
@@ -41,7 +41,7 @@ The app does not:
 - **Workspace**: install, repair, verify, terminal output
 - **Harness pages**: per-tool diff/sync and skills install
 - **Library**: edit docs, rules, skills, agents, configs; Brain Setup copy block
-- **Settings**: appearance and colors
+- **Settings**: appearance, global text size, and colors
 
 ## Dry-run before apply
 

@@ -20,7 +20,7 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 
 Skills are reusable agent instruction files. Each skill lives in its own directory under `skills/` with a `SKILL.md` file. Skills define specialized behaviors for coding agents (e.g., frontend design, security review, debugging).
 
-The app installs skills globally (system-wide). CLI scripts may support per-project installs. The bundled workspace includes 24 starter skills.
+The app installs skills globally (system-wide). The bundled workspace includes 24 starter skills.
 
 See [SKILLS.md](SKILLS.md) for the full skill directory contract.
 
@@ -34,18 +34,20 @@ See [AGENT_RULES.md](AGENT_RULES.md).
 
 ## Tool Configuration
 
-Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`.
+Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`. Codex config is diff/manual-review only because `~/.codex/config.toml` is user-owned and can be updated by Codex itself.
 
 See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md).
 
 ## Scripts
 
-Four required scripts handle sync, install, and bootstrap operations:
+Required scripts handle sync, install, and bootstrap operations:
 
 - `bootstrap.sh` — run all sync and install steps together
 - `install-skills.sh` — install skills to agent tool directories
 - `install-agent-rules.sh` — sync agent rules to tool paths
 - `install-opencode-config.sh` — sync OpenCode config and agents
+- `install-codex-config.sh` — diff Codex config template for manual review
+- `install-cursor-workspace.sh` — apply the global Cursor profile under `~/.cursor`
 
 All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.
 
@@ -69,4 +71,4 @@ When apply mode overwrites an existing diverged file, a backup is created first.
 
 Brain Setup is a copy-paste instruction surface for external AI assistants. It teaches skill routing discipline, model/tool recommendation habits, security rules, and verification expectations. It does not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude/Auggie config.
 
-Use Settings to choose which rule and config targets are enabled for diff/sync.
+Use Settings for appearance, global text size, and theme colors. Use each harness page to choose rule/config targets for that tool.

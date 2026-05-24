@@ -214,6 +214,19 @@ for name in ("safe", "workspace-write"):
         raise SystemExit(f"FAIL: Codex config missing [profiles.{name}]")
 PY
 printf '  Codex config template valid\n'
+tmp_home="$(mktemp -d)"
+if HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >/tmp/agent-workspace-codex-apply.txt 2>&1; then
+  printf 'FAIL: install-codex-config.sh --apply must require --force-overwrite\n' >&2
+  rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
+  exit 1
+fi
+if ! rg -q 'manual-review only' /tmp/agent-workspace-codex-apply.txt; then
+  printf 'FAIL: install-codex-config.sh --apply refusal must explain manual review\n' >&2
+  rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
+  exit 1
+fi
+rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
+printf '  Codex config apply guard verified\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
@@ -607,13 +620,25 @@ for doc in \
   resources/default-workspace/docs/SKILLS.md \
   resources/default-workspace/docs/AGENT_RULES.md \
   resources/default-workspace/docs/OPENCODE_CONFIG.md \
+  resources/default-workspace/docs/CODEX_CONFIG.md \
   resources/default-workspace/docs/TROUBLESHOOTING.md; do
   if [ ! -s "$doc" ]; then
     printf 'FAIL: bundled default doc missing or empty: %s\n' "$doc" >&2
     exit 1
   fi
 done
-printf '  9 bundled docs verified non-empty\n'
+printf '  bundled docs verified non-empty\n'
+
+for doc in \
+  resources/default-workspace/docs/prompt-templates/standard-prompt.md \
+  resources/default-workspace/docs/prompt-templates/masterprompt.md \
+  resources/default-workspace/docs/prompt-templates/batchprompt.md; do
+  if [ ! -s "$doc" ]; then
+    printf 'FAIL: prompt template doc missing or empty: %s\n' "$doc" >&2
+    exit 1
+  fi
+done
+printf '  prompt template docs verified non-empty\n'
 
 step "bundled default workspace marker"
 if [ ! -f resources/default-workspace/.agent-workspace/workspace.json ]; then

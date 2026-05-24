@@ -17,6 +17,14 @@
 1. **Library → Rules** — edit and save.
 2. Harness page — **Diff Rules**, review, **Sync Rules**.
 
+## Review Codex config safely
+
+1. Open **Codex** — enable the Codex config target only when you need a manual diff.
+2. Run **Diff Config**.
+3. Review `templates/codex/config.toml` against `~/.codex/config.toml` and update Codex manually if needed.
+
+The app does not overwrite Codex config.
+
 ## Install skills to one tool
 
 1. **Workspace** must be valid.
