@@ -129,6 +129,48 @@ class GlobalProfileMergeTests(unittest.TestCase):
     def test_safe_permissions_template_passes(self) -> None:
         self.assertFalse(permissions_unsafe(PERMISSIONS_TEMPLATE))
 
+    def test_install_script_accepts_apply_global_profile(self) -> None:
+        script = SCRIPTS / "install-cursor-workspace.sh"
+        proc = subprocess.run(
+            ["bash", str(script), "--help"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("--apply-global-profile", proc.stdout)
+        self.assertIn("--diff-global-profile", proc.stdout)
+        self.assertIn("--validate-global-profile", proc.stdout)
+
+    def test_apply_global_profile_writes_only_under_temp_home(self) -> None:
+        script = SCRIPTS / "install-cursor-workspace.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            fake_project = home / "project"
+            fake_project.mkdir()
+            env = {
+                "HOME": str(home),
+                "AGENT_WORKSPACE_BACKUP_DIR": str(home / "backups"),
+            }
+            proc = subprocess.run(
+                ["bash", str(script), "--apply-global-profile", "--quiet"],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+            self.assertTrue((home / ".cursor" / "mcp.json").is_file())
+            self.assertTrue((home / ".cursor" / "permissions.json").is_file())
+            perms = json.loads(
+                (home / ".cursor" / "permissions.json").read_text(encoding="utf-8")
+            )
+            self.assertIn("playwright:*", perms.get("mcpAllowlist", []))
+            self.assertNotIn("terminalAllowlist", perms)
+            self.assertFalse((fake_project / ".cursor").exists())
+
 
 if __name__ == "__main__":
     sys.exit(unittest.main())

@@ -357,6 +357,8 @@ for path in (root / "agents").glob("*.md"):
         raise SystemExit(f"FAIL: Cursor agent has unsupported frontmatter {sorted(bad)}: {path}")
 PY
 printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
+python3 scripts/check-cursor-action-compat.py
+printf '  Cursor backend action/script compatibility verified\n'
 if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--diff-global-profile'; then
   printf 'FAIL: install-cursor-workspace.sh --help missing --diff-global-profile\n' >&2
   exit 1
