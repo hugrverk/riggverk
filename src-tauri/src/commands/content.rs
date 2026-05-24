@@ -107,6 +107,12 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "templates/cursor/README.md",
         },
         DocEntry {
+            id: "templates/cursor/user-rules.md",
+            section: "Cursor",
+            title: "Cursor User Rules",
+            rel_path: "templates/cursor/user-rules.md",
+        },
+        DocEntry {
             id: "templates/codex/README.md",
             section: "Configs",
             title: "Codex Config Readme",
@@ -124,85 +130,40 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             title: "Codex MCP Readme",
             rel_path: "templates/codex/mcp/README.md",
         },
-        DocEntry {
-            id: "templates/cursor/manifest.json",
-            section: "Cursor",
-            title: "Cursor Manifest",
-            rel_path: "templates/cursor/manifest.json",
-        },
-        DocEntry {
-            id: "templates/cursor/user-rules.md",
-            section: "Cursor",
-            title: "Cursor User Rules",
-            rel_path: "templates/cursor/user-rules.md",
-        },
-        DocEntry {
-            id: "templates/cursor/mcp/README.md",
-            section: "Cursor",
-            title: "Cursor MCP Readme",
-            rel_path: "templates/cursor/mcp/README.md",
-        },
-        DocEntry {
-            id: "templates/cursor/mcp/mcp.example.json",
-            section: "Cursor",
-            title: "Cursor MCP Example",
-            rel_path: "templates/cursor/mcp/mcp.example.json",
-        },
-        DocEntry {
-            id: "templates/cursor/mcp/playwright.mcp.json",
-            section: "Cursor",
-            title: "Cursor Playwright MCP",
-            rel_path: "templates/cursor/mcp/playwright.mcp.json",
-        },
-        DocEntry {
-            id: "templates/cursor/sandbox/README.md",
-            section: "Cursor",
-            title: "Cursor Sandbox Profiles",
-            rel_path: "templates/cursor/sandbox/README.md",
-        },
-        DocEntry {
-            id: "templates/cursor/sandbox/safe.json",
-            section: "Cursor",
-            title: "Cursor Sandbox Safe",
-            rel_path: "templates/cursor/sandbox/safe.json",
-        },
-        DocEntry {
-            id: "templates/cursor/sandbox/playwright-safe.json",
-            section: "Cursor",
-            title: "Cursor Sandbox Playwright Safe",
-            rel_path: "templates/cursor/sandbox/playwright-safe.json",
-        },
-        DocEntry {
-            id: "templates/cursor/sandbox/playwright-full.json",
-            section: "Cursor",
-            title: "Cursor Sandbox Playwright Full",
-            rel_path: "templates/cursor/sandbox/playwright-full.json",
-        },
-        DocEntry {
-            id: "templates/cursor/rules/core-safety.mdc",
-            section: "Cursor Rules",
-            title: "Core Safety",
-            rel_path: "templates/cursor/rules/core-safety.mdc",
-        },
-        DocEntry {
-            id: "templates/cursor/rules/repo-workflow.mdc",
-            section: "Cursor Rules",
-            title: "Repo Workflow",
-            rel_path: "templates/cursor/rules/repo-workflow.mdc",
-        },
-        DocEntry {
-            id: "templates/cursor/agents/verifier.md",
-            section: "Cursor Agents",
-            title: "Verifier Agent",
-            rel_path: "templates/cursor/agents/verifier.md",
-        },
-        DocEntry {
-            id: "templates/cursor/agents/security-reviewer.md",
-            section: "Cursor Agents",
-            title: "Security Reviewer Agent",
-            rel_path: "templates/cursor/agents/security-reviewer.md",
-        },
     ]
+}
+
+/// Relative paths that must never appear in normal Library Docs (implementation/debug assets).
+#[cfg_attr(not(test), allow(dead_code))]
+pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
+    "templates/cursor/manifest.json",
+    "templates/cursor/mcp/mcp.example.json",
+    "templates/cursor/mcp/playwright.mcp.json",
+    "templates/cursor/sandbox/README.md",
+    "templates/cursor/sandbox/safe.json",
+    "templates/cursor/sandbox/playwright-safe.json",
+    "templates/cursor/sandbox/playwright-full.json",
+    "templates/cursor/rules/core-safety.mdc",
+    "templates/cursor/agents/verifier.md",
+];
+
+const PROMPT_TEMPLATE_DOC_REL_PATHS: &[&str] = &[
+    "docs/prompt-templates/standard-prompt.md",
+    "docs/prompt-templates/masterprompt.md",
+    "docs/prompt-templates/batchprompt.md",
+];
+
+pub(crate) fn missing_curated_doc_rel_paths(root: &Path) -> Vec<&'static str> {
+    curated_doc_registry()
+        .iter()
+        .filter_map(|entry| {
+            if root.join(entry.rel_path).is_file() {
+                None
+            } else {
+                Some(entry.rel_path)
+            }
+        })
+        .collect()
 }
 
 fn existing_curated_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
@@ -356,6 +317,14 @@ pub struct DocSummary {
     source: String,
 }
 
+#[derive(Serialize)]
+pub struct DocsHealth {
+    pub missing_count: usize,
+    pub missing_prompt_template_docs: bool,
+    /// Sample of missing curated doc paths (workspace-relative, capped).
+    pub missing_sample: Vec<String>,
+}
+
 #[derive(Serialize, Debug)]
 pub struct DocumentContent {
     pub id: String,
@@ -364,6 +333,21 @@ pub struct DocumentContent {
     pub section: String,
     pub source: String,
     pub content: String,
+}
+
+#[tauri::command]
+pub fn get_docs_health() -> Result<DocsHealth, String> {
+    let root = workspace_root()?;
+    let missing = missing_curated_doc_rel_paths(&root);
+    let missing_prompt_template_docs = PROMPT_TEMPLATE_DOC_REL_PATHS
+        .iter()
+        .any(|rel| !root.join(rel).is_file());
+    let missing_sample: Vec<String> = missing.iter().take(8).map(|s| (*s).to_string()).collect();
+    Ok(DocsHealth {
+        missing_count: missing.len(),
+        missing_prompt_template_docs,
+        missing_sample,
+    })
 }
 
 #[tauri::command]
@@ -720,6 +704,61 @@ mod tests {
             found.is_none(),
             "unknown doc id must not be found in curated registry"
         );
+    }
+
+    #[test]
+    fn curated_registry_includes_prompt_template_docs() {
+        let ids: Vec<&str> = curated_doc_registry().iter().map(|e| e.rel_path).collect();
+        for rel in PROMPT_TEMPLATE_DOC_REL_PATHS {
+            assert!(
+                ids.contains(rel),
+                "curated registry must include prompt template doc: {}",
+                rel
+            );
+        }
+    }
+
+    #[test]
+    fn curated_registry_excludes_internal_cursor_library_docs() {
+        let ids: Vec<&str> = curated_doc_registry().iter().map(|e| e.rel_path).collect();
+        for forbidden in FORBIDDEN_LIBRARY_DOC_REL_PATHS {
+            assert!(
+                !ids.contains(forbidden),
+                "curated registry must not expose internal Cursor doc: {}",
+                forbidden
+            );
+        }
+        let cursor_docs: Vec<&str> = ids
+            .iter()
+            .copied()
+            .filter(|p| p.starts_with("templates/cursor/"))
+            .collect();
+        assert_eq!(
+            cursor_docs,
+            &[
+                "templates/cursor/README.md",
+                "templates/cursor/user-rules.md"
+            ],
+            "normal Library Cursor docs must be user-facing only"
+        );
+    }
+
+    #[test]
+    fn missing_curated_docs_detects_absent_prompt_templates() {
+        let root = temp_root("missing-prompt-templates");
+        write_file(&root, "README.md", "# readme\n");
+        write_file(&root, "docs/START_HERE.md", "# start\n");
+
+        let missing = missing_curated_doc_rel_paths(&root);
+        cleanup(&root);
+
+        for rel in PROMPT_TEMPLATE_DOC_REL_PATHS {
+            assert!(
+                missing.contains(rel),
+                "missing curated docs must include absent prompt template: {}",
+                rel
+            );
+        }
     }
 
     #[test]

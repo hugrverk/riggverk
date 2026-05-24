@@ -640,6 +640,9 @@ for doc in \
 done
 printf '  prompt template docs verified non-empty\n'
 
+step "curated Library Docs registry"
+python3 scripts/check-curated-library-docs.py
+
 step "bundled default workspace marker"
 if [ ! -f resources/default-workspace/.agent-workspace/workspace.json ]; then
   printf 'FAIL: bundled default workspace marker not found\n' >&2
