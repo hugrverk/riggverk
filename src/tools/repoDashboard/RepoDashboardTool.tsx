@@ -495,7 +495,12 @@ export function RepoDashboardTool() {
                 )}
               </div>
               <div className="repo-dashboard-card">
-                <h2 className="font-mono">Changed files</h2>
+                <h2 className="font-mono">Changed files at HEAD (local git)</h2>
+                <p className="text-muted small">
+                  {latestMerge
+                    ? "Latest merge above may come from gh; file list below is from local git show HEAD, not the PR diff."
+                    : "From local git show HEAD — not a GitHub PR file list."}
+                </p>
                 <div className="repo-dashboard-list">
                   {snapshot.changed_files.map(file => (
                     <div key={file.path} className="repo-dashboard-item">
