@@ -1,5 +1,6 @@
-import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { invoke, isTauri } from "@tauri-apps/api/core";
+import { open } from "@tauri-apps/plugin-dialog";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AppSettings,
   RepoDashboardSnapshot,
@@ -84,6 +85,14 @@ export function RepoDashboardTool() {
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [pickerStatus, setPickerStatus] = useState<string | null>(null);
+  const pickerTimerRef = useRef<number | null>(null);
+
+  const showPickerStatus = useCallback((text: string) => {
+    setPickerStatus(text);
+    if (pickerTimerRef.current !== null) window.clearTimeout(pickerTimerRef.current);
+    pickerTimerRef.current = window.setTimeout(() => setPickerStatus(null), 2500);
+  }, []);
 
   useEffect(() => {
     invoke<AppSettings>("get_settings")
@@ -156,6 +165,29 @@ export function RepoDashboardTool() {
       setError(String(e));
     }
   }, [repoPath, defaultBranch]);
+
+  const chooseRepoFolder = useCallback(async () => {
+    if (!isTauri()) {
+      showPickerStatus("folder picker requires native app");
+      return;
+    }
+    try {
+      const selected = await open({
+        title: "Choose repository folder",
+        directory: true,
+        multiple: false,
+        defaultPath: repoPath.trim() || undefined,
+      });
+      if (selected === null) return;
+      if (typeof selected === "string") {
+        setRepoPath(selected);
+        setError(null);
+        showPickerStatus("folder selected");
+      }
+    } catch {
+      showPickerStatus("folder picker unavailable");
+    }
+  }, [repoPath, showPickerStatus]);
 
   const workItems = useMemo(
     () => (snapshot ? mergeWorkItems(snapshot.docs, snapshot.gh.open_issues) : []),
@@ -256,13 +288,24 @@ export function RepoDashboardTool() {
                 ))}
               </select>
             )}
-            <input
-              className="repo-dashboard-field repo-dashboard-field-path font-mono"
-              value={repoPath}
-              onChange={e => setRepoPath(e.target.value)}
-              placeholder="/path/to/repo"
-              aria-label="Local repository path"
-            />
+            <div className="repo-dashboard-path-row">
+              <input
+                className="repo-dashboard-field repo-dashboard-field-path font-mono"
+                value={repoPath}
+                onChange={e => setRepoPath(e.target.value)}
+                placeholder="/path/to/repo"
+                aria-label="Local repository path"
+              />
+              <button
+                type="button"
+                className="repo-dashboard-btn font-mono"
+                onClick={() => void chooseRepoFolder()}
+                disabled={loading}
+                aria-label="Choose repository folder"
+              >
+                browse
+              </button>
+            </div>
             <input
               className="repo-dashboard-field font-mono"
               value={defaultBranch}
@@ -287,6 +330,9 @@ export function RepoDashboardTool() {
             >
               {loading ? "refreshing…" : "refresh"}
             </button>
+            {pickerStatus && (
+              <span className="text-muted small font-mono" role="status">{pickerStatus}</span>
+            )}
             {saveStatus && (
               <span className="text-muted small font-mono" role="status">{saveStatus}</span>
             )}

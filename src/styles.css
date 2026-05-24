@@ -5091,6 +5091,12 @@ code {
   border-radius: var(--radius);
 }
 
+.repo-dashboard-path-row {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+}
+
 .repo-dashboard-field-path {
   width: min(280px, 36vw);
 }
