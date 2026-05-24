@@ -29,7 +29,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             if let Some(window) = app.get_webview_window("main") {
-                window.maximize()?;
+                let _ = window.maximize();
             }
             Ok(())
         })
