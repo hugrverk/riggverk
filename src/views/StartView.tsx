@@ -2,7 +2,7 @@ import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
-import type { StatusData, WorkspaceDiagnostics } from "../types";
+import type { BundledResourcesStatus, StatusData, WorkspaceDiagnostics } from "../types";
 
 export type InstalledWorkspaceChip = "CHECKING" | "INSTALLED" | "MISSING" | "NEEDS REPAIR";
 
@@ -14,6 +14,7 @@ interface StartViewProps {
   onRefreshDiagnostics: () => void;
   onInstall: () => void;
   onRepair: () => void;
+  onUpdateResources: () => void;
   onOpenFolder: () => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -64,6 +65,77 @@ export function deriveInstallState(diag: WorkspaceDiagnostics | null): Installed
   return "NEEDS REPAIR";
 }
 
+export function needsBundledResourcesUpdate(diag: WorkspaceDiagnostics | null): boolean {
+  return diag?.valid === true && diag.bundled_resources_status === "missing";
+}
+
+export function workspaceStatusDetail(
+  installState: InstalledWorkspaceChip,
+  diag: WorkspaceDiagnostics | null,
+): string {
+  if (needsBundledResourcesUpdate(diag)) {
+    const count = diag?.missing_bundled_count ?? 0;
+    const sample = diag?.missing_bundled_sample ?? [];
+    const sampleHint =
+      sample.length > 0 ? ` Missing examples: ${sample.slice(0, 3).join(", ")}.` : "";
+    return (
+      `Workspace is installed. ${count} bundled file(s) from this app are not in the workspace yet` +
+      " (for example Library prompt templates)." +
+      " Update resources copies only missing bundled files; existing files are kept." +
+      sampleHint
+    );
+  }
+  return statusCopy(installState);
+}
+
+function formatBundledMeta(status: BundledResourcesStatus, count: number): string | null {
+  if (status === "current") return null;
+  return count === 1 ? "1 bundled file missing" : `${count} bundled files missing`;
+}
+
+export function runStartViewBundledSelfTests(): void {
+  const base: WorkspaceDiagnostics = {
+    candidate_path: DEFAULT_WORKSPACE_PATH,
+    resolved_path: DEFAULT_WORKSPACE_PATH,
+    valid: true,
+    error: null,
+    markers: [],
+    enabled_rule_targets: 0,
+    total_rule_targets: 0,
+    enabled_config_targets: 0,
+    total_config_targets: 0,
+    backup_root: "",
+    backup_root_exists: false,
+    release_check_available: false,
+    bundled_resources_status: "current",
+    missing_bundled_count: 0,
+    missing_bundled_sample: [],
+  };
+
+  const assert = (cond: boolean, msg: string) => {
+    if (!cond) throw new Error(msg);
+  };
+
+  assert(deriveInstallState(base) === "INSTALLED", "valid workspace stays INSTALLED");
+  assert(
+    deriveInstallState({ ...base, valid: true, bundled_resources_status: "missing", missing_bundled_count: 2 }) === "INSTALLED",
+    "missing bundled files must not flip install state to NEEDS REPAIR",
+  );
+  assert(!needsBundledResourcesUpdate(base), "current bundled status needs no update");
+  assert(
+    needsBundledResourcesUpdate({ ...base, bundled_resources_status: "missing", missing_bundled_count: 1 }),
+    "missing bundled on valid workspace needs update",
+  );
+  assert(
+    !needsBundledResourcesUpdate({ ...base, valid: false, bundled_resources_status: "missing", missing_bundled_count: 1 }),
+    "invalid workspace must not offer update resources",
+  );
+  assert(
+    workspaceStatusDetail("INSTALLED", { ...base, bundled_resources_status: "missing", missing_bundled_count: 3 }).includes("Update resources"),
+    "stale detail must mention update resources",
+  );
+}
+
 export function StartView({
   workspaceDiagnostics,
   installState,
@@ -72,6 +144,7 @@ export function StartView({
   onRefreshDiagnostics,
   onInstall,
   onRepair,
+  onUpdateResources,
   onOpenFolder,
   wsLog,
   wsLogCompletedAt,
@@ -89,10 +162,15 @@ export function StartView({
   onOpenBackupsFolder,
 }: StartViewProps) {
   const resolvedPath = workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? null;
-  const statusDetail = statusCopy(installState);
+  const showUpdateResources = needsBundledResourcesUpdate(workspaceDiagnostics);
+  const statusDetail = workspaceStatusDetail(installState, workspaceDiagnostics);
+  const bundledMeta = workspaceDiagnostics
+    ? formatBundledMeta(workspaceDiagnostics.bundled_resources_status, workspaceDiagnostics.missing_bundled_count)
+    : null;
   const showInstall = installState === "MISSING";
   const showRepair = installState === "NEEDS REPAIR";
   const canOpenFolder = Boolean(resolvedPath) && installState !== "MISSING";
+  const actionBusy = installRunning || repairRunning;
 
   return (
     <section className="ws-layout ws-layout-start">
@@ -135,7 +213,20 @@ export function StartView({
               )}
             </div>
 
-            <p className="start-workspace-status-detail ws-path-status-detail">{statusDetail}</p>
+            <p className="start-workspace-status-detail ws-path-status-detail" role="status">
+              {statusDetail}
+            </p>
+
+            {bundledMeta && (
+              <div className="start-workspace-status-row" role="status" aria-live="polite">
+                <div className="start-workspace-status-meta">
+                  <span className="start-workspace-status-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span>{bundledMeta}</span>
+                </div>
+              </div>
+            )}
 
             <div className="ws-action-row start-workspace-actions">
               <button
@@ -144,6 +235,7 @@ export function StartView({
                   onRefreshDiagnostics();
                   onRefreshStatus();
                 }}
+                disabled={actionBusy}
               >
                 refresh
               </button>
@@ -151,7 +243,7 @@ export function StartView({
                 <button
                   className="btn btn-sm btn-primary"
                   onClick={onInstall}
-                  disabled={installRunning || repairRunning}
+                  disabled={actionBusy}
                 >
                   {installRunning ? "installing\u2026" : "install"}
                 </button>
@@ -160,15 +252,26 @@ export function StartView({
                 <button
                   className="btn btn-sm btn-primary"
                   onClick={onRepair}
-                  disabled={installRunning || repairRunning}
+                  disabled={actionBusy}
+                  aria-busy={repairRunning || undefined}
                 >
                   {repairRunning ? "repairing\u2026" : "repair"}
+                </button>
+              )}
+              {showUpdateResources && (
+                <button
+                  className="btn btn-sm btn-primary"
+                  onClick={onUpdateResources}
+                  disabled={actionBusy}
+                  aria-busy={repairRunning || undefined}
+                >
+                  {repairRunning ? "updating\u2026" : "update resources"}
                 </button>
               )}
               <button
                 className="btn btn-sm"
                 onClick={onOpenFolder}
-                disabled={!canOpenFolder || installRunning || repairRunning}
+                disabled={!canOpenFolder || actionBusy}
               >
                 open folder
               </button>

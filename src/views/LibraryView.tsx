@@ -181,13 +181,13 @@ function DocItemList({
       {showStaleBanner && (
         <div className="lib-docs-stale-banner" role="status">
           <p className="lib-docs-stale-title">Bundled docs need update</p>
-          <p className="lib-docs-stale-hint">{staleHint} Use repair on the Workspace page to copy missing files without overwriting your edits.</p>
+          <p className="lib-docs-stale-hint">{staleHint} Use update resources on the Workspace page to copy missing files without overwriting your edits.</p>
           <button
             type="button"
             className="btn btn-sm btn-primary"
             onClick={onGoToWorkspaceRepair}
           >
-            open workspace repair
+            open workspace update
           </button>
         </div>
       )}

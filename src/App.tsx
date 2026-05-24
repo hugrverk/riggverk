@@ -274,7 +274,6 @@ function App() {
   }, [appSettings]);
 
   const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
-  const [workspaceRepairRunning, setWorkspaceRepairRunning] = useState(false);
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -726,23 +725,6 @@ function App() {
       setError(`Install workspace: ${e}`);
     } finally {
       setWorkspaceInstallRunning(false);
-    }
-  }, [persistActiveWorkspace]);
-
-  const runRepairDefaultWorkspace = useCallback(async () => {
-    setWorkspaceRepairRunning(true);
-    try {
-      const result = await invoke<RepairWorkspaceResult>("repair_default_workspace");
-      if (result.ok) {
-        setSettingsMsg({ ok: true, text: "workspace repaired" });
-        await persistActiveWorkspace(result.target_path);
-      } else {
-        setError(`Repair workspace: ${result.message}`);
-      }
-    } catch (e) {
-      setError(`Repair workspace: ${e}`);
-    } finally {
-      setWorkspaceRepairRunning(false);
     }
   }, [persistActiveWorkspace]);
 
@@ -1246,6 +1228,36 @@ function App() {
     workspaceLoadGenerationRef,
   ]);
 
+  const runDefaultWorkspaceResourceAction = useCallback(
+    (label: "repair workspace" | "update resources") => {
+      runWsTask({
+        label,
+        action: "repair_default_workspace",
+        task: async () => invoke<RepairWorkspaceResult>("repair_default_workspace"),
+        toActionResult: repairWorkspaceToActionResult,
+        refresh: async () => {
+          const generation = workspaceLoadGenerationRef.current;
+          await Promise.all([
+            loadWorkspaceDiagnostics(generation),
+            loadDocs(generation),
+            fetchStatus(generation),
+          ]);
+        },
+      });
+    },
+    [
+      runWsTask,
+      repairWorkspaceToActionResult,
+      loadWorkspaceDiagnostics,
+      loadDocs,
+      fetchStatus,
+      workspaceLoadGenerationRef,
+    ],
+  );
+
+  const workspaceResourceActionRunning =
+    wsRunning === "repair workspace" || wsRunning === "update resources";
+
   const enabledTargetIds = status?.enabled_target_ids ?? [];
   const codexConfigEnabled = enabledTargetIds.includes("codex_config");
   const opencodeConfigEnabled = enabledTargetIds.includes("opencode_config");
@@ -1439,13 +1451,14 @@ function App() {
             workspaceDiagnostics={workspaceDiagnostics}
             installState={installState}
             installRunning={workspaceInstallRunning}
-            repairRunning={workspaceRepairRunning}
+            repairRunning={workspaceResourceActionRunning}
             onRefreshDiagnostics={() => {
               loadWorkspaceDiagnostics();
               fetchStatus();
             }}
             onInstall={runInstallDefaultWorkspace}
-            onRepair={runRepairDefaultWorkspace}
+            onRepair={() => runDefaultWorkspaceResourceAction("repair workspace")}
+            onUpdateResources={() => runDefaultWorkspaceResourceAction("update resources")}
             onOpenFolder={openDefaultWorkspaceFolder}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
