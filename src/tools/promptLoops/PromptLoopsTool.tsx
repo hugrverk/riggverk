@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { CopyButton } from "../../components/CopyButton";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -156,17 +157,20 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
                     <h2 className="prompt-loops-detail-title">{activeItem.title}</h2>
                     <p className="prompt-loops-detail-meta text-muted">{activeItem.meta}</p>
                   </div>
-                  <div className="prompt-loops-detail-actions">
-                    <button
-                      type="button"
-                      className="prompt-loops-btn prompt-loops-btn-primary font-mono"
-                      onClick={() => void copyText(activeItem.prompt, "prompt copied")}
-                    >
-                      copy prompt
-                    </button>
-                  </div>
                 </div>
-                <pre className="prompt-loops-prompt font-mono">{activeItem.prompt}</pre>
+                <div className="prompt-loops-prompt-wrap">
+                  <CopyButton
+                    getText={() => activeItem.prompt}
+                    copyLabel="Copy prompt"
+                    copiedLabel="Prompt copied"
+                    className="prompt-loops-prompt-copy"
+                    fallbackElementId="prompt-loops-active-prompt"
+                    onCopySuccess={() => showStatus("prompt copied")}
+                  />
+                  <pre id="prompt-loops-active-prompt" className="prompt-loops-prompt font-mono">
+                    {activeItem.prompt}
+                  </pre>
+                </div>
               </>
             ) : (
               <div className="prompt-loops-empty font-mono">select a prompt</div>

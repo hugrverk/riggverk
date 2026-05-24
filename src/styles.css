@@ -5015,6 +5015,19 @@ code {
   background: rgba(var(--accent-rgb), 0.18);
 }
 
+.prompt-loops-prompt-wrap {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.prompt-loops-prompt-wrap .prompt-loops-prompt-copy {
+  top: 8px;
+  right: 8px;
+}
+
 .prompt-loops-prompt {
   white-space: pre-wrap;
   word-break: break-word;
@@ -5023,11 +5036,12 @@ code {
   color: var(--text);
   background: var(--bg-inset);
   border: 1px solid var(--border);
-  padding: 12px;
+  padding: 12px 40px 12px 12px;
   border-radius: var(--radius);
   flex: 1;
   overflow: auto;
   margin: 0;
+  user-select: text;
 }
 
 .prompt-loops-empty {

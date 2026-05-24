@@ -4,6 +4,9 @@ interface CopyButtonProps {
   getText: () => string;
   className?: string;
   fallbackElementId?: string;
+  copyLabel?: string;
+  copiedLabel?: string;
+  onCopySuccess?: () => void;
 }
 
 function CopyIcon() {
@@ -23,13 +26,21 @@ function CheckIcon() {
   );
 }
 
-export function CopyButton({ getText, className = "", fallbackElementId }: CopyButtonProps) {
+export function CopyButton({
+  getText,
+  className = "",
+  fallbackElementId,
+  copyLabel = "Copy",
+  copiedLabel = "Copied",
+  onCopySuccess,
+}: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
   const onCopy = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(getText());
       setCopied(true);
+      onCopySuccess?.();
       setTimeout(() => setCopied(false), 2000);
     } catch {
       if (fallbackElementId) {
@@ -43,15 +54,15 @@ export function CopyButton({ getText, className = "", fallbackElementId }: CopyB
         }
       }
     }
-  }, [getText, fallbackElementId]);
+  }, [getText, fallbackElementId, onCopySuccess]);
 
   return (
     <button
       type="button"
       className={`copy-btn${copied ? " copy-btn-copied" : ""}${className ? ` ${className}` : ""}`}
       onClick={onCopy}
-      aria-label={copied ? "Copied" : "Copy"}
-      title={copied ? "Copied" : "Copy"}
+      aria-label={copied ? copiedLabel : copyLabel}
+      title={copied ? copiedLabel : copyLabel}
     >
       {copied ? <CheckIcon /> : <CopyIcon />}
     </button>
