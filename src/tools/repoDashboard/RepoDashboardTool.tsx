@@ -289,7 +289,11 @@ function PlanningGapsPanel({
   );
 }
 
-export function RepoDashboardTool() {
+interface RepoDashboardToolProps {
+  toolsSwitcher?: ReactNode;
+}
+
+export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
   const [section, setSection] = useState<RepoDashboardSection>("overview");
   const [repoPath, setRepoPath] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
@@ -474,6 +478,7 @@ export function RepoDashboardTool() {
   return (
     <div className="repo-dashboard-tool">
       <aside className="repo-dashboard-sidebar">
+        {toolsSwitcher}
         <div className="repo-dashboard-brand font-mono">
           <span className="tools-title-dot" aria-hidden="true" />
           <span>kretsverket.repo.state</span>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -11,7 +11,11 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
   });
 }
 
-export function PromptLoopsTool() {
+interface PromptLoopsToolProps {
+  toolsSwitcher?: ReactNode;
+}
+
+export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
   const [groupIndex, setGroupIndex] = useState(0);
   const [itemIndex, setItemIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -75,6 +79,7 @@ export function PromptLoopsTool() {
   return (
     <div className="prompt-loops-tool">
       <aside className="prompt-loops-sidebar">
+        {toolsSwitcher}
         <nav className="prompt-loops-nav" aria-label="Prompt groups">
           {PROMPT_LOOP_GROUPS.map((g, index) => (
             <button
