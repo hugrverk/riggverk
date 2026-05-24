@@ -39,6 +39,16 @@ const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo"
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
 
+function repoEntryIdFromPath(path: string): string {
+  const base = path.replace(/\/+$/, "").split("/").pop() || "repo";
+  const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+  return slug || "repo";
+}
+
+function repoEntryLabelFromPath(path: string): string {
+  return path.replace(/\/+$/, "").split("/").pop() || "Repository";
+}
+
 function WorkItemsList({ items }: { items: RepoDashboardWorkItem[] }) {
   if (!items.length) {
     return <p className="text-muted small">No matching items found.</p>;
@@ -72,6 +82,7 @@ export function RepoDashboardTool() {
   const [workFilter, setWorkFilter] = useState<WorkFilter>("all");
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
+  const [saveStatus, setSaveStatus] = useState<string | null>(null);
 
   useEffect(() => {
     invoke<AppSettings>("get_settings")
@@ -109,6 +120,39 @@ export function RepoDashboardTool() {
       setSnapshot(null);
     } finally {
       setLoading(false);
+    }
+  }, [repoPath, defaultBranch]);
+
+  const saveCurrentRepo = useCallback(async () => {
+    const path = repoPath.trim();
+    if (!path) {
+      setError("Enter a local repository path");
+      return;
+    }
+    setSaveStatus(null);
+    try {
+      const settings = await invoke<AppSettings>("get_settings");
+      const id = repoEntryIdFromPath(path);
+      const label = repoEntryLabelFromPath(path);
+      const branch = defaultBranch.trim() || null;
+      const entries = [...(settings.repo_dashboard_entries ?? [])];
+      const existingIndex = entries.findIndex(e => e.id === id || e.path === path);
+      const entry = { id, label, path, default_branch: branch };
+      if (existingIndex >= 0) {
+        entries[existingIndex] = entry;
+      } else {
+        entries.push(entry);
+      }
+      const next: AppSettings = {
+        ...settings,
+        repo_dashboard_entries: entries,
+        active_repo_dashboard_id: id,
+      };
+      const saved = await invoke<AppSettings>("update_settings", { settings: next });
+      setSavedEntries(saved.repo_dashboard_entries ?? []);
+      setSaveStatus("saved");
+    } catch (e) {
+      setError(String(e));
     }
   }, [repoPath, defaultBranch]);
 
@@ -226,11 +270,23 @@ export function RepoDashboardTool() {
             <button
               type="button"
               className="repo-dashboard-btn font-mono"
+              onClick={() => void saveCurrentRepo()}
+              disabled={loading || !repoPath.trim()}
+              aria-label="Save repository path to settings"
+            >
+              save
+            </button>
+            <button
+              type="button"
+              className="repo-dashboard-btn font-mono"
               onClick={() => void refresh()}
               disabled={loading}
             >
               {loading ? "refreshing…" : "refresh"}
             </button>
+            {saveStatus && (
+              <span className="text-muted small font-mono" role="status">{saveStatus}</span>
+            )}
           </div>
         </header>
 
