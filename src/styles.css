@@ -4102,6 +4102,14 @@ code {
   margin: 0;
 }
 
+.brain-setup-lib-body .copyable-block-content {
+  overflow: auto;
+}
+
+.brain-setup-lib-body .brain-setup-pre {
+  margin: 0;
+}
+
 /* responsive: stack sidebar on narrow screens */
 @media (max-width: 640px) {
   .lib-layout {

@@ -39,5 +39,9 @@ if rg -n '>Overview<|\{SECTIONS\.find\(s => s\.id === section\)\?\.label' src/to
   fail "Repo Dashboard must not render a redundant section heading below the path controls"
 fi
 
+if ! rg -n -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: auto;' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Brain Setup Library content must define a local scroll container"
+fi
+
 rm -f /tmp/agent-workspace-ui-regressions.txt
 printf 'UI regression checks passed\n'
