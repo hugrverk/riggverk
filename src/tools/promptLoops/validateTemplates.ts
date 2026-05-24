@@ -12,8 +12,11 @@ const PROMPT_GENERATOR_IDS = new Set([
 const PROMPT_FORMAT_IDS = new Set([
   ...PROMPT_GENERATOR_IDS,
   "standard-verify",
+  "standard-merge",
   "master-verify",
+  "master-merge",
   "batch-verify",
+  "batch-merge",
 ]);
 
 const OPERATOR_METADATA_FIELDS = [
@@ -32,6 +35,7 @@ const FORBIDS_SKILLS_OUTSIDE_METADATA = [
   /lägg aldrig target tool\/model, skills/i,
   /never put skills in the (copy\/paste )?prompt/i,
   /skills must not appear in the copy\/paste prompt/i,
+  /skills ska inte finnas i promptblocket/i,
 ];
 
 const REQUIRES_SKILL_WEAVE = [
@@ -43,6 +47,16 @@ const REQUIRES_EXECUTABLE_BLOCK = /copy\/paste prompt-blocket ska vara exekverba
 
 const REQUIRES_METADATA_SEPARATION =
   /lägg aldrig operator metadata-etiketter/i;
+
+function proposesPrompt(prompt: string): boolean {
+  const lower = prompt.toLowerCase();
+  if (prompt.includes("Copy/paste prompt:")) return true;
+  if (/föreslå/.test(lower) && /prompt/.test(lower)) return true;
+  if (/skriv/.test(lower) && /prompt/.test(lower)) return true;
+  if (/standardprompt|masterprompt|batchprompt/.test(lower)) return true;
+  if (/nästa prompt|nästa rimliga/.test(lower)) return true;
+  return false;
+}
 
 export function validatePromptLoopTemplates(): string[] {
   const errors: string[] = [];
@@ -57,10 +71,13 @@ export function validatePromptLoopTemplates(): string[] {
         }
       }
 
-      if (PROMPT_FORMAT_IDS.has(item.id)) {
-        if (!REQUIRES_SKILL_WEAVE.some(p => p.test(prompt))) {
-          errors.push(`${item.id}: must require exact skill names woven into executable instructions`);
-        }
+      const needsSkillWeave =
+        PROMPT_FORMAT_IDS.has(item.id) || proposesPrompt(prompt);
+
+      if (needsSkillWeave && !REQUIRES_SKILL_WEAVE.some(p => p.test(prompt))) {
+        errors.push(
+          `${item.id}: must require exact skill names woven into executable instructions`,
+        );
       }
 
       if (PROMPT_GENERATOR_IDS.has(item.id)) {
