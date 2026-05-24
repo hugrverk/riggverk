@@ -54,6 +54,19 @@ pub(crate) fn resolve_default_workspace_root(app: &tauri::AppHandle) -> Result<P
     )
 }
 
+/// Bundled Cursor global-profile files that repair may refresh when stale (backup-first).
+pub(crate) fn cursor_bundle_refresh_paths() -> &'static [&'static str] {
+    &[
+        "scripts/install-cursor-workspace.sh",
+        "scripts/cursor-global-profile-lib.sh",
+        "scripts/check-cursor-profile.py",
+        "templates/cursor/manifest.json",
+        "templates/cursor/global-profile.json",
+        "templates/cursor/permissions/global-playwright.json",
+        "templates/cursor/mcp/playwright.mcp.json",
+    ]
+}
+
 pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static str])> {
     vec![
         ("Marker", &[".agent-workspace/workspace.json"]),
@@ -561,6 +574,21 @@ mod tests {
             assert!(
                 files.contains(&rel),
                 "default workspace copy list missing: {}",
+                rel
+            );
+        }
+    }
+
+    #[test]
+    fn cursor_bundle_refresh_paths_are_in_copy_list() {
+        let files: Vec<&str> = default_workspace_files()
+            .into_iter()
+            .flat_map(|(_, paths)| paths.iter().copied())
+            .collect();
+        for rel in cursor_bundle_refresh_paths() {
+            assert!(
+                files.contains(rel),
+                "default workspace copy list missing Cursor refresh path: {}",
                 rel
             );
         }

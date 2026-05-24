@@ -4,6 +4,7 @@ use std::path::{Path, PathBuf};
 use serde::Serialize;
 
 use super::process::{run_cmd, ActionResult};
+use super::status::file_eq;
 use crate::agent_targets;
 use crate::path_utils::{
     default_installed_workspace_path, is_legacy_default_workspace_path,
@@ -1081,18 +1082,62 @@ pub struct RepairWorkspaceResult {
     pub dry_run: bool,
     pub target_path: String,
     pub copied_files: Vec<String>,
+    pub refreshed_files: Vec<String>,
     pub skipped_files: Vec<String>,
     pub errors: Vec<String>,
     pub warnings: Vec<String>,
     pub message: String,
 }
 
+fn utc_backup_timestamp() -> String {
+    std::process::Command::new("date")
+        .args(["-u", "+%Y%m%d-%H%M%S"])
+        .output()
+        .ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .filter(|s| s.len() == 15)
+        .unwrap_or_else(|| "00000000-000000".to_string())
+}
+
+fn backup_workspace_bundle_file(dst: &Path, rel: &str) -> Result<(), String> {
+    let backup_root = super::backups::backup_root()?;
+    let ts = utc_backup_timestamp();
+    let safe_name = rel.replace('/', "__");
+    let backup_dir = backup_root.join(&ts).join("workspace-bundle");
+    fs::create_dir_all(&backup_dir)
+        .map_err(|e| format!("create workspace bundle backup dir: {e}"))?;
+    let backup_path = backup_dir.join(&safe_name);
+    fs::copy(dst, &backup_path).map_err(|e| format!("backup '{}' before refresh: {e}", rel))?;
+    Ok(())
+}
+
+fn collect_stale_cursor_bundle_files(source_root: &Path, target: &Path) -> Vec<&'static str> {
+    let mut stale = Vec::new();
+    for &rel in super::defaults::cursor_bundle_refresh_paths() {
+        if rel.contains("..") || rel.is_empty() || Path::new(rel).is_absolute() {
+            continue;
+        }
+        let src = source_root.join(rel);
+        let dst = target.join(rel);
+        if !src.is_file() || !dst.is_file() {
+            continue;
+        }
+        if !file_eq(&src, &dst) {
+            stale.push(rel);
+        }
+    }
+    stale
+}
+
 /// Core repair logic: copy missing default workspace files from `source_root`
 /// into `target`. This is the testable inner function.
 ///
 /// Semantics:
-/// - Never overwrites existing files.
-/// - If dry_run is true, only reports what would be copied.
+/// - Never overwrites existing files except allowlisted Cursor bundle paths when stale.
+/// - Stale Cursor bundle refresh is backup-first.
+/// - If dry_run is true, only reports what would be copied/refreshed.
 /// - Skips files missing from the source bundle.
 /// - Skips files with unsafe relative paths.
 fn repair_workspace_core(
@@ -1123,18 +1168,27 @@ fn repair_workspace_core(
         }
     }
 
+    let stale_cursor = collect_stale_cursor_bundle_files(source_root, target);
+
     if dry_run {
-        let count = missing_files.len();
-        let message = if count == 0 {
+        let copy_count = missing_files.len();
+        let refresh_count = stale_cursor.len();
+        let message = if copy_count == 0 && refresh_count == 0 {
             "No missing files to repair. Workspace is up to date.".to_string()
         } else {
-            format!("Dry-run: {} file(s) would be copied.", count)
+            format!(
+                "Dry-run: {} file(s) would be copied, {} Cursor bundle file(s) would be refreshed.",
+                copy_count, refresh_count
+            )
         };
+        let mut planned: Vec<String> = missing_files.into_iter().map(|s| s.to_string()).collect();
+        planned.extend(stale_cursor.iter().map(|s| format!("refresh:{s}")));
         return RepairWorkspaceResult {
             ok: true,
             dry_run: true,
             target_path,
-            copied_files: missing_files.into_iter().map(|s| s.to_string()).collect(),
+            copied_files: planned,
+            refreshed_files: stale_cursor.into_iter().map(|s| s.to_string()).collect(),
             skipped_files: vec![],
             errors: vec![],
             warnings: vec![],
@@ -1144,7 +1198,9 @@ fn repair_workspace_core(
 
     // Apply: copy missing files
     let mut copied_files: Vec<String> = Vec::new();
+    let mut refreshed_files: Vec<String> = Vec::new();
     let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
 
     for &rel in &missing_files {
         let src = source_root.join(rel);
@@ -1170,16 +1226,53 @@ fn repair_workspace_core(
         }
     }
 
+    for &rel in &stale_cursor {
+        let src = source_root.join(rel);
+        let dst = target.join(rel);
+        if let Some(parent) = dst.parent() {
+            if !parent.exists() {
+                if let Err(e) = fs::create_dir_all(parent) {
+                    errors.push(format!(
+                        "Failed to create directory for stale refresh '{}': {}",
+                        rel, e
+                    ));
+                    continue;
+                }
+            }
+        }
+        match backup_workspace_bundle_file(&dst, rel) {
+            Ok(()) => {
+                warnings.push(format!(
+                    "Backed up stale Cursor bundle file before refresh: {}",
+                    rel
+                ));
+            }
+            Err(e) => {
+                errors.push(e);
+                continue;
+            }
+        }
+        match fs::copy(&src, &dst) {
+            Ok(_) => refreshed_files.push(rel.to_string()),
+            Err(e) => errors.push(format!("Failed to refresh stale '{}': {}", rel, e)),
+        }
+    }
+
     let status_ok = errors.is_empty();
-    let message = if copied_files.is_empty() && errors.is_empty() {
+    let message = if copied_files.is_empty() && refreshed_files.is_empty() && errors.is_empty() {
         "No files needed repair.".to_string()
     } else if errors.is_empty() {
-        format!("Repair complete. {} file(s) copied.", copied_files.len())
+        format!(
+            "Repair complete. {} file(s) copied, {} Cursor bundle file(s) refreshed.",
+            copied_files.len(),
+            refreshed_files.len()
+        )
     } else {
         format!(
-            "Repair finished with {} error(s). {} file(s) copied.",
+            "Repair finished with {} error(s). {} copied, {} refreshed.",
             errors.len(),
-            copied_files.len()
+            copied_files.len(),
+            refreshed_files.len()
         )
     };
 
@@ -1188,9 +1281,10 @@ fn repair_workspace_core(
         dry_run: false,
         target_path,
         copied_files,
+        refreshed_files,
         skipped_files: vec![],
         errors,
-        warnings: vec![],
+        warnings,
         message,
     }
 }
@@ -1216,6 +1310,7 @@ fn repair_workspace_impl(
                 dry_run,
                 target_path: target_path.to_string(),
                 copied_files: vec![],
+                refreshed_files: vec![],
                 skipped_files: vec![],
                 errors: vec!["No target path provided".to_string()],
                 warnings: vec![],
@@ -1228,6 +1323,7 @@ fn repair_workspace_impl(
                 dry_run,
                 target_path: target_path.to_string(),
                 copied_files: vec![],
+                refreshed_files: vec![],
                 skipped_files: vec![],
                 errors: vec![e],
                 warnings: vec![],
@@ -1244,6 +1340,7 @@ fn repair_workspace_impl(
             dry_run,
             target_path: normalized,
             copied_files: vec![],
+            refreshed_files: vec![],
             skipped_files: vec![],
             errors: vec!["Target path is too broad or unsafe for repair.".to_string()],
             warnings: vec!["Use a specific workspace directory.".to_string()],
@@ -1257,6 +1354,7 @@ fn repair_workspace_impl(
             dry_run,
             target_path: normalized,
             copied_files: vec![],
+            refreshed_files: vec![],
             skipped_files: vec![],
             errors: vec!["Target is not an existing directory.".to_string()],
             warnings: vec![],
@@ -1272,6 +1370,7 @@ fn repair_workspace_impl(
                 dry_run,
                 target_path: normalized,
                 copied_files: vec![],
+                refreshed_files: vec![],
                 skipped_files: vec![],
                 errors: vec![e],
                 warnings: vec![],
@@ -2838,6 +2937,61 @@ mod tests {
         assert!(
             target.join("templates/opencode.policy.json").is_file(),
             "policy.json must exist on disk after repair"
+        );
+
+        cleanup(&source);
+        cleanup(&target);
+    }
+
+    #[test]
+    fn repair_refreshes_stale_cursor_bundle_files() {
+        let bundled =
+            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let source = setup_source_root("repair-cursor-refresh-src");
+        let target = temp_root("repair-cursor-refresh-tgt");
+        fs::create_dir_all(&target).expect("create target");
+
+        let fresh_script = fs::read_to_string(bundled.join("scripts/install-cursor-workspace.sh"))
+            .expect("read bundled install-cursor-workspace.sh");
+        write_file(
+            &source,
+            "scripts/install-cursor-workspace.sh",
+            &fresh_script,
+        );
+        let fresh_manifest = fs::read_to_string(bundled.join("templates/cursor/manifest.json"))
+            .expect("read bundled manifest");
+        write_file(&source, "templates/cursor/manifest.json", &fresh_manifest);
+
+        write_file(&target, ".agent-workspace/workspace.json", "{}");
+        write_file(&target, "README.md", "# workspace\n");
+        write_file(
+            &target,
+            "scripts/install-cursor-workspace.sh",
+            "#!/usr/bin/env bash\n# stale legacy script\n",
+        );
+        let stale_manifest = r#"{"schema_version":"1.0","agents":[]}"#;
+        write_file(&target, "templates/cursor/manifest.json", stale_manifest);
+
+        let result = repair_workspace_core(&source, &target, false);
+        assert!(result.ok, "repair should succeed: {}", result.message);
+        assert!(
+            result
+                .refreshed_files
+                .iter()
+                .any(|p| p == "scripts/install-cursor-workspace.sh"),
+            "stale install script should be refreshed, got: {:?}",
+            result.refreshed_files
+        );
+        let script =
+            fs::read_to_string(target.join("scripts/install-cursor-workspace.sh")).unwrap();
+        assert!(
+            script.contains("--apply-global-profile"),
+            "refreshed script must include --apply-global-profile"
+        );
+        let manifest = fs::read_to_string(target.join("templates/cursor/manifest.json")).unwrap();
+        assert!(
+            manifest.contains("permissions_templates"),
+            "refreshed manifest must include permissions_templates"
         );
 
         cleanup(&source);
