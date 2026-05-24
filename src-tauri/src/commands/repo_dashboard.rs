@@ -619,4 +619,42 @@ mod tests {
             Some("owner/repo".into())
         );
     }
+
+    #[test]
+    fn redact_gh_status_masks_token_lines() {
+        let raw = "Logged in to github.com\n✓ Token: ghp_secretvalue\n";
+        let redacted = redact_gh_status(raw.to_string());
+        assert!(redacted.contains("token: [redacted]"));
+        assert!(!redacted.contains("ghp_secretvalue"));
+    }
+
+    #[test]
+    fn parse_gh_prs_rejects_malformed_json() {
+        assert!(parse_gh_prs("not json").is_empty());
+        assert!(parse_gh_prs("[]").is_empty());
+    }
+
+    #[test]
+    fn parse_gh_prs_parses_valid_payload() {
+        let raw = r#"[{"number":1,"title":"Fix","mergedAt":"2024-01-01T00:00:00Z","author":{"login":"dev"},"body":"hi"}]"#;
+        let prs = parse_gh_prs(raw);
+        assert_eq!(prs.len(), 1);
+        assert_eq!(prs[0].number, 1);
+        assert_eq!(prs[0].title, "Fix");
+        assert_eq!(prs[0].author, "dev");
+    }
+
+    #[test]
+    fn parse_gh_issues_rejects_malformed_json() {
+        assert!(parse_gh_issues("{").is_empty());
+    }
+
+    #[test]
+    fn parse_gh_issues_parses_valid_payload() {
+        let raw = r#"[{"number":2,"title":"Bug","state":"OPEN","labels":[{"name":"bug"}]}]"#;
+        let issues = parse_gh_issues(raw);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].number, 2);
+        assert_eq!(issues[0].labels, vec!["bug".to_string()]);
+    }
 }
