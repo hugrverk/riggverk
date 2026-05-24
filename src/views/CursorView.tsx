@@ -3,6 +3,11 @@ import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
+import {
+  CURSOR_STALE_RESOURCES_MESSAGE,
+  isCursorWorkspaceResourcesStale,
+  repairWorkspaceBlockedTitle,
+} from "../lib/cursorWorkspaceResources";
 import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
@@ -27,6 +32,7 @@ interface CursorViewProps {
   canRunReleaseCheck: boolean;
   cursorProfileHealth: CursorProfileHealth | null;
   onRefreshCursorProfile: () => void;
+  onRepairWorkspace: () => void;
   onCursorDiffGlobalProfile: () => void;
   onCursorApplyGlobalProfile: () => void;
   onCursorValidateGlobalProfile: () => void;
@@ -84,6 +90,7 @@ export function CursorView({
   canRunReleaseCheck,
   cursorProfileHealth,
   onRefreshCursorProfile,
+  onRepairWorkspace,
   onCursorDiffGlobalProfile,
   onCursorApplyGlobalProfile,
   onCursorValidateGlobalProfile,
@@ -109,9 +116,10 @@ export function CursorView({
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
   const health = cursorProfileHealth;
-  const workspaceResourcesStale = health?.workspace_resources_status === "stale"
-    || health?.workspace_resources_status === "missing";
+  const workspaceResourcesStale = isCursorWorkspaceResourcesStale(health);
   const globalProfileActionsBlocked = workspaceResourcesStale || health?.status === "stale";
+  const workspaceRepairActive = wsRunning === "repair workspace";
+  const repairBusy = busy;
 
   return (
     <section className="ws-layout target-page-layout">
@@ -147,7 +155,9 @@ export function CursorView({
               details={health ? [
                 {
                   label: "Workspace",
-                  value: health.workspace_resources_status,
+                  value: health.workspace_resources_status === "stale"
+                    ? "workspace resources stale"
+                    : health.workspace_resources_status,
                   tone: health.workspace_resources_status === "current" ? "ok" : "warn",
                 },
                 {
@@ -176,37 +186,47 @@ export function CursorView({
                   tone: shellTone(health.shell_posture_status),
                 },
               ] : undefined}
-              warning={health && health.warnings.length > 0 ? health.warnings[0] : undefined}
-              nextAction={health?.next_action}
+              warning={workspaceResourcesStale
+                ? CURSOR_STALE_RESOURCES_MESSAGE
+                : health && health.warnings.length > 0
+                  ? health.warnings[0]
+                  : undefined}
+              nextAction={workspaceResourcesStale ? undefined : health?.next_action}
               nextActionTone={health?.status === "synced" ? "ok" : health?.status === "unsafe" ? "fail" : "warn"}
               secondaryActions={[
-                { label: "refresh", onClick: onRefreshCursorProfile, disabled: busy },
+                { label: "refresh", onClick: onRefreshCursorProfile, disabled: repairBusy },
                 {
                   label: "diff global",
                   onClick: onCursorDiffGlobalProfile,
-                  disabled: busy || globalProfileActionsBlocked,
+                  disabled: repairBusy || globalProfileActionsBlocked,
                   title: globalProfileActionsBlocked
-                    ? "Repair or update the workspace on Start before diffing the global profile."
+                    ? repairWorkspaceBlockedTitle("Diff global")
                     : undefined,
                 },
                 {
                   label: "validate",
                   onClick: onCursorValidateGlobalProfile,
-                  disabled: busy || globalProfileActionsBlocked,
+                  disabled: repairBusy || globalProfileActionsBlocked,
                   title: globalProfileActionsBlocked
-                    ? "Repair or update the workspace on Start before validating the global profile."
+                    ? repairWorkspaceBlockedTitle("Validate")
                     : undefined,
                 },
-                { label: "open settings", onClick: onCursorOpenSettings, disabled: busy },
+                { label: "open settings", onClick: onCursorOpenSettings, disabled: repairBusy },
               ]}
-              primaryAction={{
-                label: "apply global",
-                onClick: onCursorApplyGlobalProfile,
-                disabled: busy || globalProfileActionsBlocked,
-                title: globalProfileActionsBlocked
-                  ? "Repair or update the workspace on Start before applying the global profile."
-                  : undefined,
-              }}
+              primaryAction={workspaceResourcesStale
+                ? {
+                    label: workspaceRepairActive ? "updating..." : "repair workspace",
+                    onClick: onRepairWorkspace,
+                    disabled: repairBusy,
+                  }
+                : {
+                    label: "apply global",
+                    onClick: onCursorApplyGlobalProfile,
+                    disabled: repairBusy || globalProfileActionsBlocked,
+                    title: globalProfileActionsBlocked
+                      ? repairWorkspaceBlockedTitle("Apply global")
+                      : undefined,
+                  }}
             />
           )}
 

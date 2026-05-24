@@ -1189,6 +1189,46 @@ function App() {
     });
   }, [runWsTask, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
 
+  const repairWorkspaceToActionResult = useCallback((r: RepairWorkspaceResult): ActionResult => {
+    const lines = [
+      ...r.copied_files.map((f) => `copy: ${f}`),
+      ...r.refreshed_files.map((f) => `refresh: ${f}`),
+    ];
+    const stdout = lines.length > 0 ? `${lines.join("\n")}\n${r.message}` : r.message;
+    const stderr = [...r.errors, ...r.warnings].filter(Boolean).join("\n");
+    return {
+      success: r.ok,
+      action: "repair_default_workspace",
+      stdout,
+      stderr,
+      exit_code: r.ok ? 0 : 1,
+    };
+  }, []);
+
+  const runCursorWorkspaceRepair = useCallback(() => {
+    runWsTask({
+      label: "repair workspace",
+      action: "repair_default_workspace",
+      task: async () => invoke<RepairWorkspaceResult>("repair_default_workspace"),
+      toActionResult: repairWorkspaceToActionResult,
+      refresh: async () => {
+        const generation = workspaceLoadGenerationRef.current;
+        await Promise.all([
+          loadWorkspaceDiagnostics(generation),
+          loadCursorProfileHealth(generation),
+          fetchStatus(generation),
+        ]);
+      },
+    });
+  }, [
+    runWsTask,
+    repairWorkspaceToActionResult,
+    loadWorkspaceDiagnostics,
+    loadCursorProfileHealth,
+    fetchStatus,
+    workspaceLoadGenerationRef,
+  ]);
+
   const enabledTargetIds = status?.enabled_target_ids ?? [];
   const configEnabled = (status?.enabled_config_target_ids?.length ?? 0) > 0;
   const codexConfigEnabled = enabledTargetIds.includes("codex_config");
@@ -1563,6 +1603,7 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             cursorProfileHealth={cursorProfileHealth}
             onRefreshCursorProfile={() => loadCursorProfileHealth()}
+            onRepairWorkspace={runCursorWorkspaceRepair}
             onCursorDiffGlobalProfile={() => runCursorProfileAction("cursor_diff_global_profile", "cursor diff global profile")}
             onCursorApplyGlobalProfile={() => runCursorProfileAction("cursor_apply_global_profile", "cursor apply global profile")}
             onCursorValidateGlobalProfile={() => runCursorProfileAction("cursor_validate_global_profile", "cursor validate global profile")}

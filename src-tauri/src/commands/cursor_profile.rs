@@ -517,7 +517,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     let script = root.join("scripts/install-cursor-workspace.sh");
     if !script.is_file() {
         warnings.push(
-            "Workspace install-cursor-workspace.sh is missing. Repair the workspace on Start."
+            "Workspace install-cursor-workspace.sh is missing. Use repair workspace on the Cursor page."
                 .into(),
         );
         return "missing".into();
@@ -537,7 +537,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     }
     if !missing_flags.is_empty() {
         warnings.push(format!(
-            "Installed workspace Cursor script is stale (missing {}). Use Repair on the Workspace page to update bundled scripts and templates.",
+            "Installed workspace Cursor script is stale (missing {}). Use repair workspace on the Cursor page to update bundled scripts and templates.",
             missing_flags.join(", ")
         ));
         return "stale".into();
@@ -546,7 +546,8 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     let manifest_path = cursor_root(root).join("manifest.json");
     if !manifest_path.is_file() {
         warnings.push(
-            "Workspace Cursor manifest.json is missing. Repair the workspace on Start.".into(),
+            "Workspace Cursor manifest.json is missing. Use repair workspace on the Cursor page."
+                .into(),
         );
         return "stale".into();
     }
@@ -566,7 +567,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
         .is_some_and(|v| v.is_array() && !v.as_array().map(|a| a.is_empty()).unwrap_or(true))
     {
         warnings.push(
-            "Installed workspace Cursor manifest is stale (missing permissions_templates). Repair the workspace on Start."
+            "Installed workspace Cursor manifest is stale (missing permissions_templates). Use repair workspace on the Cursor page."
                 .into(),
         );
         return "stale".into();
@@ -668,7 +669,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
 
     let next_action = match status.as_str() {
         "stale" => {
-            "Repair or update the workspace on Start first. Installed Cursor scripts/templates are behind the app."
+            "Installed Cursor scripts/templates are behind the app. Repair workspace resources, then apply the global profile."
                 .into()
         }
         "synced" => {
@@ -736,7 +737,7 @@ fn block_when_workspace_resources_stale(
         action.to_string(),
         String::new(),
         format!(
-            "Workspace Cursor resources are {}. Repair or update the workspace on Start before running this action.",
+            "Workspace Cursor resources are {}. Use repair workspace on the Cursor page before running this action.",
             health.workspace_resources_status
         ),
         Some(1),
@@ -920,6 +921,9 @@ mod tests {
         };
         let blocked = block_when_workspace_resources_stale("cursor_apply_global_profile", &health);
         assert!(blocked.is_some());
-        assert!(!blocked.unwrap().success);
+        let result = blocked.unwrap();
+        assert!(!result.success);
+        assert!(result.stderr.contains("Cursor page"));
+        assert!(!result.stderr.contains("Start"));
     }
 }
