@@ -1,15 +1,17 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "1.1",
   "profile": {
     "id": "agent-workspace-cursor",
     "name": "Agent Workspace Cursor Profile",
-    "description": "Public-safe starter Cursor profile assets for rules, focused subagents, skills guidance, and MCP examples."
+    "description": "Public-safe starter Cursor profile assets for global Playwright-oriented sync."
   },
+  "global_profile": "templates/cursor/global-profile.json",
   "user_rules": "templates/cursor/user-rules.md",
   "agents_dir": "templates/cursor/agents",
   "rules_dir": "templates/cursor/rules",
   "mcp_examples_dir": "templates/cursor/mcp",
-  "sandbox_profiles_dir": "templates/cursor/sandbox",
+  "permissions_dir": "templates/cursor/permissions",
+  "legacy_sandbox_profiles_dir": "templates/cursor/sandbox",
   "recommended_pinned_skills": [
     "diagnose",
     "implementation-plan",
@@ -39,16 +41,20 @@
     "mcp.example.json",
     "playwright.mcp.json"
   ],
-  "sandbox_profiles": [
+  "permissions_templates": [
+    "global-playwright.json"
+  ],
+  "legacy_sandbox_profiles": [
     "README.md",
     "safe.json",
     "playwright-safe.json",
     "playwright-full.json"
   ],
   "notes": [
-    "User Rules are manually managed in Cursor Settings; this profile does not define a global User Rules file path.",
-    "Project Rules are installed to .cursor/rules in explicit project targets.",
-    "MCP examples and sandbox profiles are opt-in templates and must be reviewed before use.",
+    "Primary workflow: apply the global Playwright profile to ~/.cursor/agents, ~/.cursor/skills, ~/.cursor/mcp.json, and ~/.cursor/permissions.json.",
+    "User Rules remain manually managed in Cursor Settings; this profile does not write a global User Rules file.",
+    "Project rules, project MCP, project agents, .cursorignore, and AGENTS.md are never written by the global profile flow.",
+    "Legacy sandbox/*.json templates are debug/copy-only.",
     "Secrets must be supplied via Cursor-supported environment interpolation such as ${env:VARIABLE_NAME}."
   ]
 }

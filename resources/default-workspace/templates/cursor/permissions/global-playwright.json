@@ -1,0 +1,11 @@
+{
+  "mcpAllowlist": [
+    "playwright:*"
+  ],
+  "notes": [
+    "Merged into ~/.cursor/permissions.json by install-cursor-workspace.sh.",
+    "Enables Playwright MCP tools to auto-run when Cursor auto-run allowlist mode is enabled.",
+    "terminalAllowlist is intentionally omitted so shell/terminal remains restricted.",
+    "Do not add npx, npm, node, playwright, chrome, chromium, or *:* terminal patterns."
+  ]
+}

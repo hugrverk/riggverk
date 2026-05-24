@@ -1,0 +1,53 @@
+{
+  "schema_version": "1.0",
+  "id": "global-playwright",
+  "name": "Global Playwright Cursor Profile",
+  "description": "Global-only Cursor profile for autonomous Playwright MCP browser QA with restricted shell/terminal permissions.",
+  "surfaces": {
+    "agents": {
+      "source_dir": "templates/cursor/agents",
+      "target": "${HOME}/.cursor/agents",
+      "writable": true
+    },
+    "skills": {
+      "source_dir": "skills",
+      "target": "${HOME}/.cursor/skills",
+      "writable": true,
+      "agent": "cursor",
+      "scope": "global"
+    },
+    "mcp": {
+      "template": "templates/cursor/mcp/playwright.mcp.json",
+      "target": "${HOME}/.cursor/mcp.json",
+      "writable": true,
+      "merge_key": "mcpServers.playwright"
+    },
+    "permissions": {
+      "template": "templates/cursor/permissions/global-playwright.json",
+      "target": "${HOME}/.cursor/permissions.json",
+      "writable": true
+    }
+  },
+  "shell_posture": {
+    "terminal_allowlist": "restricted",
+    "notes": [
+      "Do not add npx, npm, node, playwright, chrome, chromium, or broad shell wildcards to terminalAllowlist.",
+      "Playwright autonomy uses MCP tool allowlists only (playwright:*)."
+    ]
+  },
+  "project_writes": false,
+  "excluded_targets": [
+    ".cursor/mcp.json",
+    ".cursor/rules",
+    ".cursor/agents",
+    ".cursor/skills",
+    ".cursorignore",
+    "AGENTS.md"
+  ],
+  "legacy_sandbox_profiles_dir": "templates/cursor/sandbox",
+  "notes": [
+    "Apply via scripts/install-cursor-workspace.sh --apply-global-profile.",
+    "Diff via --diff-global-profile; validate via --validate-global-profile.",
+    "Legacy sandbox/*.json templates are debug/copy-only and do not drive the primary workflow."
+  ]
+}

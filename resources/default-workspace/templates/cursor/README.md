@@ -1,12 +1,37 @@
 # Cursor Profile
 
-This directory is the starter Cursor profile source for this workspace.
+Global-only Cursor profile sync for autonomous Playwright MCP browser QA with restricted shell/terminal permissions.
 
-- `user-rules.md` is copied manually into Cursor Settings. It is not installed to a file-backed global path.
-- `rules/*.mdc` are project rules for `.cursor/rules`.
-- `agents/*.md` are focused Cursor subagents. Use them when they reduce risk or context load.
-- `manifest.json` is the machine-readable profile inventory used by checks and GUI integrations.
-- `mcp/` contains opt-in examples only. Review MCP security before creating `.cursor/mcp.json` in a project.
-- `sandbox/` contains versioned Auto-Run, sandbox, command allowlist, and MCP allowlist templates. They are show/copy/manual templates only.
+## Primary workflow
 
-Install/diff through `scripts/install-cursor-workspace.sh`; scripts remain the source of truth for sync behavior.
+Use `scripts/install-cursor-workspace.sh`:
+
+- `--diff-global-profile` — dry-run global profile (agents, skills, MCP, permissions)
+- `--apply-global-profile` — apply to `~/.cursor/agents`, `~/.cursor/skills`, `~/.cursor/mcp.json`, `~/.cursor/permissions.json`
+- `--validate-global-profile` — validate templates and installed global state
+
+The machine-readable profile is `global-profile.json`. Permissions template: `permissions/global-playwright.json` (`mcpAllowlist: ["playwright:*"]`, no broad `terminalAllowlist`).
+
+## What the global profile writes
+
+| Surface | Path |
+| --- | --- |
+| Agents | `~/.cursor/agents` |
+| Skills | `~/.cursor/skills` (recommended pinned skills) |
+| MCP | `~/.cursor/mcp.json` (merges `playwright` server only) |
+| Permissions | `~/.cursor/permissions.json` (merges `mcpAllowlist` only) |
+
+## What it does not write
+
+- Project `.cursor/mcp.json`, `.cursor/rules`, `.cursor/agents`, `.cursor/skills`
+- `.cursorignore`, `AGENTS.md`
+- Undocumented Cursor internal storage
+
+## Other assets
+
+- `user-rules.md` — copy manually into Cursor Settings → Rules → User Rules
+- `rules/*.mdc` — project rules (CLI-only `--project-rules`; not part of global profile apply)
+- `mcp/` — Playwright MCP template used by global profile merge
+- `sandbox/` — legacy debug/copy templates only (not primary UX)
+
+Scripts remain the source of truth for sync behavior.

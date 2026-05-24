@@ -14,6 +14,8 @@ MANIFEST = CURSOR / "manifest.json"
 MCP_EXAMPLE = CURSOR / "mcp" / "mcp.example.json"
 MCP_DIR = CURSOR / "mcp"
 SANDBOX_DIR = CURSOR / "sandbox"
+PERMISSIONS_DIR = CURSOR / "permissions"
+GLOBAL_PROFILE = CURSOR / "global-profile.json"
 
 ALLOWED_AGENT_KEYS = {"name", "description", "model", "readonly", "is_background"}
 OPENCODE_ONLY_KEYS = {"permission", "mode", "temperature", "steps", "hidden"}
@@ -89,21 +91,32 @@ def validate_manifest() -> dict:
     for key in [
         "schema_version",
         "profile",
+        "global_profile",
         "user_rules",
         "agents_dir",
         "rules_dir",
         "mcp_examples_dir",
-        "sandbox_profiles_dir",
+        "permissions_dir",
+        "legacy_sandbox_profiles_dir",
         "recommended_pinned_skills",
         "agents",
         "rules",
         "mcp_examples",
-        "sandbox_profiles",
+        "permissions_templates",
+        "legacy_sandbox_profiles",
         "notes",
     ]:
         if key not in data:
             fail(f"manifest missing key: {key}")
-    for path_key in ["user_rules", "agents_dir", "rules_dir", "mcp_examples_dir", "sandbox_profiles_dir"]:
+    for path_key in [
+        "global_profile",
+        "user_rules",
+        "agents_dir",
+        "rules_dir",
+        "mcp_examples_dir",
+        "permissions_dir",
+        "legacy_sandbox_profiles_dir",
+    ]:
         if not isinstance(data[path_key], str):
             fail(f"manifest {path_key} must be a string")
         resolve_manifest_path(data[path_key])
@@ -217,10 +230,39 @@ def validate_mcp(manifest: dict) -> None:
     ok("Cursor MCP example valid")
 
 
-def validate_sandbox_profiles(manifest: dict) -> None:
-    listed = manifest.get("sandbox_profiles", [])
+def validate_permissions_templates(manifest: dict) -> None:
+    listed = manifest.get("permissions_templates", [])
     if not isinstance(listed, list) or not listed:
-        fail("manifest sandbox_profiles must be a non-empty list")
+        fail("manifest permissions_templates must be a non-empty list")
+    actual = sorted(p.name for p in PERMISSIONS_DIR.glob("*.json"))
+    if sorted(listed) != actual:
+        fail(
+            "manifest permissions templates do not match files: "
+            f"listed={sorted(listed)} actual={actual}"
+        )
+    for name in listed:
+        path = PERMISSIONS_DIR / name
+        data = load_json(path)
+        validate_structured_credentials(data, path.relative_to(ROOT), label="permissions template")
+        if not isinstance(data, dict):
+            fail(f"{path.relative_to(ROOT)} root must be an object")
+        allowlist = data.get("mcpAllowlist", [])
+        if not isinstance(allowlist, list) or "playwright:*" not in [str(x) for x in allowlist]:
+            fail(f"{path.relative_to(ROOT)} must include playwright:* in mcpAllowlist")
+        if data.get("terminalAllowlist"):
+            fail(f"{path.relative_to(ROOT)} must not define terminalAllowlist")
+    profile = load_json(GLOBAL_PROFILE)
+    if profile.get("id") != "global-playwright":
+        fail("global-profile.json id must be global-playwright")
+    if profile.get("project_writes") is not False:
+        fail("global-profile.json must set project_writes false")
+    ok("Cursor permissions templates valid")
+
+
+def validate_sandbox_profiles(manifest: dict) -> None:
+    listed = manifest.get("legacy_sandbox_profiles", [])
+    if not isinstance(listed, list) or not listed:
+        fail("manifest legacy_sandbox_profiles must be a non-empty list")
     actual = sorted(p.name for p in SANDBOX_DIR.iterdir() if p.is_file())
     if sorted(listed) != actual:
         fail(f"manifest sandbox profiles do not match files: listed={sorted(listed)} actual={actual}")
@@ -277,6 +319,7 @@ def main() -> int:
     validate_agents(manifest)
     validate_rules(manifest)
     validate_mcp(manifest)
+    validate_permissions_templates(manifest)
     validate_sandbox_profiles(manifest)
     validate_no_fake_user_rules_path()
     return 0
