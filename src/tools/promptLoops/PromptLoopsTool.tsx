@@ -38,15 +38,6 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
     statusTimerRef.current = window.setTimeout(() => setStatus(null), 1200);
   }, []);
 
-  const copyText = useCallback(async (text: string, label: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-      showStatus(label);
-    } catch {
-      showStatus("copy failed");
-    }
-  }, [showStatus]);
-
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "/" && document.activeElement !== searchRef.current) {
@@ -166,6 +157,7 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
                     className="prompt-loops-prompt-copy"
                     fallbackElementId="prompt-loops-active-prompt"
                     onCopySuccess={() => showStatus("prompt copied")}
+                    onCopyFailure={() => showStatus("copy failed")}
                   />
                   <pre id="prompt-loops-active-prompt" className="prompt-loops-prompt font-mono">
                     {activeItem.prompt}

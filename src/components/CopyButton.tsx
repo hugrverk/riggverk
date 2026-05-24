@@ -7,6 +7,7 @@ interface CopyButtonProps {
   copyLabel?: string;
   copiedLabel?: string;
   onCopySuccess?: () => void;
+  onCopyFailure?: () => void;
 }
 
 function CopyIcon() {
@@ -33,6 +34,7 @@ export function CopyButton({
   copyLabel = "Copy",
   copiedLabel = "Copied",
   onCopySuccess,
+  onCopyFailure,
 }: CopyButtonProps) {
   const [copied, setCopied] = useState(false);
 
@@ -43,6 +45,7 @@ export function CopyButton({
       onCopySuccess?.();
       setTimeout(() => setCopied(false), 2000);
     } catch {
+      onCopyFailure?.();
       if (fallbackElementId) {
         const el = document.getElementById(fallbackElementId);
         if (el) {
@@ -54,7 +57,7 @@ export function CopyButton({
         }
       }
     }
-  }, [getText, fallbackElementId, onCopySuccess]);
+  }, [getText, fallbackElementId, onCopySuccess, onCopyFailure]);
 
   return (
     <button
