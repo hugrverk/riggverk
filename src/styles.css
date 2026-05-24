@@ -3726,30 +3726,6 @@ code {
   background: var(--bg);
 }
 
-.lib-topline {
-  display: flex;
-  align-items: baseline;
-  gap: 10px;
-  padding: 12px 14px;
-  border-bottom: 1px solid var(--border);
-  flex-shrink: 0;
-  background: var(--bg);
-}
-
-.lib-topline-title {
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  letter-spacing: -0.02em;
-  line-height: 1.2;
-  color: var(--text-heading);
-}
-
-.lib-topline-summary {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
 .lib-layout {
   display: flex;
   flex: 1;

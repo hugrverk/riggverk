@@ -677,11 +677,6 @@ export function LibraryView(props: LibraryViewProps) {
 
   return (
     <section className="lib-frame">
-      <header className="lib-topline">
-        <h1 className="lib-topline-title">Library</h1>
-        <span className="lib-topline-summary">{sourceTypeTitle}</span>
-      </header>
-
       <div className="lib-layout">
         {/* Vertical source rail */}
         <nav className="lib-source-rail" aria-label="Source type">
