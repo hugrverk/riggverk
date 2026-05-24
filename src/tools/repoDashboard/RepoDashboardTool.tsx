@@ -395,18 +395,18 @@ export function RepoDashboardTool() {
                 </button>
               </div>
 
-              <div className="repo-dashboard-grid cols">
-                <div className="repo-dashboard-card">
+              <div className="repo-dashboard-grid cols repo-dashboard-overview-row">
+                <div className="repo-dashboard-card repo-dashboard-activity-card">
                   <h2 className="font-mono">Repo activity (loaded history)</h2>
                   {lineChart ? (
                     <ActivityLineChart data={lineChart} />
                   ) : (
                     <p className="text-muted small">No matching activity.</p>
                   )}
-                  <p className="text-muted small">
-                    Cumulative activity from up to {COMMITS_LOAD_LIMIT} most recent commits.
-                    {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older commits are not loaded." : ""}
-                    {" "}Blue = uxsmedjan. Green = PRIVATE.
+                  <p className="text-muted small repo-dashboard-footnote">
+                    Up to {COMMITS_LOAD_LIMIT} recent commits.
+                    {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older history not loaded." : ""}
+                    {" "}Blue = uxsmedjan · Green = PRIVATE.
                   </p>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
@@ -435,8 +435,8 @@ export function RepoDashboardTool() {
                 </div>
               </div>
 
-              <div className="repo-dashboard-grid heatrow">
-                <div className="repo-dashboard-card">
+              <div className="repo-dashboard-grid heatrow repo-dashboard-activity-section">
+                <div className="repo-dashboard-card repo-dashboard-heat-card">
                   <h2 className="font-mono">Activity heatmap</h2>
                   {heatmap.length ? <ActivityHeatmap cells={heatmap} /> : <p className="text-muted small">No activity data.</p>}
                   <h2 className="font-mono repo-dashboard-subheading">Remaining by type</h2>
@@ -474,7 +474,7 @@ export function RepoDashboardTool() {
                     ))}
                   </div>
                 </div>
-                <div className="repo-dashboard-card">
+                <div className="repo-dashboard-card repo-dashboard-health-card">
                   <h2 className="font-mono">Source health</h2>
                   {health.map(row => (
                     <div key={row.label} className="repo-dashboard-row">

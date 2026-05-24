@@ -5254,8 +5254,34 @@ code {
 
 .repo-dashboard-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(120px, 1fr));
-  gap: 10px;
+  grid-template-columns: repeat(5, minmax(100px, 1fr));
+  gap: 8px;
+}
+
+.repo-dashboard-overview-row {
+  align-items: stretch;
+}
+
+.repo-dashboard-activity-card {
+  min-height: 280px;
+}
+
+.repo-dashboard-footnote {
+  margin: 8px 0 0;
+  line-height: 1.45;
+}
+
+.repo-dashboard-activity-section {
+  align-items: start;
+}
+
+.repo-dashboard-heat-card {
+  min-width: 0;
+}
+
+.repo-dashboard-health-card {
+  max-height: min(520px, 60vh);
+  overflow: auto;
 }
 
 .repo-dashboard-card {
@@ -5307,14 +5333,18 @@ code {
 }
 
 .repo-dashboard-kpi-num {
-  font-size: 24px;
+  font-size: 20px;
   line-height: 1;
 }
 
 .repo-dashboard-kpi-label {
-  margin-top: 6px;
-  font-size: 12px;
+  margin-top: 4px;
+  font-size: 11px;
   color: var(--text-muted);
+}
+
+.repo-dashboard-kpi {
+  padding: 10px 12px;
 }
 
 .repo-dashboard-row {
