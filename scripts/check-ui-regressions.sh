@@ -66,6 +66,18 @@ fi
 if ! rg -n 'repo-dashboard-heat-density-compact|flex: 1 1 0' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "heatmap CSS must include compact density and responsive week columns"
 fi
+if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Repo Dashboard must expose a narrow-layout section control"
+fi
+if ! rg -n 'density="default"' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Repo Dashboard overview heatmap must use default density"
+fi
+if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "repo-dashboard-workspace must not use overflow auto (nested scroll)"
+fi
+if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Prompt Loops must expose a narrow-layout group control"
+fi
 
 rm -f /tmp/agent-workspace-ui-regressions.txt
 printf 'UI regression checks passed\n'

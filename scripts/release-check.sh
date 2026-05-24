@@ -230,6 +230,10 @@ if ! rg -q 'manual-review only' /tmp/agent-workspace-codex-apply.txt; then
   exit 1
 fi
 rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
+if ! grep -q 'codex-config synced' resources/default-workspace/scripts/install-codex-config.sh; then
+  printf 'FAIL: install-codex-config.sh --diff must print codex-config synced when unchanged\n' >&2
+  exit 1
+fi
 printf '  Codex config apply guard verified\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
@@ -1518,6 +1522,10 @@ if ! search_has_match 'needsBundledResourcesUpdate|update resources|bundled_reso
 fi
 if ! search_has_match 'missing_bundled_count|missing_bundled_file_paths' src-tauri/src/commands/workspace.rs; then
   printf 'FAIL: workspace diagnostics must report missing bundled default files\n' >&2
+  exit 1
+fi
+if ! search_has_match 'workspace_install_file_missing' src-tauri/src/commands/workspace.rs; then
+  printf 'FAIL: workspace must treat zero-byte bundled install files as missing\n' >&2
   exit 1
 fi
 if search_has_match 'showRepair = installState === "INSTALLED"' src/views/StartView.tsx; then
