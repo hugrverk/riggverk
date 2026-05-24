@@ -1482,7 +1482,6 @@ function App() {
             onDiffRules={() => runWsAction("diff_codex_rules", "diff codex rules")}
             onSyncRules={() => runWsAction("sync_codex_rules", "sync codex rules")}
             onDiffConfigs={() => runWsAction("diff_codex_config", "diff codex config")}
-            onSyncConfigs={() => runWsAction("sync_codex_config", "sync codex config")}
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["codex"], "install skills dry-run (codex)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["codex"], "install skills (codex)")}

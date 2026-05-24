@@ -18,6 +18,9 @@ fn enabled_config_runs(mode: agent_targets::ConfigScriptMode) -> Vec<ConfigRun> 
     agent_targets::config_sync_targets()
         .into_iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
+        .filter(|t| {
+            !matches!(mode, agent_targets::ConfigScriptMode::Apply) || t.id != "codex_config"
+        })
         .map(|t| {
             let (script_rel, args) = t.script_rel_and_args(mode);
             ConfigRun {
@@ -76,7 +79,13 @@ fn run_codex_config_install(
             all_args.extend(["--quiet", "--diff"]);
         }
         agent_targets::ConfigScriptMode::Apply => {
-            all_args.extend(["--quiet", "--apply"]);
+            return Ok(ActionResult::new(
+                false,
+                action,
+                "Codex config apply is disabled in the app. Use diff config and manually review templates/codex/config.toml before changing ~/.codex/config.toml.\n".into(),
+                String::new(),
+                Some(1),
+            ));
         }
     }
     let (ok, out, err, code) = run_cmd("bash", &all_args, root);

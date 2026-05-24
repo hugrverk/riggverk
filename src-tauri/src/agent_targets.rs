@@ -154,7 +154,7 @@ pub fn default_enabled_rule_ids() -> Vec<String> {
 }
 
 pub fn default_enabled_config_ids() -> Vec<String> {
-    vec!["opencode_config".into(), "codex_config".into()]
+    vec!["opencode_config".into()]
 }
 
 pub fn default_enabled_ids() -> Vec<String> {
@@ -176,8 +176,8 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "codex".into(),
             label: "Codex".into(),
-            description: "Codex rules + config (Codex custom agents use TOML, not shared runtime .md)".into(),
-            target_ids: vec!["codex_rules".into(), "codex_config".into()],
+            description: "Codex rules. Config template is manual-review only to avoid clobbering Codex-owned settings.".into(),
+            target_ids: vec!["codex_rules".into()],
         },
         TargetProfileMeta {
             id: "opencode".into(),
@@ -233,7 +233,6 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 "claude_agents".into(),
                 "auggie_agents".into(),
                 "opencode_config".into(),
-                "codex_config".into(),
                 "cursor_setup".into(),
             ],
         },
@@ -465,6 +464,14 @@ mod tests {
                 id
             );
         }
+    }
+
+    #[test]
+    fn codex_config_is_not_default_enabled() {
+        assert!(
+            !default_enabled_ids().contains(&"codex_config".to_string()),
+            "Codex config must stay manual-review only by default"
+        );
     }
 
     #[test]

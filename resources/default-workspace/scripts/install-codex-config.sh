@@ -6,6 +6,7 @@ source_config="$repo_root/templates/codex/config.toml"
 apply=0
 show_diff=0
 quiet=0
+force_overwrite=0
 
 usage() {
   cat <<'USAGE'
@@ -14,6 +15,8 @@ Usage: ./scripts/install-codex-config.sh [options]
 Options:
   --apply       Write Codex config template
   --diff        Show diff for existing Codex config
+  --force-overwrite
+                Required with --apply; overwrites ~/.codex/config.toml after backup
   --quiet       Print compact app-friendly output
   --help        Show this help
 
@@ -33,6 +36,7 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --apply) apply=1; shift ;;
     --diff) show_diff=1; shift ;;
+    --force-overwrite) force_overwrite=1; shift ;;
     --quiet) quiet=1; shift ;;
     --help) usage; exit 0 ;;
     *) die "unknown argument: $1" ;;
@@ -74,6 +78,9 @@ if [ "$show_diff" -eq 1 ]; then
 fi
 
 if [ "$apply" -eq 1 ]; then
+  if [ "$force_overwrite" -ne 1 ]; then
+    die "Codex config apply is manual-review only. Run --diff and pass --force-overwrite only after reviewing ~/.codex/config.toml."
+  fi
   if [ -f "$target_config" ] && ! cmp -s "$source_config" "$target_config"; then
     ts="$(date +%Y%m%d-%H%M%S)"
     backup_dir="$(backup_root)/$ts/codex-config"

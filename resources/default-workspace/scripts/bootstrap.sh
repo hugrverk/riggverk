@@ -23,12 +23,12 @@ Options:
   --skills-only    Run only skills install
   --rules-only     Run only agent rules sync
   --opencode-only  Run only OpenCode config sync
-  --codex-only     Run only Codex config sync
+  --codex-only     Run only Codex config diff/manual-review check
   --cursor-only    Run only Cursor workspace setup
   --skip-skills    Skip skills install
   --skip-rules     Skip agent rules sync
   --skip-opencode  Skip OpenCode config sync
-  --skip-codex     Skip Codex config sync
+  --skip-codex     Skip Codex config diff/manual-review check
   --skip-cursor    Skip Cursor workspace setup
   --cursor         Include Cursor workspace setup (not enabled by default)
   --codex          Rule target: Codex (passed to rules script)
@@ -157,7 +157,6 @@ $quiet && skills_args+=(--quiet)
 if $apply; then
   rules_args+=(--apply)
   config_args+=(--apply)
-  codex_config_args+=(--apply)
   cursor_args+=(--apply)
 elif $diff_mode; then
   rules_args+=(--diff)
@@ -194,7 +193,7 @@ if ! $quiet; then
   fi
   if $run_rules;   then printf '  Rules: yes\n'; else printf '  Rules: skipped\n'; fi
   if $run_config;  then printf '  OpenCode config: yes\n'; else printf '  OpenCode config: skipped\n'; fi
-  if $run_codex_config; then printf '  Codex config: yes\n'; else printf '  Codex config: skipped\n'; fi
+  if $run_codex_config; then printf '  Codex config: manual-review only\n'; else printf '  Codex config: skipped\n'; fi
   if $run_cursor;  then printf '  Cursor: yes\n'; else printf '  Cursor: skipped\n'; fi
   if $run_skills;  then printf '  Skills: yes\n'; else printf '  Skills: skipped\n'; fi
 fi

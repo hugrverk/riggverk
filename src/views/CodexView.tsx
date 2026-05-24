@@ -30,7 +30,6 @@ interface CodexViewProps {
   onDiffRules: () => void;
   onSyncRules: () => void;
   onDiffConfigs: () => void;
-  onSyncConfigs: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -67,7 +66,6 @@ export function CodexView({
   onDiffRules,
   onSyncRules,
   onDiffConfigs,
-  onSyncConfigs,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -132,10 +130,10 @@ export function CodexView({
             <HarnessActionCard
               title="Config"
               ariaLabel="Codex config sync"
-              description="Sync enabled config targets (templates/codex/config.toml when Codex config is on)."
-              statusChip={{ label: codexConfigEnabled ? "codex on" : "codex off", tone: codexConfigEnabled ? "ok" : "muted" }}
-              warning={!codexConfigEnabled && configEnabled
-                ? "Enable codex config in Targets to sync Codex config.toml."
+              description="Manual-review template for ~/.codex/config.toml. Diff is available; app apply is disabled to avoid clobbering Codex-managed settings."
+              statusChip={{ label: codexConfigEnabled ? "manual review" : "off", tone: codexConfigEnabled ? "warn" : "muted" }}
+              warning={codexConfigEnabled
+                ? "Review the diff and update Codex config manually. The app will not overwrite ~/.codex/config.toml."
                 : undefined}
               secondaryActions={[
                 {
@@ -144,12 +142,6 @@ export function CodexView({
                   disabled: busy || !configEnabled,
                 },
               ]}
-              primaryAction={{
-                label: "sync config",
-                onClick: onSyncConfigs,
-                disabled: busy || !codexConfigEnabled || !configEnabled,
-                title: !codexConfigEnabled ? "Enable codex config target to sync" : undefined,
-              }}
             />
           )}
 
