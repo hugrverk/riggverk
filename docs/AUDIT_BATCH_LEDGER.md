@@ -1,58 +1,69 @@
 # Audit batch ledger (2026-05-25)
 
+## Batch 1 (prior)
+
 Baseline: `main` @ `b4de47456bc8fcf35c7adeda5491e0d448440fcd`, clean tree, synced with `origin/main`.
 
-## Inventory
+End: `5d68b429` @ verification record after `3654025d`.
 
-| ID | Sev | Status | Evidence | Fix (batch) |
-|----|-----|--------|----------|-------------|
-| DOC-001 | P1 | fixed | README Workspace startup claims skills UI on Start; skills live on harness pages | 2 |
-| DOC-002 | P1 | fixed | README/WORKFLOWS/TROUBLESHOOTING say Save in Settings; app autosaves targets | 2 |
-| DOC-003 | P2 | fixed | User docs omit **update resources** (StartView has separate action) | 2 |
-| DOC-004 | P2 | fixed | USING_THE_APP cites `ux-context` for prompt templates | 2 |
+### Inventory (batch 1)
+
+| ID | Sev | Status | Evidence | Fix |
+|----|-----|--------|----------|-----|
+| DOC-001 | P1 | fixed | README Workspace startup claims skills UI on Start | 2 |
+| DOC-002 | P1 | fixed | README/WORKFLOWS/TROUBLESHOOTING say Save in Settings | 2 |
+| DOC-003 | P2 | fixed | User docs omit update resources | 2 |
+| DOC-004 | P2 | fixed | USING_THE_APP cites ux-context for prompt templates | 2 |
 | DOC-005 | P2 | fixed | WORKSPACE_CONTRACT implies app project Cursor rules | 2 |
-| DOC-006 | P2 | follow-up | README claims bundled resource preview; no UI invoke | — |
-| DOC-007 | P3 | fixed | Nav aria "Start" vs docs "Workspace" | 2 |
-| DOC-008 | P3 | fixed | Bundled docs omit Tools (Prompt Loops, Repo Dashboard) | 2 |
-| DOC-009 | P3 | follow-up | WORKSPACE_CONTRACT transition/private-repo note | — |
-| AW-BACK-001 | P1 | fixed | `missing_bundled_file_paths` uses `is_file()` only; empty files skipped by repair | 3 |
-| AW-BACK-004 | P2 | fixed | `install-codex-config.sh --diff` silent when synced | 5 |
-| AW-BACK-005 | P3 | fixed | Unconfigured diagnostics report bundled `current` | 11 |
-| AW-BACK-006 | P3 | fixed | `window.maximize()?` can fail setup | 11 |
-| AW-BACK-002 | P2 | blocked | `open` macOS-only; needs product decision for Linux/Windows | — |
-| AW-BACK-003 | P2 | blocked | Settings/backups under `~/Library/...` on all OS | — |
-| RD-RESP-NAV | P1 | fixed | Sidebar hidden ≤1100px with no section control | 7 |
-| RD-WORKSPACE-SCROLL | P2 | fixed | `.repo-dashboard-workspace { overflow: auto }` nested scroll | 7 |
-| RD-HEAT-COMPACT-ONLY | P2 | fixed | Overview heatmap always `compact` density | 7 |
-| RD-HEAT-LABEL | P3 | fixed | "Activity heatmap" vs "Commit heatmap" | 7 |
+| DOC-006 | P2 | fixed | README claimed bundled resource preview (removed; drift guard) | 2 |
+| DOC-007 | P3 | fixed | Nav aria Start vs docs Workspace | 2 |
+| DOC-008 | P3 | fixed | Bundled docs omit Tools | 2 |
+| DOC-009 | P3 | closed | No transition/private-repo wording remains | — |
+| AW-BACK-001 | P1 | fixed | Zero-byte bundled files skipped by repair | 3 |
+| AW-BACK-004 | P2 | fixed | Codex config diff silent when synced | 5 |
+| AW-BACK-005 | P3 | fixed | Unconfigured diagnostics report bundled current | 3 |
+| AW-BACK-006 | P3 | fixed | window.maximize can fail setup | 8 |
+| AW-BACK-002 | P2 | blocked | open macOS-only | — |
+| AW-BACK-003 | P2 | blocked | Settings/backups under ~/Library on all OS | — |
+| RD-RESP-NAV | P1 | fixed | Sidebar hidden ≤1100px without section control | 7 |
+| RD-WORKSPACE-SCROLL | P2 | fixed | repo-dashboard-workspace nested scroll | 7 |
+| RD-HEAT-COMPACT-ONLY | P2 | fixed | Overview heatmap always compact | 7 |
+| RD-HEAT-LABEL | P3 | fixed | Activity vs Commit heatmap label | 7 |
 | PL-RESP-NAV | P2 | fixed | Prompt sidebar hidden ≤900px | 6 |
-| LIB-BRAIN-TRIPLE | P3 | fixed | Triple "Brain Setup" heading | 8 |
+| LIB-BRAIN-TRIPLE | P3 | fixed | Triple Brain Setup heading | 8 |
 | LIB-AGENTS-LABEL | P3 | fixed | Rail vs empty-state label mismatch | 8 |
-| FONT-ZOOM-SIDEFX | P2 | follow-up | `#root { zoom }` + fixed px; broader typography pass | — |
+| FONT-ZOOM-SIDEFX | P2 | follow-up | #root zoom + fixed px typography pass | — |
 
-## Commit ledger
+Batch 1 commits: `35d2bdc6` … `3654025d` (9), verify `5d68b429`.
+
+---
+
+## Batch 2 (follow-up audit)
+
+Baseline: `main` @ `5d68b429b7f4452d03a5455863df1275a1c06289`, clean tree, synced with `origin/main`.
+
+### Inventory (batch 2)
+
+| ID | Sev | Status | Evidence | Fix |
+|----|-----|--------|----------|-----|
+| AW-REPAIR-001 | P1 | fixed | `repair_default_workspace` used `default_installed_workspace_path` while diagnostics use `configured_workspace_path` | workspace |
+| AW-DOC-010 | P2 | fixed | WORKSPACE_CONTRACT claimed bundled preview + create dry-run UI | contract doc |
+| AW-DEAD-001 | P3 | fixed | `bootstrap_*` run_action arms unused in frontend | actions.rs |
+| AW-CSS-001 | P3 | fixed | `.start-trust-note` only in styles.css | styles.css |
+| RD-AUTHOR-001 | P2 | fixed | Hardcoded uxsmedjan/PRIVATE chart labels | repo-dashboard |
+| RD-DISPLAY-001 | P3 | fixed | Activity list slice(0,120) without copy | repo-dashboard |
+| RC-GAP-001 | P3 | fixed | No drift guard for contract/repair path | check-readme-docs-drift |
+| AW-BACK-002 | P2 | blocked | open macOS-only | — |
+| AW-BACK-003 | P2 | blocked | Settings/backups ~/Library on all OS | — |
+| FONT-ZOOM-SIDEFX | P2 | follow-up | #root zoom side effects | — |
+
+### Commit ledger (batch 2)
 
 | # | SHA | Message | Issues |
 |---|-----|---------|--------|
-| 1 | 35d2bdc6 | docs(audit): add batch audit ledger for 2026-05-25 | ledger |
-| 2 | 66e9f6d7 | docs: align README and bundled docs with current app behavior | DOC-001–008,007 |
-| 3 | 94685872 | fix(workspace): treat zero-byte bundled files as missing | AW-BACK-001, AW-BACK-005 |
-| 4 | 6f80216b | fix(codex): print synced line when config diff has no changes | AW-BACK-004 |
-| 5 | 85b58c51 | fix(repo-dashboard): narrow section nav, heatmap density, scroll | RD-* |
-| 6 | a187e459 | fix(prompt-loops): add narrow-layout group selector | PL-RESP-NAV |
-| 7 | 4b69bb84 | fix(library): reduce duplicate Brain Setup labels | LIB-* |
-| 8 | cb57529f | fix(tauri): do not fail startup when maximize is unsupported | AW-BACK-006 |
-| 9 | 3654025d | chore(release-check): guard UI and bundled-file regressions | guards |
-
-Baseline `b4de47456` → end `3654025d` (9 commits).
-
-## Verification (end of batch)
-
-- [x] `npm run typecheck` — pass
-- [x] `npm run build` — pass
-- [x] `cargo fmt --check` — pass
-- [x] `cargo check` — pass
-- [x] `cargo clippy --all-targets -- -D warnings` — pass
-- [x] `cargo test` — 339 passed
-- [x] `./scripts/release-check.sh` — pass
-- [x] `git diff --check` — pass
+| 1 | (pending) | docs(audit): extend ledger for batch 2 follow-up audit | ledger |
+| 2 | (pending) | fix(workspace): align repair path with configured workspace | AW-REPAIR-001 |
+| 3 | (pending) | docs: align WORKSPACE_CONTRACT with Workspace UI | AW-DOC-010 |
+| 4 | (pending) | fix(repo-dashboard): generic author labels and list cap copy | RD-* |
+| 5 | (pending) | chore: remove dead bootstrap actions and unused CSS | AW-DEAD-001, AW-CSS-001 |
+| 6 | (pending) | chore(release-check): guard contract and repair path drift | RC-GAP-001 |
