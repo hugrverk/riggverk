@@ -20,7 +20,7 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 
 Skills are reusable agent instruction files. Each skill lives in its own directory under `skills/` with a `SKILL.md` file. Skills define specialized behaviors for coding agents (e.g., frontend design, security review, debugging).
 
-The app installs skills globally (system-wide). The bundled workspace includes 24 starter skills.
+The app installs skills globally (system-wide). The bundled workspace includes 28 skills at `skills/<skill>/SKILL.md`.
 
 See [SKILLS.md](SKILLS.md) for the full skill directory contract.
 

@@ -9,7 +9,7 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 ## What lives here
 
 - **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting. **docs/prompt-templates/** holds Standard, Masterprompt, and Batchprompt templates; they appear in the app under Library → Docs after install or repair copies them into your workspace.
-- **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 24 starter skills are bundled.
+- **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 28 bundled skills ship with the default workspace.
 - **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), Codex config (`templates/codex/`), and Cursor global-profile assets (`templates/cursor/`). Cursor writes only global `~/.cursor/*` surfaces via `install-cursor-workspace.sh`; legacy sandbox JSON under `templates/cursor/sandbox/` is debug/copy-only and is not shown as normal Library docs.
 - **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
 - **.agent-workspace/** — workspace identity marker (do not delete)

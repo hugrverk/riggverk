@@ -163,6 +163,10 @@ for stale_pattern in \
   fi
 done
 
+step "README and settings docs drift"
+python3 scripts/check-readme-docs-drift.py
+printf '  README/docs drift checks ok\n'
+
 step "bundled default workspace scripts"
 bash -n resources/default-workspace/scripts/bootstrap.sh
 bash -n resources/default-workspace/scripts/install-skills.sh

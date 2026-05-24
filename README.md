@@ -47,17 +47,9 @@ The app operates on a workspace folder — a user-owned data directory containin
 
 Workspace validation uses `.agent-workspace/workspace.json` and required workspace markers (scripts, templates, Cursor setup assets, README, skills directory).
 
-This repository is the shared private app/runtime repo for PRIVATE and his colleague. User workspace content lives in separate user-owned workspace folders outside this checkout.
+This repository is the Agent Workspace **app and runtime**: the Tauri GUI, bundled default workspace resources (28 skills, templates, scripts, docs), and release tooling. Installed user workspace content lives at `~/.config/agent-workspace` (or `AGENT_WORKSPACE_PATH` for dev/test) and is separate from this checkout.
 
-### Repo boundaries
-
-| Repo | Role |
-| --- | --- |
-| `agent-workspace` (this repo) | Shared app, runtime tools, 28 bundled skills, agents, templates, and install scripts for PRIVATE and his colleague |
-| `private-context` | PRIVATE-only saved memory and personal context (not bundled into defaults) |
-| `ux-workspace` | Deprecated migration source; do not use for new work |
-
-See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the full workspace contract.
+See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the workspace contract.
 
 The app source includes a shared starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, 28 skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
@@ -99,8 +91,9 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
+| `app_font_size` | `"small"` `"medium"` `"large"` | `"medium"` | Global app text size (Settings → Text size). Scales UI typography via root CSS variables. |
 | `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config","codex_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); persisted when you **Save** in Settings. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); persisted when you **Save** in Settings. `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 
@@ -118,7 +111,7 @@ Primary navigation:
 - **Harness pages** (Codex, OpenCode, Cursor, Claude, Augment) — per-tool diff/sync/install actions and skills install for that tool.
 - **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, legacy sandbox profiles, adapter agents, project rules) stay in the workspace for scripts but are not listed as normal Library docs.
 - **Tools** — native Kretsverket utilities: **Prompt Loops** (copy-ready prompt templates) and **Repo Dashboard** (local-git-first repository insight).
-- **Settings** — appearance and theme colors. Target profiles and sync toggles live on harness pages.
+- **Settings** — appearance, global text size, and theme colors. Target profiles and sync toggles live on harness pages.
 
 ### Tools
 
