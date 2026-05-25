@@ -93,20 +93,44 @@ export const WORK_TYPE_COLORS: Record<RepoDashboardWorkType, string> = {
 export const ACTIVITY_BLUE = "#58a6ff";
 export const ACTIVITY_GREEN = "#56d364";
 
-export function normalizeAuthor(value: string): ActivityActor {
-  const v = value.toLowerCase();
-  if (/hellq|PRIVATE|hellquist413/.test(v)) return "secondary";
-  if (/uxsmedjan|uxsme|PRIVATE|PRIVATE|c\.PRIVATE/.test(v)) return "primary";
-  return "other";
+export function authorIdentity(commit: RepoCommitEntry): string {
+  const email = (commit.author_email || "").trim().toLowerCase();
+  const name = (commit.author_name || "").trim().toLowerCase();
+  return email || name || "unknown";
 }
 
-export function commitActor(commit: RepoCommitEntry): ActivityActor {
-  return normalizeAuthor([commit.author_name, commit.author_email].filter(Boolean).join(" "));
+/** Map commit authors to primary/secondary by commit volume (top two). */
+export function buildActivityActorMap(commits: RepoCommitEntry[]): Map<string, ActivityActor> {
+  const counts = new Map<string, number>();
+  for (const commit of commits) {
+    const id = authorIdentity(commit);
+    counts.set(id, (counts.get(id) ?? 0) + 1);
+  }
+  const ranked = [...counts.entries()].sort((a, b) => b[1] - a[1]);
+  const map = new Map<string, ActivityActor>();
+  for (let i = 0; i < ranked.length; i += 1) {
+    const [id] = ranked[i];
+    if (i === 0) map.set(id, "primary");
+    else if (i === 1) map.set(id, "secondary");
+    else map.set(id, "other");
+  }
+  return map;
+}
+
+export function commitActor(
+  commit: RepoCommitEntry,
+  actorMap: Map<string, ActivityActor>,
+): ActivityActor {
+  return actorMap.get(authorIdentity(commit)) ?? "other";
 }
 
 export function eventsFromCommits(commits: RepoCommitEntry[]): ActivityEvent[] {
+  const actorMap = buildActivityActorMap(commits);
   return commits
-    .map(c => ({ actor: commitActor(c), date: new Date(c.authored_at * 1000) }))
+    .map(c => ({
+      actor: commitActor(c, actorMap),
+      date: new Date(c.authored_at * 1000),
+    }))
     .filter(e => !Number.isNaN(e.date.getTime()));
 }
 
@@ -277,4 +301,9 @@ export function commitDateRangeLabel(commits: RepoCommitEntry[]): string | null 
   const fmt = (t: number) =>
     new Date(t).toLocaleDateString(undefined, { year: "2-digit", month: "short", day: "numeric" });
   return min === max ? fmt(min) : `${fmt(min)} → ${fmt(max)}`;
+}
+
+/** Normalize repo paths for comparing user input to snapshot path. */
+export function normalizeRepoPathForCompare(path: string): string {
+  return path.trim().replace(/\/+$/, "");
 }
