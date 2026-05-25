@@ -18,6 +18,7 @@ import {
   mergeImportedRepoEntries,
   repoEntryIdFromPath,
 } from "../../lib/repoDashboardEntries";
+import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
 import { mergeWorkItems } from "./docsParser";
 import {
   authorLabel,
@@ -222,9 +223,11 @@ function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
 function WorkItemsList({
   items,
   emptyMessage = "No matching items found.",
+  onUsePromptContext,
 }: {
   items: RepoDashboardWorkItem[];
   emptyMessage?: string;
+  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
   if (!items.length) {
     return <p className="text-muted small" role="status">{emptyMessage}</p>;
@@ -253,6 +256,18 @@ function WorkItemsList({
           <div className="repo-dashboard-work-loc text-muted">
             {item.source} · {item.path}{item.line ? `:${item.line}` : ""}
           </div>
+          {onUsePromptContext && isPromptContextEligibleWorkItem(item) ? (
+            <div className="repo-dashboard-work-actions">
+              <button
+                type="button"
+                className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
+                onClick={() => onUsePromptContext(item)}
+                aria-label={`Use this ${item.type} item as Prompt Loops context`}
+              >
+                Use as context
+              </button>
+            </div>
+          ) : null}
         </div>
       ))}
       </div>
@@ -263,9 +278,11 @@ function WorkItemsList({
 function PlanningGapsPanel({
   items,
   typeFilter,
+  onUsePromptContext,
 }: {
   items: RepoDashboardWorkItem[];
   typeFilter: RepoDashboardWorkType | "all";
+  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
   const filtered = items.filter(
     i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter),
@@ -294,6 +311,7 @@ function PlanningGapsPanel({
           <WorkItemsList
             items={groupItems}
             emptyMessage=""
+            onUsePromptContext={onUsePromptContext}
           />
         </section>
       ))}
@@ -301,11 +319,17 @@ function PlanningGapsPanel({
   );
 }
 
-interface RepoDashboardToolProps {
-  toolsSwitcher?: ReactNode;
+export interface RepoDashboardPromptContextPayload {
+  item: RepoDashboardWorkItem;
+  repoPath: string;
 }
 
-export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
+interface RepoDashboardToolProps {
+  toolsSwitcher?: ReactNode;
+  onUsePromptContext?: (payload: RepoDashboardPromptContextPayload) => void;
+}
+
+export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDashboardToolProps) {
   const [section, setSection] = useState<RepoDashboardSection>("overview");
   const [repoPath, setRepoPath] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
@@ -587,6 +611,14 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
           : "Not synced";
 
   const planningCount = workItems.filter(i => i.needsPlan || i.status === "open").length;
+
+  const handleUsePromptContext = useCallback(
+    (item: RepoDashboardWorkItem) => {
+      if (!onUsePromptContext) return;
+      onUsePromptContext({ item, repoPath: repoPath.trim() });
+    },
+    [onUsePromptContext, repoPath],
+  );
 
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
@@ -1052,7 +1084,11 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
                     <p className="text-muted small repo-dashboard-page-desc">
                       Open or needs-planning items grouped by type — actionable decisions, not raw dump.
                     </p>
-                    <PlanningGapsPanel items={workItems} typeFilter={typeFilter} />
+                    <PlanningGapsPanel
+                      items={workItems}
+                      typeFilter={typeFilter}
+                      onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
+                    />
                   </div>
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
@@ -1123,6 +1159,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                   <WorkItemsList
                     items={filteredWorkItems}
+                    onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
                     emptyMessage={
                       workFilter !== "all" || typeFilter !== "all"
                         ? "No items match the active filters. Try clearing status or type."
