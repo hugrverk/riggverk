@@ -1,5 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "../../components/CopyButton";
+import { useSavedRepoDashboardEntries } from "../../lib/savedRepoEntries";
+import {
+  composePrompt,
+  hasActiveComposerState,
+  isOptionDisabled,
+  NO_REPO_CONTEXT_VALUE,
+  PROMPT_OPTION_DEFS,
+  togglePromptOption,
+} from "./composer";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -21,12 +30,38 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
   const [itemIndex, setItemIndex] = useState(0);
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState<string | null>(null);
+  const [repoEntryId, setRepoEntryId] = useState(NO_REPO_CONTEXT_VALUE);
+  const [taskContext, setTaskContext] = useState("");
+  const [selectedOptions, setSelectedOptions] = useState<Set<string>>(() => new Set());
+  const [optionsOpen, setOptionsOpen] = useState(false);
+  const { entries: savedRepos, loading: savedReposLoading } = useSavedRepoDashboardEntries();
   const searchRef = useRef<HTMLInputElement>(null);
   const statusTimerRef = useRef<number | null>(null);
 
   const group = PROMPT_LOOP_GROUPS[groupIndex] ?? PROMPT_LOOP_GROUPS[0];
   const items = useMemo(() => filterItems(group, query), [group, query]);
   const activeItem = items[itemIndex] ?? items[0] ?? null;
+
+  const selectedRepoEntry = useMemo(
+    () => savedRepos.find(e => e.id === repoEntryId) ?? null,
+    [savedRepos, repoEntryId],
+  );
+
+  const composedPrompt = useMemo(() => {
+    if (!activeItem) return "";
+    return composePrompt({
+      basePrompt: activeItem.prompt,
+      repoEntry: selectedRepoEntry,
+      taskContext,
+      selectedOptionIds: [...selectedOptions],
+    });
+  }, [activeItem, selectedRepoEntry, taskContext, selectedOptions]);
+
+  const composerActive = hasActiveComposerState({
+    repoEntryId,
+    taskContext,
+    selectedOptionIds: selectedOptions,
+  });
 
   useEffect(() => {
     if (itemIndex >= items.length) setItemIndex(0);
@@ -36,6 +71,16 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
     setStatus(text);
     if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current);
     statusTimerRef.current = window.setTimeout(() => setStatus(null), 1200);
+  }, []);
+
+  const clearComposer = useCallback(() => {
+    setRepoEntryId(NO_REPO_CONTEXT_VALUE);
+    setTaskContext("");
+    setSelectedOptions(new Set());
+  }, []);
+
+  const toggleOption = useCallback((optionId: string) => {
+    setSelectedOptions(prev => togglePromptOption(prev, optionId));
   }, []);
 
   useEffect(() => {
@@ -169,10 +214,88 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
                     <h2 className="prompt-loops-detail-title">{activeItem.title}</h2>
                     <p className="prompt-loops-detail-meta text-muted">{activeItem.meta}</p>
                   </div>
+                  {composerActive ? (
+                    <button
+                      type="button"
+                      className="prompt-loops-composer-reset font-mono"
+                      onClick={clearComposer}
+                    >
+                      Clear composer
+                    </button>
+                  ) : null}
                 </div>
+
+                <div className="prompt-loops-composer font-mono">
+                  <label className="prompt-loops-composer-field">
+                    <span className="prompt-loops-composer-label">Repo context</span>
+                    <select
+                      className="repo-dashboard-field prompt-loops-composer-select"
+                      value={repoEntryId}
+                      onChange={e => setRepoEntryId(e.target.value)}
+                      aria-label="Repository context"
+                      disabled={savedReposLoading}
+                    >
+                      <option value={NO_REPO_CONTEXT_VALUE}>No repo context</option>
+                      {savedRepos.map(entry => (
+                        <option key={entry.id} value={entry.id}>{entry.label}</option>
+                      ))}
+                    </select>
+                  </label>
+                  {!savedReposLoading && savedRepos.length === 0 ? (
+                    <p className="prompt-loops-composer-note text-muted small">
+                      No saved repos yet. Add entries in Repo Dashboard; templates still copy as-is without context.
+                    </p>
+                  ) : null}
+
+                  <label className="prompt-loops-composer-field">
+                    <span className="prompt-loops-composer-label">Task / context (optional)</span>
+                    <textarea
+                      className="prompt-loops-composer-textarea"
+                      value={taskContext}
+                      onChange={e => setTaskContext(e.target.value)}
+                      placeholder="Add bounded task context visible in the preview"
+                      rows={2}
+                      aria-label="Optional task or context"
+                    />
+                  </label>
+
+                  <details
+                    className="prompt-loops-options-panel"
+                    open={optionsOpen}
+                    onToggle={e => setOptionsOpen((e.target as HTMLDetailsElement).open)}
+                  >
+                    <summary className="prompt-loops-options-summary">Prompt options</summary>
+                    {optionsOpen ? (
+                    <div
+                      className="prompt-loops-options-chips"
+                      role="group"
+                      aria-label="Prompt options"
+                    >
+                      {PROMPT_OPTION_DEFS.map(def => {
+                        const pressed = selectedOptions.has(def.id);
+                        const { disabled, reason } = isOptionDisabled(selectedOptions, def.id);
+                        return (
+                          <button
+                            key={def.id}
+                            type="button"
+                            className={`prompt-loops-option-chip${pressed ? " prompt-loops-option-chip-active" : ""}`}
+                            aria-pressed={pressed}
+                            disabled={disabled}
+                            title={disabled ? reason : undefined}
+                            onClick={() => toggleOption(def.id)}
+                          >
+                            {def.label}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    ) : null}
+                  </details>
+                </div>
+
                 <div className="prompt-loops-prompt-wrap">
                   <CopyButton
-                    getText={() => activeItem.prompt}
+                    getText={() => composedPrompt}
                     copyLabel="Copy prompt"
                     copiedLabel="Prompt copied"
                     className="prompt-loops-prompt-copy"
@@ -181,7 +304,7 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
                     onCopyFailure={() => showStatus("copy failed")}
                   />
                   <pre id="prompt-loops-active-prompt" className="prompt-loops-prompt font-mono">
-                    {activeItem.prompt}
+                    {composedPrompt}
                   </pre>
                 </div>
               </>
