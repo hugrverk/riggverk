@@ -12,6 +12,7 @@ import {
   togglePromptOption,
   type PromptRepoContextSection,
 } from "./composer";
+import type { PromptLoopContextSeed } from "./contextHandoff";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
 
@@ -26,9 +27,10 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
 
 interface PromptLoopsToolProps {
   toolsSwitcher?: ReactNode;
+  contextSeed?: PromptLoopContextSeed | null;
 }
 
-export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
+export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoopsToolProps) {
   const [groupIndex, setGroupIndex] = useState(0);
   const [itemIndex, setItemIndex] = useState(0);
   const [query, setQuery] = useState("");
@@ -44,6 +46,7 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const statusTimerRef = useRef<number | null>(null);
   const repoContextSeqRef = useRef(0);
+  const appliedContextSeedIdRef = useRef<string | null>(null);
 
   const group = PROMPT_LOOP_GROUPS[groupIndex] ?? PROMPT_LOOP_GROUPS[0];
   const items = useMemo(() => filterItems(group, query), [group, query]);
@@ -144,6 +147,17 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
     if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current);
     statusTimerRef.current = window.setTimeout(() => setStatus(null), 1200);
   }, []);
+
+  useEffect(() => {
+    if (!contextSeed) return;
+    if (appliedContextSeedIdRef.current === contextSeed.id) return;
+    appliedContextSeedIdRef.current = contextSeed.id;
+    setTaskContext(contextSeed.taskContext);
+    if (contextSeed.repoEntryId) {
+      setRepoEntryId(contextSeed.repoEntryId);
+    }
+    showStatus("context loaded from Repo Dashboard");
+  }, [contextSeed, showStatus]);
 
   const clearComposer = useCallback(() => {
     setRepoEntryId(NO_REPO_CONTEXT_VALUE);
