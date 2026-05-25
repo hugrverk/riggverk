@@ -67,10 +67,10 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
       </svg>
       <div className="repo-dashboard-legend font-mono">
         <span className="repo-dashboard-blue">
-          <i /> Primary {totals.primary}
+          <i /> Top author {totals.primary}
         </span>
         <span className="repo-dashboard-green">
-          <i /> Secondary {totals.secondary}
+          <i /> Second {totals.secondary}
         </span>
         <span className="text-muted">other/unmapped {totals.other}</span>
         <span className="text-muted">

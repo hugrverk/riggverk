@@ -20,6 +20,7 @@ import {
   commitDateRangeLabel,
   countByAuthor,
   eventsFromCommits,
+  normalizeRepoPathForCompare,
   WORK_TYPE_COLORS,
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
@@ -35,6 +36,7 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
 const COMMITS_LOAD_LIMIT = 500;
+const WORK_ITEMS_DISPLAY_CAP = 120;
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
 
@@ -229,10 +231,21 @@ function WorkItemsList({
   if (!items.length) {
     return <p className="text-muted small" role="status">{emptyMessage}</p>;
   }
+  const shown = items.slice(0, WORK_ITEMS_DISPLAY_CAP);
+  const truncated = items.length > WORK_ITEMS_DISPLAY_CAP;
   return (
-    <div className="repo-dashboard-list">
-      {items.slice(0, 120).map(item => (
-        <div key={`${item.path}-${item.line ?? item.text}`} className="repo-dashboard-work-item">
+    <>
+      {truncated ? (
+        <p className="text-muted small repo-dashboard-list-cap" role="status">
+          Showing first {WORK_ITEMS_DISPLAY_CAP} of {items.length} items.
+        </p>
+      ) : null}
+      <div className="repo-dashboard-list">
+      {shown.map((item, index) => (
+        <div
+          key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
+          className="repo-dashboard-work-item"
+        >
           <div className="repo-dashboard-work-head">
             <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
             <span className="repo-dashboard-work-status">{item.status}</span>
@@ -244,7 +257,8 @@ function WorkItemsList({
           </div>
         </div>
       ))}
-    </div>
+      </div>
+    </>
   );
 }
 
@@ -307,6 +321,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<string | null>(null);
   const pickerTimerRef = useRef<number | null>(null);
+  const loadSeqRef = useRef(0);
 
   const showPickerStatus = useCallback((text: string) => {
     setPickerStatus(text);
@@ -320,6 +335,8 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
       setError("Enter a local repository path");
       return;
     }
+    const seq = loadSeqRef.current + 1;
+    loadSeqRef.current = seq;
     setLoading(true);
     setError(null);
     try {
@@ -328,13 +345,15 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
         defaultBranch: branch.trim() || null,
         includeGh: true,
       });
+      if (seq !== loadSeqRef.current) return;
       setSnapshot(data);
       setLastSynced(new Date());
     } catch (e) {
+      if (seq !== loadSeqRef.current) return;
       setError(String(e));
       setSnapshot(null);
     } finally {
-      setLoading(false);
+      if (seq === loadSeqRef.current) setLoading(false);
     }
   }, []);
 
@@ -452,6 +471,12 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
   const latestCommit = snapshot?.latest_commit ?? null;
   const selectedSavedId =
     savedEntries?.find(e => e.path === repoPath.trim())?.id ?? "";
+  const snapshotMatchesPath =
+    snapshot != null &&
+    repoPath.trim() !== "" &&
+    normalizeRepoPathForCompare(snapshot.repo_path) ===
+      normalizeRepoPathForCompare(repoPath);
+
   const syncState = syncVisualState(loading, lastSynced);
   const syncLabel =
     syncState === "loading"
@@ -596,6 +621,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
                 className={`repo-dashboard-btn repo-dashboard-btn-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
                 onClick={() => void refresh()}
                 disabled={loading}
+                aria-busy={loading}
                 aria-label="Refresh dashboard"
                 title="Refresh dashboard"
               >
@@ -627,7 +653,17 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             </div>
           )}
 
-          {snapshot && !loading && section === "overview" && (
+          {snapshot && !snapshotMatchesPath && !loading && (
+            <div className="repo-dashboard-card" role="status">
+              <h2 className="font-mono">Path changed</h2>
+              <p className="text-muted small">
+                Repository path no longer matches the loaded snapshot. Refresh to sync{" "}
+                <span className="font-mono">{normalizeRepoPathForCompare(repoPath)}</span>.
+              </p>
+            </div>
+          )}
+
+          {snapshot && snapshotMatchesPath && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
               <div className="repo-dashboard-kpis">
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
@@ -663,7 +699,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
                   <p className="text-muted small repo-dashboard-footnote">
                     Up to {COMMITS_LOAD_LIMIT} recent commits.
                     {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older history not loaded." : ""}
-                    {" "}Blue = primary author · Green = secondary author.
+                    {" "}Blue = top commit author · Green = second by volume.
                   </p>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
@@ -745,7 +781,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             </div>
           )}
 
-          {snapshot && !loading && section === "activity" && (
+          {snapshot && snapshotMatchesPath && !loading && section === "activity" && (
             <RepoDashboardPage
               title="Activity"
               description={`Recent commit history from local git (up to ${COMMITS_LOAD_LIMIT}${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? ", limit reached" : ""}; list shows 120).`}
@@ -766,7 +802,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             />
           )}
 
-          {snapshot && !loading && section === "sources" && (
+          {snapshot && snapshotMatchesPath && !loading && section === "sources" && (
             <RepoDashboardPage
               title="Sources"
               description="Latest change from gh or local git, planning gaps, and tracked source docs."
@@ -829,7 +865,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             />
           )}
 
-          {snapshot && !loading && section === "work" && (
+          {snapshot && snapshotMatchesPath && !loading && section === "work" && (
             <RepoDashboardPage
               title="Work"
               description="Parsed docs markers and optional gh issues. Local git first."

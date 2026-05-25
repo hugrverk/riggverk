@@ -5439,7 +5439,7 @@ code {
 
 .repo-dashboard-heat-aside {
   min-width: 0;
-  overflow: auto;
+  overflow: hidden;
 }
 
 .repo-dashboard-heat-aside .repo-dashboard-heatbox {
@@ -5769,6 +5769,10 @@ code {
 
 .repo-dashboard-filter-summary {
   margin: 0;
+}
+
+.repo-dashboard-list-cap {
+  margin: 0 0 8px;
 }
 
 .repo-dashboard-plan-groups {
