@@ -6,6 +6,7 @@ use crate::commands::process::run_cmd;
 use crate::path_utils::normalize_user_workspace_path_for_save;
 
 const MAX_GIT_OUTPUT_BYTES: usize = 512 * 1024;
+const MAX_DOC_CONTENT_BYTES: usize = 512 * 1024;
 const MAX_COMMITS: usize = 500;
 const MAX_CHANGED_FILES: usize = 200;
 
@@ -259,12 +260,29 @@ fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
                 };
             }
             match fs::read_to_string(&full) {
-                Ok(content) => RepoDocFile {
-                    path: (*rel).to_string(),
-                    found: true,
-                    content,
-                    error: None,
-                },
+                Ok(content) => {
+                    let (content, truncated) = if content.len() > MAX_DOC_CONTENT_BYTES {
+                        (
+                            content.chars().take(MAX_DOC_CONTENT_BYTES).collect::<String>(),
+                            true,
+                        )
+                    } else {
+                        (content, false)
+                    };
+                    RepoDocFile {
+                        path: (*rel).to_string(),
+                        found: true,
+                        content,
+                        error: if truncated {
+                            Some(format!(
+                                "read {}: content truncated to {} bytes",
+                                rel, MAX_DOC_CONTENT_BYTES
+                            ))
+                        } else {
+                            None
+                        },
+                    }
+                }
                 Err(e) => RepoDocFile {
                     path: (*rel).to_string(),
                     found: false,
@@ -656,5 +674,10 @@ mod tests {
         assert_eq!(issues.len(), 1);
         assert_eq!(issues[0].number, 2);
         assert_eq!(issues[0].labels, vec!["bug".to_string()]);
+    }
+
+    #[test]
+    fn max_doc_content_bytes_matches_workspace_docs_limit() {
+        assert_eq!(MAX_DOC_CONTENT_BYTES, 512 * 1024);
     }
 }
