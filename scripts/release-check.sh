@@ -1558,6 +1558,7 @@ printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
 step "Repo Dashboard model and parser contracts"
 npx --yes tsx scripts/check-repo-dashboard-model.ts
 npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts
+npx --yes tsx scripts/check-repo-dashboard-entries.ts
 if ! search_has_match 'MAX_DOC_CONTENT_BYTES' src-tauri/src/commands/repo_dashboard.rs; then
   printf 'FAIL: repo dashboard must cap local doc read size\n' >&2
   exit 1

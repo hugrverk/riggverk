@@ -5420,6 +5420,101 @@ code {
   cursor: not-allowed;
 }
 
+.repo-dashboard-btn-secondary {
+  background: var(--bg-inset);
+}
+
+.repo-dashboard-discover-panel {
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.repo-dashboard-discover-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repo-dashboard-discover-title {
+  margin: 0;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.repo-dashboard-discover-desc {
+  margin: 0;
+  line-height: 1.45;
+}
+
+.repo-dashboard-discover-parent {
+  margin: 0;
+  word-break: break-all;
+}
+
+.repo-dashboard-discover-error {
+  margin: 0;
+  color: var(--danger, #e06c75);
+}
+
+.repo-dashboard-discover-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.repo-dashboard-discover-item {
+  margin: 0;
+}
+
+.repo-dashboard-discover-label {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 8px;
+  align-items: center;
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.repo-dashboard-discover-label:has(input:disabled) {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.repo-dashboard-discover-name {
+  grid-column: 2;
+}
+
+.repo-dashboard-discover-path {
+  grid-column: 2;
+  font-size: 11px;
+  word-break: break-all;
+}
+
+.repo-dashboard-discover-badge {
+  grid-column: 2;
+  justify-self: start;
+  font-size: 10px;
+  color: var(--text-muted, var(--text));
+  opacity: 0.85;
+}
+
+.repo-dashboard-discover-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+
 .repo-dashboard-workspace {
   min-height: 0;
   min-width: 0;

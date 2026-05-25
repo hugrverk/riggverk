@@ -26,7 +26,9 @@ pub use content::{
 pub use contract::validate_workspace_contract;
 pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
-pub use repo_dashboard_commands::{get_repo_dashboard_snapshot, get_repo_prompt_context};
+pub use repo_dashboard_commands::{
+    discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
+};
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };

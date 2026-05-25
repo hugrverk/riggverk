@@ -111,6 +111,20 @@ export interface RepoDashboardEntry {
   default_branch?: string | null;
 }
 
+/** Local git checkout found by bounded Repo Dashboard discovery (not persisted until import). */
+export interface DiscoveredLocalGitRepo {
+  label: string;
+  path: string;
+  default_branch?: string | null;
+  repo_slug?: string | null;
+  warnings?: string[];
+}
+
+export interface DiscoverLocalGitReposResult {
+  repos: DiscoveredLocalGitRepo[];
+  warnings?: string[];
+}
+
 /** Safe git-derived metadata for Prompt Loops (no local paths or raw remotes). */
 export interface RepoPromptContext {
   repo_slug: string | null;

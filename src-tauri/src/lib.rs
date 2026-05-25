@@ -7,8 +7,9 @@ mod settings;
 mod smoke_runtime;
 
 use commands::{
-    apply_workspace_repair, create_doc, generate_opencode_config_snapshot, get_agent_targets,
-    get_backup_details, get_cursor_profile_health, get_docs_health, get_opencode_runtime_health,
+    apply_workspace_repair, create_doc, discover_local_git_repos,
+    generate_opencode_config_snapshot, get_agent_targets, get_backup_details,
+    get_cursor_profile_health, get_docs_health, get_opencode_runtime_health,
     get_repo_dashboard_snapshot, get_repo_prompt_context, get_settings, get_status,
     get_target_profiles, get_workspace_diagnostics, install_default_workspace, install_skills,
     list_agent_metadata, list_agent_sources, list_backups, list_docs,
@@ -84,6 +85,7 @@ pub fn run() {
             read_brain_setup_seed,
             get_repo_dashboard_snapshot,
             get_repo_prompt_context,
+            discover_local_git_repos,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

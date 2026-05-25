@@ -119,11 +119,11 @@ Primary navigation:
 
 v1 does not parse repos or docs, does not use Repo Dashboard history/activity/commits/work items/GitHub metadata, does not call LLMs, does not hardcode repository names or project-specific repo profiles, and does not persist composer state in app settings or localStorage. Tool switching lives in the left sidebar (with Repo Dashboard). Templates require operator metadata above the copy/paste block; generated prompts must weave exact skill names (e.g. `Use diagnose...`) into executable English instructions, not only list them under Relevant skills. Run `npx tsx scripts/check-prompt-loops-templates.ts` to validate templates and the deterministic composer.
 
-**Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). It does **not** store GitHub PATs, does **not** call the GitHub API directly, and does **not** accept frontend-supplied shell commands.
+**Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). **Discover local repos** scans one parent folder you choose (shallow, bounded depth) and lets you import found checkouts into saved repo entries (shared with Prompt Loops). It does **not** store GitHub PATs, does **not** call the GitHub API directly, does **not** list account repos or clone, and does **not** accept frontend-supplied shell commands.
 
 Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode. The **Changed files** panel always reflects local `git show HEAD`, not a GitHub PR file list, even when merge metadata comes from `gh`.
 
-Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control via app settings. Only non-secret metadata is persisted. Commit history and activity charts load up to 500 recent commits (not full repository history).
+Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control or imported after **Discover local repos** via app settings. Only non-secret metadata is persisted. Commit history and activity charts load up to 500 recent commits (not full repository history).
 
 Supported data quality states:
 

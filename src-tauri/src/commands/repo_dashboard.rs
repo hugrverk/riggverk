@@ -1,4 +1,5 @@
 use serde::Serialize;
+use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
@@ -700,6 +701,202 @@ pub fn inspect_repo(
     })
 }
 
+const MAX_DISCOVER_TOP_LEVEL_DIRS: usize = 200;
+const MAX_DISCOVER_NESTED_DIRS: usize = 50;
+const MAX_DISCOVER_DIRS_SCANNED: usize = 250;
+const MAX_DISCOVERED_REPOS: usize = 100;
+
+#[derive(Serialize, Clone, Debug)]
+pub struct DiscoveredLocalGitRepo {
+    pub label: String,
+    pub path: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_branch: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub repo_slug: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct DiscoverLocalGitReposResult {
+    pub repos: Vec<DiscoveredLocalGitRepo>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<String>,
+}
+
+pub(crate) fn normalize_repo_path_for_compare(path: &str) -> String {
+    path.trim().trim_end_matches('/').to_string()
+}
+
+pub(crate) fn repo_entry_label_from_path(path: &str) -> String {
+    path.trim_end_matches('/')
+        .rsplit('/')
+        .next()
+        .unwrap_or("Repository")
+        .to_string()
+}
+
+fn resolve_parent_scan_path(raw: &str) -> Result<PathBuf, String> {
+    let normalized = normalize_user_workspace_path_for_save(raw)?
+        .ok_or_else(|| "parent folder path is required".to_string())?;
+    let path = PathBuf::from(normalized);
+    if !path.is_absolute() {
+        return Err("parent folder path must be absolute".into());
+    }
+    if !path.exists() {
+        return Err("parent folder does not exist".into());
+    }
+    if !path.is_dir() {
+        return Err("parent path is not a directory".into());
+    }
+    Ok(path)
+}
+
+fn discovered_repo_path_string(path: &Path) -> Option<String> {
+    normalize_user_workspace_path_for_save(path.to_string_lossy().as_ref())
+        .ok()
+        .flatten()
+}
+
+fn build_discovered_repo(path: &Path) -> Option<DiscoveredLocalGitRepo> {
+    if !is_git_repo(path) {
+        return None;
+    }
+    let path_str = discovered_repo_path_string(path)?;
+    let mut warnings = Vec::new();
+    let default_branch = detect_default_branch(path, None);
+    let repo_slug = {
+        let (ok, out, _) = git_in_repo(path, &["remote", "get-url", "origin"]);
+        if ok {
+            parse_github_slug(out.trim())
+        } else {
+            None
+        }
+    };
+    if repo_slug.is_none() {
+        warnings.push("Could not derive GitHub slug from origin remote.".into());
+    }
+    Some(DiscoveredLocalGitRepo {
+        label: repo_entry_label_from_path(&path_str),
+        path: path_str,
+        default_branch,
+        repo_slug,
+        warnings,
+    })
+}
+
+fn push_discovered_repo(
+    path: &Path,
+    repos: &mut Vec<DiscoveredLocalGitRepo>,
+    seen_paths: &mut HashSet<String>,
+) {
+    if repos.len() >= MAX_DISCOVERED_REPOS {
+        return;
+    }
+    let Some(repo) = build_discovered_repo(path) else {
+        return;
+    };
+    let key = normalize_repo_path_for_compare(&repo.path);
+    if seen_paths.contains(&key) {
+        return;
+    }
+    seen_paths.insert(key);
+    repos.push(repo);
+}
+
+fn scan_directory_for_git_repos(
+    parent: &Path,
+    repos: &mut Vec<DiscoveredLocalGitRepo>,
+    seen_paths: &mut HashSet<String>,
+    dirs_scanned: &mut usize,
+    warnings: &mut Vec<String>,
+) {
+    let entries = match fs::read_dir(parent) {
+        Ok(entries) => entries,
+        Err(e) => {
+            warnings.push(format!("cannot read directory: {}", e));
+            return;
+        }
+    };
+
+    for entry in entries.flatten().take(MAX_DISCOVER_TOP_LEVEL_DIRS) {
+        if *dirs_scanned >= MAX_DISCOVER_DIRS_SCANNED || repos.len() >= MAX_DISCOVERED_REPOS {
+            break;
+        }
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if !file_type.is_dir() {
+            continue;
+        }
+        let name = entry.file_name();
+        if name.to_string_lossy().starts_with('.') {
+            continue;
+        }
+        *dirs_scanned += 1;
+        let child = entry.path();
+        if is_git_repo(&child) {
+            push_discovered_repo(&child, repos, seen_paths);
+            continue;
+        }
+
+        let nested_entries = match fs::read_dir(&child) {
+            Ok(entries) => entries,
+            Err(_) => continue,
+        };
+        for nested in nested_entries.flatten().take(MAX_DISCOVER_NESTED_DIRS) {
+            if *dirs_scanned >= MAX_DISCOVER_DIRS_SCANNED || repos.len() >= MAX_DISCOVERED_REPOS {
+                break;
+            }
+            let Ok(nested_type) = nested.file_type() else {
+                continue;
+            };
+            if !nested_type.is_dir() {
+                continue;
+            }
+            let nested_name = nested.file_name();
+            if nested_name.to_string_lossy().starts_with('.') {
+                continue;
+            }
+            *dirs_scanned += 1;
+            push_discovered_repo(&nested.path(), repos, seen_paths);
+        }
+    }
+}
+
+/// Bounded shallow scan for local git checkouts under an explicit parent folder.
+pub fn discover_local_git_repos(parent_path: &str) -> Result<DiscoverLocalGitReposResult, String> {
+    let parent = resolve_parent_scan_path(parent_path)?;
+    let mut warnings = Vec::new();
+    let mut repos = Vec::new();
+    let mut seen_paths = HashSet::new();
+    let mut dirs_scanned = 0usize;
+
+    scan_directory_for_git_repos(
+        &parent,
+        &mut repos,
+        &mut seen_paths,
+        &mut dirs_scanned,
+        &mut warnings,
+    );
+
+    if dirs_scanned >= MAX_DISCOVER_DIRS_SCANNED {
+        warnings.push(format!(
+            "scan stopped after {} directories (limit reached)",
+            MAX_DISCOVER_DIRS_SCANNED
+        ));
+    }
+    if repos.len() >= MAX_DISCOVERED_REPOS {
+        warnings.push(format!(
+            "showing first {} repositories (limit reached)",
+            MAX_DISCOVERED_REPOS
+        ));
+    }
+
+    Ok(DiscoverLocalGitReposResult { repos, warnings })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -798,5 +995,81 @@ mod tests {
     #[test]
     fn max_doc_content_bytes_matches_workspace_docs_limit() {
         assert_eq!(MAX_DOC_CONTENT_BYTES, 512 * 1024);
+    }
+
+    #[test]
+    fn normalize_repo_path_for_compare_trims_trailing_slash() {
+        assert_eq!(normalize_repo_path_for_compare("/tmp/repo/"), "/tmp/repo");
+    }
+
+    #[test]
+    fn discover_local_git_repos_finds_immediate_and_nested() {
+        use std::process::Command;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let parent = std::env::temp_dir().join(format!("agent-workspace-discover-{stamp}"));
+        let immediate = parent.join("alpha");
+        let grouped = parent.join("group");
+        let nested = grouped.join("beta");
+        fs::create_dir_all(&immediate).expect("mkdir immediate");
+        fs::create_dir_all(&nested).expect("mkdir nested");
+        fs::create_dir_all(parent.join("not-git")).expect("mkdir plain");
+
+        for repo in [&immediate, &nested] {
+            let status = Command::new("git")
+                .args(["init"])
+                .current_dir(repo)
+                .status()
+                .expect("git init");
+            assert!(status.success(), "git init failed");
+        }
+
+        let result = discover_local_git_repos(parent.to_string_lossy().as_ref()).expect("discover");
+        let paths: Vec<String> = result
+            .repos
+            .iter()
+            .map(|r| normalize_repo_path_for_compare(&r.path))
+            .collect();
+        assert!(paths.contains(&normalize_repo_path_for_compare(
+            immediate.to_string_lossy().as_ref()
+        )));
+        assert!(paths.contains(&normalize_repo_path_for_compare(
+            nested.to_string_lossy().as_ref()
+        )));
+        assert_eq!(paths.len(), 2);
+
+        let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn discover_local_git_repos_ignores_plain_child_dirs() {
+        use std::process::Command;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let parent = std::env::temp_dir().join(format!("agent-workspace-discover-plain-{stamp}"));
+        let repo = parent.join("solo");
+        fs::create_dir_all(&repo).expect("mkdir");
+        fs::create_dir_all(parent.join("notes-only")).expect("mkdir plain");
+        let status = Command::new("git")
+            .args(["init"])
+            .current_dir(&repo)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+
+        let result =
+            discover_local_git_repos(parent.to_string_lossy().as_ref()).expect("discover parent");
+        assert_eq!(result.repos.len(), 1);
+        assert_eq!(result.repos[0].label, "solo");
+
+        let _ = fs::remove_dir_all(&parent);
     }
 }

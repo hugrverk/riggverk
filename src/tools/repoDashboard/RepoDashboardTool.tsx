@@ -3,6 +3,8 @@ import { open } from "@tauri-apps/plugin-dialog";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type {
   AppSettings,
+  DiscoverLocalGitReposResult,
+  DiscoveredLocalGitRepo,
   RepoDashboardSnapshot,
   RepoDashboardWorkItem,
   RepoDashboardWorkStatus,
@@ -10,6 +12,12 @@ import type {
   RepoGhPullRequest,
   RepoCommitEntry,
 } from "../../types";
+import {
+  discoveredToDashboardEntry,
+  isRepoPathAlreadySaved,
+  mergeImportedRepoEntries,
+  repoEntryIdFromPath,
+} from "../../lib/repoDashboardEntries";
 import { mergeWorkItems } from "./docsParser";
 import {
   authorLabel,
@@ -39,16 +47,6 @@ const COMMITS_LOAD_LIMIT = 500;
 const WORK_ITEMS_DISPLAY_CAP = 120;
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
-
-function repoEntryIdFromPath(path: string): string {
-  const base = path.replace(/\/+$/, "").split("/").pop() || "repo";
-  const slug = base.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
-  return slug || "repo";
-}
-
-function repoEntryLabelFromPath(path: string): string {
-  return path.replace(/\/+$/, "").split("/").pop() || "Repository";
-}
 
 type SyncVisualState = "idle" | "loading" | "synced" | "stale";
 
@@ -320,6 +318,13 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<string | null>(null);
+  const [discoverOpen, setDiscoverOpen] = useState(false);
+  const [discoverParentPath, setDiscoverParentPath] = useState("");
+  const [discoverLoading, setDiscoverLoading] = useState(false);
+  const [discoverError, setDiscoverError] = useState<string | null>(null);
+  const [discoverResult, setDiscoverResult] = useState<DiscoverLocalGitReposResult | null>(null);
+  const [discoverSelectedPaths, setDiscoverSelectedPaths] = useState<Set<string>>(() => new Set());
+  const [discoverImportStatus, setDiscoverImportStatus] = useState<string | null>(null);
   const pickerTimerRef = useRef<number | null>(null);
   const loadSeqRef = useRef(0);
 
@@ -378,6 +383,100 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
       .catch(() => {});
   }, [refreshFor]);
 
+  const runDiscoverScan = useCallback(async (parentPath: string) => {
+    setDiscoverLoading(true);
+    setDiscoverError(null);
+    setDiscoverResult(null);
+    setDiscoverImportStatus(null);
+    try {
+      const result = await invoke<DiscoverLocalGitReposResult>("discover_local_git_repos", {
+        parentPath,
+      });
+      setDiscoverResult(result);
+      const selectable = result.repos.filter(
+        r => !isRepoPathAlreadySaved(r.path, savedEntries ?? []),
+      );
+      setDiscoverSelectedPaths(new Set(selectable.map(r => r.path)));
+    } catch (e) {
+      setDiscoverError(String(e));
+      setDiscoverSelectedPaths(new Set());
+    } finally {
+      setDiscoverLoading(false);
+    }
+  }, [savedEntries]);
+
+  const startDiscoverLocalRepos = useCallback(async () => {
+    if (!isTauri()) {
+      showPickerStatus("folder picker requires native app");
+      return;
+    }
+    setDiscoverError(null);
+    setDiscoverImportStatus(null);
+    try {
+      const selected = await open({
+        title: "Choose folder to scan for git repositories",
+        directory: true,
+        multiple: false,
+        defaultPath: discoverParentPath.trim() || repoPath.trim() || undefined,
+      });
+      if (selected === null) {
+        return;
+      }
+      if (typeof selected === "string") {
+        setDiscoverOpen(true);
+        setDiscoverParentPath(selected);
+        await runDiscoverScan(selected);
+      }
+    } catch {
+      setDiscoverError("folder picker unavailable");
+      setDiscoverLoading(false);
+    }
+  }, [discoverParentPath, repoPath, runDiscoverScan, showPickerStatus]);
+
+  const closeDiscoverPanel = useCallback(() => {
+    setDiscoverOpen(false);
+    setDiscoverLoading(false);
+    setDiscoverError(null);
+    setDiscoverResult(null);
+    setDiscoverSelectedPaths(new Set());
+    setDiscoverImportStatus(null);
+  }, []);
+
+  const toggleDiscoverRepo = useCallback((path: string, checked: boolean) => {
+    setDiscoverSelectedPaths(prev => {
+      const next = new Set(prev);
+      if (checked) next.add(path);
+      else next.delete(path);
+      return next;
+    });
+  }, []);
+
+  const importSelectedDiscoveredRepos = useCallback(async () => {
+    if (!discoverResult) return;
+    const toImport = discoverResult.repos
+      .filter(r => discoverSelectedPaths.has(r.path))
+      .map(discoveredToDashboardEntry);
+    if (!toImport.length) {
+      setDiscoverImportStatus("nothing selected");
+      return;
+    }
+    setDiscoverImportStatus(null);
+    try {
+      const settings = await invoke<AppSettings>("get_settings");
+      const entries = mergeImportedRepoEntries(settings.repo_dashboard_entries ?? [], toImport);
+      const next: AppSettings = {
+        ...settings,
+        repo_dashboard_entries: entries,
+      };
+      const saved = await invoke<AppSettings>("update_settings", { settings: next });
+      setSavedEntries(saved.repo_dashboard_entries ?? []);
+      setDiscoverImportStatus(`imported ${toImport.length}`);
+      closeDiscoverPanel();
+    } catch (e) {
+      setDiscoverError(String(e));
+    }
+  }, [closeDiscoverPanel, discoverResult, discoverSelectedPaths]);
+
   const saveCurrentRepo = useCallback(async () => {
     const path = repoPath.trim();
     if (!path) {
@@ -388,7 +487,7 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
     try {
       const settings = await invoke<AppSettings>("get_settings");
       const id = repoEntryIdFromPath(path);
-      const label = repoEntryLabelFromPath(path);
+      const label = path.replace(/\/+$/, "").split("/").pop() || "Repository";
       const branch = defaultBranch.trim() || null;
       const entries = [...(settings.repo_dashboard_entries ?? [])];
       const existingIndex = entries.findIndex(e => e.id === id || e.path === path);
@@ -608,6 +707,16 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
             <div className="repo-dashboard-strip-actions">
               <button
                 type="button"
+                className="repo-dashboard-btn repo-dashboard-btn-secondary"
+                onClick={() => void startDiscoverLocalRepos()}
+                disabled={loading || discoverLoading}
+                aria-label="Discover local git repositories in a folder"
+                title="Scan a parent folder for local git checkouts"
+              >
+                Discover local repos
+              </button>
+              <button
+                type="button"
                 className="repo-dashboard-btn"
                 onClick={() => void saveCurrentRepo()}
                 disabled={loading || !repoPath.trim()}
@@ -632,6 +741,103 @@ export function RepoDashboardTool({ toolsSwitcher }: RepoDashboardToolProps) {
         </header>
 
         <div className="repo-dashboard-workspace">
+          {discoverOpen && (
+            <div
+              className="repo-dashboard-card repo-dashboard-discover-panel"
+              role="region"
+              aria-label="Discover local repositories"
+            >
+              <div className="repo-dashboard-discover-head">
+                <h2 className="font-mono repo-dashboard-discover-title">Discover local repos</h2>
+                <p className="text-muted small repo-dashboard-discover-desc">
+                  Shallow scan of one folder you choose (immediate children and one nested level).
+                  Imports add to saved Repo Dashboard entries for Prompt Loops.
+                </p>
+              </div>
+              {discoverParentPath ? (
+                <p className="font-mono small repo-dashboard-discover-parent" role="status">
+                  Scanning: {discoverParentPath}
+                </p>
+              ) : null}
+              {discoverLoading && (
+                <p className="text-muted small" role="status">Scanning for git repositories…</p>
+              )}
+              {discoverError && (
+                <p className="repo-dashboard-discover-error small" role="alert">{discoverError}</p>
+              )}
+              {discoverResult?.warnings && discoverResult.warnings.length > 0 && (
+                <p className="text-muted small repo-dashboard-discover-warnings" role="status">
+                  {discoverResult.warnings.join(" · ")}
+                </p>
+              )}
+              {!discoverLoading && discoverResult && discoverResult.repos.length === 0 && !discoverError && (
+                <p className="text-muted small" role="status">
+                  No git repositories found in this folder.
+                </p>
+              )}
+              {discoverResult && discoverResult.repos.length > 0 && (
+                <ul className="repo-dashboard-discover-list">
+                  {discoverResult.repos.map((repo: DiscoveredLocalGitRepo) => {
+                    const alreadySaved = isRepoPathAlreadySaved(repo.path, savedEntries ?? []);
+                    const checked = discoverSelectedPaths.has(repo.path);
+                    return (
+                      <li key={repo.path} className="repo-dashboard-discover-item">
+                        <label className="repo-dashboard-discover-label">
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            disabled={alreadySaved || discoverLoading}
+                            onChange={e => toggleDiscoverRepo(repo.path, e.target.checked)}
+                          />
+                          <span className="repo-dashboard-discover-name font-mono">{repo.label}</span>
+                          <span className="repo-dashboard-discover-path font-mono text-muted">{repo.path}</span>
+                          {repo.default_branch ? (
+                            <span className="prompt-loops-pill">{repo.default_branch}</span>
+                          ) : null}
+                          {alreadySaved ? (
+                            <span className="repo-dashboard-discover-badge">already saved</span>
+                          ) : null}
+                        </label>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+              <div className="repo-dashboard-discover-actions">
+                <button
+                  type="button"
+                  className="repo-dashboard-btn"
+                  onClick={() => void importSelectedDiscoveredRepos()}
+                  disabled={
+                    discoverLoading ||
+                    !discoverResult ||
+                    discoverSelectedPaths.size === 0
+                  }
+                >
+                  Import selected
+                </button>
+                <button
+                  type="button"
+                  className="repo-dashboard-btn repo-dashboard-btn-secondary"
+                  onClick={() => void startDiscoverLocalRepos()}
+                  disabled={discoverLoading}
+                >
+                  Choose folder…
+                </button>
+                <button
+                  type="button"
+                  className="repo-dashboard-btn repo-dashboard-btn-secondary"
+                  onClick={closeDiscoverPanel}
+                >
+                  Cancel
+                </button>
+                {discoverImportStatus ? (
+                  <span className="text-muted small" role="status">{discoverImportStatus}</span>
+                ) : null}
+              </div>
+            </div>
+          )}
+
           {loading && (
             <div className="repo-dashboard-card font-mono">syncing local repository…</div>
           )}
