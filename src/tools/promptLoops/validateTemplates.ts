@@ -121,12 +121,19 @@ export function validatePromptComposer(): string[] {
     errors.push("composePrompt: whitespace-only task context must not inject");
   }
 
+  const repoPath = "/tmp/demo";
   const withRepo = composePrompt({
     basePrompt: base,
-    repoEntry: { id: "x", label: "Demo", path: "/tmp/demo", default_branch: "main" },
+    repoEntry: { id: "x", label: "Demo", path: repoPath, default_branch: "main" },
   });
-  if (!withRepo.includes(base) || !withRepo.includes("Demo") || !withRepo.includes("/tmp/demo")) {
-    errors.push("composePrompt: repo section must include base prompt and metadata");
+  if (!withRepo.includes(base) || !withRepo.includes("Demo") || !withRepo.includes("main")) {
+    errors.push("composePrompt: repo section must include base prompt, label, and default branch");
+  }
+  if (!withRepo.includes("Source: saved Repo Dashboard entry")) {
+    errors.push("composePrompt: repo section must use generic saved-entry source wording");
+  }
+  if (withRepo.includes("Local path:") || withRepo.includes(repoPath)) {
+    errors.push("composePrompt: repo section must not include local checkout path");
   }
   if (/Kretsverket|hardcoded/i.test(withRepo)) {
     errors.push("composePrompt: repo section must stay generic (no project names)");

@@ -93,9 +93,9 @@ function formatRepoContextSection(entry: RepoDashboardEntry): string {
   return [
     "Repository context selected from saved Repo Dashboard entries:",
     `- Label: ${entry.label}`,
-    `- Local path: ${entry.path}`,
+    "- Source: saved Repo Dashboard entry",
     `- Default branch: ${branch}`,
-    "The selected repo metadata is only a starting context. Inspect repository reality, repo-local docs, scripts, and current git state before making claims or edits.",
+    "The selected repo metadata is only a starting context. Inspect repository reality, repo-local docs, scripts, remotes, and current git state before making claims or edits.",
   ].join("\n");
 }
 
