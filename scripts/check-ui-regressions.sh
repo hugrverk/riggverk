@@ -75,6 +75,16 @@ fi
 if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "repo-dashboard-workspace must not use overflow auto (nested scroll)"
 fi
+if rg -n -U '\.repo-dashboard-heat-aside \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "repo-dashboard-heat-aside must not use overflow auto (nested scroll)"
+fi
+if rg -n 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "Repo Dashboard model must not hardcode personal author patterns"
+fi
+if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Repo Dashboard work list must expose a user-facing display cap"
+fi
 if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Prompt Loops must expose a narrow-layout group control"
 fi

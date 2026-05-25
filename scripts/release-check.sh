@@ -1555,6 +1555,23 @@ step "Prompt Loops template contract"
 npx --yes tsx scripts/check-prompt-loops-templates.ts
 printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
 
+step "Repo Dashboard model and parser contracts"
+npx --yes tsx scripts/check-repo-dashboard-model.ts
+npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts
+if ! search_has_match 'MAX_DOC_CONTENT_BYTES' src-tauri/src/commands/repo_dashboard.rs; then
+  printf 'FAIL: repo dashboard must cap local doc read size\n' >&2
+  exit 1
+fi
+if search_has_match 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts; then
+  printf 'FAIL: repo dashboard model must not hardcode personal author patterns\n' >&2
+  exit 1
+fi
+if ! search_has_match 'loadSeqRef' src/tools/repoDashboard/RepoDashboardTool.tsx; then
+  printf 'FAIL: repo dashboard refresh must guard against stale async responses\n' >&2
+  exit 1
+fi
+printf '  Repo Dashboard model/parser/doc-cap/load-seq checks ok\n'
+
 step "UI selected-state and stale selector regressions"
 bash scripts/check-ui-regressions.sh
 
