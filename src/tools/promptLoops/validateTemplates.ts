@@ -1,4 +1,5 @@
 import { PROMPT_LOOP_GROUPS } from "./data";
+import { composePrompt, PROMPT_OPTION_DEFS, togglePromptOption } from "./composer";
 
 /** Templates that ask ChatGPT to emit operator metadata + a copy/paste prompt body. */
 const PROMPT_GENERATOR_IDS = new Set([
@@ -102,8 +103,59 @@ export function validatePromptLoopTemplates(): string[] {
   return errors;
 }
 
+export function validatePromptComposer(): string[] {
+  const errors: string[] = [];
+  const base = "BASE_TEMPLATE_PROMPT\nline two";
+
+  if (composePrompt({ basePrompt: base }) !== base) {
+    errors.push("composePrompt: empty input must return base prompt unchanged");
+  }
+
+  if (
+    composePrompt({
+      basePrompt: base,
+      taskContext: "   ",
+      selectedOptionIds: [],
+    }) !== base
+  ) {
+    errors.push("composePrompt: whitespace-only task context must not inject");
+  }
+
+  const withRepo = composePrompt({
+    basePrompt: base,
+    repoEntry: { id: "x", label: "Demo", path: "/tmp/demo", default_branch: "main" },
+  });
+  if (!withRepo.includes(base) || !withRepo.includes("Demo") || !withRepo.includes("/tmp/demo")) {
+    errors.push("composePrompt: repo section must include base prompt and metadata");
+  }
+  if (/Kretsverket|hardcoded/i.test(withRepo)) {
+    errors.push("composePrompt: repo section must stay generic (no project names)");
+  }
+
+  const gitIds = PROMPT_OPTION_DEFS.filter(d => d.conflictGroup === "git-branch").map(d => d.id);
+  let selected = new Set<string>();
+  for (const id of gitIds) {
+    selected = togglePromptOption(selected, id);
+  }
+  const gitSelected = [...selected].filter(id => gitIds.includes(id));
+  if (gitSelected.length !== 1) {
+    errors.push("togglePromptOption: git-branch group must allow only one active option");
+  }
+
+  const scopePair = ["visual-only", "no-ui-changes"] as const;
+  selected = new Set();
+  selected = togglePromptOption(selected, scopePair[0]);
+  selected = togglePromptOption(selected, scopePair[1]);
+  const scopeActive = [...selected].filter(id => (scopePair as readonly string[]).includes(id));
+  if (scopeActive.length !== 1) {
+    errors.push("togglePromptOption: scope-ui group must allow only one active option");
+  }
+
+  return errors;
+}
+
 export function runPromptLoopTemplateChecks(): void {
-  const errors = validatePromptLoopTemplates();
+  const errors = [...validatePromptLoopTemplates(), ...validatePromptComposer()];
   if (errors.length > 0) {
     for (const err of errors) console.error(`FAIL: ${err}`);
     throw new Error(`Prompt Loops template check failed (${errors.length} issue(s))`);
