@@ -1555,6 +1555,10 @@ step "Prompt Loops template contract"
 npx --yes tsx scripts/check-prompt-loops-templates.ts
 printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
 
+step "Prompt Loops context handoff contract"
+npx --yes tsx scripts/check-prompt-context-handoff.ts
+printf '  Prompt Loops context handoff formatter/eligibility checks ok\n'
+
 step "Repo Dashboard model and parser contracts"
 npx --yes tsx scripts/check-repo-dashboard-model.ts
 npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts

@@ -39,7 +39,12 @@ assert(formatted.includes("Selected Repo Dashboard item:"), "header");
 assert(formatted.includes("- Type: feature"), "type");
 assert(formatted.includes("- Line: 42"), "line");
 assert(formatted.includes("- Text: Add symbol editor center-cross grid."), "text");
-assert(formatted.includes("Treat this as starting context only."), "disclaimer");
+assert(
+  formatted.includes(
+    "Treat this as starting context only. Inspect repository reality, repo-local docs, scripts, and current code before deciding implementation.",
+  ),
+  "disclaimer",
+);
 
 const noLine = formatRepoDashboardWorkItemContext({ ...eligible, line: undefined });
 assert(!noLine.includes("- Line:"), "omit line when missing");

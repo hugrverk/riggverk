@@ -27,7 +27,9 @@ export function formatRepoDashboardWorkItemContext(item: RepoDashboardWorkItem):
   lines.push(`- Status: ${item.status}`);
   lines.push(`- Text: ${item.text}`);
   lines.push("");
-  lines.push("Treat this as starting context only.");
+  lines.push(
+    "Treat this as starting context only. Inspect repository reality, repo-local docs, scripts, and current code before deciding implementation.",
+  );
   return lines.join("\n");
 }
 
