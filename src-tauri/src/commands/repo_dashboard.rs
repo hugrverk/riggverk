@@ -263,7 +263,10 @@ fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
                 Ok(content) => {
                     let (content, truncated) = if content.len() > MAX_DOC_CONTENT_BYTES {
                         (
-                            content.chars().take(MAX_DOC_CONTENT_BYTES).collect::<String>(),
+                            content
+                                .chars()
+                                .take(MAX_DOC_CONTENT_BYTES)
+                                .collect::<String>(),
                             true,
                         )
                     } else {
