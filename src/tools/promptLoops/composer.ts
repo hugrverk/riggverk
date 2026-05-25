@@ -1,5 +1,3 @@
-import type { RepoDashboardEntry } from "../../types";
-
 export const NO_REPO_CONTEXT_VALUE = "";
 
 export interface PromptOptionDef {
@@ -81,22 +79,44 @@ export const PROMPT_OPTION_DEFS: readonly PromptOptionDef[] = [
 
 const OPTION_BY_ID = new Map(PROMPT_OPTION_DEFS.map(def => [def.id, def]));
 
+/** Sanitized repo section input for composed prompts (no local paths or raw remotes). */
+export interface PromptRepoContextSection {
+  label: string;
+  repo_slug: string | null;
+  current_branch: string | null;
+  default_branch: string | null;
+  warnings?: readonly string[];
+}
+
 export interface ComposePromptInput {
   basePrompt: string;
-  repoEntry?: RepoDashboardEntry | null;
+  repoContext?: PromptRepoContextSection | null;
   taskContext?: string;
   selectedOptionIds?: readonly string[];
 }
 
-function formatRepoContextSection(entry: RepoDashboardEntry): string {
-  const branch = entry.default_branch?.trim() || "unknown";
-  return [
+function displayOrUnknown(value: string | null | undefined): string {
+  const trimmed = value?.trim();
+  return trimmed ? trimmed : "unknown";
+}
+
+function formatRepoContextSection(ctx: PromptRepoContextSection): string {
+  const lines = [
     "Repository context selected from saved Repo Dashboard entries:",
-    `- Label: ${entry.label}`,
-    "- Source: saved Repo Dashboard entry",
-    `- Default branch: ${branch}`,
+    `- Label: ${ctx.label}`,
+    `- Repository: ${displayOrUnknown(ctx.repo_slug)}`,
+    `- Current branch: ${displayOrUnknown(ctx.current_branch)}`,
+    `- Default branch: ${displayOrUnknown(ctx.default_branch)}`,
+  ];
+  if (ctx.repo_slug == null) {
+    lines.push(
+      "- Note: repository identity could not be determined from git; inspect remotes and repo-local docs.",
+    );
+  }
+  lines.push(
     "The selected repo metadata is only a starting context. Inspect repository reality, repo-local docs, scripts, remotes, and current git state before making claims or edits.",
-  ].join("\n");
+  );
+  return lines.join("\n");
 }
 
 function formatTaskContextSection(taskContext: string): string {
@@ -113,16 +133,16 @@ function formatOptionsSection(selectedIds: readonly string[]): string {
 
 /** Pure deterministic composer. Returns exactly basePrompt when nothing is active. */
 export function composePrompt(input: ComposePromptInput): string {
-  const { basePrompt, repoEntry, taskContext, selectedOptionIds = [] } = input;
+  const { basePrompt, repoContext, taskContext, selectedOptionIds = [] } = input;
   const task = taskContext?.trim() ?? "";
   const options = selectedOptionIds.filter(id => OPTION_BY_ID.has(id));
 
-  if (!repoEntry && !task && options.length === 0) {
+  if (!repoContext && !task && options.length === 0) {
     return basePrompt;
   }
 
   const sections: string[] = [];
-  if (repoEntry) sections.push(formatRepoContextSection(repoEntry));
+  if (repoContext) sections.push(formatRepoContextSection(repoContext));
   if (task) sections.push(formatTaskContextSection(task));
   sections.push(basePrompt);
   const optionsBlock = formatOptionsSection(options);

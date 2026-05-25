@@ -1,4 +1,6 @@
-use crate::commands::repo_dashboard::{inspect_repo, RepoDashboardSnapshot};
+use crate::commands::repo_dashboard::{
+    inspect_repo, inspect_repo_prompt_context, RepoDashboardSnapshot, RepoPromptContext,
+};
 
 #[tauri::command]
 pub fn get_repo_dashboard_snapshot(
@@ -11,4 +13,12 @@ pub fn get_repo_dashboard_snapshot(
         default_branch.as_deref(),
         include_gh.unwrap_or(true),
     )
+}
+
+#[tauri::command]
+pub fn get_repo_prompt_context(
+    repo_path: String,
+    default_branch: Option<String>,
+) -> Result<RepoPromptContext, String> {
+    inspect_repo_prompt_context(&repo_path, default_branch.as_deref())
 }

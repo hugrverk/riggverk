@@ -111,6 +111,15 @@ export interface RepoDashboardEntry {
   default_branch?: string | null;
 }
 
+/** Safe git-derived metadata for Prompt Loops (no local paths or raw remotes). */
+export interface RepoPromptContext {
+  repo_slug: string | null;
+  current_branch: string | null;
+  default_branch: string | null;
+  is_repo: boolean;
+  warnings: string[];
+}
+
 export type RepoDashboardWorkType =
   | "roadmap"
   | "feature"

@@ -369,22 +369,117 @@ fn gh_merged_prs(repo: &Path) -> Vec<RepoGhPullRequest> {
     parse_gh_prs(&stdout)
 }
 
-fn parse_github_slug(remote: &str) -> Option<String> {
+/// Safe GitHub `owner/repo` slug for copyable prompt output. Never returns raw remotes.
+pub(crate) fn parse_github_slug(remote: &str) -> Option<String> {
     let trimmed = remote.trim();
+    if trimmed.is_empty() {
+        return None;
+    }
+    if trimmed.contains("ghp_")
+        || trimmed.contains("gho_")
+        || trimmed.contains("github_pat_")
+        || trimmed.contains("x-access-token")
+    {
+        return None;
+    }
+    if trimmed.contains('@') && !trimmed.starts_with("git@github.com:") {
+        return None;
+    }
     if trimmed.starts_with("git@github.com:") {
         let slug = trimmed
             .trim_start_matches("git@github.com:")
             .trim_end_matches(".git");
-        return Some(slug.to_string());
+        return slug_contains_owner_repo(slug);
     }
     if trimmed.contains("github.com/") {
         let after = trimmed.split("github.com/").nth(1)?;
         let slug = after.trim_end_matches(".git");
-        if slug.contains('/') {
-            return Some(slug.to_string());
-        }
+        return slug_contains_owner_repo(slug);
     }
     None
+}
+
+fn slug_contains_owner_repo(slug: &str) -> Option<String> {
+    let slug = slug.trim_matches('/');
+    if slug.contains('/') && !slug.starts_with('/') && !slug.contains('@') {
+        Some(slug.to_string())
+    } else {
+        None
+    }
+}
+
+#[derive(Serialize, Clone, Debug)]
+pub struct RepoPromptContext {
+    pub repo_slug: Option<String>,
+    pub current_branch: Option<String>,
+    pub default_branch: Option<String>,
+    pub is_repo: bool,
+    pub warnings: Vec<String>,
+}
+
+/// Lightweight git metadata for Prompt Loops (no gh, docs, commits, or history).
+pub fn inspect_repo_prompt_context(
+    repo_path: &str,
+    configured_default_branch: Option<&str>,
+) -> Result<RepoPromptContext, String> {
+    let path = resolve_repo_path(repo_path)?;
+    let mut warnings = Vec::new();
+
+    let git_on_path = {
+        let (ok, _, _, _) = run_cmd("git", &["--version"], &path);
+        ok
+    };
+    if !git_on_path {
+        warnings.push("git CLI not found on PATH".into());
+        return Ok(RepoPromptContext {
+            repo_slug: None,
+            current_branch: None,
+            default_branch: configured_default_branch
+                .map(str::trim)
+                .filter(|b| !b.is_empty())
+                .map(str::to_string),
+            is_repo: false,
+            warnings,
+        });
+    }
+
+    if !is_git_repo(&path) {
+        warnings.push("path is not a git repository".into());
+        return Ok(RepoPromptContext {
+            repo_slug: None,
+            current_branch: None,
+            default_branch: configured_default_branch
+                .map(str::trim)
+                .filter(|b| !b.is_empty())
+                .map(str::to_string),
+            is_repo: false,
+            warnings,
+        });
+    }
+
+    let branch = current_branch(&path);
+    let current_branch = Some(branch);
+    let default_branch = detect_default_branch(&path, configured_default_branch);
+
+    let repo_slug = {
+        let (ok, out, _) = git_in_repo(&path, &["remote", "get-url", "origin"]);
+        if ok {
+            parse_github_slug(out.trim())
+        } else {
+            None
+        }
+    };
+    if repo_slug.is_none() {
+        warnings.push("Could not determine GitHub repository identity from origin remote.".into());
+    }
+
+    Ok(RepoPromptContext {
+        repo_slug,
+        current_branch,
+        default_branch,
+        is_repo: true,
+        warnings,
+    })
 }
 
 fn parse_gh_prs(raw: &str) -> Vec<RepoGhPullRequest> {
@@ -639,6 +734,27 @@ mod tests {
             parse_github_slug("git@github.com:owner/repo.git"),
             Some("owner/repo".into())
         );
+    }
+
+    #[test]
+    fn parse_github_slug_rejects_token_remote() {
+        assert_eq!(
+            parse_github_slug("https://ghp_secrettoken@github.com/owner/repo.git"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_github_slug_rejects_userinfo_https() {
+        assert_eq!(
+            parse_github_slug("https://user:pass@github.com/owner/repo.git"),
+            None
+        );
+    }
+
+    #[test]
+    fn parse_github_slug_rejects_non_github() {
+        assert_eq!(parse_github_slug("git@gitlab.com:owner/repo.git"), None);
     }
 
     #[test]

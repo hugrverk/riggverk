@@ -9,13 +9,13 @@ mod smoke_runtime;
 use commands::{
     apply_workspace_repair, create_doc, generate_opencode_config_snapshot, get_agent_targets,
     get_backup_details, get_cursor_profile_health, get_docs_health, get_opencode_runtime_health,
-    get_repo_dashboard_snapshot, get_settings, get_status, get_target_profiles,
-    get_workspace_diagnostics, install_default_workspace, install_skills, list_agent_metadata,
-    list_agent_sources, list_backups, list_docs, list_opencode_config_editor_sources, list_skills,
-    open_agent_source, open_agent_template, open_backups_folder, open_config_template,
-    open_default_workspace_folder, open_doc, open_install_skills_script,
-    open_opencode_config_source, open_skill, plan_workspace_repair, read_agent_source,
-    read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
+    get_repo_dashboard_snapshot, get_repo_prompt_context, get_settings, get_status,
+    get_target_profiles, get_workspace_diagnostics, install_default_workspace, install_skills,
+    list_agent_metadata, list_agent_sources, list_backups, list_docs,
+    list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
+    open_backups_folder, open_config_template, open_default_workspace_folder, open_doc,
+    open_install_skills_script, open_opencode_config_source, open_skill, plan_workspace_repair,
+    read_agent_source, read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
     read_opencode_config_source, read_skill, repair_default_workspace, run_action,
     run_cursor_profile_action, save_agent_source, save_agent_template, save_config_template,
     save_doc, save_opencode_config_source, try_set_active_workspace_path, update_settings,
@@ -83,6 +83,7 @@ pub fn run() {
             apply_workspace_repair,
             read_brain_setup_seed,
             get_repo_dashboard_snapshot,
+            get_repo_prompt_context,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

@@ -1,6 +1,8 @@
+import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "../../components/CopyButton";
 import { useSavedRepoDashboardEntries } from "../../lib/savedRepoEntries";
+import type { RepoPromptContext } from "../../types";
 import {
   composePrompt,
   hasActiveComposerState,
@@ -8,6 +10,7 @@ import {
   NO_REPO_CONTEXT_VALUE,
   PROMPT_OPTION_DEFS,
   togglePromptOption,
+  type PromptRepoContextSection,
 } from "./composer";
 import { PROMPT_LOOP_GROUPS } from "./data";
 import type { PromptLoopGroup, PromptLoopItem } from "./types";
@@ -34,9 +37,13 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
   const [taskContext, setTaskContext] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(() => new Set());
   const [optionsOpen, setOptionsOpen] = useState(false);
+  const [repoPromptContext, setRepoPromptContext] = useState<PromptRepoContextSection | null>(null);
+  const [repoContextLoading, setRepoContextLoading] = useState(false);
+  const [repoContextWarning, setRepoContextWarning] = useState<string | null>(null);
   const { entries: savedRepos, loading: savedReposLoading } = useSavedRepoDashboardEntries();
   const searchRef = useRef<HTMLInputElement>(null);
   const statusTimerRef = useRef<number | null>(null);
+  const repoContextSeqRef = useRef(0);
 
   const group = PROMPT_LOOP_GROUPS[groupIndex] ?? PROMPT_LOOP_GROUPS[0];
   const items = useMemo(() => filterItems(group, query), [group, query]);
@@ -47,15 +54,80 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
     [savedRepos, repoEntryId],
   );
 
+  const activeRepoContext = useMemo((): PromptRepoContextSection | null => {
+    if (!selectedRepoEntry) return null;
+    return (
+      repoPromptContext ?? {
+        label: selectedRepoEntry.label,
+        repo_slug: null,
+        current_branch: null,
+        default_branch: selectedRepoEntry.default_branch?.trim() || null,
+      }
+    );
+  }, [selectedRepoEntry, repoPromptContext]);
+
   const composedPrompt = useMemo(() => {
     if (!activeItem) return "";
     return composePrompt({
       basePrompt: activeItem.prompt,
-      repoEntry: selectedRepoEntry,
+      repoContext: activeRepoContext,
       taskContext,
       selectedOptionIds: [...selectedOptions],
     });
-  }, [activeItem, selectedRepoEntry, taskContext, selectedOptions]);
+  }, [activeItem, activeRepoContext, taskContext, selectedOptions]);
+
+  useEffect(() => {
+    if (!selectedRepoEntry) {
+      setRepoPromptContext(null);
+      setRepoContextLoading(false);
+      setRepoContextWarning(null);
+      return;
+    }
+
+    const seq = ++repoContextSeqRef.current;
+    setRepoContextLoading(true);
+    setRepoContextWarning(null);
+    setRepoPromptContext({
+      label: selectedRepoEntry.label,
+      repo_slug: null,
+      current_branch: null,
+      default_branch: selectedRepoEntry.default_branch?.trim() || null,
+    });
+
+    invoke<RepoPromptContext>("get_repo_prompt_context", {
+      repoPath: selectedRepoEntry.path,
+      defaultBranch: selectedRepoEntry.default_branch ?? null,
+    })
+      .then(ctx => {
+        if (seq !== repoContextSeqRef.current) return;
+        setRepoPromptContext({
+          label: selectedRepoEntry.label,
+          repo_slug: ctx.repo_slug,
+          current_branch: ctx.current_branch,
+          default_branch: ctx.default_branch,
+        });
+      })
+      .catch(() => {
+        if (seq !== repoContextSeqRef.current) return;
+        setRepoContextWarning(
+          "Could not read git metadata; using generic repository context without local path.",
+        );
+        setRepoPromptContext({
+          label: selectedRepoEntry.label,
+          repo_slug: null,
+          current_branch: null,
+          default_branch: selectedRepoEntry.default_branch?.trim() || null,
+        });
+      })
+      .finally(() => {
+        if (seq === repoContextSeqRef.current) setRepoContextLoading(false);
+      });
+  }, [
+    selectedRepoEntry?.id,
+    selectedRepoEntry?.label,
+    selectedRepoEntry?.path,
+    selectedRepoEntry?.default_branch,
+  ]);
 
   const composerActive = hasActiveComposerState({
     repoEntryId,
@@ -77,6 +149,8 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
     setRepoEntryId(NO_REPO_CONTEXT_VALUE);
     setTaskContext("");
     setSelectedOptions(new Set());
+    setRepoPromptContext(null);
+    setRepoContextWarning(null);
   }, []);
 
   const toggleOption = useCallback((optionId: string) => {
@@ -244,6 +318,16 @@ export function PromptLoopsTool({ toolsSwitcher }: PromptLoopsToolProps) {
                   {!savedReposLoading && savedRepos.length === 0 ? (
                     <p className="prompt-loops-composer-note text-muted small">
                       No saved repos yet. Add entries in Repo Dashboard; templates still copy as-is without context.
+                    </p>
+                  ) : null}
+                  {repoContextLoading ? (
+                    <p className="prompt-loops-composer-note text-muted small" role="status">
+                      Reading git repository context…
+                    </p>
+                  ) : null}
+                  {repoContextWarning ? (
+                    <p className="prompt-loops-composer-note text-muted small" role="status">
+                      {repoContextWarning}
                     </p>
                   ) : null}
 
