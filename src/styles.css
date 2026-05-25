@@ -6014,6 +6014,18 @@ code {
   line-height: 1.35;
 }
 
+.repo-dashboard-work-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.repo-dashboard-use-context-btn {
+  font-size: 11px;
+  padding: 4px 8px;
+}
+
 .repo-dashboard-filter-summary {
   margin: 0;
 }
