@@ -11,14 +11,21 @@ const MAX_DOC_CONTENT_BYTES: usize = 512 * 1024;
 const MAX_COMMITS: usize = 500;
 const MAX_CHANGED_FILES: usize = 200;
 
-const DOC_PATHS: [&str; 6] = [
+const CORE_DOC_PATHS: [&str; 9] = [
     "README.md",
     "docs/ROADMAP.md",
     "docs/KNOWN_GAPS.md",
+    "docs/BACKLOG.md",
+    "docs/CURRENT_STATE.md",
+    "docs/START_HERE.md",
     "docs/FEATURES.md",
     "docs/VALIDATION.md",
     "docs/TODO.md",
 ];
+
+const ALLOWLISTED_DOC_DIRS: [(&str, usize); 2] = [("docs/product", 24), ("docs/audit", 12)];
+
+const MAX_DISCOVERED_DOC_PATHS: usize = 48;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoCommitEntry {
@@ -247,8 +254,45 @@ fn load_changed_files(repo: &Path) -> Vec<RepoChangedFile> {
         .collect()
 }
 
+fn collect_doc_paths(repo: &Path) -> Vec<String> {
+    let mut paths: Vec<String> = CORE_DOC_PATHS.iter().map(|p| (*p).to_string()).collect();
+    let mut seen: HashSet<String> = paths.iter().cloned().collect();
+
+    for (dir_rel, limit) in ALLOWLISTED_DOC_DIRS {
+        let dir = repo.join(dir_rel);
+        if !dir.is_dir() {
+            continue;
+        }
+        let Ok(entries) = fs::read_dir(&dir) else {
+            continue;
+        };
+        let mut md_files: Vec<String> = entries
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry.path().is_file() && entry.path().extension().is_some_and(|ext| ext == "md")
+            })
+            .filter_map(|entry| {
+                let name = entry.file_name().to_string_lossy().to_string();
+                if name.starts_with('.') {
+                    return None;
+                }
+                Some(format!("{}/{}", dir_rel, name))
+            })
+            .collect();
+        md_files.sort();
+        for rel in md_files.into_iter().take(limit) {
+            if seen.insert(rel.clone()) {
+                paths.push(rel);
+            }
+        }
+    }
+
+    paths.truncate(MAX_DISCOVERED_DOC_PATHS);
+    paths
+}
+
 fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
-    DOC_PATHS
+    collect_doc_paths(repo)
         .iter()
         .map(|rel| {
             let full = repo.join(rel);
@@ -995,6 +1039,31 @@ mod tests {
     #[test]
     fn max_doc_content_bytes_matches_workspace_docs_limit() {
         assert_eq!(MAX_DOC_CONTENT_BYTES, 512 * 1024);
+    }
+
+    #[test]
+    fn collect_doc_paths_includes_core_and_allowlisted_dirs() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-docs-{stamp}"));
+        fs::create_dir_all(root.join("docs/product")).expect("mkdir product");
+        fs::create_dir_all(root.join("docs/audit")).expect("mkdir audit");
+        fs::write(root.join("README.md"), "# hi").expect("write readme");
+        fs::write(root.join("docs/BACKLOG.md"), "# backlog").expect("write backlog");
+        fs::write(root.join("docs/product/FEATURES.md"), "# features").expect("write features");
+        fs::write(root.join("docs/audit/ISSUES.md"), "# issues").expect("write issues");
+
+        let paths = collect_doc_paths(&root);
+        assert!(paths.iter().any(|p| p == "README.md"));
+        assert!(paths.iter().any(|p| p == "docs/BACKLOG.md"));
+        assert!(paths.iter().any(|p| p == "docs/product/FEATURES.md"));
+        assert!(paths.iter().any(|p| p == "docs/audit/ISSUES.md"));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
