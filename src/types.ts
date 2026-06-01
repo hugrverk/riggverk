@@ -144,6 +144,8 @@ export type RepoDashboardWorkType =
 
 export type RepoDashboardWorkStatus = "open" | "started" | "done";
 
+export type RepoDashboardWorkConfidence = "high" | "medium" | "low";
+
 export interface RepoDashboardWorkItem {
   source: "docs" | "issue";
   path: string;
@@ -153,6 +155,8 @@ export interface RepoDashboardWorkItem {
   status: RepoDashboardWorkStatus;
   needsPlan: boolean;
   url?: string;
+  section?: string;
+  confidence?: RepoDashboardWorkConfidence;
 }
 
 export interface RepoCommitEntry {
