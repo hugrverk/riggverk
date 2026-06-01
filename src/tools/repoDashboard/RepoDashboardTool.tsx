@@ -19,17 +19,22 @@ import {
   repoEntryIdFromPath,
 } from "../../lib/repoDashboardEntries";
 import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
-import { mergeWorkItems } from "./docsParser";
+import { mergeWorkItemsDetailed } from "./docsParser";
 import {
   authorLabel,
+  buildActivityLegend,
+  buildDocSourceSummaries,
   buildHeatmapCells,
   buildLineChartData,
   buildRemainingByType,
   buildSourceHealth,
+  buildWorkStatusCounts,
   commitDateRangeLabel,
   countByAuthor,
   eventsFromCommits,
+  ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
+  repoDashboardBrandLabel,
   WORK_TYPE_COLORS,
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
@@ -60,6 +65,16 @@ function syncVisualState(loading: boolean, lastSynced: Date | null): SyncVisualS
   return "synced";
 }
 
+function headChangedFilesLabel(
+  snapshot: RepoDashboardSnapshot,
+  latestCommit: RepoCommitEntry | null,
+): string {
+  const count = snapshot.changed_files.length;
+  if (!count) return "No files changed at HEAD";
+  const mergeHint = latestCommit?.is_merge ? " (merge commit)" : "";
+  return `${count} file${count === 1 ? "" : "s"} from git show HEAD${mergeHint}`;
+}
+
 function LatestChangeCard({
   snapshot,
   latestMerge,
@@ -70,80 +85,70 @@ function LatestChangeCard({
   latestCommit: RepoCommitEntry | null;
 }) {
   const branchLabel = snapshot.branch || snapshot.default_branch || "—";
-  const changedCount = snapshot.changed_files.length;
+  const headFilesLabel = headChangedFilesLabel(snapshot, latestCommit);
 
-  if (latestMerge) {
+  if (!latestCommit && !latestMerge) {
     return (
-      <div className="repo-dashboard-latest-content">
-        <div className="repo-dashboard-latest-hero">
-          <span className="repo-dashboard-source-pill">gh merge</span>
-          <h3 className="font-mono repo-dashboard-latest-headline">
-            #{latestMerge.number} {latestMerge.title}
-          </h3>
-          <p className="repo-dashboard-latest-lead text-muted small">
-            GitHub merged PR via gh CLI · {latestMerge.author} ·{" "}
-            {new Date(latestMerge.merged_at).toLocaleString()}
-          </p>
-        </div>
-        <dl className="repo-dashboard-latest-facts font-mono">
-          <div>
-            <dt>Source</dt>
-            <dd>GitHub merged PR (gh)</dd>
-          </div>
-          <div>
-            <dt>Branch</dt>
-            <dd>{branchLabel}</dd>
-          </div>
-          <div>
-            <dt>Default</dt>
-            <dd>{snapshot.default_branch ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>HEAD files</dt>
-            <dd>{changedCount} changed (local git show HEAD)</dd>
-          </div>
-        </dl>
-        {latestMerge.body ? (
-          <pre className="repo-dashboard-code font-mono repo-dashboard-latest-body">{latestMerge.body.slice(0, 4000)}</pre>
-        ) : null}
-      </div>
+      <p className="text-muted small" role="status">
+        No local commit or gh merge data in this snapshot. Refresh after selecting a git repository.
+      </p>
     );
   }
 
-  if (latestCommit) {
-    return (
-      <div className="repo-dashboard-latest-content">
-        <div className="repo-dashboard-latest-hero">
-          <span className="repo-dashboard-source-pill">local commit</span>
-          <h3 className="font-mono repo-dashboard-latest-headline">{latestCommit.subject}</h3>
-          <p className="repo-dashboard-latest-lead text-muted small">
-            Latest local commit · {latestCommit.short_sha} · {authorLabel(latestCommit)} ·{" "}
-            {new Date(latestCommit.authored_at * 1000).toLocaleString()}
-          </p>
-        </div>
-        <dl className="repo-dashboard-latest-facts font-mono">
-          <div>
-            <dt>Source</dt>
-            <dd>Latest local commit</dd>
+  return (
+    <div className="repo-dashboard-latest-content">
+      {latestCommit ? (
+        <section className="repo-dashboard-latest-block" aria-label="Latest local commit">
+          <div className="repo-dashboard-latest-hero">
+            <span className="repo-dashboard-source-pill">local HEAD</span>
+            <h3 className="font-mono repo-dashboard-latest-headline">{latestCommit.subject}</h3>
+            <p className="repo-dashboard-latest-lead text-muted small">
+              {latestCommit.short_sha} · {authorLabel(latestCommit)} ·{" "}
+              {new Date(latestCommit.authored_at * 1000).toLocaleString()}
+              {latestCommit.is_merge ? " · merge commit" : ""}
+            </p>
           </div>
-          <div>
-            <dt>Branch</dt>
-            <dd>{branchLabel}</dd>
-          </div>
-          <div>
-            <dt>Default</dt>
-            <dd>{snapshot.default_branch ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>HEAD files</dt>
-            <dd>{changedCount} changed at HEAD</dd>
-          </div>
-        </dl>
-      </div>
-    );
-  }
+          <dl className="repo-dashboard-latest-facts font-mono">
+            <div>
+              <dt>Branch</dt>
+              <dd>{branchLabel}</dd>
+            </div>
+            <div>
+              <dt>HEAD files</dt>
+              <dd>{headFilesLabel}</dd>
+            </div>
+          </dl>
+        </section>
+      ) : null}
 
-  return <p className="text-muted small">No latest change found in loaded snapshot.</p>;
+      {latestMerge ? (
+        <section
+          className="repo-dashboard-latest-block repo-dashboard-latest-gh"
+          aria-label="Recent GitHub merged pull request"
+        >
+          <div className="repo-dashboard-latest-hero">
+            <span className="repo-dashboard-source-pill">gh merge</span>
+            <h3 className="font-mono repo-dashboard-latest-headline">
+              #{latestMerge.number} {latestMerge.title}
+            </h3>
+            <p className="repo-dashboard-latest-lead text-muted small">
+              Recent merged PR via gh CLI (separate from HEAD file list) · {latestMerge.author} ·{" "}
+              {new Date(latestMerge.merged_at).toLocaleString()}
+            </p>
+          </div>
+          {latestMerge.body ? (
+            <pre className="repo-dashboard-code font-mono repo-dashboard-latest-body">
+              {latestMerge.body.slice(0, 4000)}
+            </pre>
+          ) : null}
+        </section>
+      ) : snapshot.gh.available && !snapshot.gh.authenticated ? (
+        <p className="text-muted small repo-dashboard-gh-note" role="status">
+          gh CLI present but not authenticated — showing local git only.
+        </p>
+      ) : null}
+    </div>
+  );
 }
 
 function RepoDashboardPage({
@@ -558,9 +563,15 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     }
   }, [repoPath, defaultBranch, refreshFor, showPickerStatus]);
 
-  const workItems = useMemo(
-    () => (snapshot ? mergeWorkItems(snapshot.docs, snapshot.gh.open_issues) : []),
-    [snapshot],
+  const { workItems, parserWarnings } = useMemo(() => {
+    if (!snapshot) return { workItems: [], parserWarnings: [] as string[] };
+    const merged = mergeWorkItemsDetailed(snapshot.docs, snapshot.gh.open_issues);
+    return { workItems: merged.items, parserWarnings: merged.parserWarnings };
+  }, [snapshot]);
+
+  const docSources = useMemo(
+    () => (snapshot ? buildDocSourceSummaries(snapshot.docs, workItems) : []),
+    [snapshot, workItems],
   );
 
   const filteredWorkItems = useMemo(() => {
@@ -570,11 +581,12 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     return list;
   }, [workItems, workFilter, typeFilter]);
 
-  const workStatusCounts = useMemo(() => {
-    const counts = { all: workItems.length, open: 0, started: 0, done: 0 };
-    for (const item of workItems) counts[item.status] += 1;
-    return counts;
-  }, [workItems]);
+  const workStatusCounts = useMemo(() => buildWorkStatusCounts(workItems), [workItems]);
+
+  const activityLegend = useMemo(
+    () => (snapshot ? buildActivityLegend(snapshot.commits) : []),
+    [snapshot],
+  );
 
   const lineChart = useMemo(
     () => (snapshot ? buildLineChartData(eventsFromCommits(snapshot.commits)) : null),
@@ -610,8 +622,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           ? "Stale — refresh"
           : "Not synced";
 
-  const planningCount = workItems.filter(i => i.needsPlan || i.status === "open").length;
-
   const handleUsePromptContext = useCallback(
     (item: RepoDashboardWorkItem) => {
       if (!onUsePromptContext) return;
@@ -623,20 +633,26 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
     if (id === "activity") return String(snapshot.commits.length);
-    if (id === "work") return String(workItems.length);
+    if (id === "work") return String(workStatusCounts.open);
     if (id === "sources") {
-      const latest = latestMerge || latestCommit ? 1 : 0;
-      return String(latest + planningCount);
+      const contributing = docSources.filter(d => d.contributes).length;
+      return String(contributing + (latestCommit || latestMerge ? 1 : 0));
     }
-    return String(snapshot.gh.merged_prs.length || snapshot.commits.length);
+    return String(workStatusCounts.open);
   };
+
+  const brandLabel = repoDashboardBrandLabel(repoPath);
+  const ghIssuesLabel = snapshot
+    ? ghIssuesKpiLabel(snapshot.gh.available, snapshot.gh.authenticated)
+    : "gh issues";
+  const docOpenCount = workItems.filter(i => i.source === "docs" && i.status !== "done").length;
 
   return (
     <div className="repo-dashboard-tool">
       <aside className="repo-dashboard-sidebar">
         <div className="tool-context-brand font-mono">
           <span className="tools-title-dot" aria-hidden="true" />
-          <span>kretsverket.repo.state</span>
+          <span>{brandLabel}</span>
         </div>
         <nav className="repo-dashboard-nav" aria-label="Dashboard sections">
           {SECTIONS.map(({ id, label }, index) => (
@@ -903,25 +919,38 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
           {snapshot && snapshotMatchesPath && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
-              <div className="repo-dashboard-kpis">
+              <div className="repo-dashboard-kpis" role="group" aria-label="Overview metrics">
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{snapshot.gh.merged_prs.length || (latestCommit ? 1 : 0)}</div>
+                  <div className="repo-dashboard-kpi-num font-mono">
+                    {latestCommit || latestMerge ? 1 : 0}
+                  </div>
                   <div className="repo-dashboard-kpi-label">latest change</div>
+                  <div className="repo-dashboard-kpi-hint text-muted">
+                    {latestCommit ? "local HEAD" : latestMerge ? "gh only" : "none"}
+                  </div>
                 </button>
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("activity")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.commits.length}</div>
                   <div className="repo-dashboard-kpi-label">commits loaded</div>
                 </button>
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{snapshot.gh.open_issues.length}</div>
-                  <div className="repo-dashboard-kpi-label">open issues (gh)</div>
+                  <div className="repo-dashboard-kpi-num font-mono">{docOpenCount}</div>
+                  <div className="repo-dashboard-kpi-label">open from docs</div>
                 </button>
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.status === "open").length}</div>
+                  <div className="repo-dashboard-kpi-num font-mono">{workStatusCounts.open}</div>
                   <div className="repo-dashboard-kpi-label">open items</div>
                 </button>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
+                  <div className="repo-dashboard-kpi-num font-mono">
+                    {snapshot.gh.authenticated ? snapshot.gh.open_issues.length : "—"}
+                  </div>
+                  <div className="repo-dashboard-kpi-label">{ghIssuesLabel}</div>
+                </button>
                 <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{workItems.filter(i => i.needsPlan).length}</div>
+                  <div className="repo-dashboard-kpi-num font-mono">
+                    {workItems.filter(i => i.needsPlan && i.status !== "done").length}
+                  </div>
                   <div className="repo-dashboard-kpi-label">needs planning</div>
                 </button>
               </div>
@@ -930,14 +959,28 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 <div className="repo-dashboard-card repo-dashboard-activity-card">
                   <h2 className="font-mono">Repo activity (loaded history)</h2>
                   {lineChart ? (
-                    <ActivityLineChart data={lineChart} />
+                    <ActivityLineChart data={lineChart} legend={activityLegend} />
                   ) : (
-                    <p className="text-muted small">No matching activity.</p>
+                    <p className="text-muted small" role="status">
+                      {snapshot.commits.length
+                        ? "Not enough author diversity for cumulative chart (single author or unmapped)."
+                        : "No commits loaded — refresh after selecting a repository."}
+                    </p>
                   )}
                   <p className="text-muted small repo-dashboard-footnote">
                     Up to {COMMITS_LOAD_LIMIT} recent commits.
                     {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older history not loaded." : ""}
-                    {" "}Blue = top commit author · Green = second by volume.
+                    {activityLegend.length ? (
+                      <>
+                        {" "}
+                        {activityLegend.map((entry, i) => (
+                          <span key={entry.role}>
+                            {i > 0 ? " · " : ""}
+                            {entry.role === "primary" ? "Blue" : "Green"} = {entry.label} ({entry.commits})
+                          </span>
+                        ))}
+                      </>
+                    ) : null}
                   </p>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
@@ -1056,10 +1099,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   </div>
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Changed files at HEAD (local git)</h3>
-                    <p className="text-muted small">
+                    <p className="text-muted small" role="note">
+                      {headChangedFilesLabel(snapshot, latestCommit)}. This is not a GitHub PR file list.
                       {latestMerge
-                        ? "Merge title may come from gh; files below are from local git show HEAD, not the PR diff."
-                        : "From local git show HEAD — not a GitHub PR file list."}
+                        ? " A recent gh merged PR may appear above; its diff is not shown here."
+                        : ""}
                     </p>
                     <div className="repo-dashboard-list">
                       {snapshot.changed_files.map(file => (
@@ -1092,12 +1136,40 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   </div>
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
-                    {snapshot.docs.map(doc => (
-                      <div key={doc.path} className="repo-dashboard-row">
-                        <span>{doc.path}</span>
-                        <span className="prompt-loops-pill">{doc.found ? "found" : "missing"}</span>
+                    <p className="text-muted small">
+                      {docSources.filter(d => d.contributes).length} contributing ·{" "}
+                      {docSources.filter(d => d.found).length}/{docSources.length} found
+                    </p>
+                    {docSources.map(row => (
+                      <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row">
+                        <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
+                        <span className="prompt-loops-pill">
+                          {!row.found
+                            ? row.optional
+                              ? "optional"
+                              : "missing"
+                            : row.contributes
+                              ? `${row.itemCount} items (${row.openCount} open)`
+                              : "found · 0 items"}
+                        </span>
                       </div>
                     ))}
+                    {parserWarnings.length > 0 && (
+                      <pre
+                        className="repo-dashboard-code font-mono repo-dashboard-parser-warnings"
+                        role="status"
+                      >
+                        {parserWarnings.join("\n")}
+                      </pre>
+                    )}
+                    {snapshot.warnings.length > 0 && (
+                      <>
+                        <h4 className="font-mono repo-dashboard-panel-subtitle">Repo warnings</h4>
+                        <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">
+                          {snapshot.warnings.join("\n")}
+                        </pre>
+                      </>
+                    )}
                     {snapshot.gh.message && (
                       <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
                     )}
@@ -1163,7 +1235,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     emptyMessage={
                       workFilter !== "all" || typeFilter !== "all"
                         ? "No items match the active filters. Try clearing status or type."
-                        : "No work items parsed from docs or gh in this snapshot."
+                        : docSources.every(d => !d.contributes) && !snapshot.gh.authenticated
+                          ? "No work items parsed. Add or refresh docs (BACKLOG, KNOWN_GAPS, product/*.md) or authenticate gh for issues."
+                          : docSources.every(d => !d.contributes)
+                            ? "Docs were found but no actionable rows matched the parser. Check BACKLOG/KNOWN_GAPS tables or TODO checkboxes."
+                            : "No work items in this snapshot."
                     }
                   />
                 </div>
