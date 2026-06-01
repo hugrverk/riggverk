@@ -5713,8 +5713,46 @@ code {
 
 .repo-dashboard-kpis {
   display: grid;
-  grid-template-columns: repeat(5, minmax(88px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   gap: 6px;
+}
+
+.repo-dashboard-kpi-hint {
+  font-size: 10px;
+  line-height: 1.25;
+  margin-top: 2px;
+}
+
+.repo-dashboard-latest-block + .repo-dashboard-latest-block {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.repo-dashboard-latest-gh .repo-dashboard-latest-body {
+  max-height: 160px;
+  overflow: auto;
+}
+
+.repo-dashboard-doc-row {
+  align-items: flex-start;
+  gap: 8px;
+}
+
+.repo-dashboard-doc-path {
+  flex: 1;
+  min-width: 0;
+  word-break: break-word;
+}
+
+.repo-dashboard-panel-subtitle {
+  margin: 10px 0 6px;
+  font-size: 12px;
+}
+
+.repo-dashboard-parser-warnings {
+  margin-top: 8px;
+  max-height: 120px;
 }
 
 .repo-dashboard-overview-charts {
@@ -6172,7 +6210,7 @@ code {
 
 .repo-dashboard-heat-scroll {
   overflow-x: auto;
-  overflow-y: visible;
+  overflow-y: hidden;
   max-width: 100%;
   padding-bottom: 2px;
 }
