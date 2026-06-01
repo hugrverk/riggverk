@@ -188,6 +188,17 @@ export function buildLineChartData(events: ActivityEvent[]): LineChartSeries | n
   };
 }
 
+const HEATMAP_MIN_WEEKS = 53;
+/** Up to ~10 years of weeks when loaded commits span longer than one year. */
+const HEATMAP_MAX_WEEKS = 520;
+const MS_PER_DAY = 86_400_000;
+
+function heatmapWeekEndSaturday(d: Date): Date {
+  const end = dayStart(d);
+  end.setDate(end.getDate() + (6 - end.getDay()));
+  return end;
+}
+
 export function buildHeatmapCells(commits: RepoCommitEntry[]): HeatmapCell[] {
   const dated = commits
     .map(c => new Date(c.authored_at * 1000))
@@ -201,11 +212,25 @@ export function buildHeatmapCells(commits: RepoCommitEntry[]): HeatmapCell[] {
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
 
-  const end = dayStart(dated[dated.length - 1]);
-  end.setDate(end.getDate() + (6 - end.getDay()));
-  const weeks = 53;
-  const start = new Date(end);
+  const firstCommit = dayStart(dated[0]);
+  const lastCommit = dayStart(dated[dated.length - 1]);
+  const today = dayStart(new Date());
+  const rangeEnd = lastCommit > today ? lastCommit : today;
+  const end = heatmapWeekEndSaturday(rangeEnd);
+
+  let weeks = HEATMAP_MIN_WEEKS;
+  let start = new Date(end);
   start.setDate(start.getDate() - (weeks * 7 - 1));
+
+  if (firstCommit < start) {
+    const daySpan = Math.floor((end.getTime() - firstCommit.getTime()) / MS_PER_DAY) + 1;
+    weeks = Math.min(
+      HEATMAP_MAX_WEEKS,
+      Math.max(HEATMAP_MIN_WEEKS, Math.ceil(daySpan / 7)),
+    );
+    start = new Date(end);
+    start.setDate(start.getDate() - (weeks * 7 - 1));
+  }
 
   const cells: HeatmapCell[] = [];
   const values: number[] = [];
@@ -238,6 +263,121 @@ export function buildRemainingByType(items: RepoDashboardWorkItem[]): RemainingB
     const pctLeft = all.length ? Math.round((n / all.length) * 100) : 0;
     return { type, open: n, done: done.length, needsPlan: needsPlan.length, total: all.length, pctLeft };
   });
+}
+
+/** Kretsverket-style doc lanes (source file), not generic parser types. */
+export type DocWorkLaneId =
+  | "backlog"
+  | "known-gaps"
+  | "roadmap"
+  | "product"
+  | "validation"
+  | "github"
+  | "other";
+
+export const DOC_WORK_LANE_ORDER: DocWorkLaneId[] = [
+  "backlog",
+  "known-gaps",
+  "roadmap",
+  "product",
+  "validation",
+  "github",
+  "other",
+];
+
+const DOC_LANE_META: Record<
+  DocWorkLaneId,
+  { label: string; description: string; pathHint: string; color: string }
+> = {
+  backlog: {
+    label: "Backlog",
+    description: "BL queue and actionable rows",
+    pathHint: "docs/BACKLOG.md",
+    color: WORK_TYPE_COLORS.todo,
+  },
+  "known-gaps": {
+    label: "Known gaps",
+    description: "Product & validation gaps",
+    pathHint: "docs/KNOWN_GAPS.md",
+    color: WORK_TYPE_COLORS.gap,
+  },
+  roadmap: {
+    label: "Roadmap",
+    description: "Phases and milestones",
+    pathHint: "docs/ROADMAP.md",
+    color: WORK_TYPE_COLORS.roadmap,
+  },
+  product: {
+    label: "Product",
+    description: "Feature specs under docs/product",
+    pathHint: "docs/product/*.md",
+    color: WORK_TYPE_COLORS.feature,
+  },
+  validation: {
+    label: "Validation",
+    description: "Checks and audit follow-ups",
+    pathHint: "docs/VALIDATION.md",
+    color: WORK_TYPE_COLORS.fix,
+  },
+  github: {
+    label: "GitHub",
+    description: "Open issues via gh CLI",
+    pathHint: "gh issue list",
+    color: "#58a6ff",
+  },
+  other: {
+    label: "Other",
+    description: "Misc parsed markers",
+    pathHint: "other docs",
+    color: WORK_TYPE_COLORS.note,
+  },
+};
+
+export function workItemDocLane(item: RepoDashboardWorkItem): DocWorkLaneId {
+  if (item.source === "issue") return "github";
+  const path = item.path.toLowerCase();
+  if (path.includes("known_gaps")) return "known-gaps";
+  if (path.includes("backlog")) return "backlog";
+  if (path.includes("roadmap")) return "roadmap";
+  if (path.includes("validation")) return "validation";
+  if (path.includes("docs/product/") || path.includes("features.md")) return "product";
+  return "other";
+}
+
+export interface DocWorkLaneSummary {
+  id: DocWorkLaneId;
+  label: string;
+  description: string;
+  pathHint: string;
+  color: string;
+  open: number;
+  started: number;
+  done: number;
+  needsPlan: number;
+  total: number;
+}
+
+export function buildDocLaneSummaries(items: RepoDashboardWorkItem[]): DocWorkLaneSummary[] {
+  return DOC_WORK_LANE_ORDER.map(id => {
+    const laneItems = items.filter(i => workItemDocLane(i) === id);
+    const open = laneItems.filter(i => i.status === "open").length;
+    const started = laneItems.filter(i => i.status === "started").length;
+    const done = laneItems.filter(i => i.status === "done").length;
+    const needsPlan = laneItems.filter(i => i.needsPlan && i.status !== "done").length;
+    const meta = DOC_LANE_META[id];
+    return {
+      id,
+      label: meta.label,
+      description: meta.description,
+      pathHint: meta.pathHint,
+      color: meta.color,
+      open,
+      started,
+      done,
+      needsPlan,
+      total: laneItems.length,
+    };
+  }).filter(row => row.total > 0);
 }
 
 export function buildSourceHealth(

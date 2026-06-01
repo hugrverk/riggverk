@@ -1,4 +1,4 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ActivityLegendEntry, LineChartSeries } from "./model";
 import {
   ACTIVITY_BLUE,
@@ -104,11 +104,18 @@ interface ActivityHeatmapProps {
 }
 
 export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
   const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
   const weekCount = Math.max(weeks.length, 1);
 
   const rangeLabel = `${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+  }, [cells, weekCount]);
 
   return (
     <div
@@ -116,6 +123,7 @@ export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapP
       data-heatmap-density={density}
     >
       <div
+        ref={scrollRef}
         className="repo-dashboard-heat-scroll"
         role="img"
         aria-label={`Commit activity from ${rangeLabel}`}

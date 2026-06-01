@@ -7,9 +7,13 @@ use crate::commands::process::run_cmd;
 use crate::path_utils::normalize_user_workspace_path_for_save;
 
 const MAX_GIT_OUTPUT_BYTES: usize = 512 * 1024;
+/// Full `git log` for commit history / heatmap (separate from generic git output cap).
+const MAX_COMMIT_LOG_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_DOC_CONTENT_BYTES: usize = 512 * 1024;
-const MAX_COMMITS: usize = 500;
 const MAX_CHANGED_FILES: usize = 200;
+const MAX_GH_MERGED_PRS: usize = 2000;
+const MAX_GH_OPEN_ISSUES: usize = 2000;
+const GH_LIST_PAGE_LIMIT: &str = "100";
 
 const CORE_DOC_PATHS: [&str; 9] = [
     "README.md",
@@ -93,6 +97,7 @@ pub struct RepoDashboardSnapshot {
     pub behind: Option<u32>,
     pub latest_commit: Option<RepoCommitEntry>,
     pub commits: Vec<RepoCommitEntry>,
+    pub commits_truncated: bool,
     pub changed_files: Vec<RepoChangedFile>,
     pub docs: Vec<RepoDocFile>,
     pub gh: RepoGhEnhancement,
@@ -104,6 +109,18 @@ fn truncate_output(raw: String) -> String {
         return raw;
     }
     raw.chars().take(MAX_GIT_OUTPUT_BYTES).collect()
+}
+
+fn truncate_git_log_output(raw: String) -> (String, bool) {
+    if raw.len() <= MAX_COMMIT_LOG_OUTPUT_BYTES {
+        return (raw, false);
+    }
+    let mut end = MAX_COMMIT_LOG_OUTPUT_BYTES;
+    while end > 0 && !raw.is_char_boundary(end) {
+        end -= 1;
+    }
+    let boundary = raw[..end].rfind('\n').unwrap_or(end);
+    (raw[..boundary].to_string(), true)
 }
 
 fn resolve_repo_path(raw: &str) -> Result<PathBuf, String> {
@@ -218,20 +235,19 @@ pub(crate) fn parse_commit_line(line: &str) -> Option<RepoCommitEntry> {
     })
 }
 
-fn load_commits(repo: &Path) -> Vec<RepoCommitEntry> {
+fn load_commits(repo: &Path) -> (Vec<RepoCommitEntry>, bool) {
     let format = "%H|%h|%an|%ae|%at|%s";
-    let (ok, out, _) = git_in_repo(
+    let (ok, stdout, _, _) = run_cmd(
+        "git",
+        &["log", &format!("--pretty=format:{}", format)],
         repo,
-        &[
-            "log",
-            &format!("--pretty=format:{}", format),
-            &format!("-n{}", MAX_COMMITS),
-        ],
     );
     if !ok {
-        return Vec::new();
+        return (Vec::new(), false);
     }
-    out.lines().filter_map(parse_commit_line).collect()
+    let (stdout, truncated) = truncate_git_log_output(stdout);
+    let commits = stdout.lines().filter_map(parse_commit_line).collect();
+    (commits, truncated)
 }
 
 fn load_changed_files(repo: &Path) -> Vec<RepoChangedFile> {
@@ -381,15 +397,15 @@ fn redact_gh_status(raw: String) -> String {
         .join("\n")
 }
 
-fn gh_merged_prs(repo: &Path) -> Vec<RepoGhPullRequest> {
+fn gh_merged_prs(repo: &Path) -> (Vec<RepoGhPullRequest>, bool) {
     let (ok, out, _) = git_in_repo(repo, &["remote", "get-url", "origin"]);
     if !ok {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let remote = out.trim();
     let slug = parse_github_slug(remote);
     let Some(slug) = slug else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
 
     let (ok, stdout, _, _) = run_cmd(
@@ -401,17 +417,23 @@ fn gh_merged_prs(repo: &Path) -> Vec<RepoGhPullRequest> {
             &slug,
             "--state",
             "merged",
+            "--paginate",
             "--limit",
-            "10",
+            GH_LIST_PAGE_LIMIT,
             "--json",
             "number,title,mergedAt,author,body",
         ],
         repo,
     );
     if !ok {
-        return Vec::new();
+        return (Vec::new(), false);
     }
-    parse_gh_prs(&stdout)
+    let mut prs = parse_gh_prs(&stdout);
+    let truncated = prs.len() > MAX_GH_MERGED_PRS;
+    if truncated {
+        prs.truncate(MAX_GH_MERGED_PRS);
+    }
+    (prs, truncated)
 }
 
 /// Safe GitHub `owner/repo` slug for copyable prompt output. Never returns raw remotes.
@@ -556,13 +578,13 @@ fn parse_gh_prs(raw: &str) -> Vec<RepoGhPullRequest> {
         .collect()
 }
 
-fn gh_open_issues(repo: &Path) -> Vec<RepoGhIssue> {
+fn gh_open_issues(repo: &Path) -> (Vec<RepoGhIssue>, bool) {
     let (ok, out, _) = git_in_repo(repo, &["remote", "get-url", "origin"]);
     if !ok {
-        return Vec::new();
+        return (Vec::new(), false);
     }
     let Some(slug) = parse_github_slug(out.trim()) else {
-        return Vec::new();
+        return (Vec::new(), false);
     };
     let (ok, stdout, _, _) = run_cmd(
         "gh",
@@ -573,17 +595,23 @@ fn gh_open_issues(repo: &Path) -> Vec<RepoGhIssue> {
             &slug,
             "--state",
             "open",
+            "--paginate",
             "--limit",
-            "50",
+            GH_LIST_PAGE_LIMIT,
             "--json",
             "number,title,state,labels",
         ],
         repo,
     );
     if !ok {
-        return Vec::new();
+        return (Vec::new(), false);
     }
-    parse_gh_issues(&stdout)
+    let mut issues = parse_gh_issues(&stdout);
+    let truncated = issues.len() > MAX_GH_OPEN_ISSUES;
+    if truncated {
+        issues.truncate(MAX_GH_OPEN_ISSUES);
+    }
+    (issues, truncated)
 }
 
 fn parse_gh_issues(raw: &str) -> Vec<RepoGhIssue> {
@@ -642,6 +670,7 @@ pub fn inspect_repo(
             behind: None,
             latest_commit: None,
             commits: Vec::new(),
+            commits_truncated: false,
             changed_files: Vec::new(),
             docs: read_local_docs(&path),
             gh: RepoGhEnhancement {
@@ -669,6 +698,7 @@ pub fn inspect_repo(
             behind: None,
             latest_commit: None,
             commits: Vec::new(),
+            commits_truncated: false,
             changed_files: Vec::new(),
             docs: read_local_docs(&path),
             gh: RepoGhEnhancement {
@@ -690,7 +720,13 @@ pub fn inspect_repo(
         .map(|b| ahead_behind(&path, b))
         .unwrap_or((None, None));
 
-    let commits = load_commits(&path);
+    let (commits, commits_truncated) = load_commits(&path);
+    if commits_truncated {
+        warnings.push(format!(
+            "local git commit log truncated at {} MB — sync or shallow clone may hide older history",
+            MAX_COMMIT_LOG_OUTPUT_BYTES / (1024 * 1024)
+        ));
+    }
     let latest_commit = commits.first().cloned();
     let changed_files = load_changed_files(&path);
     let docs = read_local_docs(&path);
@@ -710,16 +746,28 @@ pub fn inspect_repo(
         (false, None)
     };
 
-    let merged_prs = if include_gh && gh_available_flag && gh_authenticated {
+    let (merged_prs, gh_prs_truncated) = if include_gh && gh_available_flag && gh_authenticated {
         gh_merged_prs(&path)
     } else {
-        Vec::new()
+        (Vec::new(), false)
     };
-    let open_issues = if include_gh && gh_available_flag && gh_authenticated {
+    if gh_prs_truncated {
+        warnings.push(format!(
+            "merged pull requests capped at {} items",
+            MAX_GH_MERGED_PRS
+        ));
+    }
+    let (open_issues, gh_issues_truncated) = if include_gh && gh_available_flag && gh_authenticated {
         gh_open_issues(&path)
     } else {
-        Vec::new()
+        (Vec::new(), false)
     };
+    if gh_issues_truncated {
+        warnings.push(format!(
+            "open issues capped at {} items",
+            MAX_GH_OPEN_ISSUES
+        ));
+    }
 
     Ok(RepoDashboardSnapshot {
         repo_path: path.to_string_lossy().into_owned(),
@@ -732,6 +780,7 @@ pub fn inspect_repo(
         behind,
         latest_commit,
         commits,
+        commits_truncated,
         changed_files,
         docs,
         gh: RepoGhEnhancement {
@@ -1039,6 +1088,19 @@ mod tests {
     #[test]
     fn max_doc_content_bytes_matches_workspace_docs_limit() {
         assert_eq!(MAX_DOC_CONTENT_BYTES, 512 * 1024);
+    }
+
+    #[test]
+    fn truncate_git_log_output_keeps_line_boundary() {
+        let line = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|deadbee|Ann|a@b.com|1700000000|subject\n";
+        let mut raw = String::new();
+        while raw.len() < MAX_COMMIT_LOG_OUTPUT_BYTES + line.len() {
+            raw.push_str(line);
+        }
+        let (truncated, did) = truncate_git_log_output(raw);
+        assert!(did);
+        assert!(truncated.len() <= MAX_COMMIT_LOG_OUTPUT_BYTES);
+        assert!(truncated.lines().all(|line| parse_commit_line(line).is_some()));
     }
 
     #[test]

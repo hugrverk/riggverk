@@ -215,6 +215,7 @@ export interface RepoDashboardSnapshot {
   behind: number | null;
   latest_commit: RepoCommitEntry | null;
   commits: RepoCommitEntry[];
+  commits_truncated: boolean;
   changed_files: RepoChangedFile[];
   docs: RepoDocFile[];
   gh: RepoGhEnhancement;

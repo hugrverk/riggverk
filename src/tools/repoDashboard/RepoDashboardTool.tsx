@@ -1,6 +1,14 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import type {
   AppSettings,
   DiscoverLocalGitReposResult,
@@ -23,10 +31,10 @@ import { mergeWorkItemsDetailed } from "./docsParser";
 import {
   authorLabel,
   buildActivityLegend,
+  buildDocLaneSummaries,
   buildDocSourceSummaries,
   buildHeatmapCells,
   buildLineChartData,
-  buildRemainingByType,
   buildSourceHealth,
   buildWorkStatusCounts,
   commitDateRangeLabel,
@@ -35,7 +43,9 @@ import {
   ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
   repoDashboardBrandLabel,
-  WORK_TYPE_COLORS,
+  workItemDocLane,
+  type DocWorkLaneId,
+  type DocWorkLaneSummary,
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
 
@@ -49,7 +59,7 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
-const COMMITS_LOAD_LIMIT = 500;
+const COMMIT_LIST_DISPLAY_CAP = 120;
 const WORK_ITEMS_DISPLAY_CAP = 120;
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
@@ -282,43 +292,109 @@ function WorkItemsList({
 
 function PlanningGapsPanel({
   items,
+  laneFilter,
   typeFilter,
   onUsePromptContext,
 }: {
   items: RepoDashboardWorkItem[];
+  laneFilter: DocWorkLaneId | "all";
   typeFilter: RepoDashboardWorkType | "all";
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
-  const filtered = items.filter(
-    i => (i.needsPlan || i.status === "open") && (typeFilter === "all" || i.type === typeFilter),
-  );
-  const groups = WORK_TYPES.map(type => ({
-    type,
-    items: filtered.filter(i => i.type === type),
-  })).filter(g => g.items.length);
+  const filtered = items.filter(i => {
+    if (!(i.needsPlan || i.status === "open")) return false;
+    if (laneFilter !== "all" && workItemDocLane(i) !== laneFilter) return false;
+    if (typeFilter !== "all" && i.type !== typeFilter) return false;
+    return true;
+  });
+  const groups = buildDocLaneSummaries(filtered).map(lane => ({
+    lane,
+    items: filtered.filter(i => workItemDocLane(i) === lane.id),
+  }));
 
   if (!filtered.length) {
     return (
       <p className="text-muted small" role="status">
-        No open or needs-planning items for the current type filter.
+        No open or needs-planning items for the current filters.
       </p>
     );
   }
 
   return (
     <div className="repo-dashboard-plan-groups">
-      {groups.map(({ type, items: groupItems }) => (
-        <section key={type} className="repo-dashboard-plan-group">
+      {groups.map(({ lane, items: groupItems }) => (
+        <section key={lane.id} className="repo-dashboard-plan-group">
           <h4 className="font-mono repo-dashboard-plan-group-title">
-            <span className={`repo-dashboard-chip ${type}`}>{type}</span>
+            <span className="repo-dashboard-chip" style={{ color: lane.color, borderColor: "currentColor" }}>
+              {lane.label}
+            </span>
             <span className="text-muted">{groupItems.length}</span>
           </h4>
+          <p className="text-muted small repo-dashboard-lane-hint">{lane.pathHint}</p>
           <WorkItemsList
             items={groupItems}
             emptyMessage=""
             onUsePromptContext={onUsePromptContext}
           />
         </section>
+      ))}
+    </div>
+  );
+}
+
+function DocLaneSummaryPanel({
+  lanes,
+  activeLane,
+  onSelectLane,
+}: {
+  lanes: DocWorkLaneSummary[];
+  activeLane: DocWorkLaneId | "all";
+  onSelectLane: (lane: DocWorkLaneId) => void;
+}) {
+  if (!lanes.length) {
+    return (
+      <p className="text-muted small" role="status">
+        No parsed work from BACKLOG, KNOWN_GAPS, or product docs yet.
+      </p>
+    );
+  }
+
+  const maxOpen = Math.max(1, ...lanes.map(l => l.open + l.started));
+
+  return (
+    <div className="repo-dashboard-doc-lanes" role="list">
+      {lanes.map(lane => (
+        <button
+          key={lane.id}
+          type="button"
+          role="listitem"
+          className={`repo-dashboard-doc-lane${activeLane === lane.id ? " active" : ""}`}
+          style={{ "--lane-color": lane.color } as CSSProperties}
+          aria-pressed={activeLane === lane.id}
+          onClick={() => onSelectLane(lane.id)}
+        >
+          <div className="repo-dashboard-doc-lane-head">
+            <span className="repo-dashboard-doc-lane-label font-mono">{lane.label}</span>
+            <span className="repo-dashboard-doc-lane-open font-mono">{lane.open + lane.started}</span>
+          </div>
+          <p className="text-muted small repo-dashboard-doc-lane-desc">{lane.description}</p>
+          <p className="text-muted small repo-dashboard-doc-lane-path font-mono">{lane.pathHint}</p>
+          <div className="repo-dashboard-bar repo-dashboard-doc-lane-bar">
+            <div
+              className="repo-dashboard-bar-fill"
+              style={{
+                width: `${Math.max(4, ((lane.open + lane.started) / maxOpen) * 100)}%`,
+                background: lane.color,
+              }}
+            />
+          </div>
+          <div className="repo-dashboard-doc-lane-meta font-mono">
+            <span>{lane.open} open</span>
+            <span>{lane.started} started</span>
+            <span>{lane.done} done</span>
+            {lane.needsPlan > 0 ? <span>{lane.needsPlan} plan</span> : null}
+          </div>
+        </button>
       ))}
     </div>
   );
@@ -344,6 +420,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [workFilter, setWorkFilter] = useState<WorkFilter>("all");
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
+  const [laneFilter, setLaneFilter] = useState<DocWorkLaneId | "all">("all");
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<string | null>(null);
@@ -577,9 +654,12 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const filteredWorkItems = useMemo(() => {
     let list = workItems;
     if (workFilter !== "all") list = list.filter(i => i.status === workFilter);
+    if (laneFilter !== "all") list = list.filter(i => workItemDocLane(i) === laneFilter);
     if (typeFilter !== "all") list = list.filter(i => i.type === typeFilter);
     return list;
-  }, [workItems, workFilter, typeFilter]);
+  }, [workItems, workFilter, laneFilter, typeFilter]);
+
+  const docLaneSummaries = useMemo(() => buildDocLaneSummaries(workItems), [workItems]);
 
   const workStatusCounts = useMemo(() => buildWorkStatusCounts(workItems), [workItems]);
 
@@ -596,7 +676,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     () => (snapshot ? buildHeatmapCells(snapshot.commits) : []),
     [snapshot],
   );
-  const remaining = useMemo(() => buildRemainingByType(workItems), [workItems]);
   const health = useMemo(
     () => (snapshot ? buildSourceHealth(snapshot, workItems) : []),
     [snapshot, workItems],
@@ -968,8 +1047,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     </p>
                   )}
                   <p className="text-muted small repo-dashboard-footnote">
-                    Up to {COMMITS_LOAD_LIMIT} recent commits.
-                    {snapshot.commits.length >= COMMITS_LOAD_LIMIT ? " Older history not loaded." : ""}
+                    {snapshot.commits.length.toLocaleString()} commits from local git
+                    {snapshot.commits_truncated
+                      ? " (older commits omitted — output limit; ensure a full clone)."
+                      : ""}
+                    .
                     {activityLegend.length ? (
                       <>
                         {" "}
@@ -1004,41 +1086,20 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     )}
                   </div>
                   <div className="repo-dashboard-card repo-dashboard-rem-card">
-                    <h2 className="font-mono">Remaining by type</h2>
-                    <div className="repo-dashboard-rem">
-                      {remaining.map(row => (
-                        <button
-                          key={row.type}
-                          type="button"
-                          className={`repo-dashboard-remitem ${row.type}${typeFilter === row.type ? " active" : ""}`}
-                          style={{ color: WORK_TYPE_COLORS[row.type] }}
-                          aria-pressed={typeFilter === row.type}
-                          onClick={() => {
-                            setTypeFilter(row.type);
-                            setSection("sources");
-                          }}
-                        >
-                          <div className="repo-dashboard-remtitle">
-                            <span>{row.type}</span>
-                            <strong>{row.open}</strong>
-                          </div>
-                          <div className="repo-dashboard-bar">
-                            <div
-                              className="repo-dashboard-bar-fill"
-                              style={{
-                                width: `${Math.max(2, (row.open / Math.max(1, ...remaining.map(r => r.open))) * 100)}%`,
-                                background: WORK_TYPE_COLORS[row.type],
-                              }}
-                            />
-                          </div>
-                          <div className="repo-dashboard-remmeta">
-                            <span>{row.pctLeft}% left</span>
-                            <span>{row.done} done</span>
-                            <span>{row.needsPlan} plan</span>
-                          </div>
-                        </button>
-                      ))}
-                    </div>
+                    <h2 className="font-mono">Open work by doc</h2>
+                    <p className="text-muted small repo-dashboard-rem-intro">
+                      Grouped by Kretsverket planning files (BACKLOG, KNOWN_GAPS, product, …). Click a
+                      lane to filter Work.
+                    </p>
+                    <DocLaneSummaryPanel
+                      lanes={docLaneSummaries}
+                      activeLane={laneFilter}
+                      onSelectLane={lane => {
+                        setLaneFilter(lane);
+                        setWorkFilter("open");
+                        setSection("work");
+                      }}
+                    />
                   </div>
                 </div>
                 <div className="repo-dashboard-card repo-dashboard-health-card">
@@ -1065,11 +1126,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           {snapshot && snapshotMatchesPath && !loading && section === "activity" && (
             <RepoDashboardPage
               title="Activity"
-              description={`Recent commit history from local git (up to ${COMMITS_LOAD_LIMIT}${snapshot.commits.length >= COMMITS_LOAD_LIMIT ? ", limit reached" : ""}; list shows 120).`}
+              description={`Full local git history for charts${snapshot.commits_truncated ? " (truncated at load limit)" : ""}; list shows ${COMMIT_LIST_DISPLAY_CAP}. GitHub issues/PRs via gh when authenticated.`}
               toolbar={<ActivitySummaryStrip snapshot={snapshot} />}
               main={
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <CommitHistoryList commits={snapshot.commits.slice(0, 120)} />
+                  <CommitHistoryList commits={snapshot.commits.slice(0, COMMIT_LIST_DISPLAY_CAP)} />
                 </div>
               }
               aside={
@@ -1126,10 +1187,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
                     <p className="text-muted small repo-dashboard-page-desc">
-                      Open or needs-planning items grouped by type — actionable decisions, not raw dump.
+                      Open or needs-planning items grouped by doc lane (BACKLOG, KNOWN_GAPS, product, …).
                     </p>
                     <PlanningGapsPanel
                       items={workItems}
+                      laneFilter={laneFilter}
                       typeFilter={typeFilter}
                       onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
                     />
@@ -1199,6 +1261,27 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       </button>
                     ))}
                   </div>
+                  <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Doc lane filter">
+                    <button
+                      type="button"
+                      className={`repo-dashboard-seg${laneFilter === "all" ? " active" : ""}`}
+                      aria-pressed={laneFilter === "all"}
+                      onClick={() => setLaneFilter("all")}
+                    >
+                      all lanes
+                    </button>
+                    {docLaneSummaries.map(lane => (
+                      <button
+                        key={lane.id}
+                        type="button"
+                        className={`repo-dashboard-seg${laneFilter === lane.id ? " active" : ""}`}
+                        aria-pressed={laneFilter === lane.id}
+                        onClick={() => setLaneFilter(laneFilter === lane.id ? "all" : lane.id)}
+                      >
+                        {lane.label} ({lane.open + lane.started})
+                      </button>
+                    ))}
+                  </div>
                   <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Type filter">
                     {WORK_TYPES.map(type => (
                       <button
@@ -1223,6 +1306,9 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
                     Showing {filteredWorkItems.length} of {workItems.length} items
                     {workFilter !== "all" ? ` · status: ${workFilter}` : ""}
+                    {laneFilter !== "all"
+                      ? ` · lane: ${docLaneSummaries.find(l => l.id === laneFilter)?.label ?? laneFilter}`
+                      : ""}
                     {typeFilter !== "all" ? ` · type: ${typeFilter}` : ""}
                   </p>
                 </>

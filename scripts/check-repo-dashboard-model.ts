@@ -8,7 +8,9 @@ import {
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   buildLineChartData,
+  buildDocLaneSummaries,
   buildRemainingByType,
+  workItemDocLane,
   buildWorkStatusCounts,
   commitActor,
   eventsFromCommits,
@@ -73,6 +75,25 @@ assert.equal(buildLineChartData([]), null);
   assert.ok(buildHeatmapMonthLabels(weeks).length >= 0);
 }
 
+// Heatmap defaults to one year ending at today for recent commits.
+{
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cells = buildHeatmapCells([commit({ authored_at: nowSec })]);
+  assert.equal(cells.length, 53 * 7);
+}
+
+{
+  const nowSec = Math.floor(Date.now() / 1000);
+  const yearAgo = nowSec - 400 * 86_400;
+  const cells = buildHeatmapCells([
+    commit({ authored_at: yearAgo }),
+    commit({ authored_at: nowSec }),
+  ]);
+  assert.ok(cells.length > 53 * 7, "year-spanning commits should extend past 53 weeks");
+  assert.ok(cells.length <= 520 * 7, "heatmap week grid has an upper bound");
+  assert.equal(cells[cells.length - 1].date.slice(0, 4), new Date(nowSec * 1000).getFullYear().toString());
+}
+
 // Remaining-by-type handles empty input without NaN.
 for (const row of buildRemainingByType([])) {
   assert.equal(Number.isFinite(row.pctLeft), true);
@@ -126,6 +147,21 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   ]);
   assert.equal(legend.length, 2);
   assert.equal(legend[0].label, "Alice");
+}
+
+{
+  const item = {
+    source: "docs" as const,
+    path: "docs/BACKLOG.md",
+    text: "BL-1",
+    type: "todo" as const,
+    status: "open" as const,
+    needsPlan: false,
+  };
+  assert.equal(workItemDocLane(item), "backlog");
+  const lanes = buildDocLaneSummaries([item]);
+  assert.equal(lanes.length, 1);
+  assert.equal(lanes[0].label, "Backlog");
 }
 
 console.log("Repo Dashboard model checks passed");

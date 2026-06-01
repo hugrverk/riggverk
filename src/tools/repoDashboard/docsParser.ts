@@ -136,6 +136,7 @@ function shouldSkipBullet(section: string, text: string, path: string): boolean 
   if (low.length < 4) return true;
   if (/^(see |for |refer to |maintain |keep )/.test(low)) return true;
   if (/^https?:\/\//.test(low)) return true;
+  if (/readme\.md$/i.test(path) && /\[.+?\]\([^)]+\)/.test(text.trim())) return true;
   if (!ACTIONABLE_SECTION.test(section) && !ACTIONABLE_SECTION.test(path)) {
     if (!path.includes("TODO") && !path.includes("todo")) return true;
   }
