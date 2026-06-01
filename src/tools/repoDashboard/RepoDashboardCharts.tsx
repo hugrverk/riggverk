@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import type { LineChartSeries } from "./model";
+import { useEffect, useMemo, useRef } from "react";
+import type { ActivityLegendEntry, LineChartSeries } from "./model";
 import {
   ACTIVITY_BLUE,
   ACTIVITY_GREEN,
@@ -9,9 +9,10 @@ import {
 
 interface ActivityLineChartProps {
   data: LineChartSeries;
+  legend?: ActivityLegendEntry[];
 }
 
-export function ActivityLineChart({ data }: ActivityLineChartProps) {
+export function ActivityLineChart({ data, legend = [] }: ActivityLineChartProps) {
   const { days, primary, secondary, totals } = data;
   const w = 820;
   const h = 180;
@@ -66,13 +67,27 @@ export function ActivityLineChart({ data }: ActivityLineChartProps) {
         )}
       </svg>
       <div className="repo-dashboard-legend font-mono">
-        <span className="repo-dashboard-blue">
-          <i /> Top author {totals.primary}
-        </span>
-        <span className="repo-dashboard-green">
-          <i /> Second {totals.secondary}
-        </span>
-        <span className="text-muted">other/unmapped {totals.other}</span>
+        {legend[0] ? (
+          <span className="repo-dashboard-blue">
+            <i /> {legend[0].label} ({legend[0].commits} commits, cumulative {totals.primary})
+          </span>
+        ) : (
+          <span className="repo-dashboard-blue">
+            <i /> Primary author {totals.primary}
+          </span>
+        )}
+        {legend[1] ? (
+          <span className="repo-dashboard-green">
+            <i /> {legend[1].label} ({legend[1].commits} commits, cumulative {totals.secondary})
+          </span>
+        ) : totals.secondary > 0 ? (
+          <span className="repo-dashboard-green">
+            <i /> Second author {totals.secondary}
+          </span>
+        ) : null}
+        {totals.other > 0 ? (
+          <span className="text-muted">other authors {totals.other} commits</span>
+        ) : null}
         <span className="text-muted">
           {days[0]} → {days[days.length - 1]}
         </span>
@@ -89,11 +104,18 @@ interface ActivityHeatmapProps {
 }
 
 export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapProps) {
+  const scrollRef = useRef<HTMLDivElement>(null);
   const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
   const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
   const weekCount = Math.max(weeks.length, 1);
 
   const rangeLabel = `${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    el.scrollLeft = el.scrollWidth;
+  }, [cells, weekCount]);
 
   return (
     <div
@@ -101,6 +123,7 @@ export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapP
       data-heatmap-density={density}
     >
       <div
+        ref={scrollRef}
         className="repo-dashboard-heat-scroll"
         role="img"
         aria-label={`Commit activity from ${rangeLabel}`}

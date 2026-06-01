@@ -63,8 +63,8 @@ fi
 if ! rg -n 'ActivityHeatmapDensity|density=' src/tools/repoDashboard/RepoDashboardCharts.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "ActivityHeatmap must support a density prop"
 fi
-if ! rg -n 'repo-dashboard-heat-density-compact|flex: 1 1 0' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "heatmap CSS must include compact density and responsive week columns"
+if ! rg -n 'repo-dashboard-heat-density-compact|--heat-week-count' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap CSS must include compact density and --heat-week-count intrinsic width"
 fi
 if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard must expose a narrow-layout section control"
