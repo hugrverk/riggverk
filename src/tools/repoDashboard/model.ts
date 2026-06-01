@@ -3,7 +3,9 @@ import type {
   RepoDashboardSnapshot,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
+  RepoDocFile,
 } from "../../types";
+import { isOptionalDocPath } from "./docsParser";
 
 export type ActivityActor = "primary" | "secondary" | "other";
 
@@ -306,4 +308,91 @@ export function commitDateRangeLabel(commits: RepoCommitEntry[]): string | null 
 /** Normalize repo paths for comparing user input to snapshot path. */
 export function normalizeRepoPathForCompare(path: string): string {
   return path.trim().replace(/\/+$/, "");
+}
+
+export interface WorkStatusCounts {
+  all: number;
+  open: number;
+  started: number;
+  done: number;
+}
+
+export function buildWorkStatusCounts(items: RepoDashboardWorkItem[]): WorkStatusCounts {
+  const counts: WorkStatusCounts = { all: items.length, open: 0, started: 0, done: 0 };
+  for (const item of items) counts[item.status] += 1;
+  return counts;
+}
+
+export interface DocSourceSummary {
+  path: string;
+  found: boolean;
+  optional: boolean;
+  itemCount: number;
+  openCount: number;
+  contributes: boolean;
+  readWarning?: string;
+}
+
+export function buildDocSourceSummaries(
+  docs: RepoDocFile[],
+  workItems: RepoDashboardWorkItem[],
+): DocSourceSummary[] {
+  return docs.map(doc => {
+    const fromDoc = workItems.filter(i => i.source === "docs" && i.path === doc.path);
+    const openCount = fromDoc.filter(i => i.status !== "done").length;
+    return {
+      path: doc.path,
+      found: doc.found,
+      optional: isOptionalDocPath(doc.path),
+      itemCount: fromDoc.length,
+      openCount,
+      contributes: doc.found && fromDoc.length > 0,
+      readWarning: doc.error ?? undefined,
+    };
+  });
+}
+
+export interface ActivityLegendEntry {
+  role: ActivityActor;
+  label: string;
+  commits: number;
+}
+
+/** Map primary/secondary roles to top commit author display names. */
+export function buildActivityLegend(commits: RepoCommitEntry[]): ActivityLegendEntry[] {
+  const actorMap = buildActivityActorMap(commits);
+  const byRole = new Map<ActivityActor, { label: string; commits: number }>();
+
+  for (const commit of commits) {
+    const role = commitActor(commit, actorMap);
+    if (role === "other") continue;
+    const label = authorLabel(commit);
+    const existing = byRole.get(role);
+    if (!existing) {
+      byRole.set(role, { label, commits: 1 });
+    } else {
+      existing.commits += 1;
+    }
+  }
+
+  const order: ActivityActor[] = ["primary", "secondary"];
+  return order
+    .filter(role => byRole.has(role))
+    .map(role => {
+      const entry = byRole.get(role)!;
+      return { role, label: entry.label, commits: entry.commits };
+    });
+}
+
+export function repoDashboardBrandLabel(repoPath: string): string {
+  const trimmed = repoPath.trim().replace(/\/+$/, "");
+  if (!trimmed) return "repo.dashboard";
+  const segment = trimmed.split("/").pop() || "repository";
+  return `${segment}.repo.state`;
+}
+
+export function ghIssuesKpiLabel(ghAvailable: boolean, ghAuthenticated: boolean): string {
+  if (!ghAvailable) return "gh issues (n/a)";
+  if (!ghAuthenticated) return "gh issues (local-only)";
+  return "open issues (gh)";
 }

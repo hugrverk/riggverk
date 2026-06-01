@@ -2,14 +2,19 @@ import assert from "node:assert/strict";
 import type { RepoCommitEntry } from "../src/types";
 import {
   buildActivityActorMap,
+  buildActivityLegend,
+  buildDocSourceSummaries,
   buildHeatmapCells,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   buildLineChartData,
   buildRemainingByType,
+  buildWorkStatusCounts,
   commitActor,
   eventsFromCommits,
+  ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
+  repoDashboardBrandLabel,
 } from "../src/tools/repoDashboard/model";
 
 function commit(
@@ -86,5 +91,41 @@ for (const row of buildRemainingByType([])) {
 }
 
 assert.equal(normalizeRepoPathForCompare("/repo/"), "/repo");
+
+assert.equal(repoDashboardBrandLabel("/Users/me/Kretsverket"), "Kretsverket.repo.state");
+assert.equal(repoDashboardBrandLabel(""), "repo.dashboard");
+assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
+
+{
+  const counts = buildWorkStatusCounts([
+    {
+      source: "docs",
+      path: "a",
+      text: "x",
+      type: "todo",
+      status: "open",
+      needsPlan: false,
+    },
+    {
+      source: "docs",
+      path: "a",
+      text: "y",
+      type: "todo",
+      status: "done",
+      needsPlan: false,
+    },
+  ]);
+  assert.equal(counts.open, 1);
+  assert.equal(counts.done, 1);
+}
+
+{
+  const legend = buildActivityLegend([
+    commit({ authored_at: 1, author_name: "Alice", author_email: "a@x.com" }),
+    commit({ authored_at: 2, author_name: "Bob", author_email: "b@x.com" }),
+  ]);
+  assert.equal(legend.length, 2);
+  assert.equal(legend[0].label, "Alice");
+}
 
 console.log("Repo Dashboard model checks passed");
