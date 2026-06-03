@@ -5568,11 +5568,11 @@ code {
 .repo-dashboard-page-body {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
   gap: 10px;
   min-height: 0;
   min-width: 0;
   flex: 1;
-  align-content: start;
 }
 
 .repo-dashboard-page-body.has-aside {
@@ -5601,7 +5601,7 @@ code {
   display: flex;
   flex-direction: column;
   min-height: 0;
-  max-height: min(560px, calc(100vh - 220px));
+  flex: 1 1 0;
   overflow: hidden;
 }
 
@@ -5609,7 +5609,8 @@ code {
 .repo-dashboard-scroll-panel .repo-dashboard-latest-content,
 .repo-dashboard-scroll-panel .repo-dashboard-code,
 .repo-dashboard-scroll-panel .repo-dashboard-commit-list,
-.repo-dashboard-scroll-panel .repo-dashboard-plan-groups {
+.repo-dashboard-scroll-panel .repo-dashboard-plan-groups,
+.repo-dashboard-scroll-panel .repo-dashboard-source-docs-list {
   flex: 1;
   min-height: 0;
   overflow: auto;
@@ -5687,6 +5688,8 @@ code {
 
 .repo-dashboard-heat-aside {
   min-width: 0;
+  min-height: 0;
+  flex: 1 1 0;
   overflow: hidden;
   display: flex;
   flex-direction: column;
@@ -5708,6 +5711,8 @@ code {
   flex-direction: column;
   gap: 14px;
   min-width: 0;
+  min-height: 0;
+  overflow: auto;
 }
 
 .repo-dashboard-grid {
@@ -5752,6 +5757,15 @@ code {
 .repo-dashboard-doc-row:last-child {
   border-bottom: none;
   padding-bottom: 0;
+}
+
+.repo-dashboard-source-docs-list {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  padding-right: 2px;
 }
 
 .repo-dashboard-doc-path {
@@ -5954,7 +5968,8 @@ code {
 }
 
 .repo-dashboard-latest-detail {
-  max-height: min(520px, 60vh);
+  /* Intentionally no max-height: the scroll-panel flex contract now sizes this
+     card, while the inner .repo-dashboard-latest-content still scrolls. */
 }
 
 .repo-dashboard-latest-content {
