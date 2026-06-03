@@ -1158,7 +1158,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       latestCommit={latestCommit}
                     />
                   </div>
-                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                  <div className="repo-dashboard-card">
                     <h3 className="font-mono repo-dashboard-panel-title">Changed files at HEAD (local git)</h3>
                     <p className="text-muted small" role="note">
                       {headChangedFilesLabel(snapshot, latestCommit)}. This is not a GitHub PR file list.
@@ -1202,20 +1202,22 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       {docSources.filter(d => d.contributes).length} contributing ·{" "}
                       {docSources.filter(d => d.found).length}/{docSources.length} found
                     </p>
-                    {docSources.map(row => (
-                      <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row">
-                        <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
-                        <span className="prompt-loops-pill">
-                          {!row.found
-                            ? row.optional
-                              ? "optional"
-                              : "missing"
-                            : row.contributes
-                              ? `${row.itemCount} items (${row.openCount} open)`
-                              : "found · 0 items"}
-                        </span>
-                      </div>
-                    ))}
+                    <div className="repo-dashboard-source-docs-list" role="list" aria-label="Source docs list">
+                      {docSources.map(row => (
+                        <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row" role="listitem">
+                          <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
+                          <span className="prompt-loops-pill">
+                            {!row.found
+                              ? row.optional
+                                ? "optional"
+                                : "missing"
+                              : row.contributes
+                                ? `${row.itemCount} items (${row.openCount} open)`
+                                : "found · 0 items"}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                     {parserWarnings.length > 0 && (
                       <pre
                         className="repo-dashboard-code font-mono repo-dashboard-parser-warnings"
