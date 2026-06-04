@@ -18,7 +18,6 @@ import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
-import { AugmentView } from "./views/AugmentView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { deriveInstallState, StartView } from "./views/StartView";
 import { ToolsView } from "./views/ToolsView";
@@ -37,13 +36,12 @@ type View =
   | "opencode"
   | "cursor"
   | "claude"
-  | "augment"
   | "library"
   | "tools"
   | "settings";
 
 function isWorkspaceLoadView(view: View): boolean {
-  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude" || view === "augment";
+  return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude";
 }
 
 /* ---- main app ---- */
@@ -1265,9 +1263,7 @@ function App() {
   const codexRulesEnabled = enabledTargetIds.includes("codex_rules");
   const opencodeRulesEnabled = enabledTargetIds.includes("opencode_rules");
   const claudeRulesEnabled = enabledTargetIds.includes("claude_rules");
-  const auggieRulesEnabled = enabledTargetIds.includes("auggie_rules");
   const claudeAgentsEnabled = enabledTargetIds.includes("claude_agents");
-  const auggieAgentsEnabled = enabledTargetIds.includes("auggie_agents");
   const configTargets = useMemo(
     () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
     [agentTargets],
@@ -1379,14 +1375,6 @@ function App() {
             title="Claude"
           >
             <ToolIcon name="claude" />
-          </button>
-          <button
-            className={`nav-icon ${view === "augment" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("augment")}
-            aria-label="Augment"
-            title="Augment"
-          >
-            <ToolIcon name="augment" />
           </button>
           {/* Library */}
           <button
@@ -1687,49 +1675,6 @@ function App() {
             {...targetSkillsShared}
             onDryRunSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
             onInstallSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
-          />
-        )}
-
-        {view === "augment" && (
-          <AugmentView
-            appSettings={appSettings}
-            agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
-            settingsSaveStatus={settingsSaveStatus}
-            onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            ruleTargetsEnabled={auggieRulesEnabled}
-            agentsTargetsEnabled={auggieAgentsEnabled}
-            agentsStatusLabel={status?.auggie_agents}
-            canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_auggie_rules", "diff augment rules")}
-            onSyncRules={() => runWsAction("sync_auggie_rules", "sync augment rules")}
-            onDiffAgents={() => runWsTask({
-              label: "diff augment agents",
-              action: "diff_auggie_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_auggie_agents" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            onSyncAgents={() => runWsTask({
-              label: "sync augment agents",
-              action: "sync_auggie_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_auggie_agents" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            {...targetSkillsShared}
-            onDryRunSkills={() => runWsInstallForAgents(true, ["auggie"], "install skills dry-run (auggie)")}
-            onInstallSkills={() => runWsInstallForAgents(false, ["auggie"], "install skills (auggie)")}
           />
         )}
 

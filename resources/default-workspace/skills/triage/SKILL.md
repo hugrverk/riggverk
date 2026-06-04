@@ -3,7 +3,7 @@ name: triage
 description: Lightweight solo-developer issue review. Use when the user wants to review, classify, prioritize, or prepare an issue before implementation.
 category: planning
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: diagnose
 ---
 

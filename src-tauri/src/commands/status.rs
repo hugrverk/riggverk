@@ -54,16 +54,11 @@ fn opencode_config_status(root: &Path, home: &Path) -> String {
 enum RuntimeAgentsHarness {
     Opencode,
     Claude,
-    Auggie,
 }
 
 fn runtime_agents_harness_for_target_rel(target_rel: &str) -> RuntimeAgentsHarness {
-    if target_rel.contains("opencode") {
-        RuntimeAgentsHarness::Opencode
-    } else if target_rel.contains(".claude/agents") {
+    if target_rel.contains(".claude/agents") {
         RuntimeAgentsHarness::Claude
-    } else if target_rel.contains(".augment/agents") {
-        RuntimeAgentsHarness::Auggie
     } else {
         RuntimeAgentsHarness::Opencode
     }
@@ -221,12 +216,10 @@ pub struct StatusData {
     latest_commit: String,
     rules_codex: String,
     rules_opencode: String,
-    rules_auggie: String,
     rules_claude: String,
     opencode_config: String,
     opencode_agents: String,
     claude_agents: String,
-    auggie_agents: String,
     config_statuses: std::collections::HashMap<String, String>,
     agents_statuses: std::collections::HashMap<String, String>,
     host_name: String,
@@ -336,11 +329,6 @@ pub fn get_status() -> Result<StatusData, String> {
         .get("claude_agents")
         .cloned()
         .unwrap_or_else(|| "—".into());
-    let auggie_agents_val = agents_statuses
-        .get("auggie_agents")
-        .cloned()
-        .unwrap_or_else(|| "—".into());
-
     Ok(StatusData {
         repo_path: root.to_string_lossy().into_owned(),
         git_available,
@@ -349,12 +337,10 @@ pub fn get_status() -> Result<StatusData, String> {
         latest_commit,
         rules_codex: sync("codex_rules"),
         rules_opencode: sync("opencode_rules"),
-        rules_auggie: sync("auggie_rules"),
         rules_claude: sync("claude_rules"),
         opencode_config: opencode_config_val,
         opencode_agents: opencode_agents_val,
         claude_agents: claude_agents_val,
-        auggie_agents: auggie_agents_val,
         config_statuses,
         agents_statuses,
         host_name: host,

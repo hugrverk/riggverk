@@ -4,7 +4,7 @@ description: Explain unfamiliar code in broader system context. Use when the use
 disable-model-invocation: true
 category: architecture
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: diagnose
 ---
 

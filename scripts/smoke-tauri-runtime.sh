@@ -47,7 +47,6 @@ for var in \
   OPENCODE_TUI_CONFIG_PATH \
   OPENCODE_AGENTS_DIR \
   CLAUDE_AGENTS_DIR \
-  AUGGIE_AGENTS_DIR \
   CURSOR_AGENTS_PATH \
   AGENT_WORKSPACE_BACKUP_DIR; do
   if [ -n "${!var:-}" ]; then
@@ -71,13 +70,12 @@ PLAYWRIGHT_MCP_CONFIG_PATH="$PLAYWRIGHT_CONFIG" \
 PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS" \
   bash "$WORKSPACE/scripts/install-opencode-config.sh" --apply --quiet
 
-step "apply shared runtime agents (opencode, claude, auggie)"
+step "apply shared runtime agents (opencode, claude)"
 OPENCODE_AGENTS_DIR="$HOME/.config/opencode/agents" \
 CLAUDE_AGENTS_DIR="$HOME/.claude/agents" \
-AUGGIE_AGENTS_DIR="$HOME/.augment/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$SMOKE_ROOT/backups" \
   bash "$WORKSPACE/scripts/install-runtime-agents.sh" \
-  --opencode --claude --auggie --apply --quiet
+  --opencode --claude --apply --quiet
 
 step "apply Cursor global agents to temp harness"
 CURSOR_AGENTS_PATH="$HOME/.cursor/agents" \

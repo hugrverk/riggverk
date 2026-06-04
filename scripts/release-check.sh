@@ -245,7 +245,7 @@ for pattern in "placeholder" "No files are written" "future app flows"; do
 done
 
 step "bundled default install-skills.sh help mentions all supported agents"
-for agent in codex opencode claude auggie cursor; do
+for agent in codex opencode claude cursor; do
   if ! bash resources/default-workspace/scripts/install-skills.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-skills.sh --help missing agent: %s\n' "$agent" >&2
     exit 1
@@ -253,7 +253,7 @@ for agent in codex opencode claude auggie cursor; do
 done
 
 step "bundled default install-agent-rules.sh help mentions all supported rule targets"
-for agent in codex opencode claude auggie; do
+for agent in codex opencode claude; do
   if ! bash resources/default-workspace/scripts/install-agent-rules.sh --help 2>&1 | grep -qF "$agent"; then
     printf 'FAIL: install-agent-rules.sh --help missing rule target: %s\n' "$agent" >&2
     exit 1
@@ -1050,38 +1050,34 @@ if ! $config_only_ok; then exit 1; fi
 printf '  install-opencode-config.sh --config-only: config + tui written, agents untouched\n'
 
 step "bundled default install-runtime-agents.sh help mentions supported harnesses"
-for harness in opencode claude auggie; do
+for harness in opencode claude; do
   if ! bash resources/default-workspace/scripts/install-runtime-agents.sh --help 2>&1 | grep -qF "$harness"; then
     printf 'FAIL: install-runtime-agents.sh --help missing harness: %s\n' "$harness" >&2
     exit 1
   fi
 done
 
-step "bundled default install-runtime-agents.sh temp apply (claude + auggie)"
+step "bundled default install-runtime-agents.sh temp apply (claude)"
 tmpdir="$(mktemp -d)"
 CLAUDE_AGENTS_DIR="$tmpdir/claude/agents" \
-AUGGIE_AGENTS_DIR="$tmpdir/augment/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --auggie --apply --quiet >/dev/null
+  bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --apply --quiet >/dev/null
 runtime_ok=true
 for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
-  for dest in "$tmpdir/claude/agents/$agent" "$tmpdir/augment/agents/$agent"; do
-    if [ ! -f "$dest" ]; then
-      printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
-      runtime_ok=false
-    fi
-  done
+  dest="$tmpdir/claude/agents/$agent"
+  if [ ! -f "$dest" ]; then
+    printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
+    runtime_ok=false
+  fi
 done
 rm -rf "$tmpdir"
 if ! $runtime_ok; then exit 1; fi
-printf '  install-runtime-agents.sh: claude + auggie agents written (6 each)\n'
+printf '  install-runtime-agents.sh: claude agents written (6)\n'
 
 step "harness pages use page-scoped agent sync actions"
 for required in \
   'action: "sync_claude_agents"' \
   'action: "diff_claude_agents"' \
-  'action: "sync_auggie_agents"' \
-  'action: "diff_auggie_agents"' \
   'action: "sync_opencode_agents"' \
   'action: "diff_opencode_agents"'; do
   if ! grep -qF "$required" src/App.tsx; then
@@ -1207,7 +1203,6 @@ mkdir -p "$tmpdir/$ts/codex-rules"
 mkdir -p "$tmpdir/$ts/opencode-rules"
 mkdir -p "$tmpdir/$ts/opencode-agents"
 mkdir -p "$tmpdir/$ts/claude-agents"
-mkdir -p "$tmpdir/$ts/auggie-agents"
 # Write test files
 echo "config" > "$tmpdir/$ts/opencode-config/opencode.json"
 echo "rules" > "$tmpdir/$ts/codex-rules/AGENTS.md"
@@ -1215,7 +1210,6 @@ echo "rules" > "$tmpdir/$ts/opencode-rules/AGENTS.md"
 echo "agent" > "$tmpdir/$ts/opencode-agents/architect.md"
 echo "agent" > "$tmpdir/$ts/opencode-agents/scout.md"
 echo "agent" > "$tmpdir/$ts/claude-agents/architect.md"
-echo "agent" > "$tmpdir/$ts/auggie-agents/architect.md"
 
 # Verify the timestamp format is readable by app (via Rust test)
 # We're testing that directories matching YYYYMMDD-HHMMSS are found
@@ -1228,7 +1222,7 @@ fi
 
 # Test list_backups would find these if we had Rust code to test
 # For now, verify directory structure matches what backups.rs expects
-for target_dir in opencode-config codex-rules opencode-rules opencode-agents claude-agents auggie-agents; do
+for target_dir in opencode-config codex-rules opencode-rules opencode-agents claude-agents; do
   if [ ! -d "$tmpdir/$ts/$target_dir" ]; then
     printf 'FAIL: backup schema %s dir not found\n' "$target_dir" >&2
     rm -rf "$tmpdir"
@@ -1236,7 +1230,7 @@ for target_dir in opencode-config codex-rules opencode-rules opencode-agents cla
   fi
 done
 rm -rf "$tmpdir"
-printf '  backup schema verified: YYYYMMDD-HHMMSS + target IDs (opencode-config, codex-rules, opencode-rules, opencode-agents, claude-agents, auggie-agents)\n'
+printf '  backup schema verified: YYYYMMDD-HHMMSS + target IDs (opencode-config, codex-rules, opencode-rules, opencode-agents, claude-agents)\n'
 
 step "tauri app resources config"
 if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
@@ -1325,7 +1319,7 @@ fi
 printf '  private context boundary ok\n'
 
 step "bundled default no private names"
-private_name_pattern="$(printf '%s|' "C""arl" "Dis""chornan" "Disch""örnan" "Hantverks""registret" "Auggie cred""its" "personal mod""el")"
+private_name_pattern="$(printf '%s|' "C""arl" "Dis""chornan" "Disch""örnan" "Hantverks""registret" "Account cred""its" "personal mod""el")"
 private_name_pattern="${private_name_pattern%|}"
 if search_has_match -w "$private_name_pattern" resources/default-workspace; then
   printf 'FAIL: bundled default workspace must not contain private names\n' >&2
@@ -1468,21 +1462,79 @@ print('  lib.rs: no repair_workspace reference')
 "
 printf '  repair command surface is safe (plan/apply only)\n'
 
-step "claude and augment target pages"
-for required in \
-  src/views/ClaudeView.tsx \
-  src/views/AugmentView.tsx \
-  src/assets/augment.svg; do
-  if [ ! -f "$repo_root/$required" ]; then
-    printf 'FAIL: missing %s\n' "$required" >&2
-    exit 1
-  fi
-done
+step "claude harness page present"
+if [ ! -f "$repo_root/src/views/ClaudeView.tsx" ]; then
+  printf 'FAIL: missing src/views/ClaudeView.tsx\n' >&2
+  exit 1
+fi
+if python3 - <<'PY' | grep -q .; then
+import pathlib
+import re
+root = pathlib.Path("src")
+_vendor = bytes([0x61, 0x75, 0x67, 0x6D, 0x65, 0x6E, 0x74]).decode()
+_legacy = bytes([0x61, 0x75, 0x67, 0x67, 0x69, 0x65]).decode()
+pat = re.compile(
+    rf"{_vendor}View|view === [\"']{_vendor}[\"']|switchView\([\"']{_vendor}[\"']\)|{_legacy}_",
+    re.I,
+)
+for path in root.rglob("*"):
+    if not path.is_file():
+        continue
+    if path.suffix not in {".ts", ".tsx", ".css"}:
+        continue
+    text = path.read_text(encoding="utf-8", errors="replace")
+    if pat.search(text):
+        print(path)
+PY
+  printf 'FAIL: removed harness remnants found in src\n' >&2
+  exit 1
+fi
 if search_quiet 'MiscView|TargetMiscSkillsPanel|view === "misc"|switchView\("misc"\)' src; then
   printf 'FAIL: Misc top-level route remnants found in src\n' >&2
   exit 1
 fi
-printf '  claude/augment pages present; no Misc route remnants\n'
+printf '  claude harness present; no removed harness or Misc route remnants\n'
+
+step "regression: no removed third-party harness references in tracked sources"
+if ! python3 - <<'PY'
+import pathlib
+import re
+import sys
+
+_legacy = bytes([0x61, 0x75, 0x67, 0x67, 0x69, 0x65]).decode()
+needles = [
+    _legacy,
+    bytes([0x40, 0x61, 0x75, 0x67, 0x6D, 0x65, 0x6E, 0x74, 0x63, 0x6F, 0x64, 0x65]).decode(),
+    bytes([0x2E, 0x61, 0x75, 0x67, 0x6D, 0x65, 0x6E, 0x74]).decode(),
+    _legacy + "_",
+    _legacy.upper() + "_",
+]
+pat = re.compile("|".join(re.escape(n) for n in needles), re.I)
+skip = {"target", "node_modules", "dist", ".git"}
+hits = []
+for path in pathlib.Path(".").rglob("*"):
+    if not path.is_file():
+        continue
+    if any(part in skip for part in path.parts):
+        continue
+    if path.match("src-tauri/target/**"):
+        continue
+    try:
+        text = path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        continue
+    for match in pat.finditer(text):
+        line = text.count("\n", 0, match.start()) + 1
+        hits.append(f"{path}:{line}:{match.group()}")
+if hits:
+    print("\n".join(hits))
+    sys.exit(1)
+PY
+then
+  printf 'FAIL: unexpected legacy harness references remain (see output above)\n' >&2
+  exit 1
+fi
+printf '  no legacy harness references in tracked product sources\n'
 
 step "regression: deprecated ~/Agent Workspace default not in active app UI"
 if search_has_match '~/Agent Workspace' \

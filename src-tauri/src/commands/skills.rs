@@ -166,7 +166,7 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "auggie", "cursor"];
+const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "cursor"];
 
 fn validate_agent(agent: &str) -> Result<(), String> {
     if VALID_SKILL_AGENTS.contains(&agent) {
@@ -508,7 +508,7 @@ mod tests {
             "frontend-design",
             "frontend",
             "medium",
-            "codex, opencode, claude, auggie",
+            "codex, opencode, claude, cursor",
             "screenshot-review, browser-qa, accessibility-review",
         );
 
@@ -520,7 +520,7 @@ mod tests {
         assert_eq!(s.name, "frontend-design");
         assert_eq!(s.category, "frontend");
         assert_eq!(s.risk, "medium");
-        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "auggie"]);
+        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
         assert_eq!(
             s.related,
             vec!["screenshot-review", "browser-qa", "accessibility-review"]
@@ -536,7 +536,7 @@ mod tests {
             "security-review",
             "security",
             "high",
-            "codex,  opencode , claude,auggie,  ",
+            "codex,  opencode , claude,cursor,  ",
             "diagnose,  ,release-check,",
         );
 
@@ -545,7 +545,7 @@ mod tests {
 
         let s = &skills[0];
         // whitespace trimmed, empty entries removed
-        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "auggie"]);
+        assert_eq!(s.targets, vec!["codex", "opencode", "claude", "cursor"]);
         assert_eq!(s.related, vec!["diagnose", "release-check"]);
     }
 

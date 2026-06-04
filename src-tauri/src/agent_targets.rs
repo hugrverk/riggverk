@@ -24,7 +24,6 @@ impl AgentSyncTarget {
         match self.id {
             "codex_rules" => Some("--codex"),
             "opencode_rules" => Some("--opencode"),
-            "auggie_rules" => Some("--auggie"),
             "claude_rules" => Some("--claude"),
             _ => None,
         }
@@ -57,13 +56,6 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "templates/global-agent-rules.md",
         },
         AgentSyncTarget {
-            id: "auggie_rules",
-            label: "auggie rules",
-            kind: TargetKind::Rules,
-            target_rel: ".augment/rules/global.md",
-            source_rel: "templates/global-agent-rules.md",
-        },
-        AgentSyncTarget {
             id: "claude_rules",
             label: "claude rules",
             kind: TargetKind::Rules,
@@ -82,13 +74,6 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             label: "claude agents",
             kind: TargetKind::Agents,
             target_rel: ".claude/agents",
-            source_rel: "agents",
-        },
-        AgentSyncTarget {
-            id: "auggie_agents",
-            label: "augment agents",
-            kind: TargetKind::Agents,
-            target_rel: ".augment/agents",
             source_rel: "agents",
         },
         AgentSyncTarget {
@@ -146,11 +131,7 @@ pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
 }
 
 pub fn default_enabled_rule_ids() -> Vec<String> {
-    vec![
-        "codex_rules".into(),
-        "opencode_rules".into(),
-        "auggie_rules".into(),
-    ]
+    vec!["codex_rules".into(), "opencode_rules".into()]
 }
 
 pub fn default_enabled_config_ids() -> Vec<String> {
@@ -202,19 +183,12 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec!["claude_rules".into(), "claude_agents".into()],
         },
         TargetProfileMeta {
-            id: "augment".into(),
-            label: "Augment".into(),
-            description: "Augment rules + shared runtime agents".into(),
-            target_ids: vec!["auggie_rules".into(), "auggie_agents".into()],
-        },
-        TargetProfileMeta {
             id: "all_rules".into(),
             label: "All rules".into(),
-            description: "Codex, OpenCode, Auggie, Claude rules + Cursor setup".into(),
+            description: "Codex, OpenCode, Claude rules + Cursor setup".into(),
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
-                "auggie_rules".into(),
                 "claude_rules".into(),
                 "cursor_setup".into(),
             ],
@@ -227,11 +201,9 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
             target_ids: vec![
                 "codex_rules".into(),
                 "opencode_rules".into(),
-                "auggie_rules".into(),
                 "claude_rules".into(),
                 "opencode_agents".into(),
                 "claude_agents".into(),
-                "auggie_agents".into(),
                 "opencode_config".into(),
                 "cursor_setup".into(),
             ],

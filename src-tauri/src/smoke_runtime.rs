@@ -63,12 +63,7 @@ mod tests {
             field(&status, "repo_path").as_str(),
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
-        for key in [
-            "opencode_config",
-            "opencode_agents",
-            "claude_agents",
-            "auggie_agents",
-        ] {
+        for key in ["opencode_config", "opencode_agents", "claude_agents"] {
             assert_eq!(field(&status, key).as_str(), Some("synced"), "{key} status");
         }
 
@@ -110,12 +105,7 @@ mod tests {
         );
 
         let home = std::env::var("HOME").expect("HOME for smoke");
-        for forbidden in [
-            ".config/opencode",
-            ".claude/agents",
-            ".augment/agents",
-            ".cursor/agents",
-        ] {
+        for forbidden in [".config/opencode", ".claude/agents", ".cursor/agents"] {
             let path = PathBuf::from(&home).join(forbidden);
             assert!(
                 path.starts_with(PathBuf::from(&home)),

@@ -16,7 +16,6 @@ Options:
   --diff           Show diffs without writing
   --codex          Select Codex rule target
   --opencode       Select OpenCode rule target
-  --auggie         Select Auggie rule target
   --claude         Select Claude rule target
   --all            Select all rule targets (default)
   --quiet          Print compact app-friendly output
@@ -36,7 +35,6 @@ diff_mode=false
 quiet=false
 codex=false
 opencode=false
-auggie=false
 claude=false
 
 while [ $# -gt 0 ]; do
@@ -47,9 +45,8 @@ while [ $# -gt 0 ]; do
     --help) usage; exit 0 ;;
     --codex) codex=true ;;
     --opencode) opencode=true ;;
-    --auggie) auggie=true ;;
     --claude) claude=true ;;
-    --all) codex=true; opencode=true; auggie=true; claude=true ;;
+    --all) codex=true; opencode=true; claude=true ;;
     *)
       printf 'install-agent-rules.sh: unknown option: %s\n' "$1" >&2
       usage >&2
@@ -59,8 +56,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! $codex && ! $opencode && ! $auggie && ! $claude; then
-  codex=true; opencode=true; auggie=true; claude=true
+if ! $codex && ! $opencode && ! $claude; then
+  codex=true; opencode=true; claude=true
 fi
 
 backup_root() {
@@ -82,7 +79,6 @@ resolve_target() {
   case "$agent_id" in
     codex)    printf '%s' "${CODEX_AGENTS_PATH:-$HOME/.codex/AGENTS.md}" ;;
     opencode) printf '%s' "${OPENCODE_AGENTS_PATH:-$HOME/.config/opencode/AGENTS.md}" ;;
-    auggie)   printf '%s' "${AUGGIE_GLOBAL_PATH:-$HOME/.augment/rules/global.md}" ;;
     claude)   printf '%s' "${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}" ;;
   esac
 }
@@ -91,7 +87,6 @@ target_label() {
   case "$1" in
     codex)    printf 'codex-rules' ;;
     opencode) printf 'opencode-rules' ;;
-    auggie)   printf 'auggie-rules' ;;
     claude)  printf 'claude-rules' ;;
   esac
 }
@@ -178,7 +173,6 @@ exit_code=0
 
 $codex    && handle_target codex    || exit_code=$?
 $opencode && handle_target opencode || exit_code=$?
-$auggie   && handle_target auggie   || exit_code=$?
 $claude   && handle_target claude   || exit_code=$?
 
 exit "$exit_code"

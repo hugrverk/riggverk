@@ -3,7 +3,7 @@
     "architect.md": {
       "role": "Default autonomous implementation architect/orchestrator",
       "summary": "Primary executor for most user tasks. Breaks work into bounded slices, inspects repository reality first, delegates investigation, review, docs, security, and QA work to subagents when useful, implements safe patches, verifies, commits when requested, and reports exact changes.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "medium",
       "default_skills": ["diagnose", "implementation-plan", "agent-report-review"],
       "safe_to_edit_runtime": false,
@@ -16,7 +16,7 @@
     "scout.md": {
       "role": "Repository structure scout",
       "summary": "Explores repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, and risk boundaries before implementation. Read-only.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "low",
       "default_skills": ["zoom-out"],
       "safe_to_edit_runtime": false,
@@ -27,7 +27,7 @@
     "inspector.md": {
       "role": "Post-implementation code inspector/reviewer",
       "summary": "Reviews changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, unnecessary complexity, and mismatch with existing project patterns. Read-only.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "low",
       "default_skills": ["agent-report-review"],
       "safe_to_edit_runtime": false,
@@ -38,7 +38,7 @@
     "sentinel.md": {
       "role": "Security-focused sentinel/auditor",
       "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "high",
       "default_skills": ["security-review", "supabase-rls-review"],
       "safe_to_edit_runtime": false,
@@ -50,7 +50,7 @@
     "scribe.md": {
       "role": "Documentation writer",
       "summary": "Writes README, docs, runbook, QA checklist, changelog, usage notes, operator documentation, setup docs, troubleshooting notes, and project-facing implementation notes when code changes require them.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "low",
       "default_skills": ["write-a-skill", "current-docs"],
       "safe_to_edit_runtime": false,
@@ -61,7 +61,7 @@
     "verifier.md": {
       "role": "QA verifier",
       "summary": "Runs relevant non-destructive verification commands, inspects failures, summarizes evidence, and identifies remaining manual checks. Read-only except for normal test/build artifacts.",
-      "targets": ["opencode", "claude", "auggie"],
+      "targets": ["opencode", "claude"],
       "risk": "low",
       "default_skills": ["browser-qa", "diagnose"],
       "safe_to_edit_runtime": false,

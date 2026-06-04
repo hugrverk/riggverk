@@ -64,7 +64,7 @@ Library → Docs shows a hint when bundled curated docs are absent on disk.
 
 ### Workspace startup
 
-On app startup, the Workspace page loads settings, install/repair diagnostics, and workspace contract status. Skills are loaded in the background for harness pages; skill count, selection, and install live on each tool harness (Codex, OpenCode, Cursor, Claude, Augment), not on Workspace.
+On app startup, the Workspace page loads settings, install/repair diagnostics, and workspace contract status. Skills are loaded in the background for harness pages; skill count, selection, and install live on each tool harness (Codex, OpenCode, Cursor, Claude), not on Workspace.
 
 ### Skill selection
 
@@ -93,7 +93,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
 | `app_font_size` | `"small"` `"medium"` `"large"` | `"medium"` | Global app text size (Settings → Text size). Scales UI typography via root CSS variables. |
 | `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
-| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","auggie_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); changes **autosave** (debounced). `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
+| `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); changes **autosave** (debounced). `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
 
 The settings file is created at the macOS application support path under the current user's `HOME` (`~/Library/Application Support/ai.agentworkspace.app/settings.json`). If `HOME` is unavailable, settings cannot be saved and an error is returned. Loading falls back to defaults when the file is missing or invalid.
 
@@ -108,7 +108,7 @@ Install and repair copy bundled defaults only into the canonical path (`~/.confi
 Primary navigation:
 
 - **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
-- **Harness pages** (Codex, OpenCode, Cursor, Claude, Augment) — per-tool diff/sync/install actions and skills install for that tool.
+- **Harness pages** (Codex, OpenCode, Cursor, Claude) — per-tool diff/sync/install actions and skills install for that tool.
 - **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, legacy sandbox profiles, adapter agents, project rules) stay in the workspace for scripts but are not listed as normal Library docs.
 - **Tools** — native Kretsverket utilities: **Prompt Loops** (copy-ready prompt templates) and **Repo Dashboard** (local-git-first repository insight).
 - **Settings** — appearance, global text size, and theme colors. Target profiles and sync toggles live on harness pages.
@@ -160,7 +160,7 @@ Supported data quality states:
 - Config sync targets are managed through an internal allowlisted config target registry (also in `agent_targets.rs`). Config scripts are mapped by enum, not by frontend-supplied paths.
 - Editable config templates use a narrower allowlist. Cursor setup remains a script-backed sync/status target and is not exposed through the Library Configs editor.
 - **Repo Dashboard** uses a dedicated backend module with fixed `git` and optional fixed `gh` invocations. Repo path is validated and normalized; command strings never come from the frontend.
-- Supported targets: Codex rules + config; OpenCode rules + shared runtime agents + config/TUI; Claude rules + shared runtime agents; Augment rules + shared runtime agents; Cursor adapter global agents (`templates/cursor/agents/`). Rules, agents, config, and skills are separate sync surfaces on harness pages.
+- Supported targets: Codex rules + config; OpenCode rules + shared runtime agents + config/TUI; Claude rules + shared runtime agents; Cursor adapter global agents (`templates/cursor/agents/`). Rules, agents, config, and skills are separate sync surfaces on harness pages.
 
 ### Agent rule sync (scripts/install-agent-rules.sh)
 
@@ -170,7 +170,6 @@ Supported data quality states:
 |------|-------------------------------|
 | `--codex` | `${CODEX_AGENTS_PATH:-$HOME/.codex/AGENTS.md}` |
 | `--opencode` | `${OPENCODE_AGENTS_PATH:-$HOME/.config/opencode/AGENTS.md}` |
-| `--auggie` | `${AUGGIE_GLOBAL_PATH:-$HOME/.augment/rules/global.md}` |
 | `--claude` | `${CLAUDE_RULES_PATH:-$HOME/.claude/CLAUDE.md}` |
 
 On apply, existing diverged rule targets are backed up under `~/Library/Application Support/ai.agentworkspace.app/backups` before overwrite. `AGENT_WORKSPACE_BACKUP_DIR` can override the backup root for testing or advanced local use. Diff and dry-run modes do not create backups.
@@ -183,7 +182,6 @@ On apply, existing diverged rule targets are backed up under `~/Library/Applicat
 |------|------------------|
 | `--opencode` | `${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}` |
 | `--claude` | `${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}` |
-| `--auggie` | `${AUGGIE_AGENTS_DIR:-$HOME/.augment/agents}` |
 
 Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses the global Playwright profile via `install-cursor-workspace.sh --apply-global-profile` (agents, skills, MCP, permissions under `~/.cursor/`).
 
@@ -195,10 +193,9 @@ Global destinations:
 - Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)
 - OpenCode: `$HOME/.config/opencode/skills` (override with `OPENCODE_SKILLS_PATH`)
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
-- Auggie: `$HOME/.augment/skills` (override with `AUGGIE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
-The app installs skills globally only (Codex, OpenCode, Claude, Auggie, Cursor home skill folders). Cursor’s primary workflow applies one global Playwright profile from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), `~/.cursor/mcp.json` (playwright server merge), and `~/.cursor/permissions.json` (`playwright:*` MCP allowlist; shell/terminal stays restricted). User Rules remain manual (`templates/cursor/user-rules.md`). The global profile never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Legacy sandbox JSON templates are debug/copy-only.
+The app installs skills globally only (Codex, OpenCode, Claude, Cursor home skill folders). Cursor’s primary workflow applies one global Playwright profile from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), `~/.cursor/mcp.json` (playwright server merge), and `~/.cursor/permissions.json` (`playwright:*` MCP allowlist; shell/terminal stays restricted). User Rules remain manual (`templates/cursor/user-rules.md`). The global profile never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Legacy sandbox JSON templates are debug/copy-only.
 
 ## Workspace Contract Validator
 
@@ -277,7 +274,6 @@ Resource Intelligence enriches the GUI's understanding of skills and agents with
 │   │   ├── OpenCodeView.tsx     OpenCode harness
 │   │   ├── CursorView.tsx       Cursor harness
 │   │   ├── ClaudeView.tsx       Claude harness
-│   │   ├── AugmentView.tsx      Augment harness
 │   │   ├── LibraryView.tsx      Unified source browser/editor (Docs, Rules, Skills, Agents, Configs)
 │   │   ├── library/BrainSetupContent.tsx  Brain Setup copy-paste surface
 │   │   ├── SettingsView.tsx     Settings view

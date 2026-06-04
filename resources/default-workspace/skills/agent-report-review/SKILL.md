@@ -3,7 +3,7 @@ name: agent-report-review
 description: Review a coding agent final report for completeness, verification quality, risk, missing checks, and the safest next prompt or action.
 category: workflow
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: diagnose, implementation-plan
 ---
 

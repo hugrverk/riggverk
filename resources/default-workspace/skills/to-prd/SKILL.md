@@ -3,7 +3,7 @@ name: to-prd
 description: Convert current context into a concise solo-developer PRD, feature brief, or implementation-ready product spec.
 category: planning
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: implementation-plan
 ---
 

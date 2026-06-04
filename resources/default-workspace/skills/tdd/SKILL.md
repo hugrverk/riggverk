@@ -3,7 +3,7 @@ name: tdd
 description: Use a narrow red -> green -> refactor loop for test-first features, fixes, regressions, and behavior changes.
 category: testing
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: diagnose, implementation-plan
 ---
 

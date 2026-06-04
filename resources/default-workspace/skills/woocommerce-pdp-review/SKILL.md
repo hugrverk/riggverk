@@ -3,7 +3,7 @@ name: woocommerce-pdp-review
 description: Review or improve WooCommerce product detail pages while preserving gallery, variation, stock, price, add-to-cart, tabs, reviews, and responsive behavior.
 category: commerce
 risk: medium
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: wordpress-woocommerce, frontend-design, screenshot-review, browser-qa, accessibility-review
 ---
 

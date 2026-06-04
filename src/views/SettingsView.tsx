@@ -358,7 +358,7 @@ export function SettingsView({
                   </div>
                 )}
                 <p className="settings-path-hint">
-                  Workspace install is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, Claude, and Augment.
+                  Workspace install is on Start. Target profiles and sync toggles are on Codex, OpenCode, Cursor, and Claude.
                 </p>
               </HarnessActionCard>
           </div>

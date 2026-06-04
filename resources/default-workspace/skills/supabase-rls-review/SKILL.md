@@ -3,7 +3,7 @@ name: supabase-rls-review
 description: Review Supabase RLS, auth boundaries, storage policies, service-role usage, and data access risk before or after schema/API changes.
 category: security
 risk: high
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: security-review, database-migrations, nextjs-product-slice
 ---
 

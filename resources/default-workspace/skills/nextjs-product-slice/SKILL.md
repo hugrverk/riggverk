@@ -3,7 +3,7 @@ name: nextjs-product-slice
 description: Implement small Next.js product slices with clear route/component/server boundaries, existing patterns, verification, and low-maintenance diffs.
 category: frontend
 risk: medium
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: implementation-plan, security-review, database-migrations, accessibility-review
 ---
 

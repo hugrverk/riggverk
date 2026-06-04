@@ -21,7 +21,6 @@ When synced, the template is written to tool-specific global rule paths:
 |------|-------------|
 | Codex | `~/.codex/AGENTS.md` |
 | OpenCode | `~/.config/opencode/AGENTS.md` |
-| Auggie | `~/.augment/rules/global.md` |
 | Claude | `~/.claude/CLAUDE.md` |
 
 Cursor global profile sync is separate from this global rules sync. The app writes only global Cursor profile files under `~/.cursor/` and never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
@@ -38,7 +37,6 @@ Bundled runtime agent prompts live in `agents/*.md` (six agents). They are **not
 |------|------------------------|-------------|
 | OpenCode | `~/.config/opencode/agents/*.md` | `scripts/install-runtime-agents.sh --opencode` |
 | Claude Code | `~/.claude/agents/*.md` | `scripts/install-runtime-agents.sh --claude` |
-| Augment | `~/.augment/agents/*.md` | `scripts/install-runtime-agents.sh --auggie` |
 
 Codex custom agents use **TOML** files under `~/.codex/agents/` (see Codex docs), not this shared `.md` set. The app syncs Codex **rules**; Codex config is manual-review only.
 

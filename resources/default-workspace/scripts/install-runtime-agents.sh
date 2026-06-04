@@ -14,7 +14,6 @@ Sync shared runtime agents (agents/*.md) to harness-specific agent directories.
 Targets:
   --opencode   ~/.config/opencode/agents/*.md
   --claude     ~/.claude/agents/*.md (adds name: frontmatter when missing)
-  --auggie     ~/.augment/agents/*.md (adds name: frontmatter when missing)
 
 Options:
   --apply      Write target files
@@ -25,7 +24,6 @@ Options:
 Environment overrides:
   OPENCODE_AGENTS_DIR
   CLAUDE_AGENTS_DIR
-  AUGGIE_AGENTS_DIR
   AGENT_WORKSPACE_BACKUP_DIR
 
 Default mode is dry-run. Use --apply to write files.
@@ -42,7 +40,6 @@ diff_mode=false
 quiet=false
 opencode=false
 claude=false
-auggie=false
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -52,8 +49,7 @@ while [ $# -gt 0 ]; do
     --help) usage; exit 0 ;;
     --opencode) opencode=true ;;
     --claude) claude=true ;;
-    --auggie) auggie=true ;;
-    --all) opencode=true; claude=true; auggie=true ;;
+    --all) opencode=true; claude=true ;;
     *)
       printf 'install-runtime-agents.sh: unknown option: %s\n' "$1" >&2
       usage >&2
@@ -63,10 +59,9 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-if ! $opencode && ! $claude && ! $auggie; then
+if ! $opencode && ! $claude; then
   opencode=true
   claude=true
-  auggie=true
 fi
 
 backup_root() {
@@ -106,7 +101,7 @@ refuse_unsafe_agents_dir() {
     exit 1
   fi
   case "$dir" in
-    /|"$HOME"|"$HOME/"|"$HOME/.config"|"$HOME/.claude"|"$HOME/.augment")
+    /|"$HOME"|"$HOME/"|"$HOME/.config"|"$HOME/.claude")
       printf 'install-runtime-agents.sh: refusing unsafe %s agents dir: %s\n' "$label" "$dir" >&2
       exit 1
       ;;
@@ -121,19 +116,14 @@ resolve_claude_dir() {
   printf '%s' "${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}"
 }
 
-resolve_auggie_dir() {
-  printf '%s' "${AUGGIE_AGENTS_DIR:-$HOME/.augment/agents}"
-}
-
 target_label() {
   case "$1" in
     opencode) printf 'opencode-agents' ;;
     claude) printf 'claude-agents' ;;
-    auggie) printf 'auggie-agents' ;;
   esac
 }
 
-# For Claude/Augment: ensure YAML frontmatter includes name: <stem> when absent.
+# For Claude: ensure YAML frontmatter includes name: <stem> when absent.
 stage_agent_payload() {
   local src="$1" dest="$2" harness="$3"
   if [ "$harness" = "opencode" ]; then
@@ -270,8 +260,5 @@ if $opencode; then
 fi
 if $claude; then
   handle_harness claude "$(resolve_claude_dir)" || exit_code=$?
-fi
-if $auggie; then
-  handle_harness auggie "$(resolve_auggie_dir)" || exit_code=$?
 fi
 exit "$exit_code"

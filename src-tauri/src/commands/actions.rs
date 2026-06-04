@@ -498,18 +498,6 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             run_single_rule_install(&root, "sync_claude_rules", "claude_rules", "--claude", true)
         }
 
-        "diff_auggie_rules" => run_single_rule_install(
-            &root,
-            "diff_auggie_rules",
-            "auggie_rules",
-            "--auggie",
-            false,
-        ),
-
-        "sync_auggie_rules" => {
-            run_single_rule_install(&root, "sync_auggie_rules", "auggie_rules", "--auggie", true)
-        }
-
         "diff_opencode_agents" => {
             if !opencode_agents_enabled() {
                 return Ok(no_enabled_agent_targets("diff_opencode_agents"));
@@ -554,30 +542,6 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 &root,
                 "sync_claude_agents",
                 "--claude",
-                agent_targets::ConfigScriptMode::Apply,
-            )
-        }
-
-        "diff_auggie_agents" => {
-            if !runtime_agent_target_enabled("auggie_agents") {
-                return Ok(no_enabled_agent_targets("diff_auggie_agents"));
-            }
-            run_runtime_agents_install(
-                &root,
-                "diff_auggie_agents",
-                "--auggie",
-                agent_targets::ConfigScriptMode::Diff,
-            )
-        }
-
-        "sync_auggie_agents" => {
-            if !runtime_agent_target_enabled("auggie_agents") {
-                return Ok(no_enabled_agent_targets("sync_auggie_agents"));
-            }
-            run_runtime_agents_install(
-                &root,
-                "sync_auggie_agents",
-                "--auggie",
                 agent_targets::ConfigScriptMode::Apply,
             )
         }

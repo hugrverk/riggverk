@@ -3,7 +3,7 @@ name: wordpress-woocommerce
 description: Work on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration.
 category: commerce
 risk: high
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: woocommerce-pdp-review, security-review, browser-qa, accessibility-review
 ---
 

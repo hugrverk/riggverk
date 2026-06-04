@@ -63,7 +63,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 Each `SKILL.md` frontmatter may include optional metadata fields:
 - `category` — functional area: accessibility, architecture, commerce, database, dependency, diagnosis, docs, frontend, planning, review, security, testing, workflow.
 - `risk` — low, medium, or high.
-- `targets` — comma-separated supported tools: codex, opencode, claude, auggie, cursor.
+- `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
 - `related` — comma-separated related skill names.
 
 These fields are operator guidance only. They do not change runtime behavior, skill loading, or install destinations.

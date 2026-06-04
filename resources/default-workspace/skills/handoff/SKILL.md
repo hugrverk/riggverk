@@ -3,7 +3,7 @@ name: handoff
 description: Use to compact long sessions, paused workflows, branch state, or agent chains into a useful handoff.
 category: workflow
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: agent-report-review, release-check, implementation-plan
 ---
 

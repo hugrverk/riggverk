@@ -11,9 +11,9 @@ The landing page and operations terminal. Shows whether the runtime workspace at
 - **open folder** — open the installed workspace in Finder
 - **VERIFY** — release-check and backup management when the workspace is valid
 
-Sync, diff, and install actions for each agent tool live on that tool's harness page (Codex, OpenCode, Cursor, Claude, Augment), not on Workspace.
+Sync, diff, and install actions for each agent tool live on that tool's harness page (Codex, OpenCode, Cursor, Claude), not on Workspace.
 
-## Harness pages (Codex, OpenCode, Cursor, Claude, Augment)
+## Harness pages (Codex, OpenCode, Cursor, Claude)
 
 Per-tool diff/sync/install actions and skills install for that tool only. Open the harness from the top navigation after the workspace is installed.
 

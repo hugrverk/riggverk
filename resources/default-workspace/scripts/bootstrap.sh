@@ -33,7 +33,6 @@ Options:
   --cursor         Include Cursor workspace setup (not enabled by default)
   --codex          Rule target: Codex (passed to rules script)
   --opencode       Rule target: OpenCode (passed to rules script)
-  --auggie         Rule target: Auggie (passed to rules script)
   --claude         Rule target: Claude (passed to rules script)
   --quiet          Print compact app-friendly output
   --help           Show this help
@@ -79,7 +78,6 @@ while [ $# -gt 0 ]; do
     --cursor-only) cursor_only=true ;;
     --codex)   rule_flags+=(--codex) ;;
     --opencode) rule_flags+=(--opencode) ;;
-    --auggie)   rule_flags+=(--auggie) ;;
     --claude)   rule_flags+=(--claude) ;;
     --agent)
       shift

@@ -3,7 +3,7 @@ name: write-a-skill
 description: Create or revise agent skills with minimal structure. Use when the user wants to add, edit, compress, or review a skill.
 category: workflow
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: context-budget
 ---
 

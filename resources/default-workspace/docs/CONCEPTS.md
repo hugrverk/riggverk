@@ -28,7 +28,7 @@ See [SKILLS.md](SKILLS.md) for the full skill directory contract.
 
 Agent rules define default behavior for coding agents: communication style, modification boundaries, security rules, and verification requirements. The source template is `templates/global-agent-rules.md`.
 
-Rules are synced to tool-specific global rule paths. Each agent tool (OpenCode, Codex, Claude, Auggie) stores rules at a different filesystem path. The `install-agent-rules.sh` script maps rules to each tool.
+Rules are synced to tool-specific global rule paths. Each agent tool (OpenCode, Codex, Claude) stores rules at a different filesystem path. The `install-agent-rules.sh` script maps rules to each tool.
 
 See [AGENT_RULES.md](AGENT_RULES.md).
 
@@ -69,6 +69,6 @@ When apply mode overwrites an existing diverged file, a backup is created first.
 
 ## Brain Setup
 
-Brain Setup is a copy-paste instruction surface for external AI assistants. It teaches skill routing discipline, model/tool recommendation habits, security rules, and verification expectations. It does not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude/Auggie config.
+Brain Setup is a copy-paste instruction surface for external AI assistants. It teaches skill routing discipline, model/tool recommendation habits, security rules, and verification expectations. It does not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude config.
 
 Use Settings for appearance, global text size, and theme colors. Use each harness page to choose rule/config targets for that tool.

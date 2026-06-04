@@ -3,7 +3,7 @@ name: frontend-design
 description: Design or improve frontend UI with a clear aesthetic direction, existing design-system fit, accessibility, verification, and low generic-AI feel.
 category: frontend
 risk: medium
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: screenshot-review, browser-qa, accessibility-review
 ---
 

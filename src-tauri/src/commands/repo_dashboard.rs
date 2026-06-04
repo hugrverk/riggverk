@@ -757,7 +757,8 @@ pub fn inspect_repo(
             MAX_GH_MERGED_PRS
         ));
     }
-    let (open_issues, gh_issues_truncated) = if include_gh && gh_available_flag && gh_authenticated {
+    let (open_issues, gh_issues_truncated) = if include_gh && gh_available_flag && gh_authenticated
+    {
         gh_open_issues(&path)
     } else {
         (Vec::new(), false)
@@ -1092,7 +1093,8 @@ mod tests {
 
     #[test]
     fn truncate_git_log_output_keeps_line_boundary() {
-        let line = "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|deadbee|Ann|a@b.com|1700000000|subject\n";
+        let line =
+            "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef|deadbee|Ann|a@b.com|1700000000|subject\n";
         let mut raw = String::new();
         while raw.len() < MAX_COMMIT_LOG_OUTPUT_BYTES + line.len() {
             raw.push_str(line);
@@ -1100,7 +1102,9 @@ mod tests {
         let (truncated, did) = truncate_git_log_output(raw);
         assert!(did);
         assert!(truncated.len() <= MAX_COMMIT_LOG_OUTPUT_BYTES);
-        assert!(truncated.lines().all(|line| parse_commit_line(line).is_some()));
+        assert!(truncated
+            .lines()
+            .all(|line| parse_commit_line(line).is_some()));
     }
 
     #[test]

@@ -3,7 +3,7 @@ name: prototype
 description: Use for throwaway prototype work before production implementation.
 category: workflow
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: frontend-design, zoom-out, implementation-plan
 ---
 

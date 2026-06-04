@@ -3,7 +3,7 @@ name: release-check
 description: Run a pre-merge or pre-deploy readiness check covering git state, build/test, migrations, env risk, smoke routes, rollback, and unresolved verification gaps.
 category: workflow
 risk: medium
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: security-review, database-migrations
 ---
 

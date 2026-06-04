@@ -53,7 +53,7 @@ After code changes that affect the app, manually check:
 - Settings save/reset works for appearance and theme colors; target changes from harness pages autosave (debounced).
 - Harness Targets panels show profile chips and target toggles per tool.
 - Applying OpenCode profile selects `opencode_rules` + `opencode_config`.
-- Applying All rules selects `codex_rules`, `opencode_rules`, `auggie_rules`, and `claude_rules`.
+- Applying All rules selects `codex_rules`, `opencode_rules`, and `claude_rules`.
 - Applying All supported selects all rule targets plus `opencode_config`.
 - Manual checkbox changes show custom target selection.
 - Save persists selected targets; Reset restores defaults.

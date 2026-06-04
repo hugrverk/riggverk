@@ -7,15 +7,12 @@ use super::workspace::path_arg;
 const ALLOWED_TARGET_IDS: &[&str] = &[
     "codex-rules",
     "opencode-rules",
-    "auggie-rules",
     "claude-rules",
     "opencode-config",
     "opencode-agents",
     "claude-agents",
-    "auggie-agents",
     "codex",
     "opencode",
-    "auggie",
     "claude",
 ];
 
@@ -150,16 +147,13 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
     let rel = match target_id {
         "codex-rules" => ".codex/AGENTS.md",
         "opencode-rules" => ".config/opencode/AGENTS.md",
-        "auggie-rules" => ".augment/rules/global.md",
         "claude-rules" => ".claude/CLAUDE.md",
         "opencode-config" => ".config/opencode/opencode.json",
         "opencode-agents" => ".config/opencode/agents",
         "claude-agents" => ".claude/agents",
-        "auggie-agents" => ".augment/agents",
         // Legacy backwards-compatible IDs (read-only)
         "codex" => ".codex/AGENTS.md",
         "opencode" => ".config/opencode/AGENTS.md",
-        "auggie" => ".augment/rules/global.md",
         "claude" => ".claude/CLAUDE.md",
         _ => return Err(format!("unknown backup target id: {}", target_id)),
     };

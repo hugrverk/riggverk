@@ -4,7 +4,7 @@ description: Stress-test a plan against repo docs and capture confirmed decision
 disable-model-invocation: true
 category: planning
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: grill-me
 ---
 

@@ -3,7 +3,7 @@ name: screenshot-review
 description: Review UI screenshots before implementation. Use when the user provides screenshots or asks for visual audit, layout critique, responsive review, or screenshot-driven frontend improvements.
 category: frontend
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: frontend-design, browser-qa, accessibility-review
 ---
 

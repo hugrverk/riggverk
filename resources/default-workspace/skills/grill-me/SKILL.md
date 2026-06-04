@@ -3,7 +3,7 @@ name: grill-me
 description: Stress-test a plan with bounded high-value questions before execution.
 category: planning
 risk: low
-targets: codex, opencode, claude, auggie
+targets: codex, opencode, claude
 related: grill-with-docs
 ---
 

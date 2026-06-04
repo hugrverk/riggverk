@@ -49,7 +49,7 @@ Run this checklist before sharing a built app bundle with another user.
 
 ## 4. Harness and Library Smoke
 
-- [ ] Codex, OpenCode, Cursor, Claude, Augment nav icons load harness pages
+- [ ] Codex, OpenCode, Cursor, Claude nav icons load harness pages
 - [ ] Harness pages show diff/sync actions when workspace is valid
 - [ ] Skills install UI on harness pages (not Workspace)
 - [ ] Library: Docs, Rules, Skills, Agents, Configs, Brain Setup switch correctly
