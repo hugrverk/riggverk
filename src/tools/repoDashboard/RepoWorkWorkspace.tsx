@@ -1,4 +1,3 @@
-import { useState } from "react";
 import type {
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
@@ -8,8 +7,6 @@ import type { DocWorkLaneId, DocWorkLaneSummary } from "./model";
 import { activeWorkCount, partitionWorkItems, type WorkPartition } from "./model";
 
 const WORK_ITEMS_DISPLAY_CAP = 120;
-
-type WorkLaneView = "active" | "done";
 
 function WorkItemsList({
   items,
@@ -98,11 +95,9 @@ export function RepoWorkWorkspace({
   onUsePromptContext,
   emptyMessage,
 }: RepoWorkWorkspaceProps) {
-  const [laneView, setLaneView] = useState<WorkLaneView>("active");
-
   const partition: WorkPartition = partitionWorkItems(items);
-  const displayedCount =
-    partition.activeStarted.length + partition.activeOpen.length + partition.done.length;
+  const activeTotal = activeWorkCount(partition);
+  const displayedCount = activeTotal + partition.done.length;
   const filtersActive = laneFilter !== "all" || typeFilter !== "all";
 
   return (
@@ -110,27 +105,9 @@ export function RepoWorkWorkspace({
       <header className="repo-dashboard-page-head">
         <h2 className="font-mono repo-dashboard-page-title">Work</h2>
         <p className="text-muted small repo-dashboard-page-desc">
-          Open and started items from docs and gh issues. Use filters to narrow by lane or type.
+          Active and completed items from docs and gh issues. Filters apply to both columns.
         </p>
         <div className="repo-dashboard-page-toolbar">
-          <div className="repo-dashboard-toolbar" role="group" aria-label="Work view">
-            <button
-              type="button"
-              className={`repo-dashboard-seg${laneView === "active" ? " active" : ""}`}
-              aria-pressed={laneView === "active"}
-              onClick={() => setLaneView("active")}
-            >
-              Active ({activeWorkCount(partition)})
-            </button>
-            <button
-              type="button"
-              className={`repo-dashboard-seg${laneView === "done" ? " active" : ""}`}
-              aria-pressed={laneView === "done"}
-              onClick={() => setLaneView("done")}
-            >
-              Done ({partition.done.length})
-            </button>
-          </div>
           <div className="repo-dashboard-work-filters font-mono">
             <label className="repo-dashboard-work-filter">
               <span className="repo-dashboard-work-filter-label">Lane</span>
@@ -177,30 +154,34 @@ export function RepoWorkWorkspace({
             ) : null}
           </div>
           <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
-            {displayedCount} of {totalItemCount} items
-            {laneView === "active"
-              ? ` · started ${partition.activeStarted.length} · open ${partition.activeOpen.length}`
-              : ` · done ${partition.done.length}`}
+            {displayedCount} of {totalItemCount} items · started {partition.activeStarted.length} ·
+            open {partition.activeOpen.length} · active {activeTotal} · done {partition.done.length}
           </p>
         </div>
       </header>
 
-      {laneView === "active" ? (
-        <div className="repo-dashboard-work-columns">
-          <section
-            className="repo-dashboard-work-column"
-            aria-label="Started work"
-            aria-labelledby="repo-dashboard-work-started-title"
+      <div className="repo-dashboard-work-primary-columns">
+        <section
+          className="repo-dashboard-work-column repo-dashboard-work-column-active"
+          aria-label="Active work"
+          aria-labelledby="repo-dashboard-work-active-title"
+        >
+          <h3 id="repo-dashboard-work-active-title" className="font-mono repo-dashboard-work-column-title">
+            Active ({activeTotal})
+          </h3>
+          <div
+            className="repo-dashboard-work-column-scroll"
+            role="region"
+            aria-label="Active work items"
+            tabIndex={0}
           >
-            <h3 id="repo-dashboard-work-started-title" className="font-mono repo-dashboard-work-column-title">
-              Started ({partition.activeStarted.length})
-            </h3>
-            <div
-              className="repo-dashboard-work-column-scroll"
-              role="region"
-              aria-label="Started work items"
-              tabIndex={0}
-            >
+            <div className="repo-dashboard-work-group">
+              <h4
+                id="repo-dashboard-work-started-title"
+                className="font-mono repo-dashboard-work-group-title"
+              >
+                Started ({partition.activeStarted.length})
+              </h4>
               <WorkItemsList
                 items={partition.activeStarted}
                 onUsePromptContext={onUsePromptContext}
@@ -212,22 +193,13 @@ export function RepoWorkWorkspace({
                 }
               />
             </div>
-          </section>
-
-          <section
-            className="repo-dashboard-work-column"
-            aria-label="Open work"
-            aria-labelledby="repo-dashboard-work-open-title"
-          >
-            <h3 id="repo-dashboard-work-open-title" className="font-mono repo-dashboard-work-column-title">
-              Open ({partition.activeOpen.length})
-            </h3>
-            <div
-              className="repo-dashboard-work-column-scroll"
-              role="region"
-              aria-label="Open work items"
-              tabIndex={0}
-            >
+            <div className="repo-dashboard-work-group">
+              <h4
+                id="repo-dashboard-work-open-title"
+                className="font-mono repo-dashboard-work-group-title"
+              >
+                Open ({partition.activeOpen.length})
+              </h4>
               <WorkItemsList
                 items={partition.activeOpen}
                 onUsePromptContext={onUsePromptContext}
@@ -238,9 +210,9 @@ export function RepoWorkWorkspace({
                 }
               />
             </div>
-          </section>
-        </div>
-      ) : (
+          </div>
+        </section>
+
         <section
           className="repo-dashboard-work-column repo-dashboard-work-column-done"
           aria-label="Done work"
@@ -266,7 +238,7 @@ export function RepoWorkWorkspace({
             />
           </div>
         </section>
-      )}
+      </div>
 
       {!displayedCount && emptyMessage ? (
         <p className="text-muted small repo-dashboard-work-empty-note" role="status">

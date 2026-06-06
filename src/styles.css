@@ -6737,7 +6737,8 @@ code {
   .repo-dashboard-grid.cols,
   .repo-dashboard-kpis,
   .repo-dashboard-page-body.has-aside,
-  .repo-dashboard-work-columns {
+  .repo-dashboard-work-columns,
+  .repo-dashboard-work-primary-columns {
     grid-template-columns: 1fr;
     grid-template-rows: repeat(2, minmax(0, 1fr));
   }
@@ -7043,6 +7044,7 @@ code {
   color: var(--text-heading);
 }
 
+.repo-dashboard-work-primary-columns,
 .repo-dashboard-work-columns {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
