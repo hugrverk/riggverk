@@ -145,6 +145,10 @@ export type RepoDashboardWorkStatus = "open" | "started" | "done";
 
 export type RepoDashboardWorkConfidence = "high" | "medium" | "low";
 
+export type RepoDashboardWorkClassification = "bug" | "verify" | "enhancement" | "other";
+
+export type RepoDashboardCanonicalSource = "backlog" | "audit" | "github";
+
 export interface RepoDashboardWorkItem {
   source: "docs" | "issue";
   path: string;
@@ -156,6 +160,16 @@ export interface RepoDashboardWorkItem {
   url?: string;
   section?: string;
   confidence?: RepoDashboardWorkConfidence;
+  /** Canonical queue identifier, e.g. KV-V-001 or ELCAD-AUD-014 */
+  workId?: string;
+  classification?: RepoDashboardWorkClassification;
+  priority?: string;
+  area?: string;
+  nextAction?: string;
+  verification?: string;
+  ownerFiles?: string;
+  docRole?: string;
+  canonicalSource?: RepoDashboardCanonicalSource;
 }
 
 export interface RepoCommitEntry {
