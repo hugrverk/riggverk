@@ -5689,8 +5689,9 @@ code {
 }
 
 .repo-dashboard-overview {
-  --repo-dashboard-overview-lower-height: calc(
-    var(--recent-activity-row-height, 3.35rem) * 10 + 3.25rem
+  --repo-dashboard-overview-lower-height: min(
+    32vh,
+    calc(var(--recent-activity-row-height, 3.35rem) * 7 + 3.25rem)
   );
   display: grid;
   grid-template-columns: minmax(0, 1fr);
@@ -5718,6 +5719,7 @@ code {
 .repo-dashboard-overview > .repo-dashboard-activity-insights {
   grid-row: 2;
   min-height: 0;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -5995,6 +5997,7 @@ code {
   min-width: 0;
   flex: 1 1 0;
   min-height: 0;
+  overflow: hidden;
 }
 
 .repo-dashboard-activity-insights-body > * {
@@ -6004,32 +6007,43 @@ code {
 }
 
 .repo-dashboard-activity-sidebar {
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
   min-width: 0;
   min-height: 0;
   height: 100%;
+  overflow: hidden;
 }
 
 .repo-dashboard-heatmap-panel {
   min-width: 0;
+  min-height: 0;
   border: 1px solid var(--border);
   background: var(--bg-inset);
   border-radius: var(--radius);
   padding: 8px 10px 10px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .repo-dashboard-heatmap-panel-title {
   margin: 0 0 8px;
   font-size: 11px;
   color: var(--text-heading);
+  flex-shrink: 0;
 }
 
 .repo-dashboard-heatmap-panel .repo-dashboard-heatbox {
   border: none;
   background: transparent;
   padding: 0;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 }
 
 .repo-dashboard-heatmap-panel .repo-dashboard-heat-wrap {
@@ -6044,11 +6058,14 @@ code {
 
 .repo-dashboard-contributor-panel {
   min-width: 0;
-  overflow: visible;
+  min-height: 0;
+  overflow: hidden;
   border: 1px solid var(--border);
   background: var(--bg-inset);
   border-radius: var(--radius);
   padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
 }
 
 .repo-dashboard-contributor-panel .repo-dashboard-contributors-table-wrap {
@@ -6072,6 +6089,7 @@ code {
   align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
+  flex-shrink: 0;
 }
 
 .repo-dashboard-activity-chart-footer {
@@ -6126,16 +6144,13 @@ code {
   position: relative;
   flex: 1 1 0;
   min-height: 0;
-  display: flex;
-  flex-direction: column;
 }
 
 .repo-dashboard-activity-insights-svg {
+  position: absolute;
+  inset: 0;
   display: block;
   width: 100%;
-  max-width: 100%;
-  flex: 1 1 0;
-  min-height: 0;
   height: 100%;
 }
 
@@ -6198,6 +6213,7 @@ code {
   justify-content: space-between;
   gap: 8px;
   margin-bottom: 8px;
+  flex-shrink: 0;
 }
 
 .repo-dashboard-contributor-panel-title {
@@ -6237,7 +6253,10 @@ code {
   flex-direction: column;
   gap: 0;
   min-width: 0;
-  overflow: visible;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .repo-dashboard-contributor-visibility-header,
