@@ -5689,21 +5689,42 @@ code {
 }
 
 .repo-dashboard-overview {
+  --repo-dashboard-overview-lower-height: calc(
+    var(--recent-activity-row-height, 3.35rem) * 10 + 3.25rem
+  );
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) var(--repo-dashboard-overview-lower-height);
   gap: 14px;
   width: 100%;
   max-width: 100%;
   min-width: 0;
   min-height: 0;
+  height: 100%;
+  overflow: hidden;
   overflow-x: clip;
-  overflow-y: auto;
 }
 
 .repo-dashboard-overview > * {
   grid-column: 1;
   min-width: 0;
   max-width: 100%;
+}
+
+.repo-dashboard-overview > .repo-dashboard-kpis {
+  grid-row: 1;
+}
+
+.repo-dashboard-overview > .repo-dashboard-activity-insights {
+  grid-row: 2;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.repo-dashboard-overview > .repo-dashboard-overview-lower {
+  grid-row: 3;
+  min-height: 0;
+  max-height: var(--repo-dashboard-overview-lower-height);
 }
 
 .repo-dashboard-grid {
@@ -5899,6 +5920,8 @@ code {
   gap: 14px;
   align-items: stretch;
   width: 100%;
+  min-height: 0;
+  height: 100%;
 }
 
 .repo-dashboard-overview-lower > .repo-dashboard-card {
@@ -5906,7 +5929,9 @@ code {
   flex-direction: column;
   min-width: 0;
   min-height: 0;
-  overflow: visible;
+  height: 100%;
+  max-height: 100%;
+  overflow: hidden;
 }
 
 .repo-dashboard-overview-lower .repo-dashboard-latest-content {
@@ -5997,6 +6022,8 @@ code {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .repo-dashboard-activity-insights-head {
