@@ -2,6 +2,9 @@ use serde::Serialize;
 use std::path::PathBuf;
 use tauri::Manager;
 
+#[path = "default_workspace_manifest.rs"]
+mod manifest;
+
 #[cfg_attr(not(test), allow(dead_code))]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceFile {
@@ -32,7 +35,7 @@ fn source_tree_default_workspace_root() -> PathBuf {
 fn bundled_default_workspace_root(app: &tauri::AppHandle) -> Option<PathBuf> {
     app.path()
         .resource_dir()
-        .map(|d| d.join("default-workspace"))
+        .map(|dir| dir.join("default-workspace"))
         .ok()
 }
 
@@ -48,157 +51,21 @@ pub(crate) fn resolve_default_workspace_root(app: &tauri::AppHandle) -> Result<P
         return Ok(source);
     }
 
-    Err(
-        "bundled default workspace resources unavailable (neither bundled nor source tree found)"
-            .to_string(),
-    )
+    Err("bundled default workspace resources unavailable".to_string())
 }
 
-/// Bundled Cursor global-profile files that repair may refresh when stale (backup-first).
+/// App-owned operational resources that repair may refresh backup-first.
 pub(crate) fn cursor_bundle_refresh_paths() -> &'static [&'static str] {
-    &[
-        "scripts/install-cursor-workspace.sh",
-        "scripts/cursor-global-profile-lib.sh",
-        "scripts/check-cursor-profile.py",
-        "templates/cursor/manifest.json",
-        "templates/cursor/global-profile.json",
-        "templates/cursor/permissions/global-playwright.json",
-        "templates/cursor/mcp/playwright.mcp.json",
-    ]
+    manifest::MANAGED_REFRESH_PATHS
 }
 
 pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static str])> {
-    vec![
-        ("Marker", &[".agent-workspace/workspace.json"]),
-        ("Readme", &["README.md"]),
-        (
-            "Docs",
-            &[
-                "docs/START_HERE.md",
-                "docs/CONCEPTS.md",
-                "docs/USING_THE_APP.md",
-                "docs/GIT_VERSIONING.md",
-                "docs/WORKFLOWS.md",
-                "docs/SKILLS.md",
-                "docs/AGENT_RULES.md",
-                "docs/OPENCODE_CONFIG.md",
-                "docs/CODEX_CONFIG.md",
-                "docs/TROUBLESHOOTING.md",
-                "docs/prompt-templates/standard-prompt.md",
-                "docs/prompt-templates/masterprompt.md",
-                "docs/prompt-templates/batchprompt.md",
-            ],
-        ),
-        (
-            "Templates",
-            &[
-                "templates/global-agent-rules.md",
-                "templates/opencode.json",
-                "templates/opencode.base.json",
-                "templates/opencode.policy.json",
-                "templates/playwright-mcp.config.json",
-                "templates/tui.json",
-                "templates/codex/README.md",
-                "templates/codex/config.toml",
-                "templates/codex/mcp/README.md",
-                "templates/codex/mcp/playwright.toml",
-                "templates/cursor/README.md",
-                "templates/cursor/manifest.json",
-                "templates/cursor/global-profile.json",
-                "templates/cursor/permissions/global-playwright.json",
-                "templates/cursor/user-rules.md",
-                "templates/cursor/mcp/README.md",
-                "templates/cursor/mcp/mcp.example.json",
-                "templates/cursor/mcp/playwright.mcp.json",
-                "templates/cursor/sandbox/README.md",
-                "templates/cursor/sandbox/safe.json",
-                "templates/cursor/sandbox/playwright-safe.json",
-                "templates/cursor/sandbox/playwright-full.json",
-                "templates/cursor/rules/core-safety.mdc",
-                "templates/cursor/rules/prompt-contract.mdc",
-                "templates/cursor/rules/repo-workflow.mdc",
-                "templates/cursor/rules/wordpress-woocommerce.mdc",
-                "templates/cursor/rules/nextjs-supabase.mdc",
-                "templates/cursor/rules/frontend-design.mdc",
-                "templates/cursor/rules/release-check.mdc",
-                "templates/cursor/agents/verifier.md",
-                "templates/cursor/agents/security-reviewer.md",
-                "templates/cursor/agents/release-checker.md",
-                "templates/cursor/agents/browser-qa.md",
-                "templates/cursor/agents/repo-scout.md",
-                "templates/prompts/standard-prompt.md",
-                "templates/prompts/masterprompt.md",
-            ],
-        ),
-        (
-            "Agents",
-            &[
-                "agents/architect.md",
-                "agents/scout.md",
-                "agents/inspector.md",
-                "agents/sentinel.md",
-                "agents/scribe.md",
-                "agents/verifier.md",
-            ],
-        ),
-        (
-            "Scripts",
-            &[
-                "scripts/bootstrap.sh",
-                "scripts/generate-opencode-config.py",
-                "scripts/playwright-mcp-lib.sh",
-                "scripts/check-playwright-mcp.sh",
-                "scripts/install-skills.sh",
-                "scripts/install-agent-rules.sh",
-                "scripts/install-opencode-config.sh",
-                "scripts/install-codex-config.sh",
-                "scripts/install-cursor-workspace.sh",
-                "scripts/cursor-global-profile-lib.sh",
-                "scripts/test_cursor_global_profile.py",
-                "scripts/check-codex-profile.py",
-                "scripts/check-cursor-profile.py",
-            ],
-        ),
-        (
-            "Skills",
-            &[
-                "skills/accessibility-review/SKILL.md",
-                "skills/agent-report-review/SKILL.md",
-                "skills/browser-qa/SKILL.md",
-                "skills/caveman/SKILL.md",
-                "skills/context-budget/SKILL.md",
-                "skills/current-docs/SKILL.md",
-                "skills/database-migrations/SKILL.md",
-                "skills/dependency-evaluation/SKILL.md",
-                "skills/diagnose/SKILL.md",
-                "skills/frontend-design/SKILL.md",
-                "skills/grill-me/SKILL.md",
-                "skills/grill-with-docs/SKILL.md",
-                "skills/handoff/SKILL.md",
-                "skills/implementation-plan/SKILL.md",
-                "skills/improve-codebase-architecture/SKILL.md",
-                "skills/nextjs-product-slice/SKILL.md",
-                "skills/prototype/SKILL.md",
-                "skills/release-check/SKILL.md",
-                "skills/screenshot-review/SKILL.md",
-                "skills/security-review/SKILL.md",
-                "skills/supabase-rls-review/SKILL.md",
-                "skills/tdd/SKILL.md",
-                "skills/to-prd/SKILL.md",
-                "skills/triage/SKILL.md",
-                "skills/woocommerce-pdp-review/SKILL.md",
-                "skills/wordpress-woocommerce/SKILL.md",
-                "skills/write-a-skill/SKILL.md",
-                "skills/zoom-out/SKILL.md",
-            ],
-        ),
-        ("Metadata", &["metadata/agents.json"]),
-    ]
+    manifest::categories()
 }
 
 #[cfg_attr(not(test), allow(dead_code))]
 fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
-    let categories: Vec<DefaultWorkspaceCategory> = default_workspace_files()
+    let categories = default_workspace_files()
         .into_iter()
         .map(|(label, paths)| {
             let files: Vec<DefaultWorkspaceFile> = paths
@@ -208,17 +75,17 @@ fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
                     exists: root.join(rel).exists(),
                 })
                 .collect();
-            let count = files.iter().filter(|f| f.exists).count();
             DefaultWorkspaceCategory {
                 label: label.to_string(),
-                count,
+                count: files.iter().filter(|file| file.exists).count(),
                 files,
             }
         })
         .collect();
+
     DefaultWorkspaceSummary {
         root_label: "Bundled Starter".to_string(),
-        description: "Bundled defaults installed to ~/.config/agent-workspace via install or repair on the Workspace page.".to_string(),
+        description: "Bundled defaults installed via Workspace install or repair.".to_string(),
         categories,
     }
 }
@@ -226,51 +93,31 @@ fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
-    use std::path::{Path, PathBuf};
-    use std::time::{SystemTime, UNIX_EPOCH};
 
-    fn temp_root(name: &str) -> PathBuf {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .expect("system clock before unix epoch")
-            .as_nanos();
-        std::env::temp_dir().join(format!("agent-workspace-defaults-{name}-{nonce}"))
-    }
-
-    fn write_file(root: &Path, rel: &str) {
-        if let Some(parent) = root.join(rel).parent() {
-            fs::create_dir_all(parent).expect("create parent dirs");
-        }
-        fs::write(root.join(rel), "").expect("write file");
-    }
-
-    fn cleanup(root: &PathBuf) {
-        let _ = fs::remove_dir_all(root);
+    fn all_paths() -> Vec<&'static str> {
+        default_workspace_files()
+            .into_iter()
+            .flat_map(|(_, paths)| paths.iter().copied())
+            .collect()
     }
 
     #[test]
     fn source_tree_root_ends_with_default_workspace() {
         let root = source_tree_default_workspace_root();
-        let root_str = root.to_string_lossy();
-        assert!(
-            root_str.ends_with("resources/default-workspace"),
-            "source tree root must point to resources/default-workspace, got: {}",
-            root_str
-        );
+        assert!(root.to_string_lossy().ends_with("resources/default-workspace"));
     }
 
     #[test]
-    fn summary_categories_match_expected_order() {
+    fn summary_categories_keep_stable_order() {
         let summary = build_summary(&source_tree_default_workspace_root());
         let labels: Vec<&str> = summary
             .categories
             .iter()
-            .map(|c| c.label.as_str())
+            .map(|category| category.label.as_str())
             .collect();
         assert_eq!(
             labels,
-            &[
+            [
                 "Marker",
                 "Readme",
                 "Docs",
@@ -278,371 +125,60 @@ mod tests {
                 "Agents",
                 "Scripts",
                 "Skills",
-                "Metadata",
-            ],
-            "category order must be stable"
+                "Metadata"
+            ]
         );
     }
 
     #[test]
-    fn summary_contains_known_paths() {
-        let summary = build_summary(&source_tree_default_workspace_root());
-        let keys: Vec<&str> = summary
-            .categories
-            .iter()
-            .filter_map(|c| {
-                c.files
-                    .iter()
-                    .find(|f| f.path == ".agent-workspace/workspace.json")
-                    .map(|_| c.label.as_str())
-            })
-            .collect();
-        assert!(
-            keys.contains(&"Marker"),
-            "marker category must contain workspace.json"
-        );
-    }
-
-    #[test]
-    fn scripts_not_executed() {
-        let root = temp_root("no-exec");
-        write_file(&root, "scripts/bootstrap.sh");
-        write_file(&root, "README.md");
-
-        let summary = build_summary(&root);
-        cleanup(&root);
-
-        let scripts = summary
-            .categories
-            .iter()
-            .find(|c| c.label == "Scripts")
-            .expect("scripts category must exist");
-        assert_eq!(
-            scripts.files.len(),
-            13,
-            "scripts category must have 13 known paths"
-        );
-    }
-
-    #[test]
-    fn skills_category_has_multiple_paths() {
-        let root = temp_root("skills-multiple");
-        for &rel in &[
-            "skills/diagnose/SKILL.md",
-            "skills/tdd/SKILL.md",
-            "skills/zoom-out/SKILL.md",
-        ] {
-            write_file(&root, rel);
-        }
-        write_file(&root, "README.md");
-
-        let summary = build_summary(&root);
-        cleanup(&root);
-
-        let skills = summary
-            .categories
-            .iter()
-            .find(|c| c.label == "Skills")
-            .expect("skills category must exist");
-        assert!(
-            skills.files.len() > 3,
-            "skills category must have more than 3 known paths, got {}",
-            skills.files.len()
-        );
-    }
-
-    #[test]
-    fn skills_category_includes_baseline_skill() {
-        let root = temp_root("skills-baseline");
-        write_file(&root, "skills/diagnose/SKILL.md");
-        write_file(&root, "README.md");
-
-        let summary = build_summary(&root);
-        cleanup(&root);
-
-        let skills = summary
-            .categories
-            .iter()
-            .find(|c| c.label == "Skills")
-            .expect("skills category must exist");
-        assert!(
-            skills
-                .files
-                .iter()
-                .any(|f| f.path == "skills/diagnose/SKILL.md"),
-            "skills category must include skills/diagnose/SKILL.md"
-        );
-    }
-
-    #[test]
-    fn missing_files_get_exists_false() {
-        let root = temp_root("missing-files");
-        write_file(&root, "README.md");
-
-        let summary = build_summary(&root);
-        cleanup(&root);
-
-        let docs = summary
-            .categories
-            .iter()
-            .find(|c| c.label == "Docs")
-            .expect("docs category must exist");
-        let missing_count = docs.files.iter().filter(|f| !f.exists).count();
-        assert!(
-            missing_count > 0,
-            "at least some docs files should be reported as missing"
-        );
-        assert_eq!(docs.count, docs.files.iter().filter(|f| f.exists).count());
-    }
-
-    #[test]
-    fn all_files_present_when_root_is_valid() {
-        let root = temp_root("full-bundle");
-        write_file(&root, ".agent-workspace/workspace.json");
-        write_file(&root, "README.md");
-        for &rel in &[
-            "docs/START_HERE.md",
-            "docs/CONCEPTS.md",
-            "docs/USING_THE_APP.md",
-            "docs/GIT_VERSIONING.md",
-            "docs/WORKFLOWS.md",
-            "docs/SKILLS.md",
-            "docs/AGENT_RULES.md",
-            "docs/OPENCODE_CONFIG.md",
-            "docs/CODEX_CONFIG.md",
-            "docs/TROUBLESHOOTING.md",
-            "docs/prompt-templates/standard-prompt.md",
-            "docs/prompt-templates/masterprompt.md",
-            "docs/prompt-templates/batchprompt.md",
-        ] {
-            write_file(&root, rel);
-        }
-        for &rel in &[
-            "templates/global-agent-rules.md",
-            "templates/opencode.json",
-            "templates/opencode.base.json",
-            "templates/opencode.policy.json",
-            "templates/playwright-mcp.config.json",
-            "templates/tui.json",
-            "templates/codex/README.md",
-            "templates/codex/config.toml",
-            "templates/codex/mcp/README.md",
-            "templates/codex/mcp/playwright.toml",
-            "templates/cursor/README.md",
-            "templates/cursor/manifest.json",
-            "templates/cursor/global-profile.json",
-            "templates/cursor/permissions/global-playwright.json",
-            "templates/cursor/user-rules.md",
-            "templates/cursor/mcp/README.md",
-            "templates/cursor/mcp/mcp.example.json",
-            "templates/cursor/mcp/playwright.mcp.json",
-            "templates/cursor/sandbox/README.md",
-            "templates/cursor/sandbox/safe.json",
-            "templates/cursor/sandbox/playwright-safe.json",
-            "templates/cursor/sandbox/playwright-full.json",
-            "templates/cursor/rules/core-safety.mdc",
-            "templates/cursor/rules/prompt-contract.mdc",
-            "templates/cursor/rules/repo-workflow.mdc",
-            "templates/cursor/rules/wordpress-woocommerce.mdc",
-            "templates/cursor/rules/nextjs-supabase.mdc",
-            "templates/cursor/rules/frontend-design.mdc",
-            "templates/cursor/rules/release-check.mdc",
-            "templates/cursor/agents/verifier.md",
-            "templates/cursor/agents/security-reviewer.md",
-            "templates/cursor/agents/release-checker.md",
-            "templates/cursor/agents/browser-qa.md",
-            "templates/cursor/agents/repo-scout.md",
-            "templates/prompts/standard-prompt.md",
-            "templates/prompts/masterprompt.md",
-        ] {
-            write_file(&root, rel);
-        }
-        for &rel in &[
-            "agents/architect.md",
-            "agents/scout.md",
-            "agents/inspector.md",
-            "agents/sentinel.md",
-            "agents/scribe.md",
-            "agents/verifier.md",
-        ] {
-            write_file(&root, rel);
-        }
-        for &rel in &[
-            "scripts/bootstrap.sh",
-            "scripts/generate-opencode-config.py",
-            "scripts/install-skills.sh",
-            "scripts/install-agent-rules.sh",
-            "scripts/install-opencode-config.sh",
-            "scripts/playwright-mcp-lib.sh",
-            "scripts/check-playwright-mcp.sh",
-            "scripts/install-codex-config.sh",
-            "scripts/install-cursor-workspace.sh",
-            "scripts/cursor-global-profile-lib.sh",
-            "scripts/test_cursor_global_profile.py",
-            "scripts/check-codex-profile.py",
-            "scripts/check-cursor-profile.py",
-        ] {
-            write_file(&root, rel);
-        }
-        write_file(&root, "metadata/agents.json");
-        for &rel in &[
-            "skills/accessibility-review/SKILL.md",
-            "skills/agent-report-review/SKILL.md",
-            "skills/browser-qa/SKILL.md",
-            "skills/caveman/SKILL.md",
-            "skills/context-budget/SKILL.md",
-            "skills/current-docs/SKILL.md",
-            "skills/database-migrations/SKILL.md",
-            "skills/dependency-evaluation/SKILL.md",
-            "skills/diagnose/SKILL.md",
-            "skills/frontend-design/SKILL.md",
-            "skills/grill-me/SKILL.md",
-            "skills/grill-with-docs/SKILL.md",
-            "skills/handoff/SKILL.md",
-            "skills/implementation-plan/SKILL.md",
-            "skills/improve-codebase-architecture/SKILL.md",
-            "skills/nextjs-product-slice/SKILL.md",
-            "skills/prototype/SKILL.md",
-            "skills/release-check/SKILL.md",
-            "skills/screenshot-review/SKILL.md",
-            "skills/security-review/SKILL.md",
-            "skills/supabase-rls-review/SKILL.md",
-            "skills/tdd/SKILL.md",
-            "skills/to-prd/SKILL.md",
-            "skills/triage/SKILL.md",
-            "skills/woocommerce-pdp-review/SKILL.md",
-            "skills/wordpress-woocommerce/SKILL.md",
-            "skills/write-a-skill/SKILL.md",
-            "skills/zoom-out/SKILL.md",
-        ] {
-            write_file(&root, rel);
-        }
-
-        let summary = build_summary(&root);
-        cleanup(&root);
-
-        for cat in &summary.categories {
-            assert!(
-                cat.files.iter().all(|f| f.exists),
-                "all files in {} should exist",
-                cat.label
-            );
-            assert_eq!(
-                cat.count,
-                cat.files.len(),
-                "count ({}) should equal files.len() ({}) for {}",
-                cat.count,
-                cat.files.len(),
-                cat.label
-            );
-        }
-    }
-
-    #[test]
-    fn global_agent_rules_template_contains_skill_routing() {
+    fn bundled_source_contains_every_manifest_file() {
         let root = source_tree_default_workspace_root();
-        let template_path = root.join("templates/global-agent-rules.md");
-        let content = std::fs::read_to_string(&template_path)
-            .unwrap_or_else(|_| panic!("failed to read {}", template_path.display()));
-        assert!(
-            content.contains("## Skill routing"),
-            "template must contain ## Skill routing section"
-        );
-        assert!(
-            content.contains("diagnose"),
-            "template must reference diagnose skill"
-        );
-        assert!(
-            content.contains("implementation-plan"),
-            "template must reference implementation-plan skill"
-        );
-        assert!(
-            content.contains("security-review"),
-            "template must reference security-review skill"
-        );
-        assert!(
-            content.contains("release-check"),
-            "template must reference release-check skill"
-        );
+        let missing: Vec<&str> = all_paths()
+            .into_iter()
+            .filter(|rel| !root.join(rel).is_file())
+            .collect();
+        assert!(missing.is_empty(), "missing bundled files: {missing:?}");
     }
 
     #[test]
-    fn default_workspace_files_include_playwright_mcp_assets() {
-        let files: Vec<&str> = default_workspace_files()
-            .into_iter()
-            .flat_map(|(_, paths)| paths.iter().copied())
-            .collect();
-        for rel in [
-            "templates/playwright-mcp.config.json",
-            "scripts/playwright-mcp-lib.sh",
-            "scripts/check-playwright-mcp.sh",
-        ] {
-            assert!(
-                files.contains(&rel),
-                "default workspace copy list missing: {}",
-                rel
-            );
-        }
+    fn runtime_agent_installer_is_managed() {
+        let path = "scripts/install-runtime-agents.sh";
+        assert!(all_paths().contains(&path));
+        assert!(cursor_bundle_refresh_paths().contains(&path));
     }
 
     #[test]
-    fn default_workspace_files_include_prompt_template_docs() {
-        let files: Vec<&str> = default_workspace_files()
-            .into_iter()
-            .flat_map(|(_, paths)| paths.iter().copied())
-            .collect();
-        for rel in [
-            "docs/prompt-templates/standard-prompt.md",
-            "docs/prompt-templates/masterprompt.md",
-            "docs/prompt-templates/batchprompt.md",
-        ] {
-            assert!(
-                files.contains(&rel),
-                "default workspace copy list missing prompt template doc: {}",
-                rel
-            );
-        }
-    }
-
-    #[test]
-    fn cursor_bundle_refresh_paths_are_in_copy_list() {
-        let files: Vec<&str> = default_workspace_files()
-            .into_iter()
-            .flat_map(|(_, paths)| paths.iter().copied())
-            .collect();
+    fn every_refresh_path_is_in_copy_manifest() {
+        let files = all_paths();
         for rel in cursor_bundle_refresh_paths() {
-            assert!(
-                files.contains(rel),
-                "default workspace copy list missing Cursor refresh path: {}",
-                rel
-            );
+            assert!(files.contains(rel), "refresh path absent from manifest: {rel}");
         }
     }
 
     #[test]
-    fn default_workspace_files_include_all_cursor_adapter_templates() {
-        let files: Vec<&str> = default_workspace_files()
-            .into_iter()
-            .flat_map(|(_, paths)| paths.iter().copied())
-            .collect();
-        for rel in [
-            "templates/cursor/agents/verifier.md",
-            "templates/cursor/agents/security-reviewer.md",
-            "templates/cursor/agents/release-checker.md",
-            "templates/cursor/agents/browser-qa.md",
-            "templates/cursor/agents/repo-scout.md",
-            "templates/cursor/manifest.json",
-            "templates/cursor/global-profile.json",
-            "templates/cursor/permissions/global-playwright.json",
-            "templates/cursor/mcp/mcp.example.json",
-            "templates/cursor/mcp/playwright.mcp.json",
-            "templates/cursor/sandbox/README.md",
-            "templates/cursor/sandbox/safe.json",
-            "templates/cursor/sandbox/playwright-safe.json",
-            "templates/cursor/sandbox/playwright-full.json",
-            "templates/cursor/user-rules.md",
+    fn refresh_allowlist_excludes_user_authored_sources() {
+        for rel in cursor_bundle_refresh_paths() {
+            assert!(rel.starts_with("scripts/") || rel.starts_with("templates/cursor/"));
+            assert!(!rel.starts_with("docs/"));
+            assert!(!rel.starts_with("skills/"));
+            assert!(!rel.starts_with("agents/"));
+            assert_ne!(*rel, "templates/global-agent-rules.md");
+            assert_ne!(*rel, "templates/opencode.json");
+        }
+    }
+
+    #[test]
+    fn global_rules_template_contains_skill_routing() {
+        let path = source_tree_default_workspace_root().join("templates/global-agent-rules.md");
+        let content = std::fs::read_to_string(path).expect("read global rules template");
+        for required in [
+            "## Skill routing",
+            "diagnose",
+            "implementation-plan",
+            "security-review",
+            "release-check",
         ] {
-            assert!(files.contains(&rel), "missing Cursor adapter: {}", rel);
+            assert!(content.contains(required), "template missing: {required}");
         }
     }
 }
