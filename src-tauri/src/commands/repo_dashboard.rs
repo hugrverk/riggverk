@@ -3,10 +3,20 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::process::run_cmd;
+use crate::commands::process::{run_cmd, run_cmd_bounded, BoundedCmdOptions};
 use crate::path_utils::normalize_user_workspace_path_for_save;
+use std::time::Duration;
+
+const GIT_FETCH_TIMEOUT: Duration = Duration::from_secs(60);
+const GIT_NONINTERACTIVE_ENV: [(&str, &str); 3] = [
+    ("GIT_TERMINAL_PROMPT", "0"),
+    ("GCM_INTERACTIVE", "never"),
+    ("GIT_ASKPASS", ""),
+];
 
 const MAX_GIT_OUTPUT_BYTES: usize = 512 * 1024;
+/// Documented commit history cap (README contract).
+const MAX_COMMITS_LOADED: usize = 500;
 /// Full `git log` for commit history / heatmap (separate from generic git output cap).
 const MAX_COMMIT_LOG_OUTPUT_BYTES: usize = 8 * 1024 * 1024;
 const MAX_DOC_CONTENT_BYTES: usize = 512 * 1024;
@@ -118,11 +128,38 @@ pub struct RepoDashboardSnapshot {
     pub warnings: Vec<String>,
 }
 
-fn truncate_output(raw: String) -> String {
-    if raw.len() <= MAX_GIT_OUTPUT_BYTES {
-        return raw;
+fn truncate_utf8_bytes(raw: String, max_bytes: usize) -> (String, bool) {
+    if raw.len() <= max_bytes {
+        return (raw, false);
     }
-    raw.chars().take(MAX_GIT_OUTPUT_BYTES).collect()
+    let mut end = max_bytes;
+    while end > 0 && !raw.is_char_boundary(end) {
+        end -= 1;
+    }
+    (raw[..end].to_string(), true)
+}
+
+fn truncate_doc_content(content: String) -> (String, bool) {
+    truncate_utf8_bytes(content, MAX_DOC_CONTENT_BYTES)
+}
+
+fn git_run(repo: &Path, args: &[&str], stdout_cap: usize) -> (bool, String, String, bool) {
+    let result = run_cmd_bounded(
+        "git",
+        args,
+        repo,
+        BoundedCmdOptions {
+            stdout_cap,
+            stderr_cap: MAX_GIT_OUTPUT_BYTES,
+            ..BoundedCmdOptions::default()
+        },
+    );
+    (
+        result.success,
+        result.stdout,
+        result.stderr,
+        result.stdout_truncated || result.stderr_truncated,
+    )
 }
 
 fn truncate_git_log_output(raw: String) -> (String, bool) {
@@ -154,8 +191,8 @@ fn resolve_repo_path(raw: &str) -> Result<PathBuf, String> {
 }
 
 fn git_in_repo(repo: &Path, args: &[&str]) -> (bool, String, String) {
-    let (ok, stdout, stderr, _) = run_cmd("git", args, repo);
-    (ok, truncate_output(stdout), truncate_output(stderr))
+    let (ok, stdout, stderr, _) = git_run(repo, args, MAX_GIT_OUTPUT_BYTES);
+    (ok, stdout, stderr)
 }
 
 fn is_git_repo(repo: &Path) -> bool {
@@ -251,35 +288,83 @@ pub(crate) fn parse_commit_line(line: &str) -> Option<RepoCommitEntry> {
 
 fn load_commits(repo: &Path) -> (Vec<RepoCommitEntry>, bool) {
     let format = "%H|%h|%an|%ae|%at|%s";
-    let (ok, stdout, _, _) = run_cmd(
-        "git",
-        &["log", &format!("--pretty=format:{}", format)],
-        repo,
-    );
+    let max_count = (MAX_COMMITS_LOADED + 1).to_string();
+    let (ok, stdout, _, _) = {
+        let result = run_cmd_bounded(
+            "git",
+            &[
+                "log",
+                &format!("--pretty=format:{}", format),
+                "-n",
+                &max_count,
+            ],
+            repo,
+            BoundedCmdOptions {
+                stdout_cap: MAX_COMMIT_LOG_OUTPUT_BYTES,
+                stderr_cap: MAX_GIT_OUTPUT_BYTES,
+                ..BoundedCmdOptions::default()
+            },
+        );
+        (
+            result.success,
+            result.stdout,
+            result.stderr,
+            result.exit_code,
+        )
+    };
     if !ok {
         return (Vec::new(), false);
     }
-    let (stdout, truncated) = truncate_git_log_output(stdout);
-    let commits = stdout.lines().filter_map(parse_commit_line).collect();
-    (commits, truncated)
+    let (stdout, byte_truncated) = truncate_git_log_output(stdout);
+    let mut commits: Vec<RepoCommitEntry> = stdout.lines().filter_map(parse_commit_line).collect();
+    let record_truncated = commits.len() > MAX_COMMITS_LOADED;
+    if record_truncated {
+        commits.truncate(MAX_COMMITS_LOADED);
+    }
+    (commits, record_truncated || byte_truncated)
+}
+
+fn parse_name_status_z(out: &str) -> Vec<RepoChangedFile> {
+    let mut files = Vec::new();
+    let mut tokens = out.split('\0').filter(|token| !token.is_empty());
+    while let Some(status) = tokens.next() {
+        let status_trimmed = status.trim();
+        if status_trimmed.is_empty() {
+            continue;
+        }
+        let first = status_trimmed.chars().next().unwrap_or(' ');
+        if first == 'R' || first == 'C' {
+            let _old_path = tokens.next();
+            let new_path = tokens.next().map(str::trim).filter(|p| !p.is_empty());
+            if let Some(path) = new_path {
+                files.push(RepoChangedFile {
+                    path: path.to_string(),
+                    status: status_trimmed.to_string(),
+                });
+            }
+            continue;
+        }
+        let path = tokens.next().map(str::trim).filter(|p| !p.is_empty());
+        if let Some(path) = path {
+            files.push(RepoChangedFile {
+                path: path.to_string(),
+                status: status_trimmed.to_string(),
+            });
+        }
+    }
+    files
 }
 
 fn load_changed_files(repo: &Path) -> Vec<RepoChangedFile> {
-    let (ok, out, _) = git_in_repo(repo, &["show", "--name-status", "--pretty=format:", "HEAD"]);
+    let (ok, out, _) = git_in_repo(
+        repo,
+        &["show", "--name-status", "-z", "--pretty=format:", "HEAD"],
+    );
     if !ok {
         return Vec::new();
     }
-    out.lines()
-        .filter_map(|line| {
-            let line = line.trim();
-            if line.is_empty() {
-                return None;
-            }
-            let mut parts = line.split_whitespace();
-            let status = parts.next()?.to_string();
-            let path = parts.next()?.to_string();
-            Some(RepoChangedFile { path, status })
-        })
+    parse_name_status_z(&out)
+        .into_iter()
         .take(MAX_CHANGED_FILES)
         .collect()
 }
@@ -512,17 +597,7 @@ fn read_doc_file(repo: &Path, repo_root: Option<&Path>, rel: &str) -> RepoDocFil
 
     match fs::read_to_string(&full) {
         Ok(content) => {
-            let (content, truncated) = if content.len() > MAX_DOC_CONTENT_BYTES {
-                (
-                    content
-                        .chars()
-                        .take(MAX_DOC_CONTENT_BYTES)
-                        .collect::<String>(),
-                    true,
-                )
-            } else {
-                (content, false)
-            };
+            let (content, truncated) = truncate_doc_content(content);
             RepoDocFile {
                 path: rel.to_string(),
                 found: true,
@@ -553,8 +628,10 @@ fn is_safe_git_doc_path(rel: &str) -> bool {
     if normalized.is_empty() || normalized.starts_with('/') {
         return false;
     }
-    if normalized.contains("..") {
-        return false;
+    for component in normalized.split('/') {
+        if component.is_empty() || component == "." || component == ".." {
+            return false;
+        }
     }
     let file_name = normalized.rsplit('/').next().unwrap_or("");
     if file_name.starts_with('.') || !is_markdown_file_name(file_name) {
@@ -590,10 +667,19 @@ fn collect_doc_paths_from_git_listing(listing: &[String]) -> Vec<String> {
     paths
 }
 
-fn git_list_tree_paths(repo: &Path, tree_ref: &str) -> Vec<String> {
-    let (ok, out, _) = git_in_repo(repo, &["ls-tree", "-r", "--name-only", tree_ref]);
+fn git_list_tree_paths(repo: &Path, tree_ref: &str, warnings: &mut Vec<String>) -> Vec<String> {
+    let (ok, out, _, truncated) = git_run(
+        repo,
+        &["ls-tree", "-r", "--name-only", tree_ref],
+        MAX_GIT_OUTPUT_BYTES,
+    );
     if !ok {
         return Vec::new();
+    }
+    if truncated {
+        warnings.push(
+            "Repository documentation listing was truncated; some docs may be missing.".into(),
+        );
     }
     out.lines()
         .map(str::trim)
@@ -622,17 +708,7 @@ fn read_doc_from_git(repo: &Path, tree_ref: &str, rel: &str) -> RepoDocFile {
             },
         );
     }
-    let (content, truncated) = if stdout.len() > MAX_DOC_CONTENT_BYTES {
-        (
-            stdout
-                .chars()
-                .take(MAX_DOC_CONTENT_BYTES)
-                .collect::<String>(),
-            true,
-        )
-    } else {
-        (stdout, false)
-    };
+    let (content, truncated) = truncate_doc_content(stdout);
     RepoDocFile {
         path: rel.to_string(),
         found: true,
@@ -643,8 +719,12 @@ fn read_doc_from_git(repo: &Path, tree_ref: &str, rel: &str) -> RepoDocFile {
     }
 }
 
-fn read_docs_from_git_ref(repo: &Path, tree_ref: &str) -> Vec<RepoDocFile> {
-    let paths = collect_doc_paths_from_git_listing(&git_list_tree_paths(repo, tree_ref));
+fn read_docs_from_git_ref(
+    repo: &Path,
+    tree_ref: &str,
+    warnings: &mut Vec<String>,
+) -> Vec<RepoDocFile> {
+    let paths = collect_doc_paths_from_git_listing(&git_list_tree_paths(repo, tree_ref, warnings));
     paths
         .iter()
         .map(|rel| read_doc_from_git(repo, tree_ref, rel))
@@ -661,12 +741,18 @@ fn git_ref_exists(repo: &Path, git_ref: &str) -> bool {
 }
 
 fn fetch_origin_branch(repo: &Path, branch: &str) -> bool {
-    let (ok, _, _, _) = run_cmd(
+    let result = run_cmd_bounded(
         "git",
         &["fetch", "--quiet", "--prune", "origin", branch],
         repo,
+        BoundedCmdOptions {
+            timeout: Some(GIT_FETCH_TIMEOUT),
+            stdout_cap: MAX_GIT_OUTPUT_BYTES,
+            stderr_cap: MAX_GIT_OUTPUT_BYTES,
+            extra_env: &GIT_NONINTERACTIVE_ENV,
+        },
     );
-    ok
+    result.success && !result.timed_out
 }
 
 struct DocsLoadResult {
@@ -686,7 +772,7 @@ fn load_repository_docs(
         let remote_ref = remote_tracking_ref(&branch);
         let fetch_ok = fetch_origin_branch(repo, &branch);
         if git_ref_exists(repo, &remote_ref) {
-            let docs = read_docs_from_git_ref(repo, &remote_ref);
+            let docs = read_docs_from_git_ref(repo, &remote_ref, warnings);
             if fetch_ok {
                 return DocsLoadResult {
                     docs,
@@ -1808,6 +1894,17 @@ mod tests {
         assert!(!is_safe_git_doc_path("../README.md"));
         assert!(!is_safe_git_doc_path("docs/../SECRET.md"));
         assert!(is_safe_git_doc_path("docs/BACKLOG.md"));
+        assert!(is_safe_git_doc_path("docs/notes..draft.md"));
+    }
+
+    #[test]
+    fn parse_name_status_z_handles_spaces_and_renames() {
+        let files = parse_name_status_z("M\0docs/my file.md\0R100\0old name.md\0new name.md\0");
+        assert_eq!(files.len(), 2);
+        assert_eq!(files[0].path, "docs/my file.md");
+        assert_eq!(files[0].status, "M");
+        assert_eq!(files[1].path, "new name.md");
+        assert!(files[1].status.starts_with('R'));
     }
 
     #[test]
@@ -1851,7 +1948,8 @@ mod tests {
             .status()
             .expect("git commit");
 
-        let docs = read_docs_from_git_ref(&root, "HEAD");
+        let mut warnings = Vec::new();
+        let docs = read_docs_from_git_ref(&root, "HEAD", &mut warnings);
         let readme = docs.iter().find(|d| d.path == "README.md").expect("readme");
         assert!(readme.readable);
         assert_eq!(readme.content, "# remote readme");
