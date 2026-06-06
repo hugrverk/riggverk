@@ -1946,6 +1946,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
         let candidate = repo_path_from_settings(&settings)
             .to_string_lossy()
@@ -1971,6 +1972,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
 
         let candidate = configured_workspace_path(&settings).expect("canonical fallback");
@@ -2021,6 +2023,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
         assert_eq!(
@@ -2052,6 +2055,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
 
         assert!(scrub_stale_workspace_path(&mut settings));
@@ -2072,6 +2076,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
 
         assert!(!scrub_stale_workspace_path(&mut settings));

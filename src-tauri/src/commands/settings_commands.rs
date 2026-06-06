@@ -12,8 +12,11 @@ pub fn get_settings() -> Result<AppSettings, String> {
 }
 
 #[tauri::command]
-pub fn update_settings(settings: AppSettings) -> Result<AppSettings, String> {
-    settings::save(settings)
+pub fn update_settings(
+    settings: AppSettings,
+    expected_revision: Option<u64>,
+) -> Result<AppSettings, String> {
+    settings::save_with_revision_check(settings, expected_revision)
 }
 
 #[tauri::command]

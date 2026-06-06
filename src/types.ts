@@ -101,6 +101,7 @@ export interface AppSettings {
   foreground_color: string | null;
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
+  revision?: number;
 }
 
 export interface RepoDashboardEntry {

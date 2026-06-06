@@ -1,6 +1,10 @@
 use serde::{Deserialize, Serialize};
-use std::fs;
+use std::fs::{self, File};
+use std::io::Write;
 use std::path::PathBuf;
+use std::sync::Mutex;
+
+static SETTINGS_WRITE_MUTEX: Mutex<()> = Mutex::new(());
 
 use super::agent_targets;
 use crate::path_utils::{
@@ -35,6 +39,8 @@ pub struct AppSettings {
     pub repo_dashboard_entries: Vec<RepoDashboardEntry>,
     #[serde(default)]
     pub active_repo_dashboard_id: Option<String>,
+    #[serde(default)]
+    pub revision: u64,
 }
 
 impl Default for AppSettings {
@@ -49,9 +55,12 @@ impl Default for AppSettings {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         }
     }
 }
+
+pub const SETTINGS_CONFLICT_ERROR: &str = "settings conflict";
 
 fn default_app_font_size() -> String {
     "medium".into()
@@ -185,15 +194,50 @@ pub fn load() -> AppSettings {
 }
 
 pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
-    normalize_for_save(&mut settings)?;
+    let _guard = SETTINGS_WRITE_MUTEX
+        .lock()
+        .map_err(|_| "settings lock poisoned".to_string())?;
+    let current = load();
+    settings.revision = current.revision.saturating_add(1);
+    save_inner(&mut settings)
+}
+
+pub fn save_with_revision_check(
+    mut settings: AppSettings,
+    expected_revision: Option<u64>,
+) -> Result<AppSettings, String> {
+    let _guard = SETTINGS_WRITE_MUTEX
+        .lock()
+        .map_err(|_| "settings lock poisoned".to_string())?;
+    let current = load();
+    if let Some(expected) = expected_revision {
+        if current.revision != expected {
+            return Err(SETTINGS_CONFLICT_ERROR.to_string());
+        }
+    }
+    settings.revision = current.revision.saturating_add(1);
+    save_inner(&mut settings)
+}
+
+fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
+    normalize_for_save(settings)?;
 
     let path = settings_file()?;
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("cannot create settings dir: {}", e))?;
     }
-    let json = serde_json::to_string_pretty(&settings).map_err(|e| format!("serialize: {}", e))?;
-    fs::write(&path, json).map_err(|e| format!("write settings: {}", e))?;
-    Ok(settings)
+    let json = serde_json::to_string_pretty(settings).map_err(|e| format!("serialize: {}", e))?;
+    let temp_path = path.with_extension("json.tmp");
+    {
+        let mut file =
+            File::create(&temp_path).map_err(|e| format!("write settings temp: {}", e))?;
+        file.write_all(json.as_bytes())
+            .map_err(|e| format!("write settings temp: {}", e))?;
+        file.sync_all()
+            .map_err(|e| format!("sync settings temp: {}", e))?;
+    }
+    fs::rename(&temp_path, &path).map_err(|e| format!("write settings: {}", e))?;
+    Ok(settings.clone())
 }
 
 fn normalize_loaded_repo_dashboard_entry(entry: &mut RepoDashboardEntry) {
@@ -233,8 +277,16 @@ fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Resul
 
 #[cfg(test)]
 mod tests {
-    use super::{normalize, normalize_for_save, validate_hex_color, AppSettings};
+    use super::{
+        normalize, normalize_for_save, save, save_with_revision_check, validate_hex_color,
+        AppSettings, SETTINGS_CONFLICT_ERROR,
+    };
     use crate::path_utils::is_legacy_default_workspace_path;
+    use std::fs;
+    use std::path::PathBuf;
+    use std::sync::Mutex;
+
+    static HOME_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -247,6 +299,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         }
     }
 
@@ -341,6 +394,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
 
         normalize(&mut settings);
@@ -427,6 +481,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -444,8 +499,65 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            revision: 0,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);
+    }
+
+    fn with_temp_home<F: FnOnce(&PathBuf)>(test: F) {
+        let _guard = HOME_TEST_MUTEX.lock().expect("home test mutex");
+        let dir = std::env::temp_dir().join(format!(
+            "aw-settings-test-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0)
+        ));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).expect("create temp home");
+        let previous_home = std::env::var("HOME").ok();
+        unsafe {
+            std::env::set_var("HOME", &dir);
+        }
+        test(&dir);
+        if let Some(prev) = previous_home {
+            unsafe {
+                std::env::set_var("HOME", prev);
+            }
+        }
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn save_with_revision_check_rejects_stale_revision() {
+        with_temp_home(|_| {
+            let first = save(AppSettings::default()).expect("initial save");
+            assert_eq!(first.revision, 1);
+
+            let mut stale = first.clone();
+            stale.appearance = "light".into();
+            let err = save_with_revision_check(stale, Some(0)).expect_err("stale revision");
+            assert_eq!(err, SETTINGS_CONFLICT_ERROR);
+        });
+    }
+
+    #[test]
+    fn save_writes_valid_json_atomically() {
+        with_temp_home(|dir| {
+            let saved = save(AppSettings::default()).expect("save");
+            assert_eq!(saved.revision, 1);
+
+            let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            assert!(path.is_file());
+            assert!(!dir
+                .join("Library/Application Support/ai.agentworkspace.app/settings.json.tmp")
+                .exists());
+
+            let reloaded: AppSettings =
+                serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
+            assert_eq!(reloaded.revision, 1);
+        });
     }
 }
