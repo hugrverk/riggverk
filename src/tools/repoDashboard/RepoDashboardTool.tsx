@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type ReactNode,
 } from "react";
 import type {
   AppSettings,
@@ -104,7 +103,6 @@ export interface RepoDashboardPromptContextPayload {
 }
 
 interface RepoDashboardToolProps {
-  toolsSwitcher?: ReactNode;
   onUsePromptContext?: (payload: RepoDashboardPromptContextPayload) => void;
   savedEntries?: RepoDashboardEntry[];
   activeEntryId?: string | null;
@@ -112,7 +110,6 @@ interface RepoDashboardToolProps {
 }
 
 export function RepoDashboardTool({
-  toolsSwitcher,
   onUsePromptContext,
   savedEntries: savedEntriesProp = [],
   activeEntryId = null,
@@ -491,14 +488,6 @@ export function RepoDashboardTool({
             </button>
           ))}
         </nav>
-        <footer className="tool-sidebar-footer font-mono">
-          {toolsSwitcher}
-          {snapshot?.gh.available && (
-            <div className="tool-sidebar-status text-muted">
-              gh: {snapshot.gh.authenticated ? "enhanced" : "local-only"}
-            </div>
-          )}
-        </footer>
       </aside>
 
       <section className="repo-dashboard-main">

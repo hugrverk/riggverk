@@ -183,4 +183,28 @@ if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx
   fail "Prompt Loops group select must exist"
 fi
 
+for obsolete in \
+  'ToolsView' \
+  'ToolsSwitcher' \
+  'tools-view' \
+  'tools-switcher-btn' \
+  'tool-sidebar-footer' \
+  'tool-sidebar-hints' \
+  'tool-sidebar-status'; do
+  if rg -n "$obsolete" src --glob '!**/*.test.*' >"$ui_tmp"; then
+    cat "$ui_tmp" >&2
+    fail "obsolete tools UI must not return: $obsolete"
+  fi
+done
+
+if rg -n 'gh:\s*\{snapshot\.gh\.authenticated \? "enhanced"' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "Repo Dashboard sidebar gh status must not return"
+fi
+
+if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "Prompt Loops shortcut hint block must not return"
+fi
+
 printf 'UI regression checks passed\n'

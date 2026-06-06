@@ -9,6 +9,16 @@ import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { EDITABLE_CONFIG_TARGET_IDS, useLibraryController } from "./hooks/useLibraryController";
 import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
+import {
+  savedRepoEntriesFromSettings,
+} from "./lib/useSavedRepoEntriesController";
+import {
+  createPromptLoopContextSeed,
+  isPromptContextEligibleWorkItem,
+  type PromptLoopContextSeed,
+} from "./tools/promptLoops/contextHandoff";
+import { PromptLoopsTool } from "./tools/promptLoops/PromptLoopsTool";
+import { RepoDashboardTool } from "./tools/repoDashboard/RepoDashboardTool";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
@@ -16,7 +26,11 @@ import { OpenCodeView } from "./views/OpenCodeView";
 import { deriveInstallState, StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { InitializeWorkspaceResult, RepairWorkspaceResult } from "./types";
+import type {
+  InitializeWorkspaceResult,
+  RepairWorkspaceResult,
+  RepoDashboardWorkItem,
+} from "./types";
 
 type View = AppHeaderView;
 
@@ -214,6 +228,7 @@ function App() {
     applyTargetProfile,
     activeProfileId,
     clearSettingsMsg,
+    mutateAppSettings,
   } = useAppSettingsController({
     setError,
     appliedWorkspacePathRef,
@@ -296,6 +311,33 @@ function App() {
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
   }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, clearSettingsMsg]);
+
+  // Shared state for the Prompt Loops + Repo Dashboard tools.
+  // Lifted to App so context handoff and saved-repo entry identity stay consistent
+  // regardless of which view the user is currently on.
+  const savedRepoView = useMemo(
+    () => savedRepoEntriesFromSettings(appSettings),
+    [appSettings],
+  );
+  const { entries: savedRepos, activeEntryId: savedReposActiveId, loading: savedReposLoading } = savedRepoView;
+  const [promptContextSeed, setPromptContextSeed] = useState<PromptLoopContextSeed | null>(null);
+  const promptContextSeedRef = useRef(0);
+
+  const handleUsePromptContext = useCallback(
+    (payload: { item: RepoDashboardWorkItem; repoPath: string }) => {
+      if (!isPromptContextEligibleWorkItem(payload.item)) return;
+      promptContextSeedRef.current += 1;
+      setPromptContextSeed(
+        createPromptLoopContextSeed(payload.item, {
+          repoPath: payload.repoPath,
+          savedEntries: savedRepos,
+          seedNonce: promptContextSeedRef.current,
+        }),
+      );
+      setView("prompts");
+    },
+    [savedRepos],
+  );
 
   const runCursorProfileAction = useCallback((action: string, label: string) => {
     runWsTask({
@@ -779,15 +821,20 @@ function App() {
         )}
 
         {view === "prompts" && (
-          <div className="view-placeholder" role="region" aria-label="Prompt Loops">
-            Prompt Loops view
-          </div>
+          <PromptLoopsTool
+            contextSeed={promptContextSeed}
+            savedRepos={savedRepos}
+            savedReposLoading={savedReposLoading}
+          />
         )}
 
         {view === "repo-dashboard" && (
-          <div className="view-placeholder" role="region" aria-label="Repo Dashboard">
-            Repo Dashboard view
-          </div>
+          <RepoDashboardTool
+            onUsePromptContext={handleUsePromptContext}
+            savedEntries={savedRepos}
+            activeEntryId={savedReposActiveId}
+            mutateSavedEntries={mutateAppSettings}
+          />
         )}
 
         {view === "settings" && (

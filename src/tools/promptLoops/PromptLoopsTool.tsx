@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
 import { isEditableEventTarget } from "../../lib/isEditableEventTarget";
 import { useTransientStatus } from "../../lib/useTransientStatus";
@@ -28,14 +28,12 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
 }
 
 interface PromptLoopsToolProps {
-  toolsSwitcher?: ReactNode;
   contextSeed?: PromptLoopContextSeed | null;
   savedRepos?: RepoDashboardEntry[];
   savedReposLoading?: boolean;
 }
 
 export function PromptLoopsTool({
-  toolsSwitcher,
   contextSeed = null,
   savedRepos = [],
   savedReposLoading = false,
@@ -228,14 +226,6 @@ export function PromptLoopsTool({
             </button>
           ))}
         </nav>
-        <footer className="tool-sidebar-footer font-mono">
-          {toolsSwitcher}
-          <div className="tool-sidebar-hints">
-            <div><span className="prompt-loops-pill">1–4</span> group</div>
-            <div><span className="prompt-loops-pill">/</span> search</div>
-            <div><span className="prompt-loops-pill">↑↓</span> navigate</div>
-          </div>
-        </footer>
       </aside>
 
       <section className="prompt-loops-main">

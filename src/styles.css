@@ -106,7 +106,6 @@
 .target-profile-chip:focus-visible,
 .backup-run:focus-visible,
 .ws-map-btn:focus-visible,
-.tools-switcher-btn:focus-visible,
 .prompt-loops-nav-btn:focus-visible,
 .prompt-loops-card:focus-visible,
 .prompt-loops-search input:focus-visible,
@@ -368,11 +367,6 @@ code {
 .view-area > section,
 .view-area > * > section {
   animation: view-enter 0.2s ease-out;
-}
-
-.view-area > .tools-view {
-  flex: 1;
-  min-height: 0;
 }
 
 .view-loading {
@@ -4644,18 +4638,7 @@ code {
   }
 }
 
-/* ── Tools view ── */
-
-.tools-view {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-}
+/* ── Shared tool chrome ── */
 
 .tools-title-dot {
   width: 6px;
@@ -4664,54 +4647,6 @@ code {
   background: var(--bg-inset);
   display: inline-block;
   flex-shrink: 0;
-}
-
-.tools-body {
-  flex: 1;
-  min-height: 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.tools-switcher {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 0;
-  flex-shrink: 0;
-}
-
-.tools-switcher-btn {
-  display: flex;
-  align-items: center;
-  width: 100%;
-  min-height: 30px;
-  padding: 6px 10px;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text-muted);
-  font-size: 12px;
-  text-align: left;
-  cursor: pointer;
-  border-radius: var(--radius);
-  transition: background 0.1s, color 0.1s, border-color 0.1s;
-}
-
-.tools-switcher-btn:hover {
-  color: var(--text);
-  border-color: var(--border);
-  background: var(--bg-panel);
-}
-
-.tools-switcher-btn:focus-visible {
-  outline-offset: 1px;
-}
-
-.tools-switcher-btn-active {
-  color: var(--text-heading);
-  border-color: var(--active-border);
-  background: var(--active-bg);
 }
 
 .prompt-loops-list-pane,
@@ -4813,28 +4748,6 @@ code {
   border-bottom: 1px solid var(--border);
   font-size: 12px;
   color: var(--text-muted);
-}
-
-.tool-sidebar-footer {
-  margin-top: auto;
-  padding: 12px;
-  border-top: 1px solid var(--border);
-  color: var(--text-muted);
-  font-size: 11px;
-  line-height: 1.7;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.tool-sidebar-hints {
-  display: flex;
-  flex-direction: column;
-  gap: 1px;
-}
-
-.tool-sidebar-status {
-  font-size: 11px;
 }
 
 .prompt-loops-pill {
