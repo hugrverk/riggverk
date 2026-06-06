@@ -1,20 +1,13 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "./components/TerminalOutput";
-import { ToolIcon } from "./components/ToolIcon";
-import { confirmLeaveDirtyEditor, dirtyTabClass, dirtyTabAriaLabel } from "./lib/editorGuards";
+import { AppHeaderNav } from "./components/AppHeaderNav";
+import { confirmLeaveDirtyEditor } from "./lib/editorGuards";
 import { buildBrainSetupBlock } from "./lib/brainSetup";
-import {
-  applyThemeSettings,
-  defaultSettings,
-  serializeSettingsForCompare,
-  SETTINGS_AUTOSAVE_DEBOUNCE_MS,
-  type SettingsSaveStatus,
-} from "./lib/settingsDraft";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
-import { isSettingsConflictError } from "./lib/appSettingsMutation";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
+import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
@@ -25,7 +18,7 @@ import { ToolsView } from "./views/ToolsView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const NO_WORKSPACE_TEXT = "no workspace selected";
@@ -231,36 +224,6 @@ function App() {
     }
   }, [activeAgentContent]);
 
-  // settings state
-  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
-  const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
-  const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
-  const savedSettingsRef = useRef<string | null>(null);
-  const settingsRevisionRef = useRef(0);
-  const settingsLoadedRef = useRef(false);
-  const settingsAutosaveInFlightRef = useRef<string | null>(null);
-  const settingsAutosaveSkipRef = useRef(false);
-  const appSettingsRef = useRef<AppSettings | null>(null);
-  const [settingsSaving, setSettingsSaving] = useState(false);
-  const [settingsAutoSaveError, setSettingsAutoSaveError] = useState<string | null>(null);
-
-  const settingsDirty = useMemo(() => {
-    if (!appSettings || savedSettingsRef.current === null) return false;
-    return serializeSettingsForCompare(appSettings) !== savedSettingsRef.current;
-  }, [appSettings]);
-
-  const settingsSaveStatus: SettingsSaveStatus = useMemo(() => {
-    if (settingsAutoSaveError) return "error";
-    if (settingsSaving) return "saving";
-    if (settingsDirty) return "pending";
-    return "saved";
-  }, [settingsAutoSaveError, settingsSaving, settingsDirty]);
-
-  useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
-
   const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
 
   const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
@@ -285,30 +248,6 @@ function App() {
     setLibrarySourceType(type);
     if (type === "configs") fetchStatus();
   }, [librarySourceType, isLibrarySourceDirty, fetchStatus]);
-
-  // initialize active config target from first enabled / first available
-  useEffect(() => {
-    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
-    const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
-    const firstEnabled = targets.find(t => enabledSet.has(t.id));
-    const selected = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
-    if (selected && !activeConfigTargetId) {
-      setActiveConfigTargetId(selected.id);
-    }
-  }, [agentTargets, appSettings, activeConfigTargetId]);
-
-  // fallback when active config target disappears from registry or settings
-  useEffect(() => {
-    if (!activeConfigTargetId) return;
-    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
-    const stillExists = targets.some(t => t.id === activeConfigTargetId);
-    if (!stillExists) {
-      const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
-      const firstEnabled = targets.find(t => enabledSet.has(t.id));
-      const fallback = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
-      setActiveConfigTargetId(fallback?.id ?? "");
-    }
-  }, [agentTargets, appSettings, activeConfigTargetId]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -634,30 +573,6 @@ function App() {
     ]);
   }, [loadSkills, loadDocs, loadAgentSources, fetchStatus, loadOpenCodeRuntimeHealth, loadCursorProfileHealth]);
 
-  const persistActiveWorkspace = useCallback(async (path: string) => {
-    if (!appSettings) return;
-    const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
-    try {
-      const s = await invoke<AppSettings>("try_set_active_workspace_path", { path });
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setAppSettings(s);
-      settingsRevisionRef.current = s.revision ?? 0;
-      appliedWorkspacePathRef.current = s.workspace_path ?? null;
-      savedSettingsRef.current = serializeSettingsForCompare(s);
-      settingsAutosaveSkipRef.current = true;
-      applyThemeSettings(s);
-      setSettingsMsg(null);
-      setSettingsAutoSaveError(null);
-      await Promise.all([
-        loadWorkspaceDiagnostics(generation).catch(() => {}),
-        loadWorkspaceResources(generation),
-      ]);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Activate workspace: ${e}`);
-    }
-  }, [appSettings, beginWorkspaceLoadGeneration, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
-
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
     wsRunning,
@@ -706,6 +621,65 @@ function App() {
     setAgentTemplate(null);
     setConfigTemplateContent(null);
   }, [workspaceActionRequestIdRef, resetTerminalOutput]);
+
+  const {
+    appSettings,
+    settingsMsg,
+    setSettingsMsg,
+    agentTargets,
+    targetProfiles,
+    settingsDirty,
+    settingsSaving,
+    settingsSaveStatus,
+    colorResetKey,
+    loadSettings,
+    persistActiveWorkspace,
+    retrySaveSettings,
+    resetSettings,
+    setAppearance,
+    setAppFontSize,
+    setAccentColor,
+    setBackgroundColor,
+    setForegroundColor,
+    toggleTarget,
+    applyTargetProfile,
+    activeProfileId,
+    clearSettingsMsg,
+  } = useAppSettingsController({
+    setError,
+    appliedWorkspacePathRef,
+    workspaceLoadGenerationRef,
+    isWorkspaceLoadCurrent,
+    beginWorkspaceLoadGeneration,
+    resetWorkspaceBoundState,
+    loadWorkspaceDiagnostics,
+    loadWorkspaceResources,
+    fetchStatus,
+  });
+
+  // initialize active config target from first enabled / first available
+  useEffect(() => {
+    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
+    const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
+    const firstEnabled = targets.find(t => enabledSet.has(t.id));
+    const selected = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
+    if (selected && !activeConfigTargetId) {
+      setActiveConfigTargetId(selected.id);
+    }
+  }, [agentTargets, appSettings, activeConfigTargetId]);
+
+  // fallback when active config target disappears from registry or settings
+  useEffect(() => {
+    if (!activeConfigTargetId) return;
+    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
+    const stillExists = targets.some(t => t.id === activeConfigTargetId);
+    if (!stillExists) {
+      const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
+      const firstEnabled = targets.find(t => enabledSet.has(t.id));
+      const fallback = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
+      setActiveConfigTargetId(fallback?.id ?? "");
+    }
+  }, [agentTargets, appSettings, activeConfigTargetId]);
 
   const runInstallDefaultWorkspace = useCallback(async () => {
     setWorkspaceInstallRunning(true);
@@ -966,217 +940,11 @@ function App() {
     invoke<ActionResult>("open_install_skills_script").catch(e => setError(`Open: ${e}`));
   }, []);
 
-  const loadSettings = useCallback(async () => {
-    try {
-      const [s, targets, profiles] = await Promise.all([
-        invoke<AppSettings>("get_settings"),
-        invoke<AgentTargetMeta[]>("get_agent_targets"),
-        invoke<TargetProfileMeta[]>("get_target_profiles"),
-      ]);
-      if (appliedWorkspacePathRef.current === undefined) {
-        appliedWorkspacePathRef.current = s.workspace_path ?? null;
-      }
-      setAppSettings(s);
-      settingsRevisionRef.current = s.revision ?? 0;
-      savedSettingsRef.current = serializeSettingsForCompare(s);
-      setAgentTargets(targets);
-      setTargetProfiles(profiles);
-      applyThemeSettings(s);
-      setSettingsMsg(null);
-      setSettingsAutoSaveError(null);
-      settingsLoadedRef.current = true;
-    } catch (e) { setError(`Settings: ${e}`); }
-  }, []);
-
   useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   useEffect(() => {
     loadBrainSetupSeed();
   }, [appSettings?.workspace_path, loadBrainSetupSeed]);
-
-  const persistAppSettings = useCallback(async (
-    settings: AppSettings,
-    options?: { bumpColorResetKey?: boolean; announce?: boolean },
-  ): Promise<boolean> => {
-    const serialized = serializeSettingsForCompare(settings);
-    if (settingsAutosaveInFlightRef.current === serialized) return false;
-
-    const nextWorkspacePath = settings.workspace_path ?? null;
-    const workspacePathChanged = appliedWorkspacePathRef.current !== undefined
-      && nextWorkspacePath !== appliedWorkspacePathRef.current;
-    const generation = workspacePathChanged
-      ? beginWorkspaceLoadGeneration(resetWorkspaceBoundState)
-      : workspaceLoadGenerationRef.current;
-
-    settingsAutosaveInFlightRef.current = serialized;
-    setSettingsSaving(true);
-
-    try {
-      const s = await invoke<AppSettings>("update_settings", {
-        settings,
-        expectedRevision: settingsRevisionRef.current,
-      });
-      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return false;
-
-      const latest = appSettingsRef.current;
-      const latestSerialized = latest ? serializeSettingsForCompare(latest) : null;
-      const stillCurrent = latestSerialized === serialized;
-
-      if (stillCurrent) {
-        settingsRevisionRef.current = s.revision ?? 0;
-        setAppSettings(s);
-        appliedWorkspacePathRef.current = s.workspace_path ?? null;
-        savedSettingsRef.current = serializeSettingsForCompare(s);
-        applyThemeSettings(s);
-        if (options?.bumpColorResetKey) setColorResetKey(k => k + 1);
-        setSettingsAutoSaveError(null);
-        if (options?.announce) {
-          setSettingsMsg({ ok: true, text: "settings saved" });
-        } else {
-          setSettingsMsg(null);
-        }
-      }
-
-      if (stillCurrent) {
-        if (workspacePathChanged) {
-          await Promise.all([
-            loadWorkspaceDiagnostics(generation).catch(() => {}),
-            loadWorkspaceResources(generation),
-          ]);
-        } else {
-          fetchStatus(generation);
-          loadWorkspaceDiagnostics(generation);
-        }
-      }
-      return stillCurrent;
-    } catch (e) {
-      const msg = String(e);
-      if (isSettingsConflictError(e)) {
-        try {
-          const latest = await invoke<AppSettings>("get_settings");
-          settingsRevisionRef.current = latest.revision ?? 0;
-          const latestSerialized = serializeSettingsForCompare(latest);
-          const stillCurrent = appSettingsRef.current
-            ? serializeSettingsForCompare(appSettingsRef.current) === serialized
-            : false;
-          if (stillCurrent) {
-            setAppSettings(latest);
-            savedSettingsRef.current = latestSerialized;
-            applyThemeSettings(latest);
-          }
-          setSettingsAutoSaveError("settings conflict — reloaded latest");
-          setSettingsMsg({ ok: false, text: "settings conflict — reloaded latest" });
-        } catch (reloadError) {
-          const reloadMsg = String(reloadError);
-          setSettingsAutoSaveError(reloadMsg);
-          setSettingsMsg({ ok: false, text: reloadMsg });
-        }
-        return false;
-      }
-      setSettingsAutoSaveError(msg);
-      setSettingsMsg({ ok: false, text: msg });
-      return false;
-    } finally {
-      if (settingsAutosaveInFlightRef.current === serialized) {
-        settingsAutosaveInFlightRef.current = null;
-      }
-      setSettingsSaving(false);
-    }
-  }, [beginWorkspaceLoadGeneration, fetchStatus, isWorkspaceLoadCurrent, loadWorkspaceDiagnostics, loadWorkspaceResources]);
-
-  const retrySaveSettings = useCallback(async () => {
-    const current = appSettingsRef.current;
-    if (!current) return;
-    await persistAppSettings(current, { announce: true });
-  }, [persistAppSettings]);
-
-  const resetSettings = useCallback(async () => {
-    const defaults = defaultSettings();
-    settingsAutosaveSkipRef.current = true;
-    const ok = await persistAppSettings(defaults, { bumpColorResetKey: true });
-    if (ok) {
-      setSettingsMsg({ ok: true, text: "reset to defaults" });
-    }
-  }, [persistAppSettings]);
-
-  useEffect(() => {
-    if (!settingsLoadedRef.current) return;
-    const current = appSettingsRef.current;
-    if (!current || savedSettingsRef.current === null) return;
-
-    const serialized = serializeSettingsForCompare(current);
-    if (serialized === savedSettingsRef.current) return;
-    if (settingsAutosaveSkipRef.current) {
-      settingsAutosaveSkipRef.current = false;
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      const latest = appSettingsRef.current;
-      if (!latest || savedSettingsRef.current === null) return;
-      const payload = serializeSettingsForCompare(latest);
-      if (payload === savedSettingsRef.current) return;
-      if (settingsAutosaveInFlightRef.current === payload) return;
-      void persistAppSettings(latest);
-    }, SETTINGS_AUTOSAVE_DEBOUNCE_MS);
-
-    return () => window.clearTimeout(timer);
-  }, [appSettings, persistAppSettings]);
-
-  const setAppearance = useCallback((appearance: AppSettings["appearance"]) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const next = {
-        ...prev,
-        appearance,
-        background_color: null,
-        foreground_color: null,
-      };
-      applyThemeSettings(next);
-      return next;
-    });
-  }, []);
-
-  const setAppFontSize = useCallback((appFontSize: AppSettings["app_font_size"]) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, app_font_size: appFontSize };
-      applyThemeSettings(next);
-      return next;
-    });
-  }, []);
-
-  const setAccentColor = useCallback((accentColor: string | null) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, accent_color: accentColor };
-      applyThemeSettings(next);
-      return next;
-    });
-  }, []);
-
-  const setBackgroundColor = useCallback((backgroundColor: string | null) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, background_color: backgroundColor };
-      applyThemeSettings(next);
-      return next;
-    });
-  }, []);
-
-  const setForegroundColor = useCallback((foregroundColor: string | null) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const next = { ...prev, foreground_color: foregroundColor };
-      applyThemeSettings(next);
-      return next;
-    });
-  }, []);
 
   const switchView = useCallback((v: View) => {
     if (v !== view) {
@@ -1184,7 +952,7 @@ function App() {
       if (isLibraryDirty && !confirmLeaveDirtyEditor()) return;
     }
     setView(v);
-    if (v !== "settings") setSettingsMsg(null);
+    if (v !== "settings") clearSettingsMsg();
     if (isWorkspaceLoadView(v)) {
       loadWorkspaceDiagnostics();
       loadCursorProfileHealth();
@@ -1192,7 +960,7 @@ function App() {
     }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus, clearSettingsMsg]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
@@ -1328,26 +1096,6 @@ function App() {
     onOpenInstallScript: openInstallScript,
   };
 
-  const toggleTarget = useCallback((id: string) => {
-    setSettingsMsg(null);
-    setAppSettings(prev => {
-      if (!prev) return prev;
-      const ids = prev.enabled_target_ids.includes(id)
-        ? prev.enabled_target_ids.filter(x => x !== id)
-        : [...prev.enabled_target_ids, id];
-      return { ...prev, enabled_target_ids: ids };
-    });
-  }, []);
-
-  const [colorResetKey, setColorResetKey] = useState(0);
-
-  const applyTargetProfile = useCallback((profileId: string) => {
-    const profile = targetProfiles.find(p => p.id === profileId);
-    if (!profile) return;
-    setSettingsMsg(null);
-    setAppSettings(prev => prev ? { ...prev, enabled_target_ids: [...profile.target_ids] } : prev);
-  }, [targetProfiles]);
-
   const brainSetupText = useMemo(() => {
     if (brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()) {
       return brainSetupSeed.content;
@@ -1359,114 +1107,14 @@ function App() {
     ? brainSetupSeed.source
     : "generated fallback";
 
-  const activeProfileId = useMemo(() => {
-    if (!appSettings) return null;
-    const currentSet = new Set(appSettings.enabled_target_ids);
-    const match = targetProfiles.find(p => {
-      const profileSet = new Set(p.target_ids);
-      if (profileSet.size !== currentSet.size) return false;
-      for (const id of profileSet) {
-        if (!currentSet.has(id)) return false;
-      }
-      return true;
-    });
-    return match ? match.id : null;
-  }, [appSettings, targetProfiles]);
-
   return (
       <div className="app-shell">
-      <header className="app-header">
-        <div className="app-header-drag-leading" data-tauri-drag-region aria-hidden="true" />
-        <nav className="nav-icons" aria-label="Main navigation" data-tauri-drag-region>
-          <button
-            className={`nav-icon ${view === "start" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("start")}
-            aria-label="Workspace"
-            title="Start"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" />
-            </svg>
-          </button>
-          <button
-            className={`nav-icon ${view === "codex" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("codex")}
-            aria-label="Codex"
-            title="Codex"
-          >
-            <ToolIcon name="codex" />
-          </button>
-          <button
-            className={`nav-icon ${view === "opencode" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("opencode")}
-            aria-label="OpenCode"
-            title="OpenCode"
-          >
-            <ToolIcon name="opencode" />
-          </button>
-          <button
-            className={`nav-icon ${view === "cursor" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("cursor")}
-            aria-label="Cursor"
-            title="Cursor"
-          >
-            <ToolIcon name="cursor" />
-          </button>
-          <button
-            className={`nav-icon ${view === "claude" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("claude")}
-            aria-label="Claude"
-            title="Claude"
-          >
-            <ToolIcon name="claude" />
-          </button>
-          {/* Library */}
-          <button
-            className={`nav-icon ${view === "library" ? "nav-icon-active" : ""}${dirtyTabClass(docDirty || agentTemplateDirty || configDirty || agentDirty)}`}
-            onClick={() => switchView("library")}
-            aria-label={dirtyTabAriaLabel(docDirty || agentTemplateDirty || configDirty || agentDirty, "Library")}
-            title="Library"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M4,19.5A2.5,2.5 0 0,1 6.5,17H20" />
-              <path d="M6.5,2H20v20H6.5A2.5,2.5 0 0,1 4,19.5v-15A2.5,2.5 0 0,1 6.5,2z" />
-              <line x1="8" y1="7" x2="16" y2="7" />
-              <line x1="8" y1="11" x2="14" y2="11" />
-            </svg>
-          </button>
-          {/* Tools */}
-          <button
-            className={`nav-icon ${view === "tools" ? "nav-icon-active" : ""}`}
-            onClick={() => switchView("tools")}
-            aria-label="Tools"
-            title="Tools"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-            </svg>
-          </button>
-          {/* Settings */}
-          <button
-            className={`nav-icon ${view === "settings" ? "nav-icon-active" : ""}${dirtyTabClass(settingsSaveStatus === "error")}`}
-            onClick={() => switchView("settings")}
-            aria-label={dirtyTabAriaLabel(settingsSaveStatus === "error", "Settings")}
-            title="Settings"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <line x1="4" y1="21" x2="4" y2="14" />
-              <line x1="4" y1="10" x2="4" y2="3" />
-              <line x1="12" y1="21" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12" y2="3" />
-              <line x1="20" y1="21" x2="20" y2="16" />
-              <line x1="20" y1="12" x2="20" y2="3" />
-              <line x1="1" y1="14" x2="7" y2="14" />
-              <line x1="9" y1="8" x2="15" y2="8" />
-              <line x1="17" y1="16" x2="23" y2="16" />
-            </svg>
-          </button>
-        </nav>
-        <div className="app-header-drag-trailing" data-tauri-drag-region aria-hidden="true" />
-      </header>
+      <AppHeaderNav
+        view={view}
+        libraryDirty={docDirty || agentTemplateDirty || configDirty || agentDirty}
+        settingsErrored={settingsSaveStatus === "error"}
+        onSwitchView={switchView}
+      />
 
       {error && (
         <div className="error-banner" role="alert">
