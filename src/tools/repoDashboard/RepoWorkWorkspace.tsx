@@ -1,20 +1,128 @@
-import type {
-  RepoDashboardWorkItem,
-  RepoDashboardWorkType,
-} from "../../types";
+import type { RepoDashboardWorkItem, RepoDashboardWorkType } from "../../types";
 import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
-import type { DocWorkLaneId, DocWorkLaneSummary } from "./model";
-import { partitionWorkItems, type WorkPartition } from "./model";
+import type {
+  CanonicalSourceFilter,
+  CanonicalWorkSummary,
+  PriorityFilter,
+  WorkPartition,
+} from "./model";
+import {
+  partitionCanonicalWorkItems,
+  partitionWorkItems,
+  workItemCanonicalSource,
+} from "./model";
 
 const WORK_ITEMS_DISPLAY_CAP = 120;
+
+function sourceBadgeLabel(item: RepoDashboardWorkItem): string {
+  const src = workItemCanonicalSource(item);
+  if (src === "backlog") return "Backlog";
+  if (src === "audit") return "Audit";
+  if (src === "github") return "GitHub";
+  return item.source;
+}
+
+function CanonicalWorkCard({
+  item,
+  onUsePromptContext,
+}: {
+  item: RepoDashboardWorkItem;
+  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
+}) {
+  return (
+    <div className="repo-dashboard-work-item repo-dashboard-work-item-canonical">
+      <div className="repo-dashboard-work-item-head">
+        <span className="repo-dashboard-work-id font-mono">
+          {item.workId ?? item.text.slice(0, 24)}
+        </span>
+        {item.priority ? (
+          <span className="repo-dashboard-chip note">{item.priority}</span>
+        ) : null}
+        <span className="repo-dashboard-chip todo">{sourceBadgeLabel(item)}</span>
+        {item.status === "started" ? (
+          <span className="repo-dashboard-work-status">Started</span>
+        ) : null}
+      </div>
+      {item.area ? (
+        <div className="repo-dashboard-work-area text-muted small">{item.area}</div>
+      ) : null}
+      <div className="repo-dashboard-work-text">{item.text}</div>
+      {item.nextAction ? (
+        <div className="repo-dashboard-work-meta small">
+          <span className="text-muted">Next:</span> {item.nextAction}
+        </div>
+      ) : null}
+      {item.verification ? (
+        <div className="repo-dashboard-work-meta small">
+          <span className="text-muted">Verify:</span> {item.verification}
+        </div>
+      ) : null}
+      <div className="repo-dashboard-work-loc text-muted">
+        {item.path}
+        {item.line ? `:${item.line}` : ""}
+      </div>
+      {onUsePromptContext && isPromptContextEligibleWorkItem(item) ? (
+        <div className="repo-dashboard-work-actions">
+          <button
+            type="button"
+            className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
+            onClick={() => onUsePromptContext(item)}
+            aria-label={`Use ${item.workId ?? "item"} as Prompt Loops context`}
+          >
+            Use as context
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function GenericWorkCard({
+  item,
+  onUsePromptContext,
+}: {
+  item: RepoDashboardWorkItem;
+  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
+}) {
+  return (
+    <div className="repo-dashboard-work-item">
+      <div className="repo-dashboard-work-item-head">
+        <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
+        <span className="repo-dashboard-work-status">{item.status}</span>
+        {item.needsPlan ? (
+          <span className="repo-dashboard-chip todo">needs planning</span>
+        ) : null}
+      </div>
+      <div className="repo-dashboard-work-text font-mono">{item.text}</div>
+      <div className="repo-dashboard-work-loc text-muted">
+        {item.source} · {item.path}
+        {item.line ? `:${item.line}` : ""}
+      </div>
+      {onUsePromptContext && isPromptContextEligibleWorkItem(item) ? (
+        <div className="repo-dashboard-work-actions">
+          <button
+            type="button"
+            className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
+            onClick={() => onUsePromptContext(item)}
+            aria-label={`Use this ${item.type} item as Prompt Loops context`}
+          >
+            Use as context
+          </button>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function WorkItemsList({
   items,
   emptyMessage = "No matching items found.",
+  canonicalMode,
   onUsePromptContext,
 }: {
   items: RepoDashboardWorkItem[];
   emptyMessage?: string;
+  canonicalMode: boolean;
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
   if (!items.length) {
@@ -30,37 +138,21 @@ function WorkItemsList({
         </p>
       ) : null}
       <div className="repo-dashboard-list">
-        {shown.map((item, index) => (
-          <div
-            key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
-            className="repo-dashboard-work-item"
-          >
-            <div className="repo-dashboard-work-item-head">
-              <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
-              <span className="repo-dashboard-work-status">{item.status}</span>
-              {item.needsPlan ? (
-                <span className="repo-dashboard-chip todo">needs planning</span>
-              ) : null}
-            </div>
-            <div className="repo-dashboard-work-text font-mono">{item.text}</div>
-            <div className="repo-dashboard-work-loc text-muted">
-              {item.source} · {item.path}
-              {item.line ? `:${item.line}` : ""}
-            </div>
-            {onUsePromptContext && isPromptContextEligibleWorkItem(item) ? (
-              <div className="repo-dashboard-work-actions">
-                <button
-                  type="button"
-                  className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
-                  onClick={() => onUsePromptContext(item)}
-                  aria-label={`Use this ${item.type} item as Prompt Loops context`}
-                >
-                  Use as context
-                </button>
-              </div>
-            ) : null}
-          </div>
-        ))}
+        {shown.map((item, index) =>
+          canonicalMode ? (
+            <CanonicalWorkCard
+              key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
+              item={item}
+              onUsePromptContext={onUsePromptContext}
+            />
+          ) : (
+            <GenericWorkCard
+              key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
+              item={item}
+              onUsePromptContext={onUsePromptContext}
+            />
+          ),
+        )}
       </div>
     </>
   );
@@ -72,6 +164,7 @@ function WorkColumn({
   count,
   items,
   emptyMessage,
+  canonicalMode,
   onUsePromptContext,
 }: {
   id: string;
@@ -79,6 +172,7 @@ function WorkColumn({
   count: number;
   items: RepoDashboardWorkItem[];
   emptyMessage: string;
+  canonicalMode: boolean;
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
   return (
@@ -98,6 +192,7 @@ function WorkColumn({
       >
         <WorkItemsList
           items={items}
+          canonicalMode={canonicalMode}
           onUsePromptContext={onUsePromptContext}
           emptyMessage={emptyMessage}
         />
@@ -109,11 +204,14 @@ function WorkColumn({
 export interface RepoWorkWorkspaceProps {
   items: RepoDashboardWorkItem[];
   totalItemCount: number;
-  laneFilter: DocWorkLaneId | "all";
+  canonicalMode: boolean;
+  sourceFilter: CanonicalSourceFilter;
+  priorityFilter: PriorityFilter;
   typeFilter: RepoDashboardWorkType | "all";
-  docLaneSummaries: DocWorkLaneSummary[];
   workTypes: RepoDashboardWorkType[];
-  onLaneFilterChange: (lane: DocWorkLaneId | "all") => void;
+  canonicalSummary: CanonicalWorkSummary | null;
+  onSourceFilterChange: (source: CanonicalSourceFilter) => void;
+  onPriorityFilterChange: (priority: PriorityFilter) => void;
   onTypeFilterChange: (type: RepoDashboardWorkType | "all") => void;
   onResetFilters: () => void;
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
@@ -123,20 +221,45 @@ export interface RepoWorkWorkspaceProps {
 export function RepoWorkWorkspace({
   items,
   totalItemCount,
-  laneFilter,
+  canonicalMode,
+  sourceFilter,
+  priorityFilter,
   typeFilter,
-  docLaneSummaries,
   workTypes,
-  onLaneFilterChange,
+  canonicalSummary,
+  onSourceFilterChange,
+  onPriorityFilterChange,
   onTypeFilterChange,
   onResetFilters,
   onUsePromptContext,
   emptyMessage,
 }: RepoWorkWorkspaceProps) {
   const partition: WorkPartition = partitionWorkItems(items);
-  const displayedCount =
-    partition.activeStarted.length + partition.activeOpen.length + partition.done.length;
-  const filtersActive = laneFilter !== "all" || typeFilter !== "all";
+  const canonicalPartition = partitionCanonicalWorkItems(items);
+  const filtersActive = canonicalMode
+    ? sourceFilter !== "all" || priorityFilter !== "all"
+    : typeFilter !== "all";
+
+  const displayedCount = canonicalMode
+    ? items.length
+    : partition.activeStarted.length + partition.activeOpen.length + partition.done.length;
+
+  const columns = canonicalMode
+    ? ([
+        ["Bugs", canonicalPartition.bugs, "repo-dashboard-work-bugs-title", "No open bugs in the canonical queue."],
+        ["Verify", canonicalPartition.verify, "repo-dashboard-work-verify-title", "No verify items in the canonical queue."],
+        [
+          "Enhancements",
+          canonicalPartition.enhancements,
+          "repo-dashboard-work-enhancements-title",
+          "No enhancements in the canonical queue.",
+        ],
+      ] as const)
+    : ([
+        ["Started", partition.activeStarted, "repo-dashboard-work-started-title", "No started work items."],
+        ["Open", partition.activeOpen, "repo-dashboard-work-open-title", "No open work items."],
+        ["Done", partition.done, "repo-dashboard-work-done-title", "No completed work items."],
+      ] as const);
 
   return (
     <div className="repo-dashboard-work-workspace">
@@ -145,44 +268,68 @@ export function RepoWorkWorkspace({
           <div className="repo-dashboard-work-head-text">
             <h2 className="font-mono repo-dashboard-page-title">Work</h2>
             <p className="text-muted small repo-dashboard-page-desc">
-              Started, open, and completed items from docs and gh issues.
+              {canonicalMode
+                ? "Active bugs, verification, and enhancements from canonical queues and open issues."
+                : "Started, open, and completed items from docs and gh issues."}
             </p>
           </div>
           <div className="repo-dashboard-work-filters font-mono">
-            <label className="repo-dashboard-work-filter">
-              <span className="repo-dashboard-work-filter-label">Lane</span>
-              <select
-                className="repo-dashboard-field repo-dashboard-work-filter-select"
-                value={laneFilter}
-                onChange={e => onLaneFilterChange(e.target.value as DocWorkLaneId | "all")}
-                aria-label="Filter by doc lane"
-              >
-                <option value="all">All lanes</option>
-                {docLaneSummaries.map(lane => (
-                  <option key={lane.id} value={lane.id}>
-                    {lane.label} ({lane.open + lane.started})
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="repo-dashboard-work-filter">
-              <span className="repo-dashboard-work-filter-label">Type</span>
-              <select
-                className="repo-dashboard-field repo-dashboard-work-filter-select"
-                value={typeFilter}
-                onChange={e =>
-                  onTypeFilterChange(e.target.value as RepoDashboardWorkType | "all")
-                }
-                aria-label="Filter by work type"
-              >
-                <option value="all">All types</option>
-                {workTypes.map(type => (
-                  <option key={type} value={type}>
-                    {type}
-                  </option>
-                ))}
-              </select>
-            </label>
+            {canonicalMode ? (
+              <>
+                <label className="repo-dashboard-work-filter">
+                  <span className="repo-dashboard-work-filter-label">Source</span>
+                  <select
+                    className="repo-dashboard-field repo-dashboard-work-filter-select"
+                    value={sourceFilter}
+                    onChange={e =>
+                      onSourceFilterChange(e.target.value as CanonicalSourceFilter)
+                    }
+                    aria-label="Filter by work source"
+                  >
+                    <option value="all">All sources</option>
+                    <option value="backlog">Backlog</option>
+                    <option value="audit">Audit</option>
+                    <option value="github">GitHub</option>
+                  </select>
+                </label>
+                <label className="repo-dashboard-work-filter">
+                  <span className="repo-dashboard-work-filter-label">Priority</span>
+                  <select
+                    className="repo-dashboard-field repo-dashboard-work-filter-select"
+                    value={priorityFilter}
+                    onChange={e =>
+                      onPriorityFilterChange(e.target.value as PriorityFilter)
+                    }
+                    aria-label="Filter by priority"
+                  >
+                    <option value="all">All priorities</option>
+                    <option value="high">High</option>
+                    <option value="medium">Medium</option>
+                    <option value="low">Low</option>
+                    <option value="unspecified">Unspecified</option>
+                  </select>
+                </label>
+              </>
+            ) : (
+              <label className="repo-dashboard-work-filter">
+                <span className="repo-dashboard-work-filter-label">Type</span>
+                <select
+                  className="repo-dashboard-field repo-dashboard-work-filter-select"
+                  value={typeFilter}
+                  onChange={e =>
+                    onTypeFilterChange(e.target.value as RepoDashboardWorkType | "all")
+                  }
+                  aria-label="Filter by work type"
+                >
+                  <option value="all">All types</option>
+                  {workTypes.map(type => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
             {filtersActive ? (
               <button
                 type="button"
@@ -196,46 +343,57 @@ export function RepoWorkWorkspace({
         </div>
         <div className="repo-dashboard-work-summary-row">
           <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
-            {displayedCount} of {totalItemCount} items · started {partition.activeStarted.length} ·
-            open {partition.activeOpen.length} · done {partition.done.length}
+            {canonicalMode && canonicalSummary ? (
+              <>
+                {canonicalSummary.displayed} of {canonicalSummary.total} active items · bugs{" "}
+                {canonicalSummary.bugs} · verify {canonicalSummary.verify} · enhancements{" "}
+                {canonicalSummary.enhancements}
+                {canonicalSummary.other ? ` · other ${canonicalSummary.other}` : ""}
+              </>
+            ) : (
+              <>
+                {displayedCount} of {totalItemCount} items · started {partition.activeStarted.length} ·
+                open {partition.activeOpen.length} · done {partition.done.length}
+              </>
+            )}
           </p>
         </div>
       </header>
 
-      <div className="repo-dashboard-work-primary-columns">
-        <WorkColumn
-          id="repo-dashboard-work-started-title"
-          title="Started"
-          count={partition.activeStarted.length}
-          items={partition.activeStarted}
-          onUsePromptContext={onUsePromptContext}
-          emptyMessage={
-            filtersActive
-              ? "No started items match the current filters."
-              : "No started work items."
-          }
-        />
-        <WorkColumn
-          id="repo-dashboard-work-open-title"
-          title="Open"
-          count={partition.activeOpen.length}
-          items={partition.activeOpen}
-          onUsePromptContext={onUsePromptContext}
-          emptyMessage={
-            filtersActive ? "No open items match the current filters." : "No open work items."
-          }
-        />
-        <WorkColumn
-          id="repo-dashboard-work-done-title"
-          title="Done"
-          count={partition.done.length}
-          items={partition.done}
-          onUsePromptContext={onUsePromptContext}
-          emptyMessage={
-            filtersActive ? "No done items match the current filters." : "No completed work items."
-          }
-        />
+      <div
+        className={`repo-dashboard-work-primary-columns${canonicalMode ? " repo-dashboard-work-canonical-columns" : ""}`}
+      >
+        {columns.map(([title, columnItems, columnId, emptyDefault]) => (
+          <WorkColumn
+            key={columnId}
+            id={columnId}
+            title={title}
+            count={columnItems.length}
+            items={columnItems}
+            canonicalMode={canonicalMode}
+            onUsePromptContext={onUsePromptContext}
+            emptyMessage={
+              filtersActive
+                ? `No ${title.toLowerCase()} items match the current filters.`
+                : emptyDefault
+            }
+          />
+        ))}
       </div>
+
+      {canonicalMode && canonicalPartition.other.length ? (
+        <section className="repo-dashboard-work-other-section" aria-label="Other work items">
+          <h3 className="font-mono repo-dashboard-work-column-title">
+            Other ({canonicalPartition.other.length})
+          </h3>
+          <WorkItemsList
+            items={canonicalPartition.other}
+            canonicalMode
+            onUsePromptContext={onUsePromptContext}
+            emptyMessage="No other items."
+          />
+        </section>
+      ) : null}
 
       {!displayedCount && emptyMessage ? (
         <p className="text-muted small repo-dashboard-work-empty-note" role="status">

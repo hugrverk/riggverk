@@ -7850,3 +7850,36 @@ code {
 .repo-dashboard-work-empty-note {
   margin: 0;
 }
+
+.repo-dashboard-work-item-canonical .repo-dashboard-work-text {
+  font-family: inherit;
+}
+
+.repo-dashboard-work-id {
+  font-weight: 600;
+}
+
+.repo-dashboard-work-area {
+  margin-bottom: 0.25rem;
+}
+
+.repo-dashboard-work-meta {
+  margin-top: 0.35rem;
+  line-height: 1.4;
+}
+
+.repo-dashboard-work-other-section {
+  margin-top: 1rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+.repo-dashboard-docs-role-pill {
+  margin-left: 0.35rem;
+  font-size: 0.65rem;
+  vertical-align: middle;
+}
+
+.repo-dashboard-docs-reader-role {
+  margin: 0.25rem 0 0;
+}
