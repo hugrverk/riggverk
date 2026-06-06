@@ -212,7 +212,7 @@ fn backup_corrupt_settings_file(path: &PathBuf) -> Result<(), String> {
     Ok(())
 }
 
-fn read_settings_from_path(path: &PathBuf) -> Result<DiskLoad, String> {
+fn read_settings_from_path(path: &PathBuf, recover_corrupt: bool) -> Result<DiskLoad, String> {
     let json = match fs::read_to_string(path) {
         Ok(json) => json,
         Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
@@ -232,37 +232,64 @@ fn read_settings_from_path(path: &PathBuf) -> Result<DiskLoad, String> {
                 warning: None,
             })
         }
-        Err(_) => {
+        Err(_) if recover_corrupt => {
             backup_corrupt_settings_file(path)?;
             Ok(DiskLoad {
                 settings: AppSettings::default(),
                 warning: Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE.to_string()),
             })
         }
+        Err(_) => Ok(DiskLoad {
+            settings: AppSettings::default(),
+            warning: None,
+        }),
     }
 }
 
-fn load_locked() -> Result<DiskLoad, String> {
+fn disk_load_under_write_lock(recover_corrupt: bool) -> Result<DiskLoad, String> {
     let path = settings_file()?;
-    read_settings_from_path(&path)
+    read_settings_from_path(&path, recover_corrupt)
 }
 
-/// Read settings for callers that do not write. Missing files use defaults; corrupt files recover once.
+/// Read settings for action/status callers without recovery side effects or load warnings.
 pub fn load() -> AppSettings {
     let path = match settings_file() {
         Ok(path) => path,
         Err(_) => return AppSettings::default(),
     };
-    read_settings_from_path(&path)
+    read_settings_from_path(&path, false)
         .map(|loaded| loaded.settings)
         .unwrap_or_default()
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn get_settings_snapshot() -> Result<GetSettingsResponse, String> {
-    let loaded = load_locked()?;
+    get_settings_snapshot_with_mutate(|_| Ok(MutationOutcome::Unchanged))
+}
+
+pub fn get_settings_snapshot_with_mutate<F>(mutator: F) -> Result<GetSettingsResponse, String>
+where
+    F: FnOnce(&mut AppSettings) -> Result<MutationOutcome, String>,
+{
+    let _guard = SETTINGS_WRITE_MUTEX
+        .lock()
+        .map_err(|_| "settings lock poisoned".to_string())?;
+    let DiskLoad {
+        mut settings,
+        warning,
+    } = disk_load_under_write_lock(true)?;
+    let loaded_revision = settings.revision;
+    let outcome = mutator(&mut settings)?;
+    let settings = match outcome {
+        MutationOutcome::Unchanged => settings,
+        MutationOutcome::Changed => {
+            settings.revision = loaded_revision.saturating_add(1);
+            save_inner(&mut settings)?
+        }
+    };
     Ok(GetSettingsResponse {
-        settings: loaded.settings,
-        load_warning: loaded.warning,
+        settings,
+        load_warning: warning,
     })
 }
 
@@ -273,7 +300,7 @@ where
     let DiskLoad {
         mut settings,
         warning: _,
-    } = load_locked()?;
+    } = disk_load_under_write_lock(true)?;
     let loaded_revision = settings.revision;
     let outcome = mutator(&mut settings)?;
     match outcome {
@@ -385,14 +412,16 @@ fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        get_settings_snapshot, mutate_settings, normalize, normalize_for_save, save,
-        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
-        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
+        get_settings_snapshot, get_settings_snapshot_with_mutate, load, mutate_settings, normalize,
+        normalize_for_save, save, save_with_revision_check, validate_hex_color, AppSettings,
+        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
     };
     use crate::path_utils::is_legacy_default_workspace_path;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::Mutex;
+    use std::sync::{Arc, Barrier, Mutex};
+    use std::thread;
+    use std::time::Duration;
 
     static HOME_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
@@ -756,6 +785,112 @@ mod tests {
             let reloaded: AppSettings =
                 serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
             assert_eq!(reloaded.revision, 1);
+        });
+    }
+
+    #[test]
+    fn load_does_not_recover_corrupt_settings_or_consume_warning() {
+        with_temp_home(|dir| {
+            write_settings_file(dir, "{not-json");
+
+            let loaded = load();
+            assert_eq!(loaded, AppSettings::default());
+
+            let settings_path =
+                dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            assert!(
+                settings_path.is_file(),
+                "read-only load must not rename corrupt file"
+            );
+
+            let snapshot = get_settings_snapshot().expect("snapshot");
+            assert_eq!(snapshot.settings, AppSettings::default());
+            assert_eq!(
+                snapshot.load_warning.as_deref(),
+                Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE)
+            );
+        });
+    }
+
+    #[test]
+    fn concurrent_recovery_and_update_preserves_valid_write() {
+        with_temp_home(|dir| {
+            write_settings_file(dir, "{not-json");
+
+            let barrier = Arc::new(Barrier::new(2));
+            let barrier_reader = Arc::clone(&barrier);
+            let barrier_writer = Arc::clone(&barrier);
+
+            let reader = thread::spawn(move || {
+                barrier_reader.wait();
+                get_settings_snapshot().expect("recovery snapshot")
+            });
+
+            let writer = thread::spawn(move || {
+                barrier_writer.wait();
+                thread::sleep(Duration::from_millis(5));
+                let mut next = AppSettings::default();
+                next.appearance = "light".into();
+                save(next).expect("valid update")
+            });
+
+            let snapshot = reader.join().expect("reader join");
+            let saved = writer.join().expect("writer join");
+
+            let latest = get_settings_snapshot().expect("final snapshot").settings;
+            assert_eq!(latest.appearance, saved.appearance);
+            assert_eq!(latest.revision, saved.revision);
+            assert!(
+                snapshot.load_warning.is_some() || latest.appearance == "light",
+                "recovery warning or valid write must be visible"
+            );
+        });
+    }
+
+    #[test]
+    fn recovery_warning_is_returned_exactly_once() {
+        with_temp_home(|dir| {
+            write_settings_file(dir, "{not-json");
+
+            let first = get_settings_snapshot().expect("first snapshot");
+            assert_eq!(
+                first.load_warning.as_deref(),
+                Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE)
+            );
+
+            let second = get_settings_snapshot().expect("second snapshot");
+            assert!(second.load_warning.is_none());
+        });
+    }
+
+    #[test]
+    fn stale_workspace_scrub_preserves_unrelated_settings() {
+        with_temp_home(|_| {
+            let saved = save(AppSettings {
+                appearance: "light".into(),
+                enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
+                workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+                ..AppSettings::default()
+            })
+            .expect("seed save");
+
+            let snapshot = get_settings_snapshot_with_mutate(|current| {
+                if current.workspace_path.take().is_some() {
+                    Ok(MutationOutcome::Changed)
+                } else {
+                    Ok(MutationOutcome::Unchanged)
+                }
+            })
+            .expect("scrub snapshot");
+
+            assert_eq!(snapshot.settings.appearance, saved.appearance);
+            assert_eq!(
+                snapshot.settings.enabled_target_ids,
+                saved.enabled_target_ids
+            );
+            assert_eq!(snapshot.settings.workspace_path, None);
+            assert!(snapshot.load_warning.is_none());
+            assert_eq!(snapshot.settings.revision, saved.revision.saturating_add(1));
         });
     }
 }
