@@ -94,8 +94,11 @@ export function applyThemeSettings(settings: AppSettings): void {
   root.setAttribute("data-theme", settings.appearance);
   const appFontSize = normalizeAppFontSize(settings.app_font_size);
   root.setAttribute("data-app-font-size", appFontSize);
-  root.style.setProperty("--app-font-size", appFontSize === "small" ? "14px" : appFontSize === "large" ? "16px" : "15px");
-  root.style.setProperty("--app-font-scale", appFontSize === "small" ? "0.94" : appFontSize === "large" ? "1.07" : "1");
+  root.style.setProperty(
+    "--app-font-size",
+    appFontSize === "small" ? "13px" : appFontSize === "large" ? "17px" : "15px",
+  );
+  root.style.setProperty("--app-font-scale", "1");
 
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
     root.style.setProperty("--accent", settings.accent_color);

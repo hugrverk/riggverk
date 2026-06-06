@@ -28,8 +28,8 @@
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
   --nav-icon-size: 32px;
-  --repo-chart-series-1: #f1f1f1;
-  --repo-chart-series-2: #e4ed42;
+  --repo-chart-series-1: #e4ed42;
+  --repo-chart-series-2: #f1f1f1;
   --repo-chart-series-3: #cdd63b;
   --repo-chart-series-4: #dcdcdc;
   --repo-chart-series-5: #b6bf34;
@@ -50,8 +50,8 @@
   --text: #1a1a1a;
   --text-muted: #666666;
   --text-heading: #111111;
-  --repo-chart-series-1: #f1f1f1;
-  --repo-chart-series-2: #e4ed42;
+  --repo-chart-series-1: #e4ed42;
+  --repo-chart-series-2: #f1f1f1;
   --repo-chart-series-3: #cdd63b;
   --repo-chart-series-4: #dcdcdc;
   --repo-chart-series-5: #b6bf34;
@@ -73,8 +73,8 @@
     --text: #1a1a1a;
     --text-muted: #666666;
     --text-heading: #111111;
-    --repo-chart-series-1: #f1f1f1;
-    --repo-chart-series-2: #e4ed42;
+    --repo-chart-series-1: #e4ed42;
+    --repo-chart-series-2: #f1f1f1;
     --repo-chart-series-3: #cdd63b;
     --repo-chart-series-4: #dcdcdc;
     --repo-chart-series-5: #b6bf34;
@@ -179,7 +179,6 @@ code {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  zoom: var(--app-font-scale);
 }
 
 /* ---- app shell ---- */
