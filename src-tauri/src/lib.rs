@@ -4,6 +4,8 @@ mod path_utils;
 mod settings;
 
 #[cfg(test)]
+mod script_action_smoke;
+#[cfg(test)]
 mod smoke_runtime;
 
 use commands::{
