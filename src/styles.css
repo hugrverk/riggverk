@@ -5756,9 +5756,110 @@ code {
   border-top: 1px solid var(--border);
 }
 
-.repo-dashboard-latest-gh .repo-dashboard-latest-body {
-  max-height: 160px;
-  overflow: auto;
+.repo-dashboard-latest-hero-top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.repo-dashboard-latest-badge {
+  font-size: 10px;
+  padding: 1px 6px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+}
+
+.repo-dashboard-latest-badge-clean {
+  border-color: #28552d;
+  color: #56d364;
+}
+
+.repo-dashboard-latest-badge-dirty {
+  border-color: #6e4b15;
+  color: #c3a767;
+}
+
+.repo-dashboard-latest-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  align-items: baseline;
+  font-size: 11px;
+  margin: 8px 0 10px;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-latest-sha {
+  color: var(--text-muted);
+}
+
+.repo-dashboard-latest-facts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px 12px;
+  margin: 0;
+  font-size: 11px;
+}
+
+.repo-dashboard-latest-facts-grid dt {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.repo-dashboard-latest-facts-grid dd {
+  margin: 2px 0 0;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-latest-status-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.repo-dashboard-latest-status {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+}
+
+.repo-dashboard-latest-status.added {
+  border-color: #28552d;
+  color: #56d364;
+}
+
+.repo-dashboard-latest-status.modified {
+  border-color: #3d4f6a;
+  color: #58a6ff;
+}
+
+.repo-dashboard-latest-status.deleted {
+  border-color: #6b3030;
+  color: #f85149;
+}
+
+.repo-dashboard-latest-status.other {
+  color: var(--text-muted);
+}
+
+.repo-dashboard-latest-pr-num {
+  color: var(--text-muted);
+}
+
+.repo-dashboard-latest-pr-excerpt {
+  margin: 0;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.repo-dashboard-latest-pr-toggle {
+  margin-top: 8px;
 }
 
 .repo-dashboard-doc-row {

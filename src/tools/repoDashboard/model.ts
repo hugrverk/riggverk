@@ -1,4 +1,5 @@
 import type {
+  RepoChangedFile,
   RepoCommitEntry,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
@@ -779,4 +780,83 @@ export function partitionWorkItems(items: RepoDashboardWorkItem[]): WorkPartitio
 
 export function activeWorkCount(partition: WorkPartition): number {
   return partition.activeStarted.length + partition.activeOpen.length;
+}
+
+export type ChangedFileStatusKind = "added" | "modified" | "deleted" | "other";
+
+export interface HeadFileStatusBreakdown {
+  added: number;
+  modified: number;
+  deleted: number;
+  other: number;
+  total: number;
+}
+
+export function classifyChangedFileStatus(status: string): ChangedFileStatusKind {
+  const code = status.trim().charAt(0).toUpperCase();
+  if (code === "A") return "added";
+  if (code === "M") return "modified";
+  if (code === "D") return "deleted";
+  return "other";
+}
+
+export function buildHeadFileStatusBreakdown(files: RepoChangedFile[]): HeadFileStatusBreakdown {
+  const breakdown: HeadFileStatusBreakdown = {
+    added: 0,
+    modified: 0,
+    deleted: 0,
+    other: 0,
+    total: files.length,
+  };
+  for (const file of files) {
+    breakdown[classifyChangedFileStatus(file.status)] += 1;
+  }
+  return breakdown;
+}
+
+export function summarizeHeadFileBreakdown(breakdown: HeadFileStatusBreakdown): string {
+  if (!breakdown.total) return "none";
+  const parts: string[] = [];
+  if (breakdown.added) parts.push(`${breakdown.added} added`);
+  if (breakdown.modified) parts.push(`${breakdown.modified} modified`);
+  if (breakdown.deleted) parts.push(`${breakdown.deleted} deleted`);
+  if (breakdown.other) parts.push(`${breakdown.other} other`);
+  return parts.join(" · ") || `${breakdown.total} files`;
+}
+
+export function formatAheadBehind(ahead: number | null, behind: number | null): string | null {
+  if (ahead == null && behind == null) return null;
+  const a = ahead ?? 0;
+  const b = behind ?? 0;
+  if (!a && !b) return "up to date with upstream";
+  const parts: string[] = [];
+  if (a) parts.push(`${a} ahead`);
+  if (b) parts.push(`${b} behind`);
+  return parts.join(", ");
+}
+
+export function formatRelativeAgeFromMs(ms: number, now = Date.now()): string {
+  const diffSec = Math.max(0, Math.floor((now - ms) / 1000));
+  if (diffSec < 60) return "just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+  if (diffSec < 2_629_800) return `${Math.floor(diffSec / 604800)}w ago`;
+  return `${Math.floor(diffSec / 2_629_800)}mo ago`;
+}
+
+export function formatRelativeAgeFromUnix(sec: number, now = Date.now()): string {
+  return formatRelativeAgeFromMs(sec * 1000, now);
+}
+
+export function formatRelativeAgeFromIso(iso: string, now = Date.now()): string {
+  const ms = Date.parse(iso);
+  if (Number.isNaN(ms)) return "—";
+  return formatRelativeAgeFromMs(ms, now);
+}
+
+export function prBodyExcerpt(body: string, limit = 240): string {
+  const trimmed = body.trim();
+  if (trimmed.length <= limit) return trimmed;
+  return `${trimmed.slice(0, limit).trimEnd()}…`;
 }

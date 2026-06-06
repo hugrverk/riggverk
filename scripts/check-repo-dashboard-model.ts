@@ -29,6 +29,11 @@ import {
   compareWorkItems,
   activeWorkCount,
   contributorTopTypes,
+  buildHeadFileStatusBreakdown,
+  classifyChangedFileStatus,
+  formatAheadBehind,
+  formatRelativeAgeFromUnix,
+  prBodyExcerpt,
 } from "../src/tools/repoDashboard/model";
 
 function commit(
@@ -220,6 +225,24 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.equal(activeWorkCount(partition), 2);
   assert.equal(partition.activeStarted[0].text, "started");
   assert.ok(compareWorkItems(partition.activeOpen[0], partition.activeStarted[0]) !== 0);
+}
+
+{
+  assert.equal(classifyChangedFileStatus("M"), "modified");
+  assert.equal(classifyChangedFileStatus("A"), "added");
+  assert.equal(classifyChangedFileStatus("D"), "deleted");
+  assert.equal(classifyChangedFileStatus("R100"), "other");
+  const breakdown = buildHeadFileStatusBreakdown([
+    { path: "a.ts", status: "A" },
+    { path: "b.ts", status: "M" },
+    { path: "c.ts", status: "D" },
+  ]);
+  assert.equal(breakdown.total, 3);
+  assert.equal(breakdown.added, 1);
+  assert.equal(formatAheadBehind(2, 0), "2 ahead");
+  assert.equal(formatAheadBehind(0, 0), "up to date with upstream");
+  assert.ok(formatRelativeAgeFromUnix(Math.floor(Date.now() / 1000) - 120).includes("m ago"));
+  assert.ok(prBodyExcerpt("x".repeat(300)).endsWith("…"));
 }
 
 {

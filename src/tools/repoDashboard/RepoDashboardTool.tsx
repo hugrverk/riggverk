@@ -16,7 +16,6 @@ import type {
   RepoDashboardSnapshot,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
-  RepoGhPullRequest,
   RepoCommitEntry,
 } from "../../types";
 import {
@@ -39,6 +38,7 @@ import {
   type DocWorkLaneId,
 } from "./model";
 import { ActivityHeatmap } from "./RepoDashboardCharts";
+import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
 import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
@@ -64,92 +64,6 @@ function syncVisualState(loading: boolean, lastSynced: Date | null): SyncVisualS
   if (!lastSynced) return "idle";
   if (Date.now() - lastSynced.getTime() > STALE_MS) return "stale";
   return "synced";
-}
-
-function headChangedFilesLabel(
-  snapshot: RepoDashboardSnapshot,
-  latestCommit: RepoCommitEntry | null,
-): string {
-  const count = snapshot.changed_files.length;
-  if (!count) return "No files changed at HEAD";
-  const mergeHint = latestCommit?.is_merge ? " (merge commit)" : "";
-  return `${count} file${count === 1 ? "" : "s"} from git show HEAD${mergeHint}`;
-}
-
-function LatestChangeCard({
-  snapshot,
-  latestMerge,
-  latestCommit,
-}: {
-  snapshot: RepoDashboardSnapshot;
-  latestMerge: RepoGhPullRequest | null;
-  latestCommit: RepoCommitEntry | null;
-}) {
-  const branchLabel = snapshot.branch || snapshot.default_branch || "—";
-  const headFilesLabel = headChangedFilesLabel(snapshot, latestCommit);
-
-  if (!latestCommit && !latestMerge) {
-    return (
-      <p className="text-muted small" role="status">
-        No local commit or gh merge data in this snapshot. Refresh after selecting a git repository.
-      </p>
-    );
-  }
-
-  return (
-    <div className="repo-dashboard-latest-content">
-      {latestCommit ? (
-        <section className="repo-dashboard-latest-block" aria-label="Latest local commit">
-          <div className="repo-dashboard-latest-hero">
-            <span className="repo-dashboard-source-pill">local HEAD</span>
-            <h3 className="font-mono repo-dashboard-latest-headline">{latestCommit.subject}</h3>
-            <p className="repo-dashboard-latest-lead text-muted small">
-              {latestCommit.short_sha} · {authorLabel(latestCommit)} ·{" "}
-              {new Date(latestCommit.authored_at * 1000).toLocaleString()}
-              {latestCommit.is_merge ? " · merge commit" : ""}
-            </p>
-          </div>
-          <dl className="repo-dashboard-latest-facts font-mono">
-            <div>
-              <dt>Branch</dt>
-              <dd>{branchLabel}</dd>
-            </div>
-            <div>
-              <dt>HEAD files</dt>
-              <dd>{headFilesLabel}</dd>
-            </div>
-          </dl>
-        </section>
-      ) : null}
-
-      {latestMerge ? (
-        <section
-          className="repo-dashboard-latest-block repo-dashboard-latest-gh"
-          aria-label="Recent GitHub merged pull request"
-        >
-          <div className="repo-dashboard-latest-hero">
-            <span className="repo-dashboard-source-pill">gh merge</span>
-            <h3 className="font-mono repo-dashboard-latest-headline">
-              #{latestMerge.number} {latestMerge.title}
-            </h3>
-            <p className="repo-dashboard-latest-lead text-muted small">
-              Recent merged PR via gh CLI (separate from HEAD file list) · {latestMerge.author} ·{" "}
-              {new Date(latestMerge.merged_at).toLocaleString()}
-            </p>
-          </div>
-          {latestMerge.body ? (
-            <pre className="repo-dashboard-code font-mono repo-dashboard-latest-body">
-              {latestMerge.body.slice(0, 4000)}
-            </pre>
-          ) : null}
-        </section>
-      ) : snapshot.gh.available && !snapshot.gh.authenticated ? (
-        <p className="text-muted small repo-dashboard-gh-note" role="status">
-          gh CLI present but not authenticated — showing local git only.
-        </p>
-      ) : null}
-    </div>
-  );
 }
 
 function RecentActivityList({ commits }: { commits: RepoCommitEntry[] }) {
