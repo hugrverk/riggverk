@@ -42,6 +42,14 @@ assert.ok(toolSource.includes("repo-dashboard-recent-activity-card"), "overview 
 assert.ok(!toolSource.includes("repo-dashboard-overview-mid"), "overview must not use legacy mid row layout");
 assert.ok(!toolSource.includes("repo-dashboard-overview-full"), "overview must not use legacy full-width recent row");
 assert.ok(toolSource.includes("LatestChangeCard"), "overview must render enriched latest change card");
+assert.ok(
+  toolSource.includes("RECENT_ACTIVITY_LOAD_CAP = 30"),
+  "recent activity must load exactly 30 commits",
+);
+assert.ok(
+  !toolSource.includes("RECENT_ACTIVITY_VISIBLE_ROWS"),
+  "recent activity must not use visible-row height cap",
+);
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");
 assert.ok(workSource.includes("repo-dashboard-work-primary-columns"), "work must use primary Active/Done columns");

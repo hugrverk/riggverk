@@ -5935,21 +5935,31 @@ code {
   overflow: hidden;
 }
 
+.repo-dashboard-overview-lower .repo-dashboard-latest > h2,
+.repo-dashboard-overview-lower .repo-dashboard-recent-activity-card > h2 {
+  flex-shrink: 0;
+}
+
 .repo-dashboard-overview-lower .repo-dashboard-latest-content {
-  overflow: visible;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
 }
 
 .repo-dashboard-overview-lower .repo-dashboard-recent-activity-card {
   min-height: 0;
 }
 
+.repo-dashboard-overview-lower .repo-dashboard-recent-activity-card > h2 {
+  flex-shrink: 0;
+}
+
 .repo-dashboard-overview-lower .repo-dashboard-recent-activity-scroll {
   flex: 1 1 0;
-  min-height: calc(
-    var(--recent-activity-visible-rows, 10) * var(--recent-activity-row-height, 3.35rem)
-  );
+  min-height: 0;
   height: auto;
   max-height: none;
+  overflow-y: auto;
 }
 
 .repo-dashboard-activity-insights-body {
@@ -6396,16 +6406,9 @@ code {
 
 .repo-dashboard-recent-activity-scroll {
   --recent-activity-row-height: 3.35rem;
-  flex: 0 0 auto;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
-  height: calc(
-    var(--recent-activity-visible-rows, 10) * var(--recent-activity-row-height)
-  );
-  max-height: calc(
-    var(--recent-activity-visible-rows, 10) * var(--recent-activity-row-height)
-  );
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 2px;

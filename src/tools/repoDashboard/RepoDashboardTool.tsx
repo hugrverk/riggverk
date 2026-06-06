@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type ReactNode,
 } from "react";
 import type {
@@ -51,8 +50,7 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
-const RECENT_ACTIVITY_VISIBLE_ROWS = 10;
-const RECENT_ACTIVITY_LOAD_CAP = 30;
+export const RECENT_ACTIVITY_LOAD_CAP = 30;
 
 type SyncVisualState = "idle" | "loading" | "synced" | "stale";
 
@@ -747,11 +745,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   <h2 className="font-mono">Recent activity</h2>
                   <div
                     className="repo-dashboard-recent-activity-scroll"
-                    style={
-                      {
-                        "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
-                      } as CSSProperties
-                    }
                     role="region"
                     aria-label="Recent commits"
                     tabIndex={0}
