@@ -20,7 +20,7 @@ pub(super) struct FullCommitHistory {
 fn parse_commit_records(raw: &str) -> Result<Vec<RepoCommitEntry>, String> {
     let mut commits = Vec::new();
     for raw_record in raw.split(RECORD_SEPARATOR) {
-        let record = raw_record.trim_start_matches(['\n', '\r']);
+        let record = raw_record.trim_start_matches(|c| c == '\n' || c == '\r');
         if record.is_empty() {
             continue;
         }
@@ -37,7 +37,9 @@ fn parse_commit_records(raw: &str) -> Result<Vec<RepoCommitEntry>, String> {
             author_name: fields[2].to_string(),
             author_email: fields[3].to_string(),
             authored_at,
-            subject: fields[6].trim_end_matches(['\n', '\r']).to_string(),
+            subject: fields[6]
+                .trim_end_matches(|c| c == '\n' || c == '\r')
+                .to_string(),
             is_merge: fields[5].split_whitespace().count() > 1,
         });
     }
@@ -51,7 +53,16 @@ fn load_page(repo: &Path, head: &str, offset: usize) -> Result<Vec<RepoCommitEnt
     let pretty = format!("--pretty=format:{pretty_arg}");
     let result = run_cmd_bounded(
         "git",
-        &["log", "--topo-order", &pretty, "--skip", &offset_arg, "-n", &page_size_arg, head],
+        &[
+            "log",
+            "--topo-order",
+            &pretty,
+            "--skip",
+            &offset_arg,
+            "-n",
+            &page_size_arg,
+            head,
+        ],
         repo,
         BoundedCmdOptions {
             timeout: Some(PAGE_TIMEOUT),
@@ -64,12 +75,33 @@ fn load_page(repo: &Path, head: &str, offset: usize) -> Result<Vec<RepoCommitEnt
         return Err("commit history page timed out".to_string());
     }
     if !result.success {
-        return Err(format!("commit history page failed with exit code {:?}", result.exit_code));
+        return Err(format!(
+            "commit history page failed with exit code {:?}",
+            result.exit_code
+        ));
     }
     if result.stdout_truncated {
         return Err("commit history page exceeded its bounded output limit".to_string());
     }
     parse_commit_records(&result.stdout)
+}
+
+fn collect_pages<F>(mut load: F) -> Result<Vec<RepoCommitEntry>, String>
+where
+    F: FnMut(usize) -> Result<Vec<RepoCommitEntry>, String>,
+{
+    let mut commits = Vec::new();
+    let mut offset = 0usize;
+    loop {
+        let page = load(offset)?;
+        let page_len = page.len();
+        commits.extend(page);
+        if page_len < PAGE_SIZE {
+            break;
+        }
+        offset = offset.saturating_add(page_len);
+    }
+    Ok(commits)
 }
 
 fn resolve_head(repo: &Path) -> Result<String, String> {
@@ -111,27 +143,55 @@ fn is_shallow(repo: &Path) -> bool {
 
 pub(super) fn load_all_commits(repo: &Path) -> Result<FullCommitHistory, String> {
     let head = resolve_head(repo)?;
-    let mut commits = Vec::new();
-    let mut offset = 0usize;
-    loop {
-        let page = load_page(repo, &head, offset)?;
-        let page_len = page.len();
-        commits.extend(page);
-        if page_len < PAGE_SIZE {
-            break;
-        }
-        offset = offset.saturating_add(page_len);
-    }
+    let commits = collect_pages(|offset| load_page(repo, &head, offset))?;
     let incomplete = is_shallow(repo);
     let warning = incomplete.then(|| {
-        "repository is a shallow clone; all locally available commits were loaded, but older history is not present locally".to_string()
+        "repository is a shallow clone; all locally available commits were loaded, but older history is not present locally"
+            .to_string()
     });
-    Ok(FullCommitHistory { commits, incomplete, warning })
+    Ok(FullCommitHistory {
+        commits,
+        incomplete,
+        warning,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn commit(index: usize) -> RepoCommitEntry {
+        RepoCommitEntry {
+            sha: format!("sha-{index}"),
+            short_sha: format!("s-{index}"),
+            author_name: "Author".to_string(),
+            author_email: "author@example.test".to_string(),
+            authored_at: index as i64,
+            subject: format!("Commit {index}"),
+            is_merge: false,
+        }
+    }
+
+    #[test]
+    fn collects_all_commits_across_multiple_pages() {
+        let source: Vec<RepoCommitEntry> = (0..1_205).map(commit).collect();
+        let commits = collect_pages(|offset| {
+            Ok(source
+                .iter()
+                .skip(offset)
+                .take(PAGE_SIZE)
+                .cloned()
+                .collect())
+        })
+        .expect("collect pages");
+
+        assert_eq!(commits.len(), 1_205);
+        assert_eq!(commits.first().map(|entry| entry.sha.as_str()), Some("sha-0"));
+        assert_eq!(
+            commits.last().map(|entry| entry.sha.as_str()),
+            Some("sha-1204")
+        );
+    }
 
     #[test]
     fn parses_commit_records_and_merge_state() {
@@ -139,5 +199,11 @@ mod tests {
         let commits = parse_commit_records(raw).expect("parse records");
         assert_eq!(commits.len(), 1);
         assert!(commits[0].is_merge);
+    }
+
+    #[test]
+    fn rejects_incomplete_records() {
+        let error = parse_commit_records("sha\u{1f}short\u{1e}").expect_err("invalid record");
+        assert_eq!(error, "invalid commit history record");
     }
 }
