@@ -5950,7 +5950,6 @@ code {
   gap: 14px;
   align-items: start;
   min-width: 0;
-  overflow: hidden;
 }
 
 .repo-dashboard-activity-insights-body > * {
@@ -6119,12 +6118,14 @@ code {
 
 .repo-dashboard-heat-card {
   padding-bottom: 14px;
+  overflow: visible;
 }
 
 .repo-dashboard-heat-card .repo-dashboard-heatbox {
   border: none;
   background: transparent;
   padding: 0;
+  overflow: visible;
 }
 
 .repo-dashboard-recent-activity-card {
@@ -6203,7 +6204,6 @@ code {
   background: var(--bg-panel);
   padding: 14px;
   min-width: 0;
-  min-height: 0;
 }
 
 .repo-dashboard-card > h2.font-mono,
@@ -6588,7 +6588,6 @@ code {
   width: 100%;
   min-width: 0;
   gap: 6px;
-  overflow: hidden;
 }
 
 .repo-dashboard-heat-months {
@@ -6610,6 +6609,10 @@ code {
   color: var(--text-muted);
   white-space: nowrap;
   pointer-events: none;
+}
+
+.repo-dashboard-heat-month-label-end {
+  transform: translateX(-100%);
 }
 
 .repo-dashboard-heatbody {
@@ -6650,7 +6653,9 @@ code {
   grid-template-columns: repeat(var(--heat-week-count, 53), minmax(0, 1fr));
   gap: var(--heat-gap, 2px);
   width: 100%;
+  max-width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 .repo-dashboard-heat-week {

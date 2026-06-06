@@ -14,6 +14,8 @@ import {
   sliceHeatmapCellsToWindow,
   buildLineChartData,
   buildActivityInsightsSeries,
+  buildActivityInsightsSeriesForDays,
+  ACTIVITY_INSIGHTS_DAYS,
   filterCommitsByContributor,
   filterCommitsByTimeRange,
   activityInsightsChartValue,
@@ -126,7 +128,6 @@ assert.equal(buildLineChartData([]), null);
   assert.ok(computeHeatmapCellSizePx(320, 26) >= 6);
 }
 
-assert.equal(ACTIVITY_INSIGHTS_DAYS, 90);
 {
   const nowSec = Math.floor(Date.now() / 1000);
   const commits = [
@@ -135,6 +136,10 @@ assert.equal(ACTIVITY_INSIGHTS_DAYS, 90);
   ];
   const filtered = filterCommitsForActivityInsights(commits);
   assert.equal(filtered.length, 1);
+  const windowSeries = buildActivityInsightsSeriesForDays(filtered, ACTIVITY_INSIGHTS_DAYS);
+  assert.equal(windowSeries.length, ACTIVITY_INSIGHTS_DAYS);
+  assert.equal(windowSeries[0].commitCount, 0);
+  assert.ok(windowSeries.some(point => point.commitCount > 0));
 }
 
 // Remaining-by-type handles empty input without NaN.

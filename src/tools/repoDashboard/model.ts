@@ -364,6 +364,34 @@ export function buildActivityInsightsSeries(
   return points;
 }
 
+/** Fixed calendar window (e.g. latest 90 days ending today), including zero-commit days. */
+export function buildActivityInsightsSeriesForDays(
+  commits: RepoCommitEntry[],
+  days = ACTIVITY_INSIGHTS_DAYS,
+  now = new Date(),
+): ActivityInsightsPoint[] {
+  const rangeEnd = dayStart(now);
+  const start = new Date(rangeEnd);
+  start.setDate(start.getDate() - (days - 1));
+
+  const counts = new Map<string, number>();
+  for (const commit of commits) {
+    if (!Number.isFinite(commit.authored_at)) continue;
+    const key = isoDay(new Date(commit.authored_at * 1000));
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const points: ActivityInsightsPoint[] = [];
+  let cumulative = 0;
+  for (let cursor = new Date(start); cursor <= rangeEnd; cursor.setDate(cursor.getDate() + 1)) {
+    const key = isoDay(cursor);
+    const commitCount = counts.get(key) ?? 0;
+    cumulative += commitCount;
+    points.push({ date: key, commitCount, cumulativeCount: cumulative });
+  }
+  return points;
+}
+
 export function buildRemainingByType(items: RepoDashboardWorkItem[]): RemainingByType[] {
   const types: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
   return types.map(type => {

@@ -2,7 +2,8 @@ import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { RepoCommitEntry } from "../../types";
 import {
   activityInsightsChartValue,
-  buildActivityInsightsSeries,
+  ACTIVITY_INSIGHTS_DAYS,
+  buildActivityInsightsSeriesForDays,
   buildContributorStats,
   contributorTopScopes,
   contributorTopTypes,
@@ -34,7 +35,7 @@ function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) 
   const w = 820;
   const h = 300;
   const L = 40;
-  const R = 16;
+  const R = 28;
   const T = 20;
   const B = 52;
 
@@ -180,7 +181,10 @@ export function RepoActivityInsights({
     () => filterCommitsByContributor(rangeCommits, contributorId),
     [rangeCommits, contributorId],
   );
-  const series = useMemo(() => buildActivityInsightsSeries(filteredCommits), [filteredCommits]);
+  const series = useMemo(
+    () => buildActivityInsightsSeriesForDays(filteredCommits, ACTIVITY_INSIGHTS_DAYS),
+    [filteredCommits],
+  );
 
   useEffect(() => {
     if (contributorId === "all") return;

@@ -148,7 +148,7 @@ export function ActivityHeatmap({
           gapPx,
           minPx: heatMinCellPx,
           maxPx: heatMaxCellPx,
-          paddingPx: layout === "embedded" ? 16 : 20,
+          paddingPx: layout === "embedded" ? 24 : 20,
         }),
       );
     };
@@ -185,15 +185,20 @@ export function ActivityHeatmap({
       >
         <div className="repo-dashboard-heat-months font-mono" aria-hidden="true">
           <div className="repo-dashboard-heat-month-rail">
-            {monthLabels.map(({ col, label }) => (
-              <span
-                key={`${col}-${label}`}
-                className="repo-dashboard-heat-month-label"
-                style={{ left: `${(col / weekCount) * 100}%` }}
-              >
-                {label}
-              </span>
-            ))}
+            {monthLabels.map(({ col, label }) => {
+              const atEnd = col >= weekCount - 2;
+              return (
+                <span
+                  key={`${col}-${label}`}
+                  className={`repo-dashboard-heat-month-label${
+                    atEnd ? " repo-dashboard-heat-month-label-end" : ""
+                  }`}
+                  style={{ left: `${(col / weekCount) * 100}%` }}
+                >
+                  {label}
+                </span>
+              );
+            })}
           </div>
         </div>
         <div
