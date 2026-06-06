@@ -9,9 +9,14 @@ step() {
 }
 
 scan_tmp=""
+release_tmp_dir=""
+codex_apply_log=""
 cleanup() {
   if [ -n "$scan_tmp" ] && [ -f "$scan_tmp" ]; then
     rm -f "$scan_tmp"
+  fi
+  if [ -n "$release_tmp_dir" ] && [ -d "$release_tmp_dir" ]; then
+    rm -rf "$release_tmp_dir"
   fi
 }
 trap cleanup EXIT
@@ -218,18 +223,17 @@ for name in ("safe", "workspace-write"):
         raise SystemExit(f"FAIL: Codex config missing [profiles.{name}]")
 PY
 printf '  Codex config template valid\n'
-tmp_home="$(mktemp -d)"
-if HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >/tmp/agent-workspace-codex-apply.txt 2>&1; then
+release_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-release-check.XXXXXX")"
+tmp_home="$(mktemp -d "${release_tmp_dir}/home.XXXXXX")"
+codex_apply_log="${release_tmp_dir}/codex-apply.log"
+if HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$codex_apply_log" 2>&1; then
   printf 'FAIL: install-codex-config.sh --apply must require --force-overwrite\n' >&2
-  rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
   exit 1
 fi
-if ! rg -q 'manual-review only' /tmp/agent-workspace-codex-apply.txt; then
+if ! rg -q 'manual-review only' "$codex_apply_log"; then
   printf 'FAIL: install-codex-config.sh --apply refusal must explain manual review\n' >&2
-  rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
   exit 1
 fi
-rm -rf "$tmp_home" /tmp/agent-workspace-codex-apply.txt
 if ! grep -q 'codex-config synced' resources/default-workspace/scripts/install-codex-config.sh; then
   printf 'FAIL: install-codex-config.sh --diff must print codex-config synced when unchanged\n' >&2
   exit 1
@@ -1680,7 +1684,7 @@ fi
 printf '  dashboard opencode_config status uses rendered/staged config comparison\n'
 
 step "app checks"
-npm run build
+bash "$repo_root/scripts/release-check/frontend-gate.sh"
 
 cd src-tauri
 cargo fmt --check
