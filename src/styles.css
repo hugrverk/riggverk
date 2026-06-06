@@ -5913,27 +5913,37 @@ code {
   overflow: visible;
 }
 
-.repo-dashboard-overview-mid {
+.repo-dashboard-overview-lower {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   width: 100%;
 }
 
-.repo-dashboard-overview-mid > .repo-dashboard-card {
+.repo-dashboard-overview-lower > .repo-dashboard-card {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  height: auto;
-}
-
-.repo-dashboard-overview-mid .repo-dashboard-latest-content {
+  min-height: 0;
   overflow: visible;
 }
 
-.repo-dashboard-overview-full {
-  width: 100%;
+.repo-dashboard-overview-lower .repo-dashboard-latest-content {
+  overflow: visible;
+}
+
+.repo-dashboard-overview-lower .repo-dashboard-recent-activity-card {
+  min-height: 0;
+}
+
+.repo-dashboard-overview-lower .repo-dashboard-recent-activity-scroll {
+  flex: 1 1 0;
+  min-height: calc(
+    var(--recent-activity-visible-rows, 10) * var(--recent-activity-row-height, 3.35rem)
+  );
+  height: auto;
+  max-height: none;
 }
 
 .repo-dashboard-activity-insights-body {
@@ -6299,7 +6309,7 @@ code {
   overflow: visible;
 }
 
-.repo-dashboard-overview-full .repo-dashboard-commit {
+.repo-dashboard-overview-lower .repo-dashboard-commit {
   grid-template-columns: 4.5rem minmax(0, 1fr);
   grid-template-rows: auto auto;
   align-items: baseline;
@@ -6307,12 +6317,12 @@ code {
   row-gap: 2px;
 }
 
-.repo-dashboard-overview-full .repo-dashboard-commit-sha {
+.repo-dashboard-overview-lower .repo-dashboard-commit-sha {
   grid-row: 1 / span 2;
   align-self: center;
 }
 
-.repo-dashboard-overview-full .repo-dashboard-commit-meta {
+.repo-dashboard-overview-lower .repo-dashboard-commit-meta {
   grid-column: 2;
   text-align: left;
   min-width: 0;
@@ -6321,7 +6331,7 @@ code {
   white-space: nowrap;
 }
 
-.repo-dashboard-overview-full .repo-dashboard-commit-subject {
+.repo-dashboard-overview-lower .repo-dashboard-commit-subject {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7035,7 +7045,7 @@ code {
   }
 
   .repo-dashboard-grid.cols,
-  .repo-dashboard-overview-mid,
+  .repo-dashboard-overview-lower,
   .repo-dashboard-activity-insights-body,
   .repo-dashboard-page-body.has-aside,
   .repo-dashboard-work-columns,
@@ -7052,12 +7062,12 @@ code {
     grid-template-columns: repeat(auto-fit, minmax(96px, 1fr));
   }
 
-  .repo-dashboard-overview-full .repo-dashboard-commit {
+  .repo-dashboard-overview-lower .repo-dashboard-commit {
     grid-template-columns: 4rem minmax(0, 1fr);
     grid-template-rows: auto auto;
   }
 
-  .repo-dashboard-overview-full .repo-dashboard-commit-meta {
+  .repo-dashboard-overview-lower .repo-dashboard-commit-meta {
     grid-column: 2;
     text-align: left;
     white-space: normal;

@@ -37,7 +37,10 @@ assert.ok(activitySource.includes("repo-dashboard-activity-sidebar"), "activity 
 assert.ok(activitySource.includes("repo-dashboard-heatmap-panel"), "heatmap must use inset panel in activity sidebar");
 assert.ok(activitySource.includes('density="default"'), "activity sidebar heatmap must use default density");
 assert.ok(!toolSource.includes("repo-dashboard-heat-card"), "overview must not render standalone heatmap card");
-assert.ok(toolSource.includes("repo-dashboard-overview-full"), "recent activity must be full-width");
+assert.ok(toolSource.includes("repo-dashboard-overview-lower"), "overview must use lower information grid");
+assert.ok(toolSource.includes("repo-dashboard-recent-activity-card"), "overview must render recent activity card");
+assert.ok(!toolSource.includes("repo-dashboard-overview-mid"), "overview must not use legacy mid row layout");
+assert.ok(!toolSource.includes("repo-dashboard-overview-full"), "overview must not use legacy full-width recent row");
 assert.ok(toolSource.includes("LatestChangeCard"), "overview must render enriched latest change card");
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");

@@ -734,7 +734,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 heatmapCells={heatmap}
               />
 
-              <div className="repo-dashboard-overview-mid">
+              <div className="repo-dashboard-overview-lower">
                 <div className="repo-dashboard-card repo-dashboard-latest">
                   <h2 className="font-mono">Latest merge / commit</h2>
                   <LatestChangeCard
@@ -743,22 +743,21 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     latestCommit={latestCommit}
                   />
                 </div>
-              </div>
-
-              <div className="repo-dashboard-card repo-dashboard-recent-activity-card repo-dashboard-overview-full">
-                <h2 className="font-mono">Recent activity</h2>
-                <div
-                  className="repo-dashboard-recent-activity-scroll"
-                  style={
-                    {
-                      "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
-                    } as CSSProperties
-                  }
-                  role="region"
-                  aria-label="Recent commits"
-                  tabIndex={0}
-                >
-                  <RecentActivityList commits={recentCommits} />
+                <div className="repo-dashboard-card repo-dashboard-recent-activity-card">
+                  <h2 className="font-mono">Recent activity</h2>
+                  <div
+                    className="repo-dashboard-recent-activity-scroll"
+                    style={
+                      {
+                        "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
+                      } as CSSProperties
+                    }
+                    role="region"
+                    aria-label="Recent commits"
+                    tabIndex={0}
+                  >
+                    <RecentActivityList commits={recentCommits} />
+                  </div>
                 </div>
               </div>
             </div>
