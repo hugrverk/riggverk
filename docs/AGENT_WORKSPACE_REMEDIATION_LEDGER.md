@@ -48,9 +48,9 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | AW-DEAD-002 | P3 | completed | Removed unused workspace contract load/state |
 | AW-LOAD-001 | P3 | completed | Removed duplicate `fetchStatus` + startup `loadBrainSetupSeed` |
 | AW-DOC-001 | P3 | completed | Historical labels on prior audit docs |
-| AW-REL-002 | P3 | partial | Codex apply log uses mktemp dir + trap |
-| AW-REL-001 | P3 | partial | `scripts/release-check/frontend-gate.sh` extracted |
-| AW-ARCH-001 | P2 | partial | Extracted shared hooks (`useSavedRepoEntriesController`, `useTransientStatus`, `appSettingsMutation`, `useResourceRequestGuard`); `App.tsx` still large |
+| AW-REL-002 | P3 | completed | Codex apply log + UI regressions script use mktemp + trap |
+| AW-REL-001 | P3 | completed | `frontend-gate.sh` + `rust-gate.sh`; release-check delegates to both |
+| AW-ARCH-001 | P2 | partial | `useAppSettingsController` + `AppHeaderNav`; App.tsx ~1393 lines (was ~1852) |
 | AW-RD-007 | P3 | deferred | N+1 git show retained; optimize only if measured |
 | AW-TYPES-001 | P3 | deferred | Contract fixture tests added via Vitest; no generated bindings |
 | AW-CONFIG-001 | Decision | blocked | Bundle id `.app` migration needs operator plan |

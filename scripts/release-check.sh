@@ -1685,12 +1685,7 @@ printf '  dashboard opencode_config status uses rendered/staged config compariso
 
 step "app checks"
 bash "$repo_root/scripts/release-check/frontend-gate.sh"
-
-cd src-tauri
-cargo fmt --check
-cargo check
-cargo clippy --all-targets --all-features -- -D warnings
-cargo test
+bash "$repo_root/scripts/release-check/rust-gate.sh"
 
 step "release smoke doc"
 if [ ! -f "$repo_root/docs/APP_RELEASE_SMOKE.md" ]; then
