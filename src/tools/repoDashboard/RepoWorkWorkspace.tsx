@@ -175,14 +175,25 @@ export function RepoWorkWorkspace({
       </header>
 
       <div className="repo-dashboard-work-columns">
-        <section className="repo-dashboard-work-column" aria-label="Active work">
-          <h3 className="font-mono repo-dashboard-work-column-title">Active</h3>
+        <section
+          className="repo-dashboard-work-column"
+          aria-label="Active work"
+          aria-labelledby="repo-dashboard-work-active-title"
+        >
+          <h3 id="repo-dashboard-work-active-title" className="font-mono repo-dashboard-work-column-title">
+            Active
+          </h3>
           {!partition.activeStarted.length && !partition.activeOpen.length ? (
             <p className="text-muted small" role="status">
               {filtersActive ? "No active items match the current filters." : "No active work items."}
             </p>
           ) : (
-            <div className="repo-dashboard-work-column-scroll">
+            <div
+              className="repo-dashboard-work-column-scroll"
+              role="region"
+              aria-label="Active work items"
+              tabIndex={0}
+            >
               {partition.activeStarted.length ? (
                 <div className="repo-dashboard-work-group">
                   <h4 className="font-mono repo-dashboard-work-group-title">
@@ -212,11 +223,20 @@ export function RepoWorkWorkspace({
           )}
         </section>
 
-        <section className="repo-dashboard-work-column" aria-label="Done work">
-          <h3 className="font-mono repo-dashboard-work-column-title">
+        <section
+          className="repo-dashboard-work-column"
+          aria-label="Done work"
+          aria-labelledby="repo-dashboard-work-done-title"
+        >
+          <h3 id="repo-dashboard-work-done-title" className="font-mono repo-dashboard-work-column-title">
             Done ({partition.done.length})
           </h3>
-          <div className="repo-dashboard-work-column-scroll">
+          <div
+            className="repo-dashboard-work-column-scroll"
+            role="region"
+            aria-label="Done work items"
+            tabIndex={0}
+          >
             <WorkItemsList
               items={partition.done}
               onUsePromptContext={onUsePromptContext}

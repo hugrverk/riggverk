@@ -6677,6 +6677,12 @@ code {
   padding-right: 2px;
 }
 
+.repo-dashboard-docs-reader-scroll:focus-visible,
+.repo-dashboard-work-column-scroll:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--active-border));
+  outline-offset: -2px;
+}
+
 .repo-dashboard-docs-diagnostics {
   flex: 0 0 auto;
   margin-top: auto;

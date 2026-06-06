@@ -93,14 +93,23 @@ export function RepoDocsWorkspace({
                 : "No Markdown documents discovered in this repository."}
             </p>
           ) : (
-            <ul className="repo-dashboard-docs-list" role="listbox" aria-label="Repository documents">
+            <ul
+              className="repo-dashboard-docs-list"
+              role="listbox"
+              aria-label="Repository documents"
+              aria-activedescendant={
+                selectedPath ? `repo-doc-option-${selectedPath.replace(/[^\w-]+/g, "-")}` : undefined
+              }
+            >
               {filteredDocs.map(doc => {
                 const status = docListStatus(doc);
                 const selected = doc.path === selectedPath;
+                const optionId = `repo-doc-option-${doc.path.replace(/[^\w-]+/g, "-")}`;
                 return (
                   <li key={doc.path} role="none">
                     <button
                       type="button"
+                      id={optionId}
                       role="option"
                       aria-selected={selected}
                       className={`repo-dashboard-docs-list-item${selected ? " active" : ""}`}
@@ -160,7 +169,12 @@ export function RepoDocsWorkspace({
                 ) : null}
               </header>
               {selectedDoc.readable && selectedDoc.content ? (
-                <div className="repo-dashboard-docs-reader-scroll">
+                <div
+                  className="repo-dashboard-docs-reader-scroll"
+                  role="region"
+                  aria-label="Document content"
+                  tabIndex={0}
+                >
                   <MarkdownRenderer content={selectedDoc.content} />
                 </div>
               ) : null}
