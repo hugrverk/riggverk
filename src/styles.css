@@ -6963,7 +6963,8 @@ code {
   .repo-dashboard-activity-insights-body,
   .repo-dashboard-page-body.has-aside,
   .repo-dashboard-work-columns,
-  .repo-dashboard-work-primary-columns {
+  .repo-dashboard-work-primary-columns,
+  .repo-dashboard-work-active-columns {
     grid-template-columns: 1fr;
   }
 
