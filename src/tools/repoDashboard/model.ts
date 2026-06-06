@@ -693,7 +693,7 @@ export function buildRemainingByType(items: RepoDashboardWorkItem[]): RemainingB
   });
 }
 
-/** Kretsverket-style doc lanes (source file), not generic parser types. */
+/** Documentation source lanes (source file), not generic parser types. */
 export type DocWorkLaneId =
   | "backlog"
   | "known-gaps"

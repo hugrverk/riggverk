@@ -249,7 +249,7 @@ for (const row of buildRemainingByType([])) {
 
 assert.equal(normalizeRepoPathForCompare("/repo/"), "/repo");
 
-assert.equal(repoDashboardBrandLabel("/Users/me/Kretsverket"), "Kretsverket.repo.state");
+assert.equal(repoDashboardBrandLabel("/Users/me/example-repo"), "example-repo.repo.state");
 assert.equal(repoDashboardBrandLabel(""), "repo.dashboard");
 assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 
@@ -556,7 +556,7 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
       needsPlan: false,
       classification: "verify" as const,
       canonicalSource: "backlog" as const,
-      workId: "KV-V-001",
+      workId: "PROJECT-V-001",
     },
     {
       source: "docs" as const,
@@ -567,7 +567,7 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
       needsPlan: false,
       classification: "enhancement" as const,
       canonicalSource: "audit" as const,
-      workId: "ELCAD-AUD-014",
+      workId: "PROJECT-AUD-014",
     },
   ];
   const partition = partitionCanonicalWorkItems(items);

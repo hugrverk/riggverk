@@ -37,7 +37,7 @@ export function classifyDocRole(path: string, _content = ""): DocRole {
   return "unknown";
 }
 
-/** True when the repository declares a Kretsverket-style active work queue. */
+/** True when the repository declares a canonical active work queue in BACKLOG. */
 export function detectCanonicalWorkCanon(files: readonly RepoDocFile[]): boolean {
   const backlog = files.find(
     f =>

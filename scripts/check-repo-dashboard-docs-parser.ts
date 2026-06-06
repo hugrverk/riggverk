@@ -1,7 +1,4 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
 import type { RepoDocFile, RepoGhIssue } from "../src/types";
 import {
   classifyDocRole,
@@ -19,10 +16,6 @@ import {
   isPromptContextEligibleWorkItem,
 } from "../src/tools/promptLoops/contextHandoff";
 
-const here = dirname(fileURLToPath(import.meta.url));
-const fixture = (name: string) =>
-  readFileSync(join(here, "../src/tools/repoDashboard/fixtures", name), "utf8");
-
 function doc(path: string, content: string, overrides: Partial<RepoDocFile> = {}): RepoDocFile {
   return {
     path,
@@ -33,6 +26,99 @@ function doc(path: string, content: string, overrides: Partial<RepoDocFile> = {}
     ...overrides,
   };
 }
+
+const FIXTURE_START_HERE = `# Start Here
+
+Navigation entrypoint for contributors and coding agents.
+
+## Status model
+
+| Question | Canonical owner |
+| --- | --- |
+| What concrete work is active? | [BACKLOG.md](BACKLOG.md) |
+| What exists now? | [CURRENT_STATE.md](CURRENT_STATE.md) |
+`;
+
+const FIXTURE_BACKLOG = `# Backlog
+
+Canonical queue for **concrete active work**.
+
+## NOW / NEXT / LATER
+
+| Horizon | Focus |
+| --- | --- |
+| **NOW** | Close verification items. |
+| **NEXT** | Improve bounded editing. |
+
+## Bugs
+
+No confirmed open bugs are currently documented.
+
+## Verify
+
+| ID | Priority | Area | Evidence / question | Owner files | Next action | Verification |
+| --- | --- | --- | --- | --- | --- | --- |
+| PROJECT-V-001 | Medium | Module A | Suspected jitter on target hardware. | \`moduleA.ts\` | Reproduce before changing code. | Manual sweep |
+| PROJECT-V-002 | Medium | Build | Native smoke still needs coverage. | \`src/\` | Run focused smoke. | \`npm test\` |
+| PROJECT-V-003 | Low | Export | Automated export coverage is incomplete. | \`export.ts\` | Exercise edge cases. | Unit tests |
+
+## Enhancements
+
+| ID | Priority | Area | Bounded outcome | Owner files / docs | Verification |
+| --- | --- | --- | --- | --- | --- |
+| PROJECT-E-001 | Medium | Accessibility | Extend keyboard editing. | \`nav.tsx\` | Focused keyboard tests |
+| PROJECT-E-002 | High | Core | Add explicit snapping. | \`snap.ts\` | Unit and browser smoke |
+| PROJECT-E-003 | Medium | Pipeline | Improve deterministic quality. | \`src/pipeline/\` | Vitest fixtures |
+| PROJECT-E-004 | Low | Validation | Add targeted visual regression. | \`tests/\` | Bounded screenshots |
+
+## Queue rules
+
+1. Do not add completed work or batch ledgers.
+`;
+
+const FIXTURE_AUDIT_ISSUES = `# Audit Issues
+
+Active audit findings with concrete evidence.
+
+| ID | Severity | Status | Classification | Title | Primary files | Next slice |
+| --- | --- | --- | --- | --- | --- | --- |
+| PROJECT-AUD-014 | Medium | Partially resolved | Enhancement | Targeted visual regression | \`playwright.config.ts\` | Add stable fixtures |
+| PROJECT-AUD-032 | Medium | Verify-only | Verify | Hardware-specific behavior | \`moduleA.ts\` | Reproduce through PROJECT-V-001 |
+| PROJECT-AUD-099 | Low | Resolved | Bug | Legacy resolved finding | \`old.ts\` | Closed |
+`;
+
+const FIXTURE_KNOWN_GAPS = `# Known Gaps
+
+Current limitations. This file is not an active work queue.
+
+| Area | Current boundary |
+| --- | --- |
+| Model | No inferred netlist. |
+`;
+
+const FIXTURE_ROADMAP = `# Roadmap
+
+Future direction only — not active work.
+
+## Phase 2
+
+Planned improvements for a later release.
+`;
+
+const FIXTURE_CURRENT_STATE = `# Current State
+
+Implemented behavior as of today. Not an active work queue.
+`;
+
+const FIXTURE_OPEN_QUESTIONS = `# Open Questions
+
+Undecided topics. Not active work.
+`;
+
+const FIXTURE_FEATURES = `# Features
+
+Reference product documentation. Not active work.
+`;
 
 // Generic TODO fallback
 {
@@ -56,14 +142,14 @@ assert.equal(classifyDocRole("docs/audit/OPEN_QUESTIONS.md"), "open-questions");
 assert.equal(classifyDocRole("docs/product/FEATURES.md"), "reference");
 
 const canonFiles: RepoDocFile[] = [
-  doc("docs/START_HERE.md", fixture("krets-start-here.md")),
-  doc("docs/BACKLOG.md", fixture("krets-backlog.md")),
-  doc("docs/audit/ISSUES.md", fixture("krets-audit-issues.md")),
-  doc("docs/KNOWN_GAPS.md", fixture("krets-known-gaps.md")),
-  doc("docs/ROADMAP.md", fixture("krets-roadmap.md")),
-  doc("docs/CURRENT_STATE.md", fixture("krets-current-state.md")),
-  doc("docs/audit/OPEN_QUESTIONS.md", fixture("krets-open-questions.md")),
-  doc("docs/product/FEATURES.md", fixture("krets-features-snippet.md")),
+  doc("docs/START_HERE.md", FIXTURE_START_HERE),
+  doc("docs/BACKLOG.md", FIXTURE_BACKLOG),
+  doc("docs/audit/ISSUES.md", FIXTURE_AUDIT_ISSUES),
+  doc("docs/KNOWN_GAPS.md", FIXTURE_KNOWN_GAPS),
+  doc("docs/ROADMAP.md", FIXTURE_ROADMAP),
+  doc("docs/CURRENT_STATE.md", FIXTURE_CURRENT_STATE),
+  doc("docs/audit/OPEN_QUESTIONS.md", FIXTURE_OPEN_QUESTIONS),
+  doc("docs/product/FEATURES.md", FIXTURE_FEATURES),
 ];
 
 assert.ok(detectCanonicalWorkCanon(canonFiles), "canonical work queue detected");
@@ -80,9 +166,9 @@ assert.equal(verifyItems.length, 3, "BACKLOG Verify rows parsed");
 assert.equal(enhancementItems.length, 4, "BACKLOG Enhancement rows parsed");
 assert.equal(bugItems.length, 0, "no open BACKLOG Bugs rows");
 assert.equal(auditItems.length, 2, "active audit rows parsed; resolved excluded");
-assert.ok(auditItems.some(i => i.workId === "ELCAD-AUD-014" && i.status === "started"));
-assert.ok(auditItems.some(i => i.workId === "KRETS-AUD-032" && i.status === "open"));
-assert.ok(!auditItems.some(i => i.workId === "KRETS-AUD-099"), "resolved audit row excluded");
+assert.ok(auditItems.some(i => i.workId === "PROJECT-AUD-014" && i.status === "started"));
+assert.ok(auditItems.some(i => i.workId === "PROJECT-AUD-032" && i.status === "open"));
+assert.ok(!auditItems.some(i => i.workId === "PROJECT-AUD-099"), "resolved audit row excluded");
 assert.ok(auditItems.some(i => i.classification === "verify"));
 assert.ok(auditItems.some(i => i.classification === "enhancement"));
 
@@ -142,11 +228,11 @@ assert.ok(
   assert.ok(isPromptContextEligibleWorkItem(sample), "canonical verify item eligible");
   assert.ok(isPromptContextEligibleWorkItem(enhancementItems[0]), "canonical enhancement eligible");
   const ctx = formatRepoDashboardWorkItemContext(sample);
-  assert.ok(ctx.includes("KV-V-001"), "context includes work ID");
+  assert.ok(ctx.includes("PROJECT-V-001"), "context includes work ID");
   assert.ok(ctx.includes("verify"), "context includes classification");
   assert.ok(ctx.includes("Next action"), "context includes next action field");
   const seed = createPromptLoopContextSeed(sample, { seedNonce: 1 });
-  assert.ok(seed.taskContext.includes("KV-V-001"));
+  assert.ok(seed.taskContext.includes("PROJECT-V-001"));
   assert.equal(createPromptLoopContextSeed(sample, { seedNonce: 1 }).id.split("|").slice(0, -1).join("|"), seed.id.split("|").slice(0, -1).join("|"));
 }
 
