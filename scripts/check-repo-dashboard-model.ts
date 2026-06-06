@@ -488,14 +488,14 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 
 {
   const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
-  const banned = ["#58a6ff", "#56d364", "#79c0ff", "#7e9ecf"];
-  for (const hex of banned) {
-    assert.ok(
-      !stylesSource.includes(`--repo-chart-series-${1}: ${hex}`) &&
-        !stylesSource.includes(`--repo-chart-series-${2}: ${hex}`),
-      `chart series must not use blue/green palette value ${hex}`,
-    );
-  }
+  assert.ok(
+    stylesSource.includes("--repo-chart-series-1: #9ec8e8"),
+    "dark chart series 1 must use light blue",
+  );
+  assert.ok(
+    stylesSource.includes("--repo-chart-series-2: #9ed4a8"),
+    "dark chart series 2 must use light green",
+  );
   assert.ok(
     stylesSource.includes("--repo-chart-series-1"),
     "styles must define repo chart series tokens",

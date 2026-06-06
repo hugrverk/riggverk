@@ -688,48 +688,24 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
           {snapshot && snapshotMatchesPath && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
-              <div className="repo-dashboard-kpis" role="group" aria-label="Overview metrics">
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("docs")}>
-                  <div className="repo-dashboard-kpi-num font-mono">
-                    {docSources.filter(d => d.found).length}/{docSources.length}
-                  </div>
-                  <div className="repo-dashboard-kpi-label">docs found</div>
-                  <div className="repo-dashboard-kpi-hint text-muted">
-                    {snapshot.changed_files.length} HEAD file{snapshot.changed_files.length === 1 ? "" : "s"}
-                  </div>
-                </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("overview")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{snapshot.commits.length}</div>
-                  <div className="repo-dashboard-kpi-label">commits loaded</div>
-                </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{docOpenCount}</div>
-                  <div className="repo-dashboard-kpi-label">open from docs</div>
-                </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
-                  <div className="repo-dashboard-kpi-num font-mono">{workStatusCounts.open}</div>
-                  <div className="repo-dashboard-kpi-label">open items</div>
-                </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("work")}>
-                  <div className="repo-dashboard-kpi-num font-mono">
-                    {snapshot.gh.authenticated ? snapshot.gh.open_issues.length : "—"}
-                  </div>
-                  <div className="repo-dashboard-kpi-label">{ghIssuesLabel}</div>
-                </button>
-                <button
-                  type="button"
-                  className="repo-dashboard-kpi"
-                  onClick={() => setSection("work")}
-                >
-                  <div className="repo-dashboard-kpi-num font-mono">{needsPlanningCount}</div>
-                  <div className="repo-dashboard-kpi-label">needs planning</div>
-                </button>
-              </div>
-
               <RepoActivityInsights
                 commits={snapshot.commits}
                 commitsTruncated={snapshot.commits_truncated}
                 heatmapCells={heatmap}
+                metrics={{
+                  docsFound: docSources.filter(d => d.found).length,
+                  docsTotal: docSources.length,
+                  headFileCount: snapshot.changed_files.length,
+                  commitsLoaded: snapshot.commits.length,
+                  docOpenCount,
+                  workOpenCount: workStatusCounts.open,
+                  ghIssuesValue: snapshot.gh.authenticated
+                    ? snapshot.gh.open_issues.length
+                    : null,
+                  ghIssuesLabel,
+                  needsPlanningCount,
+                }}
+                onNavigate={setSection}
               />
 
               <div className="repo-dashboard-overview-lower">

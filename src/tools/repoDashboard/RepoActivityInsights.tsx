@@ -444,14 +444,76 @@ function ContributorVisibilityRow({
   );
 }
 
+export type ActivityInsightsKpiTarget = "overview" | "work" | "docs";
+
+export interface ActivityInsightsMetrics {
+  docsFound: number;
+  docsTotal: number;
+  headFileCount: number;
+  commitsLoaded: number;
+  docOpenCount: number;
+  workOpenCount: number;
+  ghIssuesValue: number | null;
+  ghIssuesLabel: string;
+  needsPlanningCount: number;
+}
+
+function ActivityInsightsMetricsBar({
+  metrics,
+  onNavigate,
+}: {
+  metrics: ActivityInsightsMetrics;
+  onNavigate: (target: ActivityInsightsKpiTarget) => void;
+}) {
+  return (
+    <div className="repo-dashboard-kpis" role="group" aria-label="Overview metrics">
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("docs")}>
+        <div className="repo-dashboard-kpi-num font-mono">
+          {metrics.docsFound}/{metrics.docsTotal}
+        </div>
+        <div className="repo-dashboard-kpi-label">docs found</div>
+        <div className="repo-dashboard-kpi-hint text-muted">
+          {metrics.headFileCount} HEAD file{metrics.headFileCount === 1 ? "" : "s"}
+        </div>
+      </button>
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("overview")}>
+        <div className="repo-dashboard-kpi-num font-mono">{metrics.commitsLoaded}</div>
+        <div className="repo-dashboard-kpi-label">commits loaded</div>
+      </button>
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("work")}>
+        <div className="repo-dashboard-kpi-num font-mono">{metrics.docOpenCount}</div>
+        <div className="repo-dashboard-kpi-label">open from docs</div>
+      </button>
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("work")}>
+        <div className="repo-dashboard-kpi-num font-mono">{metrics.workOpenCount}</div>
+        <div className="repo-dashboard-kpi-label">open items</div>
+      </button>
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("work")}>
+        <div className="repo-dashboard-kpi-num font-mono">
+          {metrics.ghIssuesValue ?? "—"}
+        </div>
+        <div className="repo-dashboard-kpi-label">{metrics.ghIssuesLabel}</div>
+      </button>
+      <button type="button" className="repo-dashboard-kpi" onClick={() => onNavigate("work")}>
+        <div className="repo-dashboard-kpi-num font-mono">{metrics.needsPlanningCount}</div>
+        <div className="repo-dashboard-kpi-label">needs planning</div>
+      </button>
+    </div>
+  );
+}
+
 export function RepoActivityInsights({
   commits,
   commitsTruncated,
   heatmapCells,
+  metrics,
+  onNavigate,
 }: {
   commits: RepoCommitEntry[];
   commitsTruncated: boolean;
   heatmapCells: HeatmapCell[];
+  metrics: ActivityInsightsMetrics;
+  onNavigate: (target: ActivityInsightsKpiTarget) => void;
 }) {
   const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("lines");
   const [rangeDays, setRangeDays] = useState<ActivityInsightsRangeDays>(
@@ -510,7 +572,7 @@ export function RepoActivityInsights({
       aria-label="Repository activity and contributors"
     >
       <div className="repo-dashboard-activity-insights-head">
-        <h2 className="font-mono">Activity &amp; contributors</h2>
+        <ActivityInsightsMetricsBar metrics={metrics} onNavigate={onNavigate} />
       </div>
 
       {!commits.length ? (
@@ -521,7 +583,7 @@ export function RepoActivityInsights({
         <div className="repo-dashboard-activity-insights-body">
           <div className="repo-dashboard-activity-insights-chart">
             <div className="repo-dashboard-activity-chart-header">
-              <h3 className="repo-dashboard-activity-chart-title font-mono">Activity</h3>
+              <h3 className="repo-dashboard-activity-chart-title font-mono">Contributions</h3>
               <div className="repo-dashboard-activity-chart-header-controls">
                 <div className="repo-dashboard-toolbar" role="group" aria-label="Activity range">
                   {ACTIVITY_INSIGHTS_RANGE_DAYS.map(days => (

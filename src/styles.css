@@ -28,14 +28,14 @@
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
   --nav-icon-size: 32px;
-  --repo-chart-series-1: #d6c2a3;
-  --repo-chart-series-2: #c7ccd2;
-  --repo-chart-series-3: #b8a99a;
-  --repo-chart-series-4: #a8adb4;
-  --repo-chart-series-5: #9a9488;
-  --repo-chart-series-6: #8e9399;
-  --repo-chart-series-7: #a39586;
-  --repo-chart-series-8: #959aa0;
+  --repo-chart-series-1: #9ec8e8;
+  --repo-chart-series-2: #9ed4a8;
+  --repo-chart-series-3: #8ab8d8;
+  --repo-chart-series-4: #8ac89a;
+  --repo-chart-series-5: #7aa8c8;
+  --repo-chart-series-6: #7ab88a;
+  --repo-chart-series-7: #6a98b8;
+  --repo-chart-series-8: #6aa87a;
   --repo-chart-gridline: rgba(255, 255, 255, 0.06);
   --repo-chart-axis: rgba(255, 255, 255, 0.12);
   --repo-chart-text: rgba(255, 255, 255, 0.42);
@@ -50,14 +50,14 @@
   --text: #1a1a1a;
   --text-muted: #666666;
   --text-heading: #111111;
-  --repo-chart-series-1: #8a7358;
-  --repo-chart-series-2: #6e737a;
-  --repo-chart-series-3: #7a6b5c;
-  --repo-chart-series-4: #5f646b;
-  --repo-chart-series-5: #6b6458;
-  --repo-chart-series-6: #565b61;
-  --repo-chart-series-7: #75685a;
-  --repo-chart-series-8: #5c6167;
+  --repo-chart-series-1: #4a8fbf;
+  --repo-chart-series-2: #4a9f62;
+  --repo-chart-series-3: #3d7fa8;
+  --repo-chart-series-4: #3d8f52;
+  --repo-chart-series-5: #356f92;
+  --repo-chart-series-6: #357a48;
+  --repo-chart-series-7: #2d6080;
+  --repo-chart-series-8: #2d6a3e;
   --repo-chart-gridline: rgba(0, 0, 0, 0.07);
   --repo-chart-axis: rgba(0, 0, 0, 0.14);
   --repo-chart-text: rgba(0, 0, 0, 0.45);
@@ -73,14 +73,14 @@
     --text: #1a1a1a;
     --text-muted: #666666;
     --text-heading: #111111;
-    --repo-chart-series-1: #8a7358;
-    --repo-chart-series-2: #6e737a;
-    --repo-chart-series-3: #7a6b5c;
-    --repo-chart-series-4: #5f646b;
-    --repo-chart-series-5: #6b6458;
-    --repo-chart-series-6: #565b61;
-    --repo-chart-series-7: #75685a;
-    --repo-chart-series-8: #5c6167;
+    --repo-chart-series-1: #4a8fbf;
+    --repo-chart-series-2: #4a9f62;
+    --repo-chart-series-3: #3d7fa8;
+    --repo-chart-series-4: #3d8f52;
+    --repo-chart-series-5: #356f92;
+    --repo-chart-series-6: #357a48;
+    --repo-chart-series-7: #2d6080;
+    --repo-chart-series-8: #2d6a3e;
     --repo-chart-gridline: rgba(0, 0, 0, 0.07);
     --repo-chart-axis: rgba(0, 0, 0, 0.14);
     --repo-chart-text: rgba(0, 0, 0, 0.45);
@@ -5728,7 +5728,7 @@ code {
   );
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr) var(--repo-dashboard-overview-lower-height);
+  grid-template-rows: minmax(0, 1fr) var(--repo-dashboard-overview-lower-height);
   gap: 14px;
   width: 100%;
   max-width: 100%;
@@ -5745,19 +5745,15 @@ code {
   max-width: 100%;
 }
 
-.repo-dashboard-overview > .repo-dashboard-kpis {
-  grid-row: 1;
-}
-
 .repo-dashboard-overview > .repo-dashboard-activity-insights {
-  grid-row: 2;
+  grid-row: 1;
   min-height: 0;
   height: 100%;
   overflow: hidden;
 }
 
 .repo-dashboard-overview > .repo-dashboard-overview-lower {
-  grid-row: 3;
+  grid-row: 2;
   min-height: 0;
   max-height: var(--repo-dashboard-overview-lower-height);
 }
@@ -6119,10 +6115,14 @@ code {
 .repo-dashboard-activity-insights-head {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
+  align-items: stretch;
+  justify-content: stretch;
+  gap: 8px;
   flex-shrink: 0;
+}
+
+.repo-dashboard-activity-insights-head .repo-dashboard-kpis {
+  width: 100%;
 }
 
 .repo-dashboard-activity-chart-header {
