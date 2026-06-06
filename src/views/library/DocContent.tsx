@@ -82,13 +82,12 @@ export function DocContent(props: DocContentProps) {
         </div>
       </header>
 
-      <div className="lib-docs-mode-tabs" role="tablist" aria-label="Doc view mode">
+      <div className="lib-docs-mode-tabs" role="group" aria-label="Doc view mode">
         <button
           type="button"
           className={`btn btn-sm lib-docs-mode-tab${docMode === "preview" ? " btn-active" : ""}`}
           onClick={() => onSetDocMode("preview")}
-          role="tab"
-          aria-selected={docMode === "preview"}
+          aria-pressed={docMode === "preview"}
         >
           preview
         </button>
@@ -96,8 +95,7 @@ export function DocContent(props: DocContentProps) {
           type="button"
           className={`btn btn-sm lib-docs-mode-tab${docMode === "edit" ? " btn-active" : ""}`}
           onClick={() => onSetDocMode("edit")}
-          role="tab"
-          aria-selected={docMode === "edit"}
+          aria-pressed={docMode === "edit"}
         >
           edit
         </button>

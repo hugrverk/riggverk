@@ -72,16 +72,36 @@ describe("DocContent", () => {
     expect(screen.getByText("context")).not.toBeNull();
   });
 
-  it("exposes Preview and Edit tab selected state", () => {
+  it("exposes Preview and Edit as a segmented button group", () => {
     const { onSetDocMode } = renderDoc({ docMode: "preview" });
-    const preview = screen.getByRole("tab", { name: "preview" });
-    const edit = screen.getByRole("tab", { name: "edit" });
-    expect(preview.getAttribute("aria-selected")).toBe("true");
-    expect(edit.getAttribute("aria-selected")).toBe("false");
+    const group = screen.getByRole("group", { name: "Doc view mode" });
+    const preview = screen.getByRole("button", { name: "preview" });
+    const edit = screen.getByRole("button", { name: "edit" });
+    expect(group.contains(preview)).toBe(true);
+    expect(group.contains(edit)).toBe(true);
+    expect(preview.getAttribute("aria-pressed")).toBe("true");
+    expect(edit.getAttribute("aria-pressed")).toBe("false");
+    expect(preview.getAttribute("role")).toBeNull();
+    expect(edit.getAttribute("role")).toBeNull();
+    expect(preview.getAttribute("aria-selected")).toBeNull();
+    expect(edit.getAttribute("aria-selected")).toBeNull();
     expect(preview.className).toContain("btn-active");
+    expect(screen.queryByRole("tablist")).toBeNull();
+    expect(screen.queryByRole("tab")).toBeNull();
 
     fireEvent.click(edit);
     expect(onSetDocMode).toHaveBeenCalledWith("edit");
+  });
+
+  it("calls onSetDocMode with preview when Preview is clicked from edit mode", () => {
+    const { onSetDocMode } = renderDoc({ docMode: "edit" });
+    const preview = screen.getByRole("button", { name: "preview" });
+    const edit = screen.getByRole("button", { name: "edit" });
+    expect(edit.getAttribute("aria-pressed")).toBe("true");
+    expect(preview.getAttribute("aria-pressed")).toBe("false");
+
+    fireEvent.click(preview);
+    expect(onSetDocMode).toHaveBeenCalledWith("preview");
   });
 
   it("shows modified state and open action", () => {
