@@ -1,7 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { CopyButton } from "../../components/CopyButton";
-import { useSavedRepoDashboardEntries } from "../../lib/savedRepoEntries";
+import { isEditableEventTarget } from "../../lib/isEditableEventTarget";
+import { useTransientStatus } from "../../lib/useTransientStatus";
+import type { RepoDashboardEntry } from "../../types";
 import type { RepoPromptContext } from "../../types";
 import {
   composePrompt,
@@ -28,13 +30,20 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
 interface PromptLoopsToolProps {
   toolsSwitcher?: ReactNode;
   contextSeed?: PromptLoopContextSeed | null;
+  savedRepos?: RepoDashboardEntry[];
+  savedReposLoading?: boolean;
 }
 
-export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoopsToolProps) {
+export function PromptLoopsTool({
+  toolsSwitcher,
+  contextSeed = null,
+  savedRepos = [],
+  savedReposLoading = false,
+}: PromptLoopsToolProps) {
   const [groupIndex, setGroupIndex] = useState(0);
   const [itemIndex, setItemIndex] = useState(0);
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState<string | null>(null);
+  const { status, showStatus } = useTransientStatus(1200);
   const [repoEntryId, setRepoEntryId] = useState(NO_REPO_CONTEXT_VALUE);
   const [taskContext, setTaskContext] = useState("");
   const [selectedOptions, setSelectedOptions] = useState<Set<string>>(() => new Set());
@@ -42,9 +51,7 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
   const [repoPromptContext, setRepoPromptContext] = useState<PromptRepoContextSection | null>(null);
   const [repoContextLoading, setRepoContextLoading] = useState(false);
   const [repoContextWarning, setRepoContextWarning] = useState<string | null>(null);
-  const { entries: savedRepos, loading: savedReposLoading } = useSavedRepoDashboardEntries();
   const searchRef = useRef<HTMLInputElement>(null);
-  const statusTimerRef = useRef<number | null>(null);
   const repoContextSeqRef = useRef(0);
   const appliedContextSeedIdRef = useRef<string | null>(null);
 
@@ -142,12 +149,6 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
     if (itemIndex >= items.length) setItemIndex(0);
   }, [items.length, itemIndex]);
 
-  const showStatus = useCallback((text: string) => {
-    setStatus(text);
-    if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current);
-    statusTimerRef.current = window.setTimeout(() => setStatus(null), 1200);
-  }, []);
-
   useEffect(() => {
     if (!contextSeed) return;
     if (appliedContextSeedIdRef.current === contextSeed.id) return;
@@ -173,6 +174,8 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+      if (isEditableEventTarget(event.target)) return;
       if (event.key === "/" && document.activeElement !== searchRef.current) {
         event.preventDefault();
         searchRef.current?.focus();
