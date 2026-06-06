@@ -5955,12 +5955,11 @@ code {
 
 .repo-dashboard-contributor-panel {
   min-width: 0;
-  min-height: 0;
-  overflow: auto;
+  overflow: visible;
   border: 1px solid var(--border);
   background: var(--bg-inset);
   border-radius: var(--radius);
-  padding: 10px;
+  padding: 8px 10px;
 }
 
 .repo-dashboard-contributor-panel .repo-dashboard-contributors-table-wrap {
@@ -6025,9 +6024,8 @@ code {
   width: 100%;
   max-width: 100%;
   height: auto;
-  aspect-ratio: 820 / 300;
-  min-height: 280px;
-  max-height: 320px;
+  aspect-ratio: 820 / 230;
+  max-height: 240px;
   flex: 0 0 auto;
 }
 
@@ -6037,11 +6035,13 @@ code {
 }
 
 .repo-dashboard-activity-bar {
-  opacity: 0.9;
+  opacity: 0.78;
+  transition: opacity 0.12s ease;
 }
 
 .repo-dashboard-activity-bar:hover {
   opacity: 1;
+  filter: brightness(1.15);
 }
 
 .repo-dashboard-activity-point {
@@ -6105,24 +6105,35 @@ code {
   text-underline-offset: 2px;
 }
 
-.repo-dashboard-contributor-show-all:hover,
-.repo-dashboard-contributor-show-all:focus-visible {
+.repo-dashboard-contributor-show-all:hover:not(:disabled),
+.repo-dashboard-contributor-show-all:focus-visible:not(:disabled) {
   color: var(--text-heading);
   outline: 2px solid var(--focus-ring, var(--active-border));
   outline-offset: 2px;
 }
 
+.repo-dashboard-contributor-show-all-inactive,
+.repo-dashboard-contributor-show-all:disabled {
+  color: var(--text-muted);
+  opacity: 0.55;
+  cursor: default;
+  text-decoration: none;
+}
+
 .repo-dashboard-contributor-visibility-list {
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 0;
   min-width: 0;
+  max-height: min(11.5rem, 42vh);
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .repo-dashboard-contributor-visibility-header,
 .repo-dashboard-contributor-visibility {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 3.2rem 2.6rem 2.6rem;
+  grid-template-columns: 10px 2.8rem minmax(0, 1fr) 3rem 2.5rem 2.5rem;
   gap: 6px;
   align-items: center;
   text-align: left;
@@ -6131,45 +6142,66 @@ code {
 
 .repo-dashboard-contributor-visibility-header {
   color: var(--text-muted);
-  padding: 0 6px 2px;
+  padding: 0 4px 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+  position: sticky;
+  top: 0;
+  background: var(--bg-inset);
+  z-index: 1;
+}
+
+.repo-dashboard-contributor-visibility-header .repo-dashboard-contributor-visibility-stat {
+  text-align: right;
 }
 
 .repo-dashboard-contributor-visibility {
   width: 100%;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg);
-  padding: 5px 6px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  padding: 4px;
   color: var(--text-muted);
   cursor: pointer;
 }
 
 .repo-dashboard-contributor-visibility-on {
-  border-color: var(--active-border);
-  background: var(--active-bg);
+  background: color-mix(in srgb, var(--active-bg) 72%, transparent);
   color: var(--text-heading);
 }
 
 .repo-dashboard-contributor-visibility:hover,
 .repo-dashboard-contributor-visibility:focus-visible {
-  border-color: var(--active-border);
+  background: color-mix(in srgb, var(--active-bg) 55%, transparent);
   outline: none;
 }
 
 .repo-dashboard-contributor-visibility:focus-visible {
-  box-shadow: 0 0 0 2px var(--focus-ring, var(--active-border));
+  box-shadow: inset 0 0 0 2px var(--focus-ring, var(--active-border));
 }
 
 .repo-dashboard-contributor-visibility-swatch {
-  width: 10px;
-  height: 10px;
+  width: 8px;
+  height: 8px;
   border-radius: 2px;
   flex-shrink: 0;
-  opacity: 0.35;
+  opacity: 1;
 }
 
-.repo-dashboard-contributor-visibility-on .repo-dashboard-contributor-visibility-swatch {
-  opacity: 1;
+.repo-dashboard-contributor-visibility-state {
+  font-size: 9px;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.repo-dashboard-contributor-visibility-on .repo-dashboard-contributor-visibility-state {
+  color: var(--text-heading);
+}
+
+.repo-dashboard-contributor-visibility:not(.repo-dashboard-contributor-visibility-on) .repo-dashboard-contributor-visibility-name {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--text-muted) 65%, transparent);
 }
 
 .repo-dashboard-contributor-visibility-name {

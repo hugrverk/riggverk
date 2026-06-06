@@ -35,11 +35,11 @@ function ActivityInsightsChart({
   const max = useMemo(() => visibleContributorSeriesMax(series), [series]);
 
   const w = 820;
-  const h = 300;
+  const h = 230;
   const L = 40;
   const R = 28;
-  const T = 20;
-  const B = 52;
+  const T = 16;
+  const B = 44;
 
   const slotWidth = dayCount > 0 ? (w - L - R) / dayCount : 0;
   const xCenter = useCallback(
@@ -74,13 +74,13 @@ function ActivityInsightsChart({
   }
 
   const contributorCount = series.length;
-  const innerGap = 1;
-  const maxBarW = 8;
+  const innerGap = 2;
+  const maxBarW = 10;
   const barW =
     mode === "bars"
       ? Math.min(
           maxBarW,
-          Math.max(1, (slotWidth - innerGap * (contributorCount - 1)) / contributorCount),
+          Math.max(2, (slotWidth - innerGap * (contributorCount - 1)) / contributorCount),
         )
       : 0;
 
@@ -162,6 +162,7 @@ function ActivityInsightsChart({
                     y={y}
                     width={barW}
                     height={barH}
+                    rx={1.5}
                     fill={color}
                     aria-hidden="true"
                     onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex })}
@@ -233,6 +234,9 @@ function ContributorVisibilityRow({
         style={{ background: color }}
         aria-hidden="true"
       />
+      <span className="repo-dashboard-contributor-visibility-state" aria-hidden="true">
+        {visible ? "Shown" : "Hidden"}
+      </span>
       <span className="repo-dashboard-contributor-visibility-name">{stat.displayName}</span>
       <span className="repo-dashboard-contributor-visibility-stat">{stat.commitCount}</span>
       <span className="repo-dashboard-contributor-visibility-stat">{stat.percentage}%</span>
@@ -278,6 +282,10 @@ export function RepoActivityInsights({
   );
 
   const visibleIdSet = useMemo(() => new Set(visibleContributorIds), [visibleContributorIds]);
+  const allContributorsVisible = useMemo(
+    () => allStats.length > 0 && allStats.every(stat => visibleIdSet.has(stat.id)),
+    [allStats, visibleIdSet],
+  );
 
   const toggleContributor = useCallback((id: string) => {
     setVisibleContributorIds(prev =>
@@ -345,8 +353,10 @@ export function RepoActivityInsights({
                 <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
                 <button
                   type="button"
-                  className="repo-dashboard-contributor-show-all font-mono"
+                  className={`repo-dashboard-contributor-show-all font-mono${allContributorsVisible ? " repo-dashboard-contributor-show-all-inactive" : ""}`}
                   onClick={showAllContributors}
+                  disabled={allContributorsVisible}
+                  aria-disabled={allContributorsVisible}
                 >
                   Show all
                 </button>
@@ -356,6 +366,7 @@ export function RepoActivityInsights({
                   className="repo-dashboard-contributor-visibility-header"
                   aria-hidden="true"
                 >
+                  <span />
                   <span />
                   <span>Name</span>
                   <span>Commits</span>
