@@ -49,13 +49,12 @@ import {
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
 
-export type RepoDashboardSection = "overview" | "activity" | "work" | "sources";
+export type RepoDashboardSection = "overview" | "work" | "docs";
 
 const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] = [
-  { id: "overview", label: "Overview", purpose: "Repo snapshot and activity summary" },
-  { id: "activity", label: "Activity", purpose: "Loaded recent commit history" },
-  { id: "work", label: "Work", purpose: "Tracked work items from docs and gh" },
-  { id: "sources", label: "Sources", purpose: "Latest change, planning gaps, and source docs" },
+  { id: "overview", label: "Overview", purpose: "Repo snapshot, activity charts, and commit history" },
+  { id: "work", label: "Work", purpose: "Tracked work items, planning gaps, and gh issues" },
+  { id: "docs", label: "Docs", purpose: "Source doc discovery, HEAD files, and parse health" },
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
@@ -711,14 +710,16 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
-    if (id === "activity") return String(snapshot.commits.length);
+    if (id === "overview") return String(snapshot.commits.length);
     if (id === "work") return String(workStatusCounts.open);
-    if (id === "sources") {
+    if (id === "docs") {
       const contributing = docSources.filter(d => d.contributes).length;
-      return String(contributing + (latestCommit || latestMerge ? 1 : 0));
+      return String(contributing);
     }
-    return String(workStatusCounts.open);
+    return "-";
   };
+
+  const needsPlanningCount = workItems.filter(i => i.needsPlan && i.status !== "done").length;
 
   const brandLabel = repoDashboardBrandLabel(repoPath);
   const ghIssuesLabel = snapshot
@@ -999,16 +1000,16 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           {snapshot && snapshotMatchesPath && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
               <div className="repo-dashboard-kpis" role="group" aria-label="Overview metrics">
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("docs")}>
                   <div className="repo-dashboard-kpi-num font-mono">
-                    {latestCommit || latestMerge ? 1 : 0}
+                    {docSources.filter(d => d.found).length}/{docSources.length}
                   </div>
-                  <div className="repo-dashboard-kpi-label">latest change</div>
+                  <div className="repo-dashboard-kpi-label">docs found</div>
                   <div className="repo-dashboard-kpi-hint text-muted">
-                    {latestCommit ? "local HEAD" : latestMerge ? "gh only" : "none"}
+                    {snapshot.changed_files.length} HEAD file{snapshot.changed_files.length === 1 ? "" : "s"}
                   </div>
                 </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("activity")}>
+                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("overview")}>
                   <div className="repo-dashboard-kpi-num font-mono">{snapshot.commits.length}</div>
                   <div className="repo-dashboard-kpi-label">commits loaded</div>
                 </button>
@@ -1026,10 +1027,15 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   </div>
                   <div className="repo-dashboard-kpi-label">{ghIssuesLabel}</div>
                 </button>
-                <button type="button" className="repo-dashboard-kpi" onClick={() => setSection("sources")}>
-                  <div className="repo-dashboard-kpi-num font-mono">
-                    {workItems.filter(i => i.needsPlan && i.status !== "done").length}
-                  </div>
+                <button
+                  type="button"
+                  className="repo-dashboard-kpi"
+                  onClick={() => {
+                    setWorkFilter("open");
+                    setSection("work");
+                  }}
+                >
+                  <div className="repo-dashboard-kpi-num font-mono">{needsPlanningCount}</div>
                   <div className="repo-dashboard-kpi-label">needs planning</div>
                 </button>
               </div>
@@ -1105,7 +1111,8 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 <div className="repo-dashboard-card repo-dashboard-health-card">
                   <h2 className="font-mono">Source health</h2>
                   <p className="text-muted small repo-dashboard-health-note">
-                    Local git first{snapshot.gh.available ? " · gh when authenticated" : ""}.
+                    Local git first{snapshot.gh.available ? " · gh when authenticated" : ""}. Doc parse
+                    details on Docs.
                   </p>
                   <div className="repo-dashboard-health-grid">
                     {health.map(row => (
@@ -1115,40 +1122,71 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       </div>
                     ))}
                   </div>
-                  {snapshot.warnings.length > 0 && (
-                    <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">{snapshot.warnings.join("\n")}</pre>
-                  )}
                 </div>
+              </div>
+
+              <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                <h2 className="font-mono">Commit history</h2>
+                <p className="text-muted small repo-dashboard-page-desc">
+                  Loaded local git history
+                  {snapshot.commits_truncated ? " (truncated at load limit)" : ""}; list shows first{" "}
+                  {COMMIT_LIST_DISPLAY_CAP}.
+                </p>
+                <ActivitySummaryStrip snapshot={snapshot} />
+                <CommitHistoryList commits={snapshot.commits.slice(0, COMMIT_LIST_DISPLAY_CAP)} />
               </div>
             </div>
           )}
 
-          {snapshot && snapshotMatchesPath && !loading && section === "activity" && (
+          {snapshot && snapshotMatchesPath && !loading && section === "docs" && (
             <RepoDashboardPage
-              title="Activity"
-              description={`Full local git history for charts${snapshot.commits_truncated ? " (truncated at load limit)" : ""}; list shows ${COMMIT_LIST_DISPLAY_CAP}. GitHub issues/PRs via gh when authenticated.`}
-              toolbar={<ActivitySummaryStrip snapshot={snapshot} />}
+              title="Docs"
+              description="Allowlisted planning docs, HEAD file list, and parse warnings from the local snapshot."
               main={
                 <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <CommitHistoryList commits={snapshot.commits.slice(0, COMMIT_LIST_DISPLAY_CAP)} />
+                  <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
+                  <p className="text-muted small">
+                    {docSources.filter(d => d.contributes).length} contributing ·{" "}
+                    {docSources.filter(d => d.found).length}/{docSources.length} found
+                  </p>
+                  <div className="repo-dashboard-source-docs-list" role="list" aria-label="Source docs list">
+                    {docSources.map(row => (
+                      <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row" role="listitem">
+                        <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
+                        <span className="prompt-loops-pill">
+                          {!row.found
+                            ? row.optional
+                              ? "optional"
+                              : "missing"
+                            : row.contributes
+                              ? `${row.itemCount} items (${row.openCount} open)`
+                              : "found · 0 items"}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                  {parserWarnings.length > 0 && (
+                    <pre
+                      className="repo-dashboard-code font-mono repo-dashboard-parser-warnings"
+                      role="status"
+                    >
+                      {parserWarnings.join("\n")}
+                    </pre>
+                  )}
+                  {snapshot.warnings.length > 0 && (
+                    <>
+                      <h4 className="font-mono repo-dashboard-panel-subtitle">Repo warnings</h4>
+                      <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">
+                        {snapshot.warnings.join("\n")}
+                      </pre>
+                    </>
+                  )}
+                  {snapshot.gh.message && (
+                    <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
+                  )}
                 </div>
               }
               aside={
-                heatmap.length ? (
-                  <div className="repo-dashboard-card repo-dashboard-heat-aside">
-                    <h3 className="font-mono repo-dashboard-panel-title">Commit activity</h3>
-                    <ActivityHeatmap cells={heatmap} density="default" />
-                  </div>
-                ) : undefined
-              }
-            />
-          )}
-
-          {snapshot && snapshotMatchesPath && !loading && section === "sources" && (
-            <RepoDashboardPage
-              title="Sources"
-              description="Latest change from gh or local git, planning gaps, and tracked source docs."
-              main={
                 <>
                   <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Latest merge / commit</h3>
@@ -1158,7 +1196,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       latestCommit={latestCommit}
                     />
                   </div>
-                  <div className="repo-dashboard-card">
+                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                     <h3 className="font-mono repo-dashboard-panel-title">Changed files at HEAD (local git)</h3>
                     <p className="text-muted small" role="note">
                       {headChangedFilesLabel(snapshot, latestCommit)}. This is not a GitHub PR file list.
@@ -1179,64 +1217,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                         <p className="text-muted small">No changed files for HEAD.</p>
                       )}
                     </div>
-                  </div>
-                </>
-              }
-              aside={
-                <>
-                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                    <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
-                    <p className="text-muted small repo-dashboard-page-desc">
-                      Open or needs-planning items grouped by doc lane (BACKLOG, KNOWN_GAPS, product, …).
-                    </p>
-                    <PlanningGapsPanel
-                      items={workItems}
-                      laneFilter={laneFilter}
-                      typeFilter={typeFilter}
-                      onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
-                    />
-                  </div>
-                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                    <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
-                    <p className="text-muted small">
-                      {docSources.filter(d => d.contributes).length} contributing ·{" "}
-                      {docSources.filter(d => d.found).length}/{docSources.length} found
-                    </p>
-                    <div className="repo-dashboard-source-docs-list" role="list" aria-label="Source docs list">
-                      {docSources.map(row => (
-                        <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row" role="listitem">
-                          <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
-                          <span className="prompt-loops-pill">
-                            {!row.found
-                              ? row.optional
-                                ? "optional"
-                                : "missing"
-                              : row.contributes
-                                ? `${row.itemCount} items (${row.openCount} open)`
-                                : "found · 0 items"}
-                          </span>
-                        </div>
-                      ))}
-                    </div>
-                    {parserWarnings.length > 0 && (
-                      <pre
-                        className="repo-dashboard-code font-mono repo-dashboard-parser-warnings"
-                        role="status"
-                      >
-                        {parserWarnings.join("\n")}
-                      </pre>
-                    )}
-                    {snapshot.warnings.length > 0 && (
-                      <>
-                        <h4 className="font-mono repo-dashboard-panel-subtitle">Repo warnings</h4>
-                        <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">
-                          {snapshot.warnings.join("\n")}
-                        </pre>
-                      </>
-                    )}
-                    {snapshot.gh.message && (
-                      <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
-                    )}
                   </div>
                 </>
               }
@@ -1321,14 +1301,28 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     items={filteredWorkItems}
                     onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
                     emptyMessage={
-                      workFilter !== "all" || typeFilter !== "all"
-                        ? "No items match the active filters. Try clearing status or type."
+                      workFilter !== "all" || typeFilter !== "all" || laneFilter !== "all"
+                        ? "No items match the active filters. Try clearing status, lane, or type."
                         : docSources.every(d => !d.contributes) && !snapshot.gh.authenticated
                           ? "No work items parsed. Add or refresh docs (BACKLOG, KNOWN_GAPS, product/*.md) or authenticate gh for issues."
                           : docSources.every(d => !d.contributes)
                             ? "Docs were found but no actionable rows matched the parser. Check BACKLOG/KNOWN_GAPS tables or TODO checkboxes."
                             : "No work items in this snapshot."
                     }
+                  />
+                </div>
+              }
+              aside={
+                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
+                  <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
+                  <p className="text-muted small repo-dashboard-page-desc">
+                    Open or needs-planning items grouped by doc lane (BACKLOG, KNOWN_GAPS, product, …).
+                  </p>
+                  <PlanningGapsPanel
+                    items={workItems}
+                    laneFilter={laneFilter}
+                    typeFilter={typeFilter}
+                    onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
                   />
                 </div>
               }

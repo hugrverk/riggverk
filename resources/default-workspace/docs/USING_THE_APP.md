@@ -58,7 +58,7 @@ Appearance, global text size, and theme colors. Settings autosave. Target profil
 In-app utilities separate from harness sync:
 
 - **Prompt Loops** — copy/paste prompt templates with skill-weaving for agent runs.
-- **Repo Dashboard** — local git/gh snapshot of a checkout (activity, work items, sources).
+- **Repo Dashboard** — local git/gh snapshot of a checkout (overview, work items, docs).
 
 ## Dry-run before sync
 

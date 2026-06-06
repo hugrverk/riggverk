@@ -85,6 +85,13 @@ fi
 if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard work list must expose a user-facing display cap"
 fi
+if rg -n '"activity"|"sources"|label: "Activity"|label: "Sources"' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "Repo Dashboard must use exactly three primary pages: overview, work, docs"
+fi
+if ! rg -n 'label: "Docs"' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Repo Dashboard must expose a Docs primary page"
+fi
 if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Prompt Loops must expose a narrow-layout group control"
 fi
