@@ -5922,6 +5922,15 @@ code {
 
 .repo-dashboard-heat-card {
   min-width: 0;
+  padding-bottom: 14px;
+  overflow: visible;
+}
+
+.repo-dashboard-heat-card .repo-dashboard-heatbox {
+  border: none;
+  background: transparent;
+  padding: 0;
+  overflow: visible;
 }
 
 .repo-dashboard-overview-mid {
@@ -6251,18 +6260,6 @@ code {
 
 .repo-dashboard-contributor-row-selected {
   background: var(--active-bg);
-}
-
-.repo-dashboard-heat-card {
-  padding-bottom: 14px;
-  overflow: visible;
-}
-
-.repo-dashboard-heat-card .repo-dashboard-heatbox {
-  border: none;
-  background: transparent;
-  padding: 0;
-  overflow: visible;
 }
 
 .repo-dashboard-recent-activity-card {
@@ -6989,6 +6986,10 @@ code {
     justify-content: flex-end;
   }
 
+  .repo-dashboard-contributor-panel {
+    max-height: min(320px, 42vh);
+  }
+
 }
 
 .repo-dashboard-docs-workspace {
@@ -7250,10 +7251,15 @@ code {
 @media (max-width: 860px) {
   .repo-dashboard-docs-body {
     grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
   }
 
   .repo-dashboard-docs-list-pane {
     max-height: min(36vh, 320px);
+  }
+
+  .repo-dashboard-docs-reader-pane {
+    min-height: 0;
   }
 }
 
