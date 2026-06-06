@@ -2,12 +2,17 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import {
+  applyMutationPreservingPendingLocal,
+  mergePendingLocalOntoAcknowledged,
+} from "../lib/mergePendingAppSettings";
+import {
   applyThemeSettings,
   defaultSettings,
   serializeSettingsForCompare,
   SETTINGS_AUTOSAVE_DEBOUNCE_MS,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
+import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
 import type { AgentTargetMeta, AppSettings, TargetProfileMeta } from "../types";
 
 export interface AppSettingsControllerDeps {
@@ -33,7 +38,17 @@ export function useAppSettingsController({
   loadWorkspaceResources,
   fetchStatus,
 }: AppSettingsControllerDeps) {
-  const [appSettings, setAppSettings] = useState<AppSettings | null>(null);
+  const appSettingsRef = useRef<AppSettings | null>(null);
+  const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
+  const setAppSettings = useCallback((
+    value: AppSettings | null | ((prev: AppSettings | null) => AppSettings | null),
+  ) => {
+    setAppSettingsState(prev => {
+      const next = typeof value === "function" ? value(prev) : value;
+      appSettingsRef.current = next;
+      return next;
+    });
+  }, []);
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
   const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
@@ -46,7 +61,7 @@ export function useAppSettingsController({
   const settingsLoadedRef = useRef(false);
   const settingsAutosaveInFlightRef = useRef<string | null>(null);
   const settingsAutosaveSkipRef = useRef(false);
-  const appSettingsRef = useRef<AppSettings | null>(null);
+  const settingsMutationSeqRef = useRef(0);
 
   const settingsDirty = useMemo(() => {
     if (!appSettings || savedSettingsRef.current === null) return false;
@@ -59,10 +74,6 @@ export function useAppSettingsController({
     if (settingsDirty) return "pending";
     return "saved";
   }, [settingsAutoSaveError, settingsSaving, settingsDirty]);
-
-  useEffect(() => {
-    appSettingsRef.current = appSettings;
-  }, [appSettings]);
 
   const loadSettings = useCallback(async () => {
     try {
@@ -333,6 +344,62 @@ export function useAppSettingsController({
 
   const clearSettingsMsg = useCallback(() => setSettingsMsg(null), []);
 
+  const mutateAppSettings = useCallback<MutateAppSettings>(async mutator => {
+    const opId = ++settingsMutationSeqRef.current;
+    const maxAttempts = 3;
+
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      let base = appSettingsRef.current;
+      if (!base) throw new Error("settings not loaded");
+
+      if (attempt > 0) {
+        const latest = await invoke<AppSettings>("get_settings");
+        if (opId !== settingsMutationSeqRef.current) {
+          return latest;
+        }
+        settingsRevisionRef.current = latest.revision ?? 0;
+        base = mergePendingLocalOntoAcknowledged(
+          latest,
+          appSettingsRef.current ?? latest,
+          savedSettingsRef.current,
+        );
+      }
+
+      const acknowledgedAtStart = savedSettingsRef.current;
+      const next = mutator(base);
+      const sentSerialized = serializeSettingsForCompare(next);
+
+      try {
+        const saved = await invoke<AppSettings>("update_settings", {
+          settings: next,
+          expectedRevision: settingsRevisionRef.current,
+        });
+        if (opId !== settingsMutationSeqRef.current) {
+          return saved;
+        }
+
+        const merged = applyMutationPreservingPendingLocal(
+          saved,
+          sentSerialized,
+          appSettingsRef.current,
+          acknowledgedAtStart,
+        );
+        settingsRevisionRef.current = saved.revision ?? 0;
+        savedSettingsRef.current = serializeSettingsForCompare(saved);
+        setAppSettings(merged);
+        applyThemeSettings(merged);
+        setSettingsAutoSaveError(null);
+        return saved;
+      } catch (error) {
+        if (!isSettingsConflictError(error) || attempt === maxAttempts - 1) {
+          throw error;
+        }
+      }
+    }
+
+    throw new Error("settings conflict");
+  }, []);
+
   return {
     appSettings,
     setAppSettings,
@@ -360,5 +427,6 @@ export function useAppSettingsController({
     activeProfileId,
     clearSettingsMsg,
     setSettingsMsg,
+    mutateAppSettings,
   };
 }

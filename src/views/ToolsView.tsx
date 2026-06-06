@@ -1,5 +1,9 @@
-import { useCallback, useState } from "react";
-import { useSavedRepoEntriesController } from "../lib/useSavedRepoEntriesController";
+import { useCallback, useMemo, useState } from "react";
+import {
+  savedRepoEntriesFromSettings,
+  type MutateAppSettings,
+} from "../lib/useSavedRepoEntriesController";
+import type { AppSettings } from "../types";
 import {
   createPromptLoopContextSeed,
   isPromptContextEligibleWorkItem,
@@ -12,11 +16,19 @@ import { ToolsSwitcher } from "./ToolsSwitcher";
 
 export type ToolsTab = "prompt-loops" | "repo-dashboard";
 
-export function ToolsView() {
+export interface ToolsViewProps {
+  appSettings: AppSettings | null;
+  mutateAppSettings: MutateAppSettings;
+}
+
+export function ToolsView({ appSettings, mutateAppSettings }: ToolsViewProps) {
   const [tab, setTab] = useState<ToolsTab>("prompt-loops");
   const [contextSeed, setContextSeed] = useState<PromptLoopContextSeed | null>(null);
-  const savedRepoController = useSavedRepoEntriesController();
-  const { entries: savedRepos, activeEntryId, mutateEntries } = savedRepoController;
+  const savedRepoView = useMemo(
+    () => savedRepoEntriesFromSettings(appSettings),
+    [appSettings],
+  );
+  const { entries: savedRepos, activeEntryId, loading: savedReposLoading } = savedRepoView;
   const switcher = <ToolsSwitcher tab={tab} onTabChange={setTab} />;
 
   const handleUsePromptContext = useCallback(
@@ -41,7 +53,7 @@ export function ToolsView() {
             toolsSwitcher={switcher}
             contextSeed={contextSeed}
             savedRepos={savedRepos}
-            savedReposLoading={savedRepoController.loading}
+            savedReposLoading={savedReposLoading}
           />
         )}
         {tab === "repo-dashboard" && (
@@ -50,7 +62,7 @@ export function ToolsView() {
             onUsePromptContext={handleUsePromptContext}
             savedEntries={savedRepos}
             activeEntryId={activeEntryId}
-            mutateSavedEntries={mutateEntries}
+            mutateSavedEntries={mutateAppSettings}
           />
         )}
       </div>

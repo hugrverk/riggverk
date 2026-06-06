@@ -223,6 +223,7 @@ function App() {
     applyTargetProfile,
     activeProfileId,
     clearSettingsMsg,
+    mutateAppSettings,
   } = useAppSettingsController({
     setError,
     appliedWorkspacePathRef,
@@ -788,7 +789,7 @@ function App() {
         )}
 
         {view === "tools" && (
-          <ToolsView />
+          <ToolsView appSettings={appSettings} mutateAppSettings={mutateAppSettings} />
         )}
 
         {view === "settings" && (
