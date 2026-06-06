@@ -186,7 +186,10 @@ mod tests {
         .expect("collect pages");
 
         assert_eq!(commits.len(), 1_205);
-        assert_eq!(commits.first().map(|entry| entry.sha.as_str()), Some("sha-0"));
+        assert_eq!(
+            commits.first().map(|entry| entry.sha.as_str()),
+            Some("sha-0")
+        );
         assert_eq!(
             commits.last().map(|entry| entry.sha.as_str()),
             Some("sha-1204")
