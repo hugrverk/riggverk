@@ -11,6 +11,7 @@ const toolSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardTool.
 const workSource = readRepoDashboard("src/tools/repoDashboard/RepoWorkWorkspace.tsx");
 const chartsSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardCharts.tsx");
 const activitySource = readRepoDashboard("src/tools/repoDashboard/RepoActivityInsights.tsx");
+const stylesSource = readRepoDashboard("src/styles.css");
 const rustSource = readRepoDashboard("src-tauri/src/commands/repo_dashboard.rs");
 
 const sections = ['"overview"', '"work"', '"docs"'];
@@ -50,11 +51,52 @@ assert.ok(
   !toolSource.includes("RECENT_ACTIVITY_VISIBLE_ROWS"),
   "recent activity must not use visible-row height cap",
 );
+assert.ok(
+  !activitySource.includes("repo-dashboard-activity-insights-meta"),
+  "90-day metadata must not remain in activity header",
+);
+assert.ok(
+  activitySource.includes("repo-dashboard-activity-chart-footer"),
+  "chart footer must contain legend and metadata",
+);
+assert.ok(
+  activitySource.includes("90-day local git activity"),
+  "chart footer must retain 90-day metadata",
+);
+assert.ok(
+  /\.repo-dashboard-activity-insights-body[\s\S]*align-items:\s*stretch/.test(stylesSource),
+  "activity chart and sidebar must use stretch alignment",
+);
+assert.ok(
+  /\.repo-dashboard-overview[\s\S]*?overflow:\s*hidden/.test(stylesSource),
+  "overview must avoid page-level vertical scrolling",
+);
+assert.ok(
+  /\.repo-dashboard-overview-lower \.repo-dashboard-recent-activity-scroll[\s\S]*overflow-y:\s*auto/.test(
+    stylesSource,
+  ),
+  "recent activity must own a bounded scroll region",
+);
+assert.ok(
+  /\.repo-dashboard-overview-lower \.repo-dashboard-latest-content \{[^}]*overflow:\s*hidden/.test(
+    stylesSource,
+  ),
+  "latest change card must not scroll inside overview lower row",
+);
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");
-assert.ok(workSource.includes("repo-dashboard-work-primary-columns"), "work must use primary Active/Done columns");
-assert.ok(workSource.includes("Started ("), "active column must include Started group");
-assert.ok(workSource.includes("Done ("), "work must include Done column");
+assert.ok(workSource.includes("repo-dashboard-work-primary-columns"), "work must use three primary columns");
+assert.ok(workSource.includes('title="Started"'), "work must include Started column");
+assert.ok(workSource.includes('title="Open"'), "work must include Open column");
+assert.ok(workSource.includes('title="Done"'), "work must include Done column");
+assert.ok(!workSource.includes("Active ("), "work must not render Active heading");
+assert.ok(!workSource.includes("repo-dashboard-work-column-active"), "work must not use Active wrapper");
+assert.ok(!workSource.includes("repo-dashboard-work-active-columns"), "work must not use Active nested columns");
+assert.ok(!workSource.includes("repo-dashboard-work-subcolumn"), "work must not use nested subcolumns");
+assert.ok(workSource.includes("started {partition.activeStarted.length}"), "work summary must include started count");
+assert.ok(workSource.includes("open {partition.activeOpen.length}"), "work summary must include open count");
+assert.ok(workSource.includes("done {partition.done.length}"), "work summary must include done count");
+assert.ok(!workSource.includes("active {"), "work summary must not include active total");
 assert.ok(!chartsSource.includes("scrollRef"), "heatmap must not use scrollRef");
 assert.ok(!chartsSource.includes("scrollLeft"), "heatmap must not auto-scroll horizontally");
 assert.ok(chartsSource.includes("sliceHeatmapCellsToWindow"), "heatmap must slice displayed weeks");
@@ -81,10 +123,11 @@ assert.ok(
   !chartsSource.includes("aria-label={`${cell.date}"),
   "heatmap cells must not duplicate the parent heatmap label",
 );
-assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active column must use sibling Started/Open subcolumns");
-assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
-assert.equal((workSource.match(/repo-dashboard-work-subcolumn-scroll/g) ?? []).length, 2, "started and open need two scroll regions");
-assert.ok(workSource.includes("repo-dashboard-work-column-scroll"), "done must have its own scroll region");
+assert.equal((workSource.match(/<WorkColumn/g) ?? []).length, 3, "work must render three sibling columns");
+assert.ok(
+  workSource.includes("repo-dashboard-work-column-scroll"),
+  "each work column must declare its own scroll region",
+);
 assert.ok(
   workSource.includes("repo-dashboard-work-item-head"),
   "work items must use a distinct item-head class from the page header",
@@ -94,16 +137,22 @@ assert.ok(
     workSource.match(/className="repo-dashboard-work-head"/g)?.length === 1,
   "repo-dashboard-work-head must only label the page header",
 );
-{
-  const activeSection =
-    workSource.match(
-      /className="repo-dashboard-work-column repo-dashboard-work-column-active"[\s\S]*?<\/section>/,
-    )?.[0] ?? "";
-  assert.ok(
-    !activeSection.includes("repo-dashboard-work-column-scroll"),
-    "active must not use a shared outer scroll wrapping started and open",
-  );
-}
+assert.ok(
+  !stylesSource.includes("repo-dashboard-work-column-active"),
+  "stale Active-specific work layout classes must be removed",
+);
+assert.ok(
+  !stylesSource.includes("repo-dashboard-work-active-columns"),
+  "stale Active nested column layout must be removed",
+);
+assert.ok(
+  !stylesSource.includes("repo-dashboard-work-subcolumn"),
+  "stale nested Started/Open panel styles must be removed",
+);
+assert.ok(
+  stylesSource.includes("grid-template-columns: repeat(3, minmax(0, 1fr))"),
+  "work desktop layout must use three equal columns",
+);
 assert.ok(rustSource.includes("read_local_docs_rejects_readme_symlink_to_external_file"));
 assert.ok(rustSource.includes("read_local_docs_rejects_backlog_symlink_to_external_file"));
 assert.ok(rustSource.includes("symlink not allowed"));

@@ -94,8 +94,12 @@ if rg -n 'heat-range-btn|HEATMAP_WINDOW_WEEKS|chooseHeatmapWindowWeeks|windowOve
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "heatmap must not keep interval controls or auto-switching helpers"
 fi
-if ! rg -n 'repo-dashboard-work-active-columns|repo-dashboard-work-subcolumn-scroll' src/tools/repoDashboard/RepoWorkWorkspace.tsx >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "work layout must use sibling Started/Open subcolumns with independent scroll"
+if ! rg -n 'repo-dashboard-work-primary-columns|repo-dashboard-work-column-scroll' src/tools/repoDashboard/RepoWorkWorkspace.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "work layout must use three primary columns with independent scroll regions"
+fi
+if rg -n 'repo-dashboard-work-column-active|repo-dashboard-work-active-columns|repo-dashboard-work-subcolumn' src/tools/repoDashboard src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "stale Active work layout selectors must not remain"
 fi
 if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard must expose a narrow-layout section control"
@@ -124,14 +128,21 @@ fi
 if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoWorkWorkspace.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard work list must expose a user-facing display cap"
 fi
-if ! rg -n 'repo-dashboard-work-subcolumn-scroll \.repo-dashboard-list' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "work subcolumn scroll regions must reset nested list max-height"
+if ! rg -n 'repo-dashboard-work-column-scroll \.repo-dashboard-list' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "work column scroll regions must reset nested list max-height"
 fi
-if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-active-columns' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "work Started/Open subcolumns must stack at narrow dashboard breakpoint"
+if ! rg -n 'grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "work desktop layout must use three equal columns"
 fi
-if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "stacked work Active/Done columns must define two grid rows"
+if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows:\s*repeat\(3' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "narrow work layout must stack Started, Open, and Done vertically"
+fi
+if ! rg -n 'repo-dashboard-activity-chart-footer' src/tools/repoDashboard/RepoActivityInsights.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "activity chart footer must contain legend and metadata"
+fi
+if rg -n 'repo-dashboard-activity-insights-meta' src/tools/repoDashboard/RepoActivityInsights.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "90-day metadata must not remain in outer activity header"
 fi
 if ! rg -n '\[data-theme="light"\] \.repo-dashboard-heat-cell\.l1' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "heatmap must define light-appearance level colors"
