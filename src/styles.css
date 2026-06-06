@@ -6952,7 +6952,7 @@ code {
 
   .repo-dashboard-section-select {
     width: 100%;
-    max-width: 280px;
+    max-width: none;
   }
 
   .repo-dashboard-grid.cols,
@@ -6960,9 +6960,13 @@ code {
   .repo-dashboard-activity-insights-body,
   .repo-dashboard-page-body.has-aside,
   .repo-dashboard-work-columns,
-  .repo-dashboard-work-primary-columns,
   .repo-dashboard-work-active-columns {
     grid-template-columns: 1fr;
+  }
+
+  .repo-dashboard-work-primary-columns {
+    grid-template-columns: 1fr;
+    grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
   }
 
   .repo-dashboard-kpis {

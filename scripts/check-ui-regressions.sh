@@ -112,6 +112,9 @@ fi
 if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-active-columns' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "work Started/Open subcolumns must stack at narrow dashboard breakpoint"
 fi
+if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "stacked work Active/Done columns must define two grid rows"
+fi
 if rg -n 'Source health|buildSourceHealth' src/tools/repoDashboard/RepoDashboardTool.tsx src/tools/repoDashboard/model.ts >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "Repo Dashboard must not render source health"
