@@ -1,6 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
+import { Children, isValidElement } from "react";
 import { classifyMarkdownHref } from "../lib/markdownLinks";
 import { CopyableBlock } from "./CopyableBlock";
 
@@ -34,24 +35,40 @@ function MarkdownAnchor({
   );
 }
 
+function extractCodeText(children: React.ReactNode): string {
+  const child = Children.only(children);
+  if (isValidElement<{ children?: React.ReactNode }>(child)) {
+    return String(child.props.children ?? "").replace(/\n$/, "");
+  }
+  return String(children).replace(/\n$/, "");
+}
+
 const MARKDOWN_COMPONENTS: Components = {
   a: MarkdownAnchor,
+  pre: ({ children, ...props }) => {
+    const text = extractCodeText(children);
+    return (
+      <CopyableBlock text={text}>
+        <pre className="markdown-code" {...props}>
+          {children}
+        </pre>
+      </CopyableBlock>
+    );
+  },
   code: ({ className, children, ...props }) => {
-    const text = String(children).replace(/\n$/, "");
+    const text = String(children);
     const isBlock = Boolean(className) || text.includes("\n");
-    if (!isBlock) {
+    if (isBlock) {
       return (
-        <code className="markdown-inline-code" {...props}>
+        <code className={className} {...props}>
           {children}
         </code>
       );
     }
     return (
-      <CopyableBlock text={text}>
-        <pre className="markdown-code">
-          <code {...props}>{text}</code>
-        </pre>
-      </CopyableBlock>
+      <code className="markdown-inline-code" {...props}>
+        {children}
+      </code>
     );
   },
 };
