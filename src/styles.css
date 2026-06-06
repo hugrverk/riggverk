@@ -5527,7 +5527,8 @@ code {
 
 .repo-dashboard-workspace > .repo-dashboard-page,
 .repo-dashboard-workspace > .repo-dashboard-overview,
-.repo-dashboard-workspace > .repo-dashboard-docs-workspace {
+.repo-dashboard-workspace > .repo-dashboard-docs-workspace,
+.repo-dashboard-workspace > .repo-dashboard-work-workspace {
   flex: 1;
   min-height: 0;
 }
@@ -6817,4 +6818,109 @@ code {
   .repo-dashboard-docs-list-pane {
     max-height: min(36vh, 320px);
   }
+
+  .repo-dashboard-work-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+.repo-dashboard-work-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.repo-dashboard-work-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.repo-dashboard-work-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  padding: 10px 12px;
+}
+
+.repo-dashboard-work-column-title {
+  margin: 0;
+  font-size: 13px;
+}
+
+.repo-dashboard-work-column-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
+.repo-dashboard-work-group + .repo-dashboard-work-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.repo-dashboard-work-group-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.repo-dashboard-work-item-started {
+  border-left: 2px solid var(--active-border, #58a6ff);
+  padding-left: 8px;
+}
+
+.repo-dashboard-filter-reset {
+  align-self: flex-start;
+}
+
+.repo-dashboard-work-empty-note {
+  margin: 0;
+}
+
+.repo-dashboard-contributors-card {
+  min-width: 0;
+}
+
+.repo-dashboard-contributors-note {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.repo-dashboard-contributors-table-wrap {
+  overflow: auto;
+  max-width: 100%;
+}
+
+.repo-dashboard-contributors-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 11px;
+}
+
+.repo-dashboard-contributors-table th,
+.repo-dashboard-contributors-table td {
+  border-bottom: 1px solid var(--border);
+  padding: 6px 8px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.repo-dashboard-contributors-table th {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.repo-dashboard-contributors-table td:first-child {
+  color: var(--text-heading);
 }

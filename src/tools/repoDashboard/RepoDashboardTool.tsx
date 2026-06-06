@@ -15,7 +15,6 @@ import type {
   DiscoveredLocalGitRepo,
   RepoDashboardSnapshot,
   RepoDashboardWorkItem,
-  RepoDashboardWorkStatus,
   RepoDashboardWorkType,
   RepoGhPullRequest,
   RepoCommitEntry,
@@ -26,7 +25,6 @@ import {
   mergeImportedRepoEntries,
   repoEntryIdFromPath,
 } from "../../lib/repoDashboardEntries";
-import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
 import { mergeWorkItemsDetailed } from "./docsParser";
 import {
   authorLabel,
@@ -48,6 +46,8 @@ import {
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
+import { ContributorStatsPanel } from "./ContributorStatsPanel";
+import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
 
 export type RepoDashboardSection = "overview" | "work" | "docs";
 
@@ -60,9 +60,6 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
 const COMMIT_LIST_DISPLAY_CAP = 120;
 const RECENT_ACTIVITY_DISPLAY_CAP = 30;
-const WORK_ITEMS_DISPLAY_CAP = 120;
-
-type WorkFilter = "all" | RepoDashboardWorkStatus;
 
 type SyncVisualState = "idle" | "loading" | "synced" | "stale";
 
@@ -161,36 +158,6 @@ function LatestChangeCard({
   );
 }
 
-function RepoDashboardPage({
-  title,
-  description,
-  toolbar,
-  main,
-  aside,
-}: {
-  title: string;
-  description?: string;
-  toolbar?: ReactNode;
-  main: ReactNode;
-  aside?: ReactNode;
-}) {
-  return (
-    <div className="repo-dashboard-page">
-      <header className="repo-dashboard-page-head">
-        <h2 className="font-mono repo-dashboard-page-title">{title}</h2>
-        {description ? (
-          <p className="text-muted small repo-dashboard-page-desc">{description}</p>
-        ) : null}
-        {toolbar ? <div className="repo-dashboard-page-toolbar">{toolbar}</div> : null}
-      </header>
-      <div className={`repo-dashboard-page-body${aside ? " has-aside" : ""}`}>
-        <div className="repo-dashboard-page-main">{main}</div>
-        {aside ? <aside className="repo-dashboard-page-aside">{aside}</aside> : null}
-      </div>
-    </div>
-  );
-}
-
 function ActivitySummaryStrip({ snapshot }: { snapshot: RepoDashboardSnapshot }) {
   const range = commitDateRangeLabel(snapshot.commits);
   const authors = countByAuthor(snapshot.commits);
@@ -241,113 +208,6 @@ function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
             {authorLabel(commit)} · {new Date(commit.authored_at * 1000).toLocaleString()}
           </span>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function WorkItemsList({
-  items,
-  emptyMessage = "No matching items found.",
-  onUsePromptContext,
-}: {
-  items: RepoDashboardWorkItem[];
-  emptyMessage?: string;
-  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
-}) {
-  if (!items.length) {
-    return <p className="text-muted small" role="status">{emptyMessage}</p>;
-  }
-  const shown = items.slice(0, WORK_ITEMS_DISPLAY_CAP);
-  const truncated = items.length > WORK_ITEMS_DISPLAY_CAP;
-  return (
-    <>
-      {truncated ? (
-        <p className="text-muted small repo-dashboard-list-cap" role="status">
-          Showing first {WORK_ITEMS_DISPLAY_CAP} of {items.length} items.
-        </p>
-      ) : null}
-      <div className="repo-dashboard-list">
-      {shown.map((item, index) => (
-        <div
-          key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
-          className="repo-dashboard-work-item"
-        >
-          <div className="repo-dashboard-work-head">
-            <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
-            <span className="repo-dashboard-work-status">{item.status}</span>
-            {item.needsPlan && <span className="repo-dashboard-chip todo">needs planning</span>}
-          </div>
-          <div className="repo-dashboard-work-text font-mono">{item.text}</div>
-          <div className="repo-dashboard-work-loc text-muted">
-            {item.source} · {item.path}{item.line ? `:${item.line}` : ""}
-          </div>
-          {onUsePromptContext && isPromptContextEligibleWorkItem(item) ? (
-            <div className="repo-dashboard-work-actions">
-              <button
-                type="button"
-                className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
-                onClick={() => onUsePromptContext(item)}
-                aria-label={`Use this ${item.type} item as Prompt Loops context`}
-              >
-                Use as context
-              </button>
-            </div>
-          ) : null}
-        </div>
-      ))}
-      </div>
-    </>
-  );
-}
-
-function PlanningGapsPanel({
-  items,
-  laneFilter,
-  typeFilter,
-  onUsePromptContext,
-}: {
-  items: RepoDashboardWorkItem[];
-  laneFilter: DocWorkLaneId | "all";
-  typeFilter: RepoDashboardWorkType | "all";
-  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
-}) {
-  const filtered = items.filter(i => {
-    if (!(i.needsPlan || i.status === "open")) return false;
-    if (laneFilter !== "all" && workItemDocLane(i) !== laneFilter) return false;
-    if (typeFilter !== "all" && i.type !== typeFilter) return false;
-    return true;
-  });
-  const groups = buildDocLaneSummaries(filtered).map(lane => ({
-    lane,
-    items: filtered.filter(i => workItemDocLane(i) === lane.id),
-  }));
-
-  if (!filtered.length) {
-    return (
-      <p className="text-muted small" role="status">
-        No open or needs-planning items for the current filters.
-      </p>
-    );
-  }
-
-  return (
-    <div className="repo-dashboard-plan-groups">
-      {groups.map(({ lane, items: groupItems }) => (
-        <section key={lane.id} className="repo-dashboard-plan-group">
-          <h4 className="font-mono repo-dashboard-plan-group-title">
-            <span className="repo-dashboard-chip" style={{ color: lane.color, borderColor: "currentColor" }}>
-              {lane.label}
-            </span>
-            <span className="text-muted">{groupItems.length}</span>
-          </h4>
-          <p className="text-muted small repo-dashboard-lane-hint">{lane.pathHint}</p>
-          <WorkItemsList
-            items={groupItems}
-            emptyMessage=""
-            onUsePromptContext={onUsePromptContext}
-          />
-        </section>
       ))}
     </div>
   );
@@ -429,7 +289,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<RepoDashboardSnapshot | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
-  const [workFilter, setWorkFilter] = useState<WorkFilter>("all");
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
   const [laneFilter, setLaneFilter] = useState<DocWorkLaneId | "all">("all");
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
@@ -674,11 +533,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
   const filteredWorkItems = useMemo(() => {
     let list = workItems;
-    if (workFilter !== "all") list = list.filter(i => i.status === workFilter);
     if (laneFilter !== "all") list = list.filter(i => workItemDocLane(i) === laneFilter);
     if (typeFilter !== "all") list = list.filter(i => i.type === typeFilter);
     return list;
-  }, [workItems, workFilter, laneFilter, typeFilter]);
+  }, [workItems, laneFilter, typeFilter]);
 
   const docLaneSummaries = useMemo(() => buildDocLaneSummaries(workItems), [workItems]);
 
@@ -734,7 +592,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const sectionCount = (id: RepoDashboardSection): string => {
     if (!snapshot) return "-";
     if (id === "overview") return String(snapshot.commits.length);
-    if (id === "work") return String(workStatusCounts.open);
+    if (id === "work") return String(workStatusCounts.open + workStatusCounts.started);
     if (id === "docs") {
       return String(snapshot.docs.filter(d => d.found && d.readable).length);
     }
@@ -1052,10 +910,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 <button
                   type="button"
                   className="repo-dashboard-kpi"
-                  onClick={() => {
-                    setWorkFilter("open");
-                    setSection("work");
-                  }}
+                  onClick={() => setSection("work")}
                 >
                   <div className="repo-dashboard-kpi-num font-mono">{needsPlanningCount}</div>
                   <div className="repo-dashboard-kpi-label">needs planning</div>
@@ -1124,7 +979,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                       activeLane={laneFilter}
                       onSelectLane={lane => {
                         setLaneFilter(lane);
-                        setWorkFilter("open");
                         setSection("work");
                       }}
                     />
@@ -1138,6 +992,8 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                   <RecentActivityList commits={recentCommits} />
                 </div>
               </div>
+
+              <ContributorStatsPanel commits={snapshot.commits} />
 
               <div className="repo-dashboard-card repo-dashboard-scroll-panel">
                 <h2 className="font-mono">Commit history</h2>
@@ -1166,107 +1022,28 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           )}
 
           {snapshot && snapshotMatchesPath && !loading && section === "work" && (
-            <RepoDashboardPage
-              title="Work"
-              description="Parsed docs markers and optional gh issues. Local git first."
-              toolbar={
-                <>
-                  <div className="repo-dashboard-toolbar" role="group" aria-label="Status filter">
-                    {(["all", "open", "started", "done"] as WorkFilter[]).map(filter => (
-                      <button
-                        key={filter}
-                        type="button"
-                        className={`repo-dashboard-seg${workFilter === filter ? " active" : ""}`}
-                        aria-pressed={workFilter === filter}
-                        onClick={() => setWorkFilter(filter)}
-                      >
-                        {filter}
-                        {filter !== "all" ? ` (${workStatusCounts[filter]})` : ` (${workStatusCounts.all})`}
-                      </button>
-                    ))}
-                  </div>
-                  <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Doc lane filter">
-                    <button
-                      type="button"
-                      className={`repo-dashboard-seg${laneFilter === "all" ? " active" : ""}`}
-                      aria-pressed={laneFilter === "all"}
-                      onClick={() => setLaneFilter("all")}
-                    >
-                      all lanes
-                    </button>
-                    {docLaneSummaries.map(lane => (
-                      <button
-                        key={lane.id}
-                        type="button"
-                        className={`repo-dashboard-seg${laneFilter === lane.id ? " active" : ""}`}
-                        aria-pressed={laneFilter === lane.id}
-                        onClick={() => setLaneFilter(laneFilter === lane.id ? "all" : lane.id)}
-                      >
-                        {lane.label} ({lane.open + lane.started})
-                      </button>
-                    ))}
-                  </div>
-                  <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Type filter">
-                    {WORK_TYPES.map(type => (
-                      <button
-                        key={type}
-                        type="button"
-                        className={`repo-dashboard-seg ${type}${typeFilter === type ? " active" : ""}`}
-                        aria-pressed={typeFilter === type}
-                        onClick={() => setTypeFilter(typeFilter === type ? "all" : type)}
-                      >
-                        {type}
-                      </button>
-                    ))}
-                    <button
-                      type="button"
-                      className={`repo-dashboard-seg${typeFilter === "all" ? " active" : ""}`}
-                      aria-pressed={typeFilter === "all"}
-                      onClick={() => setTypeFilter("all")}
-                    >
-                      all types
-                    </button>
-                  </div>
-                  <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
-                    Showing {filteredWorkItems.length} of {workItems.length} items
-                    {workFilter !== "all" ? ` · status: ${workFilter}` : ""}
-                    {laneFilter !== "all"
-                      ? ` · lane: ${docLaneSummaries.find(l => l.id === laneFilter)?.label ?? laneFilter}`
-                      : ""}
-                    {typeFilter !== "all" ? ` · type: ${typeFilter}` : ""}
-                  </p>
-                </>
-              }
-              main={
-                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <WorkItemsList
-                    items={filteredWorkItems}
-                    onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
-                    emptyMessage={
-                      workFilter !== "all" || typeFilter !== "all" || laneFilter !== "all"
-                        ? "No items match the active filters. Try clearing status, lane, or type."
-                        : docSources.every(d => !d.contributes) && !snapshot.gh.authenticated
-                          ? "No work items parsed. Add or refresh docs (BACKLOG, KNOWN_GAPS, product/*.md) or authenticate gh for issues."
-                          : docSources.every(d => !d.contributes)
-                            ? "Docs were found but no actionable rows matched the parser. Check BACKLOG/KNOWN_GAPS tables or TODO checkboxes."
-                            : "No work items in this snapshot."
-                    }
-                  />
-                </div>
-              }
-              aside={
-                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <h3 className="font-mono repo-dashboard-panel-title">Planning gaps</h3>
-                  <p className="text-muted small repo-dashboard-page-desc">
-                    Open or needs-planning items grouped by doc lane (BACKLOG, KNOWN_GAPS, product, …).
-                  </p>
-                  <PlanningGapsPanel
-                    items={workItems}
-                    laneFilter={laneFilter}
-                    typeFilter={typeFilter}
-                    onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
-                  />
-                </div>
+            <RepoWorkWorkspace
+              items={filteredWorkItems}
+              totalItemCount={workItems.length}
+              laneFilter={laneFilter}
+              typeFilter={typeFilter}
+              docLaneSummaries={docLaneSummaries}
+              workTypes={WORK_TYPES}
+              onLaneFilterChange={setLaneFilter}
+              onTypeFilterChange={setTypeFilter}
+              onResetFilters={() => {
+                setLaneFilter("all");
+                setTypeFilter("all");
+              }}
+              onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
+              emptyMessage={
+                typeFilter !== "all" || laneFilter !== "all"
+                  ? "No items match the active filters. Try clearing lane or type."
+                  : docSources.every(d => !d.contributes) && !snapshot.gh.authenticated
+                    ? "No work items parsed. Add or refresh docs (BACKLOG, KNOWN_GAPS, product/*.md) or authenticate gh for issues."
+                    : docSources.every(d => !d.contributes)
+                      ? "Docs were found but no actionable rows matched the parser. Check BACKLOG/KNOWN_GAPS tables or TODO checkboxes."
+                      : "No work items in this snapshot."
               }
             />
           )}
