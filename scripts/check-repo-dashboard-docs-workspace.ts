@@ -5,6 +5,10 @@ import {
   filterDocsForSearch,
   pickReadableDocPath,
 } from "../src/tools/repoDashboard/RepoDocsWorkspace";
+import {
+  docsSourceLabel,
+  filterDocsSnapshotWarnings,
+} from "../src/tools/repoDashboard/model";
 
 function doc(overrides: Partial<RepoDocFile> & Pick<RepoDocFile, "path">): RepoDocFile {
   return {
@@ -32,5 +36,14 @@ assert.equal(pickReadableDocPath(docs, "missing.md"), "README.md");
 const filtered = filterDocsForSearch(docs, "backlog");
 assert.equal(filtered.length, 1);
 assert.equal(filtered[0].path, "docs/BACKLOG.md");
+
+assert.equal(docsSourceLabel("remote"), "Remote default branch");
+assert.deepEqual(
+  filterDocsSnapshotWarnings(
+    ["No remote documentation ref available — using local checkout.", "other"],
+    "local-fallback",
+  ),
+  ["other"],
+);
 
 console.log("Repo Dashboard docs workspace checks passed");
