@@ -19,15 +19,24 @@ pub fn get_repo_dashboard_snapshot(
     )?;
 
     if snapshot.git_available && snapshot.is_repo {
-        let history = load_all_commits(Path::new(&snapshot.repo_path))?;
-        snapshot.commits = history.commits;
-        snapshot.latest_commit = snapshot.commits.first().cloned();
-        snapshot.commits_truncated = history.incomplete;
-        snapshot
-            .warnings
-            .retain(|warning| !warning.starts_with("local git commit log truncated at"));
-        if let Some(warning) = history.warning {
-            snapshot.warnings.push(warning);
+        match load_all_commits(Path::new(&snapshot.repo_path)) {
+            Ok(history) => {
+                snapshot.commits = history.commits;
+                snapshot.latest_commit = snapshot.commits.first().cloned();
+                snapshot.commits_truncated = history.incomplete;
+                snapshot
+                    .warnings
+                    .retain(|warning| !warning.starts_with("local git commit log truncated at"));
+                if let Some(warning) = history.warning {
+                    snapshot.warnings.push(warning);
+                }
+            }
+            Err(error) => {
+                snapshot.commits_truncated = true;
+                snapshot.warnings.push(format!(
+                    "complete local commit history could not be loaded; showing the bounded fallback: {error}"
+                ));
+            }
         }
     }
 
