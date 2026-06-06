@@ -1,21 +1,53 @@
 import { ToolIcon } from "./ToolIcon";
 import { dirtyTabAriaLabel, dirtyTabClass } from "../lib/editorGuards";
 
-type AppView =
+export type AppHeaderView =
   | "start"
   | "codex"
   | "opencode"
   | "cursor"
   | "claude"
   | "library"
-  | "tools"
+  | "prompts"
+  | "repo-dashboard"
   | "settings";
 
 interface AppHeaderNavProps {
-  view: AppView;
+  view: AppHeaderView;
   libraryDirty: boolean;
   settingsErrored: boolean;
-  onSwitchView: (view: AppView) => void;
+  onSwitchView: (view: AppHeaderView) => void;
+}
+
+function PromptLoopsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <polyline points="4 7 4 4 7 4" />
+      <line x1="4" y1="20" x2="20" y2="20" />
+      <polyline points="20 17 20 20 17 20" />
+      <line x1="4" y1="4" x2="14" y2="4" />
+      <line x1="20" y1="20" x2="20" y2="8" />
+      <polyline points="9 9 12 12 9 15" />
+      <line x1="12" y1="9" x2="12" y2="15" />
+    </svg>
+  );
+}
+
+function RepoDashboardIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" focusable="false">
+      <circle cx="6" cy="6" r="1.5" />
+      <circle cx="6" cy="12" r="1.5" />
+      <circle cx="6" cy="18" r="1.5" />
+      <line x1="6" y1="3" x2="6" y2="3" />
+      <circle cx="18" cy="5" r="1.5" />
+      <circle cx="18" cy="11" r="1.5" />
+      <circle cx="18" cy="17" r="1.5" />
+      <path d="M7.5 6 16 5" />
+      <path d="M7.5 12 16 11" />
+      <path d="M7.5 18 16 17" />
+    </svg>
+  );
 }
 
 export function AppHeaderNav({
@@ -84,14 +116,20 @@ export function AppHeaderNav({
           </svg>
         </button>
         <button
-          className={`nav-icon ${view === "tools" ? "nav-icon-active" : ""}`}
-          onClick={() => onSwitchView("tools")}
-          aria-label="Tools"
-          title="Tools"
+          className={`nav-icon ${view === "prompts" ? "nav-icon-active" : ""}`}
+          onClick={() => onSwitchView("prompts")}
+          aria-label="Prompt Loops"
+          title="Prompt Loops"
         >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" />
-          </svg>
+          <PromptLoopsIcon />
+        </button>
+        <button
+          className={`nav-icon ${view === "repo-dashboard" ? "nav-icon-active" : ""}`}
+          onClick={() => onSwitchView("repo-dashboard")}
+          aria-label="Repo Dashboard"
+          title="Repo Dashboard"
+        >
+          <RepoDashboardIcon />
         </button>
         <button
           className={`nav-icon ${view === "settings" ? "nav-icon-active" : ""}${dirtyTabClass(settingsErrored)}`}

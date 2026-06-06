@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "./components/TerminalOutput";
-import { AppHeaderNav } from "./components/AppHeaderNav";
+import { AppHeaderNav, type AppHeaderView } from "./components/AppHeaderNav";
 import { confirmLeaveDirtyEditor } from "./lib/editorGuards";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -14,20 +14,11 @@ import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { deriveInstallState, StartView } from "./views/StartView";
-import { ToolsView } from "./views/ToolsView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import type { InitializeWorkspaceResult, RepairWorkspaceResult } from "./types";
 
-type View =
-  | "start"
-  | "codex"
-  | "opencode"
-  | "cursor"
-  | "claude"
-  | "library"
-  | "tools"
-  | "settings";
+type View = AppHeaderView;
 
 function isWorkspaceLoadView(view: View): boolean {
   return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude";
@@ -223,7 +214,6 @@ function App() {
     applyTargetProfile,
     activeProfileId,
     clearSettingsMsg,
-    mutateAppSettings,
   } = useAppSettingsController({
     setError,
     appliedWorkspacePathRef,
@@ -788,8 +778,16 @@ function App() {
           </Suspense>
         )}
 
-        {view === "tools" && (
-          <ToolsView appSettings={appSettings} mutateAppSettings={mutateAppSettings} />
+        {view === "prompts" && (
+          <div className="view-placeholder" role="region" aria-label="Prompt Loops">
+            Prompt Loops view
+          </div>
+        )}
+
+        {view === "repo-dashboard" && (
+          <div className="view-placeholder" role="region" aria-label="Repo Dashboard">
+            Repo Dashboard view
+          </div>
         )}
 
         {view === "settings" && (
