@@ -188,6 +188,32 @@ const HEATMAP_MIN_WEEKS = 53;
 const HEATMAP_MAX_WEEKS = 520;
 const MS_PER_DAY = 86_400_000;
 
+export const HEATMAP_WINDOW_WEEKS = [13, 26, 53] as const;
+export type HeatmapWindowWeeks = (typeof HEATMAP_WINDOW_WEEKS)[number];
+
+export function sliceHeatmapCellsToWindow(
+  cells: HeatmapCell[],
+  windowWeeks: HeatmapWindowWeeks,
+): HeatmapCell[] {
+  const maxCells = windowWeeks * 7;
+  if (cells.length <= maxCells) return cells;
+  return cells.slice(cells.length - maxCells);
+}
+
+export function chooseHeatmapWindowWeeks(
+  containerWidthPx: number,
+  options?: { dayLabelPx?: number; paddingPx?: number; minCellPx?: number },
+): HeatmapWindowWeeks {
+  const dayLabelPx = options?.dayLabelPx ?? 30;
+  const paddingPx = options?.paddingPx ?? 24;
+  const minCellPx = options?.minCellPx ?? 9;
+  const available = Math.max(0, containerWidthPx - dayLabelPx - paddingPx);
+  const weeksFit = Math.floor(available / minCellPx);
+  if (weeksFit >= 53) return 53;
+  if (weeksFit >= 26) return 26;
+  return 13;
+}
+
 function heatmapWeekEndSaturday(d: Date): Date {
   const end = dayStart(d);
   end.setDate(end.getDate() + (6 - end.getDay()));

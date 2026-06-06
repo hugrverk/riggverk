@@ -7,6 +7,8 @@ import {
   buildHeatmapCells,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
+  chooseHeatmapWindowWeeks,
+  sliceHeatmapCellsToWindow,
   buildLineChartData,
   buildActivityInsightsSeries,
   filterCommitsByContributor,
@@ -102,6 +104,15 @@ assert.equal(buildLineChartData([]), null);
   assert.ok(cells.length > 53 * 7, "year-spanning commits should extend past 53 weeks");
   assert.ok(cells.length <= 520 * 7, "heatmap week grid has an upper bound");
   assert.equal(cells[cells.length - 1].date.slice(0, 4), new Date(nowSec * 1000).getFullYear().toString());
+}
+
+{
+  const cells = buildHeatmapCells([commit({ authored_at: 1_700_000_000 })]);
+  const sliced = sliceHeatmapCellsToWindow(cells, 13);
+  assert.equal(sliced.length, 13 * 7);
+  assert.equal(chooseHeatmapWindowWeeks(560), 53);
+  assert.equal(chooseHeatmapWindowWeeks(320), 26);
+  assert.equal(chooseHeatmapWindowWeeks(120), 13);
 }
 
 // Remaining-by-type handles empty input without NaN.

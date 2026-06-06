@@ -1,10 +1,14 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { ActivityLegendEntry, LineChartSeries } from "./model";
 import {
   ACTIVITY_BLUE,
   ACTIVITY_GREEN,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
+  chooseHeatmapWindowWeeks,
+  HEATMAP_WINDOW_WEEKS,
+  sliceHeatmapCellsToWindow,
+  type HeatmapWindowWeeks,
 } from "./model";
 
 interface ActivityLineChartProps {
@@ -104,82 +108,113 @@ interface ActivityHeatmapProps {
 }
 
 export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapProps) {
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const weeks = useMemo(() => buildHeatmapWeeks(cells), [cells]);
-  const monthLabels = useMemo(() => buildHeatmapMonthLabels(weeks), [weeks]);
-  const weekCount = Math.max(weeks.length, 1);
-
-  const rangeLabel = `${cells[0]?.date ?? ""} to ${cells[cells.length - 1]?.date ?? ""}`;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [autoWindowWeeks, setAutoWindowWeeks] = useState<HeatmapWindowWeeks>(53);
+  const [windowOverride, setWindowOverride] = useState<HeatmapWindowWeeks | null>(null);
 
   useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    el.scrollLeft = el.scrollWidth;
-  }, [cells, weekCount]);
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const update = (width: number) => {
+      setAutoWindowWeeks(chooseHeatmapWindowWeeks(width));
+    };
+    update(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) update(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const windowWeeks = windowOverride ?? autoWindowWeeks;
+  const displayCells = useMemo(
+    () => sliceHeatmapCellsToWindow(cells, windowWeeks),
+    [cells, windowWeeks],
+  );
+  const weeks = useMemo(() => buildHeatmapWeeks(displayCells), [displayCells]);
+  const monthLabels = useMemo(
+    () => buildHeatmapMonthLabels(weeks, windowWeeks <= 13 ? 2 : 3),
+    [weeks, windowWeeks],
+  );
+  const weekCount = Math.max(weeks.length, 1);
+  const rangeLabel = `${displayCells[0]?.date ?? ""} to ${displayCells[displayCells.length - 1]?.date ?? ""}`;
 
   return (
     <div
+      ref={containerRef}
       className={`repo-dashboard-heatbox repo-dashboard-heat-density-${density}`}
       data-heatmap-density={density}
     >
+      <div className="repo-dashboard-heat-toolbar" role="group" aria-label="Heatmap week range">
+        {HEATMAP_WINDOW_WEEKS.map(weeksOption => (
+          <button
+            key={weeksOption}
+            type="button"
+            className={`repo-dashboard-heat-range-btn${
+              windowWeeks === weeksOption ? " active" : ""
+            }`}
+            aria-pressed={windowWeeks === weeksOption}
+            onClick={() =>
+              setWindowOverride(prev => (prev === weeksOption ? null : weeksOption))
+            }
+          >
+            {weeksOption}w
+          </button>
+        ))}
+        {windowOverride == null && autoWindowWeeks < 53 ? (
+          <span className="text-muted small repo-dashboard-heat-auto-note">
+            auto {autoWindowWeeks}w
+          </span>
+        ) : null}
+      </div>
       <div
-        ref={scrollRef}
-        className="repo-dashboard-heat-scroll"
+        className="repo-dashboard-heat-wrap"
+        style={{ "--heat-week-count": String(weekCount) } as Record<string, string>}
         role="img"
         aria-label={`Commit activity from ${rangeLabel}`}
       >
-        <div
-          className="repo-dashboard-heat-wrap"
-          style={
-            {
-              "--heat-week-count": String(weekCount),
-            } as Record<string, string>
-          }
-        >
-          <div className="repo-dashboard-heat-months font-mono" aria-hidden="true">
-            <div className="repo-dashboard-heat-month-rail">
-              {monthLabels.map(({ col, label }) => (
-                <span
-                  key={`${col}-${label}`}
-                  className="repo-dashboard-heat-month-label"
-                  style={{ left: `${(col / weekCount) * 100}%` }}
-                >
-                  {label}
-                </span>
-              ))}
-            </div>
+        <div className="repo-dashboard-heat-months font-mono" aria-hidden="true">
+          <div className="repo-dashboard-heat-month-rail">
+            {monthLabels.map(({ col, label }) => (
+              <span
+                key={`${col}-${label}`}
+                className="repo-dashboard-heat-month-label"
+                style={{ left: `${(col / weekCount) * 100}%` }}
+              >
+                {label}
+              </span>
+            ))}
           </div>
-          <div className="repo-dashboard-heatbody">
-            <div className="repo-dashboard-days font-mono" aria-hidden="true">
-              <span />
-              <span>Mon</span>
-              <span />
-              <span>Wed</span>
-              <span />
-              <span>Fri</span>
-              <span />
-            </div>
-            <div className="repo-dashboard-heat-grid">
-              {weeks.map((week, wi) => (
-                <div key={wi} className="repo-dashboard-heat-week">
-                  {week.map(cell => (
-                    <div
-                      key={cell.date}
-                      className={`repo-dashboard-heat-cell l${cell.level}`}
-                      title={`${cell.date}: ${cell.count} commits`}
-                      aria-label={`${cell.date}: ${cell.count} commits`}
-                    />
-                  ))}
-                </div>
-              ))}
-            </div>
+        </div>
+        <div className="repo-dashboard-heatbody">
+          <div className="repo-dashboard-days font-mono" aria-hidden="true">
+            <span />
+            <span>Mon</span>
+            <span />
+            <span>Wed</span>
+            <span />
+            <span>Fri</span>
+            <span />
+          </div>
+          <div className="repo-dashboard-heat-grid">
+            {weeks.map((week, wi) => (
+              <div key={wi} className="repo-dashboard-heat-week">
+                {week.map(cell => (
+                  <div
+                    key={cell.date}
+                    className={`repo-dashboard-heat-cell l${cell.level}`}
+                    title={`${cell.date}: ${cell.count} commits`}
+                    aria-label={`${cell.date}: ${cell.count} commits`}
+                  />
+                ))}
+              </div>
+            ))}
           </div>
         </div>
       </div>
       <div className="repo-dashboard-hleg font-mono">
-        <span className="repo-dashboard-hleg-range">
-          {cells[0]?.date ?? ""} → {cells[cells.length - 1]?.date ?? ""}
-        </span>
+        <span className="repo-dashboard-hleg-range">{rangeLabel}</span>
         <span className="repo-dashboard-hleg-scale" aria-hidden="true">
           <span>Less</span>
           {[0, 1, 2, 3, 4].map(level => (
