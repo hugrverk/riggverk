@@ -40,7 +40,6 @@ import {
   repoDashboardBrandLabel,
   workItemDocLane,
   type DocWorkLaneId,
-  type DocWorkLaneSummary,
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
@@ -177,64 +176,6 @@ function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
             {authorLabel(commit)} · {new Date(commit.authored_at * 1000).toLocaleString()}
           </span>
         </div>
-      ))}
-    </div>
-  );
-}
-
-function DocLaneSummaryPanel({
-  lanes,
-  activeLane,
-  onSelectLane,
-}: {
-  lanes: DocWorkLaneSummary[];
-  activeLane: DocWorkLaneId | "all";
-  onSelectLane: (lane: DocWorkLaneId) => void;
-}) {
-  if (!lanes.length) {
-    return (
-      <p className="text-muted small" role="status">
-        No parsed work from BACKLOG, KNOWN_GAPS, or product docs yet.
-      </p>
-    );
-  }
-
-  const maxOpen = Math.max(1, ...lanes.map(l => l.open + l.started));
-
-  return (
-    <div className="repo-dashboard-doc-lanes" role="list">
-      {lanes.map(lane => (
-        <button
-          key={lane.id}
-          type="button"
-          role="listitem"
-          className={`repo-dashboard-doc-lane${activeLane === lane.id ? " active" : ""}`}
-          style={{ "--lane-color": lane.color } as CSSProperties}
-          aria-pressed={activeLane === lane.id}
-          onClick={() => onSelectLane(lane.id)}
-        >
-          <div className="repo-dashboard-doc-lane-head">
-            <span className="repo-dashboard-doc-lane-label font-mono">{lane.label}</span>
-            <span className="repo-dashboard-doc-lane-open font-mono">{lane.open + lane.started}</span>
-          </div>
-          <p className="text-muted small repo-dashboard-doc-lane-desc">{lane.description}</p>
-          <p className="text-muted small repo-dashboard-doc-lane-path font-mono">{lane.pathHint}</p>
-          <div className="repo-dashboard-bar repo-dashboard-doc-lane-bar">
-            <div
-              className="repo-dashboard-bar-fill"
-              style={{
-                width: `${Math.max(4, ((lane.open + lane.started) / maxOpen) * 100)}%`,
-                background: lane.color,
-              }}
-            />
-          </div>
-          <div className="repo-dashboard-doc-lane-meta font-mono">
-            <span>{lane.open} open</span>
-            <span>{lane.started} started</span>
-            <span>{lane.done} done</span>
-            {lane.needsPlan > 0 ? <span>{lane.needsPlan} plan</span> : null}
-          </div>
-        </button>
       ))}
     </div>
   );
@@ -886,41 +827,46 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 </button>
               </div>
 
-              <div className="repo-dashboard-grid cols repo-dashboard-overview-charts">
-                <div className="repo-dashboard-card repo-dashboard-activity-card">
-                  <h2 className="font-mono">Repo activity</h2>
-                  {lineChart ? (
-                    <ActivityLineChart data={lineChart} legend={activityLegend} />
-                  ) : (
-                    <p className="text-muted small" role="status">
-                      {snapshot.commits.length
-                        ? "Not enough author diversity for cumulative chart (single author or unmapped)."
-                        : "No commits loaded — refresh after selecting a repository."}
+              <section
+                className="repo-dashboard-overview-activity"
+                aria-label="Activity and contributors"
+              >
+                <div className="repo-dashboard-grid cols repo-dashboard-overview-charts">
+                  <div className="repo-dashboard-card repo-dashboard-activity-card">
+                    <h2 className="font-mono">Repo activity</h2>
+                    {lineChart ? (
+                      <ActivityLineChart data={lineChart} legend={activityLegend} />
+                    ) : (
+                      <p className="text-muted small" role="status">
+                        {snapshot.commits.length
+                          ? "Not enough author diversity for cumulative chart (single author or unmapped)."
+                          : "No commits loaded — refresh after selecting a repository."}
+                      </p>
+                    )}
+                    <p className="text-muted small repo-dashboard-footnote">
+                      {snapshot.commits.length.toLocaleString()} commits from local git
+                      {snapshot.commits_truncated
+                        ? " (older commits omitted — output limit; ensure a full clone)."
+                        : ""}
+                      .
+                      {activityLegend.length ? (
+                        <>
+                          {" "}
+                          {activityLegend.map((entry, i) => (
+                            <span key={entry.role}>
+                              {i > 0 ? " · " : ""}
+                              {entry.role === "primary" ? "Blue" : "Green"} = {entry.label} ({entry.commits})
+                            </span>
+                          ))}
+                        </>
+                      ) : null}
                     </p>
-                  )}
-                  <p className="text-muted small repo-dashboard-footnote">
-                    {snapshot.commits.length.toLocaleString()} commits from local git
-                    {snapshot.commits_truncated
-                      ? " (older commits omitted — output limit; ensure a full clone)."
-                      : ""}
-                    .
-                    {activityLegend.length ? (
-                      <>
-                        {" "}
-                        {activityLegend.map((entry, i) => (
-                          <span key={entry.role}>
-                            {i > 0 ? " · " : ""}
-                            {entry.role === "primary" ? "Blue" : "Green"} = {entry.label} ({entry.commits})
-                          </span>
-                        ))}
-                      </>
-                    ) : null}
-                  </p>
+                  </div>
+                  <ContributorStatsPanel commits={snapshot.commits} />
                 </div>
-                <ContributorStatsPanel commits={snapshot.commits} />
-              </div>
+              </section>
 
-              <div className="repo-dashboard-grid cols">
+              <div className="repo-dashboard-grid cols repo-dashboard-overview-mid">
                 <div className="repo-dashboard-card repo-dashboard-heat-card">
                   <h2 className="font-mono">Commit activity</h2>
                   {heatmap.length ? (
@@ -939,41 +885,24 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 </div>
               </div>
 
-              <div className="repo-dashboard-grid cols">
-                <div className="repo-dashboard-card repo-dashboard-recent-activity-card">
-                  <h2 className="font-mono">Recent activity</h2>
-                  <p className="text-muted small repo-dashboard-card-desc">
-                    Latest {RECENT_ACTIVITY_LOAD_CAP} commits · showing {RECENT_ACTIVITY_VISIBLE_ROWS} at a
-                    time, scroll for more.
-                  </p>
-                  <div
-                    className="repo-dashboard-recent-activity-scroll"
-                    style={
-                      {
-                        "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
-                      } as CSSProperties
-                    }
-                    role="region"
-                    aria-label="Recent commits"
-                    tabIndex={0}
-                  >
-                    <RecentActivityList commits={recentCommits} />
-                  </div>
-                </div>
-                <div className="repo-dashboard-card repo-dashboard-rem-card">
-                  <h2 className="font-mono">Open work by doc</h2>
-                  <p className="text-muted small repo-dashboard-rem-intro">
-                    Grouped by planning files (BACKLOG, KNOWN_GAPS, product, …). Click a lane to
-                    filter Work.
-                  </p>
-                  <DocLaneSummaryPanel
-                    lanes={docLaneSummaries}
-                    activeLane={laneFilter}
-                    onSelectLane={lane => {
-                      setLaneFilter(lane);
-                      setSection("work");
-                    }}
-                  />
+              <div className="repo-dashboard-card repo-dashboard-recent-activity-card repo-dashboard-overview-full">
+                <h2 className="font-mono">Recent activity</h2>
+                <p className="text-muted small repo-dashboard-card-desc">
+                  Latest {RECENT_ACTIVITY_LOAD_CAP} commits · showing {RECENT_ACTIVITY_VISIBLE_ROWS} at a
+                  time, scroll for more.
+                </p>
+                <div
+                  className="repo-dashboard-recent-activity-scroll"
+                  style={
+                    {
+                      "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
+                    } as CSSProperties
+                  }
+                  role="region"
+                  aria-label="Recent commits"
+                  tabIndex={0}
+                >
+                  <RecentActivityList commits={recentCommits} />
                 </div>
               </div>
             </div>

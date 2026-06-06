@@ -5811,98 +5811,18 @@ code {
   line-height: 1.45;
 }
 
-.repo-dashboard-heat-card,
-.repo-dashboard-rem-card {
+.repo-dashboard-heat-card {
   min-width: 0;
 }
 
-.repo-dashboard-grid.cols > :last-child.repo-dashboard-rem-card .repo-dashboard-doc-lanes {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.repo-dashboard-rem-card h2 {
-  margin-bottom: 4px;
-}
-
-.repo-dashboard-rem-intro {
-  margin: 0 0 10px;
-  line-height: 1.45;
-}
-
-.repo-dashboard-doc-lanes {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.repo-dashboard-doc-lane {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+.repo-dashboard-overview-activity,
+.repo-dashboard-overview-full {
+  min-width: 0;
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-  border-radius: var(--radius);
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
 }
 
-.repo-dashboard-doc-lane:hover,
-.repo-dashboard-doc-lane.active {
-  border-color: var(--lane-color, var(--active-border));
-  background: var(--active-bg);
-}
-
-.repo-dashboard-doc-lane-head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.repo-dashboard-doc-lane-label {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--lane-color, var(--text-heading));
-}
-
-.repo-dashboard-doc-lane-open {
-  font-size: 15px;
-  font-weight: 500;
-  color: var(--text-heading);
-}
-
-.repo-dashboard-doc-lane-desc,
-.repo-dashboard-doc-lane-path {
-  margin: 0;
-  line-height: 1.35;
-}
-
-.repo-dashboard-doc-lane-path {
-  font-size: 10px;
-  opacity: 0.85;
-}
-
-.repo-dashboard-doc-lane-bar {
-  margin-top: 2px;
-}
-
-.repo-dashboard-doc-lane-meta {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px 12px;
-  font-size: 10px;
-  color: var(--text-muted);
-}
-
-.repo-dashboard-lane-hint {
-  margin: 0 0 8px;
+.repo-dashboard-overview-full .repo-dashboard-recent-activity-scroll {
+  max-width: 100%;
 }
 
 .repo-dashboard-activity-card {
@@ -6584,10 +6504,6 @@ code {
     justify-content: flex-end;
   }
 
-  .repo-dashboard-rem,
-  .repo-dashboard-doc-lanes {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
 }
 
 .repo-dashboard-docs-workspace {
