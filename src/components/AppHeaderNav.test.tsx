@@ -114,4 +114,26 @@ describe("AppHeaderNav", () => {
       expect(button.tagName).toBe("BUTTON");
     }
   });
+
+  it("uses stroke-based Repo Dashboard icon without GitHub mark", () => {
+    render(
+      <AppHeaderNav
+        view="start"
+        libraryDirty={false}
+        settingsErrored={false}
+        onSwitchView={vi.fn()}
+      />,
+    );
+    const button = screen.getByRole("button", { name: "Repo Dashboard" });
+    const svg = button.querySelector("svg");
+    expect(svg).not.toBeNull();
+    expect(svg?.getAttribute("fill")).toBe("none");
+    expect(svg?.getAttribute("stroke")).toBe("currentColor");
+    expect(svg?.getAttribute("stroke-width") ?? svg?.getAttribute("strokeWidth")).toBe("2");
+    expect(svg?.getAttribute("aria-hidden")).toBe("true");
+    expect(svg?.getAttribute("focusable")).toBe("false");
+    expect(button.innerHTML).not.toContain("M12 0c-6.626");
+    expect(button.querySelector("circle")).not.toBeNull();
+    expect(button.querySelector("line")).not.toBeNull();
+  });
 });
