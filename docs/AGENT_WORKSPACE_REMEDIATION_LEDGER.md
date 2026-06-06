@@ -9,18 +9,20 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | Audited commit | `53d9d2b245a41caddff3cc4961e335166ded85b4` |
 | Prior remediation HEAD | `07cb1b1cd08e4f5261cf9746cbaa5d649efbaeea` |
 | Follow-up pass start HEAD | `07cb1b1cd08e4f5261cf9746cbaa5d649efbaeea` |
-| Ending HEAD | `a6aa703f94b6ff8639df6c3545f2819efaefb1ec` |
+| Correctness closure start HEAD | `0a1f69cd555f350b79e11d8cabf5fda881c9a452` |
+| Implementation HEAD (verified) | `4f9bbc03e07ad673582323f8675186fd371eb40b` |
+| Remote HEAD | Obtain from Git: `git rev-parse origin/main` (do not embed the evidence commit SHA here) |
 | Branch | `main` |
-| Verdict | **READY** — automated gates pass; native webview smoke BLOCKED in agent environment |
+| Verdict | **READY FOR MANUAL WEBVIEW SMOKE** — automated gates pass; native webview smoke BLOCKED in agent environment |
 
-## Baseline (pre-edit, follow-up pass)
+## Baseline (pre-edit, correctness closure)
 
 | Gate | Result |
 |---|---|
-| `npm test` | pass (10 tests) |
+| `npm test` | pass (25 tests) |
 | `npm run typecheck` | pass |
 | `npm run build` | pass |
-| `cargo fmt/check/clippy/test` | pass (366 tests) |
+| `cargo fmt/check/clippy/test` | pass (371 tests) |
 | `./scripts/release-check.sh` | pass |
 | `bash ./scripts/check-ui-regressions.sh` | pass |
 | `git diff --check` | pass |
@@ -30,12 +32,12 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | ID | Severity | Status | Notes |
 |---|---|---|---|
 | AW-CFG-001 | P1 | completed | Single OpenCode read path; draft identity + load-seq guards |
-| AW-ASYNC-001 | P1 | completed | Resource ID + save-operation identity on doc/agent/config saves |
+| AW-ASYNC-001 | P1 | completed | Resource ID + monotonic save-operation tokens on doc/agent/config saves |
 | AW-SET-001 | P1 | completed | `mutateAppSettings` in `useAppSettingsController`; Tools uses canonical path |
-| AW-SET-002 | P1 | completed | `mutate_settings` / `mutate_settings_locked` under mutex; corrupt JSON recovery |
+| AW-SET-002 | P1 | completed | `SETTINGS_WRITE_MUTEX` single-owner recovery; read-only `load()`; corrupt backup; Rust regression tests |
 | AW-TOOLS-001 | P2 | completed | `savedRepoEntriesFromSettings` view adapter; no separate backend snapshot |
 | AW-PL-001 | P2 | completed | `isEditableEventTarget` |
-| AW-TEST-001 | P2 | completed | Vitest + RTL; 25 tests; `npm test` in release-check |
+| AW-TEST-001 | P2 | completed | Vitest + RTL; 30 tests; `npm test` in release-check |
 | AW-PROC-001 | P2 | completed | `run_cmd_bounded` with caps + timeout polling |
 | AW-RD-001 | P1 | completed | `git log -n 501`, cap 500 |
 | AW-RD-002 | P1 | completed | Bounded capture in process runner for repo git |
@@ -59,17 +61,17 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | AW-CONFIG-001 | Decision | blocked | Bundle id `.app` migration needs operator plan |
 | AW-CONFIG-002 | Decision | blocked | Schema URL needs official Tauri 2 verification |
 
-## Verification (cumulative, follow-up pass)
+## Verification (cumulative, correctness closure)
 
 | Gate | Result |
 |---|---|
-| `npm test` | pass (25) |
+| `npm test` | pass (30) |
 | `npm run typecheck` | pass |
 | `npm run build` | pass |
 | `cargo fmt --check` | pass |
 | `cargo check` | pass |
 | `cargo clippy -D warnings` | pass |
-| `cargo test` | pass (371 unit + 1 runtime smoke in release-check) |
+| `cargo test` | pass (375 unit + 1 runtime smoke in release-check) |
 | `./scripts/release-check.sh` | pass |
 | `bash ./scripts/check-ui-regressions.sh` | pass |
 | `./scripts/smoke-tauri-runtime.sh` | pass (backend IPC only) |
@@ -100,12 +102,21 @@ Operator must run before sharing builds:
 | AW-TYPES-001 | Generated TS bindings — optional future work |
 | Webview smoke | Operator runs `docs/APP_RELEASE_SMOKE.md` |
 
-## Commit log (follow-up correctness pass)
+## Commit log (correctness closure)
+
+Chronological order from `3e5a78cf` through implementation HEAD `4f9bbc03`. The docs commit `0a1f69cd` also contained minor verification-driven code cleanup.
 
 ```
-41fb2b20 fix(markdown): render fenced code through react-markdown pre boundary
-54229d88 fix(library): bind save completion to editor operation identity
-c57329db fix(settings): lock read-modify-write and recover corrupt settings safely
+07cb1b1c docs(audit): finalize remediation ledger at ARCH completion
 04d5d24d fix(settings): unify repo mutations through app settings controller
-a6aa703f docs(audit): record follow-up remediation evidence and gate results
+c57329db fix(settings): lock read-modify-write and recover corrupt settings safely
+54229d88 fix(library): bind save completion to editor operation identity
+41fb2b20 fix(markdown): render fenced code through react-markdown pre boundary
+0a1f69cd docs(audit): record follow-up remediation evidence and gate results
+a812d496 fix(settings): serialize recovery under SETTINGS_WRITE_MUTEX
+9b1de77d fix(settings): preserve corrupt-file recovery warning in UI
+604436c3 fix(library): make save-operation tokens monotonic and checkable
+4f9bbc03 fix(settings): satisfy clippy in concurrent recovery test
 ```
+
+After push, confirm remote alignment with `git rev-parse origin/main`.
