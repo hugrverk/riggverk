@@ -13,6 +13,7 @@ import {
 } from "./lib/settingsDraft";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
+import { isSettingsConflictError } from "./lib/appSettingsMutation";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { CodexView } from "./views/CodexView";
@@ -24,7 +25,7 @@ import { ToolsView } from "./views/ToolsView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceContractResult, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, AgentTargetMeta, AppSettings, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, TargetProfileMeta, WorkspaceDiagnostics } from "./types";
 
 const INVALID_WORKSPACE_TEXT = "invalid workspace path";
 const NO_WORKSPACE_TEXT = "no workspace selected";
@@ -124,6 +125,9 @@ function App() {
   const [activeConfigSourceType, setActiveConfigSourceType] = useState<string>("base");
   const [configEditorSourceContent, setConfigEditorSourceContent] = useState<DocumentContent | null>(null);
   const [configEditorSourceSaveMessage, setConfigEditorSourceSaveMessage] = useState<string>("");
+  const activeConfigSourceTypeRef = useRef(activeConfigSourceType);
+  const configSourceLoadSeqRef = useRef(0);
+  const configDraftIdentityRef = useRef<string | null>(null);
 
   // backup history state
   const { backups, loadBackups, openBackupsFolder } = useBackups(setError);
@@ -134,25 +138,10 @@ function App() {
   // workspace operations state (moved to hook)
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
 
-  // workspace contract validation
-  const [, setContractResult] = useState<WorkspaceContractResult | null>(null);
-
   // opencode runtime health
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
   const [brainSetupSeed, setBrainSetupSeed] = useState<BrainSetupSeedResult | null>(null);
-
-  const loadContract = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const result = await invoke<WorkspaceContractResult>("validate_workspace_contract");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setContractResult(result);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      if (!isInvalidWorkspaceError(e)) setError(`Contract: ${e}`);
-      setContractResult(null);
-    }
-  }, [isWorkspaceLoadCurrent]);
 
   const loadCursorProfileHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -248,6 +237,7 @@ function App() {
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
   const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
   const savedSettingsRef = useRef<string | null>(null);
+  const settingsRevisionRef = useRef(0);
   const settingsLoadedRef = useRef(false);
   const settingsAutosaveInFlightRef = useRef<string | null>(null);
   const settingsAutosaveSkipRef = useRef(false);
@@ -284,8 +274,6 @@ function App() {
       if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
     }
   }, [isWorkspaceLoadCurrent]);
-
-  useEffect(() => { fetchStatus(); }, [fetchStatus]);
 
   const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
     return isLibrarySourceTypeDirty(sourceType, docDirty, agentTemplateDirty, agentDirty, configDirty);
@@ -411,9 +399,11 @@ function App() {
     try {
       const doc = await invoke<DocumentContent>("read_doc", { id });
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeDocIdRef.current !== id) return;
       setActiveDoc(doc);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeDocIdRef.current !== id) return;
       setError(`Read doc: ${e}`);
     }
   }, [docDirty, activeDoc?.id, isWorkspaceLoadCurrent]);
@@ -431,7 +421,9 @@ function App() {
       setDocSaveResult(result);
       if (result.success) {
         if (result.stdout !== "unchanged") {
-          const updated = await invoke<DocumentContent>("read_doc", { id: activeDoc.id });
+          const docId = activeDoc.id;
+          const updated = await invoke<DocumentContent>("read_doc", { id: docId });
+          if (activeDocIdRef.current !== docId) return;
           setActiveDoc(updated);
           setDocDraft(updated.content);
         }
@@ -472,15 +464,20 @@ function App() {
   }, [configTemplateContent, configEditorSourceContent, activeConfigTargetId]);
 
   const loadConfigTemplate = useCallback(async (targetId: string, generation = workspaceLoadGenerationRef.current) => {
+    if (targetId === "opencode_config") return;
+    const loadSeq = ++configSourceLoadSeqRef.current;
     try {
       const content = await invoke<DocumentContent>("read_config_template", { targetId });
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (configSourceLoadSeqRef.current !== loadSeq) return;
+      if (activeConfigTargetId !== targetId) return;
       setConfigTemplateContent(content);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config: ${e}`);
     }
-  }, [isWorkspaceLoadCurrent]);
+  }, [activeConfigTargetId, isWorkspaceLoadCurrent]);
 
   // ── opencode config editor source callbacks ──
 
@@ -495,15 +492,21 @@ function App() {
   }, [isWorkspaceLoadCurrent]);
 
   const loadConfigEditorSourceContent = useCallback(async (sourceType: string, generation = workspaceLoadGenerationRef.current) => {
+    const loadSeq = ++configSourceLoadSeqRef.current;
+    activeConfigSourceTypeRef.current = sourceType;
     try {
       const content = await invoke<DocumentContent>("read_opencode_config_source", { sourceType });
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (configSourceLoadSeqRef.current !== loadSeq) return;
+      if (activeConfigSourceTypeRef.current !== sourceType) return;
+      if (activeConfigTargetId !== "opencode_config") return;
       setConfigEditorSourceContent(content);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (configSourceLoadSeqRef.current !== loadSeq) return;
       setError(`Config source: ${e}`);
     }
-  }, [isWorkspaceLoadCurrent]);
+  }, [activeConfigTargetId, isWorkspaceLoadCurrent]);
 
   const onSaveConfig = useCallback(async () => {
     if (!activeConfigTargetId) return;
@@ -513,6 +516,18 @@ function App() {
 
     // For opencode_config, use the source-aware save command
     if (activeConfigTargetId === "opencode_config") {
+      const draftIdentity = `opencode_config:${activeConfigSourceType}`;
+      if (configDraftIdentityRef.current !== draftIdentity) {
+        setConfigSaveResult({
+          success: false,
+          action: "save_opencode_config_source",
+          stdout: "",
+          stderr: "config source changed before save",
+          exit_code: null,
+        });
+        setConfigSaving(false);
+        return;
+      }
       try {
         const result = await invoke<ActionResult>("save_opencode_config_source", {
           sourceType: activeConfigSourceType,
@@ -521,9 +536,11 @@ function App() {
         setConfigSaveResult(result);
         if (result.success) {
           if (result.stdout !== "unchanged") {
+            const sourceType = activeConfigSourceType;
             const reloaded = await invoke<DocumentContent>("read_opencode_config_source", {
-              sourceType: activeConfigSourceType,
+              sourceType,
             });
+            if (configDraftIdentityRef.current !== `opencode_config:${sourceType}`) return;
             setConfigEditorSourceContent(reloaded);
             setConfigDraft(reloaded.content);
             setConfigEditorSourceSaveMessage("saved. Use Workspace → generate to update snapshot.");
@@ -544,32 +561,14 @@ function App() {
       return;
     }
 
-    // Fallback: use old save_config_template for non-opencode_config targets
-    try {
-      const result = await invoke<ActionResult>("save_config_template", {
-        targetId: activeConfigTargetId,
-        content: configDraft,
-      });
-      setConfigSaveResult(result);
-      if (result.success) {
-        if (result.stdout !== "unchanged") {
-          const reloaded = await invoke<DocumentContent>("read_config_template", { targetId: activeConfigTargetId });
-          setConfigTemplateContent(reloaded);
-          setConfigDraft(reloaded.content);
-        }
-        setConfigDirty(false);
-      }
-    } catch (e) {
-      setConfigSaveResult({
-        success: false,
-        action: "save_config_template",
-        stdout: "",
-        stderr: String(e),
-        exit_code: null,
-      });
-    } finally {
-      setConfigSaving(false);
-    }
+    setConfigSaveResult({
+      success: false,
+      action: "save_config",
+      stdout: "",
+      stderr: "no editable config target selected",
+      exit_code: null,
+    });
+    setConfigSaving(false);
   }, [activeConfigTargetId, activeConfigSourceType, configDraft]);
 
   const onResetConfig = useCallback(() => {
@@ -629,12 +628,11 @@ function App() {
       loadSkills(generation).catch(() => {}),
       loadDocs(generation).catch(() => {}),
       loadAgentSources(generation).catch(() => {}),
-      loadContract(generation).catch(() => {}),
       fetchStatus(generation).catch(() => {}),
       loadOpenCodeRuntimeHealth(generation).catch(() => {}),
       loadCursorProfileHealth(generation).catch(() => {}),
     ]);
-  }, [loadSkills, loadDocs, loadAgentSources, loadContract, fetchStatus, loadOpenCodeRuntimeHealth, loadCursorProfileHealth]);
+  }, [loadSkills, loadDocs, loadAgentSources, fetchStatus, loadOpenCodeRuntimeHealth, loadCursorProfileHealth]);
 
   const persistActiveWorkspace = useCallback(async (path: string) => {
     if (!appSettings) return;
@@ -643,6 +641,7 @@ function App() {
       const s = await invoke<AppSettings>("try_set_active_workspace_path", { path });
       if (!isWorkspaceLoadCurrent(generation)) return;
       setAppSettings(s);
+      settingsRevisionRef.current = s.revision ?? 0;
       appliedWorkspacePathRef.current = s.workspace_path ?? null;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       settingsAutosaveSkipRef.current = true;
@@ -684,7 +683,6 @@ function App() {
     resetTerminalOutput();
     setStatus(null);
     setWorkspaceDiagnostics(null);
-    setContractResult(null);
     setOpencodeRuntimeHealth(null);
     setCursorProfileHealth(null);
 
@@ -742,9 +740,11 @@ function App() {
     try {
       const content = await invoke<AgentSourceContent>("read_agent_source", { filename: id });
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeAgentIdRef.current !== id) return;
       setActiveAgentContent(content);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeAgentIdRef.current !== id) return;
       setError(`Read agent: ${e}`);
     }
   }, [agentDirty, activeAgentId, isWorkspaceLoadCurrent]);
@@ -762,7 +762,9 @@ function App() {
       setAgentSaveResult(result);
       if (result.success) {
         if (result.stdout !== "unchanged") {
-          const updated = await invoke<AgentSourceContent>("read_agent_source", { filename: activeAgentId });
+          const agentId = activeAgentId;
+          const updated = await invoke<AgentSourceContent>("read_agent_source", { filename: agentId });
+          if (activeAgentIdRef.current !== agentId) return;
           setActiveAgentContent(updated);
           setAgentDraft(updated.content);
         }
@@ -870,13 +872,22 @@ function App() {
     }
   }, [agentTemplate]);
 
+  useEffect(() => {
+    activeConfigSourceTypeRef.current = activeConfigSourceType;
+  }, [activeConfigSourceType]);
+
   // load config template and editor sources when library configs view is active
   useEffect(() => {
     if ((view === "library" && librarySourceType === "configs") && activeConfigTargetId) {
-      loadConfigTemplate(activeConfigTargetId);
+      configSourceLoadSeqRef.current += 1;
+      setConfigTemplateContent(null);
+      setConfigEditorSourceContent(null);
+      configDraftIdentityRef.current = null;
       if (activeConfigTargetId === "opencode_config") {
         loadConfigEditorSources();
         setActiveConfigSourceType("base");
+      } else {
+        loadConfigTemplate(activeConfigTargetId);
       }
     }
   }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate, loadConfigEditorSources]);
@@ -891,27 +902,32 @@ function App() {
   // Sync editor source content into the shared config draft state
   useEffect(() => {
     if (activeConfigTargetId === "opencode_config" && configEditorSourceContent) {
+      const identity = `opencode_config:${activeConfigSourceType}`;
+      configDraftIdentityRef.current = identity;
       setConfigDraft(configEditorSourceContent.content);
       setConfigDirty(false);
       setConfigSaveResult(null);
       setConfigEditorSourceSaveMessage("");
       setConfigMode("preview");
     }
-  }, [configEditorSourceContent?.id, activeConfigTargetId]);
+  }, [configEditorSourceContent?.id, activeConfigTargetId, activeConfigSourceType]);
 
   useEffect(() => {
+    if (activeConfigTargetId === "opencode_config") return;
     if (configTemplateContent) {
+      configDraftIdentityRef.current = `template:${activeConfigTargetId}`;
       setConfigDraft(configTemplateContent.content);
       setConfigDirty(false);
       setConfigSaveResult(null);
       setConfigMode("preview");
-    } else {
+    } else if (activeConfigTargetId) {
+      configDraftIdentityRef.current = null;
       setConfigDraft("");
       setConfigDirty(false);
       setConfigSaveResult(null);
       setConfigMode("preview");
     }
-  }, [configTemplateContent?.id]);
+  }, [configTemplateContent?.id, activeConfigTargetId]);
 
   const toggleSkill = useCallback((name: string) => {
     skillsSelectionTouched.current = true;
@@ -936,10 +952,12 @@ function App() {
     try {
       const content = await invoke<DocumentContent>("read_skill", { id });
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeSkillIdRef.current !== id) return;
       activeSkillContentIdRef.current = id;
       setActiveSkillContent(content);
     } catch (e) {
       if (!isWorkspaceLoadCurrent(generation)) return;
+      if (activeSkillIdRef.current !== id) return;
       setError(`Read skill: ${e}`);
     }
   }, [isWorkspaceLoadCurrent]);
@@ -959,6 +977,7 @@ function App() {
         appliedWorkspacePathRef.current = s.workspace_path ?? null;
       }
       setAppSettings(s);
+      settingsRevisionRef.current = s.revision ?? 0;
       savedSettingsRef.current = serializeSettingsForCompare(s);
       setAgentTargets(targets);
       setTargetProfiles(profiles);
@@ -969,7 +988,7 @@ function App() {
     } catch (e) { setError(`Settings: ${e}`); }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); loadBrainSetupSeed(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources, loadBrainSetupSeed]);
+  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
 
   useEffect(() => {
     loadBrainSetupSeed();
@@ -993,7 +1012,10 @@ function App() {
     setSettingsSaving(true);
 
     try {
-      const s = await invoke<AppSettings>("update_settings", { settings });
+      const s = await invoke<AppSettings>("update_settings", {
+        settings,
+        expectedRevision: settingsRevisionRef.current,
+      });
       if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return false;
 
       const latest = appSettingsRef.current;
@@ -1001,6 +1023,7 @@ function App() {
       const stillCurrent = latestSerialized === serialized;
 
       if (stillCurrent) {
+        settingsRevisionRef.current = s.revision ?? 0;
         setAppSettings(s);
         appliedWorkspacePathRef.current = s.workspace_path ?? null;
         savedSettingsRef.current = serializeSettingsForCompare(s);
@@ -1028,6 +1051,28 @@ function App() {
       return stillCurrent;
     } catch (e) {
       const msg = String(e);
+      if (isSettingsConflictError(e)) {
+        try {
+          const latest = await invoke<AppSettings>("get_settings");
+          settingsRevisionRef.current = latest.revision ?? 0;
+          const latestSerialized = serializeSettingsForCompare(latest);
+          const stillCurrent = appSettingsRef.current
+            ? serializeSettingsForCompare(appSettingsRef.current) === serialized
+            : false;
+          if (stillCurrent) {
+            setAppSettings(latest);
+            savedSettingsRef.current = latestSerialized;
+            applyThemeSettings(latest);
+          }
+          setSettingsAutoSaveError("settings conflict — reloaded latest");
+          setSettingsMsg({ ok: false, text: "settings conflict — reloaded latest" });
+        } catch (reloadError) {
+          const reloadMsg = String(reloadError);
+          setSettingsAutoSaveError(reloadMsg);
+          setSettingsMsg({ ok: false, text: reloadMsg });
+        }
+        return false;
+      }
       setSettingsAutoSaveError(msg);
       setSettingsMsg({ ok: false, text: msg });
       return false;
@@ -1142,13 +1187,12 @@ function App() {
     if (v !== "settings") setSettingsMsg(null);
     if (isWorkspaceLoadView(v)) {
       loadWorkspaceDiagnostics();
-      loadContract();
       loadCursorProfileHealth();
       loadOpenCodeRuntimeHealth();
     }
     else if (v === "library") { loadDocs(); loadSkills(); loadAgentSources(); loadAgentTemplate(); fetchStatus(); }
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadContract, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadSkills, loadDocs, loadAgentTemplate, loadAgentSources, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, fetchStatus]);
 
   const selectConfigTarget = useCallback((targetId: string) => {
     if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
