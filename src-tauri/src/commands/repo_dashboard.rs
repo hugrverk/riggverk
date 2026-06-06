@@ -626,7 +626,10 @@ fn read_doc_from_git(repo: &Path, tree_ref: &str, rel: &str) -> RepoDocFile {
     }
     let (content, truncated) = if stdout.len() > MAX_DOC_CONTENT_BYTES {
         (
-            stdout.chars().take(MAX_DOC_CONTENT_BYTES).collect::<String>(),
+            stdout
+                .chars()
+                .take(MAX_DOC_CONTENT_BYTES)
+                .collect::<String>(),
             true,
         )
     } else {
