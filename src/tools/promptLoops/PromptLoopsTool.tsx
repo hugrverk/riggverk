@@ -206,7 +206,7 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
       <aside className="prompt-loops-sidebar">
         <div className="tool-context-brand font-mono">
           <span className="tools-title-dot" aria-hidden="true" />
-          <span>kretsverket.prompt.loops</span>
+          <span>prompt.loops</span>
         </div>
         <nav className="prompt-loops-nav" aria-label="Prompt groups">
           {PROMPT_LOOP_GROUPS.map((g, index) => (
@@ -239,7 +239,7 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
         <header className="prompt-loops-topbar">
           <label className="prompt-loops-group-select-wrap font-mono">
             <select
-              className="repo-dashboard-field prompt-loops-group-select"
+              className="tool-field prompt-loops-group-select"
               value={groupIndex}
               onChange={e => {
                 setGroupIndex(Number(e.target.value));
@@ -317,7 +317,7 @@ export function PromptLoopsTool({ toolsSwitcher, contextSeed = null }: PromptLoo
                   <label className="prompt-loops-composer-field">
                     <span className="prompt-loops-composer-label">Repo context</span>
                     <select
-                      className="repo-dashboard-field prompt-loops-composer-select"
+                      className="tool-field prompt-loops-composer-select"
                       value={repoEntryId}
                       onChange={e => setRepoEntryId(e.target.value)}
                       aria-label="Repository context"
