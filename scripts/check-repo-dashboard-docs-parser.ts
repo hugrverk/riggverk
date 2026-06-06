@@ -18,6 +18,8 @@ const fixture = (name: string) =>
 const doc: RepoDocFile = {
   path: "docs/TODO.md",
   found: true,
+  readable: true,
+  truncated: false,
   content: [
     "## Section",
     "- [ ] First task",
@@ -36,6 +38,8 @@ assert.ok(items.some(i => i.type === "gap" && i.text.includes("gap")));
 const gaps: RepoDocFile = {
   path: "docs/KNOWN_GAPS.md",
   found: true,
+  readable: true,
+  truncated: false,
   content: fixture("krets-known-gaps.md"),
 };
 const gapItems = parseDocWorkItems([gaps]);
@@ -47,6 +51,8 @@ assert.ok(openGap && openGap.status === "open", "Open status in table");
 const backlog: RepoDocFile = {
   path: "docs/BACKLOG.md",
   found: true,
+  readable: true,
+  truncated: false,
   content: fixture("krets-backlog.md"),
 };
 const backlogItems = parseDocWorkItems([backlog]);
@@ -60,6 +66,8 @@ assert.ok(
 const todoFixture: RepoDocFile = {
   path: "docs/TODO.md",
   found: true,
+  readable: true,
+  truncated: false,
   content: fixture("krets-todo.md"),
 };
 const todoItems = parseDocWorkItems([todoFixture]);
@@ -69,6 +77,8 @@ assert.ok(!todoItems.some(i => i.text.includes("keep README")), "meta bullets sk
 const features: RepoDocFile = {
   path: "docs/product/FEATURES.md",
   found: true,
+  readable: true,
+  truncated: false,
   content: fixture("krets-features-snippet.md"),
 };
 const featureItems = parseDocWorkItems([features]);
@@ -86,7 +96,34 @@ assert.equal(merged.length, 5);
 const detailed = mergeWorkItemsDetailed([doc], issues);
 assert.ok(Array.isArray(detailed.parserWarnings));
 
-const emptyDoc: RepoDocFile = { path: "missing.md", found: false, content: "" };
+const emptyDoc: RepoDocFile = {
+  path: "missing.md",
+  found: false,
+  readable: false,
+  truncated: false,
+  content: "",
+};
 assert.deepEqual(parseDocWorkItemsDetailed([emptyDoc]).items, []);
+
+const truncatedDoc: RepoDocFile = {
+  path: "docs/BACKLOG.md",
+  found: true,
+  readable: true,
+  truncated: true,
+  content: "- [ ] still parsed",
+};
+const truncated = parseDocWorkItemsDetailed([truncatedDoc]);
+assert.ok(truncated.items.length >= 1);
+assert.ok(truncated.warnings.some(w => w.includes("truncated")));
+
+const unreadableDoc: RepoDocFile = {
+  path: "docs/ROADMAP.md",
+  found: true,
+  readable: false,
+  truncated: false,
+  content: "",
+  read_error: "read docs/ROADMAP.md: permission denied",
+};
+assert.deepEqual(parseDocWorkItemsDetailed([unreadableDoc]).items, []);
 
 console.log("Repo Dashboard docs parser checks passed");

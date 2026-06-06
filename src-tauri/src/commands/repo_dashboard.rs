@@ -53,9 +53,11 @@ pub struct RepoChangedFile {
 pub struct RepoDocFile {
     pub path: String,
     pub found: bool,
+    pub readable: bool,
+    pub truncated: bool,
     pub content: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
+    pub read_error: Option<String>,
 }
 
 #[derive(Serialize, Clone, Debug)]
@@ -467,8 +469,10 @@ fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
                 return RepoDocFile {
                     path: (*rel).to_string(),
                     found: false,
+                    readable: false,
+                    truncated: false,
                     content: String::new(),
-                    error: None,
+                    read_error: None,
                 };
             }
             match fs::read_to_string(&full) {
@@ -487,22 +491,19 @@ fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
                     RepoDocFile {
                         path: (*rel).to_string(),
                         found: true,
+                        readable: true,
+                        truncated,
                         content,
-                        error: if truncated {
-                            Some(format!(
-                                "read {}: content truncated to {} bytes",
-                                rel, MAX_DOC_CONTENT_BYTES
-                            ))
-                        } else {
-                            None
-                        },
+                        read_error: None,
                     }
                 }
                 Err(e) => RepoDocFile {
                     path: (*rel).to_string(),
-                    found: false,
+                    found: true,
+                    readable: false,
+                    truncated: false,
                     content: String::new(),
-                    error: Some(format!("read {}: {}", rel, e)),
+                    read_error: Some(format!("read {}: {}", rel, e)),
                 },
             }
         })
@@ -883,7 +884,13 @@ pub fn inspect_repo(
     let docs = read_local_docs(&path);
 
     for doc in &docs {
-        if let Some(err) = &doc.error {
+        if doc.truncated {
+            warnings.push(format!(
+                "read {}: content truncated to {} bytes",
+                doc.path, MAX_DOC_CONTENT_BYTES
+            ));
+        }
+        if let Some(err) = &doc.read_error {
             warnings.push(err.clone());
         }
     }
@@ -1346,6 +1353,48 @@ mod tests {
         assert!(paths.len() <= MAX_DISCOVERED_DOC_PATHS);
 
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn repo_doc_file_serializes_structured_states() {
+        let readable = RepoDocFile {
+            path: "README.md".into(),
+            found: true,
+            readable: true,
+            truncated: false,
+            content: "# hi".into(),
+            read_error: None,
+        };
+        let value = serde_json::to_value(&readable).expect("serialize");
+        assert_eq!(value["path"], "README.md");
+        assert_eq!(value["readable"], true);
+        assert_eq!(value["truncated"], false);
+        assert!(value.get("read_error").is_none());
+
+        let truncated = RepoDocFile {
+            path: "docs/BACKLOG.md".into(),
+            found: true,
+            readable: true,
+            truncated: true,
+            content: "# x".into(),
+            read_error: None,
+        };
+        assert_eq!(
+            serde_json::to_value(&truncated).expect("serialize")["truncated"],
+            true
+        );
+
+        let unreadable = RepoDocFile {
+            path: "docs/ROADMAP.md".into(),
+            found: true,
+            readable: false,
+            truncated: false,
+            content: String::new(),
+            read_error: Some("read docs/ROADMAP.md: denied".into()),
+        };
+        let unreadable_json = serde_json::to_value(&unreadable).expect("serialize");
+        assert_eq!(unreadable_json["readable"], false);
+        assert_eq!(unreadable_json["read_error"], "read docs/ROADMAP.md: denied");
     }
 
     #[test]

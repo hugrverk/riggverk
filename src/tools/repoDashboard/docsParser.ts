@@ -311,9 +311,12 @@ export function parseDocWorkItemsDetailed(files: RepoDocFile[]): DocParseResult 
   const warnings: string[] = [];
 
   for (const file of files) {
-    if (!file.found || !file.content) continue;
-    if (file.error) {
-      warnings.push(`${file.path}: ${file.error}`);
+    if (!file.found || !file.readable || !file.content) continue;
+    if (file.truncated) {
+      warnings.push(`${file.path}: content truncated at load limit`);
+    }
+    if (file.read_error) {
+      warnings.push(`${file.path}: ${file.read_error}`);
     }
     parseMarkdownTables(file, out);
     parseFeatureStatusBlocks(file, out);

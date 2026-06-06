@@ -466,11 +466,13 @@ export function buildWorkStatusCounts(items: RepoDashboardWorkItem[]): WorkStatu
 export interface DocSourceSummary {
   path: string;
   found: boolean;
+  readable: boolean;
+  truncated: boolean;
   optional: boolean;
   itemCount: number;
   openCount: number;
   contributes: boolean;
-  readWarning?: string;
+  readError?: string;
 }
 
 export function buildDocSourceSummaries(
@@ -483,11 +485,13 @@ export function buildDocSourceSummaries(
     return {
       path: doc.path,
       found: doc.found,
+      readable: doc.readable,
+      truncated: doc.truncated,
       optional: isOptionalDocPath(doc.path),
       itemCount: fromDoc.length,
       openCount,
-      contributes: doc.found && fromDoc.length > 0,
-      readWarning: doc.error ?? undefined,
+      contributes: doc.found && doc.readable && fromDoc.length > 0,
+      readError: doc.read_error ?? undefined,
     };
   });
 }

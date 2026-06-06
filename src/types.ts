@@ -176,8 +176,10 @@ export interface RepoChangedFile {
 export interface RepoDocFile {
   path: string;
   found: boolean;
+  readable: boolean;
+  truncated: boolean;
   content: string;
-  error?: string | null;
+  read_error?: string | null;
 }
 
 export interface RepoGhPullRequest {
