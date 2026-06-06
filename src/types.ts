@@ -160,7 +160,7 @@ export interface RepoDashboardWorkItem {
   url?: string;
   section?: string;
   confidence?: RepoDashboardWorkConfidence;
-  /** Canonical queue identifier, e.g. KV-V-001 or ELCAD-AUD-014 */
+  /** Canonical queue identifier from documentation tables */
   workId?: string;
   classification?: RepoDashboardWorkClassification;
   priority?: string;
@@ -219,6 +219,8 @@ export interface RepoGhEnhancement {
   open_issues: RepoGhIssue[];
 }
 
+export type RepoDocsSource = "remote" | "cached-remote" | "local-fallback";
+
 export interface RepoDashboardSnapshot {
   repo_path: string;
   git_available: boolean;
@@ -233,6 +235,9 @@ export interface RepoDashboardSnapshot {
   commits_truncated: boolean;
   changed_files: RepoChangedFile[];
   docs: RepoDocFile[];
+  docs_source: RepoDocsSource;
+  docs_ref: string;
+  docs_stale: boolean;
   gh: RepoGhEnhancement;
   warnings: string[];
 }

@@ -80,6 +80,14 @@ pub struct RepoGhPullRequest {
     pub body: Option<String>,
 }
 
+#[derive(Serialize, Clone, Debug, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum DocsSource {
+    Remote,
+    CachedRemote,
+    LocalFallback,
+}
+
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoGhIssue {
     pub number: u64,
@@ -103,6 +111,9 @@ pub struct RepoDashboardSnapshot {
     pub commits_truncated: bool,
     pub changed_files: Vec<RepoChangedFile>,
     pub docs: Vec<RepoDocFile>,
+    pub docs_source: DocsSource,
+    pub docs_ref: String,
+    pub docs_stale: bool,
     pub gh: RepoGhEnhancement,
     pub warnings: Vec<String>,
 }
@@ -533,6 +544,178 @@ fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
         .collect()
 }
 
+fn normalize_git_doc_path(path: &str) -> String {
+    path.replace('\\', "/").trim_start_matches("./").to_string()
+}
+
+fn is_safe_git_doc_path(rel: &str) -> bool {
+    let normalized = normalize_git_doc_path(rel);
+    if normalized.is_empty() || normalized.starts_with('/') {
+        return false;
+    }
+    if normalized.contains("..") {
+        return false;
+    }
+    let file_name = normalized.rsplit('/').next().unwrap_or("");
+    if file_name.starts_with('.') || !is_markdown_file_name(file_name) {
+        return false;
+    }
+    if !normalized.contains('/') {
+        return true;
+    }
+    if !normalized.starts_with("docs/") {
+        return false;
+    }
+    !normalized
+        .split('/')
+        .any(|segment| should_skip_doc_dir(segment))
+}
+
+fn collect_doc_paths_from_git_listing(listing: &[String]) -> Vec<String> {
+    let mut paths: Vec<String> = CORE_DOC_PATHS.iter().map(|p| (*p).to_string()).collect();
+    let mut seen: HashSet<String> = paths.iter().cloned().collect();
+    let mut discovered: Vec<String> = listing
+        .iter()
+        .map(|p| normalize_git_doc_path(p))
+        .filter(|p| is_safe_git_doc_path(p))
+        .collect();
+    discovered.sort();
+    for rel in discovered {
+        if paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+            break;
+        }
+        if seen.insert(rel.clone()) {
+            paths.push(rel);
+        }
+    }
+    paths.truncate(MAX_DISCOVERED_DOC_PATHS);
+    paths
+}
+
+fn git_list_tree_paths(repo: &Path, tree_ref: &str) -> Vec<String> {
+    let (ok, out, _) = git_in_repo(repo, &["ls-tree", "-r", "--name-only", tree_ref]);
+    if !ok {
+        return Vec::new();
+    }
+    out.lines()
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+        .map(str::to_string)
+        .collect()
+}
+
+fn read_doc_from_git(repo: &Path, tree_ref: &str, rel: &str) -> RepoDocFile {
+    let object = format!("{}:{}", tree_ref, rel);
+    let (ok, stdout, stderr) = git_in_repo(repo, &["show", &object]);
+    if !ok {
+        let err = stderr.trim();
+        if err.contains("does not exist")
+            || err.contains("exists on disk")
+            || err.contains("fatal: path")
+        {
+            return missing_doc_file(rel);
+        }
+        return unreadable_doc_file(
+            rel,
+            if err.is_empty() {
+                format!("show {rel}: git failed")
+            } else {
+                format!("show {rel}: {err}")
+            },
+        );
+    }
+    let (content, truncated) = if stdout.len() > MAX_DOC_CONTENT_BYTES {
+        (
+            stdout.chars().take(MAX_DOC_CONTENT_BYTES).collect::<String>(),
+            true,
+        )
+    } else {
+        (stdout, false)
+    };
+    RepoDocFile {
+        path: rel.to_string(),
+        found: true,
+        readable: true,
+        truncated,
+        content,
+        read_error: None,
+    }
+}
+
+fn read_docs_from_git_ref(repo: &Path, tree_ref: &str) -> Vec<RepoDocFile> {
+    let paths = collect_doc_paths_from_git_listing(&git_list_tree_paths(repo, tree_ref));
+    paths
+        .iter()
+        .map(|rel| read_doc_from_git(repo, tree_ref, rel))
+        .collect()
+}
+
+fn remote_tracking_ref(branch: &str) -> String {
+    format!("refs/remotes/origin/{}", branch)
+}
+
+fn git_ref_exists(repo: &Path, git_ref: &str) -> bool {
+    let (ok, _, _) = git_in_repo(repo, &["rev-parse", "--verify", git_ref]);
+    ok
+}
+
+fn fetch_origin_branch(repo: &Path, branch: &str) -> bool {
+    let (ok, _, _, _) = run_cmd(
+        "git",
+        &["fetch", "--quiet", "--prune", "origin", branch],
+        repo,
+    );
+    ok
+}
+
+struct DocsLoadResult {
+    docs: Vec<RepoDocFile>,
+    source: DocsSource,
+    docs_ref: String,
+    stale: bool,
+}
+
+fn load_repository_docs(
+    repo: &Path,
+    configured_default_branch: Option<&str>,
+    warnings: &mut Vec<String>,
+) -> DocsLoadResult {
+    let default_branch = detect_default_branch(repo, configured_default_branch);
+    if let Some(branch) = default_branch {
+        let remote_ref = remote_tracking_ref(&branch);
+        let fetch_ok = fetch_origin_branch(repo, &branch);
+        if git_ref_exists(repo, &remote_ref) {
+            let docs = read_docs_from_git_ref(repo, &remote_ref);
+            if fetch_ok {
+                return DocsLoadResult {
+                    docs,
+                    source: DocsSource::Remote,
+                    docs_ref: remote_ref,
+                    stale: false,
+                };
+            }
+            warnings.push(
+                "Could not fetch latest documentation from origin — showing cached remote ref."
+                    .into(),
+            );
+            return DocsLoadResult {
+                docs,
+                source: DocsSource::CachedRemote,
+                docs_ref: remote_ref,
+                stale: true,
+            };
+        }
+    }
+
+    warnings.push("No remote documentation ref available — using local checkout.".into());
+    DocsLoadResult {
+        docs: read_local_docs(repo),
+        source: DocsSource::LocalFallback,
+        docs_ref: "local-checkout".into(),
+        stale: true,
+    }
+}
+
 fn gh_available() -> bool {
     let (ok, _, _, _) = run_cmd("gh", &["--version"], &repo_root_fallback());
     ok
@@ -848,6 +1031,9 @@ pub fn inspect_repo(
             commits_truncated: false,
             changed_files: Vec::new(),
             docs: read_local_docs(&path),
+            docs_source: DocsSource::LocalFallback,
+            docs_ref: "local-checkout".into(),
+            docs_stale: true,
             gh: RepoGhEnhancement {
                 available: gh_available(),
                 authenticated: false,
@@ -876,6 +1062,9 @@ pub fn inspect_repo(
             commits_truncated: false,
             changed_files: Vec::new(),
             docs: read_local_docs(&path),
+            docs_source: DocsSource::LocalFallback,
+            docs_ref: "local-checkout".into(),
+            docs_stale: true,
             gh: RepoGhEnhancement {
                 available: gh_available(),
                 authenticated: false,
@@ -904,7 +1093,8 @@ pub fn inspect_repo(
     }
     let latest_commit = commits.first().cloned();
     let changed_files = load_changed_files(&path);
-    let docs = read_local_docs(&path);
+    let docs_load = load_repository_docs(&path, configured_default_branch, &mut warnings);
+    let docs = docs_load.docs;
 
     for doc in &docs {
         if doc.truncated {
@@ -965,6 +1155,9 @@ pub fn inspect_repo(
         commits_truncated,
         changed_files,
         docs,
+        docs_source: docs_load.source,
+        docs_ref: docs_load.docs_ref,
+        docs_stale: docs_load.stale,
         gh: RepoGhEnhancement {
             available: gh_available_flag,
             authenticated: gh_authenticated,
@@ -1586,6 +1779,111 @@ mod tests {
         assert_eq!(paths.len(), 2);
 
         let _ = fs::remove_dir_all(&parent);
+    }
+
+    #[test]
+    fn collect_doc_paths_from_git_listing_filters_tree() {
+        let listing = vec![
+            "README.md".into(),
+            "CHANGELOG.md".into(),
+            "docs/BACKLOG.md".into(),
+            "docs/product/FEATURES.md".into(),
+            "node_modules/evil.md".into(),
+            "docs/escape/SECRET.md".into(),
+            ".hidden.md".into(),
+            "src/foo.md".into(),
+        ];
+        let paths = collect_doc_paths_from_git_listing(&listing);
+        assert!(paths.iter().any(|p| p == "README.md"));
+        assert!(paths.iter().any(|p| p == "docs/BACKLOG.md"));
+        assert!(paths.iter().any(|p| p == "docs/product/FEATURES.md"));
+        assert!(!paths.iter().any(|p| p.contains("node_modules")));
+        assert!(!paths.iter().any(|p| p.contains("src/")));
+        assert!(!paths.iter().any(|p| p.starts_with('.')));
+    }
+
+    #[test]
+    fn is_safe_git_doc_path_rejects_traversal() {
+        assert!(!is_safe_git_doc_path("../README.md"));
+        assert!(!is_safe_git_doc_path("docs/../SECRET.md"));
+        assert!(is_safe_git_doc_path("docs/BACKLOG.md"));
+    }
+
+    #[test]
+    fn docs_source_serializes_kebab_case() {
+        let value = serde_json::to_value(DocsSource::CachedRemote).expect("serialize");
+        assert_eq!(value, "cached-remote");
+    }
+
+    #[test]
+    fn read_docs_from_git_ref_reads_committed_markdown() {
+        use std::process::Command;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-remote-docs-{stamp}"));
+        fs::create_dir_all(root.join("docs")).expect("mkdir docs");
+        fs::write(root.join("README.md"), "# remote readme").expect("write readme");
+        fs::write(root.join("docs/BACKLOG.md"), "# backlog").expect("write backlog");
+
+        let status = Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+        Command::new("git")
+            .args(["add", "."])
+            .current_dir(&root)
+            .status()
+            .expect("git add");
+        Command::new("git")
+            .args(["commit", "-m", "docs"])
+            .env("GIT_AUTHOR_NAME", "test")
+            .env("GIT_AUTHOR_EMAIL", "test@example.com")
+            .env("GIT_COMMITTER_NAME", "test")
+            .env("GIT_COMMITTER_EMAIL", "test@example.com")
+            .current_dir(&root)
+            .status()
+            .expect("git commit");
+
+        let docs = read_docs_from_git_ref(&root, "HEAD");
+        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme");
+        assert!(readme.readable);
+        assert_eq!(readme.content, "# remote readme");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn load_repository_docs_uses_local_fallback_without_remote() {
+        use std::process::Command;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-local-docs-{stamp}"));
+        fs::create_dir_all(&root).expect("mkdir");
+        fs::write(root.join("README.md"), "# local").expect("write readme");
+        let status = Command::new("git")
+            .args(["init"])
+            .current_dir(&root)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+
+        let mut warnings = Vec::new();
+        let loaded = load_repository_docs(&root, None, &mut warnings);
+        assert_eq!(loaded.source, DocsSource::LocalFallback);
+        assert!(loaded.stale);
+        assert!(warnings.iter().any(|w| w.contains("local checkout")));
+
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
