@@ -281,6 +281,37 @@ export function buildHeatmapCells(commits: RepoCommitEntry[]): HeatmapCell[] {
 
 export type ActivityTimeRange = "30d" | "90d" | "1y" | "all";
 export type ActivityChartMode = "period" | "cumulative";
+export type ActivityInsightsVisualMode = "lines" | "bars";
+
+/** Restrained palette for per-contributor activity series (light and dark). */
+export const CONTRIBUTOR_CHART_PALETTE = [
+  "#58a6ff",
+  "#56d364",
+  "#f0883e",
+  "#bc8cff",
+  "#ff7b72",
+  "#79c0ff",
+  "#d2a8ff",
+  "#ffa657",
+] as const;
+
+export function contributorChartColor(colorIndex: number): string {
+  const palette = CONTRIBUTOR_CHART_PALETTE;
+  return palette[((colorIndex % palette.length) + palette.length) % palette.length];
+}
+
+export interface ContributorDailyPoint {
+  date: string;
+  commitCount: number;
+}
+
+export interface ContributorActivitySeries {
+  id: string;
+  displayName: string;
+  colorIndex: number;
+  totalCommits: number;
+  points: ContributorDailyPoint[];
+}
 
 /** Activity & contributors always uses the latest 90 days of loaded commits. */
 export const ACTIVITY_INSIGHTS_DAYS = 90;
@@ -390,6 +421,91 @@ export function buildActivityInsightsSeriesForDays(
     points.push({ date: key, commitCount, cumulativeCount: cumulative });
   }
   return points;
+}
+
+function buildFixedDayKeys(
+  days: number,
+  now: Date,
+): string[] {
+  const rangeEnd = dayStart(now);
+  const start = new Date(rangeEnd);
+  start.setDate(start.getDate() - (days - 1));
+  const keys: string[] = [];
+  for (let cursor = new Date(start); cursor <= rangeEnd; cursor.setDate(cursor.getDate() + 1)) {
+    keys.push(isoDay(cursor));
+  }
+  return keys;
+}
+
+/** One independent 90-day (or custom) series per contributor, zero-filled per day. */
+export function buildContributorActivitySeries(
+  commits: RepoCommitEntry[],
+  days = ACTIVITY_INSIGHTS_DAYS,
+  now = new Date(),
+): ContributorActivitySeries[] {
+  const stats = buildContributorStats(commits);
+  if (!stats.length) return [];
+
+  const dayKeys = buildFixedDayKeys(days, now);
+  const countsByContributor = new Map<string, Map<string, number>>();
+
+  for (const commit of commits) {
+    if (!Number.isFinite(commit.authored_at)) continue;
+    const id = authorIdentity(commit);
+    const key = isoDay(new Date(commit.authored_at * 1000));
+    const bucket = countsByContributor.get(id) ?? new Map<string, number>();
+    bucket.set(key, (bucket.get(key) ?? 0) + 1);
+    countsByContributor.set(id, bucket);
+  }
+
+  return stats.map((stat, colorIndex) => {
+    const daily = countsByContributor.get(stat.id);
+    const points = dayKeys.map(date => ({
+      date,
+      commitCount: daily?.get(date) ?? 0,
+    }));
+    const totalCommits = points.reduce((sum, point) => sum + point.commitCount, 0);
+    return {
+      id: stat.id,
+      displayName: stat.displayName,
+      colorIndex,
+      totalCommits,
+      points,
+    };
+  });
+}
+
+export function filterContributorActivitySeries(
+  series: ContributorActivitySeries[],
+  visibleIds: ReadonlySet<string> | readonly string[],
+): ContributorActivitySeries[] {
+  const ids = visibleIds instanceof Set ? visibleIds : new Set(visibleIds);
+  return series.filter(entry => ids.has(entry.id));
+}
+
+export function defaultVisibleContributorIds(series: ContributorActivitySeries[]): string[] {
+  return series.map(entry => entry.id);
+}
+
+/** Drop stale IDs; if none remain, select all currently available contributors. */
+export function reconcileVisibleContributorIds(
+  visibleIds: readonly string[],
+  availableIds: readonly string[],
+): string[] {
+  const available = new Set(availableIds);
+  const pruned = visibleIds.filter(id => available.has(id));
+  if (!pruned.length && availableIds.length) return [...availableIds];
+  return pruned;
+}
+
+export function visibleContributorSeriesMax(series: ContributorActivitySeries[]): number {
+  let max = 0;
+  for (const entry of series) {
+    for (const point of entry.points) {
+      if (point.commitCount > max) max = point.commitCount;
+    }
+  }
+  return Math.max(1, max);
 }
 
 export function buildRemainingByType(items: RepoDashboardWorkItem[]): RemainingByType[] {

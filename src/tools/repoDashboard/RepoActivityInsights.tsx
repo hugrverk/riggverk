@@ -1,36 +1,38 @@
 import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { RepoCommitEntry } from "../../types";
 import {
-  activityInsightsChartValue,
   ACTIVITY_INSIGHTS_DAYS,
-  buildActivityInsightsSeriesForDays,
+  buildContributorActivitySeries,
   buildContributorStats,
-  contributorTopScopes,
-  contributorTopTypes,
-  filterCommitsByContributor,
+  contributorChartColor,
+  defaultVisibleContributorIds,
   filterCommitsForActivityInsights,
-  type ActivityInsightsPoint,
+  filterContributorActivitySeries,
+  reconcileVisibleContributorIds,
+  visibleContributorSeriesMax,
+  type ActivityInsightsVisualMode,
+  type ContributorActivitySeries,
   type ContributorStat,
 } from "./model";
 
-function formatContributorDate(timestamp: number | null): string {
-  if (timestamp == null) return "—";
-  return new Date(timestamp * 1000).toLocaleDateString(undefined, {
-    year: "2-digit",
-    month: "short",
-    day: "numeric",
-  });
+interface ChartFocus {
+  seriesId: string;
+  dayIndex: number;
 }
 
-function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) {
-  const [activeIndex, setActiveIndex] = useState<number | null>(null);
+function ActivityInsightsChart({
+  series,
+  mode,
+}: {
+  series: ContributorActivitySeries[];
+  mode: ActivityInsightsVisualMode;
+}) {
+  const [focus, setFocus] = useState<ChartFocus | null>(null);
   const chartTitleId = useId();
+  const chartDescId = useId();
 
-  const values = useMemo(
-    () => points.map(point => activityInsightsChartValue(point, "period")),
-    [points],
-  );
-  const max = Math.max(1, ...values);
+  const dayCount = series[0]?.points.length ?? 0;
+  const max = useMemo(() => visibleContributorSeriesMax(series), [series]);
 
   const w = 820;
   const h = 300;
@@ -39,30 +41,48 @@ function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) 
   const T = 20;
   const B = 52;
 
+  const slotWidth = dayCount > 0 ? (w - L - R) / dayCount : 0;
+  const xCenter = useCallback(
+    (index: number) => L + index * slotWidth + slotWidth / 2,
+    [slotWidth],
+  );
   const xAt = useCallback(
     (index: number) =>
-      points.length === 1
-        ? L + (w - L - R) / 2
-        : L + (index * (w - L - R)) / (points.length - 1),
-    [points.length],
+      dayCount === 1 ? L + (w - L - R) / 2 : L + (index * (w - L - R)) / (dayCount - 1),
+    [dayCount],
   );
   const yAt = useCallback(
     (value: number) => T + ((max - value) * (h - T - B)) / max,
     [max],
   );
 
-  const every = Math.max(1, Math.ceil(points.length / 8));
-  const activePoint = activeIndex != null ? points[activeIndex] : null;
-  const activeValue =
-    activePoint != null ? activityInsightsChartValue(activePoint, "period") : null;
+  const every = Math.max(1, Math.ceil(dayCount / 8));
+  const dayKeys = series[0]?.points.map(point => point.date) ?? [];
 
-  if (!points.length) {
+  const activeEntry = focus
+    ? series.find(entry => entry.id === focus.seriesId) ?? null
+    : null;
+  const activePoint =
+    activeEntry && focus ? activeEntry.points[focus.dayIndex] ?? null : null;
+
+  if (!series.length || !dayCount) {
     return (
       <p className="text-muted small" role="status">
-        No commits in the last 90 days.
+        Select at least one contributor to chart activity.
       </p>
     );
   }
+
+  const contributorCount = series.length;
+  const innerGap = 1;
+  const maxBarW = 8;
+  const barW =
+    mode === "bars"
+      ? Math.min(
+          maxBarW,
+          Math.max(1, (slotWidth - innerGap * (contributorCount - 1)) / contributorCount),
+        )
+      : 0;
 
   return (
     <div className="repo-dashboard-activity-insights-chart">
@@ -70,10 +90,14 @@ function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) 
         viewBox={`0 0 ${w} ${h}`}
         preserveAspectRatio="xMidYMid meet"
         role="img"
-        aria-labelledby={chartTitleId}
+        aria-labelledby={`${chartTitleId} ${chartDescId}`}
         className="repo-dashboard-activity-insights-svg"
       >
-        <title id={chartTitleId}>Commits per day — last 90 days</title>
+        <title id={chartTitleId}>Contributor commits per day — last 90 days</title>
+        <desc id={chartDescId}>
+          {mode === "lines" ? "Line chart" : "Grouped bar chart"} of daily commits per
+          contributor over the last 90 days.
+        </desc>
         <line className="repo-dashboard-axis" x1={L} y1={h - B} x2={w - R} y2={h - B} />
         <line className="repo-dashboard-axis" x1={L} y1={T} x2={L} y2={h - B} />
         {[0, Math.ceil(max / 2), max].map(v => (
@@ -84,85 +108,144 @@ function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) 
             </text>
           </g>
         ))}
-        {points.map((point, index) => {
-          const value = values[index];
-          if (!value) return null;
-          const barW = Math.max(2, (w - L - R) / points.length - 1);
-          const x = xAt(index) - barW / 2;
-          const y = yAt(value);
-          const barH = h - B - y;
-          return (
-            <rect
-              key={point.date}
-              className="repo-dashboard-activity-bar"
-              x={x}
-              y={y}
-              width={barW}
-              height={barH}
-              tabIndex={0}
-              role="graphics-symbol"
-              aria-label={`${point.date}: ${point.commitCount} commits`}
-              onMouseEnter={() => setActiveIndex(index)}
-              onMouseLeave={() => setActiveIndex(null)}
-              onFocus={() => setActiveIndex(index)}
-              onBlur={() => setActiveIndex(null)}
-            />
-          );
-        })}
-        {points.map((point, index) =>
-          index % every === 0 || index === points.length - 1 ? (
+
+        {mode === "lines"
+          ? series.map(entry => {
+              const color = contributorChartColor(entry.colorIndex);
+              const path = entry.points
+                .map((point, index) => {
+                  const x = xAt(index);
+                  const y = yAt(point.commitCount);
+                  return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+                })
+                .join(" ");
+              return (
+                <g key={entry.id}>
+                  <path
+                    className="repo-dashboard-activity-line"
+                    d={path}
+                    stroke={color}
+                    fill="none"
+                  />
+                  {entry.points.map((point, index) => (
+                    <circle
+                      key={`${entry.id}-${point.date}`}
+                      className="repo-dashboard-activity-point"
+                      cx={xAt(index)}
+                      cy={yAt(point.commitCount)}
+                      r={point.commitCount > 0 ? 3.5 : 2}
+                      fill={color}
+                      tabIndex={0}
+                      role="graphics-symbol"
+                      aria-label={`${entry.displayName}, ${point.date}: ${point.commitCount} commits`}
+                      onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex: index })}
+                      onMouseLeave={() => setFocus(null)}
+                      onFocus={() => setFocus({ seriesId: entry.id, dayIndex: index })}
+                      onBlur={() => setFocus(null)}
+                    />
+                  ))}
+                </g>
+              );
+            })
+          : dayKeys.map((date, dayIndex) => {
+              const totalWidth =
+                contributorCount * barW + Math.max(0, contributorCount - 1) * innerGap;
+              const groupStart = xCenter(dayIndex) - totalWidth / 2;
+              return series.map((entry, contributorIndex) => {
+                const point = entry.points[dayIndex];
+                if (!point?.commitCount) return null;
+                const color = contributorChartColor(entry.colorIndex);
+                const x = groupStart + contributorIndex * (barW + innerGap);
+                const y = yAt(point.commitCount);
+                const barH = h - B - y;
+                return (
+                  <rect
+                    key={`${entry.id}-${date}`}
+                    className="repo-dashboard-activity-bar"
+                    x={x}
+                    y={y}
+                    width={barW}
+                    height={barH}
+                    fill={color}
+                    tabIndex={0}
+                    role="graphics-symbol"
+                    aria-label={`${entry.displayName}, ${date}: ${point.commitCount} commits`}
+                    onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex })}
+                    onMouseLeave={() => setFocus(null)}
+                    onFocus={() => setFocus({ seriesId: entry.id, dayIndex })}
+                    onBlur={() => setFocus(null)}
+                  />
+                );
+              });
+            })}
+
+        {dayKeys.map((date, index) =>
+          index % every === 0 || index === dayKeys.length - 1 ? (
             <text
-              key={`${point.date}-label`}
+              key={`${date}-label`}
               className="repo-dashboard-chart-text"
-              x={xAt(index)}
+              x={mode === "bars" ? xCenter(index) : xAt(index)}
               y={h - 16}
               textAnchor="middle"
             >
-              {point.date.slice(5)}
+              {date.slice(5)}
             </text>
           ) : null,
         )}
       </svg>
-      {activePoint ? (
+
+      <ul className="repo-dashboard-activity-legend font-mono" aria-label="Chart series">
+        {series.map(entry => (
+          <li key={entry.id}>
+            <span
+              className="repo-dashboard-activity-legend-swatch"
+              style={{ background: contributorChartColor(entry.colorIndex) }}
+              aria-hidden="true"
+            />
+            <span>{entry.displayName}</span>
+          </li>
+        ))}
+      </ul>
+
+      {activeEntry && activePoint ? (
         <p className="repo-dashboard-activity-tooltip font-mono" role="status" aria-live="polite">
-          {activePoint.date}: {activeValue} commits
+          {activeEntry.displayName} · {activePoint.date}: {activePoint.commitCount} commits
         </p>
       ) : null}
     </div>
   );
 }
 
-function ContributorDetail({ stat }: { stat: ContributorStat }) {
+function ContributorVisibilityRow({
+  stat,
+  visible,
+  colorIndex,
+  onToggle,
+}: {
+  stat: ContributorStat;
+  visible: boolean;
+  colorIndex: number;
+  onToggle: () => void;
+}) {
+  const color = contributorChartColor(colorIndex);
   return (
-    <dl className="repo-dashboard-contributor-detail font-mono">
-      <div>
-        <dt>Commits</dt>
-        <dd>{stat.commitCount}</dd>
-      </div>
-      <div>
-        <dt>Share</dt>
-        <dd>{stat.percentage}%</dd>
-      </div>
-      <div>
-        <dt>Active</dt>
-        <dd>
-          {formatContributorDate(stat.firstCommitAt)} →{" "}
-          {formatContributorDate(stat.latestCommitAt)}
-        </dd>
-      </div>
-      <div>
-        <dt>Merges</dt>
-        <dd>{stat.mergeCommitCount}</dd>
-      </div>
-      <div>
-        <dt>Types</dt>
-        <dd>{contributorTopTypes(stat) || "—"}</dd>
-      </div>
-      <div>
-        <dt>Scopes</dt>
-        <dd>{contributorTopScopes(stat) || "—"}</dd>
-      </div>
-    </dl>
+    <button
+      type="button"
+      className={`repo-dashboard-contributor-visibility${visible ? " repo-dashboard-contributor-visibility-on" : ""}`}
+      aria-pressed={visible}
+      aria-label={`${visible ? "Hide" : "Show"} ${stat.displayName} on chart`}
+      onClick={onToggle}
+    >
+      <span
+        className="repo-dashboard-contributor-visibility-swatch"
+        style={{ background: color }}
+        aria-hidden="true"
+      />
+      <span className="repo-dashboard-contributor-visibility-name">{stat.displayName}</span>
+      <span className="repo-dashboard-contributor-visibility-stat">{stat.commitCount}</span>
+      <span className="repo-dashboard-contributor-visibility-stat">{stat.percentage}%</span>
+      <span className="repo-dashboard-contributor-visibility-stat">{stat.mergeCommitCount}</span>
+    </button>
   );
 }
 
@@ -173,30 +256,48 @@ export function RepoActivityInsights({
   commits: RepoCommitEntry[];
   commitsTruncated: boolean;
 }) {
-  const [contributorId, setContributorId] = useState<"all" | string>("all");
+  const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("lines");
+  const [visibleContributorIds, setVisibleContributorIds] = useState<string[]>([]);
 
   const allStats = useMemo(() => buildContributorStats(commits), [commits]);
   const rangeCommits = useMemo(() => filterCommitsForActivityInsights(commits), [commits]);
-  const filteredCommits = useMemo(
-    () => filterCommitsByContributor(rangeCommits, contributorId),
-    [rangeCommits, contributorId],
+  const allSeries = useMemo(
+    () => buildContributorActivitySeries(rangeCommits, ACTIVITY_INSIGHTS_DAYS),
+    [rangeCommits],
   );
-  const series = useMemo(
-    () => buildActivityInsightsSeriesForDays(filteredCommits, ACTIVITY_INSIGHTS_DAYS),
-    [filteredCommits],
-  );
+
+  const colorIndexById = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const entry of allSeries) map.set(entry.id, entry.colorIndex);
+    return map;
+  }, [allSeries]);
 
   useEffect(() => {
-    if (contributorId === "all") return;
-    if (!allStats.some(stat => stat.id === contributorId)) {
-      setContributorId("all");
-    }
-  }, [allStats, contributorId]);
+    const available = defaultVisibleContributorIds(allSeries);
+    setVisibleContributorIds(prev => {
+      if (!prev.length && available.length) return available;
+      return reconcileVisibleContributorIds(prev, available);
+    });
+  }, [allSeries]);
 
-  const selectedStat =
-    contributorId === "all" ? null : allStats.find(stat => stat.id === contributorId) ?? null;
+  const visibleSeries = useMemo(
+    () => filterContributorActivitySeries(allSeries, new Set(visibleContributorIds)),
+    [allSeries, visibleContributorIds],
+  );
 
-  const contributorSelectId = useId();
+  const visibleIdSet = useMemo(() => new Set(visibleContributorIds), [visibleContributorIds]);
+
+  const toggleContributor = useCallback((id: string) => {
+    setVisibleContributorIds(prev =>
+      prev.includes(id) ? prev.filter(entryId => entryId !== id) : [...prev, id],
+    );
+  }, []);
+
+  const showAllContributors = useCallback(() => {
+    setVisibleContributorIds(defaultVisibleContributorIds(allSeries));
+  }, [allSeries]);
+
+  const chartModeGroupId = useId();
 
   return (
     <section
@@ -210,23 +311,33 @@ export function RepoActivityInsights({
             90-day local git activity
           </p>
         </div>
-        <label className="repo-dashboard-activity-control font-mono" htmlFor={contributorSelectId}>
-          <span>Contributor</span>
-          <select
-            id={contributorSelectId}
-            className="repo-dashboard-field"
-            value={contributorId}
-            onChange={e => setContributorId(e.target.value)}
-            aria-label="Contributor filter"
-          >
-            <option value="all">All contributors</option>
-            {allStats.map(stat => (
-              <option key={stat.id} value={stat.id}>
-                {stat.displayName} ({stat.commitCount})
-              </option>
-            ))}
-          </select>
-        </label>
+        <div
+          className="repo-dashboard-activity-insights-controls"
+          role="group"
+          aria-labelledby={chartModeGroupId}
+        >
+          <span id={chartModeGroupId} className="repo-dashboard-activity-control-label font-mono">
+            Chart
+          </span>
+          <div className="repo-dashboard-toolbar">
+            <button
+              type="button"
+              className={`repo-dashboard-seg${chartMode === "lines" ? " active" : ""}`}
+              aria-pressed={chartMode === "lines"}
+              onClick={() => setChartMode("lines")}
+            >
+              Lines
+            </button>
+            <button
+              type="button"
+              className={`repo-dashboard-seg${chartMode === "bars" ? " active" : ""}`}
+              aria-pressed={chartMode === "bars"}
+              onClick={() => setChartMode("bars")}
+            >
+              Bars
+            </button>
+          </div>
+        </div>
       </div>
 
       {!commits.length ? (
@@ -235,51 +346,39 @@ export function RepoActivityInsights({
         </p>
       ) : (
         <div className="repo-dashboard-activity-insights-body">
-          <ActivityInsightsChart points={series} />
-          {selectedStat ? (
-            <div className="repo-dashboard-contributor-panel repo-dashboard-contributor-panel-detail">
-              <h3 className="font-mono repo-dashboard-contributor-focus-name">
-                {selectedStat.displayName}
-              </h3>
-              <ContributorDetail stat={selectedStat} />
-            </div>
-          ) : allStats.length ? (
+          <ActivityInsightsChart series={visibleSeries} mode={chartMode} />
+          {allStats.length ? (
             <div className="repo-dashboard-contributor-panel">
-              <div className="repo-dashboard-contributors-table-wrap">
-                <table className="repo-dashboard-contributors-table font-mono">
-                  <thead>
-                    <tr>
-                      <th scope="col">Contributor</th>
-                      <th scope="col">Commits</th>
-                      <th scope="col">Share</th>
-                      <th scope="col">Merges</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {allStats.map(stat => (
-                      <tr
-                        key={stat.id}
-                        className={
-                          contributorId === stat.id ? "repo-dashboard-contributor-row-selected" : ""
-                        }
-                      >
-                        <td>
-                          <button
-                            type="button"
-                            className="repo-dashboard-contributor-pick"
-                            aria-pressed={contributorId === stat.id}
-                            onClick={() => setContributorId(stat.id)}
-                          >
-                            {stat.displayName}
-                          </button>
-                        </td>
-                        <td>{stat.commitCount}</td>
-                        <td>{stat.percentage}%</td>
-                        <td>{stat.mergeCommitCount}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+              <div className="repo-dashboard-contributor-panel-head">
+                <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
+                <button
+                  type="button"
+                  className="repo-dashboard-contributor-show-all font-mono"
+                  onClick={showAllContributors}
+                >
+                  Show all
+                </button>
+              </div>
+              <div className="repo-dashboard-contributor-visibility-list font-mono">
+                <div
+                  className="repo-dashboard-contributor-visibility-header"
+                  aria-hidden="true"
+                >
+                  <span />
+                  <span>Name</span>
+                  <span>Commits</span>
+                  <span>Share</span>
+                  <span>Merges</span>
+                </div>
+                {allStats.map(stat => (
+                  <ContributorVisibilityRow
+                    key={stat.id}
+                    stat={stat}
+                    visible={visibleIdSet.has(stat.id)}
+                    colorIndex={colorIndexById.get(stat.id) ?? 0}
+                    onToggle={() => toggleContributor(stat.id)}
+                  />
+                ))}
               </div>
             </div>
           ) : null}

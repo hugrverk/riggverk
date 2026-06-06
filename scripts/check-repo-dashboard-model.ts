@@ -15,7 +15,12 @@ import {
   buildLineChartData,
   buildActivityInsightsSeries,
   buildActivityInsightsSeriesForDays,
-  ACTIVITY_INSIGHTS_DAYS,
+  buildContributorActivitySeries,
+  filterContributorActivitySeries,
+  defaultVisibleContributorIds,
+  reconcileVisibleContributorIds,
+  visibleContributorSeriesMax,
+  contributorChartColor,
   filterCommitsByContributor,
   filterCommitsByTimeRange,
   activityInsightsChartValue,
@@ -282,6 +287,77 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.ok(series.length >= 1);
   assert.equal(activityInsightsChartValue(series[series.length - 1], "cumulative"), 1);
   assert.equal(activityInsightsChartValue(series[series.length - 1], "period"), 0);
+}
+
+{
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  const nowSec = Math.floor(fixedNow.getTime() / 1000);
+  const commits = [
+    commit({ authored_at: nowSec - 2 * 86_400, author_email: "a@x.com", author_name: "Alice" }),
+    commit({ authored_at: nowSec - 2 * 86_400, author_email: "a@x.com", author_name: "Alice" }),
+    commit({ authored_at: nowSec - 5 * 86_400, author_email: "b@x.com", author_name: "Bob" }),
+  ];
+  const allSeries = buildContributorActivitySeries(commits, ACTIVITY_INSIGHTS_DAYS, fixedNow);
+  assert.equal(allSeries.length, 2, "one series per contributor");
+  assert.equal(allSeries[0].displayName, "Alice");
+  assert.equal(allSeries[1].displayName, "Bob");
+  assert.equal(allSeries[0].points.length, ACTIVITY_INSIGHTS_DAYS);
+  assert.equal(allSeries[1].points.length, ACTIVITY_INSIGHTS_DAYS);
+  assert.deepEqual(
+    allSeries[0].points.map(point => point.date),
+    allSeries[1].points.map(point => point.date),
+    "identical date domains",
+  );
+  const aliceDay = allSeries[0].points.find(point => point.commitCount === 2);
+  assert.ok(aliceDay, "zero-filled days retain commit spikes");
+  assert.ok(allSeries[0].points.some(point => point.commitCount === 0), "zero-commit days included");
+  assert.equal(allSeries[0].colorIndex, 0);
+  assert.equal(allSeries[1].colorIndex, 1);
+  assert.equal(contributorChartColor(0), contributorChartColor(allSeries[0].colorIndex));
+  assert.notEqual(contributorChartColor(0), contributorChartColor(1));
+
+  const visible = defaultVisibleContributorIds(allSeries);
+  assert.deepEqual(visible, ["a@x.com", "b@x.com"], "all contributors visible by default");
+  const filtered = filterContributorActivitySeries(allSeries, new Set(["b@x.com"]));
+  assert.equal(filtered.length, 1);
+  assert.equal(filtered[0].displayName, "Bob");
+  assert.equal(filtered[0].colorIndex, 1, "color index stable when filtered");
+  assert.equal(visibleContributorSeriesMax(filtered), 1);
+
+  const reconciled = reconcileVisibleContributorIds(["stale@x.com"], ["a@x.com", "b@x.com"]);
+  assert.deepEqual(reconciled, ["a@x.com", "b@x.com"]);
+  const pruned = reconcileVisibleContributorIds(["a@x.com"], ["b@x.com"]);
+  assert.deepEqual(pruned, ["b@x.com"]);
+}
+
+{
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  const nowSec = Math.floor(fixedNow.getTime() / 1000);
+  const single = buildContributorActivitySeries(
+    [commit({ authored_at: nowSec, author_name: "Solo" })],
+    ACTIVITY_INSIGHTS_DAYS,
+    fixedNow,
+  );
+  assert.equal(single.length, 1);
+  assert.equal(single[0].totalCommits, 1);
+}
+
+{
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  assert.deepEqual(buildContributorActivitySeries([], ACTIVITY_INSIGHTS_DAYS, fixedNow), []);
+}
+
+{
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  const nowSec = Math.floor(fixedNow.getTime() / 1000);
+  const commits = [
+    commit({ authored_at: nowSec, author_name: "", author_email: "" }),
+    commit({ authored_at: nowSec - 86_400, author_name: "NameOnly", author_email: "" }),
+  ];
+  const series = buildContributorActivitySeries(commits, ACTIVITY_INSIGHTS_DAYS, fixedNow);
+  assert.equal(series.length, 2);
+  assert.ok(series.some(entry => entry.id === "unknown"));
+  assert.ok(series.some(entry => entry.id === "nameonly"));
 }
 
 console.log("Repo Dashboard model checks passed");

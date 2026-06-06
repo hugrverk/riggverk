@@ -50,7 +50,12 @@ assert.ok(!chartsSource.includes("chooseHeatmapWindowWeeks"), "heatmap must not 
 assert.ok(!activitySource.includes("TIME_RANGES"), "activity insights must not expose time-range selector");
 assert.ok(!activitySource.includes("Activity time range"), "activity insights must not label a time-range control");
 assert.ok(activitySource.includes("filterCommitsForActivityInsights"), "activity insights must use fixed 90-day filter");
-assert.ok(activitySource.includes("buildActivityInsightsSeriesForDays"), "activity chart must use fixed 90-day calendar window");
+assert.ok(activitySource.includes("buildContributorActivitySeries"), "activity chart must use per-contributor 90-day series");
+assert.ok(!activitySource.includes("<select"), "activity insights must not use single-select contributor filter");
+assert.ok(activitySource.includes('useState<ActivityInsightsVisualMode>("lines")'), "line mode must be default chart mode");
+assert.ok(activitySource.includes('aria-pressed={chartMode === "lines"}'), "lines control must expose selected state");
+assert.ok(activitySource.includes('aria-pressed={chartMode === "bars"}'), "bars control must expose selected state");
+assert.ok(activitySource.includes("aria-pressed={visible}"), "contributor visibility must expose selected state");
 assert.ok(activitySource.includes("mergeCommitCount"), "contributor insights must show merge counts");
 assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active column must use sibling Started/Open subcolumns");
 assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
