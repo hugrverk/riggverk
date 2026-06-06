@@ -77,10 +77,11 @@ AGENT_WORKSPACE_BACKUP_DIR="$SMOKE_ROOT/backups" \
   bash "$WORKSPACE/scripts/install-runtime-agents.sh" \
   --opencode --claude --apply --quiet
 
-step "apply Cursor global agents to temp harness"
-CURSOR_AGENTS_PATH="$HOME/.cursor/agents" \
+step "apply Cursor global profile to temp harness"
 AGENT_WORKSPACE_BACKUP_DIR="$SMOKE_ROOT/backups" \
-  bash "$WORKSPACE/scripts/install-cursor-workspace.sh" --apply --global-agents --quiet
+PLAYWRIGHT_MCP_CONFIG_PATH="$PLAYWRIGHT_CONFIG" \
+PLAYWRIGHT_BROWSERS_PATH="$PLAYWRIGHT_BROWSERS" \
+  bash "$WORKSPACE/scripts/install-cursor-workspace.sh" --apply-global-profile --quiet
 
 step "rust command-handler smoke (same paths as Tauri IPC)"
 export AGENT_WORKSPACE_SMOKE=1

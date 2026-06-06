@@ -353,7 +353,21 @@ fn global_permissions_status(
 }
 
 fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
+    if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
+        if !path.is_empty() {
+            return PathBuf::from(path);
+        }
+    }
     home.join(".config/playwright-mcp/config.json")
+}
+
+fn resolve_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
+    if let Ok(path) = std::env::var("PLAYWRIGHT_BROWSERS_PATH") {
+        if !path.is_empty() {
+            return Some(PathBuf::from(path));
+        }
+    }
+    default_playwright_browsers_path(home)
 }
 
 fn default_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
@@ -422,7 +436,7 @@ fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> St
     let Ok(template_parsed) = serde_json::from_str::<serde_json::Value>(&template_content) else {
         return "template-invalid".into();
     };
-    let Some(browsers_path) = default_playwright_browsers_path(home) else {
+    let Some(browsers_path) = resolve_playwright_browsers_path(home) else {
         return "unsupported-platform".into();
     };
     let config_path = default_playwright_mcp_config_path(home);

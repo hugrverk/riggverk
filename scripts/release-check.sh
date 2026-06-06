@@ -1687,6 +1687,9 @@ step "app checks"
 bash "$repo_root/scripts/release-check/frontend-gate.sh"
 bash "$repo_root/scripts/release-check/rust-gate.sh"
 
+step "tauri runtime smoke"
+bash "$repo_root/scripts/smoke-tauri-runtime.sh"
+
 step "release smoke doc"
 if [ ! -f "$repo_root/docs/APP_RELEASE_SMOKE.md" ]; then
   printf 'FAIL: docs/APP_RELEASE_SMOKE.md not found\n' >&2
