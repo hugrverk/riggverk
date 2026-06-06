@@ -50,7 +50,7 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | AW-DOC-001 | P3 | completed | Historical labels on prior audit docs |
 | AW-REL-002 | P3 | completed | Codex apply log + UI regressions script use mktemp + trap |
 | AW-REL-001 | P3 | completed | `frontend-gate.sh` + `rust-gate.sh`; release-check delegates to both |
-| AW-ARCH-001 | P2 | partial | + `useWorkspaceHealthController`, `workspaceErrors`; App.tsx ~1340 lines (was ~1852) |
+| AW-ARCH-001 | P2 | completed | `useLibraryController` + prior extractions; App.tsx ~820 lines (was ~1852) |
 | AW-RD-007 | P3 | deferred | N+1 git show retained; optimize only if measured |
 | AW-TYPES-001 | P3 | deferred | Contract fixture tests added via Vitest; no generated bindings |
 | AW-CONFIG-001 | Decision | blocked | Bundle id `.app` migration needs operator plan |
