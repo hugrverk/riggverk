@@ -69,6 +69,16 @@ fi
 if ! rg -n 'repeat\(var\(--heat-week-count' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "heatmap grid must use bounded responsive week columns"
 fi
+if rg -n -U '\.repo-dashboard-heat-cell[^{]*\{[^}]*width:\s*100%' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "heatmap cells must not stretch with width 100%"
+fi
+if ! rg -n 'aspect-ratio:\s*1\s*/\s*1' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap cells must declare square aspect-ratio"
+fi
+if ! rg -n 'grid-template-columns: repeat\(var\(--heat-week-count[^)]+\),\s*var\(--heat-cell-size' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap week columns must use explicit square cell size"
+fi
 if rg -n 'scrollRef|scrollLeft|repo-dashboard-heat-scroll' src/tools/repoDashboard/RepoDashboardCharts.tsx src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "heatmap must not use horizontal scroll containers or auto-scroll behavior"

@@ -6755,8 +6755,8 @@ code {
   grid-template-columns: var(--heat-day-w, 26px) minmax(0, 1fr);
   gap: var(--heat-gap, 2px);
   align-items: start;
+  justify-items: center;
   min-width: 0;
-  height: calc(7 * var(--heat-cell-size, 11px) + 6 * var(--heat-gap, 2px));
 }
 
 .repo-dashboard-heatbody-no-days {
@@ -6785,31 +6785,33 @@ code {
 
 .repo-dashboard-heat-grid {
   display: grid;
-  grid-template-columns: repeat(var(--heat-week-count, 53), minmax(0, 1fr));
+  grid-template-columns: repeat(var(--heat-week-count, 26), var(--heat-cell-size, 11px));
   gap: var(--heat-gap, 2px);
-  width: 100%;
+  width: max-content;
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  justify-content: center;
+  margin-inline: auto;
 }
 
 .repo-dashboard-heat-week {
   display: grid;
   grid-template-rows: repeat(7, var(--heat-cell-size, 11px));
   gap: var(--heat-gap, 2px);
-  min-width: 0;
+  width: var(--heat-cell-size, 11px);
   align-content: start;
 }
 
 .repo-dashboard-heat-cell {
-  width: 100%;
+  width: var(--heat-cell-size, 11px);
   height: var(--heat-cell-size, 11px);
+  aspect-ratio: 1 / 1;
   border: 1px solid var(--border);
   background: var(--bg-inset);
   box-sizing: border-box;
   border-radius: 2px;
-  min-width: 0;
-  min-height: 0;
+  flex-shrink: 0;
 }
 
 .repo-dashboard-heat-cell.l0 {

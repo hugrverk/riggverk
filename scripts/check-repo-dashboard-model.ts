@@ -128,9 +128,21 @@ assert.equal(buildLineChartData([]), null);
   assert.equal(sliced.length, 26 * 7);
   const newestWeek = buildHeatmapWeeks(sliced).at(-1);
   assert.ok(newestWeek?.length === 7);
-  assert.ok(computeHeatmapCellSizePx(400, 26) >= 8);
-  assert.ok(computeHeatmapCellSizePx(400, 26) <= 14);
+  assert.equal(buildHeatmapWeeks(sliced).length, 26, "display window keeps exactly 26 week columns");
+  const fullWeeks = buildHeatmapWeeks(cells);
+  const slicedWeeks = buildHeatmapWeeks(sliced);
+  assert.deepEqual(
+    slicedWeeks.at(-1)?.map(cell => cell.date),
+    fullWeeks.at(-1)?.map(cell => cell.date),
+    "newest week is retained when slicing to the display window",
+  );
+  const cellSize = computeHeatmapCellSizePx(400, 26);
+  assert.ok(cellSize >= 8);
+  assert.ok(cellSize <= 14);
   assert.ok(computeHeatmapCellSizePx(320, 26) >= 6);
+  const gridWidth =
+    26 * cellSize + Math.max(0, 26 - 1) * 2 + 30 + 24;
+  assert.ok(gridWidth <= 400, "26-week square grid fits without horizontal scroll contract");
 }
 
 {
