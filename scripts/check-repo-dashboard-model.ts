@@ -264,6 +264,17 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.equal(activeWorkCount(partition), 2);
   assert.equal(partition.activeStarted[0].text, "started");
   assert.ok(compareWorkItems(partition.activeOpen[0], partition.activeStarted[0]) !== 0);
+  const keys = (list: typeof items) =>
+    list.map(item => `${item.source}:${item.path}:${item.line ?? 0}:${item.text}`);
+  const overlap = keys(partition.activeStarted).filter(key =>
+    keys(partition.activeOpen).includes(key),
+  );
+  assert.equal(overlap.length, 0, "started and open must not share items");
+  assert.equal(
+    keys(partition.done).filter(key => keys(partition.activeStarted).includes(key)).length,
+    0,
+    "done must not share items with started",
+  );
 }
 
 {
