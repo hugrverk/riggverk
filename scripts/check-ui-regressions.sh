@@ -140,6 +140,13 @@ if rg -n 'repo-dashboard-heat-aside' src/tools/repoDashboard src/styles.css >/tm
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "repo-dashboard-heat-aside is stale and must not remain in dashboard sources"
 fi
+if rg -n 'repo-dashboard-heat-card|repo-dashboard-overview-mid|repo-dashboard-overview-full' src/styles.css src/tools/repoDashboard >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "stale overview layout selectors must not remain in dashboard sources"
+fi
+if ! rg -n 'repo-dashboard-activity-sidebar|repo-dashboard-overview-lower' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "overview layout must define activity sidebar and lower information grid"
+fi
 if rg -n 'Source health|buildSourceHealth' src/tools/repoDashboard/RepoDashboardTool.tsx src/tools/repoDashboard/model.ts >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "Repo Dashboard must not render source health"

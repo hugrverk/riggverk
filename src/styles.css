@@ -5888,29 +5888,9 @@ code {
   max-height: 120px;
 }
 
-.repo-dashboard-heat-stack {
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-  min-width: 0;
-}
-
 .repo-dashboard-footnote {
   margin: 8px 0 0;
   line-height: 1.45;
-}
-
-.repo-dashboard-heat-card {
-  min-width: 0;
-  padding-bottom: 14px;
-  overflow: visible;
-}
-
-.repo-dashboard-heat-card .repo-dashboard-heatbox {
-  border: none;
-  background: transparent;
-  padding: 0;
-  overflow: visible;
 }
 
 .repo-dashboard-overview-lower {
@@ -5985,6 +5965,16 @@ code {
   border: none;
   background: transparent;
   padding: 0;
+}
+
+.repo-dashboard-heatmap-panel .repo-dashboard-heat-wrap {
+  align-items: center;
+}
+
+.repo-dashboard-heatmap-panel .repo-dashboard-heatbody {
+  width: max-content;
+  max-width: 100%;
+  margin-inline: auto;
 }
 
 .repo-dashboard-contributor-panel {
@@ -7025,6 +7015,18 @@ code {
   display: none;
 }
 
+@media (max-width: 1040px) {
+  .repo-dashboard-overview-lower {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 780px) {
+  .repo-dashboard-activity-insights-body {
+    grid-template-columns: 1fr;
+  }
+}
+
 @media (max-width: 1100px) {
   .repo-dashboard-tool {
     grid-template-columns: 1fr;
@@ -7045,8 +7047,6 @@ code {
   }
 
   .repo-dashboard-grid.cols,
-  .repo-dashboard-overview-lower,
-  .repo-dashboard-activity-insights-body,
   .repo-dashboard-page-body.has-aside,
   .repo-dashboard-work-columns,
   .repo-dashboard-work-active-columns {

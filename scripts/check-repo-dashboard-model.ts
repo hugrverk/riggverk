@@ -372,4 +372,19 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.ok(series.some(entry => entry.id === "nameonly"));
 }
 
+{
+  const sidebarWidth = 280;
+  const cellSize = computeHeatmapCellSizePx(sidebarWidth, HEATMAP_DISPLAY_WEEKS, {
+    dayLabelPx: 26,
+    gapPx: 2,
+    minPx: 6,
+    maxPx: 12,
+    paddingPx: 24,
+  });
+  assert.equal(HEATMAP_DISPLAY_WEEKS, 26);
+  const gridWidth = HEATMAP_DISPLAY_WEEKS * cellSize + 25 * 2 + 26;
+  assert.ok(gridWidth <= sidebarWidth, "embedded sidebar heatmap fits without horizontal scroll");
+  assert.ok(cellSize >= 6 && cellSize <= 12, "embedded sidebar uses compact square cell size");
+}
+
 console.log("Repo Dashboard model checks passed");
