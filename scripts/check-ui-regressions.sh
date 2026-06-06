@@ -77,6 +77,16 @@ if rg -n -U '\.repo-dashboard-heat-(wrap|box|grid)[^{]*\{[^}]*overflow-x:\s*(aut
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "heatmap must not create horizontal overflow scrolling"
 fi
+if ! rg -n 'HEATMAP_DISPLAY_WEEKS' src/tools/repoDashboard/model.ts src/tools/repoDashboard/RepoDashboardCharts.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap must use fixed 26-week display constant"
+fi
+if rg -n 'heat-range-btn|HEATMAP_WINDOW_WEEKS|chooseHeatmapWindowWeeks|windowOverride' src/tools/repoDashboard/RepoDashboardCharts.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "heatmap must not keep interval controls or auto-switching helpers"
+fi
+if ! rg -n 'repo-dashboard-work-active-columns|repo-dashboard-work-subcolumn-scroll' src/tools/repoDashboard/RepoWorkWorkspace.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "work layout must use sibling Started/Open subcolumns with independent scroll"
+fi
 if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard must expose a narrow-layout section control"
 fi

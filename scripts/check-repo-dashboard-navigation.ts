@@ -42,8 +42,29 @@ assert.ok(workSource.includes("Done ("), "work must include Done column");
 assert.ok(!chartsSource.includes("scrollRef"), "heatmap must not use scrollRef");
 assert.ok(!chartsSource.includes("scrollLeft"), "heatmap must not auto-scroll horizontally");
 assert.ok(chartsSource.includes("sliceHeatmapCellsToWindow"), "heatmap must slice displayed weeks");
-assert.ok(chartsSource.includes("HEATMAP_WINDOW_WEEKS"), "heatmap must expose 13/26/53 week windows");
+assert.ok(chartsSource.includes("HEATMAP_DISPLAY_WEEKS"), "heatmap must use fixed 26-week display window");
+assert.ok(!chartsSource.includes("HEATMAP_WINDOW_WEEKS"), "heatmap must not expose interval window options");
+assert.ok(!chartsSource.includes("heat-range-btn"), "heatmap must not render interval controls");
+assert.ok(!chartsSource.includes("windowOverride"), "heatmap must not keep range override state");
+assert.ok(!chartsSource.includes("chooseHeatmapWindowWeeks"), "heatmap must not auto-switch intervals");
+assert.ok(!activitySource.includes("TIME_RANGES"), "activity insights must not expose time-range selector");
+assert.ok(!activitySource.includes("Activity time range"), "activity insights must not label a time-range control");
+assert.ok(activitySource.includes("filterCommitsForActivityInsights"), "activity insights must use fixed 90-day filter");
 assert.ok(activitySource.includes("mergeCommitCount"), "contributor insights must show merge counts");
+assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active column must use sibling Started/Open subcolumns");
+assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
+assert.equal((workSource.match(/repo-dashboard-work-subcolumn-scroll/g) ?? []).length, 2, "started and open need two scroll regions");
+assert.ok(workSource.includes("repo-dashboard-work-column-scroll"), "done must have its own scroll region");
+{
+  const activeSection =
+    workSource.match(
+      /className="repo-dashboard-work-column repo-dashboard-work-column-active"[\s\S]*?<\/section>/,
+    )?.[0] ?? "";
+  assert.ok(
+    !activeSection.includes("repo-dashboard-work-column-scroll"),
+    "active must not use a shared outer scroll wrapping started and open",
+  );
+}
 assert.ok(rustSource.includes("read_local_docs_rejects_readme_symlink_to_external_file"));
 assert.ok(rustSource.includes("read_local_docs_rejects_backlog_symlink_to_external_file"));
 assert.ok(rustSource.includes("symlink not allowed"));

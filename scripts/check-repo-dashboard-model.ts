@@ -7,8 +7,10 @@ import {
   buildHeatmapCells,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
-  chooseHeatmapWindowWeeks,
   computeHeatmapCellSizePx,
+  filterCommitsForActivityInsights,
+  HEATMAP_DISPLAY_WEEKS,
+  ACTIVITY_INSIGHTS_DAYS,
   sliceHeatmapCellsToWindow,
   buildLineChartData,
   buildActivityInsightsSeries,
@@ -114,13 +116,25 @@ assert.equal(buildLineChartData([]), null);
 
 {
   const cells = buildHeatmapCells([commit({ authored_at: 1_700_000_000 })]);
-  const sliced = sliceHeatmapCellsToWindow(cells, 13);
-  assert.equal(sliced.length, 13 * 7);
-  assert.equal(chooseHeatmapWindowWeeks(560), 53);
-  assert.equal(chooseHeatmapWindowWeeks(320), 26);
-  assert.equal(chooseHeatmapWindowWeeks(120), 13);
-  assert.equal(computeHeatmapCellSizePx(400, 13), 14);
-  assert.equal(computeHeatmapCellSizePx(400, 53), 8);
+  const sliced = sliceHeatmapCellsToWindow(cells);
+  assert.equal(HEATMAP_DISPLAY_WEEKS, 26);
+  assert.equal(sliced.length, 26 * 7);
+  const newestWeek = buildHeatmapWeeks(sliced).at(-1);
+  assert.ok(newestWeek?.length === 7);
+  assert.ok(computeHeatmapCellSizePx(400, 26) >= 8);
+  assert.ok(computeHeatmapCellSizePx(400, 26) <= 14);
+  assert.ok(computeHeatmapCellSizePx(320, 26) >= 6);
+}
+
+assert.equal(ACTIVITY_INSIGHTS_DAYS, 90);
+{
+  const nowSec = Math.floor(Date.now() / 1000);
+  const commits = [
+    commit({ authored_at: nowSec - 10 * 86_400 }),
+    commit({ authored_at: nowSec - 100 * 86_400 }),
+  ];
+  const filtered = filterCommitsForActivityInsights(commits);
+  assert.equal(filtered.length, 1);
 }
 
 // Remaining-by-type handles empty input without NaN.
