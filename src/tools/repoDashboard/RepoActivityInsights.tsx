@@ -54,8 +54,8 @@ function ActivityInsightsChart({
   rangeDays: ActivityInsightsRangeDays;
 }) {
   const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
-  const [animateLines, setAnimateLines] = useState(true);
-  const [animateBars, setAnimateBars] = useState(false);
+  const [animateLines, setAnimateLines] = useState(mode === "lines");
+  const [animateBars, setAnimateBars] = useState(mode === "bars");
   const svgRef = useRef<SVGSVGElement>(null);
   const prevModeRef = useRef(mode);
   const prevRangeDaysRef = useRef(rangeDays);
@@ -515,7 +515,7 @@ export function RepoActivityInsights({
   metrics: ActivityInsightsMetrics;
   onNavigate: (target: ActivityInsightsKpiTarget) => void;
 }) {
-  const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("lines");
+  const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("bars");
   const [rangeDays, setRangeDays] = useState<ActivityInsightsRangeDays>(
     DEFAULT_ACTIVITY_INSIGHTS_DAYS,
   );

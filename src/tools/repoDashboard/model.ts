@@ -304,6 +304,31 @@ export function contributorChartColor(colorIndex: number): string {
   return `var(${contributorChartColorToken(colorIndex)})`;
 }
 
+const CONTRIBUTOR_CHART_COLOR_ALIASES: ReadonlyArray<{
+  aliases: readonly string[];
+  colorIndex: number;
+}> = [
+  { aliases: ["PRIVATE"], colorIndex: 0 },
+  { aliases: ["uxsmedjan"], colorIndex: 1 },
+];
+
+function contributorMatchesAlias(id: string, displayName: string, aliases: readonly string[]): boolean {
+  const haystack = `${id} ${displayName}`.toLowerCase();
+  return aliases.some(alias => haystack.includes(alias));
+}
+
+/** Stable chart colors for known contributors; falls back to list order. */
+export function contributorColorIndexFor(
+  id: string,
+  displayName: string,
+  fallbackIndex: number,
+): number {
+  for (const entry of CONTRIBUTOR_CHART_COLOR_ALIASES) {
+    if (contributorMatchesAlias(id, displayName, entry.aliases)) return entry.colorIndex;
+  }
+  return fallbackIndex;
+}
+
 export function clampActiveDayIndex(index: number, dayCount: number): number {
   if (dayCount <= 0) return 0;
   return Math.max(0, Math.min(dayCount - 1, Math.trunc(index)));
@@ -406,7 +431,7 @@ export interface ContributorActivitySeries {
 
 export type ActivityInsightsRangeDays = 7 | 14 | 30;
 
-export const DEFAULT_ACTIVITY_INSIGHTS_DAYS: ActivityInsightsRangeDays = 14;
+export const DEFAULT_ACTIVITY_INSIGHTS_DAYS: ActivityInsightsRangeDays = 30;
 
 export const ACTIVITY_INSIGHTS_RANGE_DAYS: readonly ActivityInsightsRangeDays[] = [7, 14, 30];
 
@@ -605,7 +630,8 @@ export function buildContributorActivitySeries(
     countsByContributor.set(id, bucket);
   }
 
-  return stats.map((stat, colorIndex) => {
+  return stats.map((stat, index) => {
+    const colorIndex = contributorColorIndexFor(stat.id, stat.displayName, index);
     const daily = countsByContributor.get(stat.id);
     const points = dayKeys.map(date => ({
       date,

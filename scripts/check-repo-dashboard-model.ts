@@ -28,6 +28,7 @@ import {
   visibleContributorSeriesMax,
   contributorChartColor,
   contributorChartColorToken,
+  contributorColorIndexFor,
   CONTRIBUTOR_CHART_SERIES_TOKENS,
   clampActiveDayIndex,
   activityChartKeyAction,
@@ -159,7 +160,7 @@ assert.equal(buildLineChartData([]), null);
 }
 
 {
-  assert.equal(DEFAULT_ACTIVITY_INSIGHTS_DAYS, 14);
+  assert.equal(DEFAULT_ACTIVITY_INSIGHTS_DAYS, 30);
   assert.deepEqual(ACTIVITY_INSIGHTS_RANGE_DAYS, [7, 14, 30]);
   assert.equal(isActivityInsightsRangeDays(7), true);
   assert.equal(isActivityInsightsRangeDays(14), true);
@@ -424,6 +425,40 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
+  assert.equal(contributorColorIndexFor("PRIVATE@example.com", "PRIVATE", 4), 0);
+  assert.equal(contributorColorIndexFor("PRIVATE@example.com", "uxsmedjan", 4), 1);
+  assert.equal(contributorColorIndexFor("a@x.com", "Alice", 2), 2);
+
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  const nowSec = Math.floor(fixedNow.getTime() / 1000);
+  const commits = [
+    commit({
+      authored_at: nowSec,
+      author_email: "uxsmedjan@example.com",
+      author_name: "uxsmedjan",
+    }),
+    commit({
+      authored_at: nowSec,
+      author_email: "uxsmedjan@example.com",
+      author_name: "uxsmedjan",
+    }),
+    commit({
+      authored_at: nowSec,
+      author_email: "PRIVATE@example.com",
+      author_name: "PRIVATE",
+    }),
+  ];
+  const series = buildContributorActivitySeries(commits, 14, fixedNow);
+  const uxsmedjan = series.find(entry => entry.displayName === "uxsmedjan");
+  const PRIVATE = series.find(entry => entry.displayName === "PRIVATE");
+  assert.ok(uxsmedjan && PRIVATE, "named contributors must be present");
+  assert.equal(uxsmedjan.colorIndex, 1, "uxsmedjan must use light gray series");
+  assert.equal(PRIVATE.colorIndex, 0, "PRIVATE must use lime series");
+  assert.equal(contributorChartColor(uxsmedjan.colorIndex), "var(--repo-chart-series-2)");
+  assert.equal(contributorChartColor(PRIVATE.colorIndex), "var(--repo-chart-series-1)");
+}
+
+{
   const fixedNow = new Date("2026-06-06T12:00:00");
   const nowSec = Math.floor(fixedNow.getTime() / 1000);
   const single = buildContributorActivitySeries(
@@ -489,12 +524,12 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 {
   const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
   assert.ok(
-    stylesSource.includes("--repo-chart-series-1: #9ec8e8"),
-    "dark chart series 1 must use light blue",
+    stylesSource.includes("--repo-chart-series-1: #e4ed42"),
+    "chart series 1 must use lime",
   );
   assert.ok(
-    stylesSource.includes("--repo-chart-series-2: #9ed4a8"),
-    "dark chart series 2 must use light green",
+    stylesSource.includes("--repo-chart-series-2: #f1f1f1"),
+    "chart series 2 must use light gray",
   );
   assert.ok(
     stylesSource.includes("--repo-chart-series-1"),

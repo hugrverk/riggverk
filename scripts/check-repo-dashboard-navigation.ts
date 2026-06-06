@@ -129,14 +129,14 @@ assert.ok(activitySource.includes("filterCommitsForActivityInsights"), "activity
 assert.ok(activitySource.includes("buildContributorActivitySeries"), "activity chart must use per-contributor series");
 assert.ok(
   activitySource.includes("DEFAULT_ACTIVITY_INSIGHTS_DAYS"),
-  "activity chart must default to 14-day range",
+  "activity chart must default to 30-day range",
 );
 assert.ok(
   activitySource.includes("ACTIVITY_INSIGHTS_RANGE_DAYS"),
   "activity chart must support 7, 14, and 30 day ranges",
 );
 assert.ok(!activitySource.includes("<select"), "activity insights must not use single-select contributor filter");
-assert.ok(activitySource.includes('useState<ActivityInsightsVisualMode>("lines")'), "line mode must be default chart mode");
+assert.ok(activitySource.includes('useState<ActivityInsightsVisualMode>("bars")'), "bar mode must be default chart mode");
 assert.ok(activitySource.includes('aria-pressed={chartMode === "lines"}'), "lines control must expose selected state");
 assert.ok(activitySource.includes('aria-pressed={chartMode === "bars"}'), "bars control must expose selected state");
 assert.ok(activitySource.includes("aria-pressed={visible}"), "contributor visibility must expose selected state");
