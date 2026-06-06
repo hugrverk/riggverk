@@ -52,8 +52,8 @@ import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
 export type RepoDashboardSection = "overview" | "work" | "docs";
 
 const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] = [
-  { id: "overview", label: "Overview", purpose: "Repo snapshot, activity charts, and commit history" },
-  { id: "work", label: "Work", purpose: "Tracked work items, planning gaps, and gh issues" },
+  { id: "overview", label: "Overview", purpose: "Repository summary, charts, recent activity, and contributors" },
+  { id: "work", label: "Work", purpose: "Active and completed work from docs and gh issues" },
   { id: "docs", label: "Docs", purpose: "Searchable repository Markdown documentation" },
 ];
 
