@@ -755,10 +755,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
               <div className="repo-dashboard-card repo-dashboard-recent-activity-card repo-dashboard-overview-full">
                 <h2 className="font-mono">Recent activity</h2>
-                <p className="text-muted small repo-dashboard-card-desc">
-                  Latest {RECENT_ACTIVITY_LOAD_CAP} commits · showing {RECENT_ACTIVITY_VISIBLE_ROWS} at a
-                  time, scroll for more.
-                </p>
                 <div
                   className="repo-dashboard-recent-activity-scroll"
                   style={
