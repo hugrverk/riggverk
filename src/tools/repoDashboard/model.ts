@@ -5,9 +5,15 @@ import type {
   RepoDashboardWorkType,
   RepoDashboardCanonicalSource,
   RepoDocFile,
+  RepoDocsSource,
 } from "../../types";
-import { detectCanonicalWorkCanon, isOptionalDocPath } from "./docsParser";
-import { classifyDocRole, isActiveWorkDocRole, type DocRole } from "./docRoles";
+import { isOptionalDocPath } from "./docsParser";
+import {
+  classifyDocRole,
+  detectCanonicalWorkCanon,
+  isActiveWorkDocRole,
+  type DocRole,
+} from "./docRoles";
 
 export type ActivityActor = "primary" | "secondary" | "other";
 
@@ -923,6 +929,42 @@ export function buildActivityLegend(commits: RepoCommitEntry[]): ActivityLegendE
       const entry = byRole.get(role)!;
       return { role, label: entry.label, commits: entry.commits };
     });
+}
+
+export function docsSourceLabel(source: RepoDocsSource): string {
+  switch (source) {
+    case "remote":
+      return "Remote default branch";
+    case "cached-remote":
+      return "Cached remote ref";
+    case "local-fallback":
+      return "Local checkout";
+  }
+}
+
+export function docsSourceWarning(source: RepoDocsSource, stale: boolean): string | null {
+  if (source === "cached-remote" && stale) {
+    return "Documentation loaded from cached remote ref — fetch failed.";
+  }
+  if (source === "local-fallback" && stale) {
+    return "Documentation loaded from local checkout — remote ref unavailable.";
+  }
+  return null;
+}
+
+/** Omit repository warnings duplicated by structured docs source metadata. */
+export function filterDocsSnapshotWarnings(
+  warnings: readonly string[],
+  docsSource: RepoDocsSource,
+): string[] {
+  const skip = new Set<string>();
+  if (docsSource === "cached-remote") {
+    skip.add("Could not fetch latest documentation from origin — showing cached remote ref.");
+  }
+  if (docsSource === "local-fallback") {
+    skip.add("No remote documentation ref available — using local checkout.");
+  }
+  return warnings.filter(w => !skip.has(w));
 }
 
 export function repoDashboardBrandLabel(repoPath: string): string {

@@ -615,5 +615,3 @@ export function mergeWorkItemsDetailed(
   return { items, parserWarnings: docResult.warnings };
 }
 
-export { detectCanonicalWorkCanon, classifyDocRole } from "./docRoles";
-export { docRoleLabel } from "./docRoles";
