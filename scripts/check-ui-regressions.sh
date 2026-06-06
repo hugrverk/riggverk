@@ -82,8 +82,12 @@ if rg -n 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts >/tm
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "Repo Dashboard model must not hardcode personal author patterns"
 fi
-if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoWorkWorkspace.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard work list must expose a user-facing display cap"
+fi
+if rg -n 'Source health|buildSourceHealth' src/tools/repoDashboard/RepoDashboardTool.tsx src/tools/repoDashboard/model.ts >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "Repo Dashboard must not render source health"
 fi
 if rg -n '"activity"|"sources"|label: "Activity"|label: "Sources"' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
