@@ -26,7 +26,9 @@ export function LatestChangeCard({
   const [prBodyOpen, setPrBodyOpen] = useState(false);
   const branchLabel = snapshot.branch || snapshot.default_branch || "—";
   const aheadBehind = formatAheadBehind(snapshot.ahead, snapshot.behind);
+  const upstreamLabel = snapshot.default_branch?.trim() || "—";
   const fileBreakdown = buildHeadFileStatusBreakdown(snapshot.changed_files);
+  const worktreeState = snapshot.dirty ? "dirty working tree" : "clean working tree";
 
   if (!latestCommit && !latestMerge) {
     return (
@@ -65,26 +67,49 @@ export function LatestChangeCard({
               {formatRelativeAgeFromUnix(latestCommit.authored_at)}
             </span>
           </div>
-          <dl className="repo-dashboard-latest-facts-grid font-mono">
-            <div>
-              <dt>Branch</dt>
-              <dd>{branchLabel}</dd>
-            </div>
-            {aheadBehind ? (
+          <p className="repo-dashboard-latest-state-summary font-mono text-muted small">
+            {branchLabel}
+            {aheadBehind ? ` · ${aheadBehind}` : ""}
+            {fileBreakdown.total
+              ? ` · ${fileBreakdown.total} HEAD file${fileBreakdown.total === 1 ? "" : "s"}`
+              : ""}
+            {" · "}
+            {worktreeState}
+          </p>
+          <div className="repo-dashboard-latest-state-columns">
+            <dl className="repo-dashboard-latest-facts-grid font-mono">
+              <div>
+                <dt>Branch</dt>
+                <dd className="repo-dashboard-latest-fact-value">{branchLabel}</dd>
+              </div>
               <div>
                 <dt>Upstream</dt>
-                <dd>{aheadBehind}</dd>
+                <dd className="repo-dashboard-latest-fact-value">{upstreamLabel}</dd>
               </div>
-            ) : null}
-            <div>
-              <dt>HEAD files</dt>
-              <dd>{fileBreakdown.total}</dd>
-            </div>
-            <div>
-              <dt>Status</dt>
-              <dd>{summarizeHeadFileBreakdown(fileBreakdown)}</dd>
-            </div>
-          </dl>
+              <div>
+                <dt>Sync</dt>
+                <dd className="repo-dashboard-latest-fact-value">
+                  {aheadBehind || "no upstream tracking"}
+                </dd>
+              </div>
+              <div>
+                <dt>Worktree</dt>
+                <dd className="repo-dashboard-latest-fact-value">{worktreeState}</dd>
+              </div>
+            </dl>
+            <dl className="repo-dashboard-latest-facts-grid font-mono">
+              <div>
+                <dt>HEAD files</dt>
+                <dd className="repo-dashboard-latest-fact-value">{fileBreakdown.total}</dd>
+              </div>
+              <div>
+                <dt>Changed status</dt>
+                <dd className="repo-dashboard-latest-fact-value">
+                  {fileBreakdown.total ? summarizeHeadFileBreakdown(fileBreakdown) : "none staged"}
+                </dd>
+              </div>
+            </dl>
+          </div>
           {fileBreakdown.total ? (
             <div className="repo-dashboard-latest-status-badges font-mono" aria-label="File status breakdown">
               {fileBreakdown.added ? (
@@ -127,7 +152,11 @@ export function LatestChangeCard({
           </div>
           {latestMerge.body?.trim() ? (
             <div className="repo-dashboard-latest-pr-body">
-              <p className="repo-dashboard-latest-pr-excerpt text-muted small">
+              <p
+                className={`repo-dashboard-latest-pr-excerpt text-muted small${
+                  prBodyOpen ? " repo-dashboard-latest-pr-excerpt-expanded" : ""
+                }`}
+              >
                 {prBodyOpen ? latestMerge.body.trim() : prBodyExcerpt(latestMerge.body)}
               </p>
               {latestMerge.body.trim().length > 240 ? (
