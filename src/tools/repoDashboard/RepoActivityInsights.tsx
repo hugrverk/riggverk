@@ -135,13 +135,9 @@ function ActivityInsightsChart({
                       cy={yAt(point.commitCount)}
                       r={point.commitCount > 0 ? 3.5 : 2}
                       fill={color}
-                      tabIndex={0}
-                      role="graphics-symbol"
-                      aria-label={`${entry.displayName}, ${point.date}: ${point.commitCount} commits`}
+                      aria-hidden="true"
                       onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex: index })}
                       onMouseLeave={() => setFocus(null)}
-                      onFocus={() => setFocus({ seriesId: entry.id, dayIndex: index })}
-                      onBlur={() => setFocus(null)}
                     />
                   ))}
                 </g>
@@ -167,13 +163,9 @@ function ActivityInsightsChart({
                     width={barW}
                     height={barH}
                     fill={color}
-                    tabIndex={0}
-                    role="graphics-symbol"
-                    aria-label={`${entry.displayName}, ${date}: ${point.commitCount} commits`}
+                    aria-hidden="true"
                     onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex })}
                     onMouseLeave={() => setFocus(null)}
-                    onFocus={() => setFocus({ seriesId: entry.id, dayIndex })}
-                    onBlur={() => setFocus(null)}
                   />
                 );
               });

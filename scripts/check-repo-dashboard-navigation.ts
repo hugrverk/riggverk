@@ -57,6 +57,10 @@ assert.ok(activitySource.includes('aria-pressed={chartMode === "lines"}'), "line
 assert.ok(activitySource.includes('aria-pressed={chartMode === "bars"}'), "bars control must expose selected state");
 assert.ok(activitySource.includes("aria-pressed={visible}"), "contributor visibility must expose selected state");
 assert.ok(activitySource.includes("mergeCommitCount"), "contributor insights must show merge counts");
+assert.ok(
+  !activitySource.includes("tabIndex"),
+  "activity chart must not expose per-point keyboard tab stops",
+);
 assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active column must use sibling Started/Open subcolumns");
 assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
 assert.equal((workSource.match(/repo-dashboard-work-subcolumn-scroll/g) ?? []).length, 2, "started and open need two scroll regions");
