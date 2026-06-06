@@ -7424,6 +7424,14 @@ code {
   padding: 0 4px 2px;
 }
 
+.repo-dashboard-work-subcolumn-scroll .repo-dashboard-list,
+.repo-dashboard-work-column-scroll .repo-dashboard-list {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+  overflow: visible;
+}
+
 .repo-dashboard-work-group-title {
   margin: 0 0 8px;
   font-size: 11px;

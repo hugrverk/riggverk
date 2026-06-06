@@ -106,6 +106,9 @@ fi
 if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoWorkWorkspace.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard work list must expose a user-facing display cap"
 fi
+if ! rg -n 'repo-dashboard-work-subcolumn-scroll \.repo-dashboard-list' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "work subcolumn scroll regions must reset nested list max-height"
+fi
 if rg -n 'Source health|buildSourceHealth' src/tools/repoDashboard/RepoDashboardTool.tsx src/tools/repoDashboard/model.ts >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "Repo Dashboard must not render source health"
