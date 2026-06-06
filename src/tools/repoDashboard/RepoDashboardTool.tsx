@@ -35,7 +35,6 @@ import {
   buildDocSourceSummaries,
   buildHeatmapCells,
   buildLineChartData,
-  buildSourceHealth,
   buildWorkStatusCounts,
   commitDateRangeLabel,
   countByAuthor,
@@ -60,6 +59,7 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
 const COMMIT_LIST_DISPLAY_CAP = 120;
+const RECENT_ACTIVITY_DISPLAY_CAP = 30;
 const WORK_ITEMS_DISPLAY_CAP = 120;
 
 type WorkFilter = "all" | RepoDashboardWorkStatus;
@@ -212,6 +212,17 @@ function ActivitySummaryStrip({ snapshot }: { snapshot: RepoDashboardSnapshot })
           {name} <strong>{count}</strong>
         </span>
       ))}
+    </div>
+  );
+}
+
+function RecentActivityList({ commits }: { commits: RepoCommitEntry[] }) {
+  if (!commits.length) {
+    return <p className="text-muted small" role="status">No recent commits in loaded range.</p>;
+  }
+  return (
+    <div className="repo-dashboard-recent-activity">
+      <CommitHistoryList commits={commits} />
     </div>
   );
 }
@@ -686,9 +697,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     () => (snapshot ? buildHeatmapCells(snapshot.commits) : []),
     [snapshot],
   );
-  const health = useMemo(
-    () => (snapshot ? buildSourceHealth(snapshot, workItems) : []),
-    [snapshot, workItems],
+
+  const recentCommits = useMemo(
+    () => (snapshot ? snapshot.commits.slice(0, RECENT_ACTIVITY_DISPLAY_CAP) : []),
+    [snapshot],
   );
 
   const latestMerge = snapshot?.gh.merged_prs[0] ?? null;
@@ -1118,20 +1130,12 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     />
                   </div>
                 </div>
-                <div className="repo-dashboard-card repo-dashboard-health-card">
-                  <h2 className="font-mono">Source health</h2>
-                  <p className="text-muted small repo-dashboard-health-note">
-                    Local git first{snapshot.gh.available ? " · gh when authenticated" : ""}. Doc parse
-                    details on Docs.
+                <div className="repo-dashboard-card repo-dashboard-recent-activity-card">
+                  <h2 className="font-mono">Recent activity</h2>
+                  <p className="text-muted small repo-dashboard-page-desc">
+                    Latest {RECENT_ACTIVITY_DISPLAY_CAP} commits from loaded local git history.
                   </p>
-                  <div className="repo-dashboard-health-grid">
-                    {health.map(row => (
-                      <div key={row.label} className="repo-dashboard-health-chip">
-                        <span className="repo-dashboard-health-label">{row.label}</span>
-                        <span className="prompt-loops-pill">{row.value}</span>
-                      </div>
-                    ))}
-                  </div>
+                  <RecentActivityList commits={recentCommits} />
                 </div>
               </div>
 

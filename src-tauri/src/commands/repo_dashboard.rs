@@ -317,11 +317,7 @@ fn safe_dir_under_repo(repo_root: &Path, path: &Path) -> bool {
     }
 }
 
-fn try_collect_doc_path(
-    paths: &mut Vec<String>,
-    seen: &HashSet<String>,
-    rel: String,
-) -> bool {
+fn try_collect_doc_path(paths: &mut Vec<String>, seen: &HashSet<String>, rel: String) -> bool {
     if seen.contains(&rel) || paths.len() >= MAX_DISCOVERED_DOC_PATHS {
         return false;
     }
@@ -1394,7 +1390,10 @@ mod tests {
         };
         let unreadable_json = serde_json::to_value(&unreadable).expect("serialize");
         assert_eq!(unreadable_json["readable"], false);
-        assert_eq!(unreadable_json["read_error"], "read docs/ROADMAP.md: denied");
+        assert_eq!(
+            unreadable_json["read_error"],
+            "read docs/ROADMAP.md: denied"
+        );
     }
 
     #[test]

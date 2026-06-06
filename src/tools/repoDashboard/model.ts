@@ -1,6 +1,5 @@
 import type {
   RepoCommitEntry,
-  RepoDashboardSnapshot,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
   RepoDocFile,
@@ -69,10 +68,6 @@ export function buildHeatmapMonthLabels(
   return filtered;
 }
 
-export interface SourceHealthRow {
-  label: string;
-  value: string;
-}
 
 export interface RemainingByType {
   type: RepoDashboardWorkType;
@@ -380,44 +375,6 @@ export function buildDocLaneSummaries(items: RepoDashboardWorkItem[]): DocWorkLa
   }).filter(row => row.total > 0);
 }
 
-export function buildSourceHealth(
-  snapshot: RepoDashboardSnapshot,
-  workItems: RepoDashboardWorkItem[],
-): SourceHealthRow[] {
-  const done = workItems.filter(i => i.status === "done").length;
-  const started = workItems.filter(i => i.status === "started").length;
-  const open = workItems.filter(i => i.status === "open").length;
-  const docsFound = snapshot.docs.filter(d => d.found).length;
-
-  return [
-    { label: "Repository", value: snapshot.is_repo ? "ok" : "not git" },
-    { label: "Git CLI", value: snapshot.git_available ? "ok" : "missing" },
-    { label: "Branch", value: snapshot.branch || "unknown" },
-    { label: "Default branch", value: snapshot.default_branch ?? "unknown" },
-    { label: "Dirty", value: snapshot.dirty ? "yes" : "no" },
-    {
-      label: "Remote sync",
-      value:
-        snapshot.ahead != null && snapshot.behind != null
-          ? `+${snapshot.ahead}/-${snapshot.behind}`
-          : "n/a",
-    },
-    { label: "Commits loaded", value: String(snapshot.commits.length) },
-    { label: "Docs", value: `${docsFound}/${snapshot.docs.length}` },
-    {
-      label: "gh CLI",
-      value: snapshot.gh.available
-        ? snapshot.gh.authenticated
-          ? "authenticated"
-          : "not authenticated"
-        : "not installed",
-    },
-    { label: "Done", value: String(done) },
-    { label: "Started", value: String(started) },
-    { label: "Open", value: String(open) },
-    { label: "Warnings", value: String(snapshot.warnings.length) },
-  ];
-}
 
 export function authorLabel(commit: RepoCommitEntry): string {
   return commit.author_name || commit.author_email || "unknown";
