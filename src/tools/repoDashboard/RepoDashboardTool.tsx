@@ -12,6 +12,7 @@ import type {
   AppSettings,
   DiscoverLocalGitReposResult,
   DiscoveredLocalGitRepo,
+  RepoDashboardEntry,
   RepoDashboardSnapshot,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
@@ -43,6 +44,7 @@ import {
   type CanonicalSourceFilter,
   type PriorityFilter,
 } from "./model";
+import { useTransientStatus } from "../../lib/useTransientStatus";
 import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
@@ -104,9 +106,18 @@ export interface RepoDashboardPromptContextPayload {
 interface RepoDashboardToolProps {
   toolsSwitcher?: ReactNode;
   onUsePromptContext?: (payload: RepoDashboardPromptContextPayload) => void;
+  savedEntries?: RepoDashboardEntry[];
+  activeEntryId?: string | null;
+  mutateSavedEntries?: (mutator: (current: AppSettings) => AppSettings) => Promise<AppSettings>;
 }
 
-export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDashboardToolProps) {
+export function RepoDashboardTool({
+  toolsSwitcher,
+  onUsePromptContext,
+  savedEntries: savedEntriesProp = [],
+  activeEntryId = null,
+  mutateSavedEntries,
+}: RepoDashboardToolProps) {
   const [section, setSection] = useState<RepoDashboardSection>("overview");
   const [repoPath, setRepoPath] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("");
@@ -117,9 +128,9 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<CanonicalSourceFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
-  const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
+  const savedEntries = savedEntriesProp;
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
-  const [pickerStatus, setPickerStatus] = useState<string | null>(null);
+  const { status: pickerStatus, showStatus: showPickerStatus } = useTransientStatus(2500);
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverParentPath, setDiscoverParentPath] = useState("");
   const [discoverLoading, setDiscoverLoading] = useState(false);
@@ -129,14 +140,14 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [discoverImportStatus, setDiscoverImportStatus] = useState<string | null>(null);
   const [docsSelectedPath, setDocsSelectedPath] = useState<string | null>(null);
   const [docsSearchQuery, setDocsSearchQuery] = useState("");
-  const pickerTimerRef = useRef<number | null>(null);
   const loadSeqRef = useRef(0);
+  const [syncClock, setSyncClock] = useState(0);
 
-  const showPickerStatus = useCallback((text: string) => {
-    setPickerStatus(text);
-    if (pickerTimerRef.current !== null) window.clearTimeout(pickerTimerRef.current);
-    pickerTimerRef.current = window.setTimeout(() => setPickerStatus(null), 2500);
-  }, []);
+  useEffect(() => {
+    if (!lastSynced || loading) return;
+    const id = window.setInterval(() => setSyncClock(t => t + 1), 60_000);
+    return () => window.clearInterval(id);
+  }, [lastSynced, loading]);
 
   const refreshFor = useCallback(async (path: string, branch: string) => {
     const trimmedPath = path.trim();
@@ -170,22 +181,18 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     await refreshFor(repoPath, defaultBranch);
   }, [repoPath, defaultBranch, refreshFor]);
 
+  const initialActiveLoadedRef = useRef(false);
   useEffect(() => {
-    invoke<AppSettings>("get_settings")
-      .then(settings => {
-        setSavedEntries(settings.repo_dashboard_entries ?? []);
-        const active = settings.repo_dashboard_entries?.find(
-          e => e.id === settings.active_repo_dashboard_id,
-        );
-        if (active?.path) {
-          const branch = active.default_branch ?? "";
-          setRepoPath(active.path);
-          setDefaultBranch(branch);
-          void refreshFor(active.path, branch);
-        }
-      })
-      .catch(() => {});
-  }, [refreshFor]);
+    if (initialActiveLoadedRef.current || !savedEntries.length) return;
+    const activeEntry = savedEntries.find(e => e.id === activeEntryId) ?? savedEntries[0];
+    if (activeEntry?.path) {
+      const branch = activeEntry.default_branch ?? "";
+      setRepoPath(activeEntry.path);
+      setDefaultBranch(branch);
+      void refreshFor(activeEntry.path, branch);
+      initialActiveLoadedRef.current = true;
+    }
+  }, [activeEntryId, refreshFor, savedEntries]);
 
   useEffect(() => {
     if (!snapshot) {
@@ -274,20 +281,17 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     }
     setDiscoverImportStatus(null);
     try {
-      const settings = await invoke<AppSettings>("get_settings");
-      const entries = mergeImportedRepoEntries(settings.repo_dashboard_entries ?? [], toImport);
-      const next: AppSettings = {
+      if (!mutateSavedEntries) throw new Error("settings mutation unavailable");
+      await mutateSavedEntries(settings => ({
         ...settings,
-        repo_dashboard_entries: entries,
-      };
-      const saved = await invoke<AppSettings>("update_settings", { settings: next });
-      setSavedEntries(saved.repo_dashboard_entries ?? []);
+        repo_dashboard_entries: mergeImportedRepoEntries(settings.repo_dashboard_entries ?? [], toImport),
+      }));
       setDiscoverImportStatus(`imported ${toImport.length}`);
       closeDiscoverPanel();
     } catch (e) {
       setDiscoverError(String(e));
     }
-  }, [closeDiscoverPanel, discoverResult, discoverSelectedPaths]);
+  }, [closeDiscoverPanel, discoverResult, discoverSelectedPaths, mutateSavedEntries]);
 
   const saveCurrentRepo = useCallback(async () => {
     const path = repoPath.trim();
@@ -297,30 +301,30 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     }
     setSaveStatus(null);
     try {
-      const settings = await invoke<AppSettings>("get_settings");
+      if (!mutateSavedEntries) throw new Error("settings mutation unavailable");
       const id = repoEntryIdFromPath(path);
       const label = path.replace(/\/+$/, "").split("/").pop() || "Repository";
       const branch = defaultBranch.trim() || null;
-      const entries = [...(settings.repo_dashboard_entries ?? [])];
-      const existingIndex = entries.findIndex(e => e.id === id || e.path === path);
-      const entry = { id, label, path, default_branch: branch };
-      if (existingIndex >= 0) {
-        entries[existingIndex] = entry;
-      } else {
-        entries.push(entry);
-      }
-      const next: AppSettings = {
-        ...settings,
-        repo_dashboard_entries: entries,
-        active_repo_dashboard_id: id,
-      };
-      const saved = await invoke<AppSettings>("update_settings", { settings: next });
-      setSavedEntries(saved.repo_dashboard_entries ?? []);
+      await mutateSavedEntries(settings => {
+        const entries = [...(settings.repo_dashboard_entries ?? [])];
+        const existingIndex = entries.findIndex(e => e.id === id || e.path === path);
+        const entry = { id, label, path, default_branch: branch };
+        if (existingIndex >= 0) {
+          entries[existingIndex] = entry;
+        } else {
+          entries.push(entry);
+        }
+        return {
+          ...settings,
+          repo_dashboard_entries: entries,
+          active_repo_dashboard_id: id,
+        };
+      });
       setSaveStatus("saved");
     } catch (e) {
       setError(String(e));
     }
-  }, [repoPath, defaultBranch]);
+  }, [defaultBranch, mutateSavedEntries, repoPath]);
 
   const chooseRepoFolder = useCallback(async () => {
     if (!isTauri()) {
@@ -425,7 +429,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     normalizeRepoPathForCompare(snapshot.repo_path) ===
       normalizeRepoPathForCompare(repoPath);
 
-  const syncState = syncVisualState(loading, lastSynced);
+  const syncState = useMemo(
+    () => syncVisualState(loading, lastSynced),
+    [loading, lastSynced, syncClock],
+  );
   const syncLabel =
     syncState === "loading"
       ? "Syncing…"
