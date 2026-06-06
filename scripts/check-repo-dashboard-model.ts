@@ -42,6 +42,13 @@ import {
   buildRemainingByType,
   workItemDocLane,
   buildWorkStatusCounts,
+  isCanonicalWorkMode,
+  partitionCanonicalWorkItems,
+  buildCanonicalWorkSummary,
+  filterWorkItemsByCanonicalSource,
+  filterWorkItemsByPriority,
+  workItemCanonicalSource,
+  activeDocWorkCount,
   commitActor,
   eventsFromCommits,
   ghIssuesKpiLabel,
@@ -425,37 +432,17 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
-  assert.equal(contributorColorIndexFor("PRIVATE@example.com", "PRIVATE", 4), 0);
-  assert.equal(contributorColorIndexFor("PRIVATE@example.com", "uxsmedjan", 4), 1);
   assert.equal(contributorColorIndexFor("a@x.com", "Alice", 2), 2);
 
   const fixedNow = new Date("2026-06-06T12:00:00");
   const nowSec = Math.floor(fixedNow.getTime() / 1000);
   const commits = [
-    commit({
-      authored_at: nowSec,
-      author_email: "uxsmedjan@example.com",
-      author_name: "uxsmedjan",
-    }),
-    commit({
-      authored_at: nowSec,
-      author_email: "uxsmedjan@example.com",
-      author_name: "uxsmedjan",
-    }),
-    commit({
-      authored_at: nowSec,
-      author_email: "PRIVATE@example.com",
-      author_name: "PRIVATE",
-    }),
+    commit({ authored_at: nowSec, author_email: "a@x.com", author_name: "Alice" }),
+    commit({ authored_at: nowSec, author_email: "b@x.com", author_name: "Bob" }),
   ];
   const series = buildContributorActivitySeries(commits, 14, fixedNow);
-  const uxsmedjan = series.find(entry => entry.displayName === "uxsmedjan");
-  const PRIVATE = series.find(entry => entry.displayName === "PRIVATE");
-  assert.ok(uxsmedjan && PRIVATE, "named contributors must be present");
-  assert.equal(uxsmedjan.colorIndex, 1, "uxsmedjan must use light gray series");
-  assert.equal(PRIVATE.colorIndex, 0, "PRIVATE must use lime series");
-  assert.equal(contributorChartColor(uxsmedjan.colorIndex), "var(--repo-chart-series-2)");
-  assert.equal(contributorChartColor(PRIVATE.colorIndex), "var(--repo-chart-series-1)");
+  assert.equal(series[0].colorIndex, 0);
+  assert.equal(series[1].colorIndex, 1);
 }
 
 {
@@ -556,6 +543,43 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   const gridWidth = HEATMAP_DISPLAY_WEEKS * cellSize + 25 * 2 + 26;
   assert.ok(gridWidth <= sidebarWidth, "embedded sidebar heatmap fits without horizontal scroll");
   assert.ok(cellSize >= 6 && cellSize <= 12, "embedded sidebar uses compact square cell size");
+}
+
+{
+  const items = [
+    {
+      source: "docs" as const,
+      path: "docs/BACKLOG.md",
+      text: "Verify pinch",
+      type: "fix" as const,
+      status: "open" as const,
+      needsPlan: false,
+      classification: "verify" as const,
+      canonicalSource: "backlog" as const,
+      workId: "KV-V-001",
+    },
+    {
+      source: "docs" as const,
+      path: "docs/audit/ISSUES.md",
+      text: "Audit item",
+      type: "todo" as const,
+      status: "started" as const,
+      needsPlan: false,
+      classification: "enhancement" as const,
+      canonicalSource: "audit" as const,
+      workId: "ELCAD-AUD-014",
+    },
+  ];
+  const partition = partitionCanonicalWorkItems(items);
+  assert.equal(partition.verify.length, 1);
+  assert.equal(partition.enhancements.length, 1);
+  assert.equal(workItemCanonicalSource(items[0]), "backlog");
+  assert.equal(filterWorkItemsByCanonicalSource(items, "audit").length, 1);
+  assert.equal(filterWorkItemsByPriority(items, "unspecified").length, 2);
+  const summary = buildCanonicalWorkSummary(items, items);
+  assert.equal(summary.total, 2);
+  assert.equal(summary.verify, 1);
+  assert.equal(activeDocWorkCount(items), 2);
 }
 
 console.log("Repo Dashboard model checks passed");

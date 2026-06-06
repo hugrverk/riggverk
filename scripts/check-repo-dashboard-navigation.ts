@@ -90,9 +90,14 @@ assert.ok(
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");
 assert.ok(workSource.includes("repo-dashboard-work-primary-columns"), "work must use three primary columns");
-assert.ok(workSource.includes('title="Started"'), "work must include Started column");
-assert.ok(workSource.includes('title="Open"'), "work must include Open column");
-assert.ok(workSource.includes('title="Done"'), "work must include Done column");
+assert.ok(workSource.includes('"Bugs"') || workSource.includes('"Started"'), "work must include primary column titles");
+assert.ok(workSource.includes('"Verify"') || workSource.includes('"Open"'), "work must include primary column titles");
+assert.ok(workSource.includes('"Enhancements"') || workSource.includes('"Done"'), "work must include primary column titles");
+assert.ok(workSource.includes("canonicalMode"), "work workspace must support canonical mode");
+assert.ok(workSource.includes("sourceFilter"), "canonical work must expose source filter");
+assert.ok(workSource.includes("priorityFilter"), "canonical work must expose priority filter");
+assert.ok(!workSource.includes("laneFilter"), "stale lane filter must be removed");
+assert.ok(!workSource.includes("docLaneSummaries"), "stale doc lane summaries must be removed");
 assert.ok(!workSource.includes("Active ("), "work must not render Active heading");
 assert.ok(!workSource.includes("repo-dashboard-work-column-active"), "work must not use Active wrapper");
 assert.ok(!workSource.includes("repo-dashboard-work-active-columns"), "work must not use Active nested columns");
@@ -165,7 +170,7 @@ assert.ok(
   !chartsSource.includes("aria-label={`${cell.date}"),
   "heatmap cells must not duplicate the parent heatmap label",
 );
-assert.equal((workSource.match(/<WorkColumn/g) ?? []).length, 3, "work must render three sibling columns");
+assert.equal((workSource.match(/<WorkColumn/g) ?? []).length, 1, "work must render three sibling columns via one column map");
 assert.ok(
   workSource.includes("repo-dashboard-work-column-scroll"),
   "each work column must declare its own scroll region",

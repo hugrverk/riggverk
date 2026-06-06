@@ -135,7 +135,7 @@ if ! rg -n 'grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)' src/styles.css
   fail "work desktop layout must use three equal columns"
 fi
 if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows:\s*repeat\(3' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "narrow work layout must stack Started, Open, and Done vertically"
+  fail "narrow work layout must stack primary work columns vertically"
 fi
 if ! rg -n 'repo-dashboard-activity-chart-footer' src/tools/repoDashboard/RepoActivityInsights.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "activity chart footer must contain legend and metadata"
