@@ -1,5 +1,6 @@
 import { useMemo } from "react";
 import type { RepoDocFile } from "../../types";
+import { classifyDocRole, compareDocsByRole, docRoleLabel } from "./docRoles";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 export function docDisplayTitle(path: string): string {
@@ -9,7 +10,11 @@ export function docDisplayTitle(path: string): string {
 
 export function filterDocsForSearch(docs: RepoDocFile[], query: string): RepoDocFile[] {
   const q = query.trim().toLowerCase();
-  const ordered = [...docs].sort((a, b) => a.path.localeCompare(b.path));
+  const ordered = [...docs].sort((a, b) => {
+    const roleA = classifyDocRole(a.path, a.content);
+    const roleB = classifyDocRole(b.path, b.content);
+    return compareDocsByRole({ path: a.path, role: roleA }, { path: b.path, role: roleB });
+  });
   if (!q) return ordered;
   return ordered.filter(doc => {
     const title = docDisplayTitle(doc.path).toLowerCase();
@@ -22,9 +27,15 @@ export function pickReadableDocPath(docs: RepoDocFile[], preferred: string | nul
   if (preferred && readable.some(d => d.path === preferred)) {
     return preferred;
   }
+  const startHere = readable.find(d => d.path.toLowerCase() === "docs/start_here.md");
+  if (startHere) return startHere.path;
   const readme = readable.find(d => d.path === "README.md");
   if (readme) return readme.path;
-  const sorted = [...readable].sort((a, b) => a.path.localeCompare(b.path));
+  const sorted = [...readable].sort((a, b) => {
+    const roleA = classifyDocRole(a.path, a.content);
+    const roleB = classifyDocRole(b.path, b.content);
+    return compareDocsByRole({ path: a.path, role: roleA }, { path: b.path, role: roleB });
+  });
   return sorted[0]?.path ?? null;
 }
 
@@ -105,6 +116,13 @@ export function RepoDocsWorkspace({
                 const status = docListStatus(doc);
                 const selected = doc.path === selectedPath;
                 const optionId = `repo-doc-option-${doc.path.replace(/[^\w-]+/g, "-")}`;
+                const role = classifyDocRole(doc.path, doc.content);
+                const roleLabel =
+                  role !== "unknown"
+                    ? docRoleLabel(role, doc.path)
+                    : doc.path.toLowerCase().startsWith("docs/")
+                      ? docRoleLabel("reference", doc.path)
+                      : null;
                 return (
                   <li key={doc.path} role="none">
                     <button
@@ -118,6 +136,11 @@ export function RepoDocsWorkspace({
                       <span className="font-mono repo-dashboard-docs-list-title">
                         {docDisplayTitle(doc.path)}
                       </span>
+                      {roleLabel ? (
+                        <span className="prompt-loops-pill repo-dashboard-docs-role-pill">
+                          {roleLabel}
+                        </span>
+                      ) : null}
                       <span className="font-mono repo-dashboard-docs-list-path text-muted">
                         {doc.path}
                       </span>
@@ -151,6 +174,11 @@ export function RepoDocsWorkspace({
                 <p className="font-mono small text-muted repo-dashboard-docs-reader-path">
                   {selectedDoc.path}
                 </p>
+                {selectedDoc.found && selectedDoc.readable ? (
+                  <p className="text-muted small repo-dashboard-docs-reader-role">
+                    Role: {docRoleLabel(classifyDocRole(selectedDoc.path, selectedDoc.content), selectedDoc.path)}
+                  </p>
+                ) : null}
                 {!selectedDoc.found ? (
                   <p className="text-muted small" role="status">
                     Document not found in the repository snapshot.

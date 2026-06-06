@@ -26,15 +26,19 @@ import {
 import { mergeWorkItemsDetailed } from "./docsParser";
 import {
   authorLabel,
-  buildDocLaneSummaries,
+  activeDocWorkCount,
+  buildCanonicalWorkSummary,
   buildDocSourceSummaries,
   buildHeatmapCells,
   buildWorkStatusCounts,
+  filterWorkItemsByCanonicalSource,
+  filterWorkItemsByPriority,
   ghIssuesKpiLabel,
+  isCanonicalWorkMode,
   normalizeRepoPathForCompare,
   repoDashboardBrandLabel,
-  workItemDocLane,
-  type DocWorkLaneId,
+  type CanonicalSourceFilter,
+  type PriorityFilter,
 } from "./model";
 import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
@@ -108,7 +112,8 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [snapshot, setSnapshot] = useState<RepoDashboardSnapshot | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
-  const [laneFilter, setLaneFilter] = useState<DocWorkLaneId | "all">("all");
+  const [sourceFilter, setSourceFilter] = useState<CanonicalSourceFilter>("all");
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const [savedEntries, setSavedEntries] = useState<AppSettings["repo_dashboard_entries"]>([]);
   const [saveStatus, setSaveStatus] = useState<string | null>(null);
   const [pickerStatus, setPickerStatus] = useState<string | null>(null);
@@ -349,14 +354,29 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     [snapshot, workItems],
   );
 
+  const canonicalMode = useMemo(
+    () => (snapshot ? isCanonicalWorkMode(snapshot.docs) : false),
+    [snapshot],
+  );
+
   const filteredWorkItems = useMemo(() => {
     let list = workItems;
-    if (laneFilter !== "all") list = list.filter(i => workItemDocLane(i) === laneFilter);
-    if (typeFilter !== "all") list = list.filter(i => i.type === typeFilter);
+    if (canonicalMode) {
+      list = filterWorkItemsByCanonicalSource(list, sourceFilter);
+      list = filterWorkItemsByPriority(list, priorityFilter);
+    } else if (typeFilter !== "all") {
+      list = list.filter(i => i.type === typeFilter);
+    }
     return list;
-  }, [workItems, laneFilter, typeFilter]);
+  }, [workItems, canonicalMode, sourceFilter, priorityFilter, typeFilter]);
 
-  const docLaneSummaries = useMemo(() => buildDocLaneSummaries(workItems), [workItems]);
+  const canonicalSummary = useMemo(
+    () =>
+      canonicalMode
+        ? buildCanonicalWorkSummary(workItems, filteredWorkItems)
+        : null,
+    [canonicalMode, workItems, filteredWorkItems],
+  );
 
   const workStatusCounts = useMemo(() => buildWorkStatusCounts(workItems), [workItems]);
 
@@ -408,13 +428,15 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     return "-";
   };
 
-  const needsPlanningCount = workItems.filter(i => i.needsPlan && i.status !== "done").length;
+  const needsPlanningCount = canonicalMode
+    ? 0
+    : workItems.filter(i => i.needsPlan && i.status !== "done").length;
 
   const brandLabel = repoDashboardBrandLabel(repoPath);
   const ghIssuesLabel = snapshot
     ? ghIssuesKpiLabel(snapshot.gh.available, snapshot.gh.authenticated)
     : "gh issues";
-  const docOpenCount = workItems.filter(i => i.source === "docs" && i.status !== "done").length;
+  const docOpenCount = activeDocWorkCount(workItems);
 
   return (
     <div className="repo-dashboard-tool">
@@ -749,25 +771,30 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
             <RepoWorkWorkspace
               items={filteredWorkItems}
               totalItemCount={workItems.length}
-              laneFilter={laneFilter}
+              canonicalMode={canonicalMode}
+              sourceFilter={sourceFilter}
+              priorityFilter={priorityFilter}
               typeFilter={typeFilter}
-              docLaneSummaries={docLaneSummaries}
               workTypes={WORK_TYPES}
-              onLaneFilterChange={setLaneFilter}
+              canonicalSummary={canonicalSummary}
+              onSourceFilterChange={setSourceFilter}
+              onPriorityFilterChange={setPriorityFilter}
               onTypeFilterChange={setTypeFilter}
               onResetFilters={() => {
-                setLaneFilter("all");
+                setSourceFilter("all");
+                setPriorityFilter("all");
                 setTypeFilter("all");
               }}
               onUsePromptContext={onUsePromptContext ? handleUsePromptContext : undefined}
               emptyMessage={
-                typeFilter !== "all" || laneFilter !== "all"
-                  ? "No items match the active filters. Try clearing lane or type."
+                (canonicalMode && (sourceFilter !== "all" || priorityFilter !== "all")) ||
+                (!canonicalMode && typeFilter !== "all")
+                  ? "No items match the active filters. Try clearing filters."
                   : docSources.every(d => !d.contributes) && !snapshot.gh.authenticated
-                    ? "No work items parsed. Add or refresh docs (BACKLOG, KNOWN_GAPS, product/*.md) or authenticate gh for issues."
+                    ? "No work items parsed. Add canonical docs (BACKLOG, audit/ISSUES) or authenticate gh for issues."
                     : docSources.every(d => !d.contributes)
-                      ? "Docs were found but no actionable rows matched the parser. Check BACKLOG/KNOWN_GAPS tables or TODO checkboxes."
-                      : "No work items in this snapshot."
+                      ? "Docs were found but no active queue rows matched the parser."
+                      : "No active work items in this snapshot."
               }
             />
           )}

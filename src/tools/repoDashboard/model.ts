@@ -3,9 +3,11 @@ import type {
   RepoCommitEntry,
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
+  RepoDashboardCanonicalSource,
   RepoDocFile,
 } from "../../types";
-import { isOptionalDocPath } from "./docsParser";
+import { detectCanonicalWorkCanon, isOptionalDocPath } from "./docsParser";
+import { classifyDocRole, isActiveWorkDocRole, type DocRole } from "./docRoles";
 
 export type ActivityActor = "primary" | "secondary" | "other";
 
@@ -307,10 +309,7 @@ export function contributorChartColor(colorIndex: number): string {
 const CONTRIBUTOR_CHART_COLOR_ALIASES: ReadonlyArray<{
   aliases: readonly string[];
   colorIndex: number;
-}> = [
-  { aliases: ["PRIVATE"], colorIndex: 0 },
-  { aliases: ["uxsmedjan"], colorIndex: 1 },
-];
+}> = [];
 
 function contributorMatchesAlias(id: string, displayName: string, aliases: readonly string[]): boolean {
   const haystack = `${id} ${displayName}`.toLowerCase();
@@ -870,9 +869,16 @@ export function buildDocSourceSummaries(
   docs: RepoDocFile[],
   workItems: RepoDashboardWorkItem[],
 ): DocSourceSummary[] {
+  const canonical = detectCanonicalWorkCanon(docs);
   return docs.map(doc => {
+    const role = classifyDocRole(doc.path, doc.content);
     const fromDoc = workItems.filter(i => i.source === "docs" && i.path === doc.path);
     const openCount = fromDoc.filter(i => i.status !== "done").length;
+    const contributes =
+      doc.found &&
+      doc.readable &&
+      fromDoc.length > 0 &&
+      (!canonical || isActiveWorkDocRole(role));
     return {
       path: doc.path,
       found: doc.found,
@@ -881,7 +887,7 @@ export function buildDocSourceSummaries(
       optional: isOptionalDocPath(doc.path),
       itemCount: fromDoc.length,
       openCount,
-      contributes: doc.found && doc.readable && fromDoc.length > 0,
+      contributes,
       readError: doc.read_error ?? undefined,
     };
   });
@@ -1113,6 +1119,128 @@ export function partitionWorkItems(items: RepoDashboardWorkItem[]): WorkPartitio
 export function activeWorkCount(partition: WorkPartition): number {
   return partition.activeStarted.length + partition.activeOpen.length;
 }
+
+// --- Canonical work queue ---
+
+export function isCanonicalWorkMode(docs: readonly RepoDocFile[]): boolean {
+  return detectCanonicalWorkCanon(docs);
+}
+
+export function workItemCanonicalSource(
+  item: RepoDashboardWorkItem,
+): RepoDashboardCanonicalSource | "other" {
+  if (item.canonicalSource) return item.canonicalSource;
+  if (item.source === "issue") return "github";
+  return "other";
+}
+
+export interface CanonicalWorkPartition {
+  bugs: RepoDashboardWorkItem[];
+  verify: RepoDashboardWorkItem[];
+  enhancements: RepoDashboardWorkItem[];
+  other: RepoDashboardWorkItem[];
+}
+
+export function partitionCanonicalWorkItems(
+  items: RepoDashboardWorkItem[],
+): CanonicalWorkPartition {
+  const sort = (list: RepoDashboardWorkItem[]) =>
+    [...list].sort((a, b) => {
+      const pri = comparePriority(a.priority, b.priority);
+      if (pri !== 0) return pri;
+      const idCmp = (a.workId ?? a.text).localeCompare(b.workId ?? b.text);
+      if (idCmp !== 0) return idCmp;
+      return (a.line ?? 0) - (b.line ?? 0);
+    });
+
+  const bugs = sort(items.filter(i => i.classification === "bug"));
+  const verify = sort(items.filter(i => i.classification === "verify"));
+  const enhancements = sort(items.filter(i => i.classification === "enhancement"));
+  const other = sort(
+    items.filter(
+      i =>
+        i.classification !== "bug" &&
+        i.classification !== "verify" &&
+        i.classification !== "enhancement",
+    ),
+  );
+  return { bugs, verify, enhancements, other };
+}
+
+const PRIORITY_ORDER: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function comparePriority(a?: string, b?: string): number {
+  const pa = (a ?? "").trim().toLowerCase();
+  const pb = (b ?? "").trim().toLowerCase();
+  const oa = PRIORITY_ORDER[pa] ?? 3;
+  const ob = PRIORITY_ORDER[pb] ?? 3;
+  if (oa !== ob) return oa - ob;
+  return pa.localeCompare(pb);
+}
+
+export type CanonicalSourceFilter = RepoDashboardCanonicalSource | "all";
+export type PriorityFilter = "all" | "high" | "medium" | "low" | "unspecified";
+
+export function normalizePriorityValue(priority?: string): PriorityFilter {
+  const low = (priority ?? "").trim().toLowerCase();
+  if (low === "high" || low === "medium" || low === "low") return low;
+  return "unspecified";
+}
+
+export function filterWorkItemsByCanonicalSource(
+  items: RepoDashboardWorkItem[],
+  source: CanonicalSourceFilter,
+): RepoDashboardWorkItem[] {
+  if (source === "all") return items;
+  return items.filter(i => workItemCanonicalSource(i) === source);
+}
+
+export function filterWorkItemsByPriority(
+  items: RepoDashboardWorkItem[],
+  priority: PriorityFilter,
+): RepoDashboardWorkItem[] {
+  if (priority === "all") return items;
+  return items.filter(i => normalizePriorityValue(i.priority) === priority);
+}
+
+export interface CanonicalWorkSummary {
+  displayed: number;
+  total: number;
+  bugs: number;
+  verify: number;
+  enhancements: number;
+  other: number;
+}
+
+export function buildCanonicalWorkSummary(
+  allItems: RepoDashboardWorkItem[],
+  displayedItems: RepoDashboardWorkItem[],
+): CanonicalWorkSummary {
+  const partition = partitionCanonicalWorkItems(allItems);
+  return {
+    displayed: displayedItems.length,
+    total: allItems.length,
+    bugs: partition.bugs.length,
+    verify: partition.verify.length,
+    enhancements: partition.enhancements.length,
+    other: partition.other.length,
+  };
+}
+
+export function activeDocWorkCount(items: RepoDashboardWorkItem[]): number {
+  return items.filter(i => i.source === "docs" && i.status !== "done").length;
+}
+
+export function docRoleForPath(path: string, content = ""): DocRole {
+  return classifyDocRole(path, content);
+}
+
+export { docRoleLabel, classifyDocRole, compareDocsByRole } from "./docRoles";
+export type { DocRole } from "./docRoles";
 
 export type ChangedFileStatusKind = "added" | "modified" | "deleted" | "other";
 
