@@ -66,6 +66,17 @@ fi
 if ! rg -n 'repo-dashboard-heat-density-compact|--heat-week-count' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "heatmap CSS must include compact density and --heat-week-count intrinsic width"
 fi
+if ! rg -n 'repeat\(var\(--heat-week-count' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap grid must use bounded responsive week columns"
+fi
+if rg -n 'scrollRef|scrollLeft|repo-dashboard-heat-scroll' src/tools/repoDashboard/RepoDashboardCharts.tsx src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "heatmap must not use horizontal scroll containers or auto-scroll behavior"
+fi
+if rg -n -U '\.repo-dashboard-heat-(wrap|box|grid)[^{]*\{[^}]*overflow-x:\s*(auto|scroll)' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "heatmap must not create horizontal overflow scrolling"
+fi
 if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard must expose a narrow-layout section control"
 fi
