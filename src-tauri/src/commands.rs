@@ -8,6 +8,7 @@ mod opencode_runtime;
 mod process;
 mod repo_dashboard;
 mod repo_dashboard_commands;
+mod repo_dashboard_history;
 mod settings_commands;
 mod skills;
 mod status;
