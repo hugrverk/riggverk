@@ -646,7 +646,7 @@ export function useLibraryController({
           activeConfigSourceTypeRef.current,
           configDraftIdentityRef.current,
           saveOpId,
-          saveOpId,
+          configSaveOpRef.current.isCurrent,
           sourceType,
         )) {
           return;
@@ -661,7 +661,7 @@ export function useLibraryController({
               activeConfigSourceTypeRef.current,
               configDraftIdentityRef.current,
               saveOpId,
-              saveOpId,
+              configSaveOpRef.current.isCurrent,
               sourceType,
             )) {
               return;

@@ -6,6 +6,7 @@ export function createSaveOperationTracker() {
       sequence += 1;
     },
     capture(): number {
+      sequence += 1;
       return sequence;
     },
     isCurrent(operationId: number): boolean {
@@ -20,11 +21,11 @@ export function shouldApplyOpenCodeSourceSave(
   activeTargetId: string,
   activeSourceType: string,
   draftIdentity: string | null,
-  operationId: number,
   responseOperationId: number,
+  isOperationCurrent: (operationId: number) => boolean,
   responseSourceType: string,
 ): boolean {
-  if (operationId !== responseOperationId) return false;
+  if (!isOperationCurrent(responseOperationId)) return false;
   if (activeTargetId !== "opencode_config") return false;
   if (activeSourceType !== responseSourceType) return false;
   return draftIdentity === `opencode_config:${responseSourceType}` || draftIdentity === null;
