@@ -5979,7 +5979,6 @@ code {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow: hidden;
 }
 
 .repo-dashboard-activity-insights-head {
@@ -6120,6 +6119,12 @@ code {
 
 .repo-dashboard-heat-card {
   padding-bottom: 14px;
+}
+
+.repo-dashboard-heat-card .repo-dashboard-heatbox {
+  border: none;
+  background: transparent;
+  padding: 0;
 }
 
 .repo-dashboard-recent-activity-card {
