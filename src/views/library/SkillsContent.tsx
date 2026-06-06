@@ -1,5 +1,5 @@
 import type { DocumentContent, SkillSummary } from "../../types";
-import { Markdown } from "../../components/Markdown";
+import { SafeMarkdown } from "../../components/SafeMarkdown";
 
 function skillRiskClass(risk: string): string {
   switch (risk.toLowerCase()) {
@@ -64,7 +64,7 @@ export function SkillsContent(props: SkillsContentProps) {
         </div>
       )}
       <div className="lib-editor-body">
-        <div className="lib-preview-body"><Markdown content={activeSkillContent.content} /></div>
+        <div className="lib-preview-body"><SafeMarkdown content={activeSkillContent.content} /></div>
       </div>
     </>
   );

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import {
   classifyMarkdownHref,
   isSafeExternalMarkdownHref,
-} from "../src/tools/repoDashboard/markdownLinks";
+} from "../src/lib/markdownLinks";
 
 assert.equal(classifyMarkdownHref("https://example.com/docs"), "external");
 assert.equal(classifyMarkdownHref("http://example.com"), "external");
@@ -25,7 +25,15 @@ const rendererSource = readFileSync(
   join(here, "../src/tools/repoDashboard/MarkdownRenderer.tsx"),
   "utf8",
 );
-assert.ok(!rendererSource.includes("rehype-raw"), "markdown renderer must not allow raw HTML");
-assert.ok(rendererSource.includes("remarkGfm"), "markdown renderer uses GFM plugin");
+const sharedRendererSource = readFileSync(
+  join(here, "../src/components/SafeMarkdown.tsx"),
+  "utf8",
+);
+assert.ok(!sharedRendererSource.includes("rehype-raw"), "markdown renderer must not allow raw HTML");
+assert.ok(
+  sharedRendererSource.includes("remarkGfm") || rendererSource.includes("remarkGfm"),
+  "markdown renderer uses GFM plugin",
+);
+assert.ok(rendererSource.includes("SafeMarkdown"), "repo dashboard markdown delegates to shared renderer");
 
 console.log("Repo Dashboard markdown safety checks passed");

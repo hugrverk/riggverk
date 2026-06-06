@@ -1,7 +1,7 @@
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { AgentMetadataResponse, AgentSourceContent } from "../../types";
-import { Markdown } from "../../components/Markdown";
+import { SafeMarkdown } from "../../components/SafeMarkdown";
 
 function skillRiskClass(risk: string): string {
   switch (risk.toLowerCase()) {
@@ -120,7 +120,7 @@ export function AgentContent(props: AgentContentProps) {
       </div>
       <div className="lib-editor-body">
         {agentMode === "preview" ? (
-          <div className="lib-preview-body"><Markdown content={activeAgentContent.content} /></div>
+          <div className="lib-preview-body"><SafeMarkdown content={activeAgentContent.content} /></div>
         ) : (
           <textarea
             className="editor-textarea"

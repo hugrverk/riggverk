@@ -1,7 +1,7 @@
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { DocumentContent } from "../../types";
-import { Markdown } from "../../components/Markdown";
+import { SafeMarkdown } from "../../components/SafeMarkdown";
 
 interface RulesContentProps {
   agentTemplate: DocumentContent | null;
@@ -52,7 +52,7 @@ export function RulesContent(props: RulesContentProps) {
       </div>
       <div className="lib-editor-body">
         {agentTemplateMode === "preview" ? (
-          <div className="lib-preview-body"><Markdown content={agentTemplate.content} /></div>
+          <div className="lib-preview-body"><SafeMarkdown content={agentTemplate.content} /></div>
         ) : (
           <textarea
             className="editor-textarea"

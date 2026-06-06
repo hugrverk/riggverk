@@ -1,7 +1,7 @@
 import type { ActionResult } from "../../components/TerminalOutput";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { DocumentContent } from "../../types";
-import { Markdown } from "../../components/Markdown";
+import { SafeMarkdown } from "../../components/SafeMarkdown";
 
 interface DocContentProps {
   activeDoc: DocumentContent | null;
@@ -75,7 +75,7 @@ export function DocContent(props: DocContentProps) {
       </div>
       <div className="lib-editor-body">
         {docMode === "preview" ? (
-          <div className="lib-preview-body"><Markdown content={activeDoc.content} /></div>
+          <div className="lib-preview-body"><SafeMarkdown content={activeDoc.content} /></div>
         ) : (
           <textarea
             className="editor-textarea"
