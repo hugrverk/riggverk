@@ -27,9 +27,10 @@ const CORE_DOC_PATHS: [&str; 9] = [
     "docs/TODO.md",
 ];
 
-const ALLOWLISTED_DOC_DIRS: [(&str, usize); 2] = [("docs/product", 24), ("docs/audit", 12)];
+const MAX_DISCOVERED_DOC_PATHS: usize = 96;
+const MAX_DOCS_TREE_DEPTH: usize = 12;
 
-const MAX_DISCOVERED_DOC_PATHS: usize = 48;
+const SKIP_DOC_DIR_NAMES: &[&str] = &[".git", "node_modules", "target", "dist", "build", "vendor"];
 
 #[derive(Serialize, Clone, Debug)]
 pub struct RepoCommitEntry {
@@ -270,36 +271,186 @@ fn load_changed_files(repo: &Path) -> Vec<RepoChangedFile> {
         .collect()
 }
 
+fn should_skip_doc_dir(name: &str) -> bool {
+    name.starts_with('.') || SKIP_DOC_DIR_NAMES.contains(&name)
+}
+
+fn is_markdown_file_name(name: &str) -> bool {
+    name.ends_with(".md") || name.ends_with(".markdown")
+}
+
+fn canonical_repo_root(repo: &Path) -> Option<PathBuf> {
+    let meta = fs::symlink_metadata(repo).ok()?;
+    if meta.file_type().is_symlink() {
+        return None;
+    }
+    fs::canonicalize(repo).ok()
+}
+
+fn safe_file_under_repo(repo_root: &Path, path: &Path) -> bool {
+    let meta = match fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(_) => return false,
+    };
+    if meta.file_type().is_symlink() || !meta.is_file() {
+        return false;
+    }
+    match fs::canonicalize(path) {
+        Ok(canonical) => canonical.starts_with(repo_root),
+        Err(_) => false,
+    }
+}
+
+fn safe_dir_under_repo(repo_root: &Path, path: &Path) -> bool {
+    let meta = match fs::symlink_metadata(path) {
+        Ok(meta) => meta,
+        Err(_) => return false,
+    };
+    if meta.file_type().is_symlink() || !meta.is_dir() {
+        return false;
+    }
+    match fs::canonicalize(path) {
+        Ok(canonical) => canonical.starts_with(repo_root),
+        Err(_) => false,
+    }
+}
+
+fn try_collect_doc_path(
+    paths: &mut Vec<String>,
+    seen: &HashSet<String>,
+    rel: String,
+) -> bool {
+    if seen.contains(&rel) || paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+        return false;
+    }
+    paths.push(rel);
+    true
+}
+
+fn discover_root_markdown(
+    repo: &Path,
+    repo_root: &Path,
+    paths: &mut Vec<String>,
+    seen: &HashSet<String>,
+) {
+    let Ok(entries) = fs::read_dir(repo) else {
+        return;
+    };
+    let mut root_files: Vec<String> = entries
+        .filter_map(|entry| entry.ok())
+        .filter_map(|entry| {
+            let name = entry.file_name().to_string_lossy().to_string();
+            if name.starts_with('.') || !is_markdown_file_name(&name) {
+                return None;
+            }
+            if !safe_file_under_repo(repo_root, &entry.path()) {
+                return None;
+            }
+            Some(name)
+        })
+        .collect();
+    root_files.sort();
+    for rel in root_files {
+        if paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+            break;
+        }
+        try_collect_doc_path(paths, seen, rel);
+    }
+}
+
+fn discover_docs_tree(
+    repo: &Path,
+    repo_root: &Path,
+    rel_dir: &str,
+    depth: usize,
+    paths: &mut Vec<String>,
+    seen: &HashSet<String>,
+) {
+    if depth > MAX_DOCS_TREE_DEPTH || paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+        return;
+    }
+    let dir = repo.join(rel_dir);
+    if !safe_dir_under_repo(repo_root, &dir) {
+        return;
+    }
+    let Ok(entries) = fs::read_dir(&dir) else {
+        return;
+    };
+    let mut subdirs: Vec<String> = Vec::new();
+    let mut md_files: Vec<String> = Vec::new();
+    for entry in entries.filter_map(|entry| entry.ok()) {
+        let name = entry.file_name().to_string_lossy().to_string();
+        if name.starts_with('.') {
+            continue;
+        }
+        let child = entry.path();
+        let Ok(file_type) = entry.file_type() else {
+            continue;
+        };
+        if file_type.is_symlink() {
+            continue;
+        }
+        if file_type.is_dir() {
+            if should_skip_doc_dir(&name) {
+                continue;
+            }
+            if safe_dir_under_repo(repo_root, &child) {
+                subdirs.push(name);
+            }
+            continue;
+        }
+        if file_type.is_file()
+            && is_markdown_file_name(&name)
+            && safe_file_under_repo(repo_root, &child)
+        {
+            md_files.push(format!("{}/{}", rel_dir, name));
+        }
+    }
+    md_files.sort();
+    for rel in md_files {
+        if paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+            return;
+        }
+        try_collect_doc_path(paths, seen, rel);
+    }
+    subdirs.sort();
+    for sub in subdirs {
+        if paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+            return;
+        }
+        discover_docs_tree(
+            repo,
+            repo_root,
+            &format!("{}/{}", rel_dir, sub),
+            depth + 1,
+            paths,
+            seen,
+        );
+    }
+}
+
 fn collect_doc_paths(repo: &Path) -> Vec<String> {
     let mut paths: Vec<String> = CORE_DOC_PATHS.iter().map(|p| (*p).to_string()).collect();
     let mut seen: HashSet<String> = paths.iter().cloned().collect();
 
-    for (dir_rel, limit) in ALLOWLISTED_DOC_DIRS {
-        let dir = repo.join(dir_rel);
-        if !dir.is_dir() {
-            continue;
+    let Some(repo_root) = canonical_repo_root(repo) else {
+        paths.truncate(MAX_DISCOVERED_DOC_PATHS);
+        return paths;
+    };
+
+    let mut discovered: Vec<String> = Vec::new();
+    discover_root_markdown(repo, &repo_root, &mut discovered, &seen);
+    if repo.join("docs").is_dir() {
+        discover_docs_tree(repo, &repo_root, "docs", 1, &mut discovered, &seen);
+    }
+
+    discovered.sort();
+    for rel in discovered {
+        if paths.len() >= MAX_DISCOVERED_DOC_PATHS {
+            break;
         }
-        let Ok(entries) = fs::read_dir(&dir) else {
-            continue;
-        };
-        let mut md_files: Vec<String> = entries
-            .filter_map(|entry| entry.ok())
-            .filter(|entry| {
-                entry.path().is_file() && entry.path().extension().is_some_and(|ext| ext == "md")
-            })
-            .filter_map(|entry| {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.starts_with('.') {
-                    return None;
-                }
-                Some(format!("{}/{}", dir_rel, name))
-            })
-            .collect();
-        md_files.sort();
-        for rel in md_files.into_iter().take(limit) {
-            if seen.insert(rel.clone()) {
-                paths.push(rel);
-            }
+        if seen.insert(rel.clone()) {
+            paths.push(rel);
         }
     }
 
@@ -1108,7 +1259,7 @@ mod tests {
     }
 
     #[test]
-    fn collect_doc_paths_includes_core_and_allowlisted_dirs() {
+    fn collect_doc_paths_includes_core_root_and_nested_docs() {
         use std::time::{SystemTime, UNIX_EPOCH};
 
         let stamp = SystemTime::now()
@@ -1116,18 +1267,83 @@ mod tests {
             .expect("time")
             .as_nanos();
         let root = std::env::temp_dir().join(format!("agent-workspace-docs-{stamp}"));
-        fs::create_dir_all(root.join("docs/product")).expect("mkdir product");
+        fs::create_dir_all(root.join("docs/product/nested")).expect("mkdir nested");
         fs::create_dir_all(root.join("docs/audit")).expect("mkdir audit");
+        fs::create_dir_all(root.join("node_modules/pkg")).expect("mkdir node_modules");
         fs::write(root.join("README.md"), "# hi").expect("write readme");
+        fs::write(root.join("CHANGELOG.md"), "# log").expect("write changelog");
         fs::write(root.join("docs/BACKLOG.md"), "# backlog").expect("write backlog");
         fs::write(root.join("docs/product/FEATURES.md"), "# features").expect("write features");
+        fs::write(root.join("docs/product/nested/DETAIL.md"), "# detail").expect("write detail");
         fs::write(root.join("docs/audit/ISSUES.md"), "# issues").expect("write issues");
+        fs::write(root.join("node_modules/pkg/EVIL.md"), "# evil").expect("write evil");
 
         let paths = collect_doc_paths(&root);
         assert!(paths.iter().any(|p| p == "README.md"));
+        assert!(paths.iter().any(|p| p == "CHANGELOG.md"));
         assert!(paths.iter().any(|p| p == "docs/BACKLOG.md"));
         assert!(paths.iter().any(|p| p == "docs/product/FEATURES.md"));
+        assert!(paths.iter().any(|p| p == "docs/product/nested/DETAIL.md"));
         assert!(paths.iter().any(|p| p == "docs/audit/ISSUES.md"));
+        assert!(!paths.iter().any(|p| p.contains("node_modules")));
+
+        let sorted_tail: Vec<_> = paths
+            .iter()
+            .filter(|p| !CORE_DOC_PATHS.contains(&p.as_str()))
+            .cloned()
+            .collect();
+        let mut expected_sorted = sorted_tail.clone();
+        expected_sorted.sort();
+        assert_eq!(sorted_tail, expected_sorted);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn collect_doc_paths_skips_symlink_escape() {
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-docs-symlink-{stamp}"));
+        let outside = std::env::temp_dir().join(format!("agent-workspace-docs-outside-{stamp}"));
+        fs::create_dir_all(root.join("docs")).expect("mkdir docs");
+        fs::create_dir_all(&outside).expect("mkdir outside");
+        fs::write(outside.join("SECRET.md"), "# secret").expect("write outside");
+        fs::write(root.join("README.md"), "# hi").expect("write readme");
+        symlink(&outside, root.join("docs/escape")).expect("symlink dir");
+        symlink(outside.join("SECRET.md"), root.join("docs/LEAK.md")).expect("symlink file");
+
+        let paths = collect_doc_paths(&root);
+        assert!(paths.iter().any(|p| p == "README.md"));
+        assert!(!paths.iter().any(|p| p.contains("SECRET")));
+        assert!(!paths.iter().any(|p| p == "docs/LEAK.md"));
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn collect_doc_paths_respects_file_limit() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-docs-limit-{stamp}"));
+        fs::create_dir_all(root.join("docs/extra")).expect("mkdir extra");
+        fs::write(root.join("README.md"), "# hi").expect("write readme");
+        for i in 0..120 {
+            fs::write(root.join(format!("docs/extra/file-{i:03}.md")), "# x").expect("write");
+        }
+
+        let paths = collect_doc_paths(&root);
+        assert!(paths.len() <= MAX_DISCOVERED_DOC_PATHS);
 
         let _ = fs::remove_dir_all(&root);
     }
