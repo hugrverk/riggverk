@@ -28,7 +28,7 @@
   --text-sm: 0.8rem;
   --text-base: 1rem;
   --text-lg: 1.133rem;
-  --text-heading: 1.067rem;
+  --font-size-heading: 1.067rem;
   --text-display: 1.2rem;
   --header-height: 44px;
   --traffic-light-reserve: 80px;
@@ -1623,7 +1623,7 @@ code {
 }
 
 .markdown-h { color: var(--text-heading); margin: 16px 0 8px; }
-.markdown-h1 { font-size: var(--text-heading); }
+.markdown-h1 { font-size: var(--font-size-heading); }
 .markdown-h2 { font-size: var(--text-base); }
 .markdown-h3 { font-size: calc(var(--text-base) * 0.933); }
 .markdown-h4 { font-size: calc(var(--text-base) * 0.867); }
@@ -7940,7 +7940,7 @@ code {
 
 .lib-docs-title {
   margin: 0;
-  font-size: var(--text-heading);
+  font-size: var(--font-size-heading);
   font-weight: 600;
   line-height: 1.25;
   color: var(--text-heading);
@@ -8054,7 +8054,7 @@ code {
 }
 
 .lib-docs-markdown .markdown-h2 {
-  font-size: var(--text-heading);
+  font-size: var(--font-size-heading);
   font-weight: 600;
   margin: 1.25rem 0 0.5rem;
   line-height: 1.3;

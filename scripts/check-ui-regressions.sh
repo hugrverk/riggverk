@@ -65,8 +65,19 @@ fi
 if ! rg -n 'APP_FONT_SIZE_VALUES' src/views/SettingsView.tsx src/lib/settingsDraft.ts >"$ui_tmp"; then
   fail "app font-size setting must expose all persisted values"
 fi
-if ! rg -n -- '--text-xs|--text-sm|--text-base|--text-lg|--text-heading|--text-display' src/styles.css >"$ui_tmp"; then
+if ! rg -n -- '--text-xs|--text-sm|--text-base|--text-lg|--text-heading|--font-size-heading|--text-display' src/styles.css >"$ui_tmp"; then
   fail "semantic typography variables must exist"
+fi
+if rg -n -- '--text-heading:\s*[^;]*(rem|px|em|%)' src/styles.css >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "--text-heading must remain a color token, not a font-size length"
+fi
+if rg -n -- '--font-size-heading:\s*(#|rgba?\()' src/styles.css >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "--font-size-heading must remain a length token, not a color"
+fi
+if ! rg -n -- '--font-size-heading:\s*[0-9.]+rem' src/styles.css >"$ui_tmp"; then
+  fail "semantic heading font-size token must exist"
 fi
 if rg -n 'zoom:\s*[^;]+' src/styles.css >"$ui_tmp"; then
   cat "$ui_tmp" >&2
