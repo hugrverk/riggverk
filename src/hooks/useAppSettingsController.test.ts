@@ -46,6 +46,43 @@ function mockInitialLoad(settings = baseSettings) {
   });
 }
 
+describe("useAppSettingsController loadSettings", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("keeps load_warning visible in settings status", async () => {
+    const warning = "settings file was corrupt and moved to a local backup; using defaults";
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "get_settings") {
+        return Promise.resolve({ settings: baseSettings, load_warning: warning });
+      }
+      if (cmd === "get_agent_targets") return Promise.resolve([]);
+      if (cmd === "get_target_profiles") return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    expect(result.current.settingsMsg).toEqual({ ok: false, text: warning });
+  });
+
+  it("clears settings status when load has no warning", async () => {
+    mockInitialLoad();
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    expect(result.current.settingsMsg).toBeNull();
+  });
+});
+
 describe("useAppSettingsController mutateAppSettings", () => {
   beforeEach(() => {
     invoke.mockReset();

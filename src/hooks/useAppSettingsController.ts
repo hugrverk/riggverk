@@ -91,11 +91,12 @@ export function useAppSettingsController({
       savedSettingsRef.current = serializeSettingsForCompare(settings);
       if (settingsResponse.load_warning) {
         setSettingsMsg({ ok: false, text: settingsResponse.load_warning });
+      } else {
+        setSettingsMsg(null);
       }
       setAgentTargets(targets);
       setTargetProfiles(profiles);
       applyThemeSettings(settings);
-      setSettingsMsg(null);
       setSettingsAutoSaveError(null);
       settingsLoadedRef.current = true;
     } catch (error) {
@@ -139,7 +140,9 @@ export function useAppSettingsController({
         applyThemeSettings(saved);
         if (options?.bumpColorResetKey) setColorResetKey(key => key + 1);
         setSettingsAutoSaveError(null);
-        setSettingsMsg(options?.announce ? { ok: true, text: "settings saved" } : null);
+        if (options?.announce) {
+          setSettingsMsg({ ok: true, text: "settings saved" });
+        }
       }
 
       if (stillCurrent) {
