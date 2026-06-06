@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import type { RepoCommitEntry } from "../src/types";
 import {
   buildActivityActorMap,
@@ -21,6 +22,13 @@ import {
   reconcileVisibleContributorIds,
   visibleContributorSeriesMax,
   contributorChartColor,
+  contributorChartColorToken,
+  CONTRIBUTOR_CHART_SERIES_TOKENS,
+  clampActiveDayIndex,
+  activityChartKeyAction,
+  applyActivityChartKeyAction,
+  nearestActivityDayIndex,
+  activityChartDayX,
   filterCommitsByContributor,
   filterCommitsByTimeRange,
   activityInsightsChartValue,
@@ -336,8 +344,15 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.ok(allSeries[0].points.some(point => point.commitCount === 0), "zero-commit days included");
   assert.equal(allSeries[0].colorIndex, 0);
   assert.equal(allSeries[1].colorIndex, 1);
+  assert.equal(contributorChartColorToken(0), "--repo-chart-series-1");
+  assert.equal(contributorChartColorToken(1), "--repo-chart-series-2");
+  assert.equal(contributorChartColor(0), "var(--repo-chart-series-1)");
+  assert.equal(contributorChartColor(1), "var(--repo-chart-series-2)");
   assert.equal(contributorChartColor(0), contributorChartColor(allSeries[0].colorIndex));
   assert.notEqual(contributorChartColor(0), contributorChartColor(1));
+  for (const token of CONTRIBUTOR_CHART_SERIES_TOKENS) {
+    assert.match(token, /^--repo-chart-series-\d+$/);
+  }
 
   const visible = defaultVisibleContributorIds(allSeries);
   assert.deepEqual(visible, ["a@x.com", "b@x.com"], "all contributors visible by default");
@@ -381,6 +396,61 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.equal(series.length, 2);
   assert.ok(series.some(entry => entry.id === "unknown"));
   assert.ok(series.some(entry => entry.id === "nameonly"));
+}
+
+{
+  assert.equal(clampActiveDayIndex(-3, 90), 0);
+  assert.equal(clampActiveDayIndex(120, 90), 89);
+  assert.equal(clampActiveDayIndex(45, 90), 45);
+  assert.equal(activityChartKeyAction("ArrowLeft"), "prev");
+  assert.equal(activityChartKeyAction("ArrowRight"), "next");
+  assert.equal(activityChartKeyAction("Home"), "first");
+  assert.equal(activityChartKeyAction("End"), "last");
+  assert.equal(activityChartKeyAction("Escape"), "clear");
+  assert.equal(activityChartKeyAction("Tab"), null);
+  assert.equal(applyActivityChartKeyAction(null, "next", 90), 0);
+  assert.equal(applyActivityChartKeyAction(0, "prev", 90), 0);
+  assert.equal(applyActivityChartKeyAction(10, "next", 90), 11);
+  assert.equal(applyActivityChartKeyAction(5, "clear", 90), null);
+  assert.equal(applyActivityChartKeyAction(null, "last", 90), 89);
+  const plotLeft = 40;
+  const plotRight = 28;
+  const plotWidth = 820;
+  const dayCount = 90;
+  assert.equal(
+    nearestActivityDayIndex(plotLeft + 1, dayCount, plotLeft, plotRight, plotWidth, "lines"),
+    0,
+  );
+  assert.equal(
+    nearestActivityDayIndex(plotWidth - plotRight - 1, dayCount, plotLeft, plotRight, plotWidth, "lines"),
+    dayCount - 1,
+  );
+  assert.equal(
+    activityChartDayX(0, dayCount, plotLeft, plotRight, plotWidth, "bars"),
+    plotLeft + (plotWidth - plotLeft - plotRight) / dayCount / 2,
+  );
+}
+
+{
+  const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const banned = ["#58a6ff", "#56d364", "#79c0ff", "#7e9ecf"];
+  for (const hex of banned) {
+    assert.ok(
+      !stylesSource.includes(`--repo-chart-series-${1}: ${hex}`) &&
+        !stylesSource.includes(`--repo-chart-series-${2}: ${hex}`),
+      `chart series must not use blue/green palette value ${hex}`,
+    );
+  }
+  assert.ok(
+    stylesSource.includes("--repo-chart-series-1"),
+    "styles must define repo chart series tokens",
+  );
+  assert.ok(
+    /@media\s*\(prefers-reduced-motion:\s*reduce\)[\s\S]*repo-dashboard-activity-line-animate/.test(
+      stylesSource,
+    ),
+    "reduced motion must disable line draw animation",
+  );
 }
 
 {

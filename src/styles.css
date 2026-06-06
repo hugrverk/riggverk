@@ -28,6 +28,17 @@
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
   --nav-icon-size: 32px;
+  --repo-chart-series-1: #d6c2a3;
+  --repo-chart-series-2: #c7ccd2;
+  --repo-chart-series-3: #b8a99a;
+  --repo-chart-series-4: #a8adb4;
+  --repo-chart-series-5: #9a9488;
+  --repo-chart-series-6: #8e9399;
+  --repo-chart-series-7: #a39586;
+  --repo-chart-series-8: #959aa0;
+  --repo-chart-gridline: rgba(255, 255, 255, 0.06);
+  --repo-chart-axis: rgba(255, 255, 255, 0.12);
+  --repo-chart-text: rgba(255, 255, 255, 0.42);
 }
 
 [data-theme="light"] {
@@ -39,6 +50,17 @@
   --text: #1a1a1a;
   --text-muted: #666666;
   --text-heading: #111111;
+  --repo-chart-series-1: #8a7358;
+  --repo-chart-series-2: #6e737a;
+  --repo-chart-series-3: #7a6b5c;
+  --repo-chart-series-4: #5f646b;
+  --repo-chart-series-5: #6b6458;
+  --repo-chart-series-6: #565b61;
+  --repo-chart-series-7: #75685a;
+  --repo-chart-series-8: #5c6167;
+  --repo-chart-gridline: rgba(0, 0, 0, 0.07);
+  --repo-chart-axis: rgba(0, 0, 0, 0.14);
+  --repo-chart-text: rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-color-scheme: light) {
@@ -51,6 +73,17 @@
     --text: #1a1a1a;
     --text-muted: #666666;
     --text-heading: #111111;
+    --repo-chart-series-1: #8a7358;
+    --repo-chart-series-2: #6e737a;
+    --repo-chart-series-3: #7a6b5c;
+    --repo-chart-series-4: #5f646b;
+    --repo-chart-series-5: #6b6458;
+    --repo-chart-series-6: #565b61;
+    --repo-chart-series-7: #75685a;
+    --repo-chart-series-8: #5c6167;
+    --repo-chart-gridline: rgba(0, 0, 0, 0.07);
+    --repo-chart-axis: rgba(0, 0, 0, 0.14);
+    --repo-chart-text: rgba(0, 0, 0, 0.45);
   }
 }
 
@@ -6152,27 +6185,113 @@ code {
   display: block;
   width: 100%;
   height: 100%;
+  overflow: visible;
+}
+
+.repo-dashboard-activity-gridline {
+  stroke: var(--repo-chart-gridline);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.repo-dashboard-activity-axis {
+  stroke: var(--repo-chart-axis);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+}
+
+.repo-dashboard-activity-chart-text {
+  fill: var(--repo-chart-text);
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.repo-dashboard-activity-guide {
+  stroke: var(--repo-chart-axis);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+  opacity: 0.85;
+}
+
+.repo-dashboard-activity-plot-hit {
+  fill: transparent;
+  stroke: none;
+  cursor: crosshair;
+}
+
+.repo-dashboard-activity-plot-hit:focus {
+  outline: none;
+}
+
+.repo-dashboard-activity-plot-hit:focus-visible {
+  stroke: var(--focus-ring, var(--active-border));
+  stroke-width: 1.5;
+  stroke-dasharray: 4 3;
+  fill: rgba(var(--accent-rgb), 0.04);
 }
 
 .repo-dashboard-activity-line {
   stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
   vector-effect: non-scaling-stroke;
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  transition: opacity 0.14s ease;
+}
+
+.repo-dashboard-activity-line-animate {
+  stroke-dashoffset: 1;
+  animation: repo-dashboard-activity-line-draw 420ms cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+@keyframes repo-dashboard-activity-line-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.repo-dashboard-activity-insights-svg-active .repo-dashboard-activity-line-dimmed {
+  opacity: 0.42;
+}
+
+.repo-dashboard-activity-active-point {
+  stroke: var(--bg-inset);
+  stroke-width: 1.5;
+  pointer-events: none;
+  transition: opacity 0.14s ease;
 }
 
 .repo-dashboard-activity-bar {
-  opacity: 0.78;
-  transition: opacity 0.12s ease;
+  opacity: 0.62;
+  transform-box: fill-box;
+  transform-origin: center bottom;
+  transition: opacity 0.14s ease;
 }
 
-.repo-dashboard-activity-bar:hover {
+.repo-dashboard-activity-bar-animate {
+  transform: scaleY(0);
+  animation: repo-dashboard-activity-bar-grow 380ms cubic-bezier(0, 0, 0.2, 1) forwards;
+}
+
+@keyframes repo-dashboard-activity-bar-grow {
+  to {
+    transform: scaleY(1);
+  }
+}
+
+.repo-dashboard-activity-bar-active {
   opacity: 1;
-  filter: brightness(1.15);
 }
 
-.repo-dashboard-activity-point {
-  stroke: var(--bg-inset);
-  stroke-width: 1.5;
-  cursor: default;
+.repo-dashboard-activity-bar-dimmed {
+  opacity: 0.34;
+}
+
+.repo-dashboard-activity-bar-active {
+  filter: brightness(1.06);
 }
 
 .repo-dashboard-activity-legend {
@@ -6195,10 +6314,11 @@ code {
 }
 
 .repo-dashboard-activity-legend-swatch {
-  width: 10px;
-  height: 10px;
-  border-radius: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
   flex-shrink: 0;
+  opacity: 0.92;
 }
 
 .repo-dashboard-activity-control-label {
@@ -6346,15 +6466,86 @@ code {
 
 .repo-dashboard-activity-tooltip {
   position: absolute;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  top: 8px;
   margin: 0;
-  padding: 4px 6px;
-  font-size: 11px;
-  background: color-mix(in srgb, var(--bg-inset) 88%, var(--bg-panel));
-  border-top: 1px solid var(--border);
+  padding: 5px 7px;
+  min-width: 9rem;
+  max-width: min(12rem, 42%);
+  font-size: 10px;
+  line-height: 1.35;
+  background: color-mix(in srgb, var(--bg-inset) 90%, var(--bg-panel));
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
   pointer-events: none;
+  z-index: 1;
+}
+
+.repo-dashboard-activity-tooltip-date {
+  display: block;
+  margin-bottom: 4px;
+  color: var(--text-muted);
+  font-size: 9px;
+}
+
+.repo-dashboard-activity-tooltip-rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 3px;
+}
+
+.repo-dashboard-activity-tooltip-rows li {
+  display: grid;
+  grid-template-columns: 8px 1fr auto;
+  align-items: center;
+  gap: 5px;
+}
+
+.repo-dashboard-activity-tooltip-swatch {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+}
+
+.repo-dashboard-activity-tooltip-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.repo-dashboard-activity-tooltip-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-activity-live-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .repo-dashboard-activity-line-animate {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+
+  .repo-dashboard-activity-bar-animate {
+    animation: none;
+    transform: none;
+  }
+
+  .repo-dashboard-activity-line,
+  .repo-dashboard-activity-bar,
+  .repo-dashboard-activity-active-point {
+    transition: none;
+  }
 }
 
 .repo-dashboard-contributor-panel-detail {

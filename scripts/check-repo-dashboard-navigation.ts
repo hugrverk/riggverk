@@ -116,8 +116,24 @@ assert.ok(activitySource.includes('aria-pressed={chartMode === "bars"}'), "bars 
 assert.ok(activitySource.includes("aria-pressed={visible}"), "contributor visibility must expose selected state");
 assert.ok(activitySource.includes("mergeCommitCount"), "contributor insights must show merge counts");
 assert.ok(
-  !activitySource.includes("tabIndex"),
-  "activity chart must not expose per-point keyboard tab stops",
+  activitySource.includes("repo-dashboard-activity-plot-hit"),
+  "activity chart must expose a single plot focus target",
+);
+assert.ok(
+  (activitySource.match(/tabIndex/g) ?? []).length === 1,
+  "activity chart must use only one tab stop for date navigation",
+);
+assert.ok(
+  !activitySource.includes("repo-dashboard-activity-point"),
+  "activity chart must not render permanent point markers",
+);
+assert.ok(
+  activitySource.includes("contributorChartColor"),
+  "activity chart must use theme-aware contributor series colors",
+);
+assert.ok(
+  activitySource.includes("activityChartKeyAction"),
+  "activity chart must support keyboard date navigation",
 );
 assert.ok(
   !chartsSource.includes("aria-label={`${cell.date}"),

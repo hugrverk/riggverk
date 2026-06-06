@@ -1,13 +1,26 @@
-import { useCallback, useEffect, useId, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type MouseEvent,
+} from "react";
 import type { RepoCommitEntry } from "../../types";
 import {
   ACTIVITY_INSIGHTS_DAYS,
+  activityChartDayX,
+  activityChartKeyAction,
+  applyActivityChartKeyAction,
   buildContributorActivitySeries,
   buildContributorStats,
   contributorChartColor,
   defaultVisibleContributorIds,
   filterCommitsForActivityInsights,
   filterContributorActivitySeries,
+  nearestActivityDayIndex,
   reconcileVisibleContributorIds,
   visibleContributorSeriesMax,
   type ActivityInsightsVisualMode,
@@ -17,10 +30,12 @@ import {
 } from "./model";
 import { ActivityHeatmap } from "./RepoDashboardCharts";
 
-interface ChartFocus {
-  seriesId: string;
-  dayIndex: number;
-}
+const CHART_W = 820;
+const CHART_H = 230;
+const CHART_L = 40;
+const CHART_R = 28;
+const CHART_T = 16;
+const CHART_B = 44;
 
 function ActivityInsightsChart({
   series,
@@ -29,43 +44,94 @@ function ActivityInsightsChart({
   series: ContributorActivitySeries[];
   mode: ActivityInsightsVisualMode;
 }) {
-  const [focus, setFocus] = useState<ChartFocus | null>(null);
+  const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
+  const [animateLines, setAnimateLines] = useState(true);
+  const [animateBars, setAnimateBars] = useState(false);
+  const svgRef = useRef<SVGSVGElement>(null);
+  const prevModeRef = useRef(mode);
   const chartTitleId = useId();
   const chartDescId = useId();
+  const liveStatusId = useId();
+  const plotFocusId = useId();
 
   const dayCount = series[0]?.points.length ?? 0;
   const max = useMemo(() => visibleContributorSeriesMax(series), [series]);
 
-  const w = 820;
-  const h = 230;
-  const L = 40;
-  const R = 28;
-  const T = 16;
-  const B = 44;
-
-  const slotWidth = dayCount > 0 ? (w - L - R) / dayCount : 0;
+  const slotWidth = dayCount > 0 ? (CHART_W - CHART_L - CHART_R) / dayCount : 0;
   const xCenter = useCallback(
-    (index: number) => L + index * slotWidth + slotWidth / 2,
+    (index: number) => CHART_L + index * slotWidth + slotWidth / 2,
     [slotWidth],
   );
   const xAt = useCallback(
     (index: number) =>
-      dayCount === 1 ? L + (w - L - R) / 2 : L + (index * (w - L - R)) / (dayCount - 1),
+      activityChartDayX(index, dayCount, CHART_L, CHART_R, CHART_W, "lines"),
     [dayCount],
   );
   const yAt = useCallback(
-    (value: number) => T + ((max - value) * (h - T - B)) / max,
+    (value: number) => CHART_T + ((max - value) * (CHART_H - CHART_T - CHART_B)) / max,
     [max],
   );
 
   const every = Math.max(1, Math.ceil(dayCount / 8));
   const dayKeys = series[0]?.points.map(point => point.date) ?? [];
 
-  const activeEntry = focus
-    ? series.find(entry => entry.id === focus.seriesId) ?? null
-    : null;
-  const activePoint =
-    activeEntry && focus ? activeEntry.points[focus.dayIndex] ?? null : null;
+  useEffect(() => {
+    if (prevModeRef.current === mode) return;
+    setAnimateLines(mode === "lines");
+    setAnimateBars(mode === "bars");
+    prevModeRef.current = mode;
+  }, [mode]);
+
+  useEffect(() => {
+    if (!animateLines) return;
+    const timer = window.setTimeout(() => setAnimateLines(false), 480);
+    return () => window.clearTimeout(timer);
+  }, [animateLines]);
+
+  useEffect(() => {
+    if (!animateBars) return;
+    const timer = window.setTimeout(() => setAnimateBars(false), 460);
+    return () => window.clearTimeout(timer);
+  }, [animateBars]);
+
+  const resolveSvgX = useCallback((clientX: number) => {
+    const svg = svgRef.current;
+    if (!svg) return CHART_L;
+    const rect = svg.getBoundingClientRect();
+    const scaleX = CHART_W / rect.width;
+    return (clientX - rect.left) * scaleX;
+  }, []);
+
+  const selectNearestDay = useCallback(
+    (clientX: number) => {
+      const svgX = resolveSvgX(clientX);
+      setActiveDayIndex(
+        nearestActivityDayIndex(svgX, dayCount, CHART_L, CHART_R, CHART_W, mode),
+      );
+    },
+    [dayCount, mode, resolveSvgX],
+  );
+
+  const handlePlotMouseMove = useCallback(
+    (event: MouseEvent<SVGRectElement>) => {
+      selectNearestDay(event.clientX);
+    },
+    [selectNearestDay],
+  );
+
+  const handlePlotMouseLeave = useCallback(() => {
+    setActiveDayIndex(null);
+  }, []);
+
+  const handlePlotKeyDown = useCallback(
+    (event: KeyboardEvent<SVGRectElement>) => {
+      const action = activityChartKeyAction(event.key);
+      if (!action) return;
+      event.preventDefault();
+      setActiveDayIndex(current => applyActivityChartKeyAction(current, action, dayCount));
+    },
+    [dayCount],
+  );
 
   if (!series.length || !dayCount) {
     return (
@@ -76,8 +142,8 @@ function ActivityInsightsChart({
   }
 
   const contributorCount = series.length;
-  const innerGap = 2;
-  const maxBarW = 10;
+  const innerGap = 3;
+  const maxBarW = 9;
   const barW =
     mode === "bars"
       ? Math.min(
@@ -86,115 +152,219 @@ function ActivityInsightsChart({
         )
       : 0;
 
+  const activeDate = activeDayIndex != null ? dayKeys[activeDayIndex] : null;
+  const activeX =
+    activeDayIndex != null
+      ? activityChartDayX(activeDayIndex, dayCount, CHART_L, CHART_R, CHART_W, mode)
+      : null;
+
+  const tooltipLeft =
+    activeX != null
+      ? Math.min(Math.max(activeX - 72, CHART_L), CHART_W - CHART_R - 144)
+      : CHART_L;
+
+  const liveSummary =
+    activeDayIndex != null && activeDate
+      ? `${activeDate}: ${series
+          .map(
+            entry =>
+              `${entry.displayName} ${entry.points[activeDayIndex]?.commitCount ?? 0} commits`,
+          )
+          .join(", ")}`
+      : "";
+
   return (
     <div className="repo-dashboard-activity-insights-chart">
       <div className="repo-dashboard-activity-chart-main">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="xMidYMid meet"
-        role="img"
-        aria-labelledby={`${chartTitleId} ${chartDescId}`}
-        className="repo-dashboard-activity-insights-svg"
-      >
-        <title id={chartTitleId}>Contributor commits per day — last 90 days</title>
-        <desc id={chartDescId}>
-          {mode === "lines" ? "Line chart" : "Grouped bar chart"} of daily commits per
-          contributor over the last 90 days.
-        </desc>
-        <line className="repo-dashboard-axis" x1={L} y1={h - B} x2={w - R} y2={h - B} />
-        <line className="repo-dashboard-axis" x1={L} y1={T} x2={L} y2={h - B} />
-        {[0, Math.ceil(max / 2), max].map(v => (
-          <g key={v}>
-            <line className="repo-dashboard-gridline" x1={L} y1={yAt(v)} x2={w - R} y2={yAt(v)} />
-            <text className="repo-dashboard-chart-text" x={6} y={yAt(v) + 3}>
-              {v}
-            </text>
-          </g>
-        ))}
+        <svg
+          ref={svgRef}
+          viewBox={`0 0 ${CHART_W} ${CHART_H}`}
+          preserveAspectRatio="xMidYMid meet"
+          role="img"
+          aria-labelledby={`${chartTitleId} ${chartDescId}`}
+          className={`repo-dashboard-activity-insights-svg${activeDayIndex != null ? " repo-dashboard-activity-insights-svg-active" : ""}`}
+          data-chart-mode={mode}
+        >
+          <title id={chartTitleId}>Contributor commits per day — last 90 days</title>
+          <desc id={chartDescId}>
+            {mode === "lines" ? "Line chart" : "Grouped bar chart"} of daily commits per
+            contributor over the last 90 days. Use arrow keys to move between dates when the chart
+            plot is focused.
+          </desc>
 
-        {mode === "lines"
-          ? series.map(entry => {
-              const color = contributorChartColor(entry.colorIndex);
-              const path = entry.points
-                .map((point, index) => {
-                  const x = xAt(index);
+          {[0, Math.ceil(max / 2), max].map(v => (
+            <g key={v} aria-hidden="true">
+              {v > 0 ? (
+                <line
+                  className="repo-dashboard-activity-gridline"
+                  x1={CHART_L}
+                  y1={yAt(v)}
+                  x2={CHART_W - CHART_R}
+                  y2={yAt(v)}
+                />
+              ) : null}
+              <text className="repo-dashboard-activity-chart-text" x={6} y={yAt(v) + 3}>
+                {v}
+              </text>
+            </g>
+          ))}
+
+          <line
+            className="repo-dashboard-activity-axis"
+            x1={CHART_L}
+            y1={CHART_H - CHART_B}
+            x2={CHART_W - CHART_R}
+            y2={CHART_H - CHART_B}
+            aria-hidden="true"
+          />
+
+          {activeX != null ? (
+            <line
+              className="repo-dashboard-activity-guide"
+              x1={activeX}
+              y1={CHART_T}
+              x2={activeX}
+              y2={CHART_H - CHART_B}
+              aria-hidden="true"
+            />
+          ) : null}
+
+          {mode === "lines"
+            ? series.map(entry => {
+                const color = contributorChartColor(entry.colorIndex);
+                const path = entry.points
+                  .map((point, index) => {
+                    const x = xAt(index);
+                    const y = yAt(point.commitCount);
+                    return `${index === 0 ? "M" : "L"} ${x} ${y}`;
+                  })
+                  .join(" ");
+                return (
+                  <g key={entry.id} className="repo-dashboard-activity-series">
+                    <path
+                      className={`repo-dashboard-activity-line${animateLines ? " repo-dashboard-activity-line-animate" : ""}${activeDayIndex != null ? " repo-dashboard-activity-line-dimmed" : ""}`}
+                      d={path}
+                      stroke={color}
+                      fill="none"
+                      pathLength={1}
+                    />
+                    {activeDayIndex != null
+                      ? (() => {
+                          const point = entry.points[activeDayIndex];
+                          if (!point) return null;
+                          return (
+                            <circle
+                              className="repo-dashboard-activity-active-point"
+                              cx={xAt(activeDayIndex)}
+                              cy={yAt(point.commitCount)}
+                              r={point.commitCount > 0 ? 4 : 3}
+                              fill={color}
+                              aria-hidden="true"
+                            />
+                          );
+                        })()
+                      : null}
+                  </g>
+                );
+              })
+            : dayKeys.map((date, dayIndex) => {
+                const totalWidth =
+                  contributorCount * barW + Math.max(0, contributorCount - 1) * innerGap;
+                const groupStart = xCenter(dayIndex) - totalWidth / 2;
+                const isActiveDay = activeDayIndex === dayIndex;
+                return series.map((entry, contributorIndex) => {
+                  const point = entry.points[dayIndex];
+                  if (!point?.commitCount) return null;
+                  const color = contributorChartColor(entry.colorIndex);
+                  const x = groupStart + contributorIndex * (barW + innerGap);
                   const y = yAt(point.commitCount);
-                  return `${index === 0 ? "M" : "L"} ${x} ${y}`;
-                })
-                .join(" ");
-              return (
-                <g key={entry.id}>
-                  <path
-                    className="repo-dashboard-activity-line"
-                    d={path}
-                    stroke={color}
-                    fill="none"
-                  />
-                  {entry.points.map((point, index) => (
-                    <circle
-                      key={`${entry.id}-${point.date}`}
-                      className="repo-dashboard-activity-point"
-                      cx={xAt(index)}
-                      cy={yAt(point.commitCount)}
-                      r={point.commitCount > 0 ? 3.5 : 2}
+                  const barH = CHART_H - CHART_B - y;
+                  const isActiveBar = isActiveDay;
+                  const isDimmed = activeDayIndex != null && !isActiveDay;
+                  return (
+                    <rect
+                      key={`${entry.id}-${date}`}
+                      className={`repo-dashboard-activity-bar${animateBars ? " repo-dashboard-activity-bar-animate" : ""}${isActiveBar ? " repo-dashboard-activity-bar-active" : ""}${isDimmed ? " repo-dashboard-activity-bar-dimmed" : ""}`}
+                      style={{ animationDelay: animateBars ? `${contributorIndex * 18}ms` : undefined }}
+                      x={x}
+                      y={y}
+                      width={barW}
+                      height={barH}
+                      rx={2}
+                      ry={2}
                       fill={color}
                       aria-hidden="true"
-                      onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex: index })}
-                      onMouseLeave={() => setFocus(null)}
                     />
-                  ))}
-                </g>
-              );
-            })
-          : dayKeys.map((date, dayIndex) => {
-              const totalWidth =
-                contributorCount * barW + Math.max(0, contributorCount - 1) * innerGap;
-              const groupStart = xCenter(dayIndex) - totalWidth / 2;
-              return series.map((entry, contributorIndex) => {
-                const point = entry.points[dayIndex];
-                if (!point?.commitCount) return null;
-                const color = contributorChartColor(entry.colorIndex);
-                const x = groupStart + contributorIndex * (barW + innerGap);
-                const y = yAt(point.commitCount);
-                const barH = h - B - y;
+                  );
+                });
+              })}
+
+          {dayKeys.map((date, index) =>
+            index % every === 0 || index === dayKeys.length - 1 ? (
+              <text
+                key={`${date}-label`}
+                className="repo-dashboard-activity-chart-text"
+                x={mode === "bars" ? xCenter(index) : xAt(index)}
+                y={CHART_H - 16}
+                textAnchor="middle"
+                aria-hidden="true"
+              >
+                {date.slice(5)}
+              </text>
+            ) : null,
+          )}
+
+          <rect
+            id={plotFocusId}
+            className="repo-dashboard-activity-plot-hit"
+            x={CHART_L}
+            y={CHART_T}
+            width={CHART_W - CHART_L - CHART_R}
+            height={CHART_H - CHART_T - CHART_B}
+            tabIndex={0}
+            role="application"
+            aria-label="Activity chart date navigator. Arrow keys move between dates. Escape clears selection."
+            aria-controls={liveStatusId}
+            onMouseMove={handlePlotMouseMove}
+            onMouseLeave={handlePlotMouseLeave}
+            onKeyDown={handlePlotKeyDown}
+          />
+        </svg>
+
+        <div
+          id={liveStatusId}
+          className="repo-dashboard-activity-live-status visually-hidden"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          {liveSummary}
+        </div>
+
+        {activeDayIndex != null && activeDate ? (
+          <div
+            className="repo-dashboard-activity-tooltip font-mono"
+            style={{ left: `${(tooltipLeft / CHART_W) * 100}%` }}
+            aria-hidden="true"
+          >
+            <span className="repo-dashboard-activity-tooltip-date">{activeDate}</span>
+            <ul className="repo-dashboard-activity-tooltip-rows">
+              {series.map(entry => {
+                const count = entry.points[activeDayIndex]?.commitCount ?? 0;
                 return (
-                  <rect
-                    key={`${entry.id}-${date}`}
-                    className="repo-dashboard-activity-bar"
-                    x={x}
-                    y={y}
-                    width={barW}
-                    height={barH}
-                    rx={1.5}
-                    fill={color}
-                    aria-hidden="true"
-                    onMouseEnter={() => setFocus({ seriesId: entry.id, dayIndex })}
-                    onMouseLeave={() => setFocus(null)}
-                  />
+                  <li key={entry.id}>
+                    <span
+                      className="repo-dashboard-activity-tooltip-swatch"
+                      style={{ background: contributorChartColor(entry.colorIndex) }}
+                    />
+                    <span className="repo-dashboard-activity-tooltip-name">{entry.displayName}</span>
+                    <span className="repo-dashboard-activity-tooltip-value">{count}</span>
+                  </li>
                 );
-              });
-            })}
-
-        {dayKeys.map((date, index) =>
-          index % every === 0 || index === dayKeys.length - 1 ? (
-            <text
-              key={`${date}-label`}
-              className="repo-dashboard-chart-text"
-              x={mode === "bars" ? xCenter(index) : xAt(index)}
-              y={h - 16}
-              textAnchor="middle"
-            >
-              {date.slice(5)}
-            </text>
-          ) : null,
-        )}
-      </svg>
-
-      {activeEntry && activePoint ? (
-        <p className="repo-dashboard-activity-tooltip font-mono" role="status" aria-live="polite">
-          {activeEntry.displayName} · {activePoint.date}: {activePoint.commitCount} commits
-        </p>
-      ) : null}
+              })}
+            </ul>
+          </div>
+        ) : null}
       </div>
 
       <div className="repo-dashboard-activity-chart-footer">

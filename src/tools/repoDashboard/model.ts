@@ -283,21 +283,112 @@ export type ActivityTimeRange = "30d" | "90d" | "1y" | "all";
 export type ActivityChartMode = "period" | "cumulative";
 export type ActivityInsightsVisualMode = "lines" | "bars";
 
-/** Restrained palette for per-contributor activity series (light and dark). */
-export const CONTRIBUTOR_CHART_PALETTE = [
-  "#58a6ff",
-  "#56d364",
-  "#f0883e",
-  "#bc8cff",
-  "#ff7b72",
-  "#79c0ff",
-  "#d2a8ff",
-  "#ffa657",
+/** Theme-aware CSS custom properties for per-contributor activity series. */
+export const CONTRIBUTOR_CHART_SERIES_TOKENS = [
+  "--repo-chart-series-1",
+  "--repo-chart-series-2",
+  "--repo-chart-series-3",
+  "--repo-chart-series-4",
+  "--repo-chart-series-5",
+  "--repo-chart-series-6",
+  "--repo-chart-series-7",
+  "--repo-chart-series-8",
 ] as const;
 
+export function contributorChartColorToken(colorIndex: number): string {
+  const tokens = CONTRIBUTOR_CHART_SERIES_TOKENS;
+  return tokens[((colorIndex % tokens.length) + tokens.length) % tokens.length];
+}
+
 export function contributorChartColor(colorIndex: number): string {
-  const palette = CONTRIBUTOR_CHART_PALETTE;
-  return palette[((colorIndex % palette.length) + palette.length) % palette.length];
+  return `var(${contributorChartColorToken(colorIndex)})`;
+}
+
+export function clampActiveDayIndex(index: number, dayCount: number): number {
+  if (dayCount <= 0) return 0;
+  return Math.max(0, Math.min(dayCount - 1, Math.trunc(index)));
+}
+
+export type ActivityChartKeyAction = "prev" | "next" | "first" | "last" | "clear";
+
+export function activityChartKeyAction(key: string): ActivityChartKeyAction | null {
+  switch (key) {
+    case "ArrowLeft":
+      return "prev";
+    case "ArrowRight":
+      return "next";
+    case "Home":
+      return "first";
+    case "End":
+      return "last";
+    case "Escape":
+      return "clear";
+    default:
+      return null;
+  }
+}
+
+export function applyActivityChartKeyAction(
+  current: number | null,
+  action: ActivityChartKeyAction,
+  dayCount: number,
+): number | null {
+  if (dayCount <= 0) return null;
+  switch (action) {
+    case "prev":
+      return current === null ? dayCount - 1 : clampActiveDayIndex(current - 1, dayCount);
+    case "next":
+      return current === null ? 0 : clampActiveDayIndex(current + 1, dayCount);
+    case "first":
+      return 0;
+    case "last":
+      return dayCount - 1;
+    case "clear":
+      return null;
+  }
+}
+
+export function activityChartDayX(
+  index: number,
+  dayCount: number,
+  plotLeft: number,
+  plotRight: number,
+  plotWidth: number,
+  mode: ActivityInsightsVisualMode,
+): number {
+  const innerWidth = plotWidth - plotLeft - plotRight;
+  if (mode === "bars") {
+    const slotWidth = dayCount > 0 ? innerWidth / dayCount : 0;
+    return plotLeft + index * slotWidth + slotWidth / 2;
+  }
+  return dayCount === 1 ? plotLeft + innerWidth / 2 : plotLeft + (index * innerWidth) / (dayCount - 1);
+}
+
+export function nearestActivityDayIndex(
+  svgX: number,
+  dayCount: number,
+  plotLeft: number,
+  plotRight: number,
+  plotWidth: number,
+  mode: ActivityInsightsVisualMode,
+): number {
+  if (dayCount <= 0) return 0;
+  const innerWidth = plotWidth - plotLeft - plotRight;
+  if (mode === "bars") {
+    const slotWidth = innerWidth / dayCount;
+    return clampActiveDayIndex(Math.floor((svgX - plotLeft) / slotWidth), dayCount);
+  }
+  let nearest = 0;
+  let minDist = Infinity;
+  for (let i = 0; i < dayCount; i++) {
+    const x = activityChartDayX(i, dayCount, plotLeft, plotRight, plotWidth, mode);
+    const dist = Math.abs(svgX - x);
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = i;
+    }
+  }
+  return nearest;
 }
 
 export interface ContributorDailyPoint {
