@@ -10,7 +10,7 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | Prior remediation HEAD | `07cb1b1cd08e4f5261cf9746cbaa5d649efbaeea` |
 | Follow-up pass start HEAD | `07cb1b1cd08e4f5261cf9746cbaa5d649efbaeea` |
 | Correctness closure start HEAD | `0a1f69cd555f350b79e11d8cabf5fda881c9a452` |
-| Implementation HEAD (verified) | `4f9bbc03e07ad673582323f8675186fd371eb40b` |
+| Implementation HEAD (verified) | `4f9bbc03967f432d7464bfd3f12f427fded64336` |
 | Remote HEAD | Obtain from Git: `git rev-parse origin/main` (do not embed the evidence commit SHA here) |
 | Branch | `main` |
 | Verdict | **READY FOR MANUAL WEBVIEW SMOKE** — automated gates pass; native webview smoke BLOCKED in agent environment |
@@ -39,7 +39,7 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | AW-PL-001 | P2 | completed | `isEditableEventTarget` |
 | AW-TEST-001 | P2 | completed | Vitest + RTL; 30 tests; `npm test` in release-check |
 | AW-PROC-001 | P2 | completed | `run_cmd_bounded` with caps + timeout polling |
-| AW-RD-001 | P1 | completed | `git log -n 501`, cap 500 |
+| AW-RD-001 | P1 | superseded | Product requirement changed after audit: load every locally available commit through bounded 500-record pages, not a 500-record total cap |
 | AW-RD-002 | P1 | completed | Bounded capture in process runner for repo git |
 | AW-RD-003 | P1 | completed | UTF-8 byte truncation; doc listing warning |
 | AW-RD-004 | P2 | completed | NUL-delimited name-status parsing |
@@ -78,6 +78,12 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | `git diff --check` | pass |
 | Native Tauri webview smoke (`docs/APP_RELEASE_SMOKE.md`) | **BLOCKED** — no macOS Tauri webview automation in agent environment |
 
+## Post-audit product change: complete commit history
+
+The previous 500-record total cap was intentionally removed after operator review. Repo Dashboard now reloads the full commit history available in the local checkout using bounded 500-record `git log` pages against a frozen `HEAD`. Each subprocess keeps timeout and output limits. A shallow clone is reported as incomplete because commits absent from the local object database cannot be displayed.
+
+This post-audit change was written directly through the GitHub connector. It requires local Rust formatting, check, Clippy, tests, release-check, and manual Repo Dashboard smoke before the audit can be marked fully closed.
+
 ## Native webview smoke (manual checklist)
 
 Operator must run before sharing builds:
@@ -89,7 +95,7 @@ Operator must run before sharing builds:
 - [ ] Prompt Loops repository list refresh
 - [ ] Fenced code blocks and copy controls
 - [ ] Small, medium, and large font settings
-- [ ] Repo Dashboard refresh
+- [ ] Repo Dashboard refresh loads the complete locally available commit history, including repositories with more than 500 commits
 - [ ] No console errors; no credential-bearing output
 
 ## Deferred / blocked (no further autonomous work)
