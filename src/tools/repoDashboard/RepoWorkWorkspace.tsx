@@ -4,7 +4,7 @@ import type {
 } from "../../types";
 import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
 import type { DocWorkLaneId, DocWorkLaneSummary } from "./model";
-import { activeWorkCount, partitionWorkItems, type WorkPartition } from "./model";
+import { partitionWorkItems, type WorkPartition } from "./model";
 
 const WORK_ITEMS_DISPLAY_CAP = 120;
 
@@ -12,12 +12,10 @@ function WorkItemsList({
   items,
   emptyMessage = "No matching items found.",
   onUsePromptContext,
-  startedVisual = false,
 }: {
   items: RepoDashboardWorkItem[];
   emptyMessage?: string;
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
-  startedVisual?: boolean;
 }) {
   if (!items.length) {
     return <p className="text-muted small" role="status">{emptyMessage}</p>;
@@ -35,7 +33,7 @@ function WorkItemsList({
         {shown.map((item, index) => (
           <div
             key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
-            className={`repo-dashboard-work-item${startedVisual ? " repo-dashboard-work-item-started" : ""}`}
+            className="repo-dashboard-work-item"
           >
             <div className="repo-dashboard-work-item-head">
               <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
@@ -68,6 +66,46 @@ function WorkItemsList({
   );
 }
 
+function WorkColumn({
+  id,
+  title,
+  count,
+  items,
+  emptyMessage,
+  onUsePromptContext,
+}: {
+  id: string;
+  title: string;
+  count: number;
+  items: RepoDashboardWorkItem[];
+  emptyMessage: string;
+  onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
+}) {
+  return (
+    <section
+      className="repo-dashboard-work-column"
+      aria-label={`${title} work`}
+      aria-labelledby={id}
+    >
+      <h3 id={id} className="font-mono repo-dashboard-work-column-title">
+        {title} ({count})
+      </h3>
+      <div
+        className="repo-dashboard-work-column-scroll"
+        role="region"
+        aria-labelledby={id}
+        tabIndex={0}
+      >
+        <WorkItemsList
+          items={items}
+          onUsePromptContext={onUsePromptContext}
+          emptyMessage={emptyMessage}
+        />
+      </div>
+    </section>
+  );
+}
+
 export interface RepoWorkWorkspaceProps {
   items: RepoDashboardWorkItem[];
   totalItemCount: number;
@@ -96,8 +134,8 @@ export function RepoWorkWorkspace({
   emptyMessage,
 }: RepoWorkWorkspaceProps) {
   const partition: WorkPartition = partitionWorkItems(items);
-  const activeTotal = activeWorkCount(partition);
-  const displayedCount = activeTotal + partition.done.length;
+  const displayedCount =
+    partition.activeStarted.length + partition.activeOpen.length + partition.done.length;
   const filtersActive = laneFilter !== "all" || typeFilter !== "all";
 
   return (
@@ -107,7 +145,7 @@ export function RepoWorkWorkspace({
           <div className="repo-dashboard-work-head-text">
             <h2 className="font-mono repo-dashboard-page-title">Work</h2>
             <p className="text-muted small repo-dashboard-page-desc">
-              Active and completed items from docs and gh issues.
+              Started, open, and completed items from docs and gh issues.
             </p>
           </div>
           <div className="repo-dashboard-work-filters font-mono">
@@ -159,98 +197,44 @@ export function RepoWorkWorkspace({
         <div className="repo-dashboard-work-summary-row">
           <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
             {displayedCount} of {totalItemCount} items · started {partition.activeStarted.length} ·
-            open {partition.activeOpen.length} · active {activeTotal} · done {partition.done.length}
+            open {partition.activeOpen.length} · done {partition.done.length}
           </p>
         </div>
       </header>
 
       <div className="repo-dashboard-work-primary-columns">
-        <section
-          className="repo-dashboard-work-column repo-dashboard-work-column-active"
-          aria-label="Active work"
-          aria-labelledby="repo-dashboard-work-active-title"
-        >
-          <h3 id="repo-dashboard-work-active-title" className="font-mono repo-dashboard-work-column-title">
-            Active ({activeTotal})
-          </h3>
-          <div className="repo-dashboard-work-active-columns">
-            <div className="repo-dashboard-work-subcolumn">
-              <h4
-                id="repo-dashboard-work-started-title"
-                className="font-mono repo-dashboard-work-group-title"
-              >
-                Started ({partition.activeStarted.length})
-              </h4>
-              <div
-                className="repo-dashboard-work-subcolumn-scroll"
-                role="region"
-                aria-labelledby="repo-dashboard-work-started-title"
-                tabIndex={0}
-              >
-                <WorkItemsList
-                  items={partition.activeStarted}
-                  onUsePromptContext={onUsePromptContext}
-                  startedVisual
-                  emptyMessage={
-                    filtersActive
-                      ? "No started items match the current filters."
-                      : "No started work items."
-                  }
-                />
-              </div>
-            </div>
-            <div className="repo-dashboard-work-subcolumn">
-              <h4
-                id="repo-dashboard-work-open-title"
-                className="font-mono repo-dashboard-work-group-title"
-              >
-                Open ({partition.activeOpen.length})
-              </h4>
-              <div
-                className="repo-dashboard-work-subcolumn-scroll"
-                role="region"
-                aria-labelledby="repo-dashboard-work-open-title"
-                tabIndex={0}
-              >
-                <WorkItemsList
-                  items={partition.activeOpen}
-                  onUsePromptContext={onUsePromptContext}
-                  emptyMessage={
-                    filtersActive
-                      ? "No open items match the current filters."
-                      : "No open work items."
-                  }
-                />
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section
-          className="repo-dashboard-work-column repo-dashboard-work-column-done"
-          aria-label="Done work"
-          aria-labelledby="repo-dashboard-work-done-title"
-        >
-          <h3 id="repo-dashboard-work-done-title" className="font-mono repo-dashboard-work-column-title">
-            Done ({partition.done.length})
-          </h3>
-          <div
-            className="repo-dashboard-work-column-scroll"
-            role="region"
-            aria-labelledby="repo-dashboard-work-done-title"
-            tabIndex={0}
-          >
-            <WorkItemsList
-              items={partition.done}
-              onUsePromptContext={onUsePromptContext}
-              emptyMessage={
-                filtersActive
-                  ? "No done items match the current filters."
-                  : "No completed work items."
-              }
-            />
-          </div>
-        </section>
+        <WorkColumn
+          id="repo-dashboard-work-started-title"
+          title="Started"
+          count={partition.activeStarted.length}
+          items={partition.activeStarted}
+          onUsePromptContext={onUsePromptContext}
+          emptyMessage={
+            filtersActive
+              ? "No started items match the current filters."
+              : "No started work items."
+          }
+        />
+        <WorkColumn
+          id="repo-dashboard-work-open-title"
+          title="Open"
+          count={partition.activeOpen.length}
+          items={partition.activeOpen}
+          onUsePromptContext={onUsePromptContext}
+          emptyMessage={
+            filtersActive ? "No open items match the current filters." : "No open work items."
+          }
+        />
+        <WorkColumn
+          id="repo-dashboard-work-done-title"
+          title="Done"
+          count={partition.done.length}
+          items={partition.done}
+          onUsePromptContext={onUsePromptContext}
+          emptyMessage={
+            filtersActive ? "No done items match the current filters." : "No completed work items."
+          }
+        />
       </div>
 
       {!displayedCount && emptyMessage ? (

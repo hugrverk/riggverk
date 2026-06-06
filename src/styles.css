@@ -5806,12 +5806,29 @@ code {
   color: var(--text-muted);
 }
 
+.repo-dashboard-latest-state-summary {
+  margin: 0 0 10px;
+  line-height: 1.45;
+  word-break: break-word;
+}
+
+.repo-dashboard-latest-state-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
+  gap: 10px 14px;
+}
+
 .repo-dashboard-latest-facts-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 12px;
   margin: 0;
   font-size: 11px;
+}
+
+.repo-dashboard-latest-fact-value {
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .repo-dashboard-latest-facts-grid dt {
@@ -5866,6 +5883,14 @@ code {
   line-height: 1.45;
   white-space: pre-wrap;
   word-break: break-word;
+}
+
+.repo-dashboard-latest-pr-excerpt-expanded {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 5;
+  overflow: hidden;
+  max-height: 7.25em;
 }
 
 .repo-dashboard-latest-pr-toggle {
@@ -7083,6 +7108,21 @@ code {
   .repo-dashboard-overview-lower {
     grid-template-columns: 1fr;
   }
+
+  .repo-dashboard-latest-state-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1280px) and (min-width: 1101px) {
+  .repo-dashboard-work-primary-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  }
+
+  .repo-dashboard-work-primary-columns > .repo-dashboard-work-column:last-child {
+    grid-column: 1 / -1;
+  }
 }
 
 @media (max-width: 780px) {
@@ -7112,14 +7152,13 @@ code {
 
   .repo-dashboard-grid.cols,
   .repo-dashboard-page-body.has-aside,
-  .repo-dashboard-work-columns,
-  .repo-dashboard-work-active-columns {
+  .repo-dashboard-work-columns {
     grid-template-columns: 1fr;
   }
 
   .repo-dashboard-work-primary-columns {
     grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1.15fr) minmax(0, 0.85fr);
+    grid-template-rows: repeat(3, minmax(0, 1fr));
   }
 
   .repo-dashboard-kpis {
@@ -7267,8 +7306,7 @@ code {
 }
 
 .repo-dashboard-docs-reader-scroll:focus-visible,
-.repo-dashboard-work-column-scroll:focus-visible,
-.repo-dashboard-work-subcolumn-scroll:focus-visible {
+.repo-dashboard-work-column-scroll:focus-visible {
   outline: 2px solid var(--focus-ring, var(--active-border));
   outline-offset: -2px;
 }
@@ -7452,7 +7490,7 @@ code {
 .repo-dashboard-work-primary-columns,
 .repo-dashboard-work-columns {
   display: grid;
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   grid-template-rows: minmax(0, 1fr);
   gap: 14px;
   flex: 1 1 0;
@@ -7484,12 +7522,6 @@ code {
 .repo-dashboard-work-filter-select {
   min-width: 140px;
   max-width: 220px;
-}
-
-.repo-dashboard-work-column-done {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
 }
 
 .repo-dashboard-work-workspace {
@@ -7551,35 +7583,6 @@ code {
   margin: 0;
 }
 
-.repo-dashboard-work-active-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 10px;
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.repo-dashboard-work-subcolumn {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  min-height: 0;
-  min-width: 0;
-  overflow: hidden;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  padding: 8px 10px;
-}
-
-.repo-dashboard-work-column-active {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.repo-dashboard-work-subcolumn-scroll,
 .repo-dashboard-work-column-scroll {
   flex: 1 1 0;
   min-height: 0;
@@ -7589,23 +7592,11 @@ code {
   padding: 0 4px 2px;
 }
 
-.repo-dashboard-work-subcolumn-scroll .repo-dashboard-list,
 .repo-dashboard-work-column-scroll .repo-dashboard-list {
   flex: 1 1 auto;
   min-height: 0;
   max-height: none;
   overflow: visible;
-}
-
-.repo-dashboard-work-group-title {
-  margin: 0 0 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.repo-dashboard-work-item-started {
-  border-left: 2px solid var(--active-border, #58a6ff);
-  padding-left: 8px;
 }
 
 .repo-dashboard-filter-reset {
