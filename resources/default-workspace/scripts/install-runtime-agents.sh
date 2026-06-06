@@ -220,7 +220,11 @@ handle_harness() {
       fi
       rm -f "$staged"
     done < <(list_agent_files)
-    $has_diffs && return 1 || return 0
+    if ! $has_diffs && $quiet; then
+      printf '%s synced\n' "$label"
+    fi
+    # Preview differences are expected output, not an execution failure.
+    return 0
   fi
 
   if $apply; then
