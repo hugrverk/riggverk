@@ -3,11 +3,11 @@ import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "./components/TerminalOutput";
 import { AppHeaderNav } from "./components/AppHeaderNav";
 import { confirmLeaveDirtyEditor } from "./lib/editorGuards";
-import { buildBrainSetupBlock } from "./lib/brainSetup";
 import { useBackups } from "./lib/useBackups";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
 import { isLibrarySourceTypeDirty } from "./lib/libraryDirtyGuards";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
@@ -18,10 +18,8 @@ import { ToolsView } from "./views/ToolsView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 import type { LibrarySourceType } from "./views/LibraryView";
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, BrainSetupSeedResult, ConfigEditorSourceMeta, CursorProfileHealth, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, OpenCodeRuntimeHealth, RepairWorkspaceResult, SkillSummary, StatusData, WorkspaceDiagnostics } from "./types";
+import type { AgentMetadataListResponse, AgentMetadataResponse, AgentSourceContent, ConfigEditorSourceMeta, DocsHealth, DocSummary, DocumentContent, InitializeWorkspaceResult, RepairWorkspaceResult, SkillSummary } from "./types";
 
-const INVALID_WORKSPACE_TEXT = "invalid workspace path";
-const NO_WORKSPACE_TEXT = "no workspace selected";
 const EDITABLE_CONFIG_TARGET_IDS = new Set(["opencode_config"]);
 
 type View =
@@ -41,7 +39,6 @@ function isWorkspaceLoadView(view: View): boolean {
 /* ---- main app ---- */
 
 function App() {
-  const [status, setStatus] = useState<StatusData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("start");
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
@@ -128,63 +125,25 @@ function App() {
   // workspace resource generation
   const { workspaceLoadGenerationRef, isWorkspaceLoadCurrent, beginWorkspaceLoadGeneration } = useWorkspaceGeneration();
 
-  // workspace operations state (moved to hook)
-  const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
-
-  // opencode runtime health
-  const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
-  const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
-  const [brainSetupSeed, setBrainSetupSeed] = useState<BrainSetupSeedResult | null>(null);
-
-  const loadCursorProfileHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const health = await invoke<CursorProfileHealth>("get_cursor_profile_health");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setCursorProfileHealth(health);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setCursorProfileHealth(null);
-      if (!isInvalidWorkspaceError(e)) setError(`Cursor profile: ${e}`);
-    }
-  }, [isWorkspaceLoadCurrent]);
-
-  const loadBrainSetupSeed = useCallback(async () => {
-    try {
-      const result = await invoke<BrainSetupSeedResult>("read_brain_setup_seed");
-      setBrainSetupSeed(result);
-    } catch {
-      setBrainSetupSeed(null);
-    }
-  }, []);
-
-  const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const health = await invoke<OpenCodeRuntimeHealth>("get_opencode_runtime_health");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setOpencodeRuntimeHealth(health);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      // Don't show error for runtime health — it's informational
-      setOpencodeRuntimeHealth(null);
-    }
-  }, [isWorkspaceLoadCurrent]);
-
-  const loadWorkspaceDiagnostics = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const diagnostics = await invoke<WorkspaceDiagnostics>("get_workspace_diagnostics");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setWorkspaceDiagnostics(diagnostics);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Workspace diagnostics: ${e}`);
-    }
-  }, [isWorkspaceLoadCurrent]);
-
-  // default workspace preview state
-  function isInvalidWorkspaceError(e: unknown): boolean {
-    const message = String(e).toLowerCase();
-    return message.includes(INVALID_WORKSPACE_TEXT) || message.includes(NO_WORKSPACE_TEXT);
-  }
+  const {
+    status,
+    workspaceDiagnostics,
+    opencodeRuntimeHealth,
+    cursorProfileHealth,
+    brainSetupText,
+    brainSetupSource,
+    fetchStatus,
+    loadWorkspaceDiagnostics,
+    loadOpenCodeRuntimeHealth,
+    loadCursorProfileHealth,
+    loadBrainSetupSeed,
+    resetWorkspaceHealthState,
+    isInvalidWorkspaceError,
+  } = useWorkspaceHealthController({
+    setError,
+    workspaceLoadGenerationRef,
+    isWorkspaceLoadCurrent,
+  });
 
   // install skills state
   const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
@@ -225,18 +184,6 @@ function App() {
   }, [activeAgentContent]);
 
   const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
-
-  const fetchStatus = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    try {
-      const data = await invoke<StatusData>("get_status");
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setStatus(data);
-    } catch (e) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setStatus(null);
-      if (!isInvalidWorkspaceError(e)) setError(`Status error: ${e}`);
-    }
-  }, [isWorkspaceLoadCurrent]);
 
   const isLibrarySourceDirty = useCallback((sourceType: LibrarySourceType): boolean => {
     return isLibrarySourceTypeDirty(sourceType, docDirty, agentTemplateDirty, agentDirty, configDirty);
@@ -596,10 +543,7 @@ function App() {
   const resetWorkspaceBoundState = useCallback(() => {
     workspaceActionRequestIdRef.current += 1;
     resetTerminalOutput();
-    setStatus(null);
-    setWorkspaceDiagnostics(null);
-    setOpencodeRuntimeHealth(null);
-    setCursorProfileHealth(null);
+    resetWorkspaceHealthState();
 
     setSkills([]);
     setSkillsLoaded(false);
@@ -620,7 +564,7 @@ function App() {
     setActiveAgentContent(null);
     setAgentTemplate(null);
     setConfigTemplateContent(null);
-  }, [workspaceActionRequestIdRef, resetTerminalOutput]);
+  }, [workspaceActionRequestIdRef, resetTerminalOutput, resetWorkspaceHealthState]);
 
   const {
     appSettings,
@@ -1095,17 +1039,6 @@ function App() {
     onSetSkillSearch: setSkillSearch,
     onOpenInstallScript: openInstallScript,
   };
-
-  const brainSetupText = useMemo(() => {
-    if (brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()) {
-      return brainSetupSeed.content;
-    }
-    return buildBrainSetupBlock();
-  }, [brainSetupSeed]);
-
-  const brainSetupSource = brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()
-    ? brainSetupSeed.source
-    : "generated fallback";
 
   return (
       <div className="app-shell">
