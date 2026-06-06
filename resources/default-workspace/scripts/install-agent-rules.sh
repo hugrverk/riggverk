@@ -171,8 +171,14 @@ fi
 
 exit_code=0
 
-$codex    && handle_target codex    || exit_code=$?
-$opencode && handle_target opencode || exit_code=$?
-$claude   && handle_target claude   || exit_code=$?
+if $codex; then
+  handle_target codex || exit_code=$?
+fi
+if $opencode; then
+  handle_target opencode || exit_code=$?
+fi
+if $claude; then
+  handle_target claude || exit_code=$?
+fi
 
 exit "$exit_code"
