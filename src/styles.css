@@ -5384,7 +5384,7 @@ code {
 
 .repo-dashboard-field-path {
   flex: 1;
-  min-width: 100px;
+  min-width: 0;
 }
 
 .repo-dashboard-field-branch {
@@ -5686,26 +5686,6 @@ code {
 .repo-dashboard-commit-meta {
   font-size: 11px;
   grid-column: 2;
-}
-
-.repo-dashboard-heat-aside {
-  min-width: 0;
-  min-height: 0;
-  flex: 1 1 0;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
-}
-
-.repo-dashboard-heat-aside .repo-dashboard-card {
-  flex: 1;
-  min-height: min(320px, 42vh);
-}
-
-.repo-dashboard-heat-aside .repo-dashboard-heatbox {
-  border: none;
-  background: transparent;
-  padding: 0;
 }
 
 .repo-dashboard-overview {
@@ -6057,23 +6037,10 @@ code {
   opacity: 1;
 }
 
-.repo-dashboard-activity-bar:focus-visible {
-  opacity: 1;
-  outline: none;
-  stroke: var(--focus-ring, var(--active-border));
-  stroke-width: 2;
-}
-
 .repo-dashboard-activity-point {
   stroke: var(--bg-inset);
   stroke-width: 1.5;
   cursor: default;
-}
-
-.repo-dashboard-activity-point:focus-visible {
-  outline: none;
-  stroke: var(--focus-ring, var(--active-border));
-  stroke-width: 2.5;
 }
 
 .repo-dashboard-activity-legend {
@@ -6347,11 +6314,6 @@ code {
 
 .repo-dashboard-latest {
   min-height: 0;
-}
-
-.repo-dashboard-latest-detail {
-  /* Intentionally no max-height: the scroll-panel flex contract now sizes this
-     card, while the inner .repo-dashboard-latest-content still scrolls. */
 }
 
 .repo-dashboard-latest-content {
@@ -7002,6 +6964,7 @@ code {
   gap: 12px;
   min-height: 0;
   flex: 1 1 0;
+  overflow: hidden;
 }
 
 .repo-dashboard-docs-body {
