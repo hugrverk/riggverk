@@ -197,18 +197,23 @@ function ActivityInsightsChart({
       ) : null}
       </div>
 
-      <ul className="repo-dashboard-activity-legend font-mono" aria-label="Chart series">
-        {series.map(entry => (
-          <li key={entry.id}>
-            <span
-              className="repo-dashboard-activity-legend-swatch"
-              style={{ background: contributorChartColor(entry.colorIndex) }}
-              aria-hidden="true"
-            />
-            <span>{entry.displayName}</span>
-          </li>
-        ))}
-      </ul>
+      <div className="repo-dashboard-activity-chart-footer">
+        <ul className="repo-dashboard-activity-legend font-mono" aria-label="Chart series">
+          {series.map(entry => (
+            <li key={entry.id}>
+              <span
+                className="repo-dashboard-activity-legend-swatch"
+                style={{ background: contributorChartColor(entry.colorIndex) }}
+                aria-hidden="true"
+              />
+              <span>{entry.displayName}</span>
+            </li>
+          ))}
+        </ul>
+        <span className="repo-dashboard-activity-chart-meta font-mono text-muted" aria-hidden="true">
+          90-day local git activity
+        </span>
+      </div>
     </div>
   );
 }
@@ -313,9 +318,6 @@ export function RepoActivityInsights({
       <div className="repo-dashboard-activity-insights-head">
         <div>
           <h2 className="font-mono">Activity &amp; contributors</h2>
-          <p className="text-muted small repo-dashboard-activity-insights-meta">
-            90-day local git activity
-          </p>
         </div>
         <div
           className="repo-dashboard-activity-insights-controls"

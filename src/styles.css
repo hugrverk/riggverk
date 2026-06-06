@@ -6039,10 +6039,20 @@ code {
   gap: 12px;
 }
 
-.repo-dashboard-activity-insights-meta {
-  margin: 4px 0 0;
-  line-height: 1.45;
-  font-size: 11px;
+.repo-dashboard-activity-chart-footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  flex-shrink: 0;
+}
+
+.repo-dashboard-activity-chart-meta {
+  margin-left: auto;
+  font-size: 10px;
+  line-height: 1.35;
+  white-space: nowrap;
 }
 
 .repo-dashboard-activity-insights-controls {
@@ -6124,6 +6134,8 @@ code {
   list-style: none;
   font-size: 10px;
   color: var(--text-muted);
+  flex: 1 1 auto;
+  min-width: 0;
 }
 
 .repo-dashboard-activity-legend li {
