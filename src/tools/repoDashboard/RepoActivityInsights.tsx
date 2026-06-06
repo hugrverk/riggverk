@@ -88,6 +88,7 @@ function ActivityInsightsChart({
 
   return (
     <div className="repo-dashboard-activity-insights-chart">
+      <div className="repo-dashboard-activity-chart-main">
       <svg
         viewBox={`0 0 ${w} ${h}`}
         preserveAspectRatio="xMidYMid meet"
@@ -189,6 +190,13 @@ function ActivityInsightsChart({
         )}
       </svg>
 
+      {activeEntry && activePoint ? (
+        <p className="repo-dashboard-activity-tooltip font-mono" role="status" aria-live="polite">
+          {activeEntry.displayName} · {activePoint.date}: {activePoint.commitCount} commits
+        </p>
+      ) : null}
+      </div>
+
       <ul className="repo-dashboard-activity-legend font-mono" aria-label="Chart series">
         {series.map(entry => (
           <li key={entry.id}>
@@ -201,12 +209,6 @@ function ActivityInsightsChart({
           </li>
         ))}
       </ul>
-
-      {activeEntry && activePoint ? (
-        <p className="repo-dashboard-activity-tooltip font-mono" role="status" aria-live="polite">
-          {activeEntry.displayName} · {activePoint.date}: {activePoint.commitCount} commits
-        </p>
-      ) : null}
     </div>
   );
 }

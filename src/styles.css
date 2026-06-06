@@ -5912,6 +5912,7 @@ code {
 .repo-dashboard-footnote {
   margin: 8px 0 0;
   line-height: 1.45;
+  flex-shrink: 0;
 }
 
 .repo-dashboard-overview-lower {
@@ -5955,13 +5956,16 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 2fr) minmax(200px, 1fr);
   gap: 14px;
-  align-items: start;
+  align-items: stretch;
   min-width: 0;
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .repo-dashboard-activity-insights-body > * {
   min-width: 0;
   max-width: 100%;
+  min-height: 0;
 }
 
 .repo-dashboard-activity-sidebar {
@@ -5969,7 +5973,8 @@ code {
   flex-direction: column;
   gap: 14px;
   min-width: 0;
-  align-self: start;
+  min-height: 0;
+  height: 100%;
 }
 
 .repo-dashboard-heatmap-panel {
@@ -6065,19 +6070,28 @@ code {
   padding: 10px 10px 8px;
   min-width: 0;
   max-width: 100%;
+  min-height: 0;
+  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 8px;
+}
+
+.repo-dashboard-activity-chart-main {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .repo-dashboard-activity-insights-svg {
   display: block;
   width: 100%;
   max-width: 100%;
-  height: auto;
-  aspect-ratio: 820 / 230;
-  max-height: 240px;
-  flex: 0 0 auto;
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
 }
 
 .repo-dashboard-activity-line {
@@ -6265,8 +6279,16 @@ code {
 }
 
 .repo-dashboard-activity-tooltip {
-  margin: 8px 0 0;
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  margin: 0;
+  padding: 4px 6px;
   font-size: 11px;
+  background: color-mix(in srgb, var(--bg-inset) 88%, var(--bg-panel));
+  border-top: 1px solid var(--border);
+  pointer-events: none;
 }
 
 .repo-dashboard-contributor-panel-detail {
