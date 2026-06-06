@@ -69,9 +69,12 @@ assert.doesNotMatch(rustSource, /sh\s+-c/);
 
 const styles = read("src/styles.css");
 assert.match(styles, /\.tool-field,/);
+assert.match(styles, /--bg-panel:\s*color-mix\(in srgb, var\(--bg\)/);
+assert.match(styles, /--bg-inset:\s*color-mix\(in srgb, var\(--bg\)/);
 assert.match(styles, /var\(--bg-inset\)/);
 assert.match(styles, /var\(--radius\)/);
 assert.match(styles, /var\(--focus-ring\)/);
+assert.match(styles, /\.repo-dashboard-card\.repo-dashboard-activity-insights/);
 assert.doesNotMatch(
   styles.slice(styles.indexOf("/* ── Repo Dashboard tool ── */")),
   /\.repo-dashboard-card\s*\{[^}]*background:\s*#[0-9a-fA-F]{3,8}/,

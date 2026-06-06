@@ -1,7 +1,7 @@
 :root {
   --bg: #212121;
-  --bg-panel: #272727;
-  --bg-inset: #1a1a1a;
+  --bg-panel: color-mix(in srgb, var(--bg) 97%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 79%, black);
   --border: rgba(255, 255, 255, 0.08);
   --border-strong: rgba(255, 255, 255, 0.14);
   --text: #e0e0e0;
@@ -28,8 +28,8 @@
   --traffic-light-reserve: 80px;
   --nav-leading-gap: 10px;
   --nav-icon-size: 32px;
-  --repo-chart-series-1: #e4ed42;
-  --repo-chart-series-2: #f1f1f1;
+  --repo-chart-series-1: #f1f1f1;
+  --repo-chart-series-2: #e4ed42;
   --repo-chart-series-3: #cdd63b;
   --repo-chart-series-4: #dcdcdc;
   --repo-chart-series-5: #b6bf34;
@@ -43,15 +43,15 @@
 
 [data-theme="light"] {
   --bg: #f5f5f5;
-  --bg-panel: #ffffff;
-  --bg-inset: #f0f0f0;
+  --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
   --border: rgba(0, 0, 0, 0.08);
   --border-strong: rgba(0, 0, 0, 0.14);
   --text: #1a1a1a;
   --text-muted: #666666;
   --text-heading: #111111;
-  --repo-chart-series-1: #e4ed42;
-  --repo-chart-series-2: #f1f1f1;
+  --repo-chart-series-1: #f1f1f1;
+  --repo-chart-series-2: #e4ed42;
   --repo-chart-series-3: #cdd63b;
   --repo-chart-series-4: #dcdcdc;
   --repo-chart-series-5: #b6bf34;
@@ -66,15 +66,15 @@
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
     --bg: #f5f5f5;
-    --bg-panel: #ffffff;
-    --bg-inset: #f0f0f0;
+    --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
+    --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
     --border: rgba(0, 0, 0, 0.08);
     --border-strong: rgba(0, 0, 0, 0.14);
     --text: #1a1a1a;
     --text-muted: #666666;
     --text-heading: #111111;
-    --repo-chart-series-1: #e4ed42;
-    --repo-chart-series-2: #f1f1f1;
+    --repo-chart-series-1: #f1f1f1;
+    --repo-chart-series-2: #e4ed42;
     --repo-chart-series-3: #cdd63b;
     --repo-chart-series-4: #dcdcdc;
     --repo-chart-series-5: #b6bf34;
@@ -6206,6 +6206,7 @@ code {
 .repo-dashboard-activity-insights-chart {
   border: 1px solid var(--border);
   background: var(--bg-inset);
+  border-radius: var(--radius);
   padding: 8px 10px 8px;
   min-width: 0;
   max-width: 100%;
@@ -6706,8 +6707,15 @@ code {
 .repo-dashboard-card {
   border: 1px solid var(--border);
   background: var(--bg-panel);
+  border-radius: var(--radius);
   padding: 14px;
   min-width: 0;
+}
+
+.repo-dashboard-card.repo-dashboard-activity-insights {
+  background: transparent;
+  border-color: transparent;
+  padding: 0;
 }
 
 .repo-dashboard-card > h2.font-mono,
@@ -6816,7 +6824,7 @@ code {
   cursor: pointer;
   text-align: left;
   border: 1px solid var(--border);
-  background: transparent;
+  background: var(--bg-inset);
   padding: 8px 10px;
   border-radius: var(--radius);
   min-width: 0;
@@ -6825,7 +6833,7 @@ code {
 
 .repo-dashboard-kpi:hover {
   border-color: var(--border-strong);
-  background: var(--bg-inset);
+  background: var(--bg-panel);
 }
 
 .repo-dashboard-kpi:focus-visible {
