@@ -91,7 +91,7 @@ Settings are stored as JSON at `~/Library/Application Support/ai.agentworkspace.
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | `appearance` | `"dark"` `"light"` `"system"` | `"dark"` | Theme mode. `system` follows the OS colour scheme via `prefers-color-scheme`. |
-| `app_font_size` | `"small"` `"medium"` `"large"` | `"medium"` | Global app text size (Settings → Text size). Scales UI typography via root CSS variables. |
+| `app_font_size` | `"small"` `"medium"` `"large"` `"extra-large"` | `"medium"` | Global app text size (Settings → Text size). Scales UI typography via root CSS variables. |
 | `workspace_path` | `string` or `null` | `null` | Optional persisted path after a successful install (usually the canonical install path). When `null`, resolution uses `AGENT_WORKSPACE_PATH` or `~/.config/agent-workspace`. Legacy `~/Agent Workspace` values are ignored. Whitespace-only values are saved as `null`. |
 | `enabled_target_ids` | `string[]` | `["codex_rules","opencode_rules","opencode_config"]` | Which agent and config targets are enabled for status checks and sync. Edited on harness pages (Targets panel); changes **autosave** (debounced). `codex_config` is available on the Codex harness but is not enabled by default. Profiles are quick-select presets on each harness page — they do not run sync or write target files. |
 

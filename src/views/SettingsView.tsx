@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from "react";
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import {
+  APP_FONT_SIZE_LABELS,
+  APP_FONT_SIZE_VALUES,
   contrastRatio,
   hasPoorContrast,
   isValidThemeHex,
@@ -276,7 +278,7 @@ export function SettingsView({
                 description="Applies across the app and saves automatically."
               >
                 <div className="settings-options" role="group" aria-label="Global app text size">
-                  {(["small", "medium", "large"] as const).map(size => (
+                  {APP_FONT_SIZE_VALUES.map(size => (
                     <button
                       key={size}
                       type="button"
@@ -284,7 +286,7 @@ export function SettingsView({
                       aria-pressed={appSettings.app_font_size === size}
                       onClick={() => onSetAppFontSize(size)}
                     >
-                      {size}
+                      {APP_FONT_SIZE_LABELS[size]}
                     </button>
                   ))}
                 </div>

@@ -50,4 +50,20 @@ describe("commitAppSettingsMutation", () => {
     expect(saved.app_font_size).toBe("large");
     expect(invoke).toHaveBeenCalledTimes(4);
   });
+
+  it("persists extra-large through CAS retry", async () => {
+    invoke
+      .mockResolvedValueOnce({ settings: { ...baseSettings, revision: 2 }, load_warning: null })
+      .mockRejectedValueOnce(new Error(SETTINGS_CONFLICT_ERROR))
+      .mockResolvedValueOnce({ settings: { ...baseSettings, revision: 3 }, load_warning: null })
+      .mockResolvedValueOnce({ ...baseSettings, revision: 4, app_font_size: "extra-large" });
+
+    const saved = await commitAppSettingsMutation(current => ({
+      ...current,
+      app_font_size: "extra-large",
+    }));
+
+    expect(saved.app_font_size).toBe("extra-large");
+    expect(invoke).toHaveBeenCalledTimes(4);
+  });
 });

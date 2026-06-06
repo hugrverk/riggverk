@@ -259,4 +259,30 @@ describe("useAppSettingsController mutateAppSettings", () => {
     expect(result.current.appSettings?.app_font_size).toBe("large");
     expect(result.current.appSettings?.active_repo_dashboard_id).toBe("server");
   });
+
+  it("persists extra-large through setAppFontSize", async () => {
+    mockInitialLoad();
+    invoke.mockImplementation((cmd: string, args?: { settings?: AppSettings }) => {
+      if (cmd === "update_settings") {
+        return Promise.resolve({ ...(args?.settings ?? baseSettings), revision: 2 });
+      }
+      if (cmd === "get_settings") {
+        return Promise.resolve({ settings: baseSettings, load_warning: null });
+      }
+      if (cmd === "get_agent_targets") return Promise.resolve([]);
+      if (cmd === "get_target_profiles") return Promise.resolve([]);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+
+    const { result } = renderHook(() => useAppSettingsController(createDeps()));
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+
+    await act(async () => {
+      result.current.setAppFontSize("extra-large");
+    });
+
+    await waitFor(() => expect(result.current.appSettings?.app_font_size).toBe("extra-large"));
+  });
 });

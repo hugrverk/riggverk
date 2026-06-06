@@ -62,6 +62,12 @@ fi
 if ! rg -n 'Global app text size' src/views/SettingsView.tsx >"$ui_tmp"; then
   fail "Settings view must expose app font-size control"
 fi
+if ! rg -n 'APP_FONT_SIZE_VALUES' src/views/SettingsView.tsx src/lib/settingsDraft.ts >"$ui_tmp"; then
+  fail "app font-size setting must expose all persisted values"
+fi
+if ! rg -n 'extra-large' src/lib/settingsDraft.ts src/types.ts src-tauri/src/settings.rs >"$ui_tmp"; then
+  fail "extra-large app font-size value must exist in frontend and backend contracts"
+fi
 
 if rg -n -U '\.repo-dashboard-heat-(scroll|wrap|box|grid)[^{]*\{[^}]*overflow-y:\s*(auto|scroll)' src/styles.css >"$ui_tmp"; then
   cat "$ui_tmp" >&2

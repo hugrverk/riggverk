@@ -87,7 +87,7 @@ fn default_app_font_size() -> String {
 
 fn normalize_app_font_size(value: &str) -> String {
     match value {
-        "small" | "medium" | "large" => value.to_string(),
+        "small" | "medium" | "large" | "extra-large" => value.to_string(),
         _ => default_app_font_size(),
     }
 }
@@ -549,7 +549,7 @@ mod tests {
 
     #[test]
     fn app_font_size_accepts_constrained_values() {
-        for value in ["small", "medium", "large"] {
+        for value in ["small", "medium", "large", "extra-large"] {
             let mut settings = settings_with_path(None);
             settings.app_font_size = value.into();
 

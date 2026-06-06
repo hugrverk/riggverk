@@ -6,7 +6,27 @@ export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
 export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
 
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "opencode_config"];
-export const APP_FONT_SIZE_VALUES = ["small", "medium", "large"] as const;
+export const APP_FONT_SIZE_VALUES = ["small", "medium", "large", "extra-large"] as const;
+
+export const APP_FONT_SIZE_LABELS: Record<AppSettings["app_font_size"], string> = {
+  small: "small",
+  medium: "medium",
+  large: "large",
+  "extra-large": "extra large",
+};
+
+export function appFontSizePx(size: AppSettings["app_font_size"]): string {
+  switch (size) {
+    case "small":
+      return "13px";
+    case "large":
+      return "17px";
+    case "extra-large":
+      return "19px";
+    default:
+      return "15px";
+  }
+}
 
 /** Canonical installed workspace path (display form; backend owns resolution). */
 export const DEFAULT_WORKSPACE_PATH = "~/.config/agent-workspace";
@@ -94,10 +114,7 @@ export function applyThemeSettings(settings: AppSettings): void {
   root.setAttribute("data-theme", settings.appearance);
   const appFontSize = normalizeAppFontSize(settings.app_font_size);
   root.setAttribute("data-app-font-size", appFontSize);
-  root.style.setProperty(
-    "--app-font-size",
-    appFontSize === "small" ? "13px" : appFontSize === "large" ? "17px" : "15px",
-  );
+  root.style.setProperty("--app-font-size", appFontSizePx(appFontSize));
   root.style.setProperty("--app-font-scale", "1");
 
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
