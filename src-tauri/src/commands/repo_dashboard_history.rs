@@ -20,7 +20,7 @@ pub(super) struct FullCommitHistory {
 fn parse_commit_records(raw: &str) -> Result<Vec<RepoCommitEntry>, String> {
     let mut commits = Vec::new();
     for raw_record in raw.split(RECORD_SEPARATOR) {
-        let record = raw_record.trim_start_matches(|c| c == '\n' || c == '\r');
+        let record = raw_record.trim_start_matches(['\n', '\r']);
         if record.is_empty() {
             continue;
         }
@@ -37,9 +37,7 @@ fn parse_commit_records(raw: &str) -> Result<Vec<RepoCommitEntry>, String> {
             author_name: fields[2].to_string(),
             author_email: fields[3].to_string(),
             authored_at,
-            subject: fields[6]
-                .trim_end_matches(|c| c == '\n' || c == '\r')
-                .to_string(),
+            subject: fields[6].trim_end_matches(['\n', '\r']).to_string(),
             is_merge: fields[5].split_whitespace().count() > 1,
         });
     }
