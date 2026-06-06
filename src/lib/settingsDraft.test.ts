@@ -36,4 +36,24 @@ describe("applyThemeSettings", () => {
     expect(document.documentElement.style.getPropertyValue("--app-font-size")).toBe("19px");
     expect(document.documentElement.style.getPropertyValue("--app-font-scale")).toBe("1");
   });
+
+  it("does not apply root zoom", () => {
+    applyThemeSettings(defaultSettings());
+    expect(document.documentElement.style.getPropertyValue("zoom")).toBe("");
+    expect(document.documentElement.style.getPropertyValue("transform")).toBe("");
+  });
+});
+
+describe("typography inheritance", () => {
+  it("maps all four settings to distinct root font sizes", () => {
+    for (const [size, px] of [
+      ["small", "13px"],
+      ["medium", "15px"],
+      ["large", "17px"],
+      ["extra-large", "19px"],
+    ] as const) {
+      applyThemeSettings({ ...defaultSettings(), app_font_size: size });
+      expect(document.documentElement.style.getPropertyValue("--app-font-size")).toBe(px);
+    }
+  });
 });

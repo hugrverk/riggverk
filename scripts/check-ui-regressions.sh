@@ -65,8 +65,18 @@ fi
 if ! rg -n 'APP_FONT_SIZE_VALUES' src/views/SettingsView.tsx src/lib/settingsDraft.ts >"$ui_tmp"; then
   fail "app font-size setting must expose all persisted values"
 fi
+if ! rg -n -- '--text-xs|--text-sm|--text-base|--text-lg|--text-heading|--text-display' src/styles.css >"$ui_tmp"; then
+  fail "semantic typography variables must exist"
+fi
+if rg -n 'zoom:\s*[^;]+' src/styles.css >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "typography scaling must not use CSS zoom"
+fi
 if ! rg -n 'extra-large' src/lib/settingsDraft.ts src/types.ts src-tauri/src/settings.rs >"$ui_tmp"; then
   fail "extra-large app font-size value must exist in frontend and backend contracts"
+fi
+if ! rg -n 'font:\s*inherit' src/styles.css >"$ui_tmp"; then
+  fail "form controls must inherit typography"
 fi
 
 if rg -n -U '\.repo-dashboard-heat-(scroll|wrap|box|grid)[^{]*\{[^}]*overflow-y:\s*(auto|scroll)' src/styles.css >"$ui_tmp"; then
