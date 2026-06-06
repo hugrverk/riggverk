@@ -225,7 +225,7 @@ export function ActivityHeatmap({
                     key={cell.date}
                     className={`repo-dashboard-heat-cell l${cell.level}`}
                     title={`${cell.date}: ${cell.count} commits`}
-                    aria-label={`${cell.date}: ${cell.count} commits`}
+                    aria-hidden="true"
                   />
                 ))}
               </div>

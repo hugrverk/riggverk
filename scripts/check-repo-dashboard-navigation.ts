@@ -61,6 +61,10 @@ assert.ok(
   !activitySource.includes("tabIndex"),
   "activity chart must not expose per-point keyboard tab stops",
 );
+assert.ok(
+  !chartsSource.includes("aria-label={`${cell.date}"),
+  "heatmap cells must not duplicate the parent heatmap label",
+);
 assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active column must use sibling Started/Open subcolumns");
 assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
 assert.equal((workSource.match(/repo-dashboard-work-subcolumn-scroll/g) ?? []).length, 2, "started and open need two scroll regions");
