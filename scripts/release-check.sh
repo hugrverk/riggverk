@@ -1615,8 +1615,23 @@ step "Repo Dashboard model and parser contracts"
 npx --yes tsx scripts/check-repo-dashboard-model.ts
 npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts
 npx --yes tsx scripts/check-repo-dashboard-entries.ts
+npx --yes tsx scripts/check-repo-dashboard-markdown.ts
+npx --yes tsx scripts/check-repo-dashboard-docs-workspace.ts
+npx --yes tsx scripts/check-repo-dashboard-navigation.ts
 if ! search_has_match 'MAX_DOC_CONTENT_BYTES' src-tauri/src/commands/repo_dashboard.rs; then
   printf 'FAIL: repo dashboard must cap local doc read size\n' >&2
+  exit 1
+fi
+if ! search_has_match 'collect_doc_paths' src-tauri/src/commands/repo_dashboard.rs; then
+  printf 'FAIL: repo dashboard must discover markdown docs\n' >&2
+  exit 1
+fi
+if search_has_match 'buildSourceHealth' src/tools/repoDashboard/model.ts; then
+  printf 'FAIL: repo dashboard must not expose source health helpers\n' >&2
+  exit 1
+fi
+if search_has_match 'Source health' src/tools/repoDashboard/RepoDashboardTool.tsx; then
+  printf 'FAIL: repo dashboard must not render source health\n' >&2
   exit 1
 fi
 if search_has_match 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts; then
