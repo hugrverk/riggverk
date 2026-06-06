@@ -15,6 +15,23 @@ function read(rel: string): string {
   return readFileSync(join(root, rel), "utf8");
 }
 
+function cssRuleBlock(styles: string, selector: string): string | undefined {
+  const needle = `${selector} {`;
+  let searchFrom = 0;
+  while (searchFrom < styles.length) {
+    const index = styles.indexOf(needle, searchFrom);
+    if (index === -1) return undefined;
+    const isCanonical = index === 0 || styles[index - 1] === "\n";
+    if (isCanonical) {
+      const end = styles.indexOf("}", index);
+      if (end === -1) return undefined;
+      return styles.slice(index, end + 1);
+    }
+    searchFrom = index + 1;
+  }
+  return undefined;
+}
+
 function walk(dir: string): string[] {
   const entries = readdirSync(dir, { withFileTypes: true });
   const files: string[] = [];
@@ -108,5 +125,41 @@ assert.match(docsWorkspace, /docsStale:\s*boolean/);
 const dashboardTool = read("src/tools/repoDashboard/RepoDashboardTool.tsx");
 assert.match(dashboardTool, /filterDocsSnapshotWarnings/);
 assert.match(dashboardTool, /workItemCanonicalSource/);
+
+const cardRule = cssRuleBlock(repoDashboardStyles, ".repo-dashboard-card");
+assert.ok(cardRule, ".repo-dashboard-card rule must exist");
+assert.match(
+  cardRule!,
+  /border-radius:\s*var\(--radius\)/,
+  ".repo-dashboard-card must use theme radius",
+);
+
+const chartRule = cssRuleBlock(repoDashboardStyles, ".repo-dashboard-activity-insights-chart");
+assert.ok(chartRule, ".repo-dashboard-activity-insights-chart rule must exist");
+assert.match(
+  chartRule!,
+  /border-radius:\s*var\(--radius\)/,
+  ".repo-dashboard-activity-insights-chart must use theme radius",
+);
+
+const notSyncedBlock = dashboardTool.match(
+  /<h2 className="font-mono">Not synced<\/h2>[\s\S]*?<\/p>/,
+)?.[0];
+assert.ok(notSyncedBlock, "Not synced empty state must exist");
+assert.doesNotMatch(
+  notSyncedBlock!,
+  /docs by default/i,
+  "Not synced copy must not describe documentation as local-first",
+);
+assert.match(
+  notSyncedBlock!,
+  /remote default branch/i,
+  "Not synced copy must mention remote default branch documentation",
+);
+assert.match(
+  notSyncedBlock!,
+  /cached|fallback/i,
+  "Not synced copy must mention documentation fallback",
+);
 
 console.log("Repo Dashboard contract checks passed");

@@ -717,8 +717,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
             <div className="repo-dashboard-card" role="status">
               <h2 className="font-mono">Not synced</h2>
               <p className="text-muted small">
-                Enter a local checkout path and press refresh. Uses local git and docs by default.
-                Optional gh CLI enrichment when authenticated. No GitHub token stored.
+                Enter a local checkout path and press refresh. Git history and working-tree data
+                come from that checkout. Documentation loads from the remote default branch when
+                available, with cached-remote or local-checkout fallback. Optional gh CLI
+                enrichment when authenticated. No GitHub token stored.
               </p>
             </div>
           )}

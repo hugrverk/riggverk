@@ -1612,6 +1612,7 @@ npx --yes tsx scripts/check-prompt-context-handoff.ts
 printf '  Prompt Loops context handoff formatter/eligibility checks ok\n'
 
 step "Repo Dashboard model and parser contracts"
+npm run check:repo-dashboard-contracts
 npx --yes tsx scripts/check-repo-dashboard-model.ts
 npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts
 npx --yes tsx scripts/check-repo-dashboard-entries.ts
