@@ -1,45 +1,68 @@
 #!/usr/bin/env python3
-"""Verify default_workspace_files() lists required bundled assets (not test fixtures)."""
+"""Verify the bundled workspace manifest lists required runtime assets."""
 
 from __future__ import annotations
 
 import re
-import sys
 from pathlib import Path
 
 
-def main() -> int:
-    repo_root = Path(__file__).resolve().parent.parent
-    defaults_rs = repo_root / "src-tauri" / "src" / "commands" / "defaults.rs"
-    text = defaults_rs.read_text()
+ROOT = Path(__file__).resolve().parent.parent
+MANIFEST = ROOT / "src-tauri" / "src" / "commands" / "default_workspace_manifest.rs"
+DEFAULTS = ROOT / "src-tauri" / "src" / "commands" / "defaults.rs"
 
-    fn_match = re.search(r"pub\(crate\) fn default_workspace_files\(\)", text)
-    if not fn_match:
-        print("FAIL: missing default_workspace_files() in defaults.rs", file=sys.stderr)
-        return 1
 
-    test_marker = text.find("#[cfg(test)]", fn_match.start())
-    if test_marker == -1:
-        print("FAIL: defaults.rs missing #[cfg(test)] after default_workspace_files()", file=sys.stderr)
-        return 1
+def fail(message: str) -> None:
+    raise SystemExit(f"FAIL: {message}")
 
-    body = text[fn_match.start() : test_marker]
 
-    def section_paths(label: str) -> set[str]:
-        match = re.search(
-            rf'"{re.escape(label)}",\s*&\[\s*([^\]]+)\]',
-            body,
-            re.DOTALL,
-        )
-        if not match:
-            print(f"FAIL: default_workspace_files() missing {label} section", file=sys.stderr)
-            raise SystemExit(1)
-        return set(re.findall(r'"([^"]+)"', match.group(1)))
+def section_paths(text: str, label: str) -> set[str]:
+    match = re.search(
+        rf'"{re.escape(label)}",\s*&\[\s*([^\]]+)\]',
+        text,
+        re.DOTALL,
+    )
+    if not match:
+        fail(f"bundled manifest missing {label} section")
+    return set(re.findall(r'"([^"]+)"', match.group(1)))
 
-    scripts = section_paths("Scripts")
-    templates = section_paths("Templates")
+
+def managed_refresh_paths(text: str) -> set[str]:
+    match = re.search(
+        r"MANAGED_REFRESH_PATHS:\s*&\[&str\]\s*=\s*&\[([^\]]+)\]",
+        text,
+        re.DOTALL,
+    )
+    if not match:
+        fail("bundled manifest missing MANAGED_REFRESH_PATHS")
+    return set(re.findall(r'"([^"]+)"', match.group(1)))
+
+
+def main() -> None:
+    if not MANIFEST.is_file():
+        fail(f"manifest not found: {MANIFEST.relative_to(ROOT)}")
+    if not DEFAULTS.is_file():
+        fail(f"defaults module not found: {DEFAULTS.relative_to(ROOT)}")
+
+    manifest_text = MANIFEST.read_text(encoding="utf-8")
+    defaults_text = DEFAULTS.read_text(encoding="utf-8")
+
+    if 'mod manifest;' not in defaults_text:
+        fail("defaults.rs must load the centralized bundled manifest")
+    if "manifest::categories()" not in defaults_text:
+        fail("default_workspace_files() must delegate to manifest::categories()")
+    if "manifest::MANAGED_REFRESH_PATHS" not in defaults_text:
+        fail("managed refresh paths must come from the centralized manifest")
+
+    scripts = section_paths(manifest_text, "Scripts")
+    templates = section_paths(manifest_text, "Templates")
+    docs = section_paths(manifest_text, "Docs")
+    refresh = managed_refresh_paths(manifest_text)
 
     required_scripts = {
+        "scripts/install-agent-rules.sh",
+        "scripts/install-runtime-agents.sh",
+        "scripts/install-opencode-config.sh",
         "scripts/generate-opencode-config.py",
         "scripts/playwright-mcp-lib.sh",
         "scripts/check-playwright-mcp.sh",
@@ -49,33 +72,37 @@ def main() -> int:
         "templates/opencode.policy.json",
         "templates/playwright-mcp.config.json",
     }
-    docs = section_paths("Docs")
     required_docs = {
         "docs/prompt-templates/standard-prompt.md",
         "docs/prompt-templates/masterprompt.md",
         "docs/prompt-templates/batchprompt.md",
     }
+    required_refresh = {
+        "scripts/install-agent-rules.sh",
+        "scripts/install-runtime-agents.sh",
+        "scripts/install-opencode-config.sh",
+    }
 
-    ok = True
-    for rel in sorted(required_scripts):
-        if rel not in scripts:
-            print(f"FAIL: Scripts section missing: {rel}", file=sys.stderr)
-            ok = False
-    for rel in sorted(required_templates):
-        if rel not in templates:
-            print(f"FAIL: Templates section missing: {rel}", file=sys.stderr)
-            ok = False
-    for rel in sorted(required_docs):
-        if rel not in docs:
-            print(f"FAIL: Docs section missing: {rel}", file=sys.stderr)
-            ok = False
+    for rel in sorted(required_scripts - scripts):
+        fail(f"Scripts section missing: {rel}")
+    for rel in sorted(required_templates - templates):
+        fail(f"Templates section missing: {rel}")
+    for rel in sorted(required_docs - docs):
+        fail(f"Docs section missing: {rel}")
+    for rel in sorted(required_refresh - refresh):
+        fail(f"managed refresh list missing app action script: {rel}")
 
-    if not ok:
-        return 1
+    user_owned_prefixes = ("docs/", "skills/", "agents/")
+    for rel in sorted(refresh):
+        if rel.startswith(user_owned_prefixes):
+            fail(f"managed refresh must not overwrite user-authored source: {rel}")
+        if rel in {"templates/global-agent-rules.md", "templates/opencode.json"}:
+            fail(f"managed refresh must not overwrite editable source: {rel}")
 
-    print("  default_workspace_files(): generator, opencode base/policy, playwright mcp, prompt-template docs listed")
-    return 0
+    print(
+        "  bundled manifest: runtime installers listed; app action scripts refreshable backup-first"
+    )
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()
