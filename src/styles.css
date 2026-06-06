@@ -6790,6 +6790,56 @@ code {
 .repo-dashboard-heat-cell.l3 { background: #238636; border-color: #327c3a; }
 .repo-dashboard-heat-cell.l4 { background: #56d364; border-color: #6ee87a; }
 
+[data-theme="light"] .repo-dashboard-heat-cell.l1,
+[data-theme="light"] .repo-dashboard-heat-mini.l1 {
+  background: #d8f0dc;
+  border-color: #b7e0c0;
+}
+
+[data-theme="light"] .repo-dashboard-heat-cell.l2,
+[data-theme="light"] .repo-dashboard-heat-mini.l2 {
+  background: #a8ddb4;
+  border-color: #8ecf9d;
+}
+
+[data-theme="light"] .repo-dashboard-heat-cell.l3,
+[data-theme="light"] .repo-dashboard-heat-mini.l3 {
+  background: #6bc77f;
+  border-color: #4fb866;
+}
+
+[data-theme="light"] .repo-dashboard-heat-cell.l4,
+[data-theme="light"] .repo-dashboard-heat-mini.l4 {
+  background: #2ea043;
+  border-color: #248a37;
+}
+
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] .repo-dashboard-heat-cell.l1,
+  [data-theme="system"] .repo-dashboard-heat-mini.l1 {
+    background: #d8f0dc;
+    border-color: #b7e0c0;
+  }
+
+  [data-theme="system"] .repo-dashboard-heat-cell.l2,
+  [data-theme="system"] .repo-dashboard-heat-mini.l2 {
+    background: #a8ddb4;
+    border-color: #8ecf9d;
+  }
+
+  [data-theme="system"] .repo-dashboard-heat-cell.l3,
+  [data-theme="system"] .repo-dashboard-heat-mini.l3 {
+    background: #6bc77f;
+    border-color: #4fb866;
+  }
+
+  [data-theme="system"] .repo-dashboard-heat-cell.l4,
+  [data-theme="system"] .repo-dashboard-heat-mini.l4 {
+    background: #2ea043;
+    border-color: #248a37;
+  }
+}
+
 .repo-dashboard-hleg {
   display: flex;
   align-items: center;
@@ -6961,6 +7011,10 @@ code {
 
   .repo-dashboard-contributor-panel {
     max-height: min(320px, 42vh);
+  }
+
+  .repo-dashboard-activity-insights-controls {
+    width: 100%;
   }
 
 }
