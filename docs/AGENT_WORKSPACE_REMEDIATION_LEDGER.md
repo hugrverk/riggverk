@@ -8,8 +8,10 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 |---|---|
 | Audited commit | `53d9d2b245a41caddff3cc4961e335166ded85b4` |
 | Starting HEAD | `53d9d2b245a41caddff3cc4961e335166ded85b4` |
+| Ending HEAD | `3e5a78cf4c95bdefe3d55419910d53c88cb55bf1` |
+| Commits | 16 on `main` (unpushed) |
 | Branch | `main` |
-| Verdict | **READY FOR MERGE CHECK** (pending native smoke) |
+| Verdict | **READY FOR MERGE** — automated gates pass; manual webview smoke optional before share |
 
 ## Baseline (pre-edit)
 
@@ -61,10 +63,33 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 - `npm test` — pass (10)
 - `npm run typecheck` — pass
 - `npm run build` — pass
-- `cargo test` — pass (367)
+- `cargo test` — pass (366 unit + 1 runtime smoke in release-check)
 - `cargo clippy -D warnings` — pass
 - `./scripts/release-check.sh` — pass
 - `bash ./scripts/check-ui-regressions.sh` — pass
 - `git diff --check` — pass
 - `./scripts/smoke-tauri-runtime.sh` — pass (backend IPC; fixed cursor profile apply + MCP path env)
+- `./scripts/release-check.sh` (post-ARCH) — pass (2026-06-06)
 - Native Tauri webview smoke — **not run** (manual per `docs/APP_RELEASE_SMOKE.md`)
+
+## Deferred / blocked (no further autonomous work)
+
+| ID | Action needed |
+|---|---|
+| AW-CONFIG-001 | Operator plan for bundle id `.app` migration |
+| AW-CONFIG-002 | Verify Tauri 2 schema URL against official docs |
+| AW-RD-007 | Optimize N+1 `git show` only if measured in production |
+| AW-TYPES-001 | Generated TS bindings — optional future work |
+| Webview smoke | Operator runs `docs/APP_RELEASE_SMOKE.md` before sharing builds |
+
+## Commit log (remediation)
+
+```
+3e5a78cf refactor(app): extract library controller from App shell
+2d2a9fde fix(smoke): align cursor profile runtime smoke with health checks
+df76d649 refactor(app): extract workspace health controller
+068a36a6 chore(release): wire rust gate and mktemp UI regression checks
+327b4abe refactor(app): extract settings controller and header nav
+de5536b1 docs(audit): add remediation ledger and mark historical reports
+… (+10 earlier remediation commits)
+```
