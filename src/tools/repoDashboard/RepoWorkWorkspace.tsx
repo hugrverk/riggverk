@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type {
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
@@ -7,6 +8,8 @@ import type { DocWorkLaneId, DocWorkLaneSummary } from "./model";
 import { activeWorkCount, partitionWorkItems, type WorkPartition } from "./model";
 
 const WORK_ITEMS_DISPLAY_CAP = 120;
+
+type WorkLaneView = "active" | "done";
 
 function WorkItemsList({
   items,
@@ -95,6 +98,8 @@ export function RepoWorkWorkspace({
   onUsePromptContext,
   emptyMessage,
 }: RepoWorkWorkspaceProps) {
+  const [laneView, setLaneView] = useState<WorkLaneView>("active");
+
   const partition: WorkPartition = partitionWorkItems(items);
   const displayedCount =
     partition.activeStarted.length + partition.activeOpen.length + partition.done.length;
@@ -105,126 +110,139 @@ export function RepoWorkWorkspace({
       <header className="repo-dashboard-page-head">
         <h2 className="font-mono repo-dashboard-page-title">Work</h2>
         <p className="text-muted small repo-dashboard-page-desc">
-          Parsed docs markers and optional gh issues. Active items include open, started, and
-          needs-planning work.
+          Open and started items from docs and gh issues. Use filters to narrow by lane or type.
         </p>
         <div className="repo-dashboard-page-toolbar">
-          <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Doc lane filter">
+          <div className="repo-dashboard-toolbar" role="group" aria-label="Work view">
             <button
               type="button"
-              className={`repo-dashboard-seg${laneFilter === "all" ? " active" : ""}`}
-              aria-pressed={laneFilter === "all"}
-              onClick={() => onLaneFilterChange("all")}
+              className={`repo-dashboard-seg${laneView === "active" ? " active" : ""}`}
+              aria-pressed={laneView === "active"}
+              onClick={() => setLaneView("active")}
             >
-              all lanes
+              Active ({activeWorkCount(partition)})
             </button>
-            {docLaneSummaries.map(lane => (
-              <button
-                key={lane.id}
-                type="button"
-                className={`repo-dashboard-seg${laneFilter === lane.id ? " active" : ""}`}
-                aria-pressed={laneFilter === lane.id}
-                onClick={() =>
-                  onLaneFilterChange(laneFilter === lane.id ? "all" : lane.id)
+            <button
+              type="button"
+              className={`repo-dashboard-seg${laneView === "done" ? " active" : ""}`}
+              aria-pressed={laneView === "done"}
+              onClick={() => setLaneView("done")}
+            >
+              Done ({partition.done.length})
+            </button>
+          </div>
+          <div className="repo-dashboard-work-filters font-mono">
+            <label className="repo-dashboard-work-filter">
+              <span className="repo-dashboard-work-filter-label">Lane</span>
+              <select
+                className="repo-dashboard-field repo-dashboard-work-filter-select"
+                value={laneFilter}
+                onChange={e => onLaneFilterChange(e.target.value as DocWorkLaneId | "all")}
+                aria-label="Filter by doc lane"
+              >
+                <option value="all">All lanes</option>
+                {docLaneSummaries.map(lane => (
+                  <option key={lane.id} value={lane.id}>
+                    {lane.label} ({lane.open + lane.started})
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="repo-dashboard-work-filter">
+              <span className="repo-dashboard-work-filter-label">Type</span>
+              <select
+                className="repo-dashboard-field repo-dashboard-work-filter-select"
+                value={typeFilter}
+                onChange={e =>
+                  onTypeFilterChange(e.target.value as RepoDashboardWorkType | "all")
                 }
+                aria-label="Filter by work type"
               >
-                {lane.label} ({lane.open + lane.started})
-              </button>
-            ))}
-          </div>
-          <div className="repo-dashboard-toolbar wrap" role="group" aria-label="Type filter">
-            {workTypes.map(type => (
+                <option value="all">All types</option>
+                {workTypes.map(type => (
+                  <option key={type} value={type}>
+                    {type}
+                  </option>
+                ))}
+              </select>
+            </label>
+            {filtersActive ? (
               <button
-                key={type}
                 type="button"
-                className={`repo-dashboard-seg ${type}${typeFilter === type ? " active" : ""}`}
-                aria-pressed={typeFilter === type}
-                onClick={() => onTypeFilterChange(typeFilter === type ? "all" : type)}
+                className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-filter-reset"
+                onClick={onResetFilters}
               >
-                {type}
+                Clear
               </button>
-            ))}
-            <button
-              type="button"
-              className={`repo-dashboard-seg${typeFilter === "all" ? " active" : ""}`}
-              aria-pressed={typeFilter === "all"}
-              onClick={() => onTypeFilterChange("all")}
-            >
-              all types
-            </button>
+            ) : null}
           </div>
-          {filtersActive ? (
-            <button
-              type="button"
-              className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-filter-reset"
-              onClick={onResetFilters}
-            >
-              Reset filters
-            </button>
-          ) : null}
           <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
-            Showing {displayedCount} of {totalItemCount} items · open {partition.activeOpen.length} ·
-            started {partition.activeStarted.length} · active {activeWorkCount(partition)} · done{" "}
-            {partition.done.length}
-            {laneFilter !== "all"
-              ? ` · lane: ${docLaneSummaries.find(l => l.id === laneFilter)?.label ?? laneFilter}`
-              : ""}
-            {typeFilter !== "all" ? ` · type: ${typeFilter}` : ""}
+            {displayedCount} of {totalItemCount} items
+            {laneView === "active"
+              ? ` · started ${partition.activeStarted.length} · open ${partition.activeOpen.length}`
+              : ` · done ${partition.done.length}`}
           </p>
         </div>
       </header>
 
-      <div className="repo-dashboard-work-columns">
-        <section
-          className="repo-dashboard-work-column"
-          aria-label="Active work"
-          aria-labelledby="repo-dashboard-work-active-title"
-        >
-          <h3 id="repo-dashboard-work-active-title" className="font-mono repo-dashboard-work-column-title">
-            Active
-          </h3>
-          {!partition.activeStarted.length && !partition.activeOpen.length ? (
-            <p className="text-muted small" role="status">
-              {filtersActive ? "No active items match the current filters." : "No active work items."}
-            </p>
-          ) : (
+      {laneView === "active" ? (
+        <div className="repo-dashboard-work-columns">
+          <section
+            className="repo-dashboard-work-column"
+            aria-label="Started work"
+            aria-labelledby="repo-dashboard-work-started-title"
+          >
+            <h3 id="repo-dashboard-work-started-title" className="font-mono repo-dashboard-work-column-title">
+              Started ({partition.activeStarted.length})
+            </h3>
             <div
               className="repo-dashboard-work-column-scroll"
               role="region"
-              aria-label="Active work items"
+              aria-label="Started work items"
               tabIndex={0}
             >
-              {partition.activeStarted.length ? (
-                <div className="repo-dashboard-work-group">
-                  <h4 className="font-mono repo-dashboard-work-group-title">
-                    Started ({partition.activeStarted.length})
-                  </h4>
-                  <WorkItemsList
-                    items={partition.activeStarted}
-                    onUsePromptContext={onUsePromptContext}
-                    startedVisual
-                    emptyMessage=""
-                  />
-                </div>
-              ) : null}
-              {partition.activeOpen.length ? (
-                <div className="repo-dashboard-work-group">
-                  <h4 className="font-mono repo-dashboard-work-group-title">
-                    Open ({partition.activeOpen.length})
-                  </h4>
-                  <WorkItemsList
-                    items={partition.activeOpen}
-                    onUsePromptContext={onUsePromptContext}
-                    emptyMessage=""
-                  />
-                </div>
-              ) : null}
+              <WorkItemsList
+                items={partition.activeStarted}
+                onUsePromptContext={onUsePromptContext}
+                startedVisual
+                emptyMessage={
+                  filtersActive
+                    ? "No started items match the current filters."
+                    : "No started work items."
+                }
+              />
             </div>
-          )}
-        </section>
+          </section>
 
+          <section
+            className="repo-dashboard-work-column"
+            aria-label="Open work"
+            aria-labelledby="repo-dashboard-work-open-title"
+          >
+            <h3 id="repo-dashboard-work-open-title" className="font-mono repo-dashboard-work-column-title">
+              Open ({partition.activeOpen.length})
+            </h3>
+            <div
+              className="repo-dashboard-work-column-scroll"
+              role="region"
+              aria-label="Open work items"
+              tabIndex={0}
+            >
+              <WorkItemsList
+                items={partition.activeOpen}
+                onUsePromptContext={onUsePromptContext}
+                emptyMessage={
+                  filtersActive
+                    ? "No open items match the current filters."
+                    : "No open work items."
+                }
+              />
+            </div>
+          </section>
+        </div>
+      ) : (
         <section
-          className="repo-dashboard-work-column"
+          className="repo-dashboard-work-column repo-dashboard-work-column-done"
           aria-label="Done work"
           aria-labelledby="repo-dashboard-work-done-title"
         >
@@ -248,7 +266,7 @@ export function RepoWorkWorkspace({
             />
           </div>
         </section>
-      </div>
+      )}
 
       {!displayedCount && emptyMessage ? (
         <p className="text-muted small repo-dashboard-work-empty-note" role="status">

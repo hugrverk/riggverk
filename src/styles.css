@@ -5725,6 +5725,18 @@ code {
 
 .repo-dashboard-grid.cols {
   grid-template-columns: minmax(0, 1.15fr) minmax(300px, 0.85fr);
+  align-items: stretch;
+}
+
+.repo-dashboard-grid.cols > * {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+/* Right column fills row height; left keeps natural content size */
+.repo-dashboard-grid.cols > :last-child {
+  min-height: 0;
 }
 
 .repo-dashboard-kpis {
@@ -5787,17 +5799,6 @@ code {
   max-height: 120px;
 }
 
-.repo-dashboard-overview-charts {
-  align-items: stretch;
-}
-
-.repo-dashboard-overview-lower {
-  display: grid;
-  grid-template-columns: minmax(0, 1.5fr) minmax(280px, 0.9fr);
-  gap: 14px;
-  align-items: start;
-}
-
 .repo-dashboard-heat-stack {
   display: flex;
   flex-direction: column;
@@ -5813,6 +5814,13 @@ code {
 .repo-dashboard-heat-card,
 .repo-dashboard-rem-card {
   min-width: 0;
+}
+
+.repo-dashboard-grid.cols > :last-child.repo-dashboard-rem-card .repo-dashboard-doc-lanes {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .repo-dashboard-rem-card h2 {
@@ -5898,10 +5906,12 @@ code {
 }
 
 .repo-dashboard-activity-card {
-  display: flex;
-  flex-direction: column;
-  min-height: 200px;
   min-width: 0;
+}
+
+.repo-dashboard-activity-card .repo-dashboard-chart,
+.repo-dashboard-activity-card .repo-dashboard-footnote {
+  flex: 0 0 auto;
 }
 
 .repo-dashboard-heat-card {
@@ -5909,17 +5919,33 @@ code {
 }
 
 .repo-dashboard-recent-activity-card {
-  display: flex;
-  flex-direction: column;
-  min-height: min(420px, 52vh);
-  max-height: min(420px, 52vh);
-  overflow: hidden;
+  min-width: 0;
 }
 
-.repo-dashboard-recent-activity {
-  overflow: auto;
-  min-height: 0;
-  flex: 1 1 0;
+.repo-dashboard-card-desc {
+  margin: 0 0 10px;
+  line-height: 1.45;
+}
+
+.repo-dashboard-recent-activity-scroll {
+  --recent-activity-row-height: 2.75rem;
+  flex: 0 0 auto;
+  height: calc(
+    var(--recent-activity-visible-rows, 10) * var(--recent-activity-row-height)
+  );
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.repo-dashboard-recent-activity-scroll:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--active-border));
+  outline-offset: -2px;
+}
+
+.repo-dashboard-recent-activity-scroll .repo-dashboard-commit-list {
+  display: flex;
+  flex-direction: column;
 }
 
 .repo-dashboard-card {
@@ -5936,8 +5962,6 @@ code {
 }
 
 .repo-dashboard-latest {
-  display: flex;
-  flex-direction: column;
   min-height: 0;
 }
 
@@ -5951,6 +5975,10 @@ code {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+}
+
+.repo-dashboard-grid.cols > :last-child.repo-dashboard-latest .repo-dashboard-latest-content {
+  flex: 1 1 0;
 }
 
 .repo-dashboard-latest-hero {
@@ -6543,10 +6571,11 @@ code {
   }
 
   .repo-dashboard-grid.cols,
-  .repo-dashboard-overview-lower,
   .repo-dashboard-kpis,
-  .repo-dashboard-page-body.has-aside {
+  .repo-dashboard-page-body.has-aside,
+  .repo-dashboard-work-columns {
     grid-template-columns: 1fr;
+    grid-template-rows: repeat(2, minmax(0, 1fr));
   }
 
   .repo-dashboard-strip-actions {
@@ -6824,74 +6853,6 @@ code {
   .repo-dashboard-docs-list-pane {
     max-height: min(36vh, 320px);
   }
-
-  .repo-dashboard-work-columns {
-    grid-template-columns: 1fr;
-  }
-}
-
-.repo-dashboard-work-workspace {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  min-height: 0;
-  flex: 1 1 0;
-}
-
-.repo-dashboard-work-columns {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
-  gap: 14px;
-  min-height: 0;
-  flex: 1 1 0;
-}
-
-.repo-dashboard-work-column {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  min-height: 0;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-  padding: 10px 12px;
-}
-
-.repo-dashboard-work-column-title {
-  margin: 0;
-  font-size: 13px;
-}
-
-.repo-dashboard-work-column-scroll {
-  overflow: auto;
-  min-height: 0;
-  flex: 1 1 0;
-}
-
-.repo-dashboard-work-group + .repo-dashboard-work-group {
-  margin-top: 12px;
-  padding-top: 12px;
-  border-top: 1px solid var(--border);
-}
-
-.repo-dashboard-work-group-title {
-  margin: 0 0 8px;
-  font-size: 11px;
-  color: var(--text-muted);
-}
-
-.repo-dashboard-work-item-started {
-  border-left: 2px solid var(--active-border, #58a6ff);
-  padding-left: 8px;
-}
-
-.repo-dashboard-filter-reset {
-  align-self: flex-start;
-}
-
-.repo-dashboard-work-empty-note {
-  margin: 0;
 }
 
 .repo-dashboard-contributors-card {
@@ -6906,6 +6867,11 @@ code {
 .repo-dashboard-contributors-table-wrap {
   overflow: auto;
   max-width: 100%;
+}
+
+.repo-dashboard-grid.cols > :last-child.repo-dashboard-contributors-card .repo-dashboard-contributors-table-wrap {
+  flex: 1 1 0;
+  min-height: 0;
 }
 
 .repo-dashboard-contributors-table {
@@ -6929,4 +6895,109 @@ code {
 
 .repo-dashboard-contributors-table td:first-child {
   color: var(--text-heading);
+}
+
+.repo-dashboard-work-columns {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  gap: 14px;
+  flex: 1 1 0;
+  min-height: 0;
+  align-items: stretch;
+}
+
+.repo-dashboard-work-filters {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px 14px;
+}
+
+.repo-dashboard-work-filter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.repo-dashboard-work-filter-label {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.repo-dashboard-work-filter-select {
+  min-width: 140px;
+  max-width: 220px;
+}
+
+.repo-dashboard-work-column-done {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.repo-dashboard-work-workspace {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 0;
+  flex: 1 1 0;
+  overflow: hidden;
+}
+
+.repo-dashboard-work-column {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--bg-inset);
+  padding: 10px 12px;
+}
+
+.repo-dashboard-work-column-title {
+  margin: 0;
+  font-size: 13px;
+  flex: 0 0 auto;
+}
+
+.repo-dashboard-work-column-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  margin: 0 -4px;
+  padding: 0 4px 2px;
+}
+
+.repo-dashboard-work-group + .repo-dashboard-work-group {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.repo-dashboard-work-group-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.repo-dashboard-work-item-started {
+  border-left: 2px solid var(--active-border, #58a6ff);
+  padding-left: 8px;
+}
+
+.repo-dashboard-filter-reset {
+  align-self: flex-end;
+}
+
+.repo-dashboard-work-empty-note {
+  margin: 0;
 }

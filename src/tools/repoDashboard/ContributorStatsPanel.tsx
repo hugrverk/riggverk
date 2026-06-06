@@ -32,8 +32,7 @@ export function ContributorStatsPanel({ commits }: { commits: RepoCommitEntry[] 
     <div className="repo-dashboard-card repo-dashboard-contributors-card">
       <h2 className="font-mono">Contributor activity</h2>
       <p className="text-muted small repo-dashboard-contributors-note">
-        Based on loaded local git history and commit subjects only — not effort, ownership, or code
-        quality.
+        Based on loaded local git history and commit subjects — not effort or code quality.
       </p>
       <div className="repo-dashboard-contributors-table-wrap">
         <table className="repo-dashboard-contributors-table font-mono">
@@ -43,8 +42,8 @@ export function ContributorStatsPanel({ commits }: { commits: RepoCommitEntry[] 
               <th scope="col">Commits</th>
               <th scope="col">Share</th>
               <th scope="col">Active</th>
-              <th scope="col">Common types</th>
-              <th scope="col">Common scopes</th>
+              <th scope="col">Types</th>
+              <th scope="col">Scopes</th>
             </tr>
           </thead>
           <tbody>

@@ -34,8 +34,6 @@ import {
   buildHeatmapCells,
   buildLineChartData,
   buildWorkStatusCounts,
-  commitDateRangeLabel,
-  countByAuthor,
   eventsFromCommits,
   ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
@@ -58,8 +56,8 @@ const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] =
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
-const COMMIT_LIST_DISPLAY_CAP = 120;
-const RECENT_ACTIVITY_DISPLAY_CAP = 30;
+const RECENT_ACTIVITY_VISIBLE_ROWS = 10;
+const RECENT_ACTIVITY_LOAD_CAP = 30;
 
 type SyncVisualState = "idle" | "loading" | "synced" | "stale";
 
@@ -158,40 +156,11 @@ function LatestChangeCard({
   );
 }
 
-function ActivitySummaryStrip({ snapshot }: { snapshot: RepoDashboardSnapshot }) {
-  const range = commitDateRangeLabel(snapshot.commits);
-  const authors = countByAuthor(snapshot.commits);
-  const remoteSync =
-    snapshot.ahead != null && snapshot.behind != null
-      ? `+${snapshot.ahead}/-${snapshot.behind}`
-      : "n/a";
-
-  return (
-    <div className="repo-dashboard-statstrip font-mono" role="group" aria-label="Activity summary">
-      <span className="repo-dashboard-stat">
-        <strong>{snapshot.commits.length}</strong> commits loaded
-      </span>
-      <span className="repo-dashboard-stat">branch {snapshot.branch || "—"}</span>
-      <span className="repo-dashboard-stat">remote {remoteSync}</span>
-      {range ? <span className="repo-dashboard-stat">{range}</span> : null}
-      {authors.slice(0, 5).map(([name, count]) => (
-        <span key={name} className="repo-dashboard-stat repo-dashboard-stat-author">
-          {name} <strong>{count}</strong>
-        </span>
-      ))}
-    </div>
-  );
-}
-
 function RecentActivityList({ commits }: { commits: RepoCommitEntry[] }) {
   if (!commits.length) {
     return <p className="text-muted small" role="status">No recent commits in loaded range.</p>;
   }
-  return (
-    <div className="repo-dashboard-recent-activity">
-      <CommitHistoryList commits={commits} />
-    </div>
-  );
+  return <CommitHistoryList commits={commits} />;
 }
 
 function CommitHistoryList({ commits }: { commits: RepoCommitEntry[] }) {
@@ -557,7 +526,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   );
 
   const recentCommits = useMemo(
-    () => (snapshot ? snapshot.commits.slice(0, RECENT_ACTIVITY_DISPLAY_CAP) : []),
+    () => (snapshot ? snapshot.commits.slice(0, RECENT_ACTIVITY_LOAD_CAP) : []),
     [snapshot],
   );
 
@@ -919,7 +888,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
               <div className="repo-dashboard-grid cols repo-dashboard-overview-charts">
                 <div className="repo-dashboard-card repo-dashboard-activity-card">
-                  <h2 className="font-mono">Repo activity (loaded history)</h2>
+                  <h2 className="font-mono">Repo activity</h2>
                   {lineChart ? (
                     <ActivityLineChart data={lineChart} legend={activityLegend} />
                   ) : (
@@ -948,6 +917,18 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                     ) : null}
                   </p>
                 </div>
+                <ContributorStatsPanel commits={snapshot.commits} />
+              </div>
+
+              <div className="repo-dashboard-grid cols">
+                <div className="repo-dashboard-card repo-dashboard-heat-card">
+                  <h2 className="font-mono">Commit activity</h2>
+                  {heatmap.length ? (
+                    <ActivityHeatmap cells={heatmap} density="default" />
+                  ) : (
+                    <p className="text-muted small">No activity data.</p>
+                  )}
+                </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
                   <h2 className="font-mono">Latest merge / commit</h2>
                   <LatestChangeCard
@@ -958,52 +939,42 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 </div>
               </div>
 
-              <div className="repo-dashboard-overview-lower">
-                <div className="repo-dashboard-heat-stack">
-                  <div className="repo-dashboard-card repo-dashboard-heat-card">
-                    <h2 className="font-mono">Commit activity</h2>
-                    {heatmap.length ? (
-                      <ActivityHeatmap cells={heatmap} density="default" />
-                    ) : (
-                      <p className="text-muted small">No activity data.</p>
-                    )}
-                  </div>
-                  <div className="repo-dashboard-card repo-dashboard-rem-card">
-                    <h2 className="font-mono">Open work by doc</h2>
-                    <p className="text-muted small repo-dashboard-rem-intro">
-                      Grouped by Kretsverket planning files (BACKLOG, KNOWN_GAPS, product, …). Click a
-                      lane to filter Work.
-                    </p>
-                    <DocLaneSummaryPanel
-                      lanes={docLaneSummaries}
-                      activeLane={laneFilter}
-                      onSelectLane={lane => {
-                        setLaneFilter(lane);
-                        setSection("work");
-                      }}
-                    />
-                  </div>
-                </div>
+              <div className="repo-dashboard-grid cols">
                 <div className="repo-dashboard-card repo-dashboard-recent-activity-card">
                   <h2 className="font-mono">Recent activity</h2>
-                  <p className="text-muted small repo-dashboard-page-desc">
-                    Latest {RECENT_ACTIVITY_DISPLAY_CAP} commits from loaded local git history.
+                  <p className="text-muted small repo-dashboard-card-desc">
+                    Latest {RECENT_ACTIVITY_LOAD_CAP} commits · showing {RECENT_ACTIVITY_VISIBLE_ROWS} at a
+                    time, scroll for more.
                   </p>
-                  <RecentActivityList commits={recentCommits} />
+                  <div
+                    className="repo-dashboard-recent-activity-scroll"
+                    style={
+                      {
+                        "--recent-activity-visible-rows": RECENT_ACTIVITY_VISIBLE_ROWS,
+                      } as CSSProperties
+                    }
+                    role="region"
+                    aria-label="Recent commits"
+                    tabIndex={0}
+                  >
+                    <RecentActivityList commits={recentCommits} />
+                  </div>
                 </div>
-              </div>
-
-              <ContributorStatsPanel commits={snapshot.commits} />
-
-              <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                <h2 className="font-mono">Commit history</h2>
-                <p className="text-muted small repo-dashboard-page-desc">
-                  Loaded local git history
-                  {snapshot.commits_truncated ? " (truncated at load limit)" : ""}; list shows first{" "}
-                  {COMMIT_LIST_DISPLAY_CAP}.
-                </p>
-                <ActivitySummaryStrip snapshot={snapshot} />
-                <CommitHistoryList commits={snapshot.commits.slice(0, COMMIT_LIST_DISPLAY_CAP)} />
+                <div className="repo-dashboard-card repo-dashboard-rem-card">
+                  <h2 className="font-mono">Open work by doc</h2>
+                  <p className="text-muted small repo-dashboard-rem-intro">
+                    Grouped by planning files (BACKLOG, KNOWN_GAPS, product, …). Click a lane to
+                    filter Work.
+                  </p>
+                  <DocLaneSummaryPanel
+                    lanes={docLaneSummaries}
+                    activeLane={laneFilter}
+                    onSelectLane={lane => {
+                      setLaneFilter(lane);
+                      setSection("work");
+                    }}
+                  />
+                </div>
               </div>
             </div>
           )}
