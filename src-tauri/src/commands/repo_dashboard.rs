@@ -1347,12 +1347,19 @@ mod tests {
         symlink(outside.join("SECRET.md"), root.join("README.md")).expect("symlink readme");
 
         let docs = read_local_docs(&root);
-        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme entry");
+        let readme = docs
+            .iter()
+            .find(|d| d.path == "README.md")
+            .expect("readme entry");
         assert!(readme.found);
         assert!(!readme.readable);
         assert!(readme.content.is_empty());
         assert!(!readme.content.contains("external secret"));
-        assert!(readme.read_error.as_deref().unwrap_or("").contains("symlink"));
+        assert!(readme
+            .read_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("symlink"));
 
         let _ = fs::remove_dir_all(&root);
         let _ = fs::remove_dir_all(&outside);
@@ -1385,9 +1392,16 @@ mod tests {
         assert!(!backlog.readable);
         assert!(backlog.content.is_empty());
         assert!(!backlog.content.contains("leaked backlog"));
-        assert!(backlog.read_error.as_deref().unwrap_or("").contains("symlink"));
+        assert!(backlog
+            .read_error
+            .as_deref()
+            .unwrap_or("")
+            .contains("symlink"));
 
-        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme entry");
+        let readme = docs
+            .iter()
+            .find(|d| d.path == "README.md")
+            .expect("readme entry");
         assert!(readme.readable);
         assert_eq!(readme.content, "# safe readme");
 
@@ -1414,7 +1428,10 @@ mod tests {
         assert!(readme.readable);
         assert_eq!(readme.content, "# hi");
 
-        let backlog = docs.iter().find(|d| d.path == "docs/BACKLOG.md").expect("backlog");
+        let backlog = docs
+            .iter()
+            .find(|d| d.path == "docs/BACKLOG.md")
+            .expect("backlog");
         assert!(backlog.readable);
         assert_eq!(backlog.content, "# backlog");
 
