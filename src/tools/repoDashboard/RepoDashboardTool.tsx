@@ -354,7 +354,9 @@ export function RepoDashboardTool({
   }, [snapshot]);
 
   const docSources = useMemo(
-    () => (snapshot ? buildDocSourceSummaries(snapshot.docs, workItems) : []),
+    () => (snapshot ? buildDocSourceSummaries(snapshot.docs, workItems).filter(
+      summary => summary.found || !summary.optional,
+    ) : []),
     [snapshot, workItems],
   );
 

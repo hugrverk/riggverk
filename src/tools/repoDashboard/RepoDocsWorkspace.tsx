@@ -1,6 +1,7 @@
 import { useMemo } from "react";
 import type { RepoDocFile, RepoDocsSource } from "../../types";
 import { classifyDocRole, compareDocsByRole, docRoleLabel } from "./docRoles";
+import { shouldIncludeDocInDashboardList } from "./docsParser";
 import { docsSourceLabel, docsSourceWarning } from "./model";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
@@ -11,7 +12,8 @@ export function docDisplayTitle(path: string): string {
 
 export function filterDocsForSearch(docs: RepoDocFile[], query: string): RepoDocFile[] {
   const q = query.trim().toLowerCase();
-  const ordered = [...docs].sort((a, b) => {
+  const visible = docs.filter(shouldIncludeDocInDashboardList);
+  const ordered = [...visible].sort((a, b) => {
     const roleA = classifyDocRole(a.path, a.content);
     const roleB = classifyDocRole(b.path, b.content);
     return compareDocsByRole({ path: a.path, role: roleA }, { path: b.path, role: roleB });

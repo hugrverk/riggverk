@@ -237,6 +237,8 @@ assert.ok(
 }
 
 assert.equal(isOptionalDocPath("docs/TODO.md"), true);
+assert.equal(isOptionalDocPath("docs/FEATURES.md"), true);
+assert.equal(isOptionalDocPath("docs/VALIDATION.md"), true);
 assert.equal(isOptionalDocPath("docs/BACKLOG.md"), false);
 
 const emptyDoc: RepoDocFile = {

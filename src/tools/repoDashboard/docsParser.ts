@@ -21,8 +21,10 @@ export interface DocParseResult {
   warnings: string[];
 }
 
-const OPTIONAL_DOC_PATHS = new Set([
+/** Legacy doc paths still parsed when present, but not expected in every repository. */
+const LEGACY_OPTIONAL_DOC_PATHS = new Set([
   "docs/FEATURES.md",
+  "docs/VALIDATION.md",
   "docs/TODO.md",
 ]);
 
@@ -552,7 +554,13 @@ function dedupeDocItems(items: RepoDashboardWorkItem[]): RepoDashboardWorkItem[]
 }
 
 export function isOptionalDocPath(path: string): boolean {
-  return OPTIONAL_DOC_PATHS.has(path);
+  return LEGACY_OPTIONAL_DOC_PATHS.has(path);
+}
+
+/** Hide absent legacy docs from the Repo Dashboard docs list. */
+export function shouldIncludeDocInDashboardList(doc: RepoDocFile): boolean {
+  if (doc.found) return true;
+  return !isOptionalDocPath(doc.path);
 }
 
 export function parseIssueWorkItems(issues: RepoGhIssue[]): RepoDashboardWorkItem[] {

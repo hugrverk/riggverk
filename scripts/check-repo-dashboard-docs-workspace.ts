@@ -5,6 +5,7 @@ import {
   filterDocsForSearch,
   pickReadableDocPath,
 } from "../src/tools/repoDashboard/RepoDocsWorkspace";
+import { shouldIncludeDocInDashboardList } from "../src/tools/repoDashboard/docsParser";
 import {
   docsSourceLabel,
   filterDocsSnapshotWarnings,
@@ -36,6 +37,9 @@ assert.equal(pickReadableDocPath(docs, "missing.md"), "README.md");
 const filtered = filterDocsForSearch(docs, "backlog");
 assert.equal(filtered.length, 1);
 assert.equal(filtered[0].path, "docs/BACKLOG.md");
+
+assert.equal(shouldIncludeDocInDashboardList(docs[2]), false);
+assert.equal(filterDocsForSearch(docs, "").length, 2);
 
 assert.equal(docsSourceLabel("remote"), "Remote default branch");
 assert.deepEqual(

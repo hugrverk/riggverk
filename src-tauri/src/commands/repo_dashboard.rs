@@ -25,16 +25,13 @@ const MAX_GH_MERGED_PRS: usize = 2000;
 const MAX_GH_OPEN_ISSUES: usize = 2000;
 const GH_LIST_PAGE_LIMIT: &str = "100";
 
-const CORE_DOC_PATHS: [&str; 9] = [
+const CORE_DOC_PATHS: [&str; 6] = [
     "README.md",
     "docs/ROADMAP.md",
     "docs/KNOWN_GAPS.md",
     "docs/BACKLOG.md",
     "docs/CURRENT_STATE.md",
     "docs/START_HERE.md",
-    "docs/FEATURES.md",
-    "docs/VALIDATION.md",
-    "docs/TODO.md",
 ];
 
 const MAX_DISCOVERED_DOC_PATHS: usize = 96;
