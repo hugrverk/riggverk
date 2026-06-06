@@ -734,11 +734,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 commitsTruncated={snapshot.commits_truncated}
               />
 
-              <div className="repo-dashboard-grid cols repo-dashboard-overview-mid">
+              <div className="repo-dashboard-overview-mid">
                 <div className="repo-dashboard-card repo-dashboard-heat-card">
                   <h2 className="font-mono">Commit activity</h2>
                   {heatmap.length ? (
-                    <ActivityHeatmap cells={heatmap} density="default" />
+                    <ActivityHeatmap cells={heatmap} density="default" layout="embedded" />
                   ) : (
                     <p className="text-muted small">No activity data.</p>
                   )}

@@ -52,11 +52,11 @@ function ActivityInsightsChart({
   const max = Math.max(1, ...values);
 
   const w = 820;
-  const h = 200;
+  const h = 260;
   const L = 40;
   const R = 16;
-  const T = 16;
-  const B = 36;
+  const T = 20;
+  const B = 52;
 
   const xAt = useCallback(
     (index: number) =>
@@ -165,7 +165,7 @@ function ActivityInsightsChart({
               key={`${point.date}-label`}
               className="repo-dashboard-chart-text"
               x={xAt(index)}
-              y={h - 8}
+              y={h - 16}
               textAnchor="middle"
             >
               {point.date.slice(5)}
@@ -316,63 +316,56 @@ export function RepoActivityInsights({
           No commits in loaded local git history.
         </p>
       ) : (
-        <>
+        <div className="repo-dashboard-activity-insights-body">
           <ActivityInsightsChart points={series} mode={chartMode} />
           {selectedStat ? (
-            <div className="repo-dashboard-contributor-focus">
+            <div className="repo-dashboard-contributor-panel repo-dashboard-contributor-panel-detail">
               <h3 className="font-mono repo-dashboard-contributor-focus-name">
                 {selectedStat.displayName}
               </h3>
               <ContributorDetail stat={selectedStat} />
             </div>
           ) : allStats.length ? (
-            <div className="repo-dashboard-contributors-table-wrap">
-              <table className="repo-dashboard-contributors-table font-mono">
-                <thead>
-                  <tr>
-                    <th scope="col">Contributor</th>
-                    <th scope="col">Commits</th>
-                    <th scope="col">Share</th>
-                    <th scope="col">Active</th>
-                    <th scope="col">Merges</th>
-                    <th scope="col">Types</th>
-                    <th scope="col">Scopes</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {allStats.map(stat => (
-                    <tr
-                      key={stat.id}
-                      className={
-                        contributorId === stat.id ? "repo-dashboard-contributor-row-selected" : ""
-                      }
-                    >
-                      <td>
-                        <button
-                          type="button"
-                          className="repo-dashboard-contributor-pick"
-                          aria-pressed={contributorId === stat.id}
-                          onClick={() => setContributorId(stat.id)}
-                        >
-                          {stat.displayName}
-                        </button>
-                      </td>
-                      <td>{stat.commitCount}</td>
-                      <td>{stat.percentage}%</td>
-                      <td>
-                        {formatContributorDate(stat.firstCommitAt)} →{" "}
-                        {formatContributorDate(stat.latestCommitAt)}
-                      </td>
-                      <td>{stat.mergeCommitCount}</td>
-                      <td>{contributorTopTypes(stat) || "—"}</td>
-                      <td>{contributorTopScopes(stat) || "—"}</td>
+            <div className="repo-dashboard-contributor-panel">
+              <div className="repo-dashboard-contributors-table-wrap">
+                <table className="repo-dashboard-contributors-table font-mono">
+                  <thead>
+                    <tr>
+                      <th scope="col">Contributor</th>
+                      <th scope="col">Commits</th>
+                      <th scope="col">Share</th>
+                      <th scope="col">Merges</th>
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {allStats.map(stat => (
+                      <tr
+                        key={stat.id}
+                        className={
+                          contributorId === stat.id ? "repo-dashboard-contributor-row-selected" : ""
+                        }
+                      >
+                        <td>
+                          <button
+                            type="button"
+                            className="repo-dashboard-contributor-pick"
+                            aria-pressed={contributorId === stat.id}
+                            onClick={() => setContributorId(stat.id)}
+                          >
+                            {stat.displayName}
+                          </button>
+                        </td>
+                        <td>{stat.commitCount}</td>
+                        <td>{stat.percentage}%</td>
+                        <td>{stat.mergeCommitCount}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </div>
           ) : null}
-        </>
+        </div>
       )}
 
       <p className="text-muted small repo-dashboard-footnote">

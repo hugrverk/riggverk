@@ -8,6 +8,7 @@ import {
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   chooseHeatmapWindowWeeks,
+  computeHeatmapCellSizePx,
   sliceHeatmapCellsToWindow,
   buildLineChartData,
   buildActivityInsightsSeries,
@@ -118,6 +119,8 @@ assert.equal(buildLineChartData([]), null);
   assert.equal(chooseHeatmapWindowWeeks(560), 53);
   assert.equal(chooseHeatmapWindowWeeks(320), 26);
   assert.equal(chooseHeatmapWindowWeeks(120), 13);
+  assert.equal(computeHeatmapCellSizePx(400, 13), 14);
+  assert.equal(computeHeatmapCellSizePx(400, 53), 8);
 }
 
 // Remaining-by-type handles empty input without NaN.

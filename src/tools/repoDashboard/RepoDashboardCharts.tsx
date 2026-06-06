@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import type { ActivityLegendEntry, LineChartSeries } from "./model";
 import {
   ACTIVITY_BLUE,
@@ -6,6 +6,7 @@ import {
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   chooseHeatmapWindowWeeks,
+  computeHeatmapCellSizePx,
   HEATMAP_WINDOW_WEEKS,
   sliceHeatmapCellsToWindow,
   type HeatmapWindowWeeks,
@@ -105,27 +106,19 @@ export type ActivityHeatmapDensity = "default" | "compact";
 interface ActivityHeatmapProps {
   cells: { date: string; count: number; level: 0 | 1 | 2 | 3 | 4 }[];
   density?: ActivityHeatmapDensity;
+  /** Narrower layout (e.g. overview two-column row). */
+  layout?: "default" | "embedded";
 }
 
-export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapProps) {
+export function ActivityHeatmap({
+  cells,
+  density = "compact",
+  layout = "default",
+}: ActivityHeatmapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [autoWindowWeeks, setAutoWindowWeeks] = useState<HeatmapWindowWeeks>(53);
   const [windowOverride, setWindowOverride] = useState<HeatmapWindowWeeks | null>(null);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el || typeof ResizeObserver === "undefined") return;
-    const update = (width: number) => {
-      setAutoWindowWeeks(chooseHeatmapWindowWeeks(width));
-    };
-    update(el.getBoundingClientRect().width);
-    const observer = new ResizeObserver(entries => {
-      const entry = entries[0];
-      if (entry) update(entry.contentRect.width);
-    });
-    observer.observe(el);
-    return () => observer.disconnect();
-  }, []);
+  const [cellSizePx, setCellSizePx] = useState(11);
 
   const windowWeeks = windowOverride ?? autoWindowWeeks;
   const displayCells = useMemo(
@@ -140,11 +133,55 @@ export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapP
   const weekCount = Math.max(weeks.length, 1);
   const rangeLabel = `${displayCells[0]?.date ?? ""} to ${displayCells[displayCells.length - 1]?.date ?? ""}`;
 
+  const heatGapPx = density === "default" ? 3 : 2;
+  const heatDayLabelPx = density === "default" ? 30 : 26;
+  const heatMaxCellPx = layout === "embedded" ? 12 : 14;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const update = (width: number) => {
+      const picked = chooseHeatmapWindowWeeks(width, {
+        dayLabelPx: heatDayLabelPx,
+        paddingPx: layout === "embedded" ? 20 : 24,
+        minCellPx: layout === "embedded" ? 10 : 9,
+      });
+      if (windowOverride == null) {
+        setAutoWindowWeeks(layout === "embedded" && picked === 53 ? 26 : picked);
+      }
+      setCellSizePx(
+        computeHeatmapCellSizePx(width, weekCount, {
+          dayLabelPx: heatDayLabelPx,
+          gapPx: heatGapPx,
+          maxPx: heatMaxCellPx,
+        }),
+      );
+    };
+
+    update(el.getBoundingClientRect().width);
+    const observer = new ResizeObserver(entries => {
+      const entry = entries[0];
+      if (entry) update(entry.contentRect.width);
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [heatDayLabelPx, heatGapPx, heatMaxCellPx, layout, weekCount, windowOverride]);
+
+  const heatStyle = {
+    "--heat-week-count": String(weekCount),
+    "--heat-cell-size": `${cellSizePx}px`,
+    "--heat-gap": `${heatGapPx}px`,
+    "--heat-day-w": `${heatDayLabelPx}px`,
+  } as CSSProperties;
+
   return (
     <div
       ref={containerRef}
       className={`repo-dashboard-heatbox repo-dashboard-heat-density-${density}`}
       data-heatmap-density={density}
+      data-heatmap-layout={layout}
+      style={heatStyle}
     >
       <div className="repo-dashboard-heat-toolbar" role="group" aria-label="Heatmap week range">
         {HEATMAP_WINDOW_WEEKS.map(weeksOption => (
@@ -155,9 +192,7 @@ export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapP
               windowWeeks === weeksOption ? " active" : ""
             }`}
             aria-pressed={windowWeeks === weeksOption}
-            onClick={() =>
-              setWindowOverride(prev => (prev === weeksOption ? null : weeksOption))
-            }
+            onClick={() => setWindowOverride(weeksOption)}
           >
             {weeksOption}w
           </button>
@@ -170,7 +205,7 @@ export function ActivityHeatmap({ cells, density = "compact" }: ActivityHeatmapP
       </div>
       <div
         className="repo-dashboard-heat-wrap"
-        style={{ "--heat-week-count": String(weekCount) } as Record<string, string>}
+        style={heatStyle}
         role="img"
         aria-label={`Commit activity from ${rangeLabel}`}
       >

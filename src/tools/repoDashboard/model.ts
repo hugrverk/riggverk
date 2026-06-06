@@ -215,6 +215,28 @@ export function chooseHeatmapWindowWeeks(
   return 13;
 }
 
+export function computeHeatmapCellSizePx(
+  containerWidthPx: number,
+  weekCount: number,
+  options?: {
+    dayLabelPx?: number;
+    paddingPx?: number;
+    gapPx?: number;
+    minPx?: number;
+    maxPx?: number;
+  },
+): number {
+  const dayLabelPx = options?.dayLabelPx ?? 30;
+  const paddingPx = options?.paddingPx ?? 16;
+  const gapPx = options?.gapPx ?? 2;
+  const minPx = options?.minPx ?? 8;
+  const maxPx = options?.maxPx ?? 14;
+  const weeks = Math.max(1, weekCount);
+  const available = Math.max(0, containerWidthPx - dayLabelPx - paddingPx);
+  const weekWidth = (available - Math.max(0, weeks - 1) * gapPx) / weeks;
+  return Math.min(maxPx, Math.max(minPx, Math.floor(weekWidth)));
+}
+
 function heatmapWeekEndSaturday(d: Date): Date {
   const end = dayStart(d);
   end.setDate(end.getDate() + (6 - end.getDay()));
