@@ -13,7 +13,7 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
-import type { AgentTargetMeta, AppSettings, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, GetSettingsResponse, TargetProfileMeta } from "../types";
 
 export interface AppSettingsControllerDeps {
   setError: (message: string | null) => void;
@@ -77,17 +77,21 @@ export function useAppSettingsController({
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settings, targets, profiles] = await Promise.all([
-        invoke<AppSettings>("get_settings"),
+      const [settingsResponse, targets, profiles] = await Promise.all([
+        invoke<GetSettingsResponse>("get_settings"),
         invoke<AgentTargetMeta[]>("get_agent_targets"),
         invoke<TargetProfileMeta[]>("get_target_profiles"),
       ]);
+      const settings = settingsResponse.settings;
       if (appliedWorkspacePathRef.current === undefined) {
         appliedWorkspacePathRef.current = settings.workspace_path ?? null;
       }
       setAppSettings(settings);
       settingsRevisionRef.current = settings.revision ?? 0;
       savedSettingsRef.current = serializeSettingsForCompare(settings);
+      if (settingsResponse.load_warning) {
+        setSettingsMsg({ ok: false, text: settingsResponse.load_warning });
+      }
       setAgentTargets(targets);
       setTargetProfiles(profiles);
       applyThemeSettings(settings);
@@ -154,7 +158,8 @@ export function useAppSettingsController({
       const message = String(error);
       if (isSettingsConflictError(error)) {
         try {
-          const latest = await invoke<AppSettings>("get_settings");
+          const latestResponse = await invoke<GetSettingsResponse>("get_settings");
+          const latest = latestResponse.settings;
           settingsRevisionRef.current = latest.revision ?? 0;
           const latestSerialized = serializeSettingsForCompare(latest);
           const stillCurrent = appSettingsRef.current
@@ -164,6 +169,9 @@ export function useAppSettingsController({
             setAppSettings(latest);
             savedSettingsRef.current = latestSerialized;
             applyThemeSettings(latest);
+            if (latestResponse.load_warning) {
+              setSettingsMsg({ ok: false, text: latestResponse.load_warning });
+            }
           }
           setSettingsAutoSaveError("settings conflict — reloaded latest");
           setSettingsMsg({ ok: false, text: "settings conflict — reloaded latest" });
@@ -353,7 +361,8 @@ export function useAppSettingsController({
       if (!base) throw new Error("settings not loaded");
 
       if (attempt > 0) {
-        const latest = await invoke<AppSettings>("get_settings");
+        const latestResponse = await invoke<GetSettingsResponse>("get_settings");
+        const latest = latestResponse.settings;
         if (opId !== settingsMutationSeqRef.current) {
           return latest;
         }

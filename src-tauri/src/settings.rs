@@ -12,7 +12,7 @@ use crate::path_utils::{
     normalize_user_workspace_path_for_save,
 };
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RepoDashboardEntry {
     pub id: String,
     pub label: String,
@@ -21,7 +21,7 @@ pub struct RepoDashboardEntry {
     pub default_branch: Option<String>,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
+#[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct AppSettings {
     pub appearance: String,
     #[serde(default = "default_app_font_size")]
@@ -61,6 +61,25 @@ impl Default for AppSettings {
 }
 
 pub const SETTINGS_CONFLICT_ERROR: &str = "settings conflict";
+pub const SETTINGS_CORRUPT_RECOVERY_MESSAGE: &str =
+    "settings file was corrupt and moved to a local backup; using defaults";
+
+#[derive(Serialize, Clone, Debug)]
+pub struct GetSettingsResponse {
+    pub settings: AppSettings,
+    pub load_warning: Option<String>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MutationOutcome {
+    Unchanged,
+    Changed,
+}
+
+struct DiskLoad {
+    settings: AppSettings,
+    warning: Option<String>,
+}
 
 fn default_app_font_size() -> String {
     "medium".into()
@@ -180,43 +199,130 @@ fn settings_file() -> Result<PathBuf, String> {
     Ok(PathBuf::from(home).join("Library/Application Support/ai.agentworkspace.app/settings.json"))
 }
 
-pub fn load() -> AppSettings {
-    let path = match settings_file() {
-        Ok(p) => p,
-        Err(_) => return AppSettings::default(),
-    };
-    let mut settings = match fs::read_to_string(&path) {
-        Ok(json) => serde_json::from_str(&json).unwrap_or_default(),
-        Err(_) => AppSettings::default(),
-    };
-    normalize(&mut settings);
-    settings
+fn backup_corrupt_settings_file(path: &PathBuf) -> Result<(), String> {
+    if !path.is_file() {
+        return Ok(());
+    }
+    let nanos = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_nanos())
+        .unwrap_or(0);
+    let backup_path = path.with_extension(format!("json.corrupt.{nanos}.bak"));
+    fs::rename(path, &backup_path).map_err(|e| format!("recover corrupt settings: {e}"))?;
+    Ok(())
 }
 
-pub fn save(mut settings: AppSettings) -> Result<AppSettings, String> {
+fn read_settings_from_path(path: &PathBuf) -> Result<DiskLoad, String> {
+    let json = match fs::read_to_string(path) {
+        Ok(json) => json,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            return Ok(DiskLoad {
+                settings: AppSettings::default(),
+                warning: None,
+            });
+        }
+        Err(error) => return Err(format!("read settings: {error}")),
+    };
+
+    match serde_json::from_str::<AppSettings>(&json) {
+        Ok(mut settings) => {
+            normalize(&mut settings);
+            Ok(DiskLoad {
+                settings,
+                warning: None,
+            })
+        }
+        Err(_) => {
+            backup_corrupt_settings_file(path)?;
+            Ok(DiskLoad {
+                settings: AppSettings::default(),
+                warning: Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE.to_string()),
+            })
+        }
+    }
+}
+
+fn load_locked() -> Result<DiskLoad, String> {
+    let path = settings_file()?;
+    read_settings_from_path(&path)
+}
+
+/// Read settings for callers that do not write. Missing files use defaults; corrupt files recover once.
+pub fn load() -> AppSettings {
+    let path = match settings_file() {
+        Ok(path) => path,
+        Err(_) => return AppSettings::default(),
+    };
+    read_settings_from_path(&path)
+        .map(|loaded| loaded.settings)
+        .unwrap_or_default()
+}
+
+pub fn get_settings_snapshot() -> Result<GetSettingsResponse, String> {
+    let loaded = load_locked()?;
+    Ok(GetSettingsResponse {
+        settings: loaded.settings,
+        load_warning: loaded.warning,
+    })
+}
+
+fn mutate_settings_locked<F>(mutator: F) -> Result<AppSettings, String>
+where
+    F: FnOnce(&mut AppSettings) -> Result<MutationOutcome, String>,
+{
+    let DiskLoad {
+        mut settings,
+        warning: _,
+    } = load_locked()?;
+    let loaded_revision = settings.revision;
+    let outcome = mutator(&mut settings)?;
+    match outcome {
+        MutationOutcome::Unchanged => Ok(settings),
+        MutationOutcome::Changed => {
+            settings.revision = loaded_revision.saturating_add(1);
+            save_inner(&mut settings)
+        }
+    }
+}
+
+pub fn mutate_settings<F>(mutator: F) -> Result<AppSettings, String>
+where
+    F: FnOnce(&mut AppSettings) -> Result<MutationOutcome, String>,
+{
     let _guard = SETTINGS_WRITE_MUTEX
         .lock()
         .map_err(|_| "settings lock poisoned".to_string())?;
-    let current = load();
-    settings.revision = current.revision.saturating_add(1);
-    save_inner(&mut settings)
+    mutate_settings_locked(mutator)
+}
+
+pub fn save(settings: AppSettings) -> Result<AppSettings, String> {
+    let _guard = SETTINGS_WRITE_MUTEX
+        .lock()
+        .map_err(|_| "settings lock poisoned".to_string())?;
+    let incoming = settings;
+    mutate_settings_locked(|current| {
+        *current = incoming;
+        Ok(MutationOutcome::Changed)
+    })
 }
 
 pub fn save_with_revision_check(
-    mut settings: AppSettings,
+    settings: AppSettings,
     expected_revision: Option<u64>,
 ) -> Result<AppSettings, String> {
     let _guard = SETTINGS_WRITE_MUTEX
         .lock()
         .map_err(|_| "settings lock poisoned".to_string())?;
-    let current = load();
-    if let Some(expected) = expected_revision {
-        if current.revision != expected {
-            return Err(SETTINGS_CONFLICT_ERROR.to_string());
+    let incoming = settings;
+    mutate_settings_locked(|current| {
+        if let Some(expected) = expected_revision {
+            if current.revision != expected {
+                return Err(SETTINGS_CONFLICT_ERROR.to_string());
+            }
         }
-    }
-    settings.revision = current.revision.saturating_add(1);
-    save_inner(&mut settings)
+        *current = incoming;
+        Ok(MutationOutcome::Changed)
+    })
 }
 
 fn save_inner(settings: &mut AppSettings) -> Result<AppSettings, String> {
@@ -278,8 +384,9 @@ fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        normalize, normalize_for_save, save, save_with_revision_check, validate_hex_color,
-        AppSettings, SETTINGS_CONFLICT_ERROR,
+        get_settings_snapshot, mutate_settings, normalize, normalize_for_save, save,
+        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
+        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
     };
     use crate::path_utils::is_legacy_default_workspace_path;
     use std::fs;
@@ -539,6 +646,94 @@ mod tests {
             let mut stale = first.clone();
             stale.appearance = "light".into();
             let err = save_with_revision_check(stale, Some(0)).expect_err("stale revision");
+            assert_eq!(err, SETTINGS_CONFLICT_ERROR);
+        });
+    }
+
+    fn write_settings_file(dir: &PathBuf, json: &str) {
+        let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create settings parent");
+        }
+        fs::write(path, json).expect("write settings");
+    }
+
+    #[test]
+    fn missing_settings_file_returns_defaults() {
+        with_temp_home(|_| {
+            let snapshot = get_settings_snapshot().expect("snapshot");
+            assert_eq!(snapshot.settings, AppSettings::default());
+            assert!(snapshot.load_warning.is_none());
+        });
+    }
+
+    #[test]
+    fn malformed_settings_file_recovers_without_looping() {
+        with_temp_home(|dir| {
+            write_settings_file(dir, "{not-json");
+            let first = get_settings_snapshot().expect("first load");
+            assert_eq!(first.settings, AppSettings::default());
+            assert_eq!(
+                first.load_warning.as_deref(),
+                Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE)
+            );
+
+            let second = get_settings_snapshot().expect("second load");
+            assert_eq!(second.settings, AppSettings::default());
+            assert!(second.load_warning.is_none());
+        });
+    }
+
+    #[test]
+    fn mutate_settings_increments_revision_from_locked_load() {
+        with_temp_home(|_| {
+            let first = save(AppSettings::default()).expect("initial save");
+            assert_eq!(first.revision, 1);
+
+            let second = mutate_settings(|settings| {
+                settings.appearance = "light".into();
+                Ok(MutationOutcome::Changed)
+            })
+            .expect("mutate");
+            assert_eq!(second.revision, 2);
+            assert_eq!(second.appearance, "light");
+        });
+    }
+
+    #[test]
+    fn save_with_revision_check_preserves_unrelated_fields_under_lock() {
+        with_temp_home(|_| {
+            let mut initial = AppSettings::default();
+            initial.enabled_target_ids = vec!["codex_rules".into(), "opencode_config".into()];
+            let saved = save(initial).expect("save");
+            assert_eq!(saved.revision, 1);
+
+            let mut stale = saved.clone();
+            stale.appearance = "light".into();
+            let err = save_with_revision_check(stale, Some(0)).expect_err("stale revision");
+            assert_eq!(err, SETTINGS_CONFLICT_ERROR);
+
+            let latest = get_settings_snapshot().expect("reload").settings;
+            assert_eq!(latest.appearance, "dark");
+            assert_eq!(latest.enabled_target_ids.len(), 2);
+        });
+    }
+
+    #[test]
+    fn workspace_path_mutation_rejects_stale_revision() {
+        with_temp_home(|_| {
+            let first = save(AppSettings::default()).expect("first save");
+            let _second = save({
+                let mut next = first.clone();
+                next.appearance = "light".into();
+                next
+            })
+            .expect("second save");
+
+            let mut stale_workspace = first.clone();
+            stale_workspace.workspace_path = Some("/tmp/workspace".into());
+            let err = save_with_revision_check(stale_workspace, Some(first.revision))
+                .expect_err("stale workspace write");
             assert_eq!(err, SETTINGS_CONFLICT_ERROR);
         });
     }

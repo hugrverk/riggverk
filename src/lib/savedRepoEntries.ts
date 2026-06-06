@@ -1,6 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useEffect, useState } from "react";
-import type { AppSettings, RepoDashboardEntry } from "../types";
+import type { GetSettingsResponse, RepoDashboardEntry } from "../types";
 
 /** Read-only saved Repo Dashboard entries from app settings (no writes). */
 export function useSavedRepoDashboardEntries(): {
@@ -14,8 +14,9 @@ export function useSavedRepoDashboardEntries(): {
 
   useEffect(() => {
     let cancelled = false;
-    invoke<AppSettings>("get_settings")
-      .then(settings => {
+    invoke<GetSettingsResponse>("get_settings")
+      .then(response => {
+        const settings = response.settings;
         if (cancelled) return;
         setEntries(settings.repo_dashboard_entries ?? []);
         setActiveEntryId(settings.active_repo_dashboard_id ?? null);

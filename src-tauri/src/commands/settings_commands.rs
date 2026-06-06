@@ -1,14 +1,22 @@
 use crate::agent_targets;
 use crate::commands::workspace;
-use crate::settings::{self, AppSettings};
+use crate::settings::{self, AppSettings, GetSettingsResponse, MutationOutcome};
 
 #[tauri::command]
-pub fn get_settings() -> Result<AppSettings, String> {
-    let mut loaded = settings::load();
-    if workspace::scrub_stale_workspace_path(&mut loaded) {
-        loaded = settings::save(loaded)?;
-    }
-    Ok(loaded)
+pub fn get_settings() -> Result<GetSettingsResponse, String> {
+    let snapshot = settings::get_settings_snapshot()?;
+    let warning = snapshot.load_warning;
+    let settings = settings::mutate_settings(|current| {
+        if workspace::scrub_stale_workspace_path(current) {
+            Ok(MutationOutcome::Changed)
+        } else {
+            Ok(MutationOutcome::Unchanged)
+        }
+    })?;
+    Ok(GetSettingsResponse {
+        settings,
+        load_warning: warning,
+    })
 }
 
 #[tauri::command]

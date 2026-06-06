@@ -39,7 +39,7 @@ function createDeps() {
 
 function mockInitialLoad(settings = baseSettings) {
   invoke.mockImplementation((cmd: string) => {
-    if (cmd === "get_settings") return Promise.resolve(settings);
+    if (cmd === "get_settings") return Promise.resolve({ settings, load_warning: null });
     if (cmd === "get_agent_targets") return Promise.resolve([]);
     if (cmd === "get_target_profiles") return Promise.resolve([]);
     return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
@@ -65,7 +65,7 @@ describe("useAppSettingsController mutateAppSettings", () => {
         const next = args?.settings ?? baseSettings;
         return Promise.resolve({ ...next, revision: (baseSettings.revision ?? 0) + 1 });
       }
-      if (cmd === "get_settings") return Promise.resolve(baseSettings);
+      if (cmd === "get_settings") return Promise.resolve({ settings: baseSettings, load_warning: null });
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
@@ -98,7 +98,7 @@ describe("useAppSettingsController mutateAppSettings", () => {
         const next = args?.settings ?? baseSettings;
         return Promise.resolve({ ...next, revision: (baseSettings.revision ?? 0) + 1 });
       }
-      if (cmd === "get_settings") return Promise.resolve(baseSettings);
+      if (cmd === "get_settings") return Promise.resolve({ settings: baseSettings, load_warning: null });
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
@@ -140,7 +140,7 @@ describe("useAppSettingsController mutateAppSettings", () => {
         }
         return Promise.resolve({ ...next, revision: 3 });
       }
-      if (cmd === "get_settings") return Promise.resolve({ ...baseSettings, revision: 1 });
+      if (cmd === "get_settings") return Promise.resolve({ settings: { ...baseSettings, revision: 1 }, load_warning: null });
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
     });
 
@@ -196,10 +196,13 @@ describe("useAppSettingsController mutateAppSettings", () => {
       }
       if (cmd === "get_settings") {
         return Promise.resolve({
-          ...baseSettings,
-          revision: 2,
-          appearance: "light",
-          repo_dashboard_entries: [{ id: "server", label: "Server", path: "/tmp/server" }],
+          settings: {
+            ...baseSettings,
+            revision: 2,
+            appearance: "light",
+            repo_dashboard_entries: [{ id: "server", label: "Server", path: "/tmp/server" }],
+          },
+          load_warning: null,
         });
       }
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));

@@ -853,9 +853,11 @@ pub fn try_set_active_workspace_path(path: String) -> Result<settings::AppSettin
     let normalized = normalize_user_workspace_path_for_save(&path)?
         .ok_or_else(|| "workspace path must be absolute or start with ~/".to_string())?;
     let canonical = validate_workspace_root(PathBuf::from(&normalized))?;
-    let mut settings = settings::load();
-    settings.workspace_path = Some(canonical.to_string_lossy().into_owned());
-    settings::save(settings)
+    let canonical_path = canonical.to_string_lossy().into_owned();
+    settings::mutate_settings(|current| {
+        current.workspace_path = Some(canonical_path);
+        Ok(settings::MutationOutcome::Changed)
+    })
 }
 
 #[derive(Serialize)]

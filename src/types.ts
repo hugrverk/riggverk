@@ -104,6 +104,11 @@ export interface AppSettings {
   revision?: number;
 }
 
+export interface GetSettingsResponse {
+  settings: AppSettings;
+  load_warning: string | null;
+}
+
 export interface RepoDashboardEntry {
   id: string;
   label: string;

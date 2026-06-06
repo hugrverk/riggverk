@@ -1,5 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { AppSettings } from "../types";
+import type { AppSettings, GetSettingsResponse } from "../types";
 
 export const SETTINGS_CONFLICT_ERROR = "settings conflict";
 
@@ -13,7 +13,8 @@ export async function commitAppSettingsMutation(
   maxAttempts = 3,
 ): Promise<AppSettings> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
-    const current = await invoke<AppSettings>("get_settings");
+    const response = await invoke<GetSettingsResponse>("get_settings");
+    const current = response.settings;
     const expectedRevision = current.revision ?? 0;
     try {
       const next = mutator(current);

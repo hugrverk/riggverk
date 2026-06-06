@@ -37,9 +37,9 @@ describe("commitAppSettingsMutation", () => {
 
   it("retries after conflict and preserves both mutations", async () => {
     invoke
-      .mockResolvedValueOnce({ ...baseSettings, revision: 2 })
+      .mockResolvedValueOnce({ settings: { ...baseSettings, revision: 2 }, load_warning: null })
       .mockRejectedValueOnce(new Error(SETTINGS_CONFLICT_ERROR))
-      .mockResolvedValueOnce({ ...baseSettings, revision: 3, appearance: "light" })
+      .mockResolvedValueOnce({ settings: { ...baseSettings, revision: 3, appearance: "light" }, load_warning: null })
       .mockResolvedValueOnce({ ...baseSettings, revision: 4, appearance: "light", app_font_size: "large" });
 
     const saved = await commitAppSettingsMutation(current => ({
