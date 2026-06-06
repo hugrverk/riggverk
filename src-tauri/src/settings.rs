@@ -829,9 +829,11 @@ mod tests {
             let writer = thread::spawn(move || {
                 barrier_writer.wait();
                 thread::sleep(Duration::from_millis(5));
-                let mut next = AppSettings::default();
-                next.appearance = "light".into();
-                save(next).expect("valid update")
+                save(AppSettings {
+                    appearance: "light".into(),
+                    ..AppSettings::default()
+                })
+                .expect("valid update")
             });
 
             let snapshot = reader.join().expect("reader join");
