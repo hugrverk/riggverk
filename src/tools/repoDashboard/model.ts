@@ -497,3 +497,185 @@ export function ghIssuesKpiLabel(ghAvailable: boolean, ghAuthenticated: boolean)
   if (!ghAuthenticated) return "gh issues (local-only)";
   return "open issues (gh)";
 }
+
+export const CONVENTIONAL_COMMIT_TYPES = [
+  "feat",
+  "fix",
+  "docs",
+  "test",
+  "chore",
+  "refactor",
+  "perf",
+  "build",
+  "ci",
+] as const;
+
+export type ConventionalCommitType = (typeof CONVENTIONAL_COMMIT_TYPES)[number] | "other";
+
+export interface ParsedConventionalSubject {
+  type: ConventionalCommitType;
+  scope: string | null;
+}
+
+const CONVENTIONAL_SUBJECT_RE = /^([a-z]+)(?:\(([a-z0-9._-]+)\))?!?:\s/i;
+
+export function parseConventionalCommitSubject(subject: string): ParsedConventionalSubject {
+  const match = subject.match(CONVENTIONAL_SUBJECT_RE);
+  if (!match) return { type: "other", scope: null };
+  const rawType = match[1].toLowerCase();
+  const type = (CONVENTIONAL_COMMIT_TYPES as readonly string[]).includes(rawType)
+    ? (rawType as ConventionalCommitType)
+    : "other";
+  return { type, scope: match[2] ?? null };
+}
+
+function emptyTypeCounts(): Record<ConventionalCommitType, number> {
+  return {
+    feat: 0,
+    fix: 0,
+    docs: 0,
+    test: 0,
+    chore: 0,
+    refactor: 0,
+    perf: 0,
+    build: 0,
+    ci: 0,
+    other: 0,
+  };
+}
+
+export interface ContributorStat {
+  id: string;
+  displayName: string;
+  commitCount: number;
+  percentage: number;
+  firstCommitAt: number | null;
+  latestCommitAt: number | null;
+  mergeCommitCount: number;
+  typeCounts: Record<ConventionalCommitType, number>;
+  scopeCounts: Record<string, number>;
+}
+
+function topCountLabels(counts: Record<string, number>, limit = 3): string {
+  const ranked = Object.entries(counts)
+    .filter(([, count]) => count > 0)
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
+  return ranked.slice(0, limit).map(([label, count]) => `${label} ${count}`).join(", ");
+}
+
+export function contributorTopTypes(stat: ContributorStat): string {
+  return topCountLabels(stat.typeCounts as Record<string, number>);
+}
+
+export function contributorTopScopes(stat: ContributorStat): string {
+  return topCountLabels(stat.scopeCounts);
+}
+
+export function buildContributorStats(commits: RepoCommitEntry[]): ContributorStat[] {
+  if (!commits.length) return [];
+
+  type Bucket = {
+    names: Map<string, number>;
+    commitCount: number;
+    mergeCommitCount: number;
+    firstCommitAt: number | null;
+    latestCommitAt: number | null;
+    typeCounts: Record<ConventionalCommitType, number>;
+    scopeCounts: Record<string, number>;
+  };
+
+  const buckets = new Map<string, Bucket>();
+
+  for (const commit of commits) {
+    const id = authorIdentity(commit);
+    const bucket =
+      buckets.get(id) ??
+      {
+        names: new Map<string, number>(),
+        commitCount: 0,
+        mergeCommitCount: 0,
+        firstCommitAt: null,
+        latestCommitAt: null,
+        typeCounts: emptyTypeCounts(),
+        scopeCounts: {},
+      };
+
+    const label = authorLabel(commit);
+    bucket.names.set(label, (bucket.names.get(label) ?? 0) + 1);
+    bucket.commitCount += 1;
+    if (commit.is_merge) bucket.mergeCommitCount += 1;
+
+    const authoredAt = commit.authored_at;
+    if (Number.isFinite(authoredAt)) {
+      bucket.firstCommitAt =
+        bucket.firstCommitAt == null ? authoredAt : Math.min(bucket.firstCommitAt, authoredAt);
+      bucket.latestCommitAt =
+        bucket.latestCommitAt == null ? authoredAt : Math.max(bucket.latestCommitAt, authoredAt);
+    }
+
+    const parsed = parseConventionalCommitSubject(commit.subject);
+    bucket.typeCounts[parsed.type] += 1;
+    if (parsed.scope) {
+      bucket.scopeCounts[parsed.scope] = (bucket.scopeCounts[parsed.scope] ?? 0) + 1;
+    }
+
+    buckets.set(id, bucket);
+  }
+
+  const total = commits.length;
+  const stats: ContributorStat[] = [...buckets.entries()].map(([id, bucket]) => {
+    const displayName =
+      [...bucket.names.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))[0]?.[0] ??
+      id;
+    return {
+      id,
+      displayName,
+      commitCount: bucket.commitCount,
+      percentage: Math.round((bucket.commitCount / total) * 1000) / 10,
+      firstCommitAt: bucket.firstCommitAt,
+      latestCommitAt: bucket.latestCommitAt,
+      mergeCommitCount: bucket.mergeCommitCount,
+      typeCounts: bucket.typeCounts,
+      scopeCounts: bucket.scopeCounts,
+    };
+  });
+
+  return stats.sort((a, b) => {
+    if (b.commitCount !== a.commitCount) return b.commitCount - a.commitCount;
+    const latestA = a.latestCommitAt ?? 0;
+    const latestB = b.latestCommitAt ?? 0;
+    if (latestB !== latestA) return latestB - latestA;
+    return a.displayName.localeCompare(b.displayName);
+  });
+}
+
+export interface WorkPartition {
+  activeStarted: RepoDashboardWorkItem[];
+  activeOpen: RepoDashboardWorkItem[];
+  done: RepoDashboardWorkItem[];
+}
+
+export function compareWorkItems(
+  a: RepoDashboardWorkItem,
+  b: RepoDashboardWorkItem,
+): number {
+  const laneOrder = DOC_WORK_LANE_ORDER.indexOf(workItemDocLane(a)) -
+    DOC_WORK_LANE_ORDER.indexOf(workItemDocLane(b));
+  if (laneOrder !== 0) return laneOrder;
+  const pathCmp = a.path.localeCompare(b.path);
+  if (pathCmp !== 0) return pathCmp;
+  const lineCmp = (a.line ?? 0) - (b.line ?? 0);
+  if (lineCmp !== 0) return lineCmp;
+  return a.text.localeCompare(b.text);
+}
+
+export function partitionWorkItems(items: RepoDashboardWorkItem[]): WorkPartition {
+  const activeStarted = items.filter(i => i.status === "started").sort(compareWorkItems);
+  const activeOpen = items.filter(i => i.status === "open").sort(compareWorkItems);
+  const done = items.filter(i => i.status === "done").sort(compareWorkItems);
+  return { activeStarted, activeOpen, done };
+}
+
+export function activeWorkCount(partition: WorkPartition): number {
+  return partition.activeStarted.length + partition.activeOpen.length;
+}

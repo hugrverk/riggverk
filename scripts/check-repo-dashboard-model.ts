@@ -17,6 +17,12 @@ import {
   ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
   repoDashboardBrandLabel,
+  buildContributorStats,
+  parseConventionalCommitSubject,
+  partitionWorkItems,
+  compareWorkItems,
+  activeWorkCount,
+  contributorTopTypes,
 } from "../src/tools/repoDashboard/model";
 
 function commit(
@@ -162,6 +168,43 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   const lanes = buildDocLaneSummaries([item]);
   assert.equal(lanes.length, 1);
   assert.equal(lanes[0].label, "Backlog");
+}
+
+{
+  const parsed = parseConventionalCommitSubject("feat(repo-dashboard): add docs");
+  assert.equal(parsed.type, "feat");
+  assert.equal(parsed.scope, "repo-dashboard");
+  assert.equal(parseConventionalCommitSubject("misc update").type, "other");
+  assert.equal(parseConventionalCommitSubject("fix: plain").scope, null);
+}
+
+{
+  const commits = [
+    commit({ authored_at: 10, author_name: "Alice", author_email: "a@x.com", subject: "feat: one" }),
+    commit({ authored_at: 20, author_name: "Alice", author_email: "a@x.com", subject: "fix(ui): two" }),
+    commit({ authored_at: 15, author_name: "Bob", author_email: "b@x.com", subject: "Merge pull request", is_merge: true }),
+  ];
+  const stats = buildContributorStats(commits);
+  assert.equal(stats.length, 2);
+  assert.equal(stats[0].displayName, "Alice");
+  assert.equal(stats[0].commitCount, 2);
+  assert.equal(stats[0].percentage, 66.7);
+  assert.ok(contributorTopTypes(stats[0]).includes("feat"));
+}
+
+{
+  const items = [
+    { source: "docs" as const, path: "a", text: "open", type: "todo" as const, status: "open" as const, needsPlan: false },
+    { source: "docs" as const, path: "b", text: "started", type: "todo" as const, status: "started" as const, needsPlan: true },
+    { source: "docs" as const, path: "c", text: "done", type: "todo" as const, status: "done" as const, needsPlan: false },
+  ];
+  const partition = partitionWorkItems(items);
+  assert.equal(partition.activeStarted.length, 1);
+  assert.equal(partition.activeOpen.length, 1);
+  assert.equal(partition.done.length, 1);
+  assert.equal(activeWorkCount(partition), 2);
+  assert.equal(partition.activeStarted[0].text, "started");
+  assert.ok(compareWorkItems(partition.activeOpen[0], partition.activeStarted[0]) !== 0);
 }
 
 console.log("Repo Dashboard model checks passed");
