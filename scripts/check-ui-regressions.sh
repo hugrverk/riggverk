@@ -106,6 +106,14 @@ fi
 if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "repo-dashboard-workspace must not use overflow auto (nested scroll)"
 fi
+if rg -n -U '\.repo-dashboard-overview-mid \.repo-dashboard-latest-content[^{]*\{[^}]*overflow:\s*(auto|scroll)' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "latest change content must not scroll inside overview mid row"
+fi
+if rg -n -U '\.repo-dashboard-activity-insights-svg[^{]*\{[^}]*min-height:\s*[2-9][0-9]{2}px' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  cat /tmp/agent-workspace-ui-regressions.txt >&2
+  fail "activity insights chart must not enforce large minimum height"
+fi
 if rg -n -U '\.repo-dashboard-heat-aside \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "repo-dashboard-heat-aside must not use overflow auto (nested scroll)"
 fi

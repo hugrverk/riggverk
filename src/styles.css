@@ -5917,7 +5917,7 @@ code {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 14px;
-  align-items: stretch;
+  align-items: start;
   width: 100%;
 }
 
@@ -5925,15 +5925,11 @@ code {
   display: flex;
   flex-direction: column;
   min-width: 0;
-  min-height: 0;
-  height: 100%;
+  height: auto;
 }
 
 .repo-dashboard-overview-mid .repo-dashboard-latest-content {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: auto;
-  padding-right: 2px;
+  overflow: visible;
 }
 
 .repo-dashboard-overview-full {
@@ -6274,7 +6270,7 @@ code {
   max-width: 100%;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .repo-dashboard-overview-full .repo-dashboard-commit {
@@ -6326,7 +6322,7 @@ code {
   overflow-x: hidden;
   overflow-y: auto;
   padding-right: 2px;
-  contain: strict;
+  overscroll-behavior: contain;
 }
 
 .repo-dashboard-recent-activity-scroll:focus-visible {
@@ -7041,10 +7037,6 @@ code {
     margin-left: 0;
     width: 100%;
     justify-content: flex-end;
-  }
-
-  .repo-dashboard-contributor-panel {
-    max-height: min(320px, 42vh);
   }
 
   .repo-dashboard-activity-insights-controls {
