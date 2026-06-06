@@ -177,14 +177,14 @@ function DocItemList({
     : `${missingCount} bundled doc(s) are missing from this workspace.`;
 
   return (
-    <div className="lib-sidebar-body">
+    <div className="lib-sidebar-body lib-docs-sidebar">
       {showStaleBanner && (
         <div className="lib-docs-stale-banner" role="status">
           <p className="lib-docs-stale-title">Bundled docs need update</p>
           <p className="lib-docs-stale-hint">{staleHint} Use update resources on the Workspace page to copy missing files without overwriting your edits.</p>
           <button
             type="button"
-            className="btn btn-sm btn-primary"
+            className="btn btn-sm btn-primary lib-docs-stale-action"
             onClick={onGoToWorkspaceRepair}
           >
             open workspace update
@@ -192,25 +192,27 @@ function DocItemList({
         </div>
       )}
       {Array.from(groups.entries()).map(([section, items]) => (
-        <div key={section} className="lib-sidebar-group">
-          <div className="lib-sidebar-group-label">{section}</div>
+        <div key={section} className="lib-docs-section">
+          <div className="lib-docs-section-label">{section}</div>
           {items.map((d) => (
             <button
               key={d.id}
-              className={`lib-sidebar-item ${activeId === d.id ? "lib-sidebar-item-active" : ""}`}
+              type="button"
+              className={`lib-docs-list-item${activeId === d.id ? " lib-docs-list-item-active" : ""}`}
               onClick={() => onSelect(d.id)}
               aria-current={activeId === d.id ? "true" : undefined}
             >
-              <span className="lib-sidebar-item-title">{d.title}</span>
+              <span className="lib-docs-list-title">{d.title}</span>
+              <span className="lib-docs-list-path">{d.path}</span>
               {d.source === "custom" && (
-                <span className="lib-sidebar-item-tag">context</span>
+                <span className="lib-docs-context-tag">context</span>
               )}
             </button>
           ))}
         </div>
       ))}
       {workspaceValid && (
-        <button className="btn btn-sm btn-primary lib-new-btn" onClick={onNewDoc}>
+        <button type="button" className="btn btn-sm btn-primary lib-docs-new-btn" onClick={onNewDoc}>
           + new doc
         </button>
       )}
