@@ -1,8 +1,10 @@
 # Release Hardening Audit
 
+> **Historical record only.** For current remediation status see `docs/AGENT_WORKSPACE_REMEDIATION_LEDGER.md`.
+
 **Starting commit:** `9a96ec5085212895ff05d33b397e62b2d76a41de`  
 **Date:** 2026-05-09  
-**Verdict:** PASS WITH FINDINGS
+**Verdict:** PASS WITH FINDINGS (historical)
 
 ## Changes Made
 

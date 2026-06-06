@@ -1,5 +1,7 @@
 # Audit batch ledger (2026-05-25)
 
+> **Historical record.** Current remediation tracking: `docs/AGENT_WORKSPACE_REMEDIATION_LEDGER.md`.
+
 ## Batch 1 (prior)
 
 Baseline: `main` @ `b4de47456bc8fcf35c7adeda5491e0d448440fcd`, clean tree, synced with `origin/main`.
