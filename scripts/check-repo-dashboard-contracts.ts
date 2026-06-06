@@ -91,9 +91,19 @@ for (const chunk of [repoDashboardStyles, promptStyles]) {
 
 const parserScript = read("scripts/check-repo-dashboard-docs-parser.ts");
 assert.doesNotMatch(parserScript, /krets-/);
-assert.doesNotMatch(parserScript, /fixtures/);
+assert.doesNotMatch(parserScript, /repoDashboard\/fixtures/);
+assert.match(parserScript, /FIXTURE_BACKLOG/);
 
 const docsPaths = walk(join(root, "docs")).filter(path => /REPO_DASHBOARD/i.test(path));
 assert.equal(docsPaths.length, 0, "stale Repo Dashboard markdown docs must not remain");
+
+const docsWorkspace = read("src/tools/repoDashboard/RepoDocsWorkspace.tsx");
+assert.match(docsWorkspace, /docsSource:\s*RepoDocsSource/);
+assert.match(docsWorkspace, /docsRef:\s*string/);
+assert.match(docsWorkspace, /docsStale:\s*boolean/);
+
+const dashboardTool = read("src/tools/repoDashboard/RepoDashboardTool.tsx");
+assert.match(dashboardTool, /filterDocsSnapshotWarnings/);
+assert.match(dashboardTool, /workItemCanonicalSource/);
 
 console.log("Repo Dashboard contract checks passed");
