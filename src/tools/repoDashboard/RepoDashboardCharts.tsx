@@ -5,11 +5,9 @@ import {
   ACTIVITY_GREEN,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
-  chooseHeatmapWindowWeeks,
   computeHeatmapCellSizePx,
-  HEATMAP_WINDOW_WEEKS,
+  HEATMAP_DISPLAY_WEEKS,
   sliceHeatmapCellsToWindow,
-  type HeatmapWindowWeeks,
 } from "./model";
 
 interface ActivityLineChartProps {
@@ -116,45 +114,41 @@ export function ActivityHeatmap({
   layout = "default",
 }: ActivityHeatmapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const [autoWindowWeeks, setAutoWindowWeeks] = useState<HeatmapWindowWeeks>(53);
-  const [windowOverride, setWindowOverride] = useState<HeatmapWindowWeeks | null>(null);
   const [cellSizePx, setCellSizePx] = useState(11);
+  const [hideWeekdayLabels, setHideWeekdayLabels] = useState(false);
+  const [monthLabelGap, setMonthLabelGap] = useState(3);
 
-  const windowWeeks = windowOverride ?? autoWindowWeeks;
-  const displayCells = useMemo(
-    () => sliceHeatmapCellsToWindow(cells, windowWeeks),
-    [cells, windowWeeks],
-  );
+  const displayCells = useMemo(() => sliceHeatmapCellsToWindow(cells), [cells]);
   const weeks = useMemo(() => buildHeatmapWeeks(displayCells), [displayCells]);
   const monthLabels = useMemo(
-    () => buildHeatmapMonthLabels(weeks, windowWeeks <= 13 ? 2 : 3),
-    [weeks, windowWeeks],
+    () => buildHeatmapMonthLabels(weeks, monthLabelGap),
+    [weeks, monthLabelGap],
   );
-  const weekCount = Math.max(weeks.length, 1);
+  const weekCount = HEATMAP_DISPLAY_WEEKS;
   const rangeLabel = `${displayCells[0]?.date ?? ""} to ${displayCells[displayCells.length - 1]?.date ?? ""}`;
 
   const heatGapPx = density === "default" ? 3 : 2;
-  const heatDayLabelPx = density === "default" ? 30 : 26;
+  const heatDayLabelPx = hideWeekdayLabels ? 0 : density === "default" ? 30 : 26;
   const heatMaxCellPx = layout === "embedded" ? 12 : 14;
+  const heatMinCellPx = layout === "embedded" ? 6 : 5;
 
   useEffect(() => {
     const el = containerRef.current;
     if (!el || typeof ResizeObserver === "undefined") return;
 
     const update = (width: number) => {
-      const picked = chooseHeatmapWindowWeeks(width, {
-        dayLabelPx: heatDayLabelPx,
-        paddingPx: layout === "embedded" ? 20 : 24,
-        minCellPx: layout === "embedded" ? 10 : 9,
-      });
-      if (windowOverride == null) {
-        setAutoWindowWeeks(layout === "embedded" && picked === 53 ? 26 : picked);
-      }
+      const narrow = width < 420;
+      setHideWeekdayLabels(narrow);
+      setMonthLabelGap(narrow ? 4 : width < 640 ? 3 : 2);
+      const dayLabelPx = narrow ? 0 : layout === "embedded" ? 26 : 30;
+      const gapPx = narrow ? 1 : heatGapPx;
       setCellSizePx(
         computeHeatmapCellSizePx(width, weekCount, {
-          dayLabelPx: heatDayLabelPx,
-          gapPx: heatGapPx,
+          dayLabelPx,
+          gapPx,
+          minPx: heatMinCellPx,
           maxPx: heatMaxCellPx,
+          paddingPx: layout === "embedded" ? 16 : 20,
         }),
       );
     };
@@ -166,12 +160,12 @@ export function ActivityHeatmap({
     });
     observer.observe(el);
     return () => observer.disconnect();
-  }, [heatDayLabelPx, heatGapPx, heatMaxCellPx, layout, weekCount, windowOverride]);
+  }, [heatGapPx, heatMaxCellPx, heatMinCellPx, layout, weekCount]);
 
   const heatStyle = {
     "--heat-week-count": String(weekCount),
     "--heat-cell-size": `${cellSizePx}px`,
-    "--heat-gap": `${heatGapPx}px`,
+    "--heat-gap": `${hideWeekdayLabels ? 1 : heatGapPx}px`,
     "--heat-day-w": `${heatDayLabelPx}px`,
   } as CSSProperties;
 
@@ -183,26 +177,6 @@ export function ActivityHeatmap({
       data-heatmap-layout={layout}
       style={heatStyle}
     >
-      <div className="repo-dashboard-heat-toolbar" role="group" aria-label="Heatmap week range">
-        {HEATMAP_WINDOW_WEEKS.map(weeksOption => (
-          <button
-            key={weeksOption}
-            type="button"
-            className={`repo-dashboard-heat-range-btn${
-              windowWeeks === weeksOption ? " active" : ""
-            }`}
-            aria-pressed={windowWeeks === weeksOption}
-            onClick={() => setWindowOverride(weeksOption)}
-          >
-            {weeksOption}w
-          </button>
-        ))}
-        {windowOverride == null && autoWindowWeeks < 53 ? (
-          <span className="text-muted small repo-dashboard-heat-auto-note">
-            auto {autoWindowWeeks}w
-          </span>
-        ) : null}
-      </div>
       <div
         className="repo-dashboard-heat-wrap"
         style={heatStyle}
@@ -222,16 +196,22 @@ export function ActivityHeatmap({
             ))}
           </div>
         </div>
-        <div className="repo-dashboard-heatbody">
-          <div className="repo-dashboard-days font-mono" aria-hidden="true">
-            <span />
-            <span>Mon</span>
-            <span />
-            <span>Wed</span>
-            <span />
-            <span>Fri</span>
-            <span />
-          </div>
+        <div
+          className={`repo-dashboard-heatbody${
+            hideWeekdayLabels ? " repo-dashboard-heatbody-no-days" : ""
+          }`}
+        >
+          {!hideWeekdayLabels ? (
+            <div className="repo-dashboard-days font-mono" aria-hidden="true">
+              <span />
+              <span>Mon</span>
+              <span />
+              <span>Wed</span>
+              <span />
+              <span>Fri</span>
+              <span />
+            </div>
+          ) : null}
           <div className="repo-dashboard-heat-grid">
             {weeks.map((week, wi) => (
               <div key={wi} className="repo-dashboard-heat-week">
