@@ -61,6 +61,15 @@ assert.ok(workSource.includes("repo-dashboard-work-active-columns"), "active col
 assert.ok(workSource.includes("repo-dashboard-work-subcolumn-scroll"), "started and open must have independent scroll regions");
 assert.equal((workSource.match(/repo-dashboard-work-subcolumn-scroll/g) ?? []).length, 2, "started and open need two scroll regions");
 assert.ok(workSource.includes("repo-dashboard-work-column-scroll"), "done must have its own scroll region");
+assert.ok(
+  workSource.includes("repo-dashboard-work-item-head"),
+  "work items must use a distinct item-head class from the page header",
+);
+assert.ok(
+  !workSource.includes('className="repo-dashboard-work-head"') ||
+    workSource.match(/className="repo-dashboard-work-head"/g)?.length === 1,
+  "repo-dashboard-work-head must only label the page header",
+);
 {
   const activeSection =
     workSource.match(

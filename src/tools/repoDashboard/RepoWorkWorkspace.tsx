@@ -37,7 +37,7 @@ function WorkItemsList({
             key={`${item.source}-${item.path}-${item.line ?? 0}-${index}`}
             className={`repo-dashboard-work-item${startedVisual ? " repo-dashboard-work-item-started" : ""}`}
           >
-            <div className="repo-dashboard-work-head">
+            <div className="repo-dashboard-work-item-head">
               <span className={`repo-dashboard-chip ${item.type}`}>{item.type}</span>
               <span className="repo-dashboard-work-status">{item.status}</span>
               {item.needsPlan ? (
