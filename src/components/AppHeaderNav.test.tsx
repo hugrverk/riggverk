@@ -7,7 +7,7 @@ describe("AppHeaderNav", () => {
     cleanup();
   });
 
-  it("renders dedicated Prompt Loops and Repo Dashboard buttons after Library and before Settings", () => {
+  it("renders Repo Dashboard, Prompt Loops, and Library after Claude and before Settings", () => {
     const onSwitchView = vi.fn();
     const { container } = render(
       <AppHeaderNav
@@ -26,9 +26,9 @@ describe("AppHeaderNav", () => {
       "OpenCode",
       "Cursor",
       "Claude",
-      "Library",
-      "Prompt Loops",
       "Repo Dashboard",
+      "Prompt Loops",
+      "Library",
       "Settings",
     ]);
   });
