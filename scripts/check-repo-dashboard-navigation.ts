@@ -60,8 +60,12 @@ assert.ok(
   "chart footer must contain legend and metadata",
 );
 assert.ok(
-  activitySource.includes("90-day local git activity"),
-  "chart footer must retain 90-day metadata",
+  activitySource.includes("activityInsightsRangeFooterText"),
+  "chart footer must use dynamic range metadata",
+);
+assert.ok(
+  !activitySource.includes("90-day local git activity"),
+  "chart footer must not retain fixed 90-day copy",
 );
 assert.ok(
   /\.repo-dashboard-activity-insights-body[\s\S]*align-items:\s*stretch/.test(stylesSource),
@@ -105,10 +109,32 @@ assert.ok(!chartsSource.includes("HEATMAP_WINDOW_WEEKS"), "heatmap must not expo
 assert.ok(!chartsSource.includes("heat-range-btn"), "heatmap must not render interval controls");
 assert.ok(!chartsSource.includes("windowOverride"), "heatmap must not keep range override state");
 assert.ok(!chartsSource.includes("chooseHeatmapWindowWeeks"), "heatmap must not auto-switch intervals");
-assert.ok(!activitySource.includes("TIME_RANGES"), "activity insights must not expose time-range selector");
-assert.ok(!activitySource.includes("Activity time range"), "activity insights must not label a time-range control");
-assert.ok(activitySource.includes("filterCommitsForActivityInsights"), "activity insights must use fixed 90-day filter");
-assert.ok(activitySource.includes("buildContributorActivitySeries"), "activity chart must use per-contributor 90-day series");
+assert.ok(
+  activitySource.includes('aria-label="Activity range"'),
+  "activity chart must expose range controls inside chart panel",
+);
+assert.ok(
+  activitySource.includes('aria-label="Chart type"'),
+  "activity chart must expose chart type controls inside chart panel",
+);
+assert.ok(
+  activitySource.includes("repo-dashboard-activity-chart-header"),
+  "activity chart must use internal chart header",
+);
+assert.ok(
+  !activitySource.includes("repo-dashboard-activity-insights-controls"),
+  "lines and bars must not remain in outer activity header",
+);
+assert.ok(activitySource.includes("filterCommitsForActivityInsights"), "activity insights must filter commits by selected range");
+assert.ok(activitySource.includes("buildContributorActivitySeries"), "activity chart must use per-contributor series");
+assert.ok(
+  activitySource.includes("DEFAULT_ACTIVITY_INSIGHTS_DAYS"),
+  "activity chart must default to 14-day range",
+);
+assert.ok(
+  activitySource.includes("ACTIVITY_INSIGHTS_RANGE_DAYS"),
+  "activity chart must support 7, 14, and 30 day ranges",
+);
 assert.ok(!activitySource.includes("<select"), "activity insights must not use single-select contributor filter");
 assert.ok(activitySource.includes('useState<ActivityInsightsVisualMode>("lines")'), "line mode must be default chart mode");
 assert.ok(activitySource.includes('aria-pressed={chartMode === "lines"}'), "lines control must expose selected state");

@@ -10,19 +10,26 @@ import {
 } from "react";
 import type { RepoCommitEntry } from "../../types";
 import {
-  ACTIVITY_INSIGHTS_DAYS,
+  ACTIVITY_INSIGHTS_RANGE_DAYS,
   activityChartDayX,
   activityChartKeyAction,
+  activityChartXAxisLabelIndices,
+  activityInsightsChartDescription,
+  activityInsightsChartTitle,
+  activityInsightsRangeFooterText,
   applyActivityChartKeyAction,
   buildContributorActivitySeries,
   buildContributorStats,
   contributorChartColor,
+  DEFAULT_ACTIVITY_INSIGHTS_DAYS,
   defaultVisibleContributorIds,
   filterCommitsForActivityInsights,
   filterContributorActivitySeries,
   nearestActivityDayIndex,
+  reconcileActiveDayIndexOnRangeChange,
   reconcileVisibleContributorIds,
   visibleContributorSeriesMax,
+  type ActivityInsightsRangeDays,
   type ActivityInsightsVisualMode,
   type ContributorActivitySeries,
   type ContributorStat,
@@ -34,21 +41,24 @@ const CHART_W = 820;
 const CHART_H = 230;
 const CHART_L = 40;
 const CHART_R = 28;
-const CHART_T = 16;
+const CHART_T = 8;
 const CHART_B = 44;
 
 function ActivityInsightsChart({
   series,
   mode,
+  rangeDays,
 }: {
   series: ContributorActivitySeries[];
   mode: ActivityInsightsVisualMode;
+  rangeDays: ActivityInsightsRangeDays;
 }) {
   const [activeDayIndex, setActiveDayIndex] = useState<number | null>(null);
   const [animateLines, setAnimateLines] = useState(true);
   const [animateBars, setAnimateBars] = useState(false);
   const svgRef = useRef<SVGSVGElement>(null);
   const prevModeRef = useRef(mode);
+  const prevRangeDaysRef = useRef(rangeDays);
   const chartTitleId = useId();
   const chartDescId = useId();
   const liveStatusId = useId();
@@ -72,8 +82,22 @@ function ActivityInsightsChart({
     [max],
   );
 
-  const every = Math.max(1, Math.ceil(dayCount / 8));
+  const labelIndices = useMemo(
+    () => new Set(activityChartXAxisLabelIndices(dayCount)),
+    [dayCount],
+  );
   const dayKeys = series[0]?.points.map(point => point.date) ?? [];
+
+  useEffect(() => {
+    setActiveDayIndex(current =>
+      reconcileActiveDayIndexOnRangeChange(current, dayCount),
+    );
+    if (prevRangeDaysRef.current !== rangeDays) {
+      if (mode === "lines") setAnimateLines(true);
+      if (mode === "bars") setAnimateBars(true);
+      prevRangeDaysRef.current = rangeDays;
+    }
+  }, [dayCount, mode, rangeDays]);
 
   useEffect(() => {
     if (prevModeRef.current === mode) return;
@@ -174,7 +198,7 @@ function ActivityInsightsChart({
       : "";
 
   return (
-    <div className="repo-dashboard-activity-insights-chart">
+    <>
       <div className="repo-dashboard-activity-chart-main">
         <svg
           ref={svgRef}
@@ -185,12 +209,8 @@ function ActivityInsightsChart({
           className={`repo-dashboard-activity-insights-svg${activeDayIndex != null ? " repo-dashboard-activity-insights-svg-active" : ""}`}
           data-chart-mode={mode}
         >
-          <title id={chartTitleId}>Contributor commits per day — last 90 days</title>
-          <desc id={chartDescId}>
-            {mode === "lines" ? "Line chart" : "Grouped bar chart"} of daily commits per
-            contributor over the last 90 days. Use arrow keys to move between dates when the chart
-            plot is focused.
-          </desc>
+          <title id={chartTitleId}>{activityInsightsChartTitle(rangeDays)}</title>
+          <desc id={chartDescId}>{activityInsightsChartDescription(rangeDays, mode)}</desc>
 
           {[0, Math.ceil(max / 2), max].map(v => (
             <g key={v} aria-hidden="true">
@@ -300,7 +320,7 @@ function ActivityInsightsChart({
               })}
 
           {dayKeys.map((date, index) =>
-            index % every === 0 || index === dayKeys.length - 1 ? (
+            labelIndices.has(index) ? (
               <text
                 key={`${date}-label`}
                 className="repo-dashboard-activity-chart-text"
@@ -381,10 +401,10 @@ function ActivityInsightsChart({
           ))}
         </ul>
         <span className="repo-dashboard-activity-chart-meta font-mono text-muted" aria-hidden="true">
-          90-day local git activity
+          {activityInsightsRangeFooterText(rangeDays)}
         </span>
       </div>
-    </div>
+    </>
   );
 }
 
@@ -434,13 +454,19 @@ export function RepoActivityInsights({
   heatmapCells: HeatmapCell[];
 }) {
   const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("lines");
+  const [rangeDays, setRangeDays] = useState<ActivityInsightsRangeDays>(
+    DEFAULT_ACTIVITY_INSIGHTS_DAYS,
+  );
   const [visibleContributorIds, setVisibleContributorIds] = useState<string[]>([]);
 
   const allStats = useMemo(() => buildContributorStats(commits), [commits]);
-  const rangeCommits = useMemo(() => filterCommitsForActivityInsights(commits), [commits]);
+  const rangeCommits = useMemo(
+    () => filterCommitsForActivityInsights(commits, rangeDays),
+    [commits, rangeDays],
+  );
   const allSeries = useMemo(
-    () => buildContributorActivitySeries(rangeCommits, ACTIVITY_INSIGHTS_DAYS),
-    [rangeCommits],
+    () => buildContributorActivitySeries(rangeCommits, rangeDays),
+    [rangeCommits, rangeDays],
   );
 
   const colorIndexById = useMemo(() => {
@@ -478,44 +504,13 @@ export function RepoActivityInsights({
     setVisibleContributorIds(defaultVisibleContributorIds(allSeries));
   }, [allSeries]);
 
-  const chartModeGroupId = useId();
-
   return (
     <section
       className="repo-dashboard-card repo-dashboard-activity-insights"
       aria-label="Repository activity and contributors"
     >
       <div className="repo-dashboard-activity-insights-head">
-        <div>
-          <h2 className="font-mono">Activity &amp; contributors</h2>
-        </div>
-        <div
-          className="repo-dashboard-activity-insights-controls"
-          role="group"
-          aria-labelledby={chartModeGroupId}
-        >
-          <span id={chartModeGroupId} className="repo-dashboard-activity-control-label font-mono">
-            Chart
-          </span>
-          <div className="repo-dashboard-toolbar">
-            <button
-              type="button"
-              className={`repo-dashboard-seg${chartMode === "lines" ? " active" : ""}`}
-              aria-pressed={chartMode === "lines"}
-              onClick={() => setChartMode("lines")}
-            >
-              Lines
-            </button>
-            <button
-              type="button"
-              className={`repo-dashboard-seg${chartMode === "bars" ? " active" : ""}`}
-              aria-pressed={chartMode === "bars"}
-              onClick={() => setChartMode("bars")}
-            >
-              Bars
-            </button>
-          </div>
-        </div>
+        <h2 className="font-mono">Activity &amp; contributors</h2>
       </div>
 
       {!commits.length ? (
@@ -524,7 +519,49 @@ export function RepoActivityInsights({
         </p>
       ) : (
         <div className="repo-dashboard-activity-insights-body">
-          <ActivityInsightsChart series={visibleSeries} mode={chartMode} />
+          <div className="repo-dashboard-activity-insights-chart">
+            <div className="repo-dashboard-activity-chart-header">
+              <h3 className="repo-dashboard-activity-chart-title font-mono">Activity</h3>
+              <div className="repo-dashboard-activity-chart-header-controls">
+                <div className="repo-dashboard-toolbar" role="group" aria-label="Activity range">
+                  {ACTIVITY_INSIGHTS_RANGE_DAYS.map(days => (
+                    <button
+                      key={days}
+                      type="button"
+                      className={`repo-dashboard-seg repo-dashboard-seg-compact${rangeDays === days ? " active" : ""}`}
+                      aria-pressed={rangeDays === days}
+                      onClick={() => setRangeDays(days)}
+                    >
+                      {days}d
+                    </button>
+                  ))}
+                </div>
+                <div className="repo-dashboard-toolbar" role="group" aria-label="Chart type">
+                  <button
+                    type="button"
+                    className={`repo-dashboard-seg repo-dashboard-seg-compact${chartMode === "lines" ? " active" : ""}`}
+                    aria-pressed={chartMode === "lines"}
+                    onClick={() => setChartMode("lines")}
+                  >
+                    Lines
+                  </button>
+                  <button
+                    type="button"
+                    className={`repo-dashboard-seg repo-dashboard-seg-compact${chartMode === "bars" ? " active" : ""}`}
+                    aria-pressed={chartMode === "bars"}
+                    onClick={() => setChartMode("bars")}
+                  >
+                    Bars
+                  </button>
+                </div>
+              </div>
+            </div>
+            <ActivityInsightsChart
+              series={visibleSeries}
+              mode={chartMode}
+              rangeDays={rangeDays}
+            />
+          </div>
           <div className="repo-dashboard-activity-sidebar">
             {allStats.length ? (
               <div className="repo-dashboard-contributor-panel">

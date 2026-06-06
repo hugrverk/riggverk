@@ -404,14 +404,70 @@ export interface ContributorActivitySeries {
   points: ContributorDailyPoint[];
 }
 
-/** Activity & contributors always uses the latest 90 days of loaded commits. */
-export const ACTIVITY_INSIGHTS_DAYS = 90;
+export type ActivityInsightsRangeDays = 7 | 14 | 30;
+
+export const DEFAULT_ACTIVITY_INSIGHTS_DAYS: ActivityInsightsRangeDays = 14;
+
+export const ACTIVITY_INSIGHTS_RANGE_DAYS: readonly ActivityInsightsRangeDays[] = [7, 14, 30];
+
+export function isActivityInsightsRangeDays(
+  value: number,
+): value is ActivityInsightsRangeDays {
+  return value === 7 || value === 14 || value === 30;
+}
 
 export function filterCommitsForActivityInsights(
   commits: RepoCommitEntry[],
+  days: ActivityInsightsRangeDays = DEFAULT_ACTIVITY_INSIGHTS_DAYS,
   now = new Date(),
 ): RepoCommitEntry[] {
-  return filterCommitsByTimeRange(commits, "90d", now);
+  const cutoff = dayStart(now);
+  cutoff.setDate(cutoff.getDate() - (days - 1));
+  const cutoffSecs = Math.floor(cutoff.getTime() / 1000);
+  return commits.filter(c => Number.isFinite(c.authored_at) && c.authored_at >= cutoffSecs);
+}
+
+export function activityInsightsRangeFooterText(days: ActivityInsightsRangeDays): string {
+  return `${days}-day local git activity`;
+}
+
+export function activityInsightsChartTitle(days: ActivityInsightsRangeDays): string {
+  return `Contributor commits per day — last ${days} days`;
+}
+
+export function activityInsightsChartDescription(
+  days: ActivityInsightsRangeDays,
+  mode: ActivityInsightsVisualMode,
+): string {
+  const chartKind = mode === "lines" ? "Line chart" : "Grouped bar chart";
+  return `${chartKind} of daily commits per contributor over the last ${days} days. Use arrow keys to move between dates when the chart plot is focused.`;
+}
+
+/** Deterministic x-axis label indices; always includes first and last day. */
+export function activityChartXAxisLabelIndices(dayCount: number): number[] {
+  if (dayCount <= 0) return [];
+  if (dayCount === 1) return [0];
+
+  const step =
+    dayCount <= 7 ? 1 : dayCount <= 14 ? 2 : Math.ceil(dayCount / 7);
+
+  const indices: number[] = [];
+  for (let index = 0; index < dayCount; index += step) {
+    indices.push(index);
+  }
+  if (indices[indices.length - 1] !== dayCount - 1) {
+    indices.push(dayCount - 1);
+  }
+  return indices;
+}
+
+export function reconcileActiveDayIndexOnRangeChange(
+  activeIndex: number | null,
+  nextDayCount: number,
+): number | null {
+  if (activeIndex === null || nextDayCount <= 0) return null;
+  if (activeIndex >= nextDayCount) return null;
+  return activeIndex;
 }
 
 export function activityTimeRangeCutoffSecs(
@@ -486,10 +542,10 @@ export function buildActivityInsightsSeries(
   return points;
 }
 
-/** Fixed calendar window (e.g. latest 90 days ending today), including zero-commit days. */
+/** Fixed calendar window ending today, including zero-commit days. */
 export function buildActivityInsightsSeriesForDays(
   commits: RepoCommitEntry[],
-  days = ACTIVITY_INSIGHTS_DAYS,
+  days: ActivityInsightsRangeDays = DEFAULT_ACTIVITY_INSIGHTS_DAYS,
   now = new Date(),
 ): ActivityInsightsPoint[] {
   const rangeEnd = dayStart(now);
@@ -528,10 +584,10 @@ function buildFixedDayKeys(
   return keys;
 }
 
-/** One independent 90-day (or custom) series per contributor, zero-filled per day. */
+/** One independent series per contributor, zero-filled per day. */
 export function buildContributorActivitySeries(
   commits: RepoCommitEntry[],
-  days = ACTIVITY_INSIGHTS_DAYS,
+  days: ActivityInsightsRangeDays = DEFAULT_ACTIVITY_INSIGHTS_DAYS,
   now = new Date(),
 ): ContributorActivitySeries[] {
   const stats = buildContributorStats(commits);

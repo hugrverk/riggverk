@@ -11,7 +11,12 @@ import {
   computeHeatmapCellSizePx,
   filterCommitsForActivityInsights,
   HEATMAP_DISPLAY_WEEKS,
-  ACTIVITY_INSIGHTS_DAYS,
+  DEFAULT_ACTIVITY_INSIGHTS_DAYS,
+  ACTIVITY_INSIGHTS_RANGE_DAYS,
+  isActivityInsightsRangeDays,
+  activityChartXAxisLabelIndices,
+  activityInsightsRangeFooterText,
+  reconcileActiveDayIndexOnRangeChange,
   sliceHeatmapCellsToWindow,
   buildLineChartData,
   buildActivityInsightsSeries,
@@ -154,17 +159,67 @@ assert.equal(buildLineChartData([]), null);
 }
 
 {
+  assert.equal(DEFAULT_ACTIVITY_INSIGHTS_DAYS, 14);
+  assert.deepEqual(ACTIVITY_INSIGHTS_RANGE_DAYS, [7, 14, 30]);
+  assert.equal(isActivityInsightsRangeDays(7), true);
+  assert.equal(isActivityInsightsRangeDays(14), true);
+  assert.equal(isActivityInsightsRangeDays(30), true);
+  assert.equal(isActivityInsightsRangeDays(90), false);
+  assert.equal(activityInsightsRangeFooterText(7), "7-day local git activity");
+  assert.equal(activityInsightsRangeFooterText(14), "14-day local git activity");
+  assert.equal(activityInsightsRangeFooterText(30), "30-day local git activity");
+}
+
+{
   const nowSec = Math.floor(Date.now() / 1000);
   const commits = [
     commit({ authored_at: nowSec - 10 * 86_400 }),
     commit({ authored_at: nowSec - 100 * 86_400 }),
   ];
-  const filtered = filterCommitsForActivityInsights(commits);
+  const filtered = filterCommitsForActivityInsights(commits, 14);
   assert.equal(filtered.length, 1);
-  const windowSeries = buildActivityInsightsSeriesForDays(filtered, ACTIVITY_INSIGHTS_DAYS);
-  assert.equal(windowSeries.length, ACTIVITY_INSIGHTS_DAYS);
+  const windowSeries = buildActivityInsightsSeriesForDays(filtered, 14);
+  assert.equal(windowSeries.length, 14);
   assert.equal(windowSeries[0].commitCount, 0);
   assert.ok(windowSeries.some(point => point.commitCount > 0));
+}
+
+{
+  const fixedNow = new Date("2026-06-06T12:00:00");
+  const nowSec = Math.floor(fixedNow.getTime() / 1000);
+  const commits = [
+    commit({ authored_at: nowSec - 2 * 86_400, author_email: "a@x.com" }),
+    commit({ authored_at: nowSec - 20 * 86_400, author_email: "b@x.com" }),
+  ];
+  for (const days of ACTIVITY_INSIGHTS_RANGE_DAYS) {
+    const filtered = filterCommitsForActivityInsights(commits, days, fixedNow);
+    const series = buildContributorActivitySeries(filtered, days, fixedNow);
+    assert.equal(series[0].points.length, days, `${days}-day series length`);
+    assert.equal(series[0].points[days - 1].date, "2026-06-06", "newest day is final point");
+    assert.ok(series[0].points.some(point => point.commitCount === 0), "zero-filled days remain");
+  }
+}
+
+{
+  const label7 = activityChartXAxisLabelIndices(7);
+  assert.equal(label7[0], 0);
+  assert.equal(label7[label7.length - 1], 6);
+  assert.equal(label7.length, 7);
+
+  const label14 = activityChartXAxisLabelIndices(14);
+  assert.equal(label14[0], 0);
+  assert.equal(label14[label14.length - 1], 13);
+
+  const label30 = activityChartXAxisLabelIndices(30);
+  assert.equal(label30[0], 0);
+  assert.equal(label30[label30.length - 1], 29);
+  assert.ok(label30.length >= 6 && label30.length <= 8, "30-day labels stay sparse");
+}
+
+{
+  assert.equal(reconcileActiveDayIndexOnRangeChange(5, 14), 5);
+  assert.equal(reconcileActiveDayIndexOnRangeChange(20, 14), null);
+  assert.equal(reconcileActiveDayIndexOnRangeChange(null, 14), null);
 }
 
 // Remaining-by-type handles empty input without NaN.
@@ -328,12 +383,12 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
     commit({ authored_at: nowSec - 2 * 86_400, author_email: "a@x.com", author_name: "Alice" }),
     commit({ authored_at: nowSec - 5 * 86_400, author_email: "b@x.com", author_name: "Bob" }),
   ];
-  const allSeries = buildContributorActivitySeries(commits, ACTIVITY_INSIGHTS_DAYS, fixedNow);
+  const allSeries = buildContributorActivitySeries(commits, 14, fixedNow);
   assert.equal(allSeries.length, 2, "one series per contributor");
   assert.equal(allSeries[0].displayName, "Alice");
   assert.equal(allSeries[1].displayName, "Bob");
-  assert.equal(allSeries[0].points.length, ACTIVITY_INSIGHTS_DAYS);
-  assert.equal(allSeries[1].points.length, ACTIVITY_INSIGHTS_DAYS);
+  assert.equal(allSeries[0].points.length, 14);
+  assert.equal(allSeries[1].points.length, 14);
   assert.deepEqual(
     allSeries[0].points.map(point => point.date),
     allSeries[1].points.map(point => point.date),
@@ -373,7 +428,7 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   const nowSec = Math.floor(fixedNow.getTime() / 1000);
   const single = buildContributorActivitySeries(
     [commit({ authored_at: nowSec, author_name: "Solo" })],
-    ACTIVITY_INSIGHTS_DAYS,
+    14,
     fixedNow,
   );
   assert.equal(single.length, 1);
@@ -382,7 +437,7 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 
 {
   const fixedNow = new Date("2026-06-06T12:00:00");
-  assert.deepEqual(buildContributorActivitySeries([], ACTIVITY_INSIGHTS_DAYS, fixedNow), []);
+  assert.deepEqual(buildContributorActivitySeries([], 14, fixedNow), []);
 }
 
 {
@@ -392,7 +447,7 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
     commit({ authored_at: nowSec, author_name: "", author_email: "" }),
     commit({ authored_at: nowSec - 86_400, author_name: "NameOnly", author_email: "" }),
   ];
-  const series = buildContributorActivitySeries(commits, ACTIVITY_INSIGHTS_DAYS, fixedNow);
+  const series = buildContributorActivitySeries(commits, 14, fixedNow);
   assert.equal(series.length, 2);
   assert.ok(series.some(entry => entry.id === "unknown"));
   assert.ok(series.some(entry => entry.id === "nameonly"));
