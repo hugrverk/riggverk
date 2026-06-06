@@ -48,13 +48,14 @@ import {
   type DocWorkLaneSummary,
 } from "./model";
 import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
+import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
 
 export type RepoDashboardSection = "overview" | "work" | "docs";
 
 const SECTIONS: { id: RepoDashboardSection; label: string; purpose: string }[] = [
   { id: "overview", label: "Overview", purpose: "Repo snapshot, activity charts, and commit history" },
   { id: "work", label: "Work", purpose: "Tracked work items, planning gaps, and gh issues" },
-  { id: "docs", label: "Docs", purpose: "Source doc discovery, HEAD files, and parse health" },
+  { id: "docs", label: "Docs", purpose: "Searchable repository Markdown documentation" },
 ];
 
 const WORK_TYPES: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
@@ -430,6 +431,8 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
   const [discoverResult, setDiscoverResult] = useState<DiscoverLocalGitReposResult | null>(null);
   const [discoverSelectedPaths, setDiscoverSelectedPaths] = useState<Set<string>>(() => new Set());
   const [discoverImportStatus, setDiscoverImportStatus] = useState<string | null>(null);
+  const [docsSelectedPath, setDocsSelectedPath] = useState<string | null>(null);
+  const [docsSearchQuery, setDocsSearchQuery] = useState("");
   const pickerTimerRef = useRef<number | null>(null);
   const loadSeqRef = useRef(0);
 
@@ -487,6 +490,14 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
       })
       .catch(() => {});
   }, [refreshFor]);
+
+  useEffect(() => {
+    if (!snapshot) {
+      setDocsSelectedPath(null);
+      return;
+    }
+    setDocsSelectedPath(prev => pickReadableDocPath(snapshot.docs, prev));
+  }, [snapshot]);
 
   const runDiscoverScan = useCallback(async (parentPath: string) => {
     setDiscoverLoading(true);
@@ -713,8 +724,7 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     if (id === "overview") return String(snapshot.commits.length);
     if (id === "work") return String(workStatusCounts.open);
     if (id === "docs") {
-      const contributing = docSources.filter(d => d.contributes).length;
-      return String(contributing);
+      return String(snapshot.docs.filter(d => d.found && d.readable).length);
     }
     return "-";
   };
@@ -1139,87 +1149,15 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           )}
 
           {snapshot && snapshotMatchesPath && !loading && section === "docs" && (
-            <RepoDashboardPage
-              title="Docs"
-              description="Allowlisted planning docs, HEAD file list, and parse warnings from the local snapshot."
-              main={
-                <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                  <h3 className="font-mono repo-dashboard-panel-title">Source docs</h3>
-                  <p className="text-muted small">
-                    {docSources.filter(d => d.contributes).length} contributing ·{" "}
-                    {docSources.filter(d => d.found).length}/{docSources.length} found
-                  </p>
-                  <div className="repo-dashboard-source-docs-list" role="list" aria-label="Source docs list">
-                    {docSources.map(row => (
-                      <div key={row.path} className="repo-dashboard-row repo-dashboard-doc-row" role="listitem">
-                        <span className="font-mono repo-dashboard-doc-path">{row.path}</span>
-                        <span className="prompt-loops-pill">
-                          {!row.found
-                            ? row.optional
-                              ? "optional"
-                              : "missing"
-                            : row.contributes
-                              ? `${row.itemCount} items (${row.openCount} open)`
-                              : "found · 0 items"}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                  {parserWarnings.length > 0 && (
-                    <pre
-                      className="repo-dashboard-code font-mono repo-dashboard-parser-warnings"
-                      role="status"
-                    >
-                      {parserWarnings.join("\n")}
-                    </pre>
-                  )}
-                  {snapshot.warnings.length > 0 && (
-                    <>
-                      <h4 className="font-mono repo-dashboard-panel-subtitle">Repo warnings</h4>
-                      <pre className="repo-dashboard-code font-mono repo-dashboard-warnings">
-                        {snapshot.warnings.join("\n")}
-                      </pre>
-                    </>
-                  )}
-                  {snapshot.gh.message && (
-                    <p className="text-muted small repo-dashboard-gh-note">{snapshot.gh.message}</p>
-                  )}
-                </div>
-              }
-              aside={
-                <>
-                  <div className="repo-dashboard-card repo-dashboard-latest repo-dashboard-latest-detail repo-dashboard-scroll-panel">
-                    <h3 className="font-mono repo-dashboard-panel-title">Latest merge / commit</h3>
-                    <LatestChangeCard
-                      snapshot={snapshot}
-                      latestMerge={latestMerge}
-                      latestCommit={latestCommit}
-                    />
-                  </div>
-                  <div className="repo-dashboard-card repo-dashboard-scroll-panel">
-                    <h3 className="font-mono repo-dashboard-panel-title">Changed files at HEAD (local git)</h3>
-                    <p className="text-muted small" role="note">
-                      {headChangedFilesLabel(snapshot, latestCommit)}. This is not a GitHub PR file list.
-                      {latestMerge
-                        ? " A recent gh merged PR may appear above; its diff is not shown here."
-                        : ""}
-                    </p>
-                    <div className="repo-dashboard-list">
-                      {snapshot.changed_files.map(file => (
-                        <div key={file.path} className="repo-dashboard-item">
-                          <div className="repo-dashboard-item-title font-mono">{file.path}</div>
-                          <div className="repo-dashboard-item-meta">
-                            <span>{file.status}</span>
-                          </div>
-                        </div>
-                      ))}
-                      {!snapshot.changed_files.length && (
-                        <p className="text-muted small">No changed files for HEAD.</p>
-                      )}
-                    </div>
-                  </div>
-                </>
-              }
+            <RepoDocsWorkspace
+              docs={snapshot.docs}
+              parserWarnings={parserWarnings}
+              repoWarnings={snapshot.warnings}
+              ghMessage={snapshot.gh.message}
+              selectedPath={docsSelectedPath}
+              onSelectPath={setDocsSelectedPath}
+              searchQuery={docsSearchQuery}
+              onSearchQueryChange={setDocsSearchQuery}
             />
           )}
 
