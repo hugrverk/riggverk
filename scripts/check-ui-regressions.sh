@@ -115,6 +115,9 @@ fi
 if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "stacked work Active/Done columns must define two grid rows"
 fi
+if ! rg -n '\[data-theme="light"\] \.repo-dashboard-heat-cell\.l1' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "heatmap must define light-appearance level colors"
+fi
 if rg -n 'repo-dashboard-heat-aside' src/tools/repoDashboard src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   cat /tmp/agent-workspace-ui-regressions.txt >&2
   fail "repo-dashboard-heat-aside is stale and must not remain in dashboard sources"
