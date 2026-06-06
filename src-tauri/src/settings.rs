@@ -295,6 +295,7 @@ where
     mutate_settings_locked(mutator)
 }
 
+#[allow(dead_code)]
 pub fn save(settings: AppSettings) -> Result<AppSettings, String> {
     let _guard = SETTINGS_WRITE_MUTEX
         .lock()
@@ -650,7 +651,7 @@ mod tests {
         });
     }
 
-    fn write_settings_file(dir: &PathBuf, json: &str) {
+    fn write_settings_file(dir: &std::path::Path, json: &str) {
         let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create settings parent");
@@ -703,9 +704,11 @@ mod tests {
     #[test]
     fn save_with_revision_check_preserves_unrelated_fields_under_lock() {
         with_temp_home(|_| {
-            let mut initial = AppSettings::default();
-            initial.enabled_target_ids = vec!["codex_rules".into(), "opencode_config".into()];
-            let saved = save(initial).expect("save");
+            let saved = save(AppSettings {
+                enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
+                ..AppSettings::default()
+            })
+            .expect("save");
             assert_eq!(saved.revision, 1);
 
             let mut stale = saved.clone();

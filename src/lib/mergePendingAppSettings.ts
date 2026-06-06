@@ -26,7 +26,7 @@ export function mergePendingLocalOntoAcknowledged(
 /** Keep pre-mutation local edits; do not roll back fields the mutator intentionally changed. */
 export function applyMutationPreservingPendingLocal(
   saved: AppSettings,
-  sentSerialized: string,
+  _sentSerialized: string,
   local: AppSettings | null,
   acknowledgedSerialized: string | null,
 ): AppSettings {
