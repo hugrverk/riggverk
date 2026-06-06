@@ -566,9 +566,7 @@ fn is_safe_git_doc_path(rel: &str) -> bool {
     if !normalized.starts_with("docs/") {
         return false;
     }
-    !normalized
-        .split('/')
-        .any(|segment| should_skip_doc_dir(segment))
+    !normalized.split('/').any(should_skip_doc_dir)
 }
 
 fn collect_doc_paths_from_git_listing(listing: &[String]) -> Vec<String> {
