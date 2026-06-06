@@ -189,30 +189,13 @@ const HEATMAP_MIN_WEEKS = 53;
 const HEATMAP_MAX_WEEKS = 520;
 const MS_PER_DAY = 86_400_000;
 
-export const HEATMAP_WINDOW_WEEKS = [13, 26, 53] as const;
-export type HeatmapWindowWeeks = (typeof HEATMAP_WINDOW_WEEKS)[number];
+/** Fixed overview heatmap display window — always the latest 26 weeks. */
+export const HEATMAP_DISPLAY_WEEKS = 26;
 
-export function sliceHeatmapCellsToWindow(
-  cells: HeatmapCell[],
-  windowWeeks: HeatmapWindowWeeks,
-): HeatmapCell[] {
-  const maxCells = windowWeeks * 7;
+export function sliceHeatmapCellsToWindow(cells: HeatmapCell[]): HeatmapCell[] {
+  const maxCells = HEATMAP_DISPLAY_WEEKS * 7;
   if (cells.length <= maxCells) return cells;
   return cells.slice(cells.length - maxCells);
-}
-
-export function chooseHeatmapWindowWeeks(
-  containerWidthPx: number,
-  options?: { dayLabelPx?: number; paddingPx?: number; minCellPx?: number },
-): HeatmapWindowWeeks {
-  const dayLabelPx = options?.dayLabelPx ?? 30;
-  const paddingPx = options?.paddingPx ?? 24;
-  const minCellPx = options?.minCellPx ?? 9;
-  const available = Math.max(0, containerWidthPx - dayLabelPx - paddingPx);
-  const weeksFit = Math.floor(available / minCellPx);
-  if (weeksFit >= 53) return 53;
-  if (weeksFit >= 26) return 26;
-  return 13;
 }
 
 export function computeHeatmapCellSizePx(
@@ -298,6 +281,16 @@ export function buildHeatmapCells(commits: RepoCommitEntry[]): HeatmapCell[] {
 
 export type ActivityTimeRange = "30d" | "90d" | "1y" | "all";
 export type ActivityChartMode = "period" | "cumulative";
+
+/** Activity & contributors always uses the latest 90 days of loaded commits. */
+export const ACTIVITY_INSIGHTS_DAYS = 90;
+
+export function filterCommitsForActivityInsights(
+  commits: RepoCommitEntry[],
+  now = new Date(),
+): RepoCommitEntry[] {
+  return filterCommitsByTimeRange(commits, "90d", now);
+}
 
 export function activityTimeRangeCutoffSecs(
   range: ActivityTimeRange,

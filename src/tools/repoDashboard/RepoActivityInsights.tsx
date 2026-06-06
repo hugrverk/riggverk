@@ -1,4 +1,4 @@
-import { useCallback, useId, useMemo, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useState } from "react";
 import type { RepoCommitEntry } from "../../types";
 import {
   activityInsightsChartValue,
@@ -7,24 +7,10 @@ import {
   contributorTopScopes,
   contributorTopTypes,
   filterCommitsByContributor,
-  filterCommitsByTimeRange,
-  type ActivityChartMode,
+  filterCommitsForActivityInsights,
   type ActivityInsightsPoint,
-  type ActivityTimeRange,
   type ContributorStat,
 } from "./model";
-
-const TIME_RANGES: { id: ActivityTimeRange; label: string }[] = [
-  { id: "30d", label: "30 days" },
-  { id: "90d", label: "90 days" },
-  { id: "1y", label: "1 year" },
-  { id: "all", label: "All loaded" },
-];
-
-const CHART_MODES: { id: ActivityChartMode; label: string }[] = [
-  { id: "period", label: "Commits per day" },
-  { id: "cumulative", label: "Cumulative" },
-];
 
 function formatContributorDate(timestamp: number | null): string {
   if (timestamp == null) return "—";
@@ -35,24 +21,18 @@ function formatContributorDate(timestamp: number | null): string {
   });
 }
 
-function ActivityInsightsChart({
-  points,
-  mode,
-}: {
-  points: ActivityInsightsPoint[];
-  mode: ActivityChartMode;
-}) {
+function ActivityInsightsChart({ points }: { points: ActivityInsightsPoint[] }) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   const chartTitleId = useId();
 
   const values = useMemo(
-    () => points.map(point => activityInsightsChartValue(point, mode)),
-    [points, mode],
+    () => points.map(point => activityInsightsChartValue(point, "period")),
+    [points],
   );
   const max = Math.max(1, ...values);
 
   const w = 820;
-  const h = 260;
+  const h = 300;
   const L = 40;
   const R = 16;
   const T = 20;
@@ -70,22 +50,15 @@ function ActivityInsightsChart({
     [max],
   );
 
-  const pathD = useMemo(() => {
-    if (!points.length) return "";
-    return values
-      .map((value, index) => `${index ? "L" : "M"}${xAt(index).toFixed(1)},${yAt(value).toFixed(1)}`)
-      .join(" ");
-  }, [points.length, values, xAt, yAt]);
-
   const every = Math.max(1, Math.ceil(points.length / 8));
   const activePoint = activeIndex != null ? points[activeIndex] : null;
   const activeValue =
-    activePoint != null ? activityInsightsChartValue(activePoint, mode) : null;
+    activePoint != null ? activityInsightsChartValue(activePoint, "period") : null;
 
   if (!points.length) {
     return (
       <p className="text-muted small" role="status">
-        No commits in the selected range.
+        No commits in the last 90 days.
       </p>
     );
   }
@@ -99,9 +72,7 @@ function ActivityInsightsChart({
         aria-labelledby={chartTitleId}
         className="repo-dashboard-activity-insights-svg"
       >
-        <title id={chartTitleId}>
-          {mode === "cumulative" ? "Cumulative commits" : "Commits per day"}
-        </title>
+        <title id={chartTitleId}>Commits per day — last 90 days</title>
         <line className="repo-dashboard-axis" x1={L} y1={h - B} x2={w - R} y2={h - B} />
         <line className="repo-dashboard-axis" x1={L} y1={T} x2={L} y2={h - B} />
         {[0, Math.ceil(max / 2), max].map(v => (
@@ -112,53 +83,31 @@ function ActivityInsightsChart({
             </text>
           </g>
         ))}
-        {mode === "period" ? (
-          points.map((point, index) => {
-            const value = values[index];
-            if (!value) return null;
-            const barW = Math.max(2, (w - L - R) / points.length - 1);
-            const x = xAt(index) - barW / 2;
-            const y = yAt(value);
-            const barH = h - B - y;
-            return (
-              <rect
-                key={point.date}
-                className="repo-dashboard-activity-bar"
-                x={x}
-                y={y}
-                width={barW}
-                height={barH}
-                tabIndex={0}
-                role="graphics-symbol"
-                aria-label={`${point.date}: ${point.commitCount} commits`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onMouseLeave={() => setActiveIndex(null)}
-                onFocus={() => setActiveIndex(index)}
-                onBlur={() => setActiveIndex(null)}
-              />
-            );
-          })
-        ) : (
-          <path className="repo-dashboard-series-blue" d={pathD} />
-        )}
-        {mode === "cumulative"
-          ? points.map((point, index) => (
-              <circle
-                key={point.date}
-                className="repo-dashboard-activity-point"
-                cx={xAt(index)}
-                cy={yAt(values[index])}
-                r={index === activeIndex ? 5 : 3}
-                tabIndex={0}
-                role="graphics-symbol"
-                aria-label={`${point.date}: ${point.cumulativeCount} cumulative commits`}
-                onMouseEnter={() => setActiveIndex(index)}
-                onMouseLeave={() => setActiveIndex(null)}
-                onFocus={() => setActiveIndex(index)}
-                onBlur={() => setActiveIndex(null)}
-              />
-            ))
-          : null}
+        {points.map((point, index) => {
+          const value = values[index];
+          if (!value) return null;
+          const barW = Math.max(2, (w - L - R) / points.length - 1);
+          const x = xAt(index) - barW / 2;
+          const y = yAt(value);
+          const barH = h - B - y;
+          return (
+            <rect
+              key={point.date}
+              className="repo-dashboard-activity-bar"
+              x={x}
+              y={y}
+              width={barW}
+              height={barH}
+              tabIndex={0}
+              role="graphics-symbol"
+              aria-label={`${point.date}: ${point.commitCount} commits`}
+              onMouseEnter={() => setActiveIndex(index)}
+              onMouseLeave={() => setActiveIndex(null)}
+              onFocus={() => setActiveIndex(index)}
+              onBlur={() => setActiveIndex(null)}
+            />
+          );
+        })}
         {points.map((point, index) =>
           index % every === 0 || index === points.length - 1 ? (
             <text
@@ -175,14 +124,9 @@ function ActivityInsightsChart({
       </svg>
       {activePoint ? (
         <p className="repo-dashboard-activity-tooltip font-mono" role="status" aria-live="polite">
-          {activePoint.date}: {activeValue}{" "}
-          {mode === "cumulative" ? "cumulative commits" : "commits"}
+          {activePoint.date}: {activeValue} commits
         </p>
-      ) : (
-        <p className="repo-dashboard-activity-tooltip font-mono text-muted" aria-hidden="true">
-          Hover or focus chart points for details
-        </p>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -228,20 +172,22 @@ export function RepoActivityInsights({
   commits: RepoCommitEntry[];
   commitsTruncated: boolean;
 }) {
-  const [timeRange, setTimeRange] = useState<ActivityTimeRange>("90d");
-  const [chartMode, setChartMode] = useState<ActivityChartMode>("period");
   const [contributorId, setContributorId] = useState<"all" | string>("all");
 
   const allStats = useMemo(() => buildContributorStats(commits), [commits]);
-  const rangeCommits = useMemo(
-    () => filterCommitsByTimeRange(commits, timeRange),
-    [commits, timeRange],
-  );
+  const rangeCommits = useMemo(() => filterCommitsForActivityInsights(commits), [commits]);
   const filteredCommits = useMemo(
     () => filterCommitsByContributor(rangeCommits, contributorId),
     [rangeCommits, contributorId],
   );
   const series = useMemo(() => buildActivityInsightsSeries(filteredCommits), [filteredCommits]);
+
+  useEffect(() => {
+    if (contributorId === "all") return;
+    if (!allStats.some(stat => stat.id === contributorId)) {
+      setContributorId("all");
+    }
+  }, [allStats, contributorId]);
 
   const selectedStat =
     contributorId === "all" ? null : allStats.find(stat => stat.id === contributorId) ?? null;
@@ -256,59 +202,27 @@ export function RepoActivityInsights({
       <div className="repo-dashboard-activity-insights-head">
         <div>
           <h2 className="font-mono">Activity &amp; contributors</h2>
-          <p className="text-muted small repo-dashboard-activity-insights-note">
-            Based on loaded local git history and commit subjects — not effort or code quality.
+          <p className="text-muted small repo-dashboard-activity-insights-meta">
+            90-day local git activity
           </p>
         </div>
-        <div className="repo-dashboard-activity-insights-controls" role="group" aria-label="Activity chart controls">
-          <label className="repo-dashboard-activity-control font-mono">
-            <span>Range</span>
-            <select
-              className="repo-dashboard-field"
-              value={timeRange}
-              onChange={e => setTimeRange(e.target.value as ActivityTimeRange)}
-              aria-label="Activity time range"
-            >
-              {TIME_RANGES.map(range => (
-                <option key={range.id} value={range.id}>
-                  {range.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="repo-dashboard-activity-control font-mono">
-            <span>Chart</span>
-            <select
-              className="repo-dashboard-field"
-              value={chartMode}
-              onChange={e => setChartMode(e.target.value as ActivityChartMode)}
-              aria-label="Activity chart mode"
-            >
-              {CHART_MODES.map(mode => (
-                <option key={mode.id} value={mode.id}>
-                  {mode.label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="repo-dashboard-activity-control font-mono" htmlFor={contributorSelectId}>
-            <span>Contributor</span>
-            <select
-              id={contributorSelectId}
-              className="repo-dashboard-field"
-              value={contributorId}
-              onChange={e => setContributorId(e.target.value)}
-              aria-label="Contributor filter"
-            >
-              <option value="all">All contributors</option>
-              {allStats.map(stat => (
-                <option key={stat.id} value={stat.id}>
-                  {stat.displayName} ({stat.commitCount})
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
+        <label className="repo-dashboard-activity-control font-mono" htmlFor={contributorSelectId}>
+          <span>Contributor</span>
+          <select
+            id={contributorSelectId}
+            className="repo-dashboard-field"
+            value={contributorId}
+            onChange={e => setContributorId(e.target.value)}
+            aria-label="Contributor filter"
+          >
+            <option value="all">All contributors</option>
+            {allStats.map(stat => (
+              <option key={stat.id} value={stat.id}>
+                {stat.displayName} ({stat.commitCount})
+              </option>
+            ))}
+          </select>
+        </label>
       </div>
 
       {!commits.length ? (
@@ -317,7 +231,7 @@ export function RepoActivityInsights({
         </p>
       ) : (
         <div className="repo-dashboard-activity-insights-body">
-          <ActivityInsightsChart points={series} mode={chartMode} />
+          <ActivityInsightsChart points={series} />
           {selectedStat ? (
             <div className="repo-dashboard-contributor-panel repo-dashboard-contributor-panel-detail">
               <h3 className="font-mono repo-dashboard-contributor-focus-name">
@@ -368,17 +282,11 @@ export function RepoActivityInsights({
         </div>
       )}
 
-      <p className="text-muted small repo-dashboard-footnote">
-        {commits.length.toLocaleString()} commits loaded from local git
-        {commitsTruncated ? " (older commits omitted — output limit)." : "."}
-        {filteredCommits.length !== commits.length ? (
-          <>
-            {" "}
-            Showing {filteredCommits.length.toLocaleString()} in the current range
-            {contributorId !== "all" ? " and contributor filter" : ""}.
-          </>
-        ) : null}
-      </p>
+      {commitsTruncated ? (
+        <p className="text-muted small repo-dashboard-footnote" role="status">
+          Older commits omitted from loaded history.
+        </p>
+      ) : null}
     </section>
   );
 }
