@@ -456,53 +456,80 @@ fn collect_doc_paths(repo: &Path) -> Vec<String> {
     paths
 }
 
+fn unreadable_doc_file(rel: &str, read_error: String) -> RepoDocFile {
+    RepoDocFile {
+        path: rel.to_string(),
+        found: true,
+        readable: false,
+        truncated: false,
+        content: String::new(),
+        read_error: Some(read_error),
+    }
+}
+
+fn missing_doc_file(rel: &str) -> RepoDocFile {
+    RepoDocFile {
+        path: rel.to_string(),
+        found: false,
+        readable: false,
+        truncated: false,
+        content: String::new(),
+        read_error: None,
+    }
+}
+
+fn read_doc_file(repo: &Path, repo_root: Option<&Path>, rel: &str) -> RepoDocFile {
+    let full = repo.join(rel);
+    let meta = match fs::symlink_metadata(&full) {
+        Ok(meta) => meta,
+        Err(_) => return missing_doc_file(rel),
+    };
+
+    if meta.file_type().is_symlink() {
+        return unreadable_doc_file(rel, format!("{rel}: symlink not allowed"));
+    }
+    if !meta.is_file() {
+        return missing_doc_file(rel);
+    }
+
+    let Some(repo_root) = repo_root else {
+        return unreadable_doc_file(rel, format!("{rel}: repository path not canonical"));
+    };
+    if !safe_file_under_repo(repo_root, &full) {
+        return unreadable_doc_file(rel, format!("{rel}: path escapes repository"));
+    }
+
+    match fs::read_to_string(&full) {
+        Ok(content) => {
+            let (content, truncated) = if content.len() > MAX_DOC_CONTENT_BYTES {
+                (
+                    content
+                        .chars()
+                        .take(MAX_DOC_CONTENT_BYTES)
+                        .collect::<String>(),
+                    true,
+                )
+            } else {
+                (content, false)
+            };
+            RepoDocFile {
+                path: rel.to_string(),
+                found: true,
+                readable: true,
+                truncated,
+                content,
+                read_error: None,
+            }
+        }
+        Err(e) => unreadable_doc_file(rel, format!("read {rel}: {e}")),
+    }
+}
+
 fn read_local_docs(repo: &Path) -> Vec<RepoDocFile> {
+    let repo_root = canonical_repo_root(repo);
     collect_doc_paths(repo)
         .iter()
-        .map(|rel| {
-            let full = repo.join(rel);
-            if !full.is_file() {
-                return RepoDocFile {
-                    path: (*rel).to_string(),
-                    found: false,
-                    readable: false,
-                    truncated: false,
-                    content: String::new(),
-                    read_error: None,
-                };
-            }
-            match fs::read_to_string(&full) {
-                Ok(content) => {
-                    let (content, truncated) = if content.len() > MAX_DOC_CONTENT_BYTES {
-                        (
-                            content
-                                .chars()
-                                .take(MAX_DOC_CONTENT_BYTES)
-                                .collect::<String>(),
-                            true,
-                        )
-                    } else {
-                        (content, false)
-                    };
-                    RepoDocFile {
-                        path: (*rel).to_string(),
-                        found: true,
-                        readable: true,
-                        truncated,
-                        content,
-                        read_error: None,
-                    }
-                }
-                Err(e) => RepoDocFile {
-                    path: (*rel).to_string(),
-                    found: true,
-                    readable: false,
-                    truncated: false,
-                    content: String::new(),
-                    read_error: Some(format!("read {}: {}", rel, e)),
-                },
-            }
-        })
+        .map(|rel| read_doc_file(repo, repo_root.as_deref(), rel))
         .collect()
 }
 
@@ -1298,6 +1325,106 @@ mod tests {
         let mut expected_sorted = sorted_tail.clone();
         expected_sorted.sort();
         assert_eq!(sorted_tail, expected_sorted);
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_local_docs_rejects_readme_symlink_to_external_file() {
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-readme-symlink-{stamp}"));
+        let outside = std::env::temp_dir().join(format!("agent-workspace-readme-outside-{stamp}"));
+        fs::create_dir_all(&root).expect("mkdir root");
+        fs::create_dir_all(&outside).expect("mkdir outside");
+        fs::write(outside.join("SECRET.md"), "# external secret content").expect("write outside");
+        symlink(outside.join("SECRET.md"), root.join("README.md")).expect("symlink readme");
+
+        let docs = read_local_docs(&root);
+        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme entry");
+        assert!(readme.found);
+        assert!(!readme.readable);
+        assert!(readme.content.is_empty());
+        assert!(!readme.content.contains("external secret"));
+        assert!(readme.read_error.as_deref().unwrap_or("").contains("symlink"));
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_local_docs_rejects_backlog_symlink_to_external_file() {
+        use std::os::unix::fs::symlink;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-backlog-symlink-{stamp}"));
+        let outside = std::env::temp_dir().join(format!("agent-workspace-backlog-outside-{stamp}"));
+        fs::create_dir_all(root.join("docs")).expect("mkdir docs");
+        fs::create_dir_all(&outside).expect("mkdir outside");
+        fs::write(outside.join("SECRET.md"), "# leaked backlog secret").expect("write outside");
+        fs::write(root.join("README.md"), "# safe readme").expect("write readme");
+        symlink(outside.join("SECRET.md"), root.join("docs/BACKLOG.md")).expect("symlink backlog");
+
+        let docs = read_local_docs(&root);
+        let backlog = docs
+            .iter()
+            .find(|d| d.path == "docs/BACKLOG.md")
+            .expect("backlog entry");
+        assert!(backlog.found);
+        assert!(!backlog.readable);
+        assert!(backlog.content.is_empty());
+        assert!(!backlog.content.contains("leaked backlog"));
+        assert!(backlog.read_error.as_deref().unwrap_or("").contains("symlink"));
+
+        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme entry");
+        assert!(readme.readable);
+        assert_eq!(readme.content, "# safe readme");
+
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&outside);
+    }
+
+    #[test]
+    fn read_local_docs_loads_normal_core_and_nested_markdown() {
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("agent-workspace-read-docs-{stamp}"));
+        fs::create_dir_all(root.join("docs/product/nested")).expect("mkdir nested");
+        fs::write(root.join("README.md"), "# hi").expect("write readme");
+        fs::write(root.join("docs/BACKLOG.md"), "# backlog").expect("write backlog");
+        fs::write(root.join("docs/product/nested/DETAIL.md"), "# detail").expect("write detail");
+
+        let docs = read_local_docs(&root);
+        let readme = docs.iter().find(|d| d.path == "README.md").expect("readme");
+        assert!(readme.readable);
+        assert_eq!(readme.content, "# hi");
+
+        let backlog = docs.iter().find(|d| d.path == "docs/BACKLOG.md").expect("backlog");
+        assert!(backlog.readable);
+        assert_eq!(backlog.content, "# backlog");
+
+        let detail = docs
+            .iter()
+            .find(|d| d.path == "docs/product/nested/DETAIL.md")
+            .expect("detail");
+        assert!(detail.readable);
+        assert_eq!(detail.content, "# detail");
+        assert!(!detail.content.contains("external"));
 
         let _ = fs::remove_dir_all(&root);
     }
