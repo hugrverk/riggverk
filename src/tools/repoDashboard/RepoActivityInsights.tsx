@@ -13,7 +13,9 @@ import {
   type ActivityInsightsVisualMode,
   type ContributorActivitySeries,
   type ContributorStat,
+  type HeatmapCell,
 } from "./model";
+import { ActivityHeatmap } from "./RepoDashboardCharts";
 
 interface ChartFocus {
   seriesId: string;
@@ -248,9 +250,11 @@ function ContributorVisibilityRow({
 export function RepoActivityInsights({
   commits,
   commitsTruncated,
+  heatmapCells,
 }: {
   commits: RepoCommitEntry[];
   commitsTruncated: boolean;
+  heatmapCells: HeatmapCell[];
 }) {
   const [chartMode, setChartMode] = useState<ActivityInsightsVisualMode>("lines");
   const [visibleContributorIds, setVisibleContributorIds] = useState<string[]>([]);
@@ -347,44 +351,56 @@ export function RepoActivityInsights({
       ) : (
         <div className="repo-dashboard-activity-insights-body">
           <ActivityInsightsChart series={visibleSeries} mode={chartMode} />
-          {allStats.length ? (
-            <div className="repo-dashboard-contributor-panel">
-              <div className="repo-dashboard-contributor-panel-head">
-                <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
-                <button
-                  type="button"
-                  className={`repo-dashboard-contributor-show-all font-mono${allContributorsVisible ? " repo-dashboard-contributor-show-all-inactive" : ""}`}
-                  onClick={showAllContributors}
-                  disabled={allContributorsVisible}
-                  aria-disabled={allContributorsVisible}
-                >
-                  Show all
-                </button>
-              </div>
-              <div className="repo-dashboard-contributor-visibility-list font-mono">
-                <div
-                  className="repo-dashboard-contributor-visibility-header"
-                  aria-hidden="true"
-                >
-                  <span />
-                  <span />
-                  <span>Name</span>
-                  <span>Commits</span>
-                  <span>Share</span>
-                  <span>Merges</span>
+          <div className="repo-dashboard-activity-sidebar">
+            {allStats.length ? (
+              <div className="repo-dashboard-contributor-panel">
+                <div className="repo-dashboard-contributor-panel-head">
+                  <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
+                  <button
+                    type="button"
+                    className={`repo-dashboard-contributor-show-all font-mono${allContributorsVisible ? " repo-dashboard-contributor-show-all-inactive" : ""}`}
+                    onClick={showAllContributors}
+                    disabled={allContributorsVisible}
+                    aria-disabled={allContributorsVisible}
+                  >
+                    Show all
+                  </button>
                 </div>
-                {allStats.map(stat => (
-                  <ContributorVisibilityRow
-                    key={stat.id}
-                    stat={stat}
-                    visible={visibleIdSet.has(stat.id)}
-                    colorIndex={colorIndexById.get(stat.id) ?? 0}
-                    onToggle={() => toggleContributor(stat.id)}
-                  />
-                ))}
+                <div className="repo-dashboard-contributor-visibility-list font-mono">
+                  <div
+                    className="repo-dashboard-contributor-visibility-header"
+                    aria-hidden="true"
+                  >
+                    <span />
+                    <span />
+                    <span>Name</span>
+                    <span>Commits</span>
+                    <span>Share</span>
+                    <span>Merges</span>
+                  </div>
+                  {allStats.map(stat => (
+                    <ContributorVisibilityRow
+                      key={stat.id}
+                      stat={stat}
+                      visible={visibleIdSet.has(stat.id)}
+                      colorIndex={colorIndexById.get(stat.id) ?? 0}
+                      onToggle={() => toggleContributor(stat.id)}
+                    />
+                  ))}
+                </div>
               </div>
+            ) : null}
+            <div className="repo-dashboard-heatmap-panel">
+              <h3 className="font-mono repo-dashboard-heatmap-panel-title">Commit activity</h3>
+              {heatmapCells.length ? (
+                <ActivityHeatmap cells={heatmapCells} density="default" layout="embedded" />
+              ) : (
+                <p className="text-muted small" role="status">
+                  No activity data.
+                </p>
+              )}
             </div>
-          ) : null}
+          </div>
         </div>
       )}
 

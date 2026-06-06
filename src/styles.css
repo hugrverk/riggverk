@@ -5949,6 +5949,34 @@ code {
   max-width: 100%;
 }
 
+.repo-dashboard-activity-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+  align-self: start;
+}
+
+.repo-dashboard-heatmap-panel {
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--bg-inset);
+  border-radius: var(--radius);
+  padding: 8px 10px 10px;
+}
+
+.repo-dashboard-heatmap-panel-title {
+  margin: 0 0 8px;
+  font-size: 11px;
+  color: var(--text-heading);
+}
+
+.repo-dashboard-heatmap-panel .repo-dashboard-heatbox {
+  border: none;
+  background: transparent;
+  padding: 0;
+}
+
 .repo-dashboard-contributor-panel {
   min-width: 0;
   overflow: visible;
@@ -6121,9 +6149,7 @@ code {
   flex-direction: column;
   gap: 0;
   min-width: 0;
-  max-height: min(11.5rem, 42vh);
-  overflow-x: hidden;
-  overflow-y: auto;
+  overflow: visible;
 }
 
 .repo-dashboard-contributor-visibility-header,

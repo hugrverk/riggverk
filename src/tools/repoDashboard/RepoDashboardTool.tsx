@@ -37,7 +37,6 @@ import {
   workItemDocLane,
   type DocWorkLaneId,
 } from "./model";
-import { ActivityHeatmap } from "./RepoDashboardCharts";
 import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
@@ -732,17 +731,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
               <RepoActivityInsights
                 commits={snapshot.commits}
                 commitsTruncated={snapshot.commits_truncated}
+                heatmapCells={heatmap}
               />
 
               <div className="repo-dashboard-overview-mid">
-                <div className="repo-dashboard-card repo-dashboard-heat-card">
-                  <h2 className="font-mono">Commit activity</h2>
-                  {heatmap.length ? (
-                    <ActivityHeatmap cells={heatmap} density="default" layout="embedded" />
-                  ) : (
-                    <p className="text-muted small">No activity data.</p>
-                  )}
-                </div>
                 <div className="repo-dashboard-card repo-dashboard-latest">
                   <h2 className="font-mono">Latest merge / commit</h2>
                   <LatestChangeCard

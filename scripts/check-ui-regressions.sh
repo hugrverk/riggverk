@@ -100,8 +100,8 @@ fi
 if ! rg -n 'repo-dashboard-section-select' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
   fail "Repo Dashboard must expose a narrow-layout section control"
 fi
-if ! rg -n 'density="default"' src/tools/repoDashboard/RepoDashboardTool.tsx >/tmp/agent-workspace-ui-regressions.txt; then
-  fail "Repo Dashboard overview heatmap must use default density"
+if ! rg -n 'density="default"' src/tools/repoDashboard/RepoActivityInsights.tsx >/tmp/agent-workspace-ui-regressions.txt; then
+  fail "Repo Dashboard activity sidebar heatmap must use default density"
 fi
 if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles.css >/tmp/agent-workspace-ui-regressions.txt; then
   fail "repo-dashboard-workspace must not use overflow auto (nested scroll)"
