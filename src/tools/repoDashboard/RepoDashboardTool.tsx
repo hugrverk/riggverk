@@ -31,12 +31,15 @@ import {
   buildDocSourceSummaries,
   buildHeatmapCells,
   buildWorkStatusCounts,
+  filterDocsSnapshotWarnings,
   filterWorkItemsByCanonicalSource,
   filterWorkItemsByPriority,
   ghIssuesKpiLabel,
   isCanonicalWorkMode,
+  normalizePriorityValue,
   normalizeRepoPathForCompare,
   repoDashboardBrandLabel,
+  workItemCanonicalSource,
   type CanonicalSourceFilter,
   type PriorityFilter,
 } from "./model";
@@ -358,6 +361,28 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
     () => (snapshot ? isCanonicalWorkMode(snapshot.docs) : false),
     [snapshot],
   );
+
+  useEffect(() => {
+    if (!snapshot) return;
+    if (canonicalMode) {
+      if (
+        sourceFilter !== "all" &&
+        !workItems.some(i => workItemCanonicalSource(i) === sourceFilter)
+      ) {
+        setSourceFilter("all");
+      }
+      if (
+        priorityFilter !== "all" &&
+        !workItems.some(i => normalizePriorityValue(i.priority) === priorityFilter)
+      ) {
+        setPriorityFilter("all");
+      }
+      return;
+    }
+    if (typeFilter !== "all" && !workItems.some(i => i.type === typeFilter)) {
+      setTypeFilter("all");
+    }
+  }, [snapshot, workItems, canonicalMode, sourceFilter, priorityFilter, typeFilter]);
 
   const filteredWorkItems = useMemo(() => {
     let list = workItems;
@@ -757,8 +782,11 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
           {snapshot && snapshotMatchesPath && !loading && section === "docs" && (
             <RepoDocsWorkspace
               docs={snapshot.docs}
+              docsSource={snapshot.docs_source}
+              docsRef={snapshot.docs_ref}
+              docsStale={snapshot.docs_stale}
               parserWarnings={parserWarnings}
-              repoWarnings={snapshot.warnings}
+              repoWarnings={filterDocsSnapshotWarnings(snapshot.warnings, snapshot.docs_source)}
               ghMessage={snapshot.gh.message}
               selectedPath={docsSelectedPath}
               onSelectPath={setDocsSelectedPath}

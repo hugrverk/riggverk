@@ -1,6 +1,7 @@
 import { useMemo } from "react";
-import type { RepoDocFile } from "../../types";
+import type { RepoDocFile, RepoDocsSource } from "../../types";
 import { classifyDocRole, compareDocsByRole, docRoleLabel } from "./docRoles";
+import { docsSourceLabel, docsSourceWarning } from "./model";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 
 export function docDisplayTitle(path: string): string {
@@ -48,6 +49,9 @@ function docListStatus(doc: RepoDocFile): string {
 
 export interface RepoDocsWorkspaceProps {
   docs: RepoDocFile[];
+  docsSource: RepoDocsSource;
+  docsRef: string;
+  docsStale: boolean;
   parserWarnings: string[];
   repoWarnings: string[];
   ghMessage?: string | null;
@@ -59,6 +63,9 @@ export interface RepoDocsWorkspaceProps {
 
 export function RepoDocsWorkspace({
   docs,
+  docsSource,
+  docsRef,
+  docsStale,
   parserWarnings,
   repoWarnings,
   ghMessage,
@@ -73,6 +80,7 @@ export function RepoDocsWorkspace({
   );
   const selectedDoc = docs.find(d => d.path === selectedPath) ?? null;
   const readableCount = docs.filter(d => d.found && d.readable).length;
+  const sourceWarning = docsSourceWarning(docsSource, docsStale);
 
   return (
     <div className="repo-dashboard-docs-workspace">
@@ -80,7 +88,7 @@ export function RepoDocsWorkspace({
         <h2 className="font-mono repo-dashboard-page-title">Docs</h2>
         <p className="text-muted small repo-dashboard-page-desc">
           Searchable repository Markdown. {readableCount} readable document
-          {readableCount === 1 ? "" : "s"} discovered from the local snapshot.
+          {readableCount === 1 ? "" : "s"} from {docsSourceLabel(docsSource).toLowerCase()}.
         </p>
       </header>
 
@@ -209,9 +217,21 @@ export function RepoDocsWorkspace({
             </>
           )}
 
-          {(parserWarnings.length > 0 || repoWarnings.length > 0 || ghMessage) && (
+          {(parserWarnings.length > 0 || repoWarnings.length > 0 || ghMessage || sourceWarning) && (
             <details className="repo-dashboard-docs-diagnostics font-mono">
               <summary>Diagnostics</summary>
+              <div className="repo-dashboard-docs-diagnostic-block">
+                <h4 className="repo-dashboard-docs-diagnostic-title">Documentation source</h4>
+                <p className="text-muted small repo-dashboard-docs-source-meta">
+                  {docsSourceLabel(docsSource)} · {docsRef}
+                  {docsStale ? " · stale" : ""}
+                </p>
+                {sourceWarning ? (
+                  <p className="repo-dashboard-docs-reader-warning small" role="status">
+                    {sourceWarning}
+                  </p>
+                ) : null}
+              </div>
               {parserWarnings.length > 0 ? (
                 <div className="repo-dashboard-docs-diagnostic-block">
                   <h4 className="repo-dashboard-docs-diagnostic-title">Parser warnings</h4>
