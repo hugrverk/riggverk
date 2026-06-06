@@ -223,4 +223,15 @@ if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/Pro
   fail "Prompt Loops shortcut hint block must not return"
 fi
 
+if ! rg -n 'lib-docs-markdown|lib-docs-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
+  fail "Library Docs scoped reading surface must exist"
+fi
+if rg -n 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/components/AppHeaderNav.tsx >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "obsolete Tools view must not return in navigation"
+fi
+if ! rg -n '"prompts"|"repo-dashboard"' src/components/AppHeaderNav.tsx src/App.tsx >"$ui_tmp"; then
+  fail "direct Prompt Loops and Repo Dashboard views must exist"
+fi
+
 printf 'UI regression checks passed\n'

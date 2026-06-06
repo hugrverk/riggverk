@@ -53,8 +53,21 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] Harness pages show diff/sync actions when workspace is valid
 - [ ] Skills install UI on harness pages (not Workspace)
 - [ ] Library: Docs, Rules, Skills, Agents, Configs, Brain Setup switch correctly
+- [ ] Library → Docs: document selection, Preview, Edit, modified state, save, reset, open, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
 - [ ] Brain Setup copy block works
-- [ ] Settings: appearance and theme colors save and reset
+- [ ] Settings: appearance, all four text sizes (`small`, `medium`, `large`, `extra large`), and theme colors save and reset
+- [ ] Extra-large text size at minimum supported window width
+
+## 4b. Prompt Loops and Repo Dashboard Smoke
+
+- [ ] Header exposes dedicated **Prompt Loops** and **Repo Dashboard** icons after Library and before Settings
+- [ ] No **Tools** icon or intermediate Tools page exists
+- [ ] Prompt Loops and Repo Dashboard sidebars have no tool switcher buttons
+- [ ] No Prompt Loops shortcut hint block (1–4 / / / ↑↓) in the sidebar
+- [ ] No Repo Dashboard sidebar `gh: enhanced` or `gh: local-only` status line
+- [ ] Prompt Loops keyboard shortcuts still work outside editable controls
+- [ ] **Use as context** from an eligible Repo Dashboard item switches to Prompt Loops with safe task context
+- [ ] Repo Dashboard refresh on a repository with more than 500 locally available commits loads complete reachable history (not a hard 500-cap)
 
 ## 5. Sync / Install Smoke (Caution)
 

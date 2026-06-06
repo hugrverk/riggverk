@@ -110,14 +110,15 @@ Primary navigation:
 - **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
 - **Harness pages** (Codex, OpenCode, Cursor, Claude) — per-tool diff/sync/install actions and skills install for that tool.
 - **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, legacy sandbox profiles, adapter agents, project rules) stay in the workspace for scripts but are not listed as normal Library docs.
-- **Tools** — native Kretsverket utilities: **Prompt Loops** (copy-ready prompt templates) and **Repo Dashboard** (local-git-first repository insight).
-- **Settings** — appearance, global text size, and theme colors. Target profiles and sync toggles live on harness pages.
+- **Prompt Loops** — direct navigation destination for copy-ready prompt templates and the optional composer (see below).
+- **Repo Dashboard** — direct navigation destination for local-git-first repository insight (see below).
+- **Settings** — appearance, global text size (`small`, `medium`, `large`, `extra large`), and theme colors. Target profiles and sync toggles live on harness pages.
 
-### Tools
+### Prompt Loops and Repo Dashboard
 
 **Prompt Loops** is a copy-ready template browser first, with an optional composer second. Groups: standard, masterprompt, batchprompt, and rewrite. Select a template, preview the prompt, and copy it unchanged when no repo context, task/context text, or prompt options are active. Optional controls add visible sections only: saved Repo Dashboard repo metadata resolved via safe local git inspection (label, sanitized `owner/repo` slug, current/default branch; never local paths or raw remotes in composed output), a task/context textarea, and a collapsed **Prompt options** panel with a small fixed set of generic hard-constraint chips. Copy always matches the preview exactly.
 
-v1 does not parse repos or docs on its own, does not call LLMs, does not hardcode repository names or project-specific repo profiles, and does not persist composer state in app settings or localStorage. Tool switching lives in the left sidebar (with Repo Dashboard). Templates require operator metadata above the copy/paste block; generated prompts must weave exact skill names (e.g. `Use diagnose...`) into executable English instructions, not only list them under Relevant skills. Run `npx tsx scripts/check-prompt-loops-templates.ts` to validate templates and the deterministic composer.
+v1 does not parse repos or docs on its own, does not call LLMs, does not hardcode repository names or project-specific repo profiles, and does not persist composer state in app settings or localStorage. Open Prompt Loops or Repo Dashboard from the header navigation icons (there is no shared Tools page). Templates require operator metadata above the copy/paste block; generated prompts must weave exact skill names (e.g. `Use diagnose...`) into executable English instructions, not only list them under Relevant skills. Run `npx tsx scripts/check-prompt-loops-templates.ts` to validate templates and the deterministic composer.
 
 **Use as context** (session-only handoff from Repo Dashboard): on eligible docs-backed work items (`feature`, `roadmap`, `todo` only — not `gap`, `fix`, `note`, or GitHub issues), **Use as context** switches to Prompt Loops and fills the optional task/context textarea with a deterministic block for that item. It does not generate a prompt, change the active template/group, auto-select standard/master/batch/rewrite, or bypass preview/copy. If the active Repo Dashboard path matches a saved repo entry, Prompt Loops may select that repo context; otherwise task/context is filled and repo context stays unset. No right-click, multi-select, persistence, GitHub API, or `gh` calls. Run `npx tsx scripts/check-prompt-context-handoff.ts` for handoff formatter/eligibility checks.
 
@@ -125,7 +126,7 @@ v1 does not parse repos or docs on its own, does not call LLMs, does not hardcod
 
 Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode. The **Changed files** panel always reflects local `git show HEAD`, not a GitHub PR file list, even when merge metadata comes from `gh`.
 
-Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control or imported after **Discover local repos** via app settings. Only non-secret metadata is persisted. Commit history and activity charts load up to 500 recent commits (not full repository history).
+Repo dashboard entries (label, path, optional default branch) may be saved from the dashboard **save** control or imported after **Discover local repos** via app settings. Only non-secret metadata is persisted. Commit history and activity charts load all history reachable from the current local `HEAD` through bounded paginated Git reads (shallow clones expose only history present locally).
 
 Supported data quality states:
 
