@@ -28,22 +28,19 @@ import {
 import { mergeWorkItemsDetailed } from "./docsParser";
 import {
   authorLabel,
-  buildActivityLegend,
   buildDocLaneSummaries,
   buildDocSourceSummaries,
   buildHeatmapCells,
-  buildLineChartData,
   buildWorkStatusCounts,
-  eventsFromCommits,
   ghIssuesKpiLabel,
   normalizeRepoPathForCompare,
   repoDashboardBrandLabel,
   workItemDocLane,
   type DocWorkLaneId,
 } from "./model";
-import { ActivityHeatmap, ActivityLineChart } from "./RepoDashboardCharts";
+import { ActivityHeatmap } from "./RepoDashboardCharts";
+import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
-import { ContributorStatsPanel } from "./ContributorStatsPanel";
 import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
 
 export type RepoDashboardSection = "overview" | "work" | "docs";
@@ -452,15 +449,6 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
 
   const workStatusCounts = useMemo(() => buildWorkStatusCounts(workItems), [workItems]);
 
-  const activityLegend = useMemo(
-    () => (snapshot ? buildActivityLegend(snapshot.commits) : []),
-    [snapshot],
-  );
-
-  const lineChart = useMemo(
-    () => (snapshot ? buildLineChartData(eventsFromCommits(snapshot.commits)) : null),
-    [snapshot],
-  );
   const heatmap = useMemo(
     () => (snapshot ? buildHeatmapCells(snapshot.commits) : []),
     [snapshot],
@@ -827,44 +815,10 @@ export function RepoDashboardTool({ toolsSwitcher, onUsePromptContext }: RepoDas
                 </button>
               </div>
 
-              <section
-                className="repo-dashboard-overview-activity"
-                aria-label="Activity and contributors"
-              >
-                <div className="repo-dashboard-grid cols repo-dashboard-overview-charts">
-                  <div className="repo-dashboard-card repo-dashboard-activity-card">
-                    <h2 className="font-mono">Repo activity</h2>
-                    {lineChart ? (
-                      <ActivityLineChart data={lineChart} legend={activityLegend} />
-                    ) : (
-                      <p className="text-muted small" role="status">
-                        {snapshot.commits.length
-                          ? "Not enough author diversity for cumulative chart (single author or unmapped)."
-                          : "No commits loaded — refresh after selecting a repository."}
-                      </p>
-                    )}
-                    <p className="text-muted small repo-dashboard-footnote">
-                      {snapshot.commits.length.toLocaleString()} commits from local git
-                      {snapshot.commits_truncated
-                        ? " (older commits omitted — output limit; ensure a full clone)."
-                        : ""}
-                      .
-                      {activityLegend.length ? (
-                        <>
-                          {" "}
-                          {activityLegend.map((entry, i) => (
-                            <span key={entry.role}>
-                              {i > 0 ? " · " : ""}
-                              {entry.role === "primary" ? "Blue" : "Green"} = {entry.label} ({entry.commits})
-                            </span>
-                          ))}
-                        </>
-                      ) : null}
-                    </p>
-                  </div>
-                  <ContributorStatsPanel commits={snapshot.commits} />
-                </div>
-              </section>
+              <RepoActivityInsights
+                commits={snapshot.commits}
+                commitsTruncated={snapshot.commits_truncated}
+              />
 
               <div className="repo-dashboard-grid cols repo-dashboard-overview-mid">
                 <div className="repo-dashboard-card repo-dashboard-heat-card">

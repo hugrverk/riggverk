@@ -8,6 +8,10 @@ import {
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   buildLineChartData,
+  buildActivityInsightsSeries,
+  filterCommitsByContributor,
+  filterCommitsByTimeRange,
+  activityInsightsChartValue,
   buildDocLaneSummaries,
   buildRemainingByType,
   workItemDocLane,
@@ -205,6 +209,23 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
   assert.equal(activeWorkCount(partition), 2);
   assert.equal(partition.activeStarted[0].text, "started");
   assert.ok(compareWorkItems(partition.activeOpen[0], partition.activeStarted[0]) !== 0);
+}
+
+{
+  const nowSec = Math.floor(Date.now() / 1000);
+  const commits = [
+    commit({ authored_at: nowSec - 5 * 86_400, author_email: "a@x.com", author_name: "Alice" }),
+    commit({ authored_at: nowSec - 2 * 86_400, author_email: "b@x.com", author_name: "Bob" }),
+    commit({ authored_at: nowSec - 400 * 86_400, author_email: "a@x.com", author_name: "Alice" }),
+  ];
+  const recent = filterCommitsByTimeRange(commits, "30d");
+  assert.equal(recent.length, 2);
+  const aliceOnly = filterCommitsByContributor(recent, "a@x.com");
+  assert.equal(aliceOnly.length, 1);
+  const series = buildActivityInsightsSeries(aliceOnly);
+  assert.ok(series.length >= 1);
+  assert.equal(activityInsightsChartValue(series[series.length - 1], "cumulative"), 1);
+  assert.equal(activityInsightsChartValue(series[series.length - 1], "period"), 0);
 }
 
 console.log("Repo Dashboard model checks passed");

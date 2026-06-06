@@ -247,6 +247,81 @@ export function buildHeatmapCells(commits: RepoCommitEntry[]): HeatmapCell[] {
   });
 }
 
+export type ActivityTimeRange = "30d" | "90d" | "1y" | "all";
+export type ActivityChartMode = "period" | "cumulative";
+
+export function activityTimeRangeCutoffSecs(
+  range: ActivityTimeRange,
+  now = new Date(),
+): number | null {
+  if (range === "all") return null;
+  const days = range === "30d" ? 30 : range === "90d" ? 90 : 365;
+  const cutoff = dayStart(now);
+  cutoff.setDate(cutoff.getDate() - days);
+  return Math.floor(cutoff.getTime() / 1000);
+}
+
+export function filterCommitsByTimeRange(
+  commits: RepoCommitEntry[],
+  range: ActivityTimeRange,
+  now = new Date(),
+): RepoCommitEntry[] {
+  const cutoff = activityTimeRangeCutoffSecs(range, now);
+  if (cutoff == null) return commits;
+  return commits.filter(c => Number.isFinite(c.authored_at) && c.authored_at >= cutoff);
+}
+
+export function filterCommitsByContributor(
+  commits: RepoCommitEntry[],
+  contributorId: "all" | string,
+): RepoCommitEntry[] {
+  if (contributorId === "all") return commits;
+  return commits.filter(c => authorIdentity(c) === contributorId);
+}
+
+export interface ActivityInsightsPoint {
+  date: string;
+  commitCount: number;
+  cumulativeCount: number;
+}
+
+export function activityInsightsChartValue(
+  point: ActivityInsightsPoint,
+  mode: ActivityChartMode,
+): number {
+  return mode === "cumulative" ? point.cumulativeCount : point.commitCount;
+}
+
+export function buildActivityInsightsSeries(
+  commits: RepoCommitEntry[],
+): ActivityInsightsPoint[] {
+  const dated = commits
+    .filter(c => Number.isFinite(c.authored_at))
+    .sort((a, b) => a.authored_at - b.authored_at);
+  if (!dated.length) return [];
+
+  const counts = new Map<string, number>();
+  for (const commit of dated) {
+    const key = isoDay(new Date(commit.authored_at * 1000));
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+
+  const start = dayStart(new Date(dated[0].authored_at * 1000));
+  const lastCommit = dayStart(new Date(dated[dated.length - 1].authored_at * 1000));
+  const today = dayStart(new Date());
+  const rangeEnd = lastCommit > today ? lastCommit : today;
+
+  const points: ActivityInsightsPoint[] = [];
+  let cumulative = 0;
+  for (let cursor = new Date(start); cursor <= rangeEnd; cursor.setDate(cursor.getDate() + 1)) {
+    const key = isoDay(cursor);
+    const commitCount = counts.get(key) ?? 0;
+    cumulative += commitCount;
+    points.push({ date: key, commitCount, cumulativeCount: cumulative });
+  }
+  return points;
+}
+
 export function buildRemainingByType(items: RepoDashboardWorkItem[]): RemainingByType[] {
   const types: RepoDashboardWorkType[] = ["roadmap", "feature", "gap", "todo", "fix", "note"];
   return types.map(type => {
