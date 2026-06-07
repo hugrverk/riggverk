@@ -580,13 +580,14 @@ mod tests {
         );
 
         let summary = architect.unwrap();
-        // Verify the current_path joins the agents directory with the filename
-        assert!(
-            summary
-                .current_path
-                .ends_with(".config/opencode/agents/architect.md"),
-            "current_path should end with .config/opencode/agents/architect.md, got: {}",
-            summary.current_path
+        let expected_current = resolve_current_target("opencode-agents")
+            .expect("resolve opencode-agents target")
+            .join("architect.md")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            summary.current_path, expected_current,
+            "current_path should map backup file to runtime agents path"
         );
         // current_exists may be false in CI, but the path shape is what matters
 

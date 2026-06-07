@@ -2376,13 +2376,13 @@ mod tests {
 
     #[test]
     fn plan_rejects_tilde_projects() {
-        let home = crate::test_env::process_home()
-            .to_string_lossy()
-            .into_owned();
         let plan = plan_create_workspace(Some("~/Projects".into())).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert!(!plan.ok);
-        let expected = format!("{}/Projects", home);
+        let expected = crate::test_env::process_home()
+            .join("Projects")
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(plan.target_path, expected);
     }
 
