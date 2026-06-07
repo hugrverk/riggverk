@@ -98,10 +98,7 @@ mod tests {
     fn tilde_slash_expands_to_home_child_when_home_available() {
         let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
-        let expected = home
-            .join("Desktop/test")
-            .to_string_lossy()
-            .into_owned();
+        let expected = home.join("Desktop/test").to_string_lossy().into_owned();
 
         assert_eq!(
             normalize_user_workspace_path("~/Desktop/test"),
