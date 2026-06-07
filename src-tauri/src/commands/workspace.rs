@@ -1946,7 +1946,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
         let candidate = repo_path_from_settings(&settings)
@@ -1973,7 +1972,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -2025,7 +2023,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
@@ -2058,7 +2055,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -2080,7 +2076,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -2522,6 +2517,7 @@ mod tests {
             "scripts/check-playwright-mcp.sh",
             "scripts/install-skills.sh",
             "scripts/install-agent-rules.sh",
+            "scripts/install-runtime-agents.sh",
             "scripts/install-opencode-config.sh",
             "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
