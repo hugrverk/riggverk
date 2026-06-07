@@ -102,9 +102,21 @@ assert.ok(!workSource.includes("Active ("), "work must not render Active heading
 assert.ok(!workSource.includes("repo-dashboard-work-column-active"), "work must not use Active wrapper");
 assert.ok(!workSource.includes("repo-dashboard-work-active-columns"), "work must not use Active nested columns");
 assert.ok(!workSource.includes("repo-dashboard-work-subcolumn"), "work must not use nested subcolumns");
-assert.ok(workSource.includes("started {partition.activeStarted.length}"), "work summary must include started count");
-assert.ok(workSource.includes("open {partition.activeOpen.length}"), "work summary must include open count");
-assert.ok(workSource.includes("done {partition.done.length}"), "work summary must include done count");
+assert.ok(
+  workSource.includes("partition.activeStarted.length") &&
+    workSource.includes('repo-dashboard-work-summary-label">started'),
+  "work summary must include started count",
+);
+assert.ok(
+  workSource.includes("partition.activeOpen.length") &&
+    workSource.includes('repo-dashboard-work-summary-label">open'),
+  "work summary must include open count",
+);
+assert.ok(
+  workSource.includes("partition.done.length") &&
+    workSource.includes('repo-dashboard-work-summary-label">done'),
+  "work summary must include done count",
+);
 assert.ok(!workSource.includes("active {"), "work summary must not include active total");
 assert.ok(!chartsSource.includes("scrollRef"), "heatmap must not use scrollRef");
 assert.ok(!chartsSource.includes("scrollLeft"), "heatmap must not auto-scroll horizontally");
