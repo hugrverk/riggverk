@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 # Shared Playwright MCP path and render helpers. Source from install-opencode-config.sh.
 
+resolve_aw_python() {
+  if [ -n "${AW_PYTHON:-}" ] && command -v "$AW_PYTHON" >/dev/null 2>&1; then
+    printf '%s\n' "$AW_PYTHON"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' python3
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' python
+    return 0
+  fi
+  echo "python3 or python is required but was not found on PATH. Install Python 3." >&2
+  return 1
+}
+
+if [ -z "${AW_PYTHON:-}" ]; then
+  AW_PYTHON="$(resolve_aw_python)" || exit 1
+elif ! command -v "$AW_PYTHON" >/dev/null 2>&1; then
+  echo "AW_PYTHON is set to '$AW_PYTHON' but that executable was not found." >&2
+  exit 1
+fi
+export AW_PYTHON
+
 PLAYWRIGHT_MCP_VERSION="${PLAYWRIGHT_MCP_VERSION:-0.0.48}"
 
 default_playwright_browsers_path() {
