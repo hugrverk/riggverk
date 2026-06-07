@@ -3,11 +3,15 @@ mod agent_targets;
 mod commands;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
+mod executable_resolver;
+mod platform_paths;
 mod skills_install;
 mod path_utils;
 mod settings;
 mod shell_runtime;
 
+#[cfg(test)]
+mod test_env;
 #[cfg(test)]
 mod script_action_smoke;
 #[cfg(test)]

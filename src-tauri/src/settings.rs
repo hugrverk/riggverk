@@ -11,7 +11,6 @@ use crate::path_utils::{
     is_legacy_default_workspace_path, normalize_user_workspace_path,
     normalize_user_workspace_path_for_save,
 };
-use crate::cursor_profile_paths::validate_cursor_profile_root;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RepoDashboardEntry {
@@ -41,8 +40,6 @@ pub struct AppSettings {
     #[serde(default)]
     pub active_repo_dashboard_id: Option<String>,
     #[serde(default)]
-    pub cursor_profile_path: Option<String>,
-    #[serde(default)]
     pub revision: u64,
 }
 
@@ -58,7 +55,6 @@ impl Default for AppSettings {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         }
     }
@@ -152,12 +148,6 @@ fn normalize(settings: &mut AppSettings) {
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
 
-    settings.cursor_profile_path = settings
-        .cursor_profile_path
-        .as_ref()
-        .map(|path| path.trim().to_string())
-        .filter(|path| !path.is_empty())
-        .and_then(|path| validate_cursor_profile_root(&path).ok().map(|p| p.to_string_lossy().into_owned()));
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -199,31 +189,14 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
 
-    settings.cursor_profile_path = match settings.cursor_profile_path.as_ref() {
-        None => None,
-        Some(raw) => {
-            let trimmed = raw.trim();
-            if trimmed.is_empty() {
-                None
-            } else {
-                Some(
-                    validate_cursor_profile_root(trimmed)?
-                        .to_string_lossy()
-                        .into_owned(),
-                )
-            }
-        }
-    };
-
     Ok(())
 }
 
 fn settings_file() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
-    Ok(PathBuf::from(home).join("Library/Application Support/ai.agentworkspace.app/settings.json"))
+    crate::platform_paths::settings_file_path(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
 }
 
 fn backup_corrupt_settings_file(path: &PathBuf) -> Result<(), String> {
@@ -446,11 +419,9 @@ mod tests {
     use crate::path_utils::is_legacy_default_workspace_path;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Arc, Barrier, Mutex};
+    use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
-
-    static HOME_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -463,24 +434,8 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         }
-    }
-
-    #[test]
-    fn saved_cursor_profile_path_rejects_executable_like_path() {
-        let mut settings = settings_with_path(None);
-        settings.cursor_profile_path = Some(
-            r"C:\Users\me\AppData\Local\Programs\cursor\resources\app\bin\cursor".into(),
-        );
-
-        let result = normalize_for_save(&mut settings);
-
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("CLI/program path"));
     }
 
     #[test]
@@ -574,7 +529,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -662,7 +616,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
         normalize(&mut s);
@@ -681,7 +634,6 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
-            cursor_profile_path: None,
             revision: 0,
         };
         normalize(&mut s);
@@ -689,7 +641,7 @@ mod tests {
     }
 
     fn with_temp_home<F: FnOnce(&PathBuf)>(test: F) {
-        let _guard = HOME_TEST_MUTEX.lock().expect("home test mutex");
+        let _guard = crate::test_env::guard::lock();
         let dir = std::env::temp_dir().join(format!(
             "aw-settings-test-{}-{}",
             std::process::id(),
@@ -700,16 +652,11 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create temp home");
-        let previous_home = std::env::var("HOME").ok();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
         unsafe {
             std::env::set_var("HOME", &dir);
         }
         test(&dir);
-        if let Some(prev) = previous_home {
-            unsafe {
-                std::env::set_var("HOME", prev);
-            }
-        }
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -726,8 +673,20 @@ mod tests {
         });
     }
 
+    fn settings_path_for_home(dir: &std::path::Path) -> PathBuf {
+        let env = crate::platform_paths::PlatformEnv {
+            home: Some(dir.to_string_lossy().into_owned()),
+            ..crate::platform_paths::PlatformEnv::default()
+        };
+        crate::platform_paths::settings_file_path(
+            &env,
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("settings path")
+    }
+
     fn write_settings_file(dir: &std::path::Path, json: &str) {
-        let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+        let path = settings_path_for_home(dir);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create settings parent");
         }
@@ -822,11 +781,9 @@ mod tests {
             let saved = save(AppSettings::default()).expect("save");
             assert_eq!(saved.revision, 1);
 
-            let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            let path = settings_path_for_home(dir);
             assert!(path.is_file());
-            assert!(!dir
-                .join("Library/Application Support/ai.agentworkspace.app/settings.json.tmp")
-                .exists());
+            assert!(!path.with_extension("json.tmp").exists());
 
             let reloaded: AppSettings =
                 serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
@@ -842,8 +799,7 @@ mod tests {
             let loaded = load();
             assert_eq!(loaded, AppSettings::default());
 
-            let settings_path =
-                dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            let settings_path = settings_path_for_home(dir);
             assert!(
                 settings_path.is_file(),
                 "read-only load must not rename corrupt file"
