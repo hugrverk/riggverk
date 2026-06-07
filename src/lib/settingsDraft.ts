@@ -42,7 +42,6 @@ export function defaultSettings(): AppSettings {
     foreground_color: null,
     repo_dashboard_entries: [],
     active_repo_dashboard_id: null,
-    cursor_profile_path: null,
   };
 }
 

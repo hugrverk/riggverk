@@ -648,12 +648,6 @@ function App() {
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             onApplyProfile={applyTargetProfile}
-            onSetCursorProfilePath={path => {
-              void mutateAppSettings(current => ({
-                ...current,
-                cursor_profile_path: path,
-              })).then(() => loadCursorProfileHealth());
-            }}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}

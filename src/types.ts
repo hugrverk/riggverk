@@ -101,7 +101,6 @@ export interface AppSettings {
   foreground_color: string | null;
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
-  cursor_profile_path?: string | null;
   revision?: number;
 }
 
@@ -439,7 +438,7 @@ export interface BrainSetupSeedResult {
 export interface CursorProfileHealth {
   status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "stale" | "unknown" | string;
   profile_root: string;
-  profile_root_source: "default" | "custom" | string;
+  profile_root_source: "default" | string;
   workspace_resources_status: "current" | "stale" | "missing" | "unreadable" | string;
   manifest_status: string;
   user_rules_status: "manual" | "template-missing" | "unknown" | string;

@@ -1,4 +1,3 @@
-import { useMemo, useState } from "react";
 import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
@@ -9,7 +8,6 @@ import {
   isCursorWorkspaceResourcesStale,
   repairWorkspaceBlockedTitle,
 } from "../lib/cursorWorkspaceResources";
-import { cursorProfilePathValidationError } from "../lib/cursorProfilePath";
 import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
@@ -23,7 +21,6 @@ interface CursorViewProps {
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
   onApplyProfile: (profileId: string) => void;
-  onSetCursorProfilePath: (path: string | null) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -82,7 +79,6 @@ export function CursorView({
   settingsSaveStatus,
   onToggleTarget,
   onApplyProfile,
-  onSetCursorProfilePath,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -125,13 +121,6 @@ export function CursorView({
   const workspaceRepairActive = wsRunning === "repair workspace";
   const repairBusy = busy;
   const resolvedProfileRoot = health?.profile_root ?? null;
-  const [profileDraft, setProfileDraft] = useState<string | null>(null);
-  const profileInput = profileDraft ?? appSettings?.cursor_profile_path ?? "";
-  const profileValidationError = useMemo(
-    () => cursorProfilePathValidationError(profileInput),
-    [profileInput],
-  );
-  const profileUsesCustom = Boolean(appSettings?.cursor_profile_path?.trim());
 
   return (
     <section className="ws-layout target-page-layout">
@@ -156,61 +145,11 @@ export function CursorView({
             onApplyProfile={onApplyProfile}
           />
 
-          <div className="target-panel cursor-profile-path-panel" role="region" aria-label="Cursor profile path">
-            <div className="target-panel-header">
-              <h2 className="target-panel-title">Cursor profile root</h2>
-            </div>
-            <div className="target-panel-body">
-              <p className="target-profile-desc">
-                Resolved profile/config directory used for global agents, skills, MCP, and permissions.
-                This is not the Cursor executable or CLI path.
-              </p>
-              {resolvedProfileRoot && (
-                <p className="settings-path-hint">
-                  Resolved: <span className="cell-value">{resolvedProfileRoot}</span>
-                  {health?.profile_root_source === "custom" ? " (custom)" : " (default)"}
-                </p>
-              )}
-              <label className="settings-color-label" htmlFor="cursor-profile-path-input">
-                Custom profile root (optional)
-              </label>
-              <div className="settings-color-input-group">
-                <input
-                  id="cursor-profile-path-input"
-                  className="settings-input"
-                  type="text"
-                  value={profileInput}
-                  placeholder="Leave empty for platform default (~/.cursor)"
-                  onChange={e => setProfileDraft(e.target.value)}
-                  onBlur={() => {
-                    const next = profileInput.trim();
-                    if (profileValidationError) return;
-                    onSetCursorProfilePath(next ? next : null);
-                    setProfileDraft(null);
-                  }}
-                  onKeyDown={e => {
-                    if (e.key === "Enter") {
-                      (e.target as HTMLInputElement).blur();
-                    }
-                  }}
-                />
-                <button
-                  type="button"
-                  className="btn btn-sm"
-                  disabled={!profileUsesCustom && !profileInput.trim()}
-                  onClick={() => {
-                    setProfileDraft("");
-                    onSetCursorProfilePath(null);
-                  }}
-                >
-                  reset
-                </button>
-              </div>
-              {profileValidationError && (
-                <p className="target-settings-dirty" role="alert">{profileValidationError}</p>
-              )}
-            </div>
-          </div>
+          {resolvedProfileRoot && (
+            <p className="settings-path-hint" style={{ margin: "0 0 1rem" }}>
+              Cursor profile root: <span className="cell-value">{resolvedProfileRoot}</span>
+            </p>
+          )}
 
           {workspaceValid && (
             <HarnessActionCard
