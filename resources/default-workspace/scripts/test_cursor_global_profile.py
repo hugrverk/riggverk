@@ -26,15 +26,17 @@ def test_env(home: Path) -> dict[str, str]:
     }
 
 
-def merge_permissions(template: Path, target: Path) -> None:
+def merge_permissions(template: Path, target: Path) -> subprocess.CompletedProcess[str]:
     env = test_env(target.parent.parent)
-    subprocess.run(
+    return subprocess.run(
         [
             "bash",
             "-c",
             f'source "{CURSOR_LIB}" && merge_cursor_permissions "{template}" "{target}"',
         ],
         check=True,
+        capture_output=True,
+        text=True,
         env=env,
     )
 
@@ -99,6 +101,28 @@ class GlobalProfileMergeTests(unittest.TestCase):
             data = json.loads(target.read_text(encoding="utf-8"))
             self.assertEqual(data["mcpAllowlist"], ["playwright:*"])
             self.assertNotIn("terminalAllowlist", data)
+
+    def test_permissions_merge_rejects_non_array_mcp_allowlist(self) -> None:
+        for payload in (
+            '"playwright:*"',
+            '{"server":"playwright:*"}',
+            "null",
+        ):
+            with self.subTest(payload=payload):
+                with tempfile.TemporaryDirectory() as tmp:
+                    target = Path(tmp) / ".cursor" / "permissions.json"
+                    target.parent.mkdir(parents=True)
+                    target.write_text(
+                        f'{{"mcpAllowlist": {payload}}}',
+                        encoding="utf-8",
+                    )
+                    with self.assertRaises(subprocess.CalledProcessError) as ctx:
+                        merge_permissions(PERMISSIONS_TEMPLATE, target)
+                    combined = (ctx.exception.stdout or "") + (ctx.exception.stderr or "")
+                    self.assertIn(
+                        "existing permissions mcpAllowlist must be an array",
+                        combined,
+                    )
 
     def test_mcp_merge_preserves_other_servers(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:

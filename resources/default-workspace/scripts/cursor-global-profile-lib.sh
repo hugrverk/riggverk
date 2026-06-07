@@ -125,11 +125,10 @@ if target.is_file():
 else:
     data = {}
 
-existing = data.get("mcpAllowlist")
-if existing is None:
+if "mcpAllowlist" not in data:
     merged = list(dict.fromkeys(managed_entries))
-elif isinstance(existing, list):
-    merged = list(dict.fromkeys([*(str(x) for x in existing), *managed_entries]))
+elif isinstance(data["mcpAllowlist"], list):
+    merged = list(dict.fromkeys([*(str(x) for x in data["mcpAllowlist"]), *managed_entries]))
 else:
     raise SystemExit("existing permissions mcpAllowlist must be an array")
 

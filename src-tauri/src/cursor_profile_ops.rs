@@ -217,9 +217,12 @@ fn prepare_permissions_merge(template_path: &Path, target_path: &Path) -> Result
 
     let mut data = read_permissions_target(target_path)?;
 
-    let merged = match data.get("mcpAllowlist").and_then(|v| v.as_array()) {
+    let merged = match data.get("mcpAllowlist") {
         None => managed,
-        Some(existing) => {
+        Some(value) => {
+            let Some(existing) = value.as_array() else {
+                return Err("existing permissions mcpAllowlist must be an array".into());
+            };
             let mut out: Vec<String> = existing
                 .iter()
                 .filter_map(|item| item.as_str().map(str::to_string))
@@ -742,6 +745,131 @@ mod tests {
             profile_root.parent().unwrap_or(profile_root).to_path_buf(),
             profile_root.to_path_buf(),
         )
+    }
+
+    #[test]
+    fn prepare_permissions_merge_adds_missing_mcp_allowlist() {
+        let root = temp_root("perms-missing");
+        let template = root.join("template.json");
+        let target = root.join("permissions.json");
+        fs::write(
+            &template,
+            r#"{"mcpAllowlist":["playwright:*"],"notes":"managed"}"#,
+        )
+        .expect("template");
+        fs::write(&target, r#"{"other":"keep"}"#).expect("target");
+
+        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
+        let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
+        let allow = merged
+            .get("mcpAllowlist")
+            .and_then(|v| v.as_array())
+            .expect("allowlist");
+        let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(entries, vec!["playwright:*"]);
+        assert_eq!(merged.get("other").and_then(|v| v.as_str()), Some("keep"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn prepare_permissions_merge_rejects_non_array_string_mcp_allowlist() {
+        let root = temp_root("perms-string");
+        let template = root.join("template.json");
+        let target = root.join("permissions.json");
+        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
+        fs::write(&target, r#"{"mcpAllowlist":"playwright:*"}"#).expect("target");
+
+        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
+        assert!(err.contains("mcpAllowlist"));
+        assert!(err.contains("array"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn prepare_permissions_merge_rejects_non_array_object_mcp_allowlist() {
+        let root = temp_root("perms-object");
+        let template = root.join("template.json");
+        let target = root.join("permissions.json");
+        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
+        fs::write(&target, r#"{"mcpAllowlist":{"server":"playwright:*"}}"#).expect("target");
+
+        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
+        assert!(err.contains("mcpAllowlist"));
+        assert!(err.contains("array"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn prepare_permissions_merge_rejects_non_array_null_mcp_allowlist() {
+        let root = temp_root("perms-null");
+        let template = root.join("template.json");
+        let target = root.join("permissions.json");
+        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
+        fs::write(&target, r#"{"mcpAllowlist":null}"#).expect("target");
+
+        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
+        assert!(err.contains("mcpAllowlist"));
+        assert!(err.contains("array"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn prepare_permissions_merge_does_not_duplicate_managed_entries() {
+        let root = temp_root("perms-dedup");
+        let template = root.join("template.json");
+        let target = root.join("permissions.json");
+        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
+        fs::write(
+            &target,
+            r#"{"mcpAllowlist":["playwright:*","custom:*"]}"#,
+        )
+        .expect("target");
+
+        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
+        let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
+        let allow = merged
+            .get("mcpAllowlist")
+            .and_then(|v| v.as_array())
+            .expect("allowlist");
+        let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(entries, vec!["playwright:*", "custom:*"]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn preflight_rejects_non_array_mcp_allowlist_without_writes() {
+        let workspace = temp_root("preflight-bad-allowlist-type");
+        let profile = temp_root("preflight-bad-allowlist-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":"playwright:*"}"#,
+        )
+        .expect("permissions");
+
+        let (_guard, _restore) = profile_apply_env(&profile);
+        let paths = test_paths(&profile);
+        let perms_before =
+            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result.stderr.contains("mcpAllowlist"));
+        assert!(result.stderr.contains("array"));
+        assert!(!profile.join("agents").exists());
+        assert!(!profile.join("skills").exists());
+        assert_eq!(
+            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
+            perms_before
+        );
+        assert!(!profile.join("backups").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
     }
 
     #[test]
