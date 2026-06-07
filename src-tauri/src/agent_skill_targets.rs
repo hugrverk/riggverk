@@ -112,65 +112,27 @@ pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct EnvRestore {
-        home: Option<String>,
-        userprofile: Option<String>,
-        cursor_skills: Option<String>,
-    }
-
-    impl EnvRestore {
-        fn set(
-            home: Option<&str>,
-            userprofile: Option<&str>,
-            cursor_skills: Option<&str>,
-        ) -> Self {
-            let previous = EnvRestore {
-                home: std::env::var("HOME").ok(),
-                userprofile: std::env::var("USERPROFILE").ok(),
-                cursor_skills: std::env::var("CURSOR_SKILLS_PATH").ok(),
-            };
-            set_optional("HOME", home);
-            set_optional("USERPROFILE", userprofile);
-            set_optional("CURSOR_SKILLS_PATH", cursor_skills);
-            previous
-        }
-    }
-
-    fn set_optional(key: &str, value: Option<&str>) {
-        match value {
-            Some(v) => unsafe { std::env::set_var(key, v) },
-            None => unsafe { std::env::remove_var(key) },
-        }
-    }
-
-    impl Drop for EnvRestore {
-        fn drop(&mut self) {
-            set_optional("HOME", self.home.as_deref());
-            set_optional("USERPROFILE", self.userprofile.as_deref());
-            set_optional("CURSOR_SKILLS_PATH", self.cursor_skills.as_deref());
-        }
-    }
-
     #[test]
     fn cursor_global_dest_uses_profile_skills_path() {
-        let _guard = env_lock().lock().expect("env lock");
-        let _restore = EnvRestore::set(None, Some(r"C:\Users\Example"), None);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", "/tmp/aw-example-home");
+            std::env::remove_var("CURSOR_SKILLS_PATH");
+        }
         let dest = agent_global_skills_dest("cursor").expect("cursor dest");
-        assert_eq!(dest, PathBuf::from(r"C:\Users\Example\.cursor\skills"));
+        assert_eq!(dest, PathBuf::from("/tmp/aw-example-home/.cursor/skills"));
     }
 
     #[test]
     fn cursor_env_override_wins_over_default_profile() {
-        let custom = r"D:\custom-profile\skills";
-        let _guard = env_lock().lock().expect("env lock");
-        let _restore = EnvRestore::set(None, Some(r"C:\Users\Example"), Some(custom));
+        let custom = "/tmp/aw-custom-profile/skills";
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", "/tmp/aw-example-home");
+            std::env::set_var("CURSOR_SKILLS_PATH", custom);
+        }
         let dest = agent_global_skills_dest("cursor").expect("cursor dest");
         assert_eq!(dest, PathBuf::from(custom));
     }

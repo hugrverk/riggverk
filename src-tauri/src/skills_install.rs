@@ -230,52 +230,7 @@ pub fn install_skills_native(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct EnvRestore {
-        home: Option<String>,
-        userprofile: Option<String>,
-        cursor_skills: Option<String>,
-    }
-
-    impl EnvRestore {
-        fn set(
-            home: Option<&str>,
-            userprofile: Option<&str>,
-            cursor_skills: Option<&str>,
-        ) -> Self {
-            let previous = EnvRestore {
-                home: std::env::var("HOME").ok(),
-                userprofile: std::env::var("USERPROFILE").ok(),
-                cursor_skills: std::env::var("CURSOR_SKILLS_PATH").ok(),
-            };
-            set_optional("HOME", home);
-            set_optional("USERPROFILE", userprofile);
-            set_optional("CURSOR_SKILLS_PATH", cursor_skills);
-            previous
-        }
-    }
-
-    fn set_optional(key: &str, value: Option<&str>) {
-        match value {
-            Some(v) => unsafe { std::env::set_var(key, v) },
-            None => unsafe { std::env::remove_var(key) },
-        }
-    }
-
-    impl Drop for EnvRestore {
-        fn drop(&mut self) {
-            set_optional("HOME", self.home.as_deref());
-            set_optional("USERPROFILE", self.userprofile.as_deref());
-            set_optional("CURSOR_SKILLS_PATH", self.cursor_skills.as_deref());
-        }
-    }
 
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -304,12 +259,12 @@ mod tests {
         write_skill(&workspace, "diagnose", "diagnose");
 
         let skills_dest = profile.join("skills");
-        let _guard = env_lock().lock().expect("env lock");
-        let _restore = EnvRestore::set(
-            None,
-            Some(profile.parent().unwrap().to_str().unwrap()),
-            Some(skills_dest.to_str().unwrap()),
-        );
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &skills_dest);
+        }
 
         let result = install_skills_native(
             &workspace,
@@ -334,12 +289,12 @@ mod tests {
         write_skill(&workspace, "diagnose", "diagnose");
 
         let skills_dest = profile.join("skills");
-        let _guard = env_lock().lock().expect("env lock");
-        let _restore = EnvRestore::set(
-            None,
-            Some(profile.parent().unwrap().to_str().unwrap()),
-            Some(skills_dest.to_str().unwrap()),
-        );
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &skills_dest);
+        }
 
         let result = install_skills_native(
             &workspace,
@@ -404,12 +359,12 @@ mod tests {
         write_skill(&workspace, "diagnose", "diagnose");
 
         let skills_dest = profile.join("skills");
-        let _guard = env_lock().lock().expect("env lock");
-        let _restore = EnvRestore::set(
-            None,
-            Some(profile.parent().unwrap().to_str().unwrap()),
-            Some(skills_dest.to_str().unwrap()),
-        );
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &skills_dest);
+        }
 
         let result = install_skills_native(
             &workspace,
