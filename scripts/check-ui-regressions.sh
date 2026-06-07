@@ -216,6 +216,12 @@ fi
 if ! rg -n 'ToolSectionTabs|tool-section-tabs' src/tools/promptLoops/PromptLoopsTool.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
   fail "tool section tabs must exist in Prompt Loops and Repo Dashboard"
 fi
+if ! rg -n 'repo-dashboard-field-branch|Default branch override' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "Repo Dashboard default branch override must exist"
+fi
+if ! rg -n 'startDiscoverLocalRepos|Discover local git repositories' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "Repo Dashboard discover action must exist"
+fi
 
 for obsolete in \
   'ToolsView' \
