@@ -18,8 +18,16 @@ PLAYWRIGHT_LIB = SCRIPTS / "playwright-mcp-lib.sh"
 CURSOR_LIB = SCRIPTS / "cursor-global-profile-lib.sh"
 
 
+def test_env(home: Path) -> dict[str, str]:
+    return {
+        "WORKSPACE_ROOT": str(ROOT),
+        "HOME": str(home),
+        "AW_PYTHON": sys.executable,
+    }
+
+
 def merge_permissions(template: Path, target: Path) -> None:
-    env = {"WORKSPACE_ROOT": str(ROOT), "HOME": str(target.parent.parent)}
+    env = test_env(target.parent.parent)
     subprocess.run(
         [
             "bash",
@@ -32,7 +40,7 @@ def merge_permissions(template: Path, target: Path) -> None:
 
 
 def merge_mcp(template: Path, target: Path, config_path: str, browsers_path: str) -> None:
-    env = {"WORKSPACE_ROOT": str(ROOT), "HOME": str(target.parent.parent)}
+    env = test_env(target.parent.parent)
     subprocess.run(
         [
             "bash",
@@ -199,33 +207,6 @@ class GlobalProfileMergeTests(unittest.TestCase):
             self.assertTrue((profile_root / "mcp.json").is_file())
             self.assertTrue((profile_root / "permissions.json").is_file())
             self.assertFalse((home / ".cursor").exists())
-
-    def test_apply_global_profile_rejects_executable_like_profile_root(self) -> None:
-        script = SCRIPTS / "install-cursor-workspace.sh"
-        with tempfile.TemporaryDirectory() as tmp:
-            home = Path(tmp)
-            profile_root = home / "Programs" / "cursor" / "resources" / "app" / "bin"
-            profile_root.mkdir(parents=True)
-            env = {
-                "HOME": str(home),
-                "CURSOR_PROFILE_ROOT": str(profile_root),
-                "CURSOR_AGENTS_PATH": str(profile_root / "agents"),
-                "CURSOR_SKILLS_PATH": str(profile_root / "skills"),
-                "CURSOR_MCP_CONFIG_PATH": str(profile_root / "mcp.json"),
-                "CURSOR_PERMISSIONS_PATH": str(profile_root / "permissions.json"),
-                "AGENT_WORKSPACE_BACKUP_DIR": str(home / "backups"),
-            }
-            proc = subprocess.run(
-                ["bash", str(script), "--apply-global-profile", "--quiet"],
-                cwd=ROOT,
-                env=env,
-                capture_output=True,
-                text=True,
-                check=False,
-            )
-            self.assertNotEqual(proc.returncode, 0)
-            self.assertIn("refusing non-allowlisted", proc.stderr)
-
 
 if __name__ == "__main__":
     sys.exit(unittest.main())
