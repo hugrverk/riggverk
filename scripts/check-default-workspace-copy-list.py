@@ -82,6 +82,13 @@ def main() -> None:
         "scripts/install-runtime-agents.sh",
         "scripts/install-opencode-config.sh",
     }
+    required_cursor_adapters = {
+        "templates/cursor/agents/verifier.md",
+        "templates/cursor/agents/security-reviewer.md",
+        "templates/cursor/agents/release-checker.md",
+        "templates/cursor/agents/browser-qa.md",
+        "templates/cursor/agents/repo-scout.md",
+    }
 
     for rel in sorted(required_scripts - scripts):
         fail(f"Scripts section missing: {rel}")
@@ -91,6 +98,12 @@ def main() -> None:
         fail(f"Docs section missing: {rel}")
     for rel in sorted(required_refresh - refresh):
         fail(f"managed refresh list missing app action script: {rel}")
+    for rel in sorted(required_cursor_adapters - templates):
+        fail(f"Templates section missing Cursor adapter: {rel}")
+    for rel in sorted(required_cursor_adapters):
+        adapter_path = ROOT / "resources" / "default-workspace" / rel
+        if not adapter_path.is_file() or adapter_path.stat().st_size == 0:
+            fail(f"Cursor adapter missing or empty on disk: {rel}")
 
     user_owned_prefixes = ("docs/", "skills/", "agents/")
     for rel in sorted(refresh):
@@ -100,7 +113,8 @@ def main() -> None:
             fail(f"managed refresh must not overwrite editable source: {rel}")
 
     print(
-        "  bundled manifest: runtime installers listed; app action scripts refreshable backup-first"
+        "  bundled manifest: runtime installers + Cursor adapters listed; "
+        "app action scripts refreshable backup-first"
     )
 
 

@@ -414,10 +414,6 @@ for agent in verifier.md security-reviewer.md release-checker.md browser-qa.md r
       exit 1
     fi
   done
-  if ! grep -q "templates/cursor/agents/$agent" src-tauri/src/commands/defaults.rs; then
-    printf 'FAIL: default workspace copy list missing Cursor adapter: %s\n' "$agent" >&2
-    exit 1
-  fi
 done
 if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
   printf 'FAIL: editable config target allowlist missing\n' >&2
