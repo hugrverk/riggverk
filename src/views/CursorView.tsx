@@ -120,8 +120,6 @@ export function CursorView({
   const globalProfileActionsBlocked = workspaceResourcesStale || health?.status === "stale";
   const workspaceRepairActive = wsRunning === "repair workspace";
   const repairBusy = busy;
-  const resolvedProfileRoot = health?.profile_root ?? null;
-
   return (
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
@@ -144,12 +142,6 @@ export function CursorView({
             onToggleTarget={onToggleTarget}
             onApplyProfile={onApplyProfile}
           />
-
-          {resolvedProfileRoot && (
-            <p className="settings-path-hint" style={{ margin: "0 0 1rem" }}>
-              Cursor profile root: <span className="cell-value">{resolvedProfileRoot}</span>
-            </p>
-          )}
 
           {workspaceValid && (
             <HarnessActionCard
@@ -239,43 +231,40 @@ export function CursorView({
                       ? repairWorkspaceBlockedTitle("Apply global")
                       : undefined,
                   }}
+              footer={(
+                <div className="harness-advanced-section">
+                  <h4 className="harness-advanced-section-title">Advanced / debug</h4>
+                  <p className="harness-advanced-note">
+                    User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
+                  </p>
+                  <div className="harness-advanced-actions">
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
+                      copy user rules
+                    </button>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
+                      show mcp template
+                    </button>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
+                      copy mcp template
+                    </button>
+                  </div>
+                  <div className="harness-sandbox-actions">
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy safe</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
+                    </div>
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy playwright-safe</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
+                    </div>
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy playwright-full</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             />
-          )}
-
-          {workspaceValid && (
-            <details className="harness-advanced-panel">
-              <summary>Advanced / debug</summary>
-              <div className="harness-advanced-body">
-                <p className="harness-advanced-note">
-                  User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
-                </p>
-                <div className="harness-advanced-actions">
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
-                    copy user rules
-                  </button>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
-                    show mcp template
-                  </button>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
-                    copy mcp template
-                  </button>
-                </div>
-                <div className="harness-sandbox-actions">
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy safe</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
-                  </div>
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy playwright-safe</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
-                  </div>
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy playwright-full</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
-                  </div>
-                </div>
-              </div>
-            </details>
           )}
 
           <TargetSkillsPanel

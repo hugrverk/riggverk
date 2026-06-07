@@ -264,21 +264,83 @@ export function RepoWorkWorkspace({
   return (
     <div className="repo-dashboard-work-workspace">
       <header className="repo-dashboard-work-head">
-        <div className="repo-dashboard-work-head-row">
-          <div className="repo-dashboard-work-head-text">
-            <h2 className="font-mono repo-dashboard-page-title">Work</h2>
-            <p className="text-muted small repo-dashboard-page-desc">
-              {canonicalMode
-                ? "Active bugs, verification, and enhancements from canonical queues and open issues."
-                : "Started, open, and completed items from docs and gh issues."}
-            </p>
+        <div className="repo-dashboard-work-summary-row">
+          <div className="repo-dashboard-work-summary-stats font-mono" role="status">
+            {canonicalMode && canonicalSummary ? (
+              <>
+                <span className="repo-dashboard-work-summary-stat">
+                  <strong>{canonicalSummary.displayed}</strong>
+                  <span className="repo-dashboard-work-summary-label">
+                    of {canonicalSummary.total} active
+                  </span>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">bugs</span>
+                  <strong>{canonicalSummary.bugs}</strong>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">verify</span>
+                  <strong>{canonicalSummary.verify}</strong>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">enhancements</span>
+                  <strong>{canonicalSummary.enhancements}</strong>
+                </span>
+                {canonicalSummary.other ? (
+                  <>
+                    <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                      ·
+                    </span>
+                    <span className="repo-dashboard-work-summary-stat">
+                      <span className="repo-dashboard-work-summary-label">other</span>
+                      <strong>{canonicalSummary.other}</strong>
+                    </span>
+                  </>
+                ) : null}
+              </>
+            ) : (
+              <>
+                <span className="repo-dashboard-work-summary-stat">
+                  <strong>{displayedCount}</strong>
+                  <span className="repo-dashboard-work-summary-label">of {totalItemCount} items</span>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">started</span>
+                  <strong>{partition.activeStarted.length}</strong>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">open</span>
+                  <strong>{partition.activeOpen.length}</strong>
+                </span>
+                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                  ·
+                </span>
+                <span className="repo-dashboard-work-summary-stat">
+                  <span className="repo-dashboard-work-summary-label">done</span>
+                  <strong>{partition.done.length}</strong>
+                </span>
+              </>
+            )}
           </div>
           <div className="repo-dashboard-work-filters font-mono">
             {canonicalMode ? (
               <>
-                <label className="repo-dashboard-work-filter">
-                  <span className="repo-dashboard-work-filter-label">Source</span>
-                  <select
+                <select
                     className="repo-dashboard-field repo-dashboard-work-filter-select"
                     value={sourceFilter}
                     onChange={e =>
@@ -291,10 +353,7 @@ export function RepoWorkWorkspace({
                     <option value="audit">Audit</option>
                     <option value="github">GitHub</option>
                   </select>
-                </label>
-                <label className="repo-dashboard-work-filter">
-                  <span className="repo-dashboard-work-filter-label">Priority</span>
-                  <select
+                <select
                     className="repo-dashboard-field repo-dashboard-work-filter-select"
                     value={priorityFilter}
                     onChange={e =>
@@ -308,12 +367,9 @@ export function RepoWorkWorkspace({
                     <option value="low">Low</option>
                     <option value="unspecified">Unspecified</option>
                   </select>
-                </label>
               </>
             ) : (
-              <label className="repo-dashboard-work-filter">
-                <span className="repo-dashboard-work-filter-label">Type</span>
-                <select
+              <select
                   className="repo-dashboard-field repo-dashboard-work-filter-select"
                   value={typeFilter}
                   onChange={e =>
@@ -328,7 +384,6 @@ export function RepoWorkWorkspace({
                     </option>
                   ))}
                 </select>
-              </label>
             )}
             {filtersActive ? (
               <button
@@ -340,23 +395,6 @@ export function RepoWorkWorkspace({
               </button>
             ) : null}
           </div>
-        </div>
-        <div className="repo-dashboard-work-summary-row">
-          <p className="repo-dashboard-filter-summary font-mono text-muted small" role="status">
-            {canonicalMode && canonicalSummary ? (
-              <>
-                {canonicalSummary.displayed} of {canonicalSummary.total} active items · bugs{" "}
-                {canonicalSummary.bugs} · verify {canonicalSummary.verify} · enhancements{" "}
-                {canonicalSummary.enhancements}
-                {canonicalSummary.other ? ` · other ${canonicalSummary.other}` : ""}
-              </>
-            ) : (
-              <>
-                {displayedCount} of {totalItemCount} items · started {partition.activeStarted.length} ·
-                open {partition.activeOpen.length} · done {partition.done.length}
-              </>
-            )}
-          </p>
         </div>
       </header>
 

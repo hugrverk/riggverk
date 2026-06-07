@@ -29,6 +29,7 @@ export interface HarnessActionCardProps {
   nextActionTone?: "ok" | "warn" | "fail";
   variant?: "default" | "advanced";
   children?: ReactNode;
+  footer?: ReactNode;
   className?: string;
 }
 
@@ -69,6 +70,7 @@ export function HarnessActionCard({
   nextActionTone = "warn",
   variant = "default",
   children,
+  footer,
   className,
 }: HarnessActionCardProps) {
   const sectionClass = [
@@ -116,6 +118,8 @@ export function HarnessActionCard({
         </div>
       )}
 
+      {children}
+
       {(secondaryActions?.length || primaryAction) && (
         <HarnessActionGrid>
           {secondaryActions?.map(action => (
@@ -144,7 +148,7 @@ export function HarnessActionCard({
         </HarnessActionGrid>
       )}
 
-      {children}
+      {footer}
     </div>
   );
 }

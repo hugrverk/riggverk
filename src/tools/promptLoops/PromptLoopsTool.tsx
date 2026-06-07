@@ -213,10 +213,6 @@ export function PromptLoopsTool({
       <section className="prompt-loops-main">
         <header className="prompt-loops-topbar">
           <div className="prompt-loops-topbar-start">
-            <div className="tool-context-brand tool-context-brand-inline font-mono">
-              <span className="tools-title-dot" aria-hidden="true" />
-              <span>prompt.loops</span>
-            </div>
             <ToolSectionTabs
               className="prompt-loops-section-tabs"
               items={PROMPT_LOOP_GROUPS.map(g => ({

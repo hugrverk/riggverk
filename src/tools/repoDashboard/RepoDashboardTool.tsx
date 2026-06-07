@@ -38,7 +38,6 @@ import {
   isCanonicalWorkMode,
   normalizePriorityValue,
   normalizeRepoPathForCompare,
-  repoDashboardBrandLabel,
   workItemCanonicalSource,
   type CanonicalSourceFilter,
   type PriorityFilter,
@@ -464,7 +463,6 @@ export function RepoDashboardTool({
     ? 0
     : workItems.filter(i => i.needsPlan && i.status !== "done").length;
 
-  const brandLabel = repoDashboardBrandLabel(repoPath);
   const ghIssuesLabel = snapshot
     ? ghIssuesKpiLabel(snapshot.gh.available, snapshot.gh.authenticated)
     : "gh issues";
@@ -474,11 +472,7 @@ export function RepoDashboardTool({
     <div className="repo-dashboard-tool">
       <section className="repo-dashboard-main">
         <header className="repo-dashboard-topbar">
-          <div className="repo-dashboard-topbar-row repo-dashboard-topbar-nav-row">
-            <div className="tool-context-brand tool-context-brand-inline font-mono">
-              <span className="tools-title-dot" aria-hidden="true" />
-              <span>{brandLabel}</span>
-            </div>
+          <div className="repo-dashboard-topbar-nav">
             <ToolSectionTabs
               className="repo-dashboard-section-tabs"
               items={SECTIONS.map(({ id, label }) => ({
@@ -502,52 +496,32 @@ export function RepoDashboardTool({
                 ))}
               </select>
             </label>
-            <span
-              className={`repo-dashboard-sync-pill repo-dashboard-sync-pill-${syncState}`}
-              role="status"
-              aria-live="polite"
-            >
-              {syncLabel}
-              {pickerStatus ? ` · ${pickerStatus}` : ""}
-              {saveStatus ? ` · ${saveStatus}` : ""}
-            </span>
-            <button
-              type="button"
-              className={`repo-dashboard-btn repo-dashboard-btn-refresh repo-dashboard-topbar-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
-              onClick={() => void refresh()}
-              disabled={loading}
-              aria-busy={loading}
-              aria-label="Refresh dashboard"
-              title="Refresh dashboard"
-            >
-              {loading ? "…" : "Refresh"}
-            </button>
           </div>
-          <div className="repo-dashboard-topbar-row repo-dashboard-topbar-repo-row">
-            <div className="repo-dashboard-repo-strip">
-              {savedEntries && savedEntries.length > 0 && (
-                <select
-                  className="repo-dashboard-field repo-dashboard-field-saved"
-                  value={selectedSavedId}
-                  onChange={e => {
-                    const entry = savedEntries?.find(x => x.id === e.target.value);
-                    if (entry) {
-                      const branch = entry.default_branch ?? "";
-                      setRepoPath(entry.path);
-                      setDefaultBranch(branch);
-                      void refreshFor(entry.path, branch);
-                    }
-                  }}
-                  aria-label="Saved repositories"
-                  title="Saved repository"
-                >
-                  <option value="">Saved repo…</option>
-                  {savedEntries.map(entry => (
-                    <option key={entry.id} value={entry.id}>{entry.label}</option>
-                  ))}
-                </select>
-              )}
-              <div className="repo-dashboard-path-group">
+          <div className="repo-dashboard-repo-strip">
+            {savedEntries && savedEntries.length > 0 && (
+              <select
+                className="repo-dashboard-field repo-dashboard-field-saved"
+                value={selectedSavedId}
+                onChange={e => {
+                  const entry = savedEntries?.find(x => x.id === e.target.value);
+                  if (entry) {
+                    const branch = entry.default_branch ?? "";
+                    setRepoPath(entry.path);
+                    setDefaultBranch(branch);
+                    void refreshFor(entry.path, branch);
+                  }
+                }}
+                aria-label="Saved repositories"
+                title="Saved repository"
+              >
+                <option value="">Saved repo…</option>
+                {savedEntries.map(entry => (
+                  <option key={entry.id} value={entry.id}>{entry.label}</option>
+                ))}
+              </select>
+            )}
+            <div className="repo-dashboard-path-group">
+              <div className="repo-dashboard-path-field">
                 <input
                   className="repo-dashboard-field repo-dashboard-field-path"
                   value={repoPath}
@@ -556,47 +530,47 @@ export function RepoDashboardTool({
                   aria-label="Local repository path"
                   spellCheck={false}
                 />
-                <button
-                  type="button"
-                  className="repo-dashboard-btn"
-                  onClick={() => void chooseRepoFolder()}
-                  disabled={loading}
-                  aria-label="Choose repository folder"
-                  title="Browse folder"
+                <span
+                  className={`repo-dashboard-sync-status repo-dashboard-sync-status-${syncState}`}
+                  role="status"
+                  aria-live="polite"
                 >
-                  Browse
-                </button>
+                  {syncLabel}
+                  {pickerStatus ? ` · ${pickerStatus}` : ""}
+                  {saveStatus ? ` · ${saveStatus}` : ""}
+                </span>
               </div>
-              <input
-                className="repo-dashboard-field repo-dashboard-field-branch"
-                value={defaultBranch}
-                onChange={e => setDefaultBranch(e.target.value)}
-                placeholder="Branch"
-                aria-label="Default branch override"
-                title="Default branch"
-              />
-              <div className="repo-dashboard-strip-actions">
-                <button
-                  type="button"
-                  className="repo-dashboard-btn repo-dashboard-btn-secondary"
-                  onClick={() => void startDiscoverLocalRepos()}
-                  disabled={loading || discoverLoading}
-                  aria-label="Discover local git repositories in a folder"
-                  title="Scan a parent folder for local git checkouts"
-                >
-                  Discover local repos
-                </button>
-                <button
-                  type="button"
-                  className="repo-dashboard-btn"
-                  onClick={() => void saveCurrentRepo()}
-                  disabled={loading || !repoPath.trim()}
-                  aria-label="Save repository path to settings"
-                  title="Save to settings"
-                >
-                  Save
-                </button>
-              </div>
+              <button
+                type="button"
+                className="repo-dashboard-btn"
+                onClick={() => void chooseRepoFolder()}
+                disabled={loading}
+                aria-label="Choose repository folder"
+                title="Browse folder"
+              >
+                Browse
+              </button>
+              <button
+                type="button"
+                className="repo-dashboard-btn"
+                onClick={() => void saveCurrentRepo()}
+                disabled={loading || !repoPath.trim()}
+                aria-label="Save repository path to settings"
+                title="Save to settings"
+              >
+                Save
+              </button>
+              <button
+                type="button"
+                className={`repo-dashboard-btn repo-dashboard-btn-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
+                onClick={() => void refresh()}
+                disabled={loading}
+                aria-busy={loading}
+                aria-label="Refresh dashboard"
+                title="Refresh dashboard"
+              >
+                {loading ? "…" : "Refresh"}
+              </button>
             </div>
           </div>
         </header>

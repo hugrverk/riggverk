@@ -241,7 +241,7 @@ if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/Pro
   fail "Prompt Loops shortcut hint block must not return"
 fi
 
-if ! rg -n 'lib-docs-markdown|lib-docs-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
+if ! rg -n 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
   fail "Library Docs scoped reading surface must exist"
 fi
 if rg -n 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/components/AppHeaderNav.tsx >"$ui_tmp"; then
