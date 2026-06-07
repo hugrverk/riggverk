@@ -47,19 +47,15 @@ pub struct BackupRunDetails {
     files: Vec<BackupFileSummary>,
 }
 
-fn default_backup_root(home: &Path) -> PathBuf {
-    if cfg!(windows) {
-        home.join("AppData/Roaming/ai.agentworkspace.app/backups")
-    } else if cfg!(target_os = "macos") {
-        home.join("Library/Application Support/ai.agentworkspace.app/backups")
-    } else {
-        home.join(".local/share/ai.agentworkspace.app/backups")
-    }
-}
-
 pub(crate) fn backup_root() -> Result<PathBuf, String> {
-    let home = crate::cursor_profile_paths::resolve_user_home()?;
-    let default_root = default_backup_root(&home);
+    let default_root = crate::platform_paths::backup_root_path(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
 
     let root = if let Ok(env_override) = std::env::var("AGENT_WORKSPACE_BACKUP_DIR") {
         let trimmed = env_override.trim().to_string();

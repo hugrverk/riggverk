@@ -1,15 +1,21 @@
 use std::path::PathBuf;
 
+use crate::platform_paths::{default_installed_workspace_path as platform_workspace_path, Platform, PlatformEnv};
+
 /// Display form of the canonical installed workspace path (verified by release-check).
 #[allow(dead_code)]
 pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
 
+fn resolve_home_string() -> Result<String, String> {
+    crate::platform_paths::resolve_user_home(
+        &PlatformEnv::from_process_env(),
+        Platform::current(),
+    )
+    .map(|p| p.to_string_lossy().into_owned())
+}
+
 pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
-    Ok(PathBuf::from(home).join(".config/agent-workspace"))
+    platform_workspace_path(&PlatformEnv::from_process_env(), Platform::current())
 }
 
 /// Previous built-in default (`~/Agent Workspace`). Treated as deprecated, not a custom path.
@@ -21,12 +27,9 @@ pub(crate) fn is_legacy_default_workspace_path(raw: &str) -> bool {
     let Some(normalized) = normalize_user_workspace_path(trimmed) else {
         return false;
     };
-    let Ok(home) = std::env::var("HOME") else {
+    let Ok(home) = resolve_home_string() else {
         return false;
     };
-    if home.is_empty() {
-        return false;
-    }
     let legacy = PathBuf::from(home)
         .join("Agent Workspace")
         .to_string_lossy()
@@ -41,23 +44,19 @@ pub(crate) fn normalize_user_workspace_path(raw: &str) -> Option<String> {
     }
 
     if trimmed == "~" {
-        if let Ok(home) = std::env::var("HOME") {
-            if !home.is_empty() {
-                return Some(home);
-            }
+        if let Ok(home) = resolve_home_string() {
+            return Some(home);
         }
     }
 
     if let Some(rest) = trimmed.strip_prefix("~/") {
-        if let Ok(home) = std::env::var("HOME") {
-            if !home.is_empty() {
-                return Some(
-                    PathBuf::from(home)
-                        .join(rest)
-                        .to_string_lossy()
-                        .into_owned(),
-                );
-            }
+        if let Ok(home) = resolve_home_string() {
+            return Some(
+                PathBuf::from(home)
+                    .join(rest)
+                    .to_string_lossy()
+                    .into_owned(),
+            );
         }
     }
 
@@ -86,16 +85,9 @@ mod tests {
         normalize_user_workspace_path, normalize_user_workspace_path_for_save,
         DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
     };
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
     #[test]
     fn tilde_expands_to_home_when_home_available() {
-        let _guard = env_lock().lock().expect("lock env");
+        let _guard = crate::test_env::guard::lock();
         let home = std::env::var("HOME").expect("HOME required for test");
 
         assert_eq!(normalize_user_workspace_path("~"), Some(home));
@@ -103,7 +95,7 @@ mod tests {
 
     #[test]
     fn tilde_slash_expands_to_home_child_when_home_available() {
-        let _guard = env_lock().lock().expect("lock env");
+        let _guard = crate::test_env::guard::lock();
         let home = std::env::var("HOME").expect("HOME required for test");
         let expected = std::path::PathBuf::from(home)
             .join("Desktop/test")
