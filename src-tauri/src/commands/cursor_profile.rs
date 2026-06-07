@@ -5,6 +5,7 @@ use super::content::safe_canonical_target;
 use super::process::{run_cmd_owned_env, ActionResult};
 use super::status::file_eq;
 use super::workspace::workspace_root;
+#[cfg(windows)]
 use crate::cursor_profile_ops::{
     run_global_agents_only, run_global_profile, validate_global_profile,
 };
@@ -841,6 +842,79 @@ fn native_profile_result(
     )
 }
 
+pub(crate) fn cursor_global_profile_backend() -> &'static str {
+    #[cfg(windows)]
+    {
+        "native"
+    }
+    #[cfg(not(windows))]
+    {
+        "script"
+    }
+}
+
+pub(crate) fn run_cursor_workspace_script(
+    root: &Path,
+    action: &str,
+    args_tail: &[&str],
+) -> Result<ActionResult, String> {
+    let script = cursor_script_arg(root)?;
+    let bash = resolve_bash()?;
+    let python = resolve_python()?;
+    let paths = resolve_cursor_profile_paths()?;
+    let env = cursor_profile_env_pairs(&paths, &bash, &python);
+    let mut args: Vec<String> = vec![script];
+    args.extend(args_tail.iter().map(|arg| (*arg).to_string()));
+    let (ok, out, mut err, code) = run_cmd_owned_env(&bash, &args, root, &env);
+    if !ok {
+        let summary = cursor_profile_command_summary(&bash, &args, &env);
+        err = if err.trim().is_empty() {
+            summary
+        } else {
+            format!("{summary}\n{err}")
+        };
+    }
+    Ok(ActionResult::new(ok, action.to_string(), out, err, code))
+}
+
+#[cfg(windows)]
+fn run_global_profile_action_native(
+    root: &Path,
+    action: &str,
+    apply: bool,
+) -> Result<ActionResult, String> {
+    let paths = resolve_cursor_profile_paths()?;
+    Ok(native_profile_result(
+        action,
+        run_global_profile(root, &paths, apply),
+    ))
+}
+
+#[cfg(windows)]
+fn validate_global_profile_action_native(
+    root: &Path,
+    action: &str,
+) -> Result<ActionResult, String> {
+    let paths = resolve_cursor_profile_paths()?;
+    Ok(native_profile_result(
+        action,
+        validate_global_profile(root, &paths),
+    ))
+}
+
+#[cfg(windows)]
+fn run_global_agents_action_native(
+    root: &Path,
+    action: &str,
+    apply: bool,
+) -> Result<ActionResult, String> {
+    let paths = resolve_cursor_profile_paths()?;
+    Ok(native_profile_result(
+        action,
+        run_global_agents_only(root, &paths, apply),
+    ))
+}
+
 #[tauri::command]
 pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
@@ -851,39 +925,74 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
 
     match action.as_str() {
         "cursor_diff_global_profile" => {
-            let paths = resolve_cursor_profile_paths()?;
-            return Ok(native_profile_result(
-                &action,
-                run_global_profile(&root, &paths, false),
-            ));
+            #[cfg(windows)]
+            {
+                return run_global_profile_action_native(&root, &action, false);
+            }
+            #[cfg(not(windows))]
+            {
+                return run_cursor_workspace_script(
+                    &root,
+                    &action,
+                    &["--quiet", "--diff-global-profile"],
+                );
+            }
         }
         "cursor_apply_global_profile" => {
-            let paths = resolve_cursor_profile_paths()?;
-            return Ok(native_profile_result(
-                &action,
-                run_global_profile(&root, &paths, true),
-            ));
+            #[cfg(windows)]
+            {
+                return run_global_profile_action_native(&root, &action, true);
+            }
+            #[cfg(not(windows))]
+            {
+                return run_cursor_workspace_script(
+                    &root,
+                    &action,
+                    &["--quiet", "--apply-global-profile"],
+                );
+            }
         }
         "cursor_validate_global_profile" => {
-            let paths = resolve_cursor_profile_paths()?;
-            return Ok(native_profile_result(
-                &action,
-                validate_global_profile(&root, &paths),
-            ));
+            #[cfg(windows)]
+            {
+                return validate_global_profile_action_native(&root, &action);
+            }
+            #[cfg(not(windows))]
+            {
+                return run_cursor_workspace_script(
+                    &root,
+                    &action,
+                    &["--quiet", "--validate-global-profile"],
+                );
+            }
         }
         "cursor_diff_global_agents" => {
-            let paths = resolve_cursor_profile_paths()?;
-            return Ok(native_profile_result(
-                &action,
-                run_global_agents_only(&root, &paths, false),
-            ));
+            #[cfg(windows)]
+            {
+                return run_global_agents_action_native(&root, &action, false);
+            }
+            #[cfg(not(windows))]
+            {
+                return run_cursor_workspace_script(
+                    &root,
+                    &action,
+                    &["--quiet", "--global-agents"],
+                );
+            }
         }
         "cursor_sync_global_agents" => {
-            let paths = resolve_cursor_profile_paths()?;
-            return Ok(native_profile_result(
-                &action,
-                run_global_agents_only(&root, &paths, true),
-            ));
+            #[cfg(windows)]
+            {
+                return run_global_agents_action_native(&root, &action, true);
+            }
+            #[cfg(not(windows))]
+            {
+                return run_cursor_workspace_script(
+                    &root,
+                    &action,
+                    &["--quiet", "--apply", "--global-agents"],
+                );
+            }
         }
         "cursor_validate_profile" => {
             let ok = !matches!(health.status.as_str(), "unsafe" | "partial" | "stale")
@@ -1080,6 +1189,28 @@ mod tests {
         assert!(summary.contains("CURSOR_AGENTS_PATH"));
         assert!(summary.contains("AW_PYTHON"));
         assert!(summary.contains("AW_BASH"));
+    }
+
+    #[test]
+    fn global_profile_backend_is_platform_specific() {
+        #[cfg(windows)]
+        assert_eq!(cursor_global_profile_backend(), "native");
+        #[cfg(not(windows))]
+        assert_eq!(cursor_global_profile_backend(), "script");
+    }
+
+    #[test]
+    fn cursor_profile_paths_match_default_script_contract() {
+        let user_home = PathBuf::from("/tmp/aw-cursor-route-home");
+        let profile_root = user_home.join(".cursor");
+        let paths = crate::cursor_profile_paths::cursor_profile_paths_from_root(
+            user_home.clone(),
+            profile_root.clone(),
+        );
+        assert_eq!(paths.agents, profile_root.join("agents"));
+        assert_eq!(paths.skills, profile_root.join("skills"));
+        assert_eq!(paths.mcp_config, profile_root.join("mcp.json"));
+        assert_eq!(paths.permissions, profile_root.join("permissions.json"));
     }
 
     #[test]
