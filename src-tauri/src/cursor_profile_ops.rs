@@ -250,12 +250,6 @@ fn prepare_permissions_merge(template_path: &Path, target_path: &Path) -> Result
         .map_err(|e| format!("serialize permissions: {e}"))
 }
 
-fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), String> {
-    let serialized = prepare_permissions_merge(template_path, target_path)?;
-    fs::write(target_path, serialized).map_err(|e| format!("write permissions: {e}"))?;
-    Ok(())
-}
-
 fn permissions_file_unsafe(path: &Path) -> bool {
     let Ok(content) = fs::read_to_string(path) else {
         return true;
@@ -375,17 +369,6 @@ fn prepare_mcp_merge(
     serde_json::to_string_pretty(&data)
         .map(|s| s + "\n")
         .map_err(|e| format!("serialize MCP: {e}"))
-}
-
-fn merge_mcp_playwright(
-    template_path: &Path,
-    target_path: &Path,
-    config_path: &Path,
-    browsers_path: &Path,
-) -> Result<(), String> {
-    let serialized = prepare_mcp_merge(template_path, target_path, config_path, browsers_path)?;
-    fs::write(target_path, serialized).map_err(|e| format!("write MCP: {e}"))?;
-    Ok(())
 }
 
 #[derive(Debug, Clone)]
@@ -773,7 +756,8 @@ mod tests {
         .expect("template");
         fs::write(&target, r#"{"mcpAllowlist":["custom:*"],"other":"keep"}"#).expect("target");
 
-        merge_permissions(&template, &target).expect("merge");
+        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
+        fs::write(&target, serialized).expect("write");
         let merged: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&target).expect("read")).expect("json");
         let allow = merged
@@ -802,13 +786,14 @@ mod tests {
         .expect("template");
         fs::write(&target, r#"{"mcpServers":{"custom":{"command":"node"}}}"#).expect("target");
 
-        merge_mcp_playwright(
+        let serialized = prepare_mcp_merge(
             &template,
             &target,
             &PathBuf::from(r"C:\Users\Example\.config\playwright-mcp\config.json"),
             &PathBuf::from(r"C:\Users\Example\AppData\Local\ms-playwright"),
         )
         .expect("merge");
+        fs::write(&target, serialized).expect("write");
 
         let merged: serde_json::Value =
             serde_json::from_str(&fs::read_to_string(&target).expect("read")).expect("json");
