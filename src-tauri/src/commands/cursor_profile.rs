@@ -8,7 +8,10 @@ use super::workspace::workspace_root;
 use crate::cursor_profile_ops::{
     run_global_agents_only, run_global_profile, validate_global_profile,
 };
-use crate::cursor_profile_paths::{cursor_profile_env_pairs, resolve_cursor_profile_paths, CursorProfilePaths};
+use crate::cursor_profile_paths::{
+    cursor_profile_env_pairs, cursor_profile_root_display, resolve_cursor_profile_paths,
+    CursorProfilePaths,
+};
 use crate::shell_runtime::{path_arg_for_bash, resolve_bash, resolve_python};
 
 #[derive(Serialize)]
@@ -648,12 +651,8 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
 pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let root = workspace_root()?;
     let paths = resolve_cursor_profile_paths()?;
-    let profile_root = paths.profile_root.to_string_lossy().into_owned();
-    let profile_root_source = match paths.source {
-        crate::cursor_profile_paths::CursorProfileRootSource::Default => "default",
-        crate::cursor_profile_paths::CursorProfileRootSource::Custom => "custom",
-    }
-    .to_string();
+    let profile_root = cursor_profile_root_display(&paths);
+    let profile_root_source = "default".to_string();
     let mut warnings = Vec::new();
     let cursor = cursor_root(&root);
 
@@ -1070,7 +1069,6 @@ mod tests {
         let paths = crate::cursor_profile_paths::cursor_profile_paths_from_root(
             PathBuf::from(r"C:\Users\Example"),
             PathBuf::from(r"D:\AgentWorkspace\cursor-profile"),
-            crate::cursor_profile_paths::CursorProfileRootSource::Custom,
         );
         let env = cursor_profile_env_pairs(
             &paths,

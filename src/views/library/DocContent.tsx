@@ -1,4 +1,5 @@
 import type { ActionResult } from "../../components/TerminalOutput";
+import { displayPath } from "../../lib/displayPath";
 import { redactTerminalOutput } from "../../lib/redactTerminalOutput";
 import type { DocumentContent } from "../../types";
 import { SafeMarkdown } from "../../components/SafeMarkdown";
@@ -60,7 +61,7 @@ export function DocContent(props: DocContentProps) {
           <p className="lib-docs-pathline">
             <span className="lib-docs-section">{activeDoc.section}</span>
             <span className="lib-docs-path-sep" aria-hidden="true">·</span>
-            <span className="lib-docs-path">{activeDoc.path}</span>
+            <span className="lib-docs-path">{displayPath(activeDoc.path)}</span>
             {activeDoc.source === "custom" && (
               <span className="lib-docs-context-tag">context</span>
             )}
