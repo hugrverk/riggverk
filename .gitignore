@@ -1,4 +1,5 @@
 .DS_Store
+.vs/
 
 # Tauri app build artifacts
 node_modules/
