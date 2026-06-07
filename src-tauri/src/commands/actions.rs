@@ -606,7 +606,9 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 mod tests {
     use super::workspace_script_arg;
     use std::fs;
-    use std::path::{Path, PathBuf};
+    #[cfg(unix)]
+    use std::path::Path;
+    use std::path::PathBuf;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_root(name: &str) -> PathBuf {
