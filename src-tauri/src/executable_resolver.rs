@@ -185,7 +185,10 @@ mod tests {
             fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
         }
         let delimiter = if cfg!(windows) { ';' } else { ':' };
-        let path_env = format!("{delimiter}{delimiter}{}{delimiter}{delimiter}", dir.display());
+        let path_env = format!(
+            "{delimiter}{delimiter}{}{delimiter}{delimiter}",
+            dir.display()
+        );
         let found = resolve_executable("aw-gap-cmd", &path_env, None).expect("found");
         assert_eq!(found, script);
         let _ = fs::remove_dir_all(&dir);
