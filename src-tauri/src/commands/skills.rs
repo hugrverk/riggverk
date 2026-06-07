@@ -3,9 +3,12 @@ use std::path::Path;
 
 use super::content::safe_canonical_target;
 use super::content::DocumentContent;
-use super::process::{run_cmd, run_cmd_owned_env, ActionResult};
+#[cfg(not(windows))]
+use super::process::run_cmd_owned_env;
+use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
 use crate::agent_skill_targets::validate_skill_agent;
+#[cfg(not(windows))]
 use crate::shell_runtime::resolve_bash;
 #[cfg(windows)]
 use crate::skills_install::{install_skills_native, InstallSkillsRequest as NativeInstallRequest};
@@ -268,7 +271,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
                 dry_run: request.dry_run,
             },
         );
-        return Ok(ActionResult::new(
+        Ok(ActionResult::new(
             result.success,
             if request.dry_run {
                 "install_skills:dry-run"
@@ -278,7 +281,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
             result.stdout,
             result.stderr,
             Some(result.exit_code),
-        ));
+        ))
     }
     #[cfg(not(windows))]
     {

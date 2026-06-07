@@ -855,6 +855,7 @@ pub(crate) fn cursor_global_profile_backend() -> &'static str {
     }
 }
 
+#[cfg(not(windows))]
 pub(crate) fn run_cursor_workspace_script(
     root: &Path,
     action: &str,
