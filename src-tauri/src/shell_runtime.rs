@@ -1,5 +1,6 @@
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
+
+use crate::executable_resolver::resolve_executable;
 
 /// Strip Windows extended-length path prefix (`\\?\` or `//?/`).
 pub fn strip_windows_extended_prefix(path: &str) -> &str {
@@ -91,17 +92,18 @@ pub fn format_spawn_error(program: &str, error: &std::io::Error) -> String {
     format!("failed to run {program}: {raw}")
 }
 
-fn program_available(program: &str) -> bool {
-    let output = if cfg!(windows) {
-        Command::new("where").arg(program).output()
-    } else {
-        Command::new("command").args(["-v", program]).output()
-    };
+fn path_env_value() -> String {
+    std::env::var("PATH").unwrap_or_default()
+}
 
-    match output {
-        Ok(result) => result.status.success(),
-        Err(_) => Path::new(program).is_file(),
-    }
+fn program_available(program: &str) -> bool {
+    let path_env = path_env_value();
+    let pathext = if cfg!(windows) {
+        std::env::var("PATHEXT").ok()
+    } else {
+        None
+    };
+    resolve_executable(program, &path_env, pathext.as_deref()).is_some()
 }
 
 #[cfg(windows)]
