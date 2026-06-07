@@ -209,6 +209,19 @@ fi
 if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
   fail "Prompt Loops group select must exist"
 fi
+if rg -n 'prompt-loops-sidebar|repo-dashboard-sidebar' src/tools --glob '!**/*.test.*' >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "legacy tool sidebars must not return"
+fi
+if ! rg -n 'ToolSectionTabs|tool-section-tabs' src/tools/promptLoops/PromptLoopsTool.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "tool section tabs must exist in Prompt Loops and Repo Dashboard"
+fi
+if ! rg -n 'repo-dashboard-field-branch|Default branch override' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "Repo Dashboard default branch override must exist"
+fi
+if ! rg -n 'startDiscoverLocalRepos|Discover local git repositories' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "Repo Dashboard discover action must exist"
+fi
 
 for obsolete in \
   'ToolsView' \
@@ -234,7 +247,7 @@ if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/Pro
   fail "Prompt Loops shortcut hint block must not return"
 fi
 
-if ! rg -n 'lib-docs-markdown|lib-docs-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
+if ! rg -n 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
   fail "Library Docs scoped reading surface must exist"
 fi
 if rg -n 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/components/AppHeaderNav.tsx >"$ui_tmp"; then

@@ -23,9 +23,7 @@ mod tests {
             assert!(
                 result.success,
                 "{action} failed: exit={:?} stdout={:?} stderr={:?}",
-                result.exit_code,
-                result.stdout,
-                result.stderr
+                result.exit_code, result.stdout, result.stderr
             );
             assert_eq!(result.exit_code, Some(0), "{action} exit code");
             assert!(

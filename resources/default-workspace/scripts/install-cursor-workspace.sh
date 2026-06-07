@@ -144,7 +144,7 @@ backup_file() {
 }
 
 recommended_skills() {
-  python3 - "$CURSOR_MANIFEST" <<'PY'
+  "$AW_PYTHON" - "$CURSOR_MANIFEST" <<'PY'
 import json
 import sys
 
@@ -184,7 +184,7 @@ install_agents() {
 
 agents_diff_status() {
   local dest_root="$1"
-  python3 - "$CURSOR_AGENTS_SOURCE" "$dest_root" <<'PY'
+  "$AW_PYTHON" - "$CURSOR_AGENTS_SOURCE" "$dest_root" <<'PY'
 import sys
 from pathlib import Path
 
@@ -218,7 +218,7 @@ PY
 
 skills_diff_status() {
   local dest_root="$1"
-  python3 - "$CURSOR_MANIFEST" "$CURSOR_SKILLS_SOURCE" "$dest_root" <<'PY'
+  "$AW_PYTHON" - "$CURSOR_MANIFEST" "$CURSOR_SKILLS_SOURCE" "$dest_root" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -271,10 +271,10 @@ install_global_skills() {
     die "no recommended skills in manifest"
   fi
   if $apply; then
-    bash "$SKILLS_SCRIPT" --global --agent cursor --quiet "${skill_args[@]}"
+    "$AW_BASH" "$SKILLS_SCRIPT" --global --agent cursor --quiet "${skill_args[@]}"
     printf '%-18s %s %s\n' "$label" written "${#skill_args[@]}"
   else
-    bash "$SKILLS_SCRIPT" --global --agent cursor --dry-run --quiet "${skill_args[@]}" >/dev/null
+    "$AW_BASH" "$SKILLS_SCRIPT" --global --agent cursor --dry-run --quiet "${skill_args[@]}" >/dev/null
     local status
     status="$(skills_diff_status "$CURSOR_SKILLS_TARGET")"
     printf '%-18s %s %s\n' "$label" planned "${#skill_args[@]} ($status)"
@@ -286,7 +286,7 @@ mcp_diff_status() {
     printf 'unsupported'
     return 0
   }
-  python3 - "$CURSOR_MCP_TEMPLATE" "$CURSOR_MCP_TARGET" "$PLAYWRIGHT_MCP_CONFIG_PATH_RESOLVED" "$PLAYWRIGHT_BROWSERS_PATH_RESOLVED" "$PLAYWRIGHT_MCP_VERSION" <<'PY'
+  "$AW_PYTHON" - "$CURSOR_MCP_TEMPLATE" "$CURSOR_MCP_TARGET" "$PLAYWRIGHT_MCP_CONFIG_PATH_RESOLVED" "$PLAYWRIGHT_BROWSERS_PATH_RESOLVED" "$PLAYWRIGHT_MCP_VERSION" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -385,7 +385,7 @@ run_global_profile() {
 }
 
 validate_global_profile_state() {
-  python3 "$WORKSPACE_ROOT/scripts/check-cursor-profile.py" >/dev/null || die "cursor profile template validation failed"
+  "$AW_PYTHON" "$WORKSPACE_ROOT/scripts/check-cursor-profile.py" >/dev/null || die "cursor profile template validation failed"
   local agents skills mcp perms shell_ok=0
   agents="$(agents_diff_status "$CURSOR_AGENTS_TARGET")"
   skills="$(skills_diff_status "$CURSOR_SKILLS_TARGET")"

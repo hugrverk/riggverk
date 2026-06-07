@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import { ToolSectionTabs } from "../components/ToolSectionTabs";
 import type { ActionResult } from "../components/TerminalOutput";
 import type {
   AgentMetadataResponse,
@@ -128,6 +129,17 @@ interface LibraryViewProps {
 
 // ── sidebar item list components ──
 
+function filterDocsForSearch(docs: DocSummary[], query: string): DocSummary[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return docs;
+  return docs.filter(
+    (d) =>
+      d.title.toLowerCase().includes(q) ||
+      d.path.toLowerCase().includes(q) ||
+      d.section.toLowerCase().includes(q),
+  );
+}
+
 function DocItemList({
   docs,
   docsHealth,
@@ -136,6 +148,8 @@ function DocItemList({
   workspaceValid,
   onNewDoc,
   onGoToWorkspaceRepair,
+  searchQuery,
+  onSearchQueryChange,
 }: {
   docs: DocSummary[];
   docsHealth: DocsHealth | null;
@@ -144,44 +158,48 @@ function DocItemList({
   workspaceValid: boolean;
   onNewDoc: () => void;
   onGoToWorkspaceRepair: () => void;
+  searchQuery: string;
+  onSearchQueryChange: (query: string) => void;
 }) {
   const missingCount = docsHealth?.missing_count ?? 0;
   const showStaleBanner = workspaceValid && missingCount > 0;
+  const filteredDocs = useMemo(
+    () => filterDocsForSearch(docs, searchQuery),
+    [docs, searchQuery],
+  );
 
-  if (docs.length === 0 && !showStaleBanner) {
-    return (
-      <div className="lib-sidebar-body">
-        <div className="lib-sidebar-empty">
-          {workspaceValid
-            ? "No docs found"
-            : "No valid workspace"}
-        </div>
-        {workspaceValid && (
-          <button className="btn btn-sm btn-primary lib-new-btn" onClick={onNewDoc}>
-            + new
-          </button>
-        )}
-      </div>
-    );
-  }
-
-  const groups: Map<string, DocSummary[]> = new Map();
-  for (const d of docs) {
-    const existing = groups.get(d.section) ?? [];
-    existing.push(d);
-    groups.set(d.section, existing);
-  }
+  const groups = useMemo(() => {
+    const next = new Map<string, DocSummary[]>();
+    for (const d of filteredDocs) {
+      const existing = next.get(d.section) ?? [];
+      existing.push(d);
+      next.set(d.section, existing);
+    }
+    return next;
+  }, [filteredDocs]);
 
   const staleHint = docsHealth?.missing_prompt_template_docs
     ? "Prompt Templates and other bundled docs are missing from this workspace."
     : `${missingCount} bundled doc(s) are missing from this workspace.`;
 
   return (
-    <div className="lib-sidebar-body lib-docs-sidebar">
+    <aside className="lib-docs-list-pane" aria-label="Document list">
+      <label className="lib-docs-search-wrap font-mono">
+        <span className="visually-hidden">Filter documents</span>
+        <input
+          type="search"
+          className="repo-dashboard-field lib-docs-search"
+          value={searchQuery}
+          onChange={(e) => onSearchQueryChange(e.target.value)}
+          placeholder="Filter by path or title"
+          aria-label="Filter documents"
+        />
+      </label>
+
       {showStaleBanner && (
         <div className="lib-docs-stale-banner" role="status">
           <p className="lib-docs-stale-title">Bundled docs need update</p>
-          <p className="lib-docs-stale-hint">{staleHint} Use update resources on the Workspace page to copy missing files without overwriting your edits.</p>
+          <p className="lib-docs-stale-hint text-muted small">{staleHint}</p>
           <button
             type="button"
             className="btn btn-sm btn-primary lib-docs-stale-action"
@@ -191,32 +209,58 @@ function DocItemList({
           </button>
         </div>
       )}
-      {Array.from(groups.entries()).map(([section, items]) => (
-        <div key={section} className="lib-docs-section">
-          <div className="lib-docs-section-label">{section}</div>
-          {items.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              className={`lib-docs-list-item${activeId === d.id ? " lib-docs-list-item-active" : ""}`}
-              onClick={() => onSelect(d.id)}
-              aria-current={activeId === d.id ? "true" : undefined}
-            >
-              <span className="lib-docs-list-title">{d.title}</span>
-              <span className="lib-docs-list-path">{d.path}</span>
-              {d.source === "custom" && (
-                <span className="lib-docs-context-tag">context</span>
-              )}
-            </button>
+
+      {!workspaceValid ? (
+        <p className="text-muted small" role="status">No valid workspace</p>
+      ) : !docs.length ? (
+        <p className="text-muted small" role="status">No docs found</p>
+      ) : !filteredDocs.length ? (
+        <p className="text-muted small" role="status">No documents match the current filter.</p>
+      ) : (
+        <ul
+          className="lib-docs-list"
+          role="listbox"
+          aria-label="Workspace documents"
+          aria-activedescendant={activeId ? `lib-doc-option-${activeId}` : undefined}
+        >
+          {Array.from(groups.entries()).map(([section, items]) => (
+            <li key={section} role="none" className="lib-docs-list-section">
+              <div className="lib-docs-section-label">{section}</div>
+              <ul className="lib-docs-list-section-items" role="group" aria-label={section}>
+                {items.map((d) => {
+                  const selected = activeId === d.id;
+                  const optionId = `lib-doc-option-${d.id}`;
+                  return (
+                    <li key={d.id} role="none">
+                      <button
+                        type="button"
+                        id={optionId}
+                        role="option"
+                        aria-selected={selected}
+                        className={`lib-docs-list-item${selected ? " active" : ""}`}
+                        onClick={() => onSelect(d.id)}
+                      >
+                        <span className="font-mono lib-docs-list-title">{d.title}</span>
+                        {d.source === "custom" ? (
+                          <span className="prompt-loops-pill lib-docs-context-pill">context</span>
+                        ) : null}
+                        <span className="font-mono lib-docs-list-path text-muted">{d.path}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </li>
           ))}
-        </div>
-      ))}
+        </ul>
+      )}
+
       {workspaceValid && (
         <button type="button" className="btn btn-sm btn-primary lib-docs-new-btn" onClick={onNewDoc}>
           + new doc
         </button>
       )}
-    </div>
+    </aside>
   );
 }
 
@@ -539,37 +583,13 @@ export function LibraryView(props: LibraryViewProps) {
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
+  const [docSearch, setDocSearch] = useState("");
 
   // ── derive active content for main pane ──
 
   let mainContent: React.ReactNode = null;
 
-  if (sourceType === "docs" && activeDoc) {
-    mainContent = (
-      <DocContent
-        activeDoc={activeDoc}
-        onOpenDoc={onOpenDoc}
-        docDraft={docDraft}
-        docDirty={docDirty}
-        docSaving={docSaving}
-        docSaveResult={docSaveResult}
-        docMode={docMode}
-        onSetDocMode={onSetDocMode}
-        onChangeDocDraft={onChangeDocDraft}
-        onSaveDoc={onSaveDoc}
-        onResetDoc={onResetDoc}
-        showCreateDoc={showCreateDoc}
-        createDocTitle={createDocTitle}
-        createDocSlug={createDocSlug}
-        createDocError={createDocError}
-        createDocCreating={createDocCreating}
-        onSetShowCreateDoc={onSetShowCreateDoc}
-        onSetCreateDocTitle={onSetCreateDocTitle}
-        onSetCreateDocSlug={onSetCreateDocSlug}
-        onCreateDoc={onCreateDoc}
-      />
-    );
-  } else if (sourceType === "rules" && agentTemplate) {
+  if (sourceType === "rules" && agentTemplate) {
     mainContent = (
       <RulesContent
         agentTemplate={agentTemplate}
@@ -649,18 +669,6 @@ export function LibraryView(props: LibraryViewProps) {
   // Sidebar content per source type
   const sidebarContent = () => {
     switch (sourceType) {
-      case "docs":
-        return (
-          <DocItemList
-            docs={docs}
-            docsHealth={docsHealth}
-            activeId={activeDoc?.id ?? null}
-            onSelect={onSelectDoc}
-            workspaceValid={workspaceValid}
-            onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
-            onGoToWorkspaceRepair={onGoToWorkspaceRepair}
-          />
-        );
       case "rules":
         return <RulesItemList agentTemplate={agentTemplate} ruleTargets={ruleTargets} />;
       case "skills":
@@ -708,34 +716,81 @@ export function LibraryView(props: LibraryViewProps) {
     }
   }
 
+  const sourceTabItems = SOURCE_TYPES.map((st) => ({
+    id: st.id,
+    label: st.label,
+    count: sourceCount(st.id) ?? undefined,
+  }));
+
+  if (sourceType === "docs") {
+    return (
+      <section className="lib-frame">
+        <div className="lib-docs-workspace">
+          <div className="lib-docs-toolbar">
+            <ToolSectionTabs
+              className="lib-docs-source-tabs"
+              items={sourceTabItems}
+              activeId={sourceType}
+              onSelect={(id) => onSetSourceType(id as LibrarySourceType)}
+              ariaLabel="Library source type"
+            />
+          </div>
+          <div className="lib-docs-body">
+            <DocItemList
+              docs={docs}
+              docsHealth={docsHealth}
+              activeId={activeDoc?.id ?? null}
+              onSelect={onSelectDoc}
+              workspaceValid={workspaceValid}
+              onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
+              onGoToWorkspaceRepair={onGoToWorkspaceRepair}
+              searchQuery={docSearch}
+              onSearchQueryChange={setDocSearch}
+            />
+            <DocContent
+              activeDoc={activeDoc}
+              onOpenDoc={onOpenDoc}
+              docDraft={docDraft}
+              docDirty={docDirty}
+              docSaving={docSaving}
+              docSaveResult={docSaveResult}
+              docMode={docMode}
+              onSetDocMode={onSetDocMode}
+              onChangeDocDraft={onChangeDocDraft}
+              onSaveDoc={onSaveDoc}
+              onResetDoc={onResetDoc}
+              showCreateDoc={showCreateDoc}
+              createDocTitle={createDocTitle}
+              createDocSlug={createDocSlug}
+              createDocError={createDocError}
+              createDocCreating={createDocCreating}
+              onSetShowCreateDoc={onSetShowCreateDoc}
+              onSetCreateDocTitle={onSetCreateDocTitle}
+              onSetCreateDocSlug={onSetCreateDocSlug}
+              onCreateDoc={onCreateDoc}
+            />
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section className="lib-frame">
       <div className="lib-layout">
-        {/* Vertical source rail */}
-        <nav className="lib-source-rail" aria-label="Source type">
-          {SOURCE_TYPES.map((st) => {
-            const count = sourceCount(st.id);
-            return (
-              <button
-                key={st.id}
-                className={`lib-source-rail-btn ${sourceType === st.id ? "lib-source-rail-btn-active" : ""}`}
-                onClick={() => onSetSourceType(st.id)}
-                aria-current={sourceType === st.id ? "page" : undefined}
-                title={`${st.label}${count ? ` (${count})` : ""}`}
-              >
-                <span className="lib-source-rail-label">{st.label}</span>
-                {count && <span className="lib-source-rail-count">{count}</span>}
-              </button>
-            );
-          })}
-        </nav>
+        <aside className="lib-sidebar">
+          <ToolSectionTabs
+            className="lib-sidebar-source-tabs"
+            items={sourceTabItems}
+            activeId={sourceType}
+            onSelect={(id) => onSetSourceType(id as LibrarySourceType)}
+            ariaLabel="Library source type"
+          />
+          <div className="lib-sidebar-panel">
+            {sidebarContent()}
+          </div>
+        </aside>
 
-        {/* Item list sidebar */}
-        <div className="lib-sidebar">
-          {sidebarContent()}
-        </div>
-
-        {/* Main content */}
         <div className="lib-main">
           {mainContent ? (
             mainContent

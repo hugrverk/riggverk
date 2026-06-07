@@ -1,6 +1,31 @@
 #!/usr/bin/env bash
 # Shared Playwright MCP path and render helpers. Source from install-opencode-config.sh.
 
+resolve_aw_python() {
+  if [ -n "${AW_PYTHON:-}" ] && command -v "$AW_PYTHON" >/dev/null 2>&1; then
+    printf '%s\n' "$AW_PYTHON"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' python3
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' python
+    return 0
+  fi
+  echo "python3 or python is required but was not found on PATH. Install Python 3." >&2
+  return 1
+}
+
+if [ -z "${AW_PYTHON:-}" ]; then
+  AW_PYTHON="$(resolve_aw_python)" || exit 1
+elif ! command -v "$AW_PYTHON" >/dev/null 2>&1; then
+  echo "AW_PYTHON is set to '$AW_PYTHON' but that executable was not found." >&2
+  exit 1
+fi
+export AW_PYTHON
+
 PLAYWRIGHT_MCP_VERSION="${PLAYWRIGHT_MCP_VERSION:-0.0.48}"
 
 default_playwright_browsers_path() {
@@ -47,7 +72,7 @@ render_json_with_playwright_paths() {
   local config_path="$3"
   local browsers_path="$4"
   local version="$5"
-  python3 - "$src" "$dst" "$config_path" "$browsers_path" "$version" <<'PY'
+  "$AW_PYTHON" - "$src" "$dst" "$config_path" "$browsers_path" "$version" <<'PY'
 import json
 import sys
 
@@ -84,7 +109,7 @@ merge_cursor_playwright_mcp() {
   local config_path="$3"
   local browsers_path="$4"
   local version="$5"
-  python3 - "$template" "$target" "$config_path" "$browsers_path" "$version" <<'PY'
+  "$AW_PYTHON" - "$template" "$target" "$config_path" "$browsers_path" "$version" <<'PY'
 import json
 import sys
 from pathlib import Path

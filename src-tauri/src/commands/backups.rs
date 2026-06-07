@@ -48,13 +48,14 @@ pub struct BackupRunDetails {
 }
 
 pub(crate) fn backup_root() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
-
-    let default_root =
-        PathBuf::from(&home).join("Library/Application Support/ai.agentworkspace.app/backups");
+    let default_root = crate::platform_paths::backup_root_path(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
 
     let root = if let Ok(env_override) = std::env::var("AGENT_WORKSPACE_BACKUP_DIR") {
         let trimmed = env_override.trim().to_string();
@@ -66,14 +67,8 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         default_root
     };
 
-    let root_str = root.to_string_lossy();
-    if root_str.trim().is_empty() {
-        return Err("backup directory is empty".to_string());
-    }
-
-    if root_str == "/" || root_str == home.as_str() || root_str == format!("{}/", home) {
-        return Err(format!("refusing broad backup directory: {}", root_str));
-    }
+    let platform = crate::platform_paths::Platform::current();
+    crate::platform_paths::reject_broad_write_root(&root, &home, platform, "backup")?;
 
     if root.exists() {
         let canonical = root
@@ -140,10 +135,10 @@ fn is_timestamp_dir(name: &str) -> bool {
 }
 
 fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
     let rel = match target_id {
         "codex-rules" => ".codex/AGENTS.md",
         "opencode-rules" => ".config/opencode/AGENTS.md",
@@ -157,7 +152,7 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "claude" => ".claude/CLAUDE.md",
         _ => return Err(format!("unknown backup target id: {}", target_id)),
     };
-    Ok(PathBuf::from(&home).join(rel))
+    Ok(home.join(rel))
 }
 
 fn compare_files_match(a: &Path, b: &Path) -> Result<bool, String> {
@@ -292,10 +287,7 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
         .canonicalize()
         .map_err(|e| format!("cannot resolve run path: {}", e))?;
 
-    let root_str = canonical_root.to_string_lossy().into_owned();
-    let run_str = canonical_run.to_string_lossy().into_owned();
-    let root_prefix = format!("{}/", root_str);
-    if run_str != root_str && !run_str.starts_with(&root_prefix) {
+    if canonical_run != canonical_root && !canonical_run.starts_with(&canonical_root) {
         return Err("run directory is outside backup root".to_string());
     }
 
@@ -489,14 +481,14 @@ mod tests {
 
     #[test]
     fn resolve_current_target_known_ids() {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        let home = crate::test_env::process_home();
         for tid in ALLOWED_TARGET_IDS {
             let result = resolve_current_target(tid);
             assert!(result.is_ok(), "resolve_current_target failed for {}", tid);
             let path = result.unwrap();
             assert!(
                 path.starts_with(&home),
-                "path {} not under HOME",
+                "path {} not under user home",
                 path.display()
             );
         }
@@ -581,13 +573,14 @@ mod tests {
         );
 
         let summary = architect.unwrap();
-        // Verify the current_path joins the agents directory with the filename
-        assert!(
-            summary
-                .current_path
-                .ends_with(".config/opencode/agents/architect.md"),
-            "current_path should end with .config/opencode/agents/architect.md, got: {}",
-            summary.current_path
+        let expected_current = resolve_current_target("opencode-agents")
+            .expect("resolve opencode-agents target")
+            .join("architect.md")
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            summary.current_path, expected_current,
+            "current_path should map backup file to runtime agents path"
         );
         // current_exists may be false in CI, but the path shape is what matters
 

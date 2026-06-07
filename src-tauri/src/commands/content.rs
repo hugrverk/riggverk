@@ -3,6 +3,7 @@ use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::agent_targets;
+use crate::platform_paths::{display_path, Platform};
 
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_install_file_missing, workspace_root};
@@ -367,7 +368,7 @@ pub fn list_docs() -> Result<Vec<DocSummary>, String> {
                 id,
                 title,
                 section,
-                path: path.to_string_lossy().into_owned(),
+                path: display_path(&path, Platform::current()),
                 source: source.to_string(),
             }
         })
@@ -390,7 +391,7 @@ pub fn read_doc(id: String) -> Result<DocumentContent, String> {
                 id: i.clone(),
                 title: title.clone(),
                 section: section.clone(),
-                path: path.to_string_lossy().into_owned(),
+                path: display_path(path, Platform::current()),
                 source: "curated".to_string(),
                 content,
             })

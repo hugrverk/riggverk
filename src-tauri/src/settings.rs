@@ -192,11 +192,10 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
 }
 
 fn settings_file() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
-    Ok(PathBuf::from(home).join("Library/Application Support/ai.agentworkspace.app/settings.json"))
+    crate::platform_paths::settings_file_path(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
 }
 
 fn backup_corrupt_settings_file(path: &PathBuf) -> Result<(), String> {
@@ -419,11 +418,9 @@ mod tests {
     use crate::path_utils::is_legacy_default_workspace_path;
     use std::fs;
     use std::path::PathBuf;
-    use std::sync::{Arc, Barrier, Mutex};
+    use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
-
-    static HOME_TEST_MUTEX: Mutex<()> = Mutex::new(());
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -442,7 +439,9 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_home() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let mut settings = settings_with_path(Some("~"));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
@@ -452,11 +451,9 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_child() {
-        let home = std::env::var("HOME").expect("HOME required for test");
-        let expected = std::path::PathBuf::from(home)
-            .join("Desktop/test")
-            .to_string_lossy()
-            .into_owned();
+        let _guard = crate::test_env::guard::lock();
+        let home = crate::test_env::process_home();
+        let expected = home.join("Desktop/test").to_string_lossy().into_owned();
         let mut settings = settings_with_path(Some("~/Desktop/test"));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
@@ -466,11 +463,14 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_accepts_trimmed_absolute_path() {
-        let mut settings = settings_with_path(Some("  /tmp/workspace  "));
+        let workspace = std::env::temp_dir().join("workspace");
+        let workspace_str = workspace.to_string_lossy().into_owned();
+        let workspace_input = format!("  {workspace_str}  ");
+        let mut settings = settings_with_path(Some(&workspace_input));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
 
-        assert_eq!(settings.workspace_path, Some("/tmp/workspace".into()));
+        assert_eq!(settings.workspace_path, Some(workspace_str));
     }
 
     #[test]
@@ -643,7 +643,7 @@ mod tests {
     }
 
     fn with_temp_home<F: FnOnce(&PathBuf)>(test: F) {
-        let _guard = HOME_TEST_MUTEX.lock().expect("home test mutex");
+        let _guard = crate::test_env::guard::lock();
         let dir = std::env::temp_dir().join(format!(
             "aw-settings-test-{}-{}",
             std::process::id(),
@@ -654,16 +654,9 @@ mod tests {
         ));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create temp home");
-        let previous_home = std::env::var("HOME").ok();
-        unsafe {
-            std::env::set_var("HOME", &dir);
-        }
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&dir);
         test(&dir);
-        if let Some(prev) = previous_home {
-            unsafe {
-                std::env::set_var("HOME", prev);
-            }
-        }
         let _ = fs::remove_dir_all(&dir);
     }
 
@@ -680,8 +673,38 @@ mod tests {
         });
     }
 
+    fn settings_path_for_home(dir: &std::path::Path) -> PathBuf {
+        let home_str = dir.to_string_lossy().into_owned();
+        let env = if cfg!(windows) {
+            crate::platform_paths::PlatformEnv {
+                home: None,
+                userprofile: Some(home_str),
+                appdata: Some(
+                    dir.join("AppData")
+                        .join("Roaming")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                local_appdata: Some(
+                    dir.join("AppData")
+                        .join("Local")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                ..crate::platform_paths::PlatformEnv::default()
+            }
+        } else {
+            crate::platform_paths::PlatformEnv {
+                home: Some(home_str),
+                ..crate::platform_paths::PlatformEnv::default()
+            }
+        };
+        crate::platform_paths::settings_file_path(&env, crate::platform_paths::Platform::current())
+            .expect("settings path")
+    }
+
     fn write_settings_file(dir: &std::path::Path, json: &str) {
-        let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+        let path = settings_path_for_home(dir);
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).expect("create settings parent");
         }
@@ -763,7 +786,12 @@ mod tests {
             .expect("second save");
 
             let mut stale_workspace = first.clone();
-            stale_workspace.workspace_path = Some("/tmp/workspace".into());
+            stale_workspace.workspace_path = Some(
+                std::env::temp_dir()
+                    .join("workspace")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
             let err = save_with_revision_check(stale_workspace, Some(first.revision))
                 .expect_err("stale workspace write");
             assert_eq!(err, SETTINGS_CONFLICT_ERROR);
@@ -776,11 +804,9 @@ mod tests {
             let saved = save(AppSettings::default()).expect("save");
             assert_eq!(saved.revision, 1);
 
-            let path = dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            let path = settings_path_for_home(dir);
             assert!(path.is_file());
-            assert!(!dir
-                .join("Library/Application Support/ai.agentworkspace.app/settings.json.tmp")
-                .exists());
+            assert!(!path.with_extension("json.tmp").exists());
 
             let reloaded: AppSettings =
                 serde_json::from_str(&fs::read_to_string(&path).expect("read")).expect("parse");
@@ -796,8 +822,7 @@ mod tests {
             let loaded = load();
             assert_eq!(loaded, AppSettings::default());
 
-            let settings_path =
-                dir.join("Library/Application Support/ai.agentworkspace.app/settings.json");
+            let settings_path = settings_path_for_home(dir);
             assert!(
                 settings_path.is_file(),
                 "read-only load must not rename corrupt file"
@@ -871,7 +896,12 @@ mod tests {
             let saved = save(AppSettings {
                 appearance: "light".into(),
                 enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
-                workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+                workspace_path: Some(
+                    std::env::temp_dir()
+                        .join("agent-workspace-scrub-missing")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
                 ..AppSettings::default()
             })
             .expect("seed save");

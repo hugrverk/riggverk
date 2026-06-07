@@ -38,14 +38,35 @@ describe("PromptLoopsTool", () => {
     expect(after).toBe(before);
   });
 
+  it("renders prompt group tabs and narrow fallback select", () => {
+    render(<PromptLoopsTool />);
+    expect(screen.queryByRole("navigation", { name: "Prompt groups" })).toBeNull();
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.length).toBeGreaterThan(1);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(screen.getByRole("combobox", { name: "Prompt group" })).not.toBeNull();
+  });
+
+  it("does not render legacy sidebar chrome", () => {
+    const { container } = render(<PromptLoopsTool />);
+    expect(container.querySelector(".prompt-loops-sidebar")).toBeNull();
+  });
+
+  it("selects prompt groups from tabs", () => {
+    render(<PromptLoopsTool />);
+    const tabs = screen.getAllByRole("tab");
+    fireEvent.click(tabs[1]!);
+    expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("false");
+  });
+
   it("switches prompt groups with number keys outside editable controls", () => {
     render(<PromptLoopsTool />);
-    const groupNav = screen.getByRole("navigation", { name: "Prompt groups" });
-    const buttons = groupNav.querySelectorAll("button");
-    expect(buttons.length).toBeGreaterThan(1);
-    expect(buttons[0]?.className).toContain("prompt-loops-nav-btn-active");
+    const tabs = screen.getAllByRole("tab");
+    expect(tabs.length).toBeGreaterThan(1);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
     fireEvent.keyDown(document, { key: "2" });
-    expect(buttons[1]?.className).toContain("prompt-loops-nav-btn-active");
+    expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
   });
 });

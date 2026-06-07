@@ -3,8 +3,15 @@ use std::path::Path;
 
 use super::content::safe_canonical_target;
 use super::content::DocumentContent;
-use super::process::{run_cmd, run_cmd_owned, ActionResult};
+#[cfg(not(windows))]
+use super::process::run_cmd_owned_env;
+use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
+use crate::agent_skill_targets::validate_skill_agent;
+#[cfg(not(windows))]
+use crate::shell_runtime::resolve_bash;
+#[cfg(windows)]
+use crate::skills_install::{install_skills_native, InstallSkillsRequest as NativeInstallRequest};
 
 #[derive(Serialize)]
 pub struct SkillSummary {
@@ -35,7 +42,7 @@ fn skill_summary_from_path(
         .strip_prefix(root)
         .unwrap_or(skill_md)
         .to_string_lossy()
-        .into_owned();
+        .replace('\\', "/");
 
     SkillSummary {
         id,
@@ -166,14 +173,54 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "cursor"];
-
 fn validate_agent(agent: &str) -> Result<(), String> {
-    if VALID_SKILL_AGENTS.contains(&agent) {
-        Ok(())
-    } else {
-        Err(format!("invalid agent: {}", agent))
+    validate_skill_agent(agent)
+}
+
+#[allow(dead_code)]
+pub(crate) fn skill_install_backend() -> &'static str {
+    #[cfg(windows)]
+    {
+        "native"
     }
+    #[cfg(not(windows))]
+    {
+        "script"
+    }
+}
+
+#[cfg(not(windows))]
+fn install_skills_via_script(
+    root: &Path,
+    request: &InstallSkillsRequest,
+) -> Result<ActionResult, String> {
+    let script = workspace_script_arg(root, "scripts/install-skills.sh")?;
+    let bash = resolve_bash()?;
+    let mut args: Vec<String> = vec![script, "--quiet".into()];
+    for agent in &request.agents {
+        args.push("--agent".into());
+        args.push(agent.clone());
+    }
+    args.push("--global".into());
+    for skill in &request.skills {
+        args.push("--skill".into());
+        args.push(skill.clone());
+    }
+    if request.dry_run {
+        args.push("--dry-run".into());
+    }
+    let (ok, out, err, code) = run_cmd_owned_env(&bash, &args, root, &[]);
+    Ok(ActionResult::new(
+        ok,
+        if request.dry_run {
+            "install_skills:dry-run"
+        } else {
+            "install_skills"
+        },
+        out,
+        err,
+        code,
+    ))
 }
 
 fn workspace_script_arg(root: &Path, script_rel: &str) -> Result<String, String> {
@@ -214,37 +261,33 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
 
     let root = workspace_root()?;
-    let script = workspace_script_arg(&root, "scripts/install-skills.sh")?;
-    let mut args: Vec<String> = vec![script, "--quiet".into()];
-
-    for agent in &request.agents {
-        args.push("--agent".into());
-        args.push(agent.clone());
+    #[cfg(windows)]
+    {
+        let result = install_skills_native(
+            &root,
+            &NativeInstallRequest {
+                agents: request.agents,
+                skills: request.skills,
+                dry_run: request.dry_run,
+                agent_dest_overrides: None,
+            },
+        );
+        Ok(ActionResult::new(
+            result.success,
+            if request.dry_run {
+                "install_skills:dry-run"
+            } else {
+                "install_skills"
+            },
+            result.stdout,
+            result.stderr,
+            Some(result.exit_code),
+        ))
     }
-
-    args.push("--global".into());
-
-    for skill in &request.skills {
-        args.push("--skill".into());
-        args.push(skill.clone());
+    #[cfg(not(windows))]
+    {
+        install_skills_via_script(&root, &request)
     }
-
-    if request.dry_run {
-        args.push("--dry-run".into());
-    }
-
-    let (ok, out, err, code) = run_cmd_owned("bash", &args, &root);
-    Ok(ActionResult::new(
-        ok,
-        if request.dry_run {
-            "install_skills:dry-run"
-        } else {
-            "install_skills"
-        },
-        out,
-        err,
-        code,
-    ))
 }
 
 #[tauri::command]
@@ -309,6 +352,14 @@ mod tests {
             ),
         )
         .expect("write skill with metadata");
+    }
+
+    #[test]
+    fn skill_install_backend_is_platform_specific() {
+        #[cfg(windows)]
+        assert_eq!(super::skill_install_backend(), "native");
+        #[cfg(not(windows))]
+        assert_eq!(super::skill_install_backend(), "script");
     }
 
     #[test]
@@ -402,7 +453,7 @@ mod tests {
 
     #[test]
     fn agent_validation_accepts_all_valid_agents() {
-        for agent in super::VALID_SKILL_AGENTS {
+        for agent in crate::agent_skill_targets::VALID_SKILL_AGENTS {
             assert!(
                 super::validate_agent(agent).is_ok(),
                 "valid agent '{}' should be accepted",

@@ -120,7 +120,6 @@ export function CursorView({
   const globalProfileActionsBlocked = workspaceResourcesStale || health?.status === "stale";
   const workspaceRepairActive = wsRunning === "repair workspace";
   const repairBusy = busy;
-
   return (
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
@@ -128,7 +127,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Apply one global Playwright profile to ~/.cursor (agents, skills, MCP, permissions). No project files are written. Playwright MCP can run autonomously; shell stays restricted."
+            summary="Apply one global Playwright profile to your Cursor profile directory (agents, skills, MCP, permissions). This is separate from the Cursor CLI/executable path. No project files are written. Playwright MCP can run autonomously; shell stays restricted."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
@@ -148,11 +147,16 @@ export function CursorView({
             <HarnessActionCard
               title="Global Cursor profile"
               ariaLabel="Cursor global Playwright profile"
-              description="Syncs ~/.cursor/agents, ~/.cursor/skills, ~/.cursor/mcp.json (playwright server merge), and ~/.cursor/permissions.json (playwright:* MCP allowlist). Backups are created before overwriting existing files."
+              description="Syncs Cursor profile agents, skills, mcp.json (playwright server merge), and permissions.json (playwright:* MCP allowlist). Backups are created before overwriting existing files."
               statusChip={health
                 ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
                 : { label: "loading", tone: "muted" }}
               details={health ? [
+                {
+                  label: "Profile root",
+                  value: health.profile_root,
+                  tone: "ok" as const,
+                },
                 {
                   label: "Workspace",
                   value: health.workspace_resources_status === "stale"
@@ -227,43 +231,40 @@ export function CursorView({
                       ? repairWorkspaceBlockedTitle("Apply global")
                       : undefined,
                   }}
+              footer={(
+                <div className="harness-advanced-section">
+                  <h4 className="harness-advanced-section-title">Advanced / debug</h4>
+                  <p className="harness-advanced-note">
+                    User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
+                  </p>
+                  <div className="harness-advanced-actions">
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
+                      copy user rules
+                    </button>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
+                      show mcp template
+                    </button>
+                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
+                      copy mcp template
+                    </button>
+                  </div>
+                  <div className="harness-sandbox-actions">
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy safe</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
+                    </div>
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy playwright-safe</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
+                    </div>
+                    <div className="harness-sandbox-row">
+                      <span className="harness-sandbox-label">legacy playwright-full</span>
+                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
+                    </div>
+                  </div>
+                </div>
+              )}
             />
-          )}
-
-          {workspaceValid && (
-            <details className="harness-advanced-panel">
-              <summary>Advanced / debug</summary>
-              <div className="harness-advanced-body">
-                <p className="harness-advanced-note">
-                  User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
-                </p>
-                <div className="harness-advanced-actions">
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
-                    copy user rules
-                  </button>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
-                    show mcp template
-                  </button>
-                  <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
-                    copy mcp template
-                  </button>
-                </div>
-                <div className="harness-sandbox-actions">
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy safe</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
-                  </div>
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy playwright-safe</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
-                  </div>
-                  <div className="harness-sandbox-row">
-                    <span className="harness-sandbox-label">legacy playwright-full</span>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
-                  </div>
-                </div>
-              </div>
-            </details>
           )}
 
           <TargetSkillsPanel

@@ -38,12 +38,12 @@ import {
   isCanonicalWorkMode,
   normalizePriorityValue,
   normalizeRepoPathForCompare,
-  repoDashboardBrandLabel,
   workItemCanonicalSource,
   type CanonicalSourceFilter,
   type PriorityFilter,
 } from "./model";
 import { useTransientStatus } from "../../lib/useTransientStatus";
+import { ToolSectionTabs } from "../../components/ToolSectionTabs";
 import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
@@ -463,7 +463,6 @@ export function RepoDashboardTool({
     ? 0
     : workItems.filter(i => i.needsPlan && i.status !== "done").length;
 
-  const brandLabel = repoDashboardBrandLabel(repoPath);
   const ghIssuesLabel = snapshot
     ? ghIssuesKpiLabel(snapshot.gh.available, snapshot.gh.authenticated)
     : "gh issues";
@@ -471,41 +470,33 @@ export function RepoDashboardTool({
 
   return (
     <div className="repo-dashboard-tool">
-      <aside className="repo-dashboard-sidebar">
-        <div className="tool-context-brand font-mono">
-          <span className="tools-title-dot" aria-hidden="true" />
-          <span>{brandLabel}</span>
-        </div>
-        <nav className="repo-dashboard-nav" aria-label="Dashboard sections">
-          {SECTIONS.map(({ id, label }, index) => (
-            <button
-              key={id}
-              type="button"
-              className={`repo-dashboard-nav-btn${section === id ? " repo-dashboard-nav-btn-active" : ""}`}
-              onClick={() => setSection(id)}
-              aria-current={section === id ? "page" : undefined}
-            >
-              <span>{index + 1}. {label}</span>
-              <span className="prompt-loops-count">{sectionCount(id)}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
       <section className="repo-dashboard-main">
         <header className="repo-dashboard-topbar">
-          <label className="repo-dashboard-section-select-wrap font-mono">
-            <select
-              className="repo-dashboard-field repo-dashboard-section-select"
-              value={section}
-              onChange={e => setSection(e.target.value as RepoDashboardSection)}
-              aria-label="Dashboard section"
-            >
-              {SECTIONS.map(({ id, label }) => (
-                <option key={id} value={id}>{label}</option>
-              ))}
-            </select>
-          </label>
+          <div className="repo-dashboard-topbar-nav">
+            <ToolSectionTabs
+              className="repo-dashboard-section-tabs"
+              items={SECTIONS.map(({ id, label }) => ({
+                id,
+                label,
+                count: sectionCount(id),
+              }))}
+              activeId={section}
+              onSelect={id => setSection(id as RepoDashboardSection)}
+              ariaLabel="Dashboard sections"
+            />
+            <label className="repo-dashboard-section-select-wrap font-mono">
+              <select
+                className="repo-dashboard-field repo-dashboard-section-select"
+                value={section}
+                onChange={e => setSection(e.target.value as RepoDashboardSection)}
+                aria-label="Dashboard section"
+              >
+                {SECTIONS.map(({ id, label }) => (
+                  <option key={id} value={id}>{label}</option>
+                ))}
+              </select>
+            </label>
+          </div>
           <div className="repo-dashboard-repo-strip">
             {savedEntries && savedEntries.length > 0 && (
               <select
@@ -530,14 +521,25 @@ export function RepoDashboardTool({
               </select>
             )}
             <div className="repo-dashboard-path-group">
-              <input
-                className="repo-dashboard-field repo-dashboard-field-path"
-                value={repoPath}
-                onChange={e => setRepoPath(e.target.value)}
-                placeholder="Local repository path"
-                aria-label="Local repository path"
-                spellCheck={false}
-              />
+              <div className="repo-dashboard-path-field">
+                <input
+                  className="repo-dashboard-field repo-dashboard-field-path"
+                  value={repoPath}
+                  onChange={e => setRepoPath(e.target.value)}
+                  placeholder="Local repository path"
+                  aria-label="Local repository path"
+                  spellCheck={false}
+                />
+                <span
+                  className={`repo-dashboard-sync-status repo-dashboard-sync-status-${syncState}`}
+                  role="status"
+                  aria-live="polite"
+                >
+                  {syncLabel}
+                  {pickerStatus ? ` · ${pickerStatus}` : ""}
+                  {saveStatus ? ` · ${saveStatus}` : ""}
+                </span>
+              </div>
               <button
                 type="button"
                 className="repo-dashboard-btn"
@@ -555,28 +557,20 @@ export function RepoDashboardTool({
               onChange={e => setDefaultBranch(e.target.value)}
               placeholder="Branch"
               aria-label="Default branch override"
-              title="Default branch"
+              title="Default branch override (empty = auto-detect)"
+              spellCheck={false}
             />
-            <span
-              className={`repo-dashboard-sync-pill repo-dashboard-sync-pill-${syncState}`}
-              role="status"
-              aria-live="polite"
+            <button
+              type="button"
+              className="repo-dashboard-btn repo-dashboard-btn-secondary"
+              onClick={() => void startDiscoverLocalRepos()}
+              disabled={loading || discoverLoading}
+              aria-label="Discover local git repositories in a folder"
+              title="Scan a parent folder for local git checkouts"
             >
-              {syncLabel}
-              {pickerStatus ? ` · ${pickerStatus}` : ""}
-              {saveStatus ? ` · ${saveStatus}` : ""}
-            </span>
+              Discover
+            </button>
             <div className="repo-dashboard-strip-actions">
-              <button
-                type="button"
-                className="repo-dashboard-btn repo-dashboard-btn-secondary"
-                onClick={() => void startDiscoverLocalRepos()}
-                disabled={loading || discoverLoading}
-                aria-label="Discover local git repositories in a folder"
-                title="Scan a parent folder for local git checkouts"
-              >
-                Discover local repos
-              </button>
               <button
                 type="button"
                 className="repo-dashboard-btn"

@@ -104,7 +104,9 @@ mod tests {
     #[test]
     fn source_tree_root_ends_with_default_workspace() {
         let root = source_tree_default_workspace_root();
-        assert!(root.to_string_lossy().ends_with("resources/default-workspace"));
+        assert!(root
+            .to_string_lossy()
+            .ends_with("resources/default-workspace"));
     }
 
     #[test]
@@ -151,7 +153,10 @@ mod tests {
     fn every_refresh_path_is_in_copy_manifest() {
         let files = all_paths();
         for rel in cursor_bundle_refresh_paths() {
-            assert!(files.contains(rel), "refresh path absent from manifest: {rel}");
+            assert!(
+                files.contains(rel),
+                "refresh path absent from manifest: {rel}"
+            );
         }
     }
 

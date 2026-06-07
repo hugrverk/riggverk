@@ -81,19 +81,10 @@ export function RepoDocsWorkspace({
     [docs, searchQuery],
   );
   const selectedDoc = docs.find(d => d.path === selectedPath) ?? null;
-  const readableCount = docs.filter(d => d.found && d.readable).length;
   const sourceWarning = docsSourceWarning(docsSource, docsStale);
 
   return (
     <div className="repo-dashboard-docs-workspace">
-      <header className="repo-dashboard-page-head">
-        <h2 className="font-mono repo-dashboard-page-title">Docs</h2>
-        <p className="text-muted small repo-dashboard-page-desc">
-          Searchable repository Markdown. {readableCount} readable document
-          {readableCount === 1 ? "" : "s"} from {docsSourceLabel(docsSource).toLowerCase()}.
-        </p>
-      </header>
-
       <div className="repo-dashboard-docs-body">
         <aside className="repo-dashboard-docs-list-pane" aria-label="Document list">
           <label className="repo-dashboard-docs-search-wrap font-mono">

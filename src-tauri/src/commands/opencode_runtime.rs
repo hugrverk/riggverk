@@ -113,23 +113,7 @@ const PLAYWRIGHT_BROWSERS_PLACEHOLDER: &str = "__PLAYWRIGHT_BROWSERS_PATH__";
 
 /// Default browser cache path (mirrors `playwright-mcp-lib.sh`).
 fn default_playwright_browsers_path(home_dir: &Path) -> Option<std::path::PathBuf> {
-    #[cfg(target_os = "macos")]
-    {
-        Some(home_dir.join("Library/Caches/ms-playwright"))
-    }
-    #[cfg(target_os = "linux")]
-    {
-        let xdg = std::env::var_os("XDG_CACHE_HOME")
-            .filter(|v| !v.is_empty())
-            .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| home_dir.join(".cache"));
-        Some(xdg.join("ms-playwright"))
-    }
-    #[cfg(not(any(target_os = "macos", target_os = "linux")))]
-    {
-        let _ = home_dir;
-        None
-    }
+    crate::commands::cursor_profile::default_playwright_browsers_path(home_dir)
 }
 
 /// Default Playwright MCP config path (mirrors `playwright-mcp-lib.sh`).

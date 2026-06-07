@@ -5,6 +5,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::shell_runtime::format_spawn_error;
+
 #[derive(Serialize, Debug)]
 pub struct ActionResult {
     pub(crate) success: bool,
@@ -37,7 +39,7 @@ pub(super) struct BoundedCmdOptions {
     pub timeout: Option<Duration>,
     pub stdout_cap: usize,
     pub stderr_cap: usize,
-    pub extra_env: &'static [(&'static str, &'static str)],
+    pub extra_env: Vec<(String, String)>,
 }
 
 impl Default for BoundedCmdOptions {
@@ -46,7 +48,7 @@ impl Default for BoundedCmdOptions {
             timeout: None,
             stdout_cap: 16 * 1024 * 1024,
             stderr_cap: 512 * 1024,
-            extra_env: &[],
+            extra_env: Vec::new(),
         }
     }
 }
@@ -96,7 +98,7 @@ pub(super) fn run_cmd_bounded(
         .current_dir(cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    for (key, value) in options.extra_env {
+    for (key, value) in &options.extra_env {
         command.env(key, value);
     }
 
@@ -106,7 +108,7 @@ pub(super) fn run_cmd_bounded(
             return BoundedCmdResult {
                 success: false,
                 stdout: String::new(),
-                stderr: error.to_string(),
+                stderr: format_spawn_error(program, &error),
                 exit_code: None,
                 timed_out: false,
                 stdout_truncated: false,
@@ -181,19 +183,52 @@ pub(super) fn run_cmd(
     )
 }
 
+#[allow(dead_code)]
 pub(super) fn run_cmd_owned(
     program: &str,
     args: &[String],
     cwd: &Path,
 ) -> (bool, String, String, Option<i32>) {
+    run_cmd_owned_env(program, args, cwd, &[])
+}
+
+pub(super) fn run_cmd_owned_env(
+    program: &str,
+    args: &[String],
+    cwd: &Path,
+    env: &[(String, String)],
+) -> (bool, String, String, Option<i32>) {
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_cmd(program, &arg_refs, cwd)
+    let result = run_cmd_bounded(
+        program,
+        &arg_refs,
+        cwd,
+        BoundedCmdOptions {
+            extra_env: env.to_vec(),
+            ..BoundedCmdOptions::default()
+        },
+    );
+    (
+        result.success,
+        result.stdout,
+        result.stderr,
+        result.exit_code,
+    )
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell_runtime::format_spawn_error;
     use std::process::{Command as StdCommand, Stdio as StdStdio};
+
+    #[test]
+    fn format_spawn_error_for_missing_bash_is_actionable() {
+        let error = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        let message = format_spawn_error("bash", &error);
+        assert!(message.contains("bash"));
+        assert!(!message.eq("program not found"));
+    }
 
     #[test]
     fn bounded_cmd_truncates_stdout() {

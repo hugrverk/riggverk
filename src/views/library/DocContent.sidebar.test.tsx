@@ -23,33 +23,41 @@ function DocsListFixture({
   }
 
   return (
-    <div className="lib-sidebar-body lib-docs-sidebar">
+    <aside className="lib-docs-list-pane" aria-label="Document list">
       {showStaleBanner && (
         <div className="lib-docs-stale-banner" role="status">
           <p className="lib-docs-stale-title">Bundled docs need update</p>
         </div>
       )}
-      {Array.from(groups.entries()).map(([section, items]) => (
-        <div key={section} className="lib-docs-section">
-          <div className="lib-docs-section-label">{section}</div>
-          {items.map((d) => (
-            <button
-              key={d.id}
-              type="button"
-              className={`lib-docs-list-item${activeId === d.id ? " lib-docs-list-item-active" : ""}`}
-              aria-current={activeId === d.id ? "true" : undefined}
-            >
-              <span className="lib-docs-list-title">{d.title}</span>
-              <span className="lib-docs-list-path">{d.path}</span>
-              {d.source === "custom" && <span className="lib-docs-context-tag">context</span>}
-            </button>
-          ))}
-        </div>
-      ))}
+      <ul className="lib-docs-list" role="listbox" aria-label="Workspace documents">
+        {Array.from(groups.entries()).map(([section, items]) => (
+          <li key={section} role="none" className="lib-docs-list-section">
+            <div className="lib-docs-section-label">{section}</div>
+            <ul className="lib-docs-list-section-items" role="group" aria-label={section}>
+              {items.map((d) => (
+                <li key={d.id} role="none">
+                  <button
+                    type="button"
+                    className={`lib-docs-list-item${activeId === d.id ? " active" : ""}`}
+                    role="option"
+                    aria-selected={activeId === d.id}
+                  >
+                    <span className="font-mono lib-docs-list-title">{d.title}</span>
+                    <span className="font-mono lib-docs-list-path text-muted">{d.path}</span>
+                    {d.source === "custom" && (
+                      <span className="prompt-loops-pill lib-docs-context-pill">context</span>
+                    )}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </li>
+        ))}
+      </ul>
       <button type="button" className="btn btn-sm btn-primary lib-docs-new-btn">
         + new doc
       </button>
-    </div>
+    </aside>
   );
 }
 
@@ -81,7 +89,7 @@ describe("Library Docs list chrome", () => {
     );
     expect(screen.getByText("Bundled")).not.toBeNull();
     expect(screen.getByText("Context")).not.toBeNull();
-    const active = container.querySelector(".lib-docs-list-item-active");
+    const active = container.querySelector(".lib-docs-list-item.active");
     expect(active?.textContent).toContain("Beta notes");
   });
 

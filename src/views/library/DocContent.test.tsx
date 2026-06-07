@@ -65,27 +65,24 @@ describe("DocContent", () => {
     cleanup();
   });
 
-  it("renders title, path metadata, and custom context tag", () => {
+  it("renders title and path without section subcategory", () => {
     renderDoc();
     expect(screen.getByRole("heading", { name: "Operator checklist" })).not.toBeNull();
     expect(screen.getByText("docs/context/operator-checklist.md")).not.toBeNull();
-    expect(screen.getByText("context")).not.toBeNull();
+    expect(screen.queryByText("Context")).toBeNull();
+    expect(screen.queryByText("Context · context")).toBeNull();
   });
 
-  it("exposes Preview and Edit as a segmented button group", () => {
+  it("exposes Preview and Edit as icon buttons in a group", () => {
     const { onSetDocMode } = renderDoc({ docMode: "preview" });
     const group = screen.getByRole("group", { name: "Doc view mode" });
-    const preview = screen.getByRole("button", { name: "preview" });
-    const edit = screen.getByRole("button", { name: "edit" });
+    const preview = screen.getByRole("button", { name: "Preview" });
+    const edit = screen.getByRole("button", { name: "Edit" });
     expect(group.contains(preview)).toBe(true);
     expect(group.contains(edit)).toBe(true);
     expect(preview.getAttribute("aria-pressed")).toBe("true");
     expect(edit.getAttribute("aria-pressed")).toBe("false");
-    expect(preview.getAttribute("role")).toBeNull();
-    expect(edit.getAttribute("role")).toBeNull();
-    expect(preview.getAttribute("aria-selected")).toBeNull();
-    expect(edit.getAttribute("aria-selected")).toBeNull();
-    expect(preview.className).toContain("btn-active");
+    expect(preview.className).toContain("lib-docs-icon-btn-active");
     expect(screen.queryByRole("tablist")).toBeNull();
     expect(screen.queryByRole("tab")).toBeNull();
 
@@ -95,8 +92,8 @@ describe("DocContent", () => {
 
   it("calls onSetDocMode with preview when Preview is clicked from edit mode", () => {
     const { onSetDocMode } = renderDoc({ docMode: "edit" });
-    const preview = screen.getByRole("button", { name: "preview" });
-    const edit = screen.getByRole("button", { name: "edit" });
+    const preview = screen.getByRole("button", { name: "Preview" });
+    const edit = screen.getByRole("button", { name: "Edit" });
     expect(edit.getAttribute("aria-pressed")).toBe("true");
     expect(preview.getAttribute("aria-pressed")).toBe("false");
 
@@ -104,10 +101,11 @@ describe("DocContent", () => {
     expect(onSetDocMode).toHaveBeenCalledWith("preview");
   });
 
-  it("shows modified state and open action", () => {
+  it("shows modified state, copy path, and open action", () => {
     const { onOpenDoc } = renderDoc({ docDirty: true });
     expect(screen.getByLabelText("Unsaved changes")).not.toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "open" }));
+    expect(screen.getByRole("button", { name: "Copy path" })).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Open" }));
     expect(onOpenDoc).toHaveBeenCalledWith("doc-1");
   });
 

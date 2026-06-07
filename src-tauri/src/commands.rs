@@ -1,8 +1,8 @@
 mod actions;
-mod backups;
+pub(crate) mod backups;
 mod content;
 mod contract;
-mod cursor_profile;
+pub(crate) mod cursor_profile;
 mod defaults;
 mod opencode_runtime;
 mod process;

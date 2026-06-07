@@ -4,9 +4,16 @@ Local macOS control panel for skills, rules, config, and workflow sync.
 
 ## Purpose
 
-Thin GUI wrapper around the existing workspace scripts. Scripts remain the source of truth. The app does not reimplement script logic.
+Thin GUI wrapper around the existing workspace scripts. On macOS and Linux, scripts remain the source of truth for Cursor profile and skill installation actions. On Windows, a narrow native adapter covers Bash-free support for those same actions while shell-only Cursor helpers still route through workspace scripts on Unix or fail clearly on Windows.
 
 App-triggered script actions use each script's `--quiet` option for compact terminal output. Running the scripts manually without `--quiet` keeps the more verbose CLI/debug output.
+
+### Cross-platform notes
+
+- **Cursor profile:** macOS/Linux GUI actions invoke `scripts/install-cursor-workspace.sh` with the same templates, manifest, and `CURSOR_*` path env overrides as the CLI. Windows uses the native adapter for diff/apply/validate/global agents while preserving the same resolved targets under the user profile.
+- **Skills:** macOS/Linux route through `scripts/install-skills.sh`. Windows uses the hardened native installer with staged replacement and destination containment.
+- **Home resolution:** Windows prefers non-empty `USERPROFILE`, then `HOMEDRIVE`+`HOMEPATH`, then `HOME`. macOS/Linux prefer `HOME`.
+- **Safety:** Backup roots and skill destinations reject broad targets such as filesystem roots, Windows drive roots, UNC share roots, and the resolved user home directory.
 
 ## Prerequisites
 
@@ -122,7 +129,7 @@ v1 does not parse repos or docs on its own, does not call LLMs, does not hardcod
 
 **Use as context** (session-only handoff from Repo Dashboard): on eligible docs-backed work items (`feature`, `roadmap`, `todo` only — not `gap`, `fix`, `note`, or GitHub issues), **Use as context** switches to Prompt Loops and fills the optional task/context textarea with a deterministic block for that item. It does not generate a prompt, change the active template/group, auto-select standard/master/batch/rewrite, or bypass preview/copy. If the active Repo Dashboard path matches a saved repo entry, Prompt Loops may select that repo context; otherwise task/context is filled and repo context stays unset. No right-click, multi-select, persistence, GitHub API, or `gh` calls. Run `npx tsx scripts/check-prompt-context-handoff.ts` for handoff formatter/eligibility checks.
 
-**Repo Dashboard** is local-git-first. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). **Discover local repos** scans one parent folder you choose (shallow, bounded depth) and lets you import found checkouts into saved repo entries (shared with Prompt Loops). It does **not** store GitHub PATs, does **not** call the GitHub API directly, does **not** list account repos or clone, and does **not** accept frontend-supplied shell commands.
+**Repo Dashboard** is local-git-first with a full-width top tab layout (Overview, Work, Docs). The repository strip includes path entry, optional **default branch override** (empty = auto-detect), **Discover local repos**, save, and refresh controls. Point it at a checkout path on disk; the app runs fixed allowlisted `git` commands via the Tauri backend (branch, dirty state, ahead/behind, commit log, changed files at `HEAD`, and local docs parsing). **Discover local repos** scans one parent folder you choose (shallow, bounded depth) and lets you import found checkouts into saved repo entries (shared with Prompt Loops). It does **not** store GitHub PATs, does **not** call the GitHub API directly, does **not** list account repos or clone, and does **not** accept frontend-supplied shell commands.
 
 Optional enhancement: when the `gh` CLI is installed and authenticated, the dashboard may enrich merged PR metadata and open issues using fixed `gh` subcommands with explicit args and bounded JSON output. If `gh` is missing or not authenticated, the UI stays in local-git-only mode. The **Changed files** panel always reflects local `git show HEAD`, not a GitHub PR file list, even when merge metadata comes from `gh`.
 
@@ -188,7 +195,7 @@ Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). 
 
 ## Skill installation
 
-Skills are installed directly into native agent skill folders using local filesystem copy from the validated repo `skills/` directories. No external package managers are used for install.
+Skills are installed into agent skill folders using local filesystem copy from validated workspace `skills/` directories (bash script on macOS/Linux, native adapter on Windows). No external package managers are used for install.
 
 Global destinations:
 - Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)

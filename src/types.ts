@@ -437,6 +437,8 @@ export interface BrainSetupSeedResult {
 
 export interface CursorProfileHealth {
   status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "stale" | "unknown" | string;
+  profile_root: string;
+  profile_root_source: "default" | string;
   workspace_resources_status: "current" | "stale" | "missing" | "unreadable" | string;
   manifest_status: string;
   user_rules_status: "manual" | "template-missing" | "unknown" | string;
