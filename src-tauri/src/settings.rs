@@ -451,6 +451,7 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_child() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let expected = home.join("Desktop/test").to_string_lossy().into_owned();
         let mut settings = settings_with_path(Some("~/Desktop/test"));

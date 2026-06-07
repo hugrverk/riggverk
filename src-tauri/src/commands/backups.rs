@@ -67,15 +67,8 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         default_root
     };
 
-    let root_str = root.to_string_lossy();
-    if root_str.trim().is_empty() {
-        return Err("backup directory is empty".to_string());
-    }
-
-    let home_str = home.to_string_lossy();
-    if root_str == "/" || root_str == home_str.as_ref() || root_str == format!("{}/", home_str) {
-        return Err(format!("refusing broad backup directory: {}", root_str));
-    }
+    let platform = crate::platform_paths::Platform::current();
+    crate::platform_paths::reject_broad_write_root(&root, &home, platform, "backup")?;
 
     if root.exists() {
         let canonical = root
