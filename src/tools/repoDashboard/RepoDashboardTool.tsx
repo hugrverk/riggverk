@@ -550,6 +550,27 @@ export function RepoDashboardTool({
               >
                 Browse
               </button>
+            </div>
+            <input
+              className="repo-dashboard-field repo-dashboard-field-branch"
+              value={defaultBranch}
+              onChange={e => setDefaultBranch(e.target.value)}
+              placeholder="Branch"
+              aria-label="Default branch override"
+              title="Default branch override (empty = auto-detect)"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              className="repo-dashboard-btn repo-dashboard-btn-secondary"
+              onClick={() => void startDiscoverLocalRepos()}
+              disabled={loading || discoverLoading}
+              aria-label="Discover local git repositories in a folder"
+              title="Scan a parent folder for local git checkouts"
+            >
+              Discover
+            </button>
+            <div className="repo-dashboard-strip-actions">
               <button
                 type="button"
                 className="repo-dashboard-btn"
