@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
+
+#[cfg(test)]
+use std::sync::Mutex;
 
 use crate::agent_skill_targets::{
     agent_global_skills_dest, ensure_skill_dest_contained, validate_skill_agent,
@@ -96,6 +100,98 @@ fn remove_dir_all(path: &Path) -> Result<(), String> {
     if path.is_dir() {
         fs::remove_dir_all(path).map_err(|e| format!("remove dir {}: {e}", path.display()))?;
     }
+    Ok(())
+}
+
+#[cfg(test)]
+static FAIL_RENAME_TO: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+fn unique_dir_under_root(dest_root: &Path, prefix: &str) -> PathBuf {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    dest_root.join(format!(".{prefix}-{nonce}"))
+}
+
+fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
+    #[cfg(test)]
+    if let Ok(guard) = FAIL_RENAME_TO.lock() {
+        let staging_to_dest = from
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(".aw-skill-staging-"))
+            && guard.as_ref().is_some_and(|expected| expected == to);
+        if staging_to_dest {
+            return Err(format!(
+                "rename {} -> {}: forced test failure",
+                from.display(),
+                to.display()
+            ));
+        }
+    }
+    fs::rename(from, to).map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
+}
+
+fn validate_source_tree(src_dir: &Path) -> Result<(), String> {
+    let skill_md = src_dir.join("SKILL.md");
+    if !skill_md.is_file() {
+        return Err(format!("source missing SKILL.md: {}", src_dir.display()));
+    }
+    Ok(())
+}
+
+fn replace_skill_directory(
+    src_dir: &Path,
+    dest_dir: &Path,
+    dest_root: &Path,
+) -> Result<(), String> {
+    validate_source_tree(src_dir)?;
+
+    let staging = unique_dir_under_root(dest_root, "aw-skill-staging");
+    if staging.exists() {
+        return Err(format!(
+            "staging path already exists: {}",
+            staging.display()
+        ));
+    }
+
+    if let Err(err) = copy_dir_all(src_dir, &staging) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(err);
+    }
+    if let Err(err) = validate_source_tree(&staging) {
+        let _ = fs::remove_dir_all(&staging);
+        return Err(err);
+    }
+
+    let rollback = if dest_dir.exists() {
+        let rollback_dir = unique_dir_under_root(dest_root, "aw-skill-rollback");
+        if rollback_dir.exists() {
+            let _ = fs::remove_dir_all(&staging);
+            return Err(format!(
+                "rollback path already exists: {}",
+                rollback_dir.display()
+            ));
+        }
+        rename_path(dest_dir, &rollback_dir)?;
+        Some(rollback_dir)
+    } else {
+        None
+    };
+
+    if let Err(err) = rename_path(&staging, dest_dir) {
+        if let Some(rollback_dir) = &rollback {
+            let _ = rename_path(rollback_dir, dest_dir);
+        }
+        let _ = fs::remove_dir_all(&staging);
+        return Err(err);
+    }
+
+    if let Some(rollback_dir) = rollback {
+        remove_dir_all(&rollback_dir)?;
+    }
+
     Ok(())
 }
 
@@ -211,15 +307,7 @@ pub fn install_skills_native(
                     continue;
                 }
             };
-            if let Err(err) = remove_dir_all(&dest_dir) {
-                stdout.push_str(&format!(
-                    "  {:<10} FAIL {name} (remove existing: {err})\n",
-                    format!("{agent}:")
-                ));
-                exit_code = 1;
-                continue;
-            }
-            if let Err(err) = copy_dir_all(src_dir, &dest_dir) {
+            if let Err(err) = replace_skill_directory(src_dir, &dest_dir, &dest_root) {
                 stdout.push_str(&format!(
                     "  {:<10} FAIL {name} (src={} dest={err})\n",
                     format!("{agent}:"),
@@ -360,6 +448,124 @@ mod tests {
         assert!(!result.success);
         assert!(result.stderr.contains("invalid agent"));
         let _ = fs::remove_dir_all(&workspace);
+    }
+
+    fn staging_artifacts(dest_root: &Path) -> Vec<PathBuf> {
+        fs::read_dir(dest_root)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| {
+                        name.starts_with(".aw-skill-staging-")
+                            || name.starts_with(".aw-skill-rollback-")
+                    })
+            })
+            .collect()
+    }
+
+    #[test]
+    fn source_validation_failure_preserves_existing_installation() {
+        let workspace = temp_root("bad-source");
+        let profile = temp_root("profile-bad-source");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        fs::create_dir_all(workspace.join("skills/diagnose")).expect("bad source");
+        fs::write(workspace.join("skills/diagnose/extra.txt"), "only extra").expect("extra");
+
+        let skills_dest = profile.join("skills");
+        let err = replace_skill_directory(
+            &workspace.join("skills/diagnose"),
+            &skills_dest.join("diagnose"),
+            &skills_dest,
+        )
+        .expect_err("missing SKILL.md");
+        assert!(err.contains("SKILL.md"));
+        assert_eq!(
+            fs::read_to_string(skills_dest.join("diagnose/SKILL.md")).expect("old preserved"),
+            "old content"
+        );
+        assert!(staging_artifacts(&skills_dest).is_empty());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn replacement_failure_restores_existing_installation() {
+        let workspace = temp_root("rename-fail");
+        let profile = temp_root("profile-rename-fail");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &skills_dest);
+        }
+
+        let dest_dir =
+            ensure_skill_dest_contained(&skills_dest, "diagnose").expect("canonical dest");
+        {
+            let mut guard = FAIL_RENAME_TO.lock().expect("rename fail lock");
+            *guard = Some(dest_dir);
+        }
+        let result = install_skills_native(
+            &workspace,
+            &InstallSkillsRequest {
+                agents: vec!["cursor".into()],
+                skills: vec!["diagnose".into()],
+                dry_run: false,
+            },
+        );
+        {
+            let mut guard = FAIL_RENAME_TO.lock().expect("rename fail lock");
+            *guard = None;
+        }
+
+        assert!(!result.success);
+        assert_eq!(
+            fs::read_to_string(skills_dest.join("diagnose/SKILL.md")).expect("restored"),
+            "old content"
+        );
+        assert!(staging_artifacts(&skills_dest).is_empty());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn successful_replacement_leaves_no_staging_or_rollback_dirs() {
+        let workspace = temp_root("clean-success");
+        let profile = temp_root("profile-clean-success");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &skills_dest);
+        }
+
+        let result = install_skills_native(
+            &workspace,
+            &InstallSkillsRequest {
+                agents: vec!["cursor".into()],
+                skills: vec!["diagnose".into()],
+                dry_run: false,
+            },
+        );
+        assert!(result.success);
+        assert!(staging_artifacts(&skills_dest).is_empty());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
     }
 
     #[test]
