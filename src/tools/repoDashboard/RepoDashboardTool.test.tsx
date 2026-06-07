@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { RepoDashboardTool } from "./RepoDashboardTool";
 import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
@@ -23,8 +23,28 @@ describe("RepoDashboardTool", () => {
     expect(container.querySelector(".tools-switcher")).toBeNull();
     expect(container.querySelector(".tool-sidebar-footer")).toBeNull();
     expect(container.querySelector(".tool-sidebar-status")).toBeNull();
+    expect(container.querySelector(".repo-dashboard-sidebar")).toBeNull();
     expect(screen.queryByText(/gh:\s*enhanced/i)).toBeNull();
     expect(screen.queryByText(/gh:\s*local-only/i)).toBeNull();
+  });
+
+  it("renders section tabs and narrow fallback select", () => {
+    render(<RepoDashboardTool />);
+    expect(screen.getAllByRole("tab")).toHaveLength(3);
+    expect(screen.getByRole("tab", { name: /Overview/ })).not.toBeNull();
+    expect(screen.getByRole("tab", { name: /Work/ })).not.toBeNull();
+    expect(screen.getByRole("tab", { name: /Docs/ })).not.toBeNull();
+    expect(screen.getByRole("combobox", { name: "Dashboard section" })).not.toBeNull();
+  });
+
+  it("switches sections from tabs", () => {
+    render(<RepoDashboardTool />);
+    const workTab = screen.getByRole("tab", { name: /Work/ });
+    fireEvent.click(workTab);
+    expect(workTab.getAttribute("aria-selected")).toBe("true");
+    const docsTab = screen.getByRole("tab", { name: /Docs/ });
+    fireEvent.click(docsTab);
+    expect(docsTab.getAttribute("aria-selected")).toBe("true");
   });
 });
 

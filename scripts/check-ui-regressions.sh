@@ -209,6 +209,13 @@ fi
 if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
   fail "Prompt Loops group select must exist"
 fi
+if rg -n 'prompt-loops-sidebar|repo-dashboard-sidebar' src/tools --glob '!**/*.test.*' >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "legacy tool sidebars must not return"
+fi
+if ! rg -n 'ToolSectionTabs|tool-section-tabs' src/tools/promptLoops/PromptLoopsTool.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
+  fail "tool section tabs must exist in Prompt Loops and Repo Dashboard"
+fi
 
 for obsolete in \
   'ToolsView' \

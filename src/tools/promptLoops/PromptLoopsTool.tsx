@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
+import { ToolSectionTabs } from "../../components/ToolSectionTabs";
 import { isEditableEventTarget } from "../../lib/isEditableEventTarget";
 import { useTransientStatus } from "../../lib/useTransientStatus";
 import type { RepoDashboardEntry } from "../../types";
@@ -202,42 +203,40 @@ export function PromptLoopsTool({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [items.length]);
 
+  const selectPromptGroup = useCallback((index: number) => {
+    setGroupIndex(index);
+    setItemIndex(0);
+  }, []);
+
   return (
     <div className="prompt-loops-tool">
-      <aside className="prompt-loops-sidebar">
-        <div className="tool-context-brand font-mono">
-          <span className="tools-title-dot" aria-hidden="true" />
-          <span>prompt.loops</span>
-        </div>
-        <nav className="prompt-loops-nav" aria-label="Prompt groups">
-          {PROMPT_LOOP_GROUPS.map((g, index) => (
-            <button
-              key={g.key}
-              type="button"
-              className={`prompt-loops-nav-btn${index === groupIndex ? " prompt-loops-nav-btn-active" : ""}`}
-              onClick={() => {
-                setGroupIndex(index);
-                setItemIndex(0);
-              }}
-              aria-current={index === groupIndex ? "true" : undefined}
-            >
-              <span className="prompt-loops-nav-label">{g.group}</span>
-              <span className="prompt-loops-count">{g.items.length}</span>
-            </button>
-          ))}
-        </nav>
-      </aside>
-
       <section className="prompt-loops-main">
         <header className="prompt-loops-topbar">
+          <div className="prompt-loops-topbar-start">
+            <div className="tool-context-brand tool-context-brand-inline font-mono">
+              <span className="tools-title-dot" aria-hidden="true" />
+              <span>prompt.loops</span>
+            </div>
+            <ToolSectionTabs
+              className="prompt-loops-section-tabs"
+              items={PROMPT_LOOP_GROUPS.map(g => ({
+                id: g.key,
+                label: g.group,
+                count: g.items.length,
+              }))}
+              activeId={group.key}
+              onSelect={id => {
+                const next = PROMPT_LOOP_GROUPS.findIndex(g => g.key === id);
+                if (next >= 0) selectPromptGroup(next);
+              }}
+              ariaLabel="Prompt groups"
+            />
+          </div>
           <label className="prompt-loops-group-select-wrap font-mono">
             <select
               className="tool-field prompt-loops-group-select"
               value={groupIndex}
-              onChange={e => {
-                setGroupIndex(Number(e.target.value));
-                setItemIndex(0);
-              }}
+              onChange={e => selectPromptGroup(Number(e.target.value))}
               aria-label="Prompt group"
             >
               {PROMPT_LOOP_GROUPS.map((g, index) => (
