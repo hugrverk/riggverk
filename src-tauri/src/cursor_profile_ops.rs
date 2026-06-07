@@ -8,7 +8,9 @@ use crate::commands::cursor_profile::{
     sync_skill_dirs_status, terminal_allowlist_unsafe, transform_playwright_template_value,
 };
 use crate::cursor_profile_paths::{normalized_path_key, CursorProfilePaths};
-use crate::skills_install::{install_skills_native, InstallSkillsRequest};
+use crate::skills_install::{
+    discover_workspace_skills, install_skills_native, InstallSkillsRequest,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileRunOutput {
@@ -470,6 +472,81 @@ fn apply_global_mcp(
     Ok(())
 }
 
+fn preflight_global_profile(
+    workspace_root: &Path,
+    paths: &CursorProfilePaths,
+) -> Result<(), String> {
+    for (path, label) in [
+        (&paths.agents, "agents"),
+        (&paths.skills, "skills"),
+        (&paths.mcp_config, "mcp"),
+        (&paths.permissions, "permissions"),
+    ] {
+        ensure_global_write_target(paths, path, label)?;
+    }
+
+    let agents_source = cursor_root(workspace_root).join("agents");
+    if !agents_source.is_dir() {
+        return Err(format!(
+            "Cursor agents source not found: {}",
+            agents_source.display()
+        ));
+    }
+
+    let recommended = manifest_recommended_skills(workspace_root);
+    if recommended.is_empty() {
+        return Err("no recommended skills in manifest".into());
+    }
+
+    let discovered = discover_workspace_skills(&workspace_root.join("skills"))?;
+    for skill in &recommended {
+        if !discovered.contains_key(skill) {
+            return Err(format!("unknown skill: {skill}"));
+        }
+    }
+
+    let permissions_template = permissions_template_path(workspace_root);
+    let permissions_content = fs::read_to_string(&permissions_template)
+        .map_err(|e| format!("read permissions template: {e}"))?;
+    serde_json::from_str::<serde_json::Value>(&permissions_content)
+        .map_err(|e| format!("permissions template invalid JSON: {e}"))?;
+    if json_has_unsafe_literals(&permissions_content) {
+        return Err("permissions template contains unsafe literals".into());
+    }
+
+    let mcp_template = mcp_template_path(workspace_root);
+    let mcp_content =
+        fs::read_to_string(&mcp_template).map_err(|e| format!("read MCP template: {e}"))?;
+    let mcp_parsed: serde_json::Value = serde_json::from_str(&mcp_content)
+        .map_err(|e| format!("MCP template invalid JSON: {e}"))?;
+    if json_has_unsafe_literals(&mcp_content) {
+        return Err("Playwright MCP template contains unsafe literals".into());
+    }
+    if mcp_parsed
+        .get("mcpServers")
+        .and_then(|v| v.get("playwright"))
+        .is_none()
+    {
+        return Err("MCP template missing playwright server".into());
+    }
+
+    let (config_path, browsers_path) = resolve_playwright_paths(&paths.user_home)
+        .ok_or_else(|| "could not resolve Playwright MCP paths for this platform".to_string())?;
+    let _ = (config_path, browsers_path);
+
+    backup_root()?;
+    Ok(())
+}
+
+fn stage_failure(stage: &str, err: String, stdout: String) -> ProfileRunOutput {
+    ProfileRunOutput {
+        success: false,
+        stdout,
+        stderr: format!("{stage}: {err}\n"),
+        exit_code: 1,
+    }
+}
+
 fn apply_global_permissions(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -501,34 +578,24 @@ pub fn run_global_profile(
     apply: bool,
 ) -> ProfileRunOutput {
     let mut stdout = String::new();
-    let stages: [(&str, Result<(), String>); 4] = [
-        (
-            "global-agents",
-            install_agents(workspace_root, paths, apply, "global-agents", &mut stdout),
-        ),
-        (
-            "global-skills",
-            install_global_skills(workspace_root, paths, apply, &mut stdout),
-        ),
-        (
-            "global-mcp",
-            apply_global_mcp(workspace_root, paths, apply, &mut stdout),
-        ),
-        (
-            "global-permissions",
-            apply_global_permissions(workspace_root, paths, apply, &mut stdout),
-        ),
-    ];
 
-    for (stage, step) in stages {
-        if let Err(err) = step {
-            return ProfileRunOutput {
-                success: false,
-                stdout,
-                stderr: format!("{stage}: {err}\n"),
-                exit_code: 1,
-            };
+    if apply {
+        if let Err(err) = preflight_global_profile(workspace_root, paths) {
+            return stage_failure("preflight", err, stdout);
         }
+    }
+
+    if let Err(err) = install_agents(workspace_root, paths, apply, "global-agents", &mut stdout) {
+        return stage_failure("global-agents", err, stdout);
+    }
+    if let Err(err) = install_global_skills(workspace_root, paths, apply, &mut stdout) {
+        return stage_failure("global-skills", err, stdout);
+    }
+    if let Err(err) = apply_global_mcp(workspace_root, paths, apply, &mut stdout) {
+        return stage_failure("global-mcp", err, stdout);
+    }
+    if let Err(err) = apply_global_permissions(workspace_root, paths, apply, &mut stdout) {
+        return stage_failure("global-permissions", err, stdout);
     }
 
     ProfileRunOutput {
@@ -760,22 +827,143 @@ mod tests {
         let _ = fs::remove_dir_all(&profile);
     }
 
+    fn write_minimal_profile_workspace(workspace: &Path) {
+        fs::create_dir_all(workspace.join("templates/cursor/agents")).expect("agents src");
+        fs::write(
+            workspace.join("templates/cursor/agents/reviewer.md"),
+            "# reviewer",
+        )
+        .expect("agent");
+        fs::write(
+            workspace.join("templates/cursor/manifest.json"),
+            r#"{"recommended_pinned_skills":["diagnose"]}"#,
+        )
+        .expect("manifest");
+        fs::create_dir_all(workspace.join("skills/diagnose")).expect("skill");
+        fs::write(
+            workspace.join("skills/diagnose/SKILL.md"),
+            "---\nname: diagnose\ndescription: d\n---\n",
+        )
+        .expect("skill md");
+        let perms_template = workspace.join("templates/cursor/permissions/global-playwright.json");
+        fs::create_dir_all(perms_template.parent().expect("perms parent")).expect("perms dir");
+        fs::write(&perms_template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("perms template");
+        let mcp_template = workspace.join("templates/cursor/mcp/playwright.mcp.json");
+        fs::create_dir_all(mcp_template.parent().expect("mcp parent")).expect("mcp dir");
+        fs::write(
+            &mcp_template,
+            include_str!(
+                "../../resources/default-workspace/templates/cursor/mcp/playwright.mcp.json"
+            ),
+        )
+        .expect("mcp template");
+    }
+
     #[test]
-    fn apply_stops_after_first_stage_failure() {
-        let workspace = temp_root("fail-fast");
-        let profile = temp_root("fail-fast-profile");
-        fs::create_dir_all(workspace.join("templates/cursor")).expect("templates");
+    fn preflight_rejects_missing_skill_before_writes() {
+        let workspace = temp_root("preflight-missing-skill");
+        let profile = temp_root("preflight-missing-profile");
+        write_minimal_profile_workspace(&workspace);
         fs::write(
             workspace.join("templates/cursor/manifest.json"),
             r#"{"recommended_pinned_skills":["missing-skill"]}"#,
         )
         .expect("manifest");
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("permissions");
+
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                profile.join("backups").to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "CURSOR_SKILLS_PATH",
+                profile.join("skills").to_string_lossy().as_ref(),
+            );
+        }
+
         let paths = test_paths(&profile);
+        let mcp_before = fs::read_to_string(profile.join("mcp.json")).expect("mcp before");
+        let perms_before =
+            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result.stderr.contains("missing-skill"));
+        assert!(!profile.join("agents").exists());
+        assert_eq!(
+            fs::read_to_string(profile.join("mcp.json")).expect("mcp after"),
+            mcp_before
+        );
+        assert_eq!(
+            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
+            perms_before
+        );
+        assert!(!profile.join("backups").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn execution_failure_stops_before_later_stages() {
+        let workspace = temp_root("exec-stop");
+        let profile = temp_root("exec-stop-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(profile.join("agents"), "block agents directory").expect("block agents");
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("permissions");
+
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                profile.join("backups").to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "CURSOR_SKILLS_PATH",
+                profile.join("skills").to_string_lossy().as_ref(),
+            );
+        }
+
+        let paths = test_paths(&profile);
+        let mcp_before = fs::read_to_string(profile.join("mcp.json")).expect("mcp before");
+        let perms_before =
+            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
         let result = run_global_profile(&workspace, &paths, true);
         assert!(!result.success);
         assert!(result.stderr.contains("global-agents"));
-        assert!(!profile.join("mcp.json").exists());
-        assert!(!profile.join("permissions.json").exists());
+        assert!(!result.stderr.contains("global-mcp"));
+        assert!(!result.stderr.contains("global-permissions"));
+        assert_eq!(
+            fs::read_to_string(profile.join("mcp.json")).expect("mcp after"),
+            mcp_before
+        );
+        assert_eq!(
+            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
+            perms_before
+        );
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
     }
