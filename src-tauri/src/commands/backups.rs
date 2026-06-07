@@ -47,14 +47,19 @@ pub struct BackupRunDetails {
     files: Vec<BackupFileSummary>,
 }
 
-pub(crate) fn backup_root() -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
+fn default_backup_root(home: &Path) -> PathBuf {
+    if cfg!(windows) {
+        home.join("AppData/Roaming/ai.agentworkspace.app/backups")
+    } else if cfg!(target_os = "macos") {
+        home.join("Library/Application Support/ai.agentworkspace.app/backups")
+    } else {
+        home.join(".local/share/ai.agentworkspace.app/backups")
     }
+}
 
-    let default_root =
-        PathBuf::from(&home).join("Library/Application Support/ai.agentworkspace.app/backups");
+pub(crate) fn backup_root() -> Result<PathBuf, String> {
+    let home = crate::cursor_profile_paths::resolve_user_home()?;
+    let default_root = default_backup_root(&home);
 
     let root = if let Ok(env_override) = std::env::var("AGENT_WORKSPACE_BACKUP_DIR") {
         let trimmed = env_override.trim().to_string();
@@ -71,7 +76,8 @@ pub(crate) fn backup_root() -> Result<PathBuf, String> {
         return Err("backup directory is empty".to_string());
     }
 
-    if root_str == "/" || root_str == home.as_str() || root_str == format!("{}/", home) {
+    let home_str = home.to_string_lossy();
+    if root_str == "/" || root_str == home_str.as_ref() || root_str == format!("{}/", home_str) {
         return Err(format!("refusing broad backup directory: {}", root_str));
     }
 

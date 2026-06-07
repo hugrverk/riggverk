@@ -51,7 +51,7 @@ fn normalize_profile_root_input(raw: &str) -> Option<PathBuf> {
     None
 }
 
-fn normalized_path_key(path: &Path) -> String {
+pub fn normalized_path_key(path: &Path) -> String {
     path.components()
         .map(|component| match component {
             Component::Prefix(prefix) => prefix.as_os_str().to_string_lossy().into_owned(),
@@ -94,6 +94,19 @@ fn is_broad_profile_root(path: &Path, user_home: &Path) -> bool {
     if let Some(prefix) = path.components().next() {
         if matches!(prefix, Component::Prefix(_) | Component::RootDir) && path.parent().is_none() {
             return true;
+        }
+    }
+    #[cfg(windows)]
+    {
+        let normalized = path.to_string_lossy();
+        if normalized.len() == 3 {
+            let mut chars = normalized.chars();
+            if chars.next().is_some()
+                && chars.next() == Some(':')
+                && matches!(chars.next(), Some('\\') | Some('/'))
+            {
+                return true;
+            }
         }
     }
     false
@@ -385,5 +398,11 @@ mod tests {
     fn validate_rejects_relative_profile_path() {
         let err = validate_cursor_profile_root(".cursor").expect_err("relative");
         assert!(err.contains("absolute"));
+    }
+
+    #[test]
+    fn validate_rejects_windows_drive_root() {
+        let err = validate_cursor_profile_root(r"C:\").expect_err("drive root");
+        assert!(err.contains("too broad"));
     }
 }

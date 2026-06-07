@@ -5,6 +5,9 @@ use super::content::safe_canonical_target;
 use super::process::{run_cmd_owned_env, ActionResult};
 use super::status::file_eq;
 use super::workspace::workspace_root;
+use crate::cursor_profile_ops::{
+    run_global_agents_only, run_global_profile, validate_global_profile,
+};
 use crate::cursor_profile_paths::{cursor_profile_env_pairs, resolve_cursor_profile_paths, CursorProfilePaths};
 use crate::shell_runtime::{path_arg_for_bash, resolve_bash, resolve_python};
 
@@ -30,7 +33,7 @@ pub struct CursorProfileHealth {
     next_action: String,
 }
 
-fn cursor_root(root: &Path) -> PathBuf {
+pub(crate) fn cursor_root(root: &Path) -> PathBuf {
     root.join("templates/cursor")
 }
 
@@ -47,7 +50,7 @@ fn list_files(dir: &Path, extension: &str) -> Vec<PathBuf> {
     files
 }
 
-fn sync_dir_status(
+pub(crate) fn sync_dir_status(
     source_dir: &Path,
     target_dir: &Path,
     extension: &str,
@@ -90,7 +93,7 @@ fn sync_dir_status(
     (status.into(), installed, sources.len())
 }
 
-fn sync_skill_dirs_status(
+pub(crate) fn sync_skill_dirs_status(
     source_root: &Path,
     target_root: &Path,
     skill_names: &[String],
@@ -203,14 +206,14 @@ fn scan_json_for_unsafe(value: &serde_json::Value, key: Option<&str>) -> bool {
     }
 }
 
-fn json_has_unsafe_literals(content: &str) -> bool {
+pub(crate) fn json_has_unsafe_literals(content: &str) -> bool {
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(content) else {
         return false;
     };
     scan_json_for_unsafe(&parsed, None)
 }
 
-fn terminal_allowlist_unsafe(value: &serde_json::Value) -> bool {
+pub(crate) fn terminal_allowlist_unsafe(value: &serde_json::Value) -> bool {
     let Some(items) = value.as_array() else {
         return false;
     };
@@ -236,7 +239,7 @@ fn terminal_allowlist_unsafe(value: &serde_json::Value) -> bool {
     false
 }
 
-fn mcp_allowlist_unsafe(value: &serde_json::Value) -> bool {
+pub(crate) fn mcp_allowlist_unsafe(value: &serde_json::Value) -> bool {
     let Some(items) = value.as_array() else {
         return false;
     };
@@ -249,7 +252,7 @@ fn mcp_allowlist_unsafe(value: &serde_json::Value) -> bool {
     false
 }
 
-fn manifest_recommended_skills(root: &Path) -> Vec<String> {
+pub(crate) fn manifest_recommended_skills(root: &Path) -> Vec<String> {
     let path = cursor_root(root).join("manifest.json");
     let Ok(content) = std::fs::read_to_string(&path) else {
         return Vec::new();
@@ -269,7 +272,7 @@ fn manifest_recommended_skills(root: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
-fn permissions_template_required(root: &Path) -> Vec<String> {
+pub(crate) fn permissions_template_required(root: &Path) -> Vec<String> {
     let path = cursor_root(root).join("permissions/global-playwright.json");
     let Ok(content) = std::fs::read_to_string(&path) else {
         return vec!["playwright:*".into()];
@@ -365,7 +368,7 @@ fn global_permissions_status(
     ("missing".into(), "restricted".into())
 }
 
-fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
+pub(crate) fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {
     if let Ok(path) = std::env::var("PLAYWRIGHT_MCP_CONFIG_PATH") {
         if !path.is_empty() {
             return PathBuf::from(path);
@@ -383,7 +386,7 @@ fn resolve_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
     default_playwright_browsers_path(home)
 }
 
-fn default_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
+pub(crate) fn default_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
     if cfg!(target_os = "macos") {
         Some(home.join("Library/Caches/ms-playwright"))
     } else if cfg!(target_os = "linux") {
@@ -391,12 +394,14 @@ fn default_playwright_browsers_path(home: &Path) -> Option<PathBuf> {
             .map(PathBuf::from)
             .unwrap_or_else(|| home.join(".cache"));
         Some(cache.join("ms-playwright"))
+    } else if cfg!(windows) {
+        Some(home.join("AppData/Local/ms-playwright"))
     } else {
         None
     }
 }
 
-fn transform_playwright_template_value(
+pub(crate) fn transform_playwright_template_value(
     value: &serde_json::Value,
     config_path: &str,
     browsers_path: &str,
@@ -814,6 +819,29 @@ fn cursor_profile_command_summary(
     )
 }
 
+fn windows_shell_only_action_message(action: &str) -> ActionResult {
+    ActionResult::new(
+        false,
+        action.to_string(),
+        String::new(),
+        format!(
+            "The Cursor action \"{action}\" is not available in the Windows desktop app. \
+             Use the workspace scripts manually or run this action on macOS/Linux."
+        ),
+        Some(1),
+    )
+}
+
+fn native_profile_result(action: &str, output: crate::cursor_profile_ops::ProfileRunOutput) -> ActionResult {
+    ActionResult::new(
+        output.success,
+        action.to_string(),
+        output.stdout,
+        output.stderr,
+        Some(output.exit_code),
+    )
+}
+
 #[tauri::command]
 pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
@@ -821,40 +849,42 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
     if let Some(blocked) = block_when_workspace_resources_stale(&action, &health) {
         return Ok(blocked);
     }
-    let script = cursor_script_arg(&root)?;
-    let mut args = vec![script];
 
     match action.as_str() {
         "cursor_diff_global_profile" => {
-            args.extend(["--quiet".into(), "--diff-global-profile".into()])
+            let paths = resolve_cursor_profile_paths()?;
+            return Ok(native_profile_result(
+                &action,
+                run_global_profile(&root, &paths, false),
+            ));
         }
         "cursor_apply_global_profile" => {
-            args.extend(["--quiet".into(), "--apply-global-profile".into()])
+            let paths = resolve_cursor_profile_paths()?;
+            return Ok(native_profile_result(
+                &action,
+                run_global_profile(&root, &paths, true),
+            ));
         }
         "cursor_validate_global_profile" => {
-            args.extend(["--quiet".into(), "--validate-global-profile".into()])
+            let paths = resolve_cursor_profile_paths()?;
+            return Ok(native_profile_result(
+                &action,
+                validate_global_profile(&root, &paths),
+            ));
         }
-        "cursor_open_settings" => args.push("--open-cursor-settings".into()),
-        "cursor_copy_user_rules" => args.push("--copy-user-rules".into()),
-        "cursor_show_playwright_mcp" => args.push("--show-playwright-mcp".into()),
-        "cursor_copy_playwright_mcp" => args.push("--copy-playwright-mcp".into()),
-        "cursor_show_sandbox_safe" => args.extend(["--show-sandbox-profile".into(), "safe".into()]),
-        "cursor_copy_sandbox_safe" => args.extend(["--copy-sandbox-profile".into(), "safe".into()]),
-        "cursor_show_sandbox_playwright_safe" => {
-            args.extend(["--show-sandbox-profile".into(), "playwright-safe".into()])
+        "cursor_diff_global_agents" => {
+            let paths = resolve_cursor_profile_paths()?;
+            return Ok(native_profile_result(
+                &action,
+                run_global_agents_only(&root, &paths, false),
+            ));
         }
-        "cursor_copy_sandbox_playwright_safe" => {
-            args.extend(["--copy-sandbox-profile".into(), "playwright-safe".into()])
-        }
-        "cursor_show_sandbox_playwright_full" => {
-            args.extend(["--show-sandbox-profile".into(), "playwright-full".into()])
-        }
-        "cursor_copy_sandbox_playwright_full" => {
-            args.extend(["--copy-sandbox-profile".into(), "playwright-full".into()])
-        }
-        "cursor_diff_global_agents" => args.extend(["--quiet".into(), "--global-agents".into()]),
         "cursor_sync_global_agents" => {
-            args.extend(["--quiet".into(), "--apply".into(), "--global-agents".into()])
+            let paths = resolve_cursor_profile_paths()?;
+            return Ok(native_profile_result(
+                &action,
+                run_global_agents_only(&root, &paths, true),
+            ));
         }
         "cursor_validate_profile" => {
             let ok = !matches!(health.status.as_str(), "unsafe" | "partial" | "stale")
@@ -880,25 +910,63 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
                 if ok { Some(0) } else { Some(1) },
             ));
         }
+        _ => {}
+    }
+
+    #[cfg(windows)]
+    if matches!(
+        action.as_str(),
+        "cursor_open_settings"
+            | "cursor_copy_user_rules"
+            | "cursor_show_playwright_mcp"
+            | "cursor_copy_playwright_mcp"
+            | "cursor_show_sandbox_safe"
+            | "cursor_copy_sandbox_safe"
+            | "cursor_show_sandbox_playwright_safe"
+            | "cursor_copy_sandbox_playwright_safe"
+            | "cursor_show_sandbox_playwright_full"
+            | "cursor_copy_sandbox_playwright_full"
+    ) {
+        return Ok(windows_shell_only_action_message(&action));
+    }
+
+    let script = cursor_script_arg(&root)?;
+    let mut args = vec![script];
+    match action.as_str() {
+        "cursor_open_settings" => args.push("--open-cursor-settings".into()),
+        "cursor_copy_user_rules" => args.push("--copy-user-rules".into()),
+        "cursor_show_playwright_mcp" => args.push("--show-playwright-mcp".into()),
+        "cursor_copy_playwright_mcp" => args.push("--copy-playwright-mcp".into()),
+        "cursor_show_sandbox_safe" => args.extend(["--show-sandbox-profile".into(), "safe".into()]),
+        "cursor_copy_sandbox_safe" => args.extend(["--copy-sandbox-profile".into(), "safe".into()]),
+        "cursor_show_sandbox_playwright_safe" => {
+            args.extend(["--show-sandbox-profile".into(), "playwright-safe".into()])
+        }
+        "cursor_copy_sandbox_playwright_safe" => {
+            args.extend(["--copy-sandbox-profile".into(), "playwright-safe".into()])
+        }
+        "cursor_show_sandbox_playwright_full" => {
+            args.extend(["--show-sandbox-profile".into(), "playwright-full".into()])
+        }
+        "cursor_copy_sandbox_playwright_full" => {
+            args.extend(["--copy-sandbox-profile".into(), "playwright-full".into()])
+        }
         _ => return Err(format!("unknown Cursor action: {action}")),
     }
 
-    let (ok, out, err, code) = {
-        let paths = resolve_cursor_profile_paths()?;
-        let bash = resolve_bash()?;
-        let python = resolve_python()?;
-        let env = cursor_profile_env_pairs(&paths, &bash, &python);
-        let (ok, out, mut err, code) = run_cmd_owned_env(&bash, &args, &root, &env);
-        if !ok {
-            let summary = cursor_profile_command_summary(&bash, &args, &env);
-            err = if err.trim().is_empty() {
-                summary
-            } else {
-                format!("{summary}\n{err}")
-            };
-        }
-        (ok, out, err, code)
-    };
+    let paths = resolve_cursor_profile_paths()?;
+    let bash = resolve_bash()?;
+    let python = resolve_python()?;
+    let env = cursor_profile_env_pairs(&paths, &bash, &python);
+    let (ok, out, mut err, code) = run_cmd_owned_env(&bash, &args, &root, &env);
+    if !ok {
+        let summary = cursor_profile_command_summary(&bash, &args, &env);
+        err = if err.trim().is_empty() {
+            summary
+        } else {
+            format!("{summary}\n{err}")
+        };
+    }
     Ok(ActionResult::new(ok, action, out, err, code))
 }
 

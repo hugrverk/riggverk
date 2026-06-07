@@ -1,6 +1,9 @@
+mod agent_skill_targets;
 mod agent_targets;
 mod commands;
+mod cursor_profile_ops;
 mod cursor_profile_paths;
+mod skills_install;
 mod path_utils;
 mod settings;
 mod shell_runtime;

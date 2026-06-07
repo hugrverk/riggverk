@@ -3,8 +3,10 @@ use std::path::Path;
 
 use super::content::safe_canonical_target;
 use super::content::DocumentContent;
-use super::process::{run_cmd, run_cmd_owned, ActionResult};
+use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
+use crate::agent_skill_targets::validate_skill_agent;
+use crate::skills_install::{install_skills_native, InstallSkillsRequest as NativeInstallRequest};
 
 #[derive(Serialize)]
 pub struct SkillSummary {
@@ -166,14 +168,8 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "cursor"];
-
 fn validate_agent(agent: &str) -> Result<(), String> {
-    if VALID_SKILL_AGENTS.contains(&agent) {
-        Ok(())
-    } else {
-        Err(format!("invalid agent: {}", agent))
-    }
+    validate_skill_agent(agent)
 }
 
 fn workspace_script_arg(root: &Path, script_rel: &str) -> Result<String, String> {
@@ -214,36 +210,24 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
 
     let root = workspace_root()?;
-    let script = workspace_script_arg(&root, "scripts/install-skills.sh")?;
-    let mut args: Vec<String> = vec![script, "--quiet".into()];
-
-    for agent in &request.agents {
-        args.push("--agent".into());
-        args.push(agent.clone());
-    }
-
-    args.push("--global".into());
-
-    for skill in &request.skills {
-        args.push("--skill".into());
-        args.push(skill.clone());
-    }
-
-    if request.dry_run {
-        args.push("--dry-run".into());
-    }
-
-    let (ok, out, err, code) = run_cmd_owned("bash", &args, &root);
+    let result = install_skills_native(
+        &root,
+        &NativeInstallRequest {
+            agents: request.agents,
+            skills: request.skills,
+            dry_run: request.dry_run,
+        },
+    );
     Ok(ActionResult::new(
-        ok,
+        result.success,
         if request.dry_run {
             "install_skills:dry-run"
         } else {
             "install_skills"
         },
-        out,
-        err,
-        code,
+        result.stdout,
+        result.stderr,
+        Some(result.exit_code),
     ))
 }
 
@@ -402,7 +386,7 @@ mod tests {
 
     #[test]
     fn agent_validation_accepts_all_valid_agents() {
-        for agent in super::VALID_SKILL_AGENTS {
+        for agent in crate::agent_skill_targets::VALID_SKILL_AGENTS {
             assert!(
                 super::validate_agent(agent).is_ok(),
                 "valid agent '{}' should be accepted",
