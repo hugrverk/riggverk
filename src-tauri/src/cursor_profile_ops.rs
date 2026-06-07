@@ -506,27 +506,41 @@ pub fn run_global_profile(
     apply: bool,
 ) -> ProfileRunOutput {
     let mut stdout = String::new();
-    let mut stderr = String::new();
-    let mut ok = true;
+    let stages: [(&str, Result<(), String>); 4] = [
+        (
+            "global-agents",
+            install_agents(workspace_root, paths, apply, "global-agents", &mut stdout),
+        ),
+        (
+            "global-skills",
+            install_global_skills(workspace_root, paths, apply, &mut stdout),
+        ),
+        (
+            "global-mcp",
+            apply_global_mcp(workspace_root, paths, apply, &mut stdout),
+        ),
+        (
+            "global-permissions",
+            apply_global_permissions(workspace_root, paths, apply, &mut stdout),
+        ),
+    ];
 
-    for step in [
-        install_agents(workspace_root, paths, apply, "global-agents", &mut stdout),
-        install_global_skills(workspace_root, paths, apply, &mut stdout),
-        apply_global_mcp(workspace_root, paths, apply, &mut stdout),
-        apply_global_permissions(workspace_root, paths, apply, &mut stdout),
-    ] {
+    for (stage, step) in stages {
         if let Err(err) = step {
-            stderr.push_str(&err);
-            stderr.push('\n');
-            ok = false;
+            return ProfileRunOutput {
+                success: false,
+                stdout,
+                stderr: format!("{stage}: {err}\n"),
+                exit_code: 1,
+            };
         }
     }
 
     ProfileRunOutput {
-        success: ok,
+        success: true,
         stdout,
-        stderr,
-        exit_code: if ok { 0 } else { 1 },
+        stderr: String::new(),
+        exit_code: 0,
     }
 }
 
@@ -591,7 +605,6 @@ pub fn run_global_agents_only(
 mod tests {
     use super::*;
     use crate::cursor_profile_paths::cursor_profile_paths_from_root;
-    use crate::cursor_profile_paths::CursorProfileRootSource;
     use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -614,7 +627,6 @@ mod tests {
         cursor_profile_paths_from_root(
             profile_root.parent().unwrap_or(profile_root).to_path_buf(),
             profile_root.to_path_buf(),
-            CursorProfileRootSource::Custom,
         )
     }
 
@@ -712,11 +724,11 @@ mod tests {
         )
         .expect("mcp template");
 
-        let _guard = env_lock().lock().expect("env lock");
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
         let home = profile.parent().unwrap().to_path_buf();
         unsafe {
-            std::env::set_var("USERPROFILE", home.to_string_lossy().as_ref());
-            std::env::remove_var("HOME");
+            std::env::set_var("HOME", home.to_string_lossy().as_ref());
             std::env::set_var(
                 "AGENT_WORKSPACE_BACKUP_DIR",
                 profile.join("backups").to_string_lossy().as_ref(),
@@ -742,10 +754,26 @@ mod tests {
         assert!(profile.join("mcp.json").is_file());
         assert!(profile.join("permissions.json").is_file());
 
-        unsafe {
-            std::env::remove_var("AGENT_WORKSPACE_BACKUP_DIR");
-            std::env::remove_var("CURSOR_SKILLS_PATH");
-        }
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn apply_stops_after_first_stage_failure() {
+        let workspace = temp_root("fail-fast");
+        let profile = temp_root("fail-fast-profile");
+        fs::create_dir_all(workspace.join("templates/cursor")).expect("templates");
+        fs::write(
+            workspace.join("templates/cursor/manifest.json"),
+            r#"{"recommended_pinned_skills":["missing-skill"]}"#,
+        )
+        .expect("manifest");
+        let paths = test_paths(&profile);
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("global-agents"));
+        assert!(!profile.join("mcp.json").exists());
+        assert!(!profile.join("permissions.json").exists());
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
     }
