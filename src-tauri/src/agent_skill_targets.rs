@@ -176,8 +176,8 @@ mod tests {
         let _ = fs::create_dir_all(&home);
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("HOME", &home);
             std::env::set_var("CURSOR_SKILLS_PATH", &home);
         }
         assert!(validate_skill_dest_root(&home).is_err());
@@ -233,27 +233,35 @@ mod tests {
 
     #[test]
     fn cursor_global_dest_uses_profile_skills_path() {
+        let home = std::env::temp_dir().join("aw-cursor-profile-skills-test");
+        let _ = fs::create_dir_all(&home);
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("HOME", "/tmp/aw-example-home");
             std::env::remove_var("CURSOR_SKILLS_PATH");
         }
         let dest = agent_global_skills_dest("cursor").expect("cursor dest");
-        assert_eq!(dest, PathBuf::from("/tmp/aw-example-home/.cursor/skills"));
+        assert_eq!(dest, home.join(".cursor").join("skills"));
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]
     fn cursor_env_override_wins_over_default_profile() {
-        let custom = "/tmp/aw-custom-profile/skills";
+        let home = std::env::temp_dir().join("aw-cursor-env-override-home");
+        let custom = std::env::temp_dir().join("aw-cursor-env-override-skills");
+        let _ = fs::create_dir_all(&home);
+        let _ = fs::create_dir_all(&custom);
         let _guard = crate::test_env::guard::lock();
         let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("HOME", "/tmp/aw-example-home");
-            std::env::set_var("CURSOR_SKILLS_PATH", custom);
+            std::env::set_var("CURSOR_SKILLS_PATH", &custom);
         }
         let dest = agent_global_skills_dest("cursor").expect("cursor dest");
-        assert_eq!(dest, PathBuf::from(custom));
+        assert_eq!(dest, custom);
+        let _ = fs::remove_dir_all(&custom);
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]
