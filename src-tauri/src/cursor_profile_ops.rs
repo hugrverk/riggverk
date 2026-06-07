@@ -166,7 +166,37 @@ fn diff_permissions_status(template_path: &Path, target_path: &Path) -> String {
     }
 }
 
-fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), String> {
+fn permissions_value_unsafe(value: &serde_json::Value) -> bool {
+    if let Ok(serialized) = serde_json::to_string(value) {
+        if json_has_unsafe_literals(&serialized) {
+            return true;
+        }
+    } else {
+        return true;
+    }
+    if let Some(terminal) = value.get("terminalAllowlist") {
+        if terminal_allowlist_unsafe(terminal) {
+            return true;
+        }
+    }
+    if let Some(mcp) = value.get("mcpAllowlist") {
+        if mcp_allowlist_unsafe(mcp) {
+            return true;
+        }
+    }
+    false
+}
+
+fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, String> {
+    if !target_path.is_file() {
+        return Ok(serde_json::Value::Object(serde_json::Map::new()));
+    }
+    let content =
+        fs::read_to_string(target_path).map_err(|e| format!("read permissions target: {e}"))?;
+    serde_json::from_str(&content).map_err(|e| format!("permissions target invalid JSON: {e}"))
+}
+
+fn prepare_permissions_merge(template_path: &Path, target_path: &Path) -> Result<String, String> {
     let template_content =
         fs::read_to_string(template_path).map_err(|e| format!("read permissions template: {e}"))?;
     let template: serde_json::Value = serde_json::from_str(&template_content)
@@ -185,14 +215,7 @@ fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), Str
         return Err("permissions template missing mcpAllowlist entries".into());
     }
 
-    let mut data = if target_path.is_file() {
-        let content =
-            fs::read_to_string(target_path).map_err(|e| format!("read permissions target: {e}"))?;
-        serde_json::from_str(&content)
-            .map_err(|e| format!("permissions target invalid JSON: {e}"))?
-    } else {
-        serde_json::Value::Object(serde_json::Map::new())
-    };
+    let mut data = read_permissions_target(target_path)?;
 
     let merged = match data.get("mcpAllowlist").and_then(|v| v.as_array()) {
         None => managed,
@@ -218,9 +241,17 @@ fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), Str
         serde_json::Value::Array(merged.into_iter().map(serde_json::Value::String).collect()),
     );
 
-    let serialized = serde_json::to_string_pretty(&data)
-        .map_err(|e| format!("serialize permissions: {e}"))?
-        + "\n";
+    if permissions_value_unsafe(&data) {
+        return Err("permissions JSON failed safety check".into());
+    }
+
+    serde_json::to_string_pretty(&data)
+        .map(|s| s + "\n")
+        .map_err(|e| format!("serialize permissions: {e}"))
+}
+
+fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), String> {
+    let serialized = prepare_permissions_merge(template_path, target_path)?;
     fs::write(target_path, serialized).map_err(|e| format!("write permissions: {e}"))?;
     Ok(())
 }
@@ -235,17 +266,7 @@ fn permissions_file_unsafe(path: &Path) -> bool {
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
         return true;
     };
-    if let Some(terminal) = parsed.get("terminalAllowlist") {
-        if terminal_allowlist_unsafe(terminal) {
-            return true;
-        }
-    }
-    if let Some(mcp) = parsed.get("mcpAllowlist") {
-        if mcp_allowlist_unsafe(mcp) {
-            return true;
-        }
-    }
-    false
+    permissions_value_unsafe(&parsed)
 }
 
 fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf)> {
@@ -304,12 +325,20 @@ fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths) -> String 
     }
 }
 
-fn merge_mcp_playwright(
+fn read_mcp_target(target_path: &Path) -> Result<serde_json::Value, String> {
+    if !target_path.is_file() {
+        return Ok(serde_json::json!({}));
+    }
+    let content = fs::read_to_string(target_path).map_err(|e| format!("read MCP target: {e}"))?;
+    serde_json::from_str(&content).map_err(|e| format!("MCP target invalid JSON: {e}"))
+}
+
+fn prepare_mcp_merge(
     template_path: &Path,
     target_path: &Path,
     config_path: &Path,
     browsers_path: &Path,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let template_content =
         fs::read_to_string(template_path).map_err(|e| format!("read MCP template: {e}"))?;
     let template: serde_json::Value = serde_json::from_str(&template_content)
@@ -325,13 +354,7 @@ fn merge_mcp_playwright(
         &browsers_path.to_string_lossy(),
     );
 
-    let mut data = if target_path.is_file() {
-        let content =
-            fs::read_to_string(target_path).map_err(|e| format!("read MCP target: {e}"))?;
-        serde_json::from_str(&content).map_err(|e| format!("MCP target invalid JSON: {e}"))?
-    } else {
-        serde_json::json!({})
-    };
+    let mut data = read_mcp_target(target_path)?;
     let object = data
         .as_object_mut()
         .ok_or_else(|| "MCP data must be an object".to_string())?;
@@ -344,10 +367,31 @@ fn merge_mcp_playwright(
         return Err("mcpServers must be an object".into());
     }
 
-    let serialized =
-        serde_json::to_string_pretty(&data).map_err(|e| format!("serialize MCP: {e}"))? + "\n";
+    if json_has_unsafe_literals(&serde_json::to_string(&data).unwrap_or_else(|_| "{}".to_string()))
+    {
+        return Err("merged MCP JSON contains unsafe literals".into());
+    }
+
+    serde_json::to_string_pretty(&data)
+        .map(|s| s + "\n")
+        .map_err(|e| format!("serialize MCP: {e}"))
+}
+
+fn merge_mcp_playwright(
+    template_path: &Path,
+    target_path: &Path,
+    config_path: &Path,
+    browsers_path: &Path,
+) -> Result<(), String> {
+    let serialized = prepare_mcp_merge(template_path, target_path, config_path, browsers_path)?;
     fs::write(target_path, serialized).map_err(|e| format!("write MCP: {e}"))?;
     Ok(())
+}
+
+#[derive(Debug, Clone)]
+struct GlobalProfilePlan {
+    permissions_serialized: String,
+    mcp_serialized: String,
 }
 
 fn install_agents(
@@ -442,28 +486,20 @@ fn apply_global_mcp(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
     apply: bool,
+    plan: Option<&GlobalProfilePlan>,
     stdout: &mut String,
 ) -> Result<(), String> {
     ensure_global_write_target(paths, &paths.mcp_config, "mcp")?;
-    let template_path = mcp_template_path(workspace_root);
     if apply {
-        let (config_path, browsers_path) =
-            resolve_playwright_paths(&paths.user_home).ok_or_else(|| {
-                "could not resolve Playwright MCP paths for this platform".to_string()
-            })?;
-        if json_has_unsafe_literals(&fs::read_to_string(&template_path).unwrap_or_default()) {
-            return Err("Playwright MCP template contains unsafe literals".into());
-        }
+        let serialized = plan
+            .ok_or_else(|| "internal error: missing MCP plan".to_string())?
+            .mcp_serialized
+            .clone();
         if let Some(parent) = paths.mcp_config.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("create MCP parent: {e}"))?;
         }
         backup_file_before_write(&paths.mcp_config, "cursor-mcp")?;
-        merge_mcp_playwright(
-            &template_path,
-            &paths.mcp_config,
-            &config_path,
-            &browsers_path,
-        )?;
+        fs::write(&paths.mcp_config, serialized).map_err(|e| format!("write MCP: {e}"))?;
         stdout.push_str("global-mcp          written 1\n");
     } else {
         let status = mcp_diff_status(workspace_root, paths);
@@ -475,7 +511,7 @@ fn apply_global_mcp(
 fn preflight_global_profile(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
-) -> Result<(), String> {
+) -> Result<GlobalProfilePlan, String> {
     for (path, label) in [
         (&paths.agents, "agents"),
         (&paths.skills, "skills"),
@@ -514,6 +550,13 @@ fn preflight_global_profile(
         return Err("permissions template contains unsafe literals".into());
     }
 
+    if paths.permissions.is_file() {
+        let existing = read_permissions_target(&paths.permissions)?;
+        if permissions_value_unsafe(&existing) {
+            return Err("existing permissions JSON failed safety check".into());
+        }
+    }
+
     let mcp_template = mcp_template_path(workspace_root);
     let mcp_content =
         fs::read_to_string(&mcp_template).map_err(|e| format!("read MCP template: {e}"))?;
@@ -530,12 +573,28 @@ fn preflight_global_profile(
         return Err("MCP template missing playwright server".into());
     }
 
+    if paths.mcp_config.is_file() {
+        read_mcp_target(&paths.mcp_config)?;
+    }
+
     let (config_path, browsers_path) = resolve_playwright_paths(&paths.user_home)
         .ok_or_else(|| "could not resolve Playwright MCP paths for this platform".to_string())?;
-    let _ = (config_path, browsers_path);
+
+    let permissions_serialized =
+        prepare_permissions_merge(&permissions_template, &paths.permissions)?;
+    let mcp_serialized = prepare_mcp_merge(
+        &mcp_template,
+        &paths.mcp_config,
+        &config_path,
+        &browsers_path,
+    )?;
 
     backup_root()?;
-    Ok(())
+
+    Ok(GlobalProfilePlan {
+        permissions_serialized,
+        mcp_serialized,
+    })
 }
 
 fn stage_failure(stage: &str, err: String, stdout: String) -> ProfileRunOutput {
@@ -551,19 +610,21 @@ fn apply_global_permissions(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
     apply: bool,
+    plan: Option<&GlobalProfilePlan>,
     stdout: &mut String,
 ) -> Result<(), String> {
     ensure_global_write_target(paths, &paths.permissions, "permissions")?;
     let template_path = permissions_template_path(workspace_root);
     if apply {
+        let serialized = plan
+            .ok_or_else(|| "internal error: missing permissions plan".to_string())?
+            .permissions_serialized
+            .clone();
         if let Some(parent) = paths.permissions.parent() {
             fs::create_dir_all(parent).map_err(|e| format!("create permissions parent: {e}"))?;
         }
         backup_file_before_write(&paths.permissions, "cursor-permissions")?;
-        merge_permissions(&template_path, &paths.permissions)?;
-        if permissions_file_unsafe(&paths.permissions) {
-            return Err("permissions JSON failed safety check after merge".into());
-        }
+        fs::write(&paths.permissions, serialized).map_err(|e| format!("write permissions: {e}"))?;
         stdout.push_str("global-permissions  written 1\n");
     } else {
         let status = diff_permissions_status(&template_path, &paths.permissions);
@@ -579,11 +640,14 @@ pub fn run_global_profile(
 ) -> ProfileRunOutput {
     let mut stdout = String::new();
 
-    if apply {
-        if let Err(err) = preflight_global_profile(workspace_root, paths) {
-            return stage_failure("preflight", err, stdout);
+    let plan = if apply {
+        match preflight_global_profile(workspace_root, paths) {
+            Ok(plan) => Some(plan),
+            Err(err) => return stage_failure("preflight", err, stdout),
         }
-    }
+    } else {
+        None
+    };
 
     if let Err(err) = install_agents(workspace_root, paths, apply, "global-agents", &mut stdout) {
         return stage_failure("global-agents", err, stdout);
@@ -591,10 +655,12 @@ pub fn run_global_profile(
     if let Err(err) = install_global_skills(workspace_root, paths, apply, &mut stdout) {
         return stage_failure("global-skills", err, stdout);
     }
-    if let Err(err) = apply_global_mcp(workspace_root, paths, apply, &mut stdout) {
+    if let Err(err) = apply_global_mcp(workspace_root, paths, apply, plan.as_ref(), &mut stdout) {
         return stage_failure("global-mcp", err, stdout);
     }
-    if let Err(err) = apply_global_permissions(workspace_root, paths, apply, &mut stdout) {
+    if let Err(err) =
+        apply_global_permissions(workspace_root, paths, apply, plan.as_ref(), &mut stdout)
+    {
         return stage_failure("global-permissions", err, stdout);
     }
 
@@ -977,4 +1043,149 @@ mod tests {
         assert!(err.contains("non-allowlisted"));
         let _ = fs::remove_dir_all(&profile);
     }
+
+    fn profile_apply_env(
+        profile: &Path,
+    ) -> (
+        std::sync::MutexGuard<'static, ()>,
+        crate::test_env::guard::EnvRestore,
+    ) {
+        let guard = crate::test_env::guard::lock();
+        let restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                profile.join("backups").to_string_lossy().as_ref(),
+            );
+            std::env::remove_var("CURSOR_SKILLS_PATH");
+        }
+        (guard, restore)
+    }
+
+    #[test]
+    fn preflight_rejects_invalid_existing_mcp_json() {
+        let workspace = temp_root("preflight-bad-mcp");
+        let profile = temp_root("preflight-bad-mcp-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(profile.join("mcp.json"), "{not json").expect("bad mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("permissions");
+
+        let (_guard, _restore) = profile_apply_env(&profile);
+        let paths = test_paths(&profile);
+        let mcp_before = fs::read_to_string(profile.join("mcp.json")).expect("mcp before");
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result.stderr.contains("MCP target invalid JSON"));
+        assert!(!profile.join("agents").exists());
+        assert!(!profile.join("skills").exists());
+        assert_eq!(
+            fs::read_to_string(profile.join("mcp.json")).expect("mcp after"),
+            mcp_before
+        );
+        assert!(!profile.join("backups").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn preflight_rejects_invalid_existing_permissions_json() {
+        let workspace = temp_root("preflight-bad-perms");
+        let profile = temp_root("preflight-bad-perms-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(profile.join("permissions.json"), "{bad").expect("bad perms");
+
+        let (_guard, _restore) = profile_apply_env(&profile);
+        let paths = test_paths(&profile);
+        let perms_before =
+            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result.stderr.contains("permissions target invalid JSON"));
+        assert!(!profile.join("agents").exists());
+        assert!(!profile.join("skills").exists());
+        assert_eq!(
+            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
+            perms_before
+        );
+        assert!(!profile.join("backups").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn preflight_rejects_unsafe_existing_permissions() {
+        let workspace = temp_root("preflight-unsafe-perms");
+        let profile = temp_root("preflight-unsafe-perms-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["*:*"]}"#,
+        )
+        .expect("unsafe perms");
+
+        let (_guard, _restore) = profile_apply_env(&profile);
+        let paths = test_paths(&profile);
+        let perms_before =
+            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result
+            .stderr
+            .contains("existing permissions JSON failed safety check"));
+        assert!(!profile.join("skills").exists());
+        assert_eq!(
+            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
+            perms_before
+        );
+        assert!(!profile.join("backups").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn preflight_rejects_unsafe_merged_permissions_terminal_allowlist() {
+        let workspace = temp_root("preflight-unsafe-merge");
+        let profile = temp_root("preflight-unsafe-merge-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"terminalAllowlist":["npx foo"],"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("unsafe terminal");
+
+        let (_guard, _restore) = profile_apply_env(&profile);
+        let paths = test_paths(&profile);
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(!result.success);
+        assert!(result.stderr.contains("preflight"));
+        assert!(result
+            .stderr
+            .contains("existing permissions JSON failed safety check"));
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
 }
