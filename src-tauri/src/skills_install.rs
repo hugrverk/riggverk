@@ -293,10 +293,7 @@ fn replace_skill_directory(
         if rollback_dir.exists() {
             return return_after_staging_cleanup(
                 &staging,
-                format!(
-                    "rollback path already exists: {}",
-                    rollback_dir.display()
-                ),
+                format!("rollback path already exists: {}", rollback_dir.display()),
             );
         }
         match rename_path(dest_dir, &rollback_dir) {

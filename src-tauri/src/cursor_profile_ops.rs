@@ -819,11 +819,7 @@ mod tests {
         let template = root.join("template.json");
         let target = root.join("permissions.json");
         fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
-        fs::write(
-            &target,
-            r#"{"mcpAllowlist":["playwright:*","custom:*"]}"#,
-        )
-        .expect("target");
+        fs::write(&target, r#"{"mcpAllowlist":["playwright:*","custom:*"]}"#).expect("target");
 
         let serialized = prepare_permissions_merge(&template, &target).expect("merge");
         let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
