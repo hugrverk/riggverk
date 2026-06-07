@@ -269,6 +269,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
                 agents: request.agents,
                 skills: request.skills,
                 dry_run: request.dry_run,
+                agent_dest_overrides: None,
             },
         );
         Ok(ActionResult::new(

@@ -106,10 +106,13 @@ pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
         "cursor" => {
             if let Ok(path) = std::env::var("CURSOR_SKILLS_PATH") {
                 if !path.trim().is_empty() {
-                    return Ok(PathBuf::from(path));
+                    PathBuf::from(path)
+                } else {
+                    resolve_cursor_profile_paths()?.skills
                 }
+            } else {
+                resolve_cursor_profile_paths()?.skills
             }
-            resolve_cursor_profile_paths()?.skills
         }
         _ => return Err(format!("invalid agent: {agent}")),
     };

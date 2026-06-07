@@ -451,12 +451,15 @@ fn install_global_skills(
     }
 
     if apply {
+        let mut overrides = std::collections::HashMap::new();
+        overrides.insert("cursor".into(), paths.skills.clone());
         let result = install_skills_native(
             workspace_root,
             &InstallSkillsRequest {
                 agents: vec!["cursor".into()],
                 skills,
                 dry_run: false,
+                agent_dest_overrides: Some(overrides),
             },
         );
         if !result.success {
@@ -1188,4 +1191,49 @@ mod tests {
         let _ = fs::remove_dir_all(&profile);
     }
 
+    #[test]
+    fn profile_skills_use_resolved_paths_skills_not_env_override() {
+        let workspace = temp_root("profile-skills-root");
+        let profile = temp_root("profile-skills-root-profile");
+        write_minimal_profile_workspace(&workspace);
+        fs::write(
+            profile.join("mcp.json"),
+            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
+        )
+        .expect("mcp");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("permissions");
+
+        let wrong_skills = temp_root("wrong-skills-redirect");
+        fs::create_dir_all(&wrong_skills).expect("wrong skills");
+
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                profile.join("backups").to_string_lossy().as_ref(),
+            );
+            std::env::set_var("CURSOR_SKILLS_PATH", &wrong_skills);
+        }
+
+        let paths = test_paths(&profile);
+        let result = run_global_profile(&workspace, &paths, true);
+        assert!(
+            result.success,
+            "stderr={} stdout={}",
+            result.stderr, result.stdout
+        );
+        assert!(profile.join("skills/diagnose/SKILL.md").is_file());
+        assert!(!wrong_skills.join("diagnose").exists());
+        assert!(profile.join("agents/reviewer.md").is_file());
+        assert!(profile.join("mcp.json").is_file());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+        let _ = fs::remove_dir_all(&wrong_skills);
+    }
 }
