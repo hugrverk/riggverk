@@ -8,7 +8,7 @@ use std::sync::Mutex;
 
 use crate::agent_skill_targets::{
     agent_global_skills_dest, ensure_skill_dest_contained, validate_skill_agent,
-    validate_skill_name,
+    validate_skill_dest_root, validate_skill_name,
 };
 
 #[derive(Debug, Clone)]
@@ -16,6 +16,9 @@ pub struct InstallSkillsRequest {
     pub agents: Vec<String>,
     pub skills: Vec<String>,
     pub dry_run: bool,
+    /// Validated destination roots keyed by agent name. When set for an agent,
+    /// overrides environment-based resolution for that agent only.
+    pub agent_dest_overrides: Option<HashMap<String, PathBuf>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -159,6 +162,12 @@ fn remove_dir_all(path: &Path) -> Result<(), String> {
 #[cfg(test)]
 static FAIL_RENAME_TO: Mutex<Option<PathBuf>> = Mutex::new(None);
 
+#[cfg(test)]
+static FAIL_DEST_TO_ROLLBACK: Mutex<bool> = Mutex::new(false);
+
+#[cfg(test)]
+static FAIL_RESTORE_TO_DEST: Mutex<Option<PathBuf>> = Mutex::new(None);
+
 fn unique_dir_under_root(dest_root: &Path, prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -181,6 +190,39 @@ fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
                 from.display(),
                 to.display()
             ));
+        }
+    }
+    #[cfg(test)]
+    if FAIL_DEST_TO_ROLLBACK
+        .lock()
+        .ok()
+        .is_some_and(|guard| *guard)
+        && to
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_some_and(|name| name.starts_with(".aw-skill-rollback-"))
+    {
+        return Err(format!(
+            "rename {} -> {}: forced test failure",
+            from.display(),
+            to.display()
+        ));
+    }
+    #[cfg(test)]
+    if let Ok(guard) = FAIL_RESTORE_TO_DEST.lock() {
+        if let Some(expected) = guard.as_ref() {
+            let rollback_to_dest = from
+                .file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with(".aw-skill-rollback-"))
+                && *expected == *to;
+            if rollback_to_dest {
+                return Err(format!(
+                    "rename {} -> {}: forced test failure",
+                    from.display(),
+                    to.display()
+                ));
+            }
         }
     }
     fs::rename(from, to).map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
@@ -229,25 +271,49 @@ fn replace_skill_directory(
                 rollback_dir.display()
             ));
         }
-        rename_path(dest_dir, &rollback_dir)?;
-        Some(rollback_dir)
+        match rename_path(dest_dir, &rollback_dir) {
+            Ok(()) => Some(rollback_dir),
+            Err(err) => {
+                let _ = fs::remove_dir_all(&staging);
+                return Err(err);
+            }
+        }
     } else {
         None
     };
 
-    if let Err(err) = rename_path(&staging, dest_dir) {
-        if let Some(rollback_dir) = &rollback {
-            let _ = rename_path(rollback_dir, dest_dir);
+    match rename_path(&staging, dest_dir) {
+        Ok(()) => {
+            if let Some(rollback_dir) = rollback {
+                remove_dir_all(&rollback_dir)?;
+            }
+            Ok(())
         }
-        let _ = fs::remove_dir_all(&staging);
-        return Err(err);
+        Err(replace_err) => {
+            if let Some(rollback_dir) = &rollback {
+                match rename_path(rollback_dir, dest_dir) {
+                    Ok(()) => {
+                        let _ = fs::remove_dir_all(&staging);
+                        Err(replace_err)
+                    }
+                    Err(restore_err) => {
+                        let _ = fs::remove_dir_all(&staging);
+                        Err(format!(
+                            "skill replacement failed: {replace_err}; \
+                             restoration to active destination also failed: {restore_err}; \
+                             previous installation preserved at {}; \
+                             manually restore by moving that directory to {}",
+                            rollback_dir.display(),
+                            dest_dir.display()
+                        ))
+                    }
+                }
+            } else {
+                let _ = fs::remove_dir_all(&staging);
+                Err(replace_err)
+            }
+        }
     }
-
-    if let Some(rollback_dir) = rollback {
-        remove_dir_all(&rollback_dir)?;
-    }
-
-    Ok(())
 }
 
 pub fn install_skills_native(
@@ -332,7 +398,8 @@ pub fn install_skills_native(
     }
 
     for agent in &request.agents {
-        let dest_root = match agent_global_skills_dest(agent) {
+        let dest_root = match resolve_agent_dest_root(agent, request.agent_dest_overrides.as_ref())
+        {
             Ok(path) => path,
             Err(err) => {
                 stderr.push_str(&err);
@@ -383,6 +450,23 @@ pub fn install_skills_native(
     }
 }
 
+fn resolve_agent_dest_root(
+    agent: &str,
+    overrides: Option<&HashMap<String, PathBuf>>,
+) -> Result<PathBuf, String> {
+    let dest = if let Some(map) = overrides {
+        if let Some(path) = map.get(agent) {
+            path.clone()
+        } else {
+            agent_global_skills_dest(agent)?
+        }
+    } else {
+        agent_global_skills_dest(agent)?
+    };
+    validate_skill_dest_root(&dest)?;
+    Ok(dest)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -428,6 +512,7 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: true,
+                agent_dest_overrides: None,
             },
         );
         assert!(result.success);
@@ -458,6 +543,7 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: false,
+                agent_dest_overrides: None,
             },
         );
         assert!(
@@ -481,6 +567,7 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["missing-skill".into()],
                 dry_run: true,
+                agent_dest_overrides: None,
             },
         );
         assert!(!result.success);
@@ -498,6 +585,7 @@ mod tests {
                 agents: vec!["gemini".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: true,
+                agent_dest_overrides: None,
             },
         );
         assert!(!result.success);
@@ -576,6 +664,7 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: false,
+                agent_dest_overrides: None,
             },
         );
         {
@@ -615,6 +704,7 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: false,
+                agent_dest_overrides: None,
             },
         );
         assert!(result.success);
@@ -645,11 +735,135 @@ mod tests {
                 agents: vec!["cursor".into()],
                 skills: vec!["diagnose".into()],
                 dry_run: false,
+                agent_dest_overrides: None,
             },
         );
         assert!(result.success);
         let content = fs::read_to_string(skills_dest.join("diagnose/SKILL.md")).expect("read");
         assert!(content.contains("name: diagnose"));
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn explicit_dest_override_ignores_conflicting_env_path() {
+        let workspace = temp_root("explicit-dest");
+        let profile = temp_root("profile-explicit-dest");
+        fs::create_dir_all(profile.join("skills")).expect("skills dir");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let wrong_dest = profile.join("wrong-skills");
+        fs::create_dir_all(&wrong_dest).expect("wrong dest");
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", profile.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &wrong_dest);
+        }
+
+        let mut overrides = HashMap::new();
+        overrides.insert("cursor".into(), skills_dest.clone());
+        let result = install_skills_native(
+            &workspace,
+            &InstallSkillsRequest {
+                agents: vec!["cursor".into()],
+                skills: vec!["diagnose".into()],
+                dry_run: false,
+                agent_dest_overrides: Some(overrides),
+            },
+        );
+        assert!(
+            result.success,
+            "stdout={} stderr={}",
+            result.stdout, result.stderr
+        );
+        assert!(skills_dest.join("diagnose/SKILL.md").is_file());
+        assert!(!wrong_dest.join("diagnose").exists());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn dest_to_rollback_rename_failure_cleans_staging() {
+        let _guard = crate::test_env::guard::lock();
+        let workspace = temp_root("rollback-rename-fail");
+        let profile = temp_root("profile-rollback-rename-fail");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let dest_dir = skills_dest.join("diagnose");
+        {
+            let mut guard = FAIL_DEST_TO_ROLLBACK.lock().expect("dest to rollback lock");
+            *guard = true;
+        }
+        let err =
+            replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
+                .expect_err("dest to rollback rename should fail");
+        {
+            let mut guard = FAIL_DEST_TO_ROLLBACK.lock().expect("dest to rollback lock");
+            *guard = false;
+        }
+        assert!(err.contains("forced test failure"));
+        assert_eq!(
+            fs::read_to_string(dest_dir.join("SKILL.md")).expect("old preserved"),
+            "old content"
+        );
+        assert!(staging_artifacts(&skills_dest).is_empty());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn failed_restore_reports_rollback_path() {
+        let _guard = crate::test_env::guard::lock();
+        let workspace = temp_root("restore-fail");
+        let profile = temp_root("profile-restore-fail");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let dest_dir = skills_dest.join("diagnose");
+        {
+            let mut to_guard = FAIL_RENAME_TO.lock().expect("rename to lock");
+            *to_guard = Some(dest_dir.clone());
+            let mut restore_guard = FAIL_RESTORE_TO_DEST.lock().expect("restore lock");
+            *restore_guard = Some(dest_dir.clone());
+        }
+        let err =
+            replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
+                .expect_err("restore should fail");
+        {
+            let mut to_guard = FAIL_RENAME_TO.lock().expect("rename to lock");
+            *to_guard = None;
+            let mut restore_guard = FAIL_RESTORE_TO_DEST.lock().expect("restore lock");
+            *restore_guard = None;
+        }
+
+        assert!(err.contains("skill replacement failed"));
+        assert!(err.contains("restoration to active destination also failed"));
+        assert!(err.contains("manually restore"));
+        assert!(err.contains(".aw-skill-rollback-"));
+        let rollback_dirs: Vec<_> = fs::read_dir(&skills_dest)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|entry| entry.path())
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".aw-skill-rollback-"))
+            })
+            .collect();
+        assert_eq!(rollback_dirs.len(), 1);
+        assert_eq!(
+            fs::read_to_string(rollback_dirs[0].join("SKILL.md")).expect("rollback content"),
+            "old content"
+        );
+        assert!(!dest_dir.exists());
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
     }
