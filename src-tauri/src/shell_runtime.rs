@@ -1,5 +1,8 @@
 use std::path::Path;
 
+#[cfg(windows)]
+use std::path::PathBuf;
+
 use crate::executable_resolver::resolve_executable;
 
 /// Strip Windows extended-length path prefix (`\\?\` or `//?/`).
