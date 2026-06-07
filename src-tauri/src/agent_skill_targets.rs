@@ -1,7 +1,11 @@
+use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::cursor_profile_paths::{
     normalized_path_key, resolve_cursor_profile_paths, resolve_user_home,
+};
+use crate::platform_paths::{
+    is_unc_share_root, is_windows_drive_root, reject_broad_write_root, Platform,
 };
 
 pub const VALID_SKILL_AGENTS: &[&str] = &["codex", "opencode", "claude", "cursor"];
@@ -37,6 +41,38 @@ pub fn validate_skill_agent(agent: &str) -> Result<(), String> {
     } else {
         Err(format!("invalid agent: {agent}"))
     }
+}
+
+pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
+    if dest.as_os_str().is_empty() {
+        return Err("skill destination root is empty".into());
+    }
+    let home = resolve_user_home()?;
+    let platform = Platform::current();
+    reject_broad_write_root(dest, &home, platform, "skill destination")?;
+    if is_windows_drive_root(dest) {
+        return Err(format!(
+            "refusing Windows drive root skill destination: {}",
+            dest.display()
+        ));
+    }
+    if is_unc_share_root(dest) {
+        return Err(format!(
+            "refusing UNC skill destination root: {}",
+            dest.display()
+        ));
+    }
+    if dest.exists() {
+        let meta = fs::symlink_metadata(dest)
+            .map_err(|e| format!("cannot inspect skill destination root: {e}"))?;
+        if meta.file_type().is_symlink() {
+            return Err(format!(
+                "refusing symlinked skill destination root: {}",
+                dest.display()
+            ));
+        }
+    }
+    Ok(())
 }
 
 /// Global skill install destination for an agent target.
@@ -75,11 +111,13 @@ pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
         }
         _ => return Err(format!("invalid agent: {agent}")),
     };
+    validate_skill_dest_root(&dest)?;
     Ok(dest)
 }
 
 pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result<PathBuf, String> {
     validate_skill_name(skill_name, "destination")?;
+    validate_skill_dest_root(dest_root)?;
     if !dest_root.is_dir() {
         return Err(format!(
             "destination root does not exist: {}",
@@ -90,6 +128,15 @@ pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result
     let real_root = dest_root
         .canonicalize()
         .map_err(|e| format!("cannot resolve destination root: {e}"))?;
+    if fs::symlink_metadata(&real_root)
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false)
+    {
+        return Err(format!(
+            "refusing symlinked destination root: {}",
+            real_root.display()
+        ));
+    }
     let dest_dir = real_root.join(skill_name);
 
     if dest_dir.as_os_str().is_empty() || dest_dir == real_root || dest_dir == Path::new("/") {
@@ -108,6 +155,76 @@ pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::platform_paths::{is_broad_write_root, Platform};
+
+    #[test]
+    fn rejects_unix_root_skill_destination() {
+        let home = PathBuf::from("/Users/example");
+        assert!(validate_skill_dest_root(Path::new("/")).is_err());
+        assert!(is_broad_write_root(Path::new("/"), &home, Platform::Linux));
+    }
+
+    #[test]
+    fn rejects_user_home_skill_destination() {
+        let home = std::env::temp_dir().join("aw-home-root-test");
+        let _ = fs::create_dir_all(&home);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", &home);
+            std::env::set_var("CURSOR_SKILLS_PATH", &home);
+        }
+        assert!(validate_skill_dest_root(&home).is_err());
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn rejects_windows_drive_root_skill_destination_model() {
+        assert!(validate_skill_dest_root(Path::new(r"C:\")).is_err());
+        assert!(validate_skill_dest_root(Path::new(r"C:")).is_err());
+    }
+
+    #[test]
+    fn rejects_unc_skill_destination_model() {
+        assert!(validate_skill_dest_root(Path::new(r"\\server\share\skills")).is_err());
+    }
+
+    #[test]
+    fn accepts_valid_custom_skills_directory() {
+        let custom = std::env::temp_dir().join("aw-valid-custom-skills");
+        let _ = fs::create_dir_all(&custom);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", custom.parent().unwrap());
+            std::env::set_var("CURSOR_SKILLS_PATH", &custom);
+        }
+        assert!(validate_skill_dest_root(&custom).is_ok());
+        let _ = fs::remove_dir_all(&custom);
+    }
+
+    #[test]
+    fn default_agent_destinations_are_accepted() {
+        let profile = std::env::temp_dir().join("aw-agent-dest-profile");
+        let _ = fs::create_dir_all(&profile);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe {
+            std::env::set_var("HOME", &profile);
+            std::env::remove_var("CURSOR_SKILLS_PATH");
+            std::env::remove_var("CODEX_SKILLS_PATH");
+            std::env::remove_var("OPENCODE_SKILLS_PATH");
+            std::env::remove_var("CLAUDE_SKILLS_PATH");
+        }
+        for agent in VALID_SKILL_AGENTS {
+            assert!(
+                agent_global_skills_dest(agent).is_ok(),
+                "agent {agent} should resolve safely"
+            );
+        }
+        let _ = fs::remove_dir_all(&profile);
+    }
+
     #[test]
     fn cursor_global_dest_uses_profile_skills_path() {
         let _guard = crate::test_env::guard::lock();

@@ -23,6 +23,8 @@ impl Platform {
 pub struct PlatformEnv {
     pub home: Option<String>,
     pub userprofile: Option<String>,
+    pub homedrive: Option<String>,
+    pub homepath: Option<String>,
     pub appdata: Option<String>,
     #[allow(dead_code)]
     pub local_appdata: Option<String>,
@@ -36,6 +38,8 @@ impl PlatformEnv {
         Self {
             home: non_empty_env("HOME"),
             userprofile: non_empty_env("USERPROFILE"),
+            homedrive: non_empty_env("HOMEDRIVE"),
+            homepath: non_empty_env("HOMEPATH"),
             appdata: non_empty_env("APPDATA"),
             local_appdata: non_empty_env("LOCALAPPDATA"),
             xdg_config_home: non_empty_env("XDG_CONFIG_HOME"),
@@ -51,13 +55,38 @@ fn non_empty_env(key: &str) -> Option<String> {
         .filter(|v| !v.is_empty())
 }
 
-pub fn resolve_user_home(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
-    if let Some(ref home) = env.home {
-        return Ok(PathBuf::from(home));
+fn windows_home_from_drive_path(env: &PlatformEnv) -> Option<PathBuf> {
+    let drive = env.homedrive.as_ref()?.trim();
+    let path = env.homepath.as_ref()?.trim();
+    if drive.is_empty() || path.is_empty() {
+        return None;
     }
-    if platform == Platform::Windows {
-        if let Some(ref profile) = env.userprofile {
-            return Ok(PathBuf::from(profile));
+    let drive_root = if drive.ends_with(':') {
+        drive.to_string()
+    } else {
+        format!("{drive}:")
+    };
+    let child = path.trim_start_matches(['\\', '/']);
+    Some(PathBuf::from(format!("{drive_root}\\{child}")))
+}
+
+pub fn resolve_user_home(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
+    match platform {
+        Platform::Windows => {
+            if let Some(ref profile) = env.userprofile {
+                return Ok(PathBuf::from(profile));
+            }
+            if let Some(path) = windows_home_from_drive_path(env) {
+                return Ok(path);
+            }
+            if let Some(ref home) = env.home {
+                return Ok(PathBuf::from(home));
+            }
+        }
+        Platform::MacOS | Platform::Linux => {
+            if let Some(ref home) = env.home {
+                return Ok(PathBuf::from(home));
+            }
         }
     }
     Err("user home directory is not set (HOME or USERPROFILE)".into())
@@ -129,8 +158,27 @@ pub fn normalized_path_key(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
-#[allow(dead_code)]
+pub fn is_windows_drive_root(path: &Path) -> bool {
+    let raw = path.to_string_lossy();
+    let normalized = strip_windows_extended_prefix(&raw);
+    let normalized = normalized.trim_end_matches(['\\', '/']);
+    let bytes = normalized.as_bytes();
+    bytes.len() >= 2
+        && bytes[0].is_ascii_alphabetic()
+        && bytes[1] == b':'
+        && (bytes.len() == 2 || (bytes.len() == 3 && (bytes[2] == b'\\' || bytes[2] == b'/')))
+}
+
+pub fn is_unc_share_root(path: &Path) -> bool {
+    let path_str = path.to_string_lossy();
+    let raw = strip_windows_extended_prefix(&path_str);
+    raw.starts_with(r"\\") || raw.starts_with("//")
+}
+
 pub fn is_broad_write_root(path: &Path, user_home: &Path, platform: Platform) -> bool {
+    if path.as_os_str().is_empty() {
+        return true;
+    }
     if path == Path::new("/") {
         return true;
     }
@@ -142,19 +190,25 @@ pub fn is_broad_write_root(path: &Path, user_home: &Path, platform: Platform) ->
             return true;
         }
     }
-    if platform == Platform::Windows {
-        let normalized = path.to_string_lossy();
-        if normalized.len() == 3 {
-            let mut chars = normalized.chars();
-            if chars.next().is_some()
-                && chars.next() == Some(':')
-                && matches!(chars.next(), Some('\\') | Some('/'))
-            {
-                return true;
-            }
-        }
+    if platform == Platform::Windows && is_windows_drive_root(path) {
+        return true;
+    }
+    if is_unc_share_root(path) {
+        return true;
     }
     false
+}
+
+pub fn reject_broad_write_root(
+    path: &Path,
+    user_home: &Path,
+    platform: Platform,
+    label: &str,
+) -> Result<(), String> {
+    if is_broad_write_root(path, user_home, platform) {
+        return Err(format!("refusing broad {label} path: {}", path.display()));
+    }
+    Ok(())
 }
 
 /// Strip `\\?\` or `//?/` extended-length prefixes for user-facing display only.
@@ -183,6 +237,8 @@ mod tests {
         PlatformEnv {
             home: None,
             userprofile: Some(r"C:\Users\Example".into()),
+            homedrive: None,
+            homepath: None,
             appdata: Some(r"C:\Users\Example\AppData\Roaming".into()),
             local_appdata: Some(r"C:\Users\Example\AppData\Local".into()),
             xdg_config_home: None,
@@ -194,6 +250,8 @@ mod tests {
         PlatformEnv {
             home: Some("/Users/example".into()),
             userprofile: None,
+            homedrive: None,
+            homepath: None,
             appdata: None,
             local_appdata: None,
             xdg_config_home: None,
@@ -205,6 +263,8 @@ mod tests {
         PlatformEnv {
             home: Some("/home/example".into()),
             userprofile: None,
+            homedrive: None,
+            homepath: None,
             appdata: None,
             local_appdata: None,
             xdg_config_home: None,
@@ -213,11 +273,50 @@ mod tests {
     }
 
     #[test]
+    fn windows_userprofile_wins_when_home_differs() {
+        let env = PlatformEnv {
+            home: Some(r"D:\WrongHome".into()),
+            userprofile: Some(r"C:\Users\Example".into()),
+            ..PlatformEnv::default()
+        };
+        assert_eq!(
+            resolve_user_home(&env, Platform::Windows).expect("home"),
+            PathBuf::from(r"C:\Users\Example")
+        );
+    }
+
+    #[test]
     fn windows_home_falls_back_to_userprofile() {
         let env = win_env();
         assert_eq!(
             resolve_user_home(&env, Platform::Windows).expect("home"),
             PathBuf::from(r"C:\Users\Example")
+        );
+    }
+
+    #[test]
+    fn windows_home_falls_back_to_homedrive_homepath() {
+        let env = PlatformEnv {
+            homedrive: Some("C:".into()),
+            homepath: Some(r"\Users\Example".into()),
+            ..PlatformEnv::default()
+        };
+        assert_eq!(
+            resolve_user_home(&env, Platform::Windows).expect("home"),
+            PathBuf::from(r"C:\Users\Example")
+        );
+    }
+
+    #[test]
+    fn macos_home_unchanged_when_userprofile_set() {
+        let env = PlatformEnv {
+            home: Some("/Users/example".into()),
+            userprofile: Some(r"C:\Users\Example".into()),
+            ..PlatformEnv::default()
+        };
+        assert_eq!(
+            resolve_user_home(&env, Platform::MacOS).expect("home"),
+            PathBuf::from("/Users/example")
         );
     }
 
@@ -304,11 +403,30 @@ mod tests {
     #[test]
     fn rejects_broad_windows_drive_root() {
         let home = PathBuf::from(r"C:\Users\Example");
+        assert!(is_windows_drive_root(Path::new(r"C:\")));
+        assert!(is_windows_drive_root(Path::new(r"C:")));
         assert!(is_broad_write_root(
             Path::new(r"C:\"),
             &home,
             Platform::Windows
         ));
+    }
+
+    #[test]
+    fn rejects_unc_share_root() {
+        let home = PathBuf::from(r"C:\Users\Example");
+        let unc = Path::new(r"\\server\share");
+        assert!(is_unc_share_root(unc));
+        assert!(is_broad_write_root(unc, &home, Platform::Windows));
+    }
+
+    #[test]
+    fn accepts_normal_backup_and_skill_paths() {
+        let home = PathBuf::from("/Users/example");
+        let backup = home.join("Library/Application Support/ai.agentworkspace.app/backups");
+        let skills = home.join(".cursor/skills");
+        assert!(!is_broad_write_root(&backup, &home, Platform::MacOS));
+        assert!(!is_broad_write_root(&skills, &home, Platform::MacOS));
     }
 
     #[test]

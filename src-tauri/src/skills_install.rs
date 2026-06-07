@@ -37,6 +37,32 @@ fn extract_frontmatter(content: &str, key: &str) -> String {
     String::new()
 }
 
+fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
+    let canonical_child = child
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve {}: {e}", child.display()))?;
+    let canonical_root = root
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve skills root {}: {e}", root.display()))?;
+    if canonical_child == canonical_root || canonical_child.starts_with(&canonical_root) {
+        Ok(())
+    } else {
+        Err(format!(
+            "skill path escapes workspace skills root: {}",
+            child.display()
+        ))
+    }
+}
+
+fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
+    let meta = fs::symlink_metadata(path)
+        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing symlink {label}: {}", path.display()));
+    }
+    Ok(())
+}
+
 pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, PathBuf>, String> {
     if !skills_dir.is_dir() {
         return Err(format!(
@@ -44,14 +70,28 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
             skills_dir.display()
         ));
     }
+    reject_symlink_path(skills_dir, "skills root")?;
+    let canonical_root = skills_dir
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize skills root: {e}"))?;
 
     let mut mapping = HashMap::new();
     for entry in fs::read_dir(skills_dir).map_err(|e| format!("cannot read skills dir: {e}"))? {
         let entry = entry.map_err(|e| format!("read error: {e}"))?;
-        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "refusing symlink skill directory: {}",
+                entry.path().display()
+            ));
+        }
+        if !file_type.is_dir() {
             continue;
         }
-        let skill_md = entry.path().join("SKILL.md");
+        let skill_dir = entry.path();
+        path_within_root(&skill_dir, &canonical_root)?;
+        let skill_md = skill_dir.join("SKILL.md");
+        reject_symlink_path(&skill_md, "skill file")?;
         if !skill_md.is_file() {
             continue;
         }
@@ -66,7 +106,7 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
         if mapping.contains_key(&name) {
             return Err(format!("duplicate skill name in repository: {name}"));
         }
-        mapping.insert(name, entry.path());
+        mapping.insert(name, skill_dir);
     }
 
     if mapping.is_empty() {
@@ -76,14 +116,22 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
 }
 
 fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+    reject_symlink_path(src, "source")?;
     fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
     for entry in fs::read_dir(src).map_err(|e| format!("read dir {}: {e}", src.display()))? {
         let entry = entry.map_err(|e| format!("read entry: {e}"))?;
         let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "refusing symlink in source tree: {}",
+                entry.path().display()
+            ));
+        }
         let target = dst.join(entry.file_name());
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &target)?;
-        } else {
+        } else if file_type.is_file() {
+            reject_symlink_path(&entry.path(), "source file")?;
             fs::copy(entry.path(), &target).map_err(|e| {
                 format!(
                     "copy {} -> {}: {e}",
@@ -91,6 +139,11 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
                     target.display()
                 )
             })?;
+        } else {
+            return Err(format!(
+                "unsupported source entry type: {}",
+                entry.path().display()
+            ));
         }
     }
     Ok(())
@@ -134,7 +187,9 @@ fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
 }
 
 fn validate_source_tree(src_dir: &Path) -> Result<(), String> {
+    reject_symlink_path(src_dir, "source directory")?;
     let skill_md = src_dir.join("SKILL.md");
+    reject_symlink_path(&skill_md, "skill file")?;
     if !skill_md.is_file() {
         return Err(format!("source missing SKILL.md: {}", src_dir.display()));
     }
