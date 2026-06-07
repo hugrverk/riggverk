@@ -2,13 +2,16 @@ use serde::Serialize;
 use std::path::{Path, PathBuf};
 
 use super::content::safe_canonical_target;
-use super::process::{run_cmd_owned, ActionResult};
+use super::process::{run_cmd_owned_env, ActionResult};
 use super::status::file_eq;
 use super::workspace::{path_arg, workspace_root};
+use crate::cursor_profile_paths::{cursor_profile_env_pairs, resolve_cursor_profile_paths, CursorProfilePaths};
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
     status: String,
+    profile_root: String,
+    profile_root_source: String,
     workspace_resources_status: String,
     manifest_status: String,
     user_rules_status: String,
@@ -286,12 +289,12 @@ fn permissions_template_required(root: &Path) -> Vec<String> {
 }
 
 fn global_permissions_status(
-    home: &Path,
+    paths: &CursorProfilePaths,
     root: &Path,
     warnings: &mut Vec<String>,
 ) -> (String, String) {
     let template_required = permissions_template_required(root);
-    let path = home.join(".cursor/permissions.json");
+    let path = &paths.permissions;
     if !path.is_file() {
         return ("missing".into(), "restricted-template".into());
     }
@@ -300,11 +303,17 @@ fn global_permissions_status(
         Err(_) => return ("unreadable".into(), "unknown".into()),
     };
     if serde_json::from_str::<serde_json::Value>(&content).is_err() {
-        warnings.push("~/.cursor/permissions.json is invalid JSON.".into());
+        warnings.push(format!(
+            "{} permissions.json is invalid JSON.",
+            paths.profile_root.display()
+        ));
         return ("invalid".into(), "unknown".into());
     }
     if json_has_unsafe_literals(&content) {
-        warnings.push("~/.cursor/permissions.json contains suspicious auth-like literals.".into());
+        warnings.push(format!(
+            "{} permissions.json contains suspicious auth-like literals.",
+            paths.profile_root.display()
+        ));
         return ("unsafe".into(), "unsafe".into());
     }
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
@@ -312,16 +321,19 @@ fn global_permissions_status(
     };
     if let Some(terminal) = parsed.get("terminalAllowlist") {
         if terminal_allowlist_unsafe(terminal) {
-            warnings.push(
-                "~/.cursor/permissions.json terminalAllowlist includes unsafe shell entries."
-                    .into(),
-            );
+            warnings.push(format!(
+                "{} permissions.json terminalAllowlist includes unsafe shell entries.",
+                paths.profile_root.display()
+            ));
             return ("unsafe".into(), "unsafe".into());
         }
     }
     if let Some(mcp) = parsed.get("mcpAllowlist") {
         if mcp_allowlist_unsafe(mcp) {
-            warnings.push("~/.cursor/permissions.json mcpAllowlist is overly broad.".into());
+            warnings.push(format!(
+                "{} permissions.json mcpAllowlist is overly broad.",
+                paths.profile_root.display()
+            ));
             return ("unsafe".into(), "unsafe".into());
         }
         let existing: Vec<String> = mcp
@@ -420,7 +432,7 @@ fn transform_playwright_template_value(
     }
 }
 
-fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> String {
+fn global_mcp_status(paths: &CursorProfilePaths, root: &Path, warnings: &mut Vec<String>) -> String {
     let template_path = cursor_root(root).join("mcp/playwright.mcp.json");
     if !template_path.is_file() {
         return "template-missing".into();
@@ -436,10 +448,10 @@ fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> St
     let Ok(template_parsed) = serde_json::from_str::<serde_json::Value>(&template_content) else {
         return "template-invalid".into();
     };
-    let Some(browsers_path) = resolve_playwright_browsers_path(home) else {
+    let Some(browsers_path) = resolve_playwright_browsers_path(&paths.user_home) else {
         return "unsupported-platform".into();
     };
-    let config_path = default_playwright_mcp_config_path(home);
+    let config_path = default_playwright_mcp_config_path(&paths.user_home);
     let expected = template_parsed
         .get("mcpServers")
         .and_then(|v| v.get("playwright"))
@@ -455,7 +467,7 @@ fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> St
         return "template-invalid".into();
     };
 
-    let target = home.join(".cursor/mcp.json");
+    let target = &paths.mcp_config;
     if !target.is_file() {
         return "missing".into();
     }
@@ -464,7 +476,10 @@ fn global_mcp_status(home: &Path, root: &Path, warnings: &mut Vec<String>) -> St
         Err(_) => return "unreadable".into(),
     };
     let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
-        warnings.push("~/.cursor/mcp.json is invalid JSON.".into());
+        warnings.push(format!(
+            "{} mcp.json is invalid JSON.",
+            paths.profile_root.display()
+        ));
         return "invalid".into();
     };
     let actual = parsed
@@ -626,7 +641,13 @@ fn manifest_status(root: &Path, warnings: &mut Vec<String>) -> String {
 #[tauri::command]
 pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     let root = workspace_root()?;
-    let home = crate::agent_targets::home_dir()?;
+    let paths = resolve_cursor_profile_paths()?;
+    let profile_root = paths.profile_root.to_string_lossy().into_owned();
+    let profile_root_source = match paths.source {
+        crate::cursor_profile_paths::CursorProfileRootSource::Default => "default",
+        crate::cursor_profile_paths::CursorProfileRootSource::Custom => "custom",
+    }
+    .to_string();
     let mut warnings = Vec::new();
     let cursor = cursor_root(&root);
 
@@ -639,19 +660,19 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     }
     .to_string();
     let (global_agents_status, global_agents_count, expected_global_agents_count) =
-        sync_dir_status(&cursor.join("agents"), &home.join(".cursor/agents"), "md");
+        sync_dir_status(&cursor.join("agents"), &paths.agents, "md");
 
     let recommended_skills = manifest_recommended_skills(&root);
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
         sync_skill_dirs_status(
             &root.join("skills"),
-            &home.join(".cursor/skills"),
+            &paths.skills,
             &recommended_skills,
         );
 
-    let mcp_status = global_mcp_status(&home, &root, &mut warnings);
+    let mcp_status = global_mcp_status(&paths, &root, &mut warnings);
     let (permissions_status, shell_posture_status) =
-        global_permissions_status(&home, &root, &mut warnings);
+        global_permissions_status(&paths, &root, &mut warnings);
     let legacy_sandbox_status = legacy_sandbox_status(&root, &mut warnings);
 
     let surfaces = [
@@ -691,16 +712,23 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
                 .into()
         }
         "missing" => {
-            "Run apply global profile to sync ~/.cursor agents, skills, MCP, and permissions."
-                .into()
+            format!(
+                "Run apply global profile to sync {} agents, skills, MCP, and permissions.",
+                profile_root
+            )
         }
-        "unsafe" => "Fix unsafe ~/.cursor permissions before applying the global profile.".into(),
+        "unsafe" => format!(
+            "Fix unsafe {} permissions before applying the global profile.",
+            profile_root
+        ),
         "diverged" => "Run diff global profile, then apply global profile.".into(),
         _ => "Validate the workspace templates, then apply the global profile.".into(),
     };
 
     Ok(CursorProfileHealth {
         status,
+        profile_root,
+        profile_root_source,
         workspace_resources_status,
         manifest_status,
         user_rules_status,
@@ -827,7 +855,11 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
         _ => return Err(format!("unknown Cursor action: {action}")),
     }
 
-    let (ok, out, err, code) = run_cmd_owned("bash", &args, &root);
+    let (ok, out, err, code) = {
+        let paths = resolve_cursor_profile_paths()?;
+        let env = cursor_profile_env_pairs(&paths);
+        run_cmd_owned_env("bash", &args, &root, &env)
+    };
     Ok(ActionResult::new(ok, action, out, err, code))
 }
 
@@ -917,6 +949,8 @@ mod tests {
     fn block_apply_when_workspace_resources_stale() {
         let health = CursorProfileHealth {
             status: "stale".into(),
+            profile_root: "/tmp/.cursor".into(),
+            profile_root_source: "default".into(),
             workspace_resources_status: "stale".into(),
             manifest_status: "partial".into(),
             user_rules_status: "manual".into(),

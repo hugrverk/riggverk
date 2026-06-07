@@ -1948,6 +1948,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
         let candidate = repo_path_from_settings(&settings)
@@ -1974,6 +1975,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -2025,6 +2027,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
@@ -2057,6 +2060,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -2078,6 +2082,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
 

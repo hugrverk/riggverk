@@ -13,10 +13,11 @@ CURSOR_AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
 CURSOR_SKILLS_SOURCE="$WORKSPACE_ROOT/skills"
 SKILLS_SCRIPT="$WORKSPACE_ROOT/scripts/install-skills.sh"
 
-CURSOR_AGENTS_TARGET="${CURSOR_AGENTS_PATH:-$HOME/.cursor/agents}"
-CURSOR_SKILLS_TARGET="${CURSOR_SKILLS_PATH:-$HOME/.cursor/skills}"
-CURSOR_MCP_TARGET="${CURSOR_MCP_CONFIG_PATH:-$HOME/.cursor/mcp.json}"
-CURSOR_PERMISSIONS_TARGET="${CURSOR_PERMISSIONS_PATH:-$HOME/.cursor/permissions.json}"
+CURSOR_PROFILE_ROOT="${CURSOR_PROFILE_ROOT:-$HOME/.cursor}"
+CURSOR_AGENTS_TARGET="${CURSOR_AGENTS_PATH:-$CURSOR_PROFILE_ROOT/agents}"
+CURSOR_SKILLS_TARGET="${CURSOR_SKILLS_PATH:-$CURSOR_PROFILE_ROOT/skills}"
+CURSOR_MCP_TARGET="${CURSOR_MCP_CONFIG_PATH:-$CURSOR_PROFILE_ROOT/mcp.json}"
+CURSOR_PERMISSIONS_TARGET="${CURSOR_PERMISSIONS_PATH:-$CURSOR_PROFILE_ROOT/permissions.json}"
 
 TERMINAL_ALLOWLIST_DENY_RE='^(npx|npm|node|playwright|chrome|chromium|google-chrome)(\s|$)'
 MCP_ALLOWLIST_RUN_EVERYTHING='^\*:\*$'
@@ -28,27 +29,34 @@ validate_json_file() {
 ensure_global_write_target() {
   local path="$1"
   local label="$2"
+  local profile_root="${CURSOR_PROFILE_ROOT:-$HOME/.cursor}"
   [ -n "$path" ] || die "empty $label path"
   case "$path" in
     /|/Users|"$HOME"|"$HOME/") die "refusing broad $label path: $path" ;;
   esac
   case "$label" in
-    mcp|permissions)
+    mcp)
       case "$path" in
-        "$HOME/.cursor/mcp.json"|"$HOME/.cursor/permissions.json") ;;
-        *) die "refusing non-allowlisted $label path: $path" ;;
+        "$profile_root/mcp.json") ;;
+        *) die "refusing non-allowlisted $label path: $path (expected under $profile_root)" ;;
+      esac
+      ;;
+    permissions)
+      case "$path" in
+        "$profile_root/permissions.json") ;;
+        *) die "refusing non-allowlisted $label path: $path (expected under $profile_root)" ;;
       esac
       ;;
     agents)
       case "$path" in
-        "$HOME/.cursor/agents") ;;
-        *) die "refusing non-allowlisted agents path: $path" ;;
+        "$profile_root/agents") ;;
+        *) die "refusing non-allowlisted agents path: $path (expected $profile_root/agents)" ;;
       esac
       ;;
     skills)
       case "$path" in
-        "$HOME/.cursor/skills") ;;
-        *) die "refusing non-allowlisted skills path: $path" ;;
+        "$profile_root/skills") ;;
+        *) die "refusing non-allowlisted skills path: $path (expected $profile_root/skills)" ;;
       esac
       ;;
     *) die "unknown global write label: $label" ;;

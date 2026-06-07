@@ -248,9 +248,10 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             }
 
             if cursor_on {
-                let agents_target = home.join(".cursor/agents");
+                let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()?;
+                let agents_target = cursor_paths.agents;
                 let cursor_status = if agents_target.exists() {
-                    super::status::cursor_setup_status(&root, &home)
+                    super::status::cursor_setup_status(&root, &agents_target)
                 } else {
                     "missing".to_string()
                 };

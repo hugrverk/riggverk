@@ -168,7 +168,7 @@ fn shared_runtime_agents_status(root: &Path, home: &Path, target_rel: &str) -> S
     "synced".into()
 }
 
-pub(super) fn cursor_setup_status(root: &Path, home: &Path) -> String {
+pub(super) fn cursor_setup_status(root: &Path, agents_target_dir: &Path) -> String {
     let agents_dir = root.join("templates/cursor/agents");
     if !agents_dir.is_dir() {
         return "diverged".into();
@@ -192,7 +192,7 @@ pub(super) fn cursor_setup_status(root: &Path, home: &Path) -> String {
         return "diverged".into();
     }
 
-    let target_dir = home.join(".cursor/agents");
+    let target_dir = agents_target_dir;
     for agent_name in agents {
         let source = agents_dir.join(&agent_name);
         let target = target_dir.join(&agent_name);
@@ -255,6 +255,7 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;
+    let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths().ok();
     let targets = agent_targets::targets();
     let config_targets = agent_targets::config_targets();
 
@@ -310,7 +311,10 @@ pub fn get_status() -> Result<StatusData, String> {
         .filter(|t| matches!(t.kind, agent_targets::TargetKind::Agents))
     {
         let status = if t.id == "cursor_setup" {
-            cursor_setup_status(&root, &home)
+            cursor_paths
+                .as_ref()
+                .map(|paths| cursor_setup_status(&root, &paths.agents))
+                .unwrap_or_else(|| "unknown".into())
         } else {
             shared_runtime_agents_status(&root, &home, t.target_rel)
         };

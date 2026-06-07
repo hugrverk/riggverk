@@ -11,6 +11,7 @@ use crate::path_utils::{
     is_legacy_default_workspace_path, normalize_user_workspace_path,
     normalize_user_workspace_path_for_save,
 };
+use crate::cursor_profile_paths::validate_cursor_profile_root;
 
 #[derive(Serialize, Deserialize, Clone, Debug, PartialEq)]
 pub struct RepoDashboardEntry {
@@ -40,6 +41,8 @@ pub struct AppSettings {
     #[serde(default)]
     pub active_repo_dashboard_id: Option<String>,
     #[serde(default)]
+    pub cursor_profile_path: Option<String>,
+    #[serde(default)]
     pub revision: u64,
 }
 
@@ -55,6 +58,7 @@ impl Default for AppSettings {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         }
     }
@@ -147,6 +151,13 @@ fn normalize(settings: &mut AppSettings) {
         .as_ref()
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
+
+    settings.cursor_profile_path = settings
+        .cursor_profile_path
+        .as_ref()
+        .map(|path| path.trim().to_string())
+        .filter(|path| !path.is_empty())
+        .and_then(|path| validate_cursor_profile_root(&path).ok().map(|p| p.to_string_lossy().into_owned()));
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -187,6 +198,22 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .as_ref()
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
+
+    settings.cursor_profile_path = match settings.cursor_profile_path.as_ref() {
+        None => None,
+        Some(raw) => {
+            let trimmed = raw.trim();
+            if trimmed.is_empty() {
+                None
+            } else {
+                Some(
+                    validate_cursor_profile_root(trimmed)?
+                        .to_string_lossy()
+                        .into_owned(),
+                )
+            }
+        }
+    };
 
     Ok(())
 }
@@ -436,8 +463,24 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         }
+    }
+
+    #[test]
+    fn saved_cursor_profile_path_rejects_executable_like_path() {
+        let mut settings = settings_with_path(None);
+        settings.cursor_profile_path = Some(
+            r"C:\Users\me\AppData\Local\Programs\cursor\resources\app\bin\cursor".into(),
+        );
+
+        let result = normalize_for_save(&mut settings);
+
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .contains("CLI/program path"));
     }
 
     #[test]
@@ -531,6 +574,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
 
@@ -618,6 +662,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
         normalize(&mut s);
@@ -636,6 +681,7 @@ mod tests {
             foreground_color: None,
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
+            cursor_profile_path: None,
             revision: 0,
         };
         normalize(&mut s);

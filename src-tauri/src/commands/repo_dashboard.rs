@@ -746,7 +746,10 @@ fn fetch_origin_branch(repo: &Path, branch: &str) -> bool {
             timeout: Some(GIT_FETCH_TIMEOUT),
             stdout_cap: MAX_GIT_OUTPUT_BYTES,
             stderr_cap: MAX_GIT_OUTPUT_BYTES,
-            extra_env: &GIT_NONINTERACTIVE_ENV,
+            extra_env: GIT_NONINTERACTIVE_ENV
+                .iter()
+                .map(|(key, value)| (key.to_string(), value.to_string()))
+                .collect(),
         },
     );
     result.success && !result.timed_out

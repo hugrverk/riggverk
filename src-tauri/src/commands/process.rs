@@ -37,7 +37,7 @@ pub(super) struct BoundedCmdOptions {
     pub timeout: Option<Duration>,
     pub stdout_cap: usize,
     pub stderr_cap: usize,
-    pub extra_env: &'static [(&'static str, &'static str)],
+    pub extra_env: Vec<(String, String)>,
 }
 
 impl Default for BoundedCmdOptions {
@@ -46,7 +46,7 @@ impl Default for BoundedCmdOptions {
             timeout: None,
             stdout_cap: 16 * 1024 * 1024,
             stderr_cap: 512 * 1024,
-            extra_env: &[],
+            extra_env: Vec::new(),
         }
     }
 }
@@ -96,7 +96,7 @@ pub(super) fn run_cmd_bounded(
         .current_dir(cwd)
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    for (key, value) in options.extra_env {
+    for (key, value) in &options.extra_env {
         command.env(key, value);
     }
 
@@ -186,8 +186,31 @@ pub(super) fn run_cmd_owned(
     args: &[String],
     cwd: &Path,
 ) -> (bool, String, String, Option<i32>) {
+    run_cmd_owned_env(program, args, cwd, &[])
+}
+
+pub(super) fn run_cmd_owned_env(
+    program: &str,
+    args: &[String],
+    cwd: &Path,
+    env: &[(String, String)],
+) -> (bool, String, String, Option<i32>) {
     let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
-    run_cmd(program, &arg_refs, cwd)
+    let result = run_cmd_bounded(
+        program,
+        &arg_refs,
+        cwd,
+        BoundedCmdOptions {
+            extra_env: env.to_vec(),
+            ..BoundedCmdOptions::default()
+        },
+    );
+    (
+        result.success,
+        result.stdout,
+        result.stderr,
+        result.exit_code,
+    )
 }
 
 #[cfg(test)]

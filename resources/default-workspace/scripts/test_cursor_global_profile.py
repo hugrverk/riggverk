@@ -172,5 +172,60 @@ class GlobalProfileMergeTests(unittest.TestCase):
             self.assertFalse((fake_project / ".cursor").exists())
 
 
+    def test_apply_global_profile_honors_custom_profile_root_env(self) -> None:
+        script = SCRIPTS / "install-cursor-workspace.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp) / "home"
+            profile_root = home / "custom-cursor-profile"
+            home.mkdir()
+            env = {
+                "HOME": str(home),
+                "CURSOR_PROFILE_ROOT": str(profile_root),
+                "CURSOR_AGENTS_PATH": str(profile_root / "agents"),
+                "CURSOR_SKILLS_PATH": str(profile_root / "skills"),
+                "CURSOR_MCP_CONFIG_PATH": str(profile_root / "mcp.json"),
+                "CURSOR_PERMISSIONS_PATH": str(profile_root / "permissions.json"),
+                "AGENT_WORKSPACE_BACKUP_DIR": str(home / "backups"),
+            }
+            proc = subprocess.run(
+                ["bash", str(script), "--apply-global-profile", "--quiet"],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+            self.assertTrue((profile_root / "mcp.json").is_file())
+            self.assertTrue((profile_root / "permissions.json").is_file())
+            self.assertFalse((home / ".cursor").exists())
+
+    def test_apply_global_profile_rejects_executable_like_profile_root(self) -> None:
+        script = SCRIPTS / "install-cursor-workspace.sh"
+        with tempfile.TemporaryDirectory() as tmp:
+            home = Path(tmp)
+            profile_root = home / "Programs" / "cursor" / "resources" / "app" / "bin"
+            profile_root.mkdir(parents=True)
+            env = {
+                "HOME": str(home),
+                "CURSOR_PROFILE_ROOT": str(profile_root),
+                "CURSOR_AGENTS_PATH": str(profile_root / "agents"),
+                "CURSOR_SKILLS_PATH": str(profile_root / "skills"),
+                "CURSOR_MCP_CONFIG_PATH": str(profile_root / "mcp.json"),
+                "CURSOR_PERMISSIONS_PATH": str(profile_root / "permissions.json"),
+                "AGENT_WORKSPACE_BACKUP_DIR": str(home / "backups"),
+            }
+            proc = subprocess.run(
+                ["bash", str(script), "--apply-global-profile", "--quiet"],
+                cwd=ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                check=False,
+            )
+            self.assertNotEqual(proc.returncode, 0)
+            self.assertIn("refusing non-allowlisted", proc.stderr)
+
+
 if __name__ == "__main__":
     sys.exit(unittest.main())

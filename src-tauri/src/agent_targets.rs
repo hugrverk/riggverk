@@ -224,10 +224,7 @@ pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
 }
 
 pub fn home_dir() -> Result<PathBuf, String> {
-    match std::env::var("HOME") {
-        Ok(h) if !h.is_empty() => Ok(PathBuf::from(h)),
-        _ => Err("HOME is not set".to_string()),
-    }
+    crate::cursor_profile_paths::resolve_user_home()
 }
 
 // ── config target registry ──

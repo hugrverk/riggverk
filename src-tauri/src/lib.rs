@@ -1,5 +1,6 @@
 mod agent_targets;
 mod commands;
+mod cursor_profile_paths;
 mod path_utils;
 mod settings;
 
