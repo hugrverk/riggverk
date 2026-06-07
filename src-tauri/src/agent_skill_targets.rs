@@ -11,7 +11,9 @@ pub fn validate_skill_name(name: &str, source: &str) -> Result<(), String> {
         return Err(format!("invalid skill name (empty) from {source}"));
     }
     if name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err(format!("skill name contains path traversal: \"{name}\" from {source}"));
+        return Err(format!(
+            "skill name contains path traversal: \"{name}\" from {source}"
+        ));
     }
     if !name
         .chars()
@@ -91,19 +93,13 @@ pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result
     let dest_dir = real_root.join(skill_name);
 
     if dest_dir.as_os_str().is_empty() || dest_dir == real_root || dest_dir == Path::new("/") {
-        return Err(format!(
-            "unsafe destination path: {}",
-            dest_dir.display()
-        ));
+        return Err(format!("unsafe destination path: {}", dest_dir.display()));
     }
 
     let child_key = normalized_path_key(&dest_dir);
     let root_key = normalized_path_key(&real_root);
     if child_key != root_key && !child_key.starts_with(&format!("{root_key}/")) {
-        return Err(format!(
-            "destination outside root: {}",
-            dest_dir.display()
-        ));
+        return Err(format!("destination outside root: {}", dest_dir.display()));
     }
 
     Ok(dest_dir)

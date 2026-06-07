@@ -4,18 +4,18 @@ mod commands;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;
-mod platform_paths;
-mod skills_install;
 mod path_utils;
+mod platform_paths;
 mod settings;
 mod shell_runtime;
+mod skills_install;
 
-#[cfg(test)]
-mod test_env;
 #[cfg(test)]
 mod script_action_smoke;
 #[cfg(test)]
 mod smoke_runtime;
+#[cfg(test)]
+mod test_env;
 
 use commands::{
     apply_workspace_repair, create_doc, discover_local_git_repos,

@@ -183,6 +183,7 @@ pub(super) fn run_cmd(
     )
 }
 
+#[allow(dead_code)]
 pub(super) fn run_cmd_owned(
     program: &str,
     args: &[String],

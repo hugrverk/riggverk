@@ -1,17 +1,16 @@
 use std::path::PathBuf;
 
-use crate::platform_paths::{default_installed_workspace_path as platform_workspace_path, Platform, PlatformEnv};
+use crate::platform_paths::{
+    default_installed_workspace_path as platform_workspace_path, Platform, PlatformEnv,
+};
 
 /// Display form of the canonical installed workspace path (verified by release-check).
 #[allow(dead_code)]
 pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
 
 fn resolve_home_string() -> Result<String, String> {
-    crate::platform_paths::resolve_user_home(
-        &PlatformEnv::from_process_env(),
-        Platform::current(),
-    )
-    .map(|p| p.to_string_lossy().into_owned())
+    crate::platform_paths::resolve_user_home(&PlatformEnv::from_process_env(), Platform::current())
+        .map(|p| p.to_string_lossy().into_owned())
 }
 
 pub(crate) fn default_installed_workspace_path() -> Result<PathBuf, String> {

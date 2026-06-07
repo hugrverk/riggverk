@@ -24,8 +24,10 @@ pub struct PlatformEnv {
     pub home: Option<String>,
     pub userprofile: Option<String>,
     pub appdata: Option<String>,
+    #[allow(dead_code)]
     pub local_appdata: Option<String>,
     pub xdg_config_home: Option<String>,
+    #[allow(dead_code)]
     pub xdg_data_home: Option<String>,
 }
 
@@ -78,11 +80,11 @@ pub fn app_support_dir(env: &PlatformEnv, platform: Platform) -> Result<PathBuf,
             let config_home = env
                 .xdg_config_home
                 .clone()
-                .or_else(|| resolve_user_home(env, platform).ok().map(|h| {
-                    h.join(".config")
-                        .to_string_lossy()
-                        .into_owned()
-                }))
+                .or_else(|| {
+                    resolve_user_home(env, platform)
+                        .ok()
+                        .map(|h| h.join(".config").to_string_lossy().into_owned())
+                })
                 .ok_or_else(|| "cannot resolve XDG config home".to_string())?;
             Ok(PathBuf::from(config_home).join("ai.agentworkspace.app"))
         }
@@ -97,12 +99,18 @@ pub fn backup_root_path(env: &PlatformEnv, platform: Platform) -> Result<PathBuf
     Ok(app_support_dir(env, platform)?.join("backups"))
 }
 
-pub fn default_installed_workspace_path(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
+pub fn default_installed_workspace_path(
+    env: &PlatformEnv,
+    platform: Platform,
+) -> Result<PathBuf, String> {
     let home = resolve_user_home(env, platform)?;
     Ok(home.join(".config/agent-workspace"))
 }
 
-pub fn default_cursor_profile_root(env: &PlatformEnv, platform: Platform) -> Result<PathBuf, String> {
+pub fn default_cursor_profile_root(
+    env: &PlatformEnv,
+    platform: Platform,
+) -> Result<PathBuf, String> {
     let home = resolve_user_home(env, platform)?;
     Ok(home.join(".cursor"))
 }
@@ -121,6 +129,7 @@ pub fn normalized_path_key(path: &Path) -> String {
         .to_ascii_lowercase()
 }
 
+#[allow(dead_code)]
 pub fn is_broad_write_root(path: &Path, user_home: &Path, platform: Platform) -> bool {
     if path == Path::new("/") {
         return true;
@@ -271,7 +280,9 @@ mod tests {
         let env = win_env();
         assert_eq!(
             default_installed_workspace_path(&env, Platform::Windows).expect("workspace"),
-            PathBuf::from(r"C:\Users\Example").join(".config").join("agent-workspace")
+            PathBuf::from(r"C:\Users\Example")
+                .join(".config")
+                .join("agent-workspace")
         );
     }
 

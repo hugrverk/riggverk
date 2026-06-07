@@ -66,10 +66,7 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
     }
 
     if mapping.is_empty() {
-        return Err(format!(
-            "no skills found in {}",
-            skills_dir.display()
-        ));
+        return Err(format!("no skills found in {}", skills_dir.display()));
     }
     Ok(mapping)
 }
@@ -78,15 +75,18 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
     for entry in fs::read_dir(src).map_err(|e| format!("read dir {}: {e}", src.display()))? {
         let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        let file_type = entry
-            .file_type()
-            .map_err(|e| format!("file type: {e}"))?;
+        let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
         let target = dst.join(entry.file_name());
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &target)?;
         } else {
-            fs::copy(entry.path(), &target)
-                .map_err(|e| format!("copy {} -> {}: {e}", entry.path().display(), target.display()))?;
+            fs::copy(entry.path(), &target).map_err(|e| {
+                format!(
+                    "copy {} -> {}: {e}",
+                    entry.path().display(),
+                    target.display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -162,8 +162,15 @@ pub fn install_skills_native(
 
     if request.dry_run {
         for agent in &request.agents {
-            let names: Vec<&str> = install_pairs.iter().map(|(name, _)| name.as_str()).collect();
-            stdout.push_str(&format!("{:<10} {}\n", format!("{agent}:"), names.join(" ")));
+            let names: Vec<&str> = install_pairs
+                .iter()
+                .map(|(name, _)| name.as_str())
+                .collect();
+            stdout.push_str(&format!(
+                "{:<10} {}\n",
+                format!("{agent}:"),
+                names.join(" ")
+            ));
         }
         return InstallSkillsResult {
             success: true,
@@ -184,7 +191,10 @@ pub fn install_skills_native(
             }
         };
         if let Err(err) = fs::create_dir_all(&dest_root) {
-            stderr.push_str(&format!("create destination {}: {err}\n", dest_root.display()));
+            stderr.push_str(&format!(
+                "create destination {}: {err}\n",
+                dest_root.display()
+            ));
             exit_code = 1;
             continue;
         }
@@ -193,7 +203,10 @@ pub fn install_skills_native(
             let dest_dir = match ensure_skill_dest_contained(&dest_root, name) {
                 Ok(path) => path,
                 Err(err) => {
-                    stdout.push_str(&format!("  {:<10} FAIL {name} ({err})\n", format!("{agent}:")));
+                    stdout.push_str(&format!(
+                        "  {:<10} FAIL {name} ({err})\n",
+                        format!("{agent}:")
+                    ));
                     exit_code = 1;
                     continue;
                 }
@@ -307,8 +320,7 @@ mod tests {
         assert!(
             result.success,
             "stdout={} stderr={}",
-            result.stdout,
-            result.stderr
+            result.stdout, result.stderr
         );
         assert!(skills_dest.join("diagnose/SKILL.md").is_file());
         assert!(skills_dest.join("diagnose/extra.txt").is_file());

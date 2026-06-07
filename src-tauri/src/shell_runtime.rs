@@ -146,7 +146,8 @@ fn bash_missing_message() -> String {
     }
     #[cfg(not(windows))]
     {
-        "bash is required to run Cursor workspace scripts. Install bash and ensure it is on PATH.".into()
+        "bash is required to run Cursor workspace scripts. Install bash and ensure it is on PATH."
+            .into()
     }
 }
 

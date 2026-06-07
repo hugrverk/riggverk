@@ -4,9 +4,8 @@ use std::path::{Path, PathBuf};
 use crate::commands::backups::backup_root;
 use crate::commands::cursor_profile::{
     cursor_root, default_playwright_browsers_path, default_playwright_mcp_config_path,
-    json_has_unsafe_literals, manifest_recommended_skills, mcp_allowlist_unsafe,
-    sync_dir_status, sync_skill_dirs_status,
-    terminal_allowlist_unsafe, transform_playwright_template_value,
+    json_has_unsafe_literals, manifest_recommended_skills, mcp_allowlist_unsafe, sync_dir_status,
+    sync_skill_dirs_status, terminal_allowlist_unsafe, transform_playwright_template_value,
 };
 use crate::cursor_profile_paths::{normalized_path_key, CursorProfilePaths};
 use crate::skills_install::{install_skills_native, InstallSkillsRequest};
@@ -166,8 +165,8 @@ fn diff_permissions_status(template_path: &Path, target_path: &Path) -> String {
 }
 
 fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), String> {
-    let template_content = fs::read_to_string(template_path)
-        .map_err(|e| format!("read permissions template: {e}"))?;
+    let template_content =
+        fs::read_to_string(template_path).map_err(|e| format!("read permissions template: {e}"))?;
     let template: serde_json::Value = serde_json::from_str(&template_content)
         .map_err(|e| format!("permissions template invalid JSON: {e}"))?;
     let managed: Vec<String> = template
@@ -185,8 +184,8 @@ fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), Str
     }
 
     let mut data = if target_path.is_file() {
-        let content = fs::read_to_string(target_path)
-            .map_err(|e| format!("read permissions target: {e}"))?;
+        let content =
+            fs::read_to_string(target_path).map_err(|e| format!("read permissions target: {e}"))?;
         serde_json::from_str(&content)
             .map_err(|e| format!("permissions target invalid JSON: {e}"))?
     } else {
@@ -220,8 +219,7 @@ fn merge_permissions(template_path: &Path, target_path: &Path) -> Result<(), Str
     let serialized = serde_json::to_string_pretty(&data)
         .map_err(|e| format!("serialize permissions: {e}"))?
         + "\n";
-    fs::write(target_path, serialized)
-        .map_err(|e| format!("write permissions: {e}"))?;
+    fs::write(target_path, serialized).map_err(|e| format!("write permissions: {e}"))?;
     Ok(())
 }
 
@@ -254,10 +252,7 @@ fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf)> {
     Some((config, browsers))
 }
 
-fn mcp_diff_status(
-    workspace_root: &Path,
-    paths: &CursorProfilePaths,
-) -> String {
+fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths) -> String {
     let template_path = mcp_template_path(workspace_root);
     if !template_path.is_file() {
         return "template-missing".into();
@@ -363,13 +358,14 @@ fn install_agents(
     ensure_global_write_target(paths, &paths.agents, "agents")?;
     let source_dir = cursor_root(workspace_root).join("agents");
     if !source_dir.is_dir() {
-        return Err(format!("Cursor agents source not found: {}", source_dir.display()));
+        return Err(format!(
+            "Cursor agents source not found: {}",
+            source_dir.display()
+        ));
     }
 
     let mut count = 0usize;
-    for entry in fs::read_dir(&source_dir)
-        .map_err(|e| format!("read agents source: {e}"))?
-    {
+    for entry in fs::read_dir(&source_dir).map_err(|e| format!("read agents source: {e}"))? {
         let entry = entry.map_err(|e| format!("read agent entry: {e}"))?;
         let source = entry.path();
         if !source.is_file() {
@@ -384,8 +380,7 @@ fn install_agents(
         let dest = paths.agents.join(name);
         count += 1;
         if apply {
-            fs::create_dir_all(&paths.agents)
-                .map_err(|e| format!("create agents dir: {e}"))?;
+            fs::create_dir_all(&paths.agents).map_err(|e| format!("create agents dir: {e}"))?;
             backup_file_before_write(&dest, "cursor-agents")?;
             fs::copy(&source, &dest)
                 .map_err(|e| format!("copy agent {}: {e}", source.display()))?;
@@ -450,11 +445,11 @@ fn apply_global_mcp(
     ensure_global_write_target(paths, &paths.mcp_config, "mcp")?;
     let template_path = mcp_template_path(workspace_root);
     if apply {
-        let (config_path, browsers_path) = resolve_playwright_paths(&paths.user_home)
-            .ok_or_else(|| "could not resolve Playwright MCP paths for this platform".to_string())?;
-        if json_has_unsafe_literals(
-            &fs::read_to_string(&template_path).unwrap_or_default(),
-        ) {
+        let (config_path, browsers_path) =
+            resolve_playwright_paths(&paths.user_home).ok_or_else(|| {
+                "could not resolve Playwright MCP paths for this platform".to_string()
+            })?;
+        if json_has_unsafe_literals(&fs::read_to_string(&template_path).unwrap_or_default()) {
             return Err("Playwright MCP template contains unsafe literals".into());
         }
         if let Some(parent) = paths.mcp_config.parent() {
@@ -548,13 +543,19 @@ pub fn validate_global_profile(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
 ) -> ProfileRunOutput {
-    let (agents_status, _, _) =
-        sync_dir_status(&cursor_root(workspace_root).join("agents"), &paths.agents, "md");
+    let (agents_status, _, _) = sync_dir_status(
+        &cursor_root(workspace_root).join("agents"),
+        &paths.agents,
+        "md",
+    );
     let recommended = manifest_recommended_skills(workspace_root);
     let (skills_status, _, _) =
         sync_skill_dirs_status(&workspace_root.join("skills"), &paths.skills, &recommended);
     let mcp_status = mcp_diff_status(workspace_root, paths);
-    let perms_status = diff_permissions_status(&permissions_template_path(workspace_root), &paths.permissions);
+    let perms_status = diff_permissions_status(
+        &permissions_template_path(workspace_root),
+        &paths.permissions,
+    );
     let shell_unsafe = paths.permissions.is_file() && permissions_file_unsafe(&paths.permissions);
 
     let stdout = format!(
@@ -605,13 +606,7 @@ pub fn run_global_agents_only(
 mod tests {
     use super::*;
     use crate::cursor_profile_paths::cursor_profile_paths_from_root;
-    use std::sync::{Mutex, OnceLock};
     use std::time::{SystemTime, UNIX_EPOCH};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
 
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -640,11 +635,7 @@ mod tests {
             r#"{"mcpAllowlist":["playwright:*"],"notes":"managed"}"#,
         )
         .expect("template");
-        fs::write(
-            &target,
-            r#"{"mcpAllowlist":["custom:*"],"other":"keep"}"#,
-        )
-        .expect("target");
+        fs::write(&target, r#"{"mcpAllowlist":["custom:*"],"other":"keep"}"#).expect("target");
 
         merge_permissions(&template, &target).expect("merge");
         let merged: serde_json::Value =
@@ -668,14 +659,12 @@ mod tests {
         let target = root.join("mcp.json");
         fs::write(
             &template,
-            include_str!("../../resources/default-workspace/templates/cursor/mcp/playwright.mcp.json"),
+            include_str!(
+                "../../resources/default-workspace/templates/cursor/mcp/playwright.mcp.json"
+            ),
         )
         .expect("template");
-        fs::write(
-            &target,
-            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
-        )
-        .expect("target");
+        fs::write(&target, r#"{"mcpServers":{"custom":{"command":"node"}}}"#).expect("target");
 
         merge_mcp_playwright(
             &template,
@@ -720,7 +709,9 @@ mod tests {
         fs::create_dir_all(mcp_template.parent().expect("mcp parent")).expect("mcp dir");
         fs::write(
             &mcp_template,
-            include_str!("../../resources/default-workspace/templates/cursor/mcp/playwright.mcp.json"),
+            include_str!(
+                "../../resources/default-workspace/templates/cursor/mcp/playwright.mcp.json"
+            ),
         )
         .expect("mcp template");
 
@@ -739,14 +730,25 @@ mod tests {
             );
         }
 
-        fs::write(&profile.join("permissions.json"), r#"{"mcpAllowlist":["custom:*"]}"#)
-            .expect("existing permissions");
+        fs::write(
+            profile.join("permissions.json"),
+            r#"{"mcpAllowlist":["custom:*"]}"#,
+        )
+        .expect("existing permissions");
 
         let paths = test_paths(&profile);
         let result = run_global_profile(&workspace, &paths, true);
-        assert!(result.success, "stderr={} stdout={}", result.stderr, result.stdout);
         assert!(
-            profile.join("backups").read_dir().map(|mut d| d.next().is_some()).unwrap_or(false),
+            result.success,
+            "stderr={} stdout={}",
+            result.stderr, result.stdout
+        );
+        assert!(
+            profile
+                .join("backups")
+                .read_dir()
+                .map(|mut d| d.next().is_some())
+                .unwrap_or(false),
             "expected backup before permissions overwrite"
         );
         assert!(profile.join("agents/reviewer.md").is_file());

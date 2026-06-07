@@ -12,10 +12,6 @@ pub fn resolve_user_home() -> Result<PathBuf, String> {
     platform_home(&PlatformEnv::from_process_env(), Platform::current())
 }
 
-pub fn default_cursor_profile_root_path() -> Result<PathBuf, String> {
-    default_cursor_profile_root(&PlatformEnv::from_process_env(), Platform::current())
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct CursorProfilePaths {
     pub user_home: PathBuf,
@@ -34,7 +30,10 @@ pub fn resolve_cursor_profile_paths() -> Result<CursorProfilePaths, String> {
     Ok(cursor_profile_paths_from_root(user_home, profile_root))
 }
 
-pub fn cursor_profile_paths_from_root(user_home: PathBuf, profile_root: PathBuf) -> CursorProfilePaths {
+pub fn cursor_profile_paths_from_root(
+    user_home: PathBuf,
+    profile_root: PathBuf,
+) -> CursorProfilePaths {
     CursorProfilePaths {
         agents: profile_root.join("agents"),
         skills: profile_root.join("skills"),
@@ -93,49 +92,6 @@ mod tests {
         default_cursor_profile_root, display_path, resolve_user_home as platform_home, Platform,
         PlatformEnv,
     };
-    use std::sync::{Mutex, OnceLock};
-
-    fn env_lock() -> &'static Mutex<()> {
-        static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
-        LOCK.get_or_init(|| Mutex::new(()))
-    }
-
-    struct EnvRestore {
-        home: Option<String>,
-        userprofile: Option<String>,
-    }
-
-    impl EnvRestore {
-        fn set(home: Option<&str>, userprofile: Option<&str>) -> Self {
-            let previous = EnvRestore {
-                home: std::env::var("HOME").ok(),
-                userprofile: std::env::var("USERPROFILE").ok(),
-            };
-            match home {
-                Some(value) => unsafe { std::env::set_var("HOME", value) },
-                None => unsafe { std::env::remove_var("HOME") },
-            }
-            match userprofile {
-                Some(value) => unsafe { std::env::set_var("USERPROFILE", value) },
-                None => unsafe { std::env::remove_var("USERPROFILE") },
-            }
-            previous
-        }
-    }
-
-    impl Drop for EnvRestore {
-        fn drop(&mut self) {
-            match &self.home {
-                Some(value) => unsafe { std::env::set_var("HOME", value) },
-                None => unsafe { std::env::remove_var("HOME") },
-            }
-            match &self.userprofile {
-                Some(value) => unsafe { std::env::set_var("USERPROFILE", value) },
-                None => unsafe { std::env::remove_var("USERPROFILE") },
-            }
-        }
-    }
-
     #[test]
     fn windows_like_home_falls_back_to_userprofile() {
         let env = PlatformEnv {

@@ -305,7 +305,7 @@ fn global_permissions_status(
     if !path.is_file() {
         return ("missing".into(), "restricted-template".into());
     }
-    let content = match std::fs::read_to_string(&path) {
+    let content = match std::fs::read_to_string(path) {
         Ok(content) => content,
         Err(_) => return ("unreadable".into(), "unknown".into()),
     };
@@ -441,7 +441,11 @@ pub(crate) fn transform_playwright_template_value(
     }
 }
 
-fn global_mcp_status(paths: &CursorProfilePaths, root: &Path, warnings: &mut Vec<String>) -> String {
+fn global_mcp_status(
+    paths: &CursorProfilePaths,
+    root: &Path,
+    warnings: &mut Vec<String>,
+) -> String {
     let template_path = cursor_root(root).join("mcp/playwright.mcp.json");
     if !template_path.is_file() {
         return "template-missing".into();
@@ -480,7 +484,7 @@ fn global_mcp_status(paths: &CursorProfilePaths, root: &Path, warnings: &mut Vec
     if !target.is_file() {
         return "missing".into();
     }
-    let content = match std::fs::read_to_string(&target) {
+    let content = match std::fs::read_to_string(target) {
         Ok(content) => content,
         Err(_) => return "unreadable".into(),
     };
@@ -669,11 +673,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
 
     let recommended_skills = manifest_recommended_skills(&root);
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
-        sync_skill_dirs_status(
-            &root.join("skills"),
-            &paths.skills,
-            &recommended_skills,
-        );
+        sync_skill_dirs_status(&root.join("skills"), &paths.skills, &recommended_skills);
 
     let mcp_status = global_mcp_status(&paths, &root, &mut warnings);
     let (permissions_status, shell_posture_status) =
@@ -791,11 +791,7 @@ fn block_when_workspace_resources_stale(
     ))
 }
 
-fn cursor_profile_command_summary(
-    bash: &str,
-    args: &[String],
-    env: &[(String, String)],
-) -> String {
+fn cursor_profile_command_summary(bash: &str, args: &[String], env: &[(String, String)]) -> String {
     let env_keys: Vec<&str> = env
         .iter()
         .map(|(key, _)| key.as_str())
@@ -818,6 +814,7 @@ fn cursor_profile_command_summary(
     )
 }
 
+#[cfg(windows)]
 fn windows_shell_only_action_message(action: &str) -> ActionResult {
     ActionResult::new(
         false,
@@ -831,7 +828,10 @@ fn windows_shell_only_action_message(action: &str) -> ActionResult {
     )
 }
 
-fn native_profile_result(action: &str, output: crate::cursor_profile_ops::ProfileRunOutput) -> ActionResult {
+fn native_profile_result(
+    action: &str,
+    output: crate::cursor_profile_ops::ProfileRunOutput,
+) -> ActionResult {
     ActionResult::new(
         output.success,
         action.to_string(),
@@ -1070,11 +1070,7 @@ mod tests {
             PathBuf::from(r"C:\Users\Example"),
             PathBuf::from(r"D:\AgentWorkspace\cursor-profile"),
         );
-        let env = cursor_profile_env_pairs(
-            &paths,
-            r"C:\Program Files\Git\bin\bash.exe",
-            "python",
-        );
+        let env = cursor_profile_env_pairs(&paths, r"C:\Program Files\Git\bin\bash.exe", "python");
         let summary = cursor_profile_command_summary(
             r"C:\Program Files\Git\bin\bash.exe",
             &["script.sh".into(), "--validate-global-profile".into()],

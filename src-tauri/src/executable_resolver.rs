@@ -42,9 +42,7 @@ fn resolve_with_extensions(base: &Path, pathext: Option<&str>) -> Option<PathBuf
     if is_executable_file(base, pathext) {
         return Some(base.to_path_buf());
     }
-    let Some(exts) = pathext else {
-        return None;
-    };
+    let exts = pathext?;
     for ext in exts.split(';') {
         let ext = ext.trim();
         if ext.is_empty() {
@@ -59,7 +57,7 @@ fn resolve_with_extensions(base: &Path, pathext: Option<&str>) -> Option<PathBuf
         if is_executable_file(&candidate, pathext) {
             return Some(candidate);
         }
-        if let Some(existing) = find_case_insensitive_match(&base, &suffix) {
+        if let Some(existing) = find_case_insensitive_match(base, &suffix) {
             return Some(existing);
         }
     }
@@ -126,12 +124,7 @@ mod tests {
             use std::os::unix::fs::PermissionsExt;
             fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
         }
-        let found = resolve_executable(
-            &script.to_string_lossy(),
-            "",
-            None,
-        )
-        .expect("absolute");
+        let found = resolve_executable(&script.to_string_lossy(), "", None).expect("absolute");
         assert_eq!(found, script);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -156,7 +149,9 @@ mod tests {
     #[test]
     fn missing_executable_returns_none() {
         let _guard = crate::test_env::guard::lock();
-        assert!(resolve_executable("aw-definitely-missing-cmd-xyz", "/usr/bin:/bin", None).is_none());
+        assert!(
+            resolve_executable("aw-definitely-missing-cmd-xyz", "/usr/bin:/bin", None).is_none()
+        );
     }
 
     #[test]
@@ -202,15 +197,15 @@ mod tests {
         let script = dir.join("aw-win-cmd.exe");
         fs::write(&script, "").expect("write");
         let path_env = dir.to_string_lossy().into_owned();
-        let found = resolve_executable(
-            "aw-win-cmd",
-            &path_env,
-            Some(".EXE;.CMD;.BAT;.COM"),
-        )
-        .expect("pathext");
+        let found = resolve_executable("aw-win-cmd", &path_env, Some(".EXE;.CMD;.BAT;.COM"))
+            .expect("pathext");
         assert_eq!(
-            found.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase()),
-            script.file_name().map(|n| n.to_string_lossy().to_ascii_lowercase())
+            found
+                .file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase()),
+            script
+                .file_name()
+                .map(|n| n.to_string_lossy().to_ascii_lowercase())
         );
         let _ = fs::remove_dir_all(&dir);
     }

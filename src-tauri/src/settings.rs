@@ -147,7 +147,6 @@ fn normalize(settings: &mut AppSettings) {
         .as_ref()
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
-
 }
 
 fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
@@ -678,11 +677,8 @@ mod tests {
             home: Some(dir.to_string_lossy().into_owned()),
             ..crate::platform_paths::PlatformEnv::default()
         };
-        crate::platform_paths::settings_file_path(
-            &env,
-            crate::platform_paths::Platform::current(),
-        )
-        .expect("settings path")
+        crate::platform_paths::settings_file_path(&env, crate::platform_paths::Platform::current())
+            .expect("settings path")
     }
 
     fn write_settings_file(dir: &std::path::Path, json: &str) {
