@@ -87,7 +87,9 @@ mod tests {
     #[test]
     fn tilde_expands_to_home_when_home_available() {
         let _guard = crate::test_env::guard::lock();
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
 
         assert_eq!(normalize_user_workspace_path("~"), Some(home));
     }
@@ -95,8 +97,8 @@ mod tests {
     #[test]
     fn tilde_slash_expands_to_home_child_when_home_available() {
         let _guard = crate::test_env::guard::lock();
-        let home = std::env::var("HOME").expect("HOME required for test");
-        let expected = std::path::PathBuf::from(home)
+        let home = crate::test_env::process_home();
+        let expected = home
             .join("Desktop/test")
             .to_string_lossy()
             .into_owned();
@@ -109,9 +111,11 @@ mod tests {
 
     #[test]
     fn whitespace_is_trimmed() {
+        let example = std::env::temp_dir().join("example");
+        let example_str = example.to_string_lossy().into_owned();
         assert_eq!(
-            normalize_user_workspace_path("  /tmp/example  "),
-            Some("/tmp/example".into())
+            normalize_user_workspace_path(&format!("  {example_str}  ")),
+            Some(example_str)
         );
     }
 
@@ -139,12 +143,9 @@ mod tests {
 
     #[test]
     fn default_installed_workspace_path_resolves_under_home_config() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home();
         let path = default_installed_workspace_path().expect("default path");
-        assert_eq!(
-            path,
-            std::path::PathBuf::from(home).join(".config/agent-workspace")
-        );
+        assert_eq!(path, home.join(".config/agent-workspace"));
         assert_eq!(
             DEFAULT_INSTALLED_WORKSPACE_DISPLAY,
             "~/.config/agent-workspace"
@@ -153,11 +154,8 @@ mod tests {
 
     #[test]
     fn legacy_default_workspace_path_is_detected() {
-        let home = std::env::var("HOME").expect("HOME required for test");
-        let legacy = std::path::PathBuf::from(home)
-            .join("Agent Workspace")
-            .to_string_lossy()
-            .into_owned();
+        let home = crate::test_env::process_home();
+        let legacy = home.join("Agent Workspace").to_string_lossy().into_owned();
         assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
         assert!(is_legacy_default_workspace_path(&legacy));
         assert!(!is_legacy_default_workspace_path(
@@ -167,9 +165,11 @@ mod tests {
 
     #[test]
     fn save_normalization_accepts_absolute_and_empty_paths() {
+        let example = std::env::temp_dir().join("example");
+        let example_str = example.to_string_lossy().into_owned();
         assert_eq!(
-            normalize_user_workspace_path_for_save("  /tmp/example  "),
-            Ok(Some("/tmp/example".into()))
+            normalize_user_workspace_path_for_save(&format!("  {example_str}  ")),
+            Ok(Some(example_str))
         );
         assert_eq!(
             normalize_user_workspace_path_for_save("   \n\t  "),

@@ -37,7 +37,7 @@ fn skill_summary_from_path(
         .strip_prefix(root)
         .unwrap_or(skill_md)
         .to_string_lossy()
-        .into_owned();
+        .replace('\\', "/");
 
     SkillSummary {
         id,

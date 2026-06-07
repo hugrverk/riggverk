@@ -638,20 +638,24 @@ fn derive_source_roots() -> Vec<PathBuf> {
 }
 
 fn is_unsafe_target(target: &Path) -> bool {
-    if target == Path::new("/") {
-        return true;
-    }
     if target == Path::new("/Users") {
         return true;
     }
 
-    if let Ok(home) = std::env::var("HOME") {
-        let home_path = Path::new(&home);
-        if target == home_path {
+    let platform = crate::platform_paths::Platform::current();
+    let env = crate::platform_paths::PlatformEnv::from_process_env();
+    if let Ok(home) = crate::platform_paths::resolve_user_home(&env, platform) {
+        if crate::platform_paths::is_broad_write_root(target, &home, platform) {
             return true;
         }
-        if target == home_path.join("Projects") {
+        if target == home.join("Projects") {
             return true;
+        }
+        #[cfg(windows)]
+        if let Some(users_parent) = home.parent() {
+            if target == users_parent {
+                return true;
+            }
         }
     }
 
@@ -1961,7 +1965,7 @@ mod tests {
 
     #[test]
     fn configured_workspace_path_ignores_legacy_relative_paths() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home();
         let settings = AppSettings {
             appearance: "dark".into(),
             app_font_size: "medium".into(),
@@ -1976,16 +1980,13 @@ mod tests {
         };
 
         let candidate = configured_workspace_path(&settings).expect("canonical fallback");
-        assert_eq!(
-            candidate,
-            std::path::PathBuf::from(home).join(".config/agent-workspace")
-        );
+        assert_eq!(candidate, home.join(".config/agent-workspace"));
     }
 
     #[test]
     fn default_settings_use_installed_workspace_candidate() {
-        let home = std::env::var("HOME").expect("HOME required for test");
-        let expected = std::path::PathBuf::from(home).join(".config/agent-workspace");
+        let home = crate::test_env::process_home();
+        let expected = home.join(".config/agent-workspace");
         let candidate = configured_workspace_path(&AppSettings::default())
             .expect("canonical default should resolve when HOME is set");
         assert_eq!(candidate, expected);
@@ -2012,7 +2013,7 @@ mod tests {
 
     #[test]
     fn legacy_agent_workspace_saved_setting_falls_back_to_canonical_default() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home();
         let settings = AppSettings {
             appearance: "dark".into(),
             app_font_size: "medium".into(),
@@ -2026,10 +2027,7 @@ mod tests {
             revision: 0,
         };
         let candidate = configured_workspace_path(&settings).expect("candidate");
-        assert_eq!(
-            candidate,
-            std::path::PathBuf::from(home).join(".config/agent-workspace")
-        );
+        assert_eq!(candidate, home.join(".config/agent-workspace"));
     }
 
     #[test]
@@ -2048,7 +2046,12 @@ mod tests {
         let mut settings = AppSettings {
             appearance: "dark".into(),
             app_font_size: "medium".into(),
-            workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+            workspace_path: Some(
+                std::env::temp_dir()
+                    .join("agent-workspace-scrub-missing")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
             enabled_target_ids: vec![],
             accent_color: None,
             background_color: None,
@@ -2131,7 +2134,12 @@ mod tests {
 
     #[test]
     fn plan_unsafe_target_root() {
-        let plan = plan_create_workspace(Some("/".into())).expect("plan should succeed");
+        let root = if cfg!(windows) {
+            std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()) + "\\"
+        } else {
+            "/".into()
+        };
+        let plan = plan_create_workspace(Some(root)).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert!(!plan.ok);
         assert!(!plan.planned_files.is_empty());
@@ -2139,7 +2147,9 @@ mod tests {
 
     #[test]
     fn plan_unsafe_target_home() {
-        let home = std::env::var("HOME").unwrap();
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let plan = plan_create_workspace(Some(home.clone())).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert_eq!(plan.target_path, home);
@@ -2148,7 +2158,15 @@ mod tests {
 
     #[test]
     fn plan_unsafe_target_users() {
-        let plan = plan_create_workspace(Some("/Users".into())).expect("plan should succeed");
+        let users_root = if cfg!(windows) {
+            crate::test_env::process_home()
+                .parent()
+                .map(|p| p.to_string_lossy().into_owned())
+                .expect("USERPROFILE parent")
+        } else {
+            "/Users".into()
+        };
+        let plan = plan_create_workspace(Some(users_root)).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert!(!plan.ok);
     }
@@ -2163,8 +2181,8 @@ mod tests {
 
     #[test]
     fn plan_unsafe_target_home_projects() {
-        let home = std::env::var("HOME").unwrap();
-        let path = std::path::Path::new(&home).join("Projects");
+        let home = crate::test_env::process_home();
+        let path = home.join("Projects");
         let plan = plan_create_workspace(Some(path.to_string_lossy().into_owned()))
             .expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
@@ -2347,7 +2365,9 @@ mod tests {
 
     #[test]
     fn plan_rejects_tilde_home() {
-        let home = std::env::var("HOME").unwrap();
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let plan = plan_create_workspace(Some("~".into())).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert!(!plan.ok);
@@ -2356,7 +2376,9 @@ mod tests {
 
     #[test]
     fn plan_rejects_tilde_projects() {
-        let home = std::env::var("HOME").unwrap();
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let plan = plan_create_workspace(Some("~/Projects".into())).expect("plan should succeed");
         assert_eq!(plan.status, "unsafe_target");
         assert!(!plan.ok);
@@ -2685,8 +2707,9 @@ mod tests {
     #[test]
     fn reject_unsafe_target() {
         let source = setup_source_root("reject-unsafe");
-        // Test with HOME
-        let home = std::env::var("HOME").unwrap();
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let result = create_workspace_from_source(&source, Some(home));
         cleanup(&source);
 
@@ -3201,15 +3224,25 @@ mod tests {
 
     #[test]
     fn repair_rejects_broad_paths() {
-        // Simulate the unsafe target checks used by repair_workspace_impl
-        assert!(is_unsafe_target(std::path::Path::new("/")));
-        let home = std::env::var("HOME").unwrap_or_default();
-        assert!(is_unsafe_target(std::path::Path::new(&home)));
-        assert!(is_unsafe_target(std::path::Path::new("/Users")));
-        assert!(!is_unsafe_target(std::path::Path::new(&format!(
-            "{}/my-workspace",
-            home
-        ))));
+        let home = crate::test_env::process_home();
+        let root = if cfg!(windows) {
+            std::path::PathBuf::from(
+                std::env::var("SystemDrive").unwrap_or_else(|_| "C:".into()) + "\\",
+            )
+        } else {
+            std::path::PathBuf::from("/")
+        };
+        assert!(is_unsafe_target(&root));
+        assert!(is_unsafe_target(home.as_path()));
+        let users_root = if cfg!(windows) {
+            home.parent()
+                .map(std::path::PathBuf::from)
+                .expect("USERPROFILE parent")
+        } else {
+            std::path::PathBuf::from("/Users")
+        };
+        assert!(is_unsafe_target(&users_root));
+        assert!(!is_unsafe_target(&home.join("my-workspace")));
     }
 
     #[test]

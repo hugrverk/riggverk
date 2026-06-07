@@ -1,4 +1,34 @@
 #[cfg(test)]
+use std::path::{Path, PathBuf};
+
+#[cfg(test)]
+pub fn process_home() -> PathBuf {
+    crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
+    .expect("user home required for test")
+}
+
+#[cfg(test)]
+pub fn set_test_user_dirs(dir: &Path) {
+    let dir_str = dir.to_string_lossy();
+    unsafe {
+        std::env::set_var("HOME", dir_str.as_ref());
+        #[cfg(windows)]
+        {
+            std::env::set_var("USERPROFILE", dir_str.as_ref());
+            let appdata = dir.join("AppData").join("Roaming");
+            let _ = std::fs::create_dir_all(&appdata);
+            std::env::set_var("APPDATA", appdata.to_string_lossy().as_ref());
+            let local_appdata = dir.join("AppData").join("Local");
+            let _ = std::fs::create_dir_all(&local_appdata);
+            std::env::set_var("LOCALAPPDATA", local_appdata.to_string_lossy().as_ref());
+        }
+    }
+}
+
+#[cfg(test)]
 pub mod guard {
     use std::sync::{Mutex, MutexGuard, OnceLock};
 

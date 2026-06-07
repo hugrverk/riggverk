@@ -439,7 +439,9 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_home() {
-        let home = std::env::var("HOME").expect("HOME required for test");
+        let home = crate::test_env::process_home()
+            .to_string_lossy()
+            .into_owned();
         let mut settings = settings_with_path(Some("~"));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
@@ -449,11 +451,8 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_child() {
-        let home = std::env::var("HOME").expect("HOME required for test");
-        let expected = std::path::PathBuf::from(home)
-            .join("Desktop/test")
-            .to_string_lossy()
-            .into_owned();
+        let home = crate::test_env::process_home();
+        let expected = home.join("Desktop/test").to_string_lossy().into_owned();
         let mut settings = settings_with_path(Some("~/Desktop/test"));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
@@ -463,11 +462,14 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_accepts_trimmed_absolute_path() {
-        let mut settings = settings_with_path(Some("  /tmp/workspace  "));
+        let workspace = std::env::temp_dir().join("workspace");
+        let workspace_str = workspace.to_string_lossy().into_owned();
+        let workspace_input = format!("  {workspace_str}  ");
+        let mut settings = settings_with_path(Some(&workspace_input));
 
         normalize_for_save(&mut settings).expect("save normalization should succeed");
 
-        assert_eq!(settings.workspace_path, Some("/tmp/workspace".into()));
+        assert_eq!(settings.workspace_path, Some(workspace_str));
     }
 
     #[test]
@@ -652,9 +654,7 @@ mod tests {
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).expect("create temp home");
         let _restore = crate::test_env::guard::EnvRestore::capture();
-        unsafe {
-            std::env::set_var("HOME", &dir);
-        }
+        crate::test_env::set_test_user_dirs(&dir);
         test(&dir);
         let _ = fs::remove_dir_all(&dir);
     }
@@ -673,9 +673,30 @@ mod tests {
     }
 
     fn settings_path_for_home(dir: &std::path::Path) -> PathBuf {
-        let env = crate::platform_paths::PlatformEnv {
-            home: Some(dir.to_string_lossy().into_owned()),
-            ..crate::platform_paths::PlatformEnv::default()
+        let home_str = dir.to_string_lossy().into_owned();
+        let env = if cfg!(windows) {
+            crate::platform_paths::PlatformEnv {
+                home: None,
+                userprofile: Some(home_str),
+                appdata: Some(
+                    dir.join("AppData")
+                        .join("Roaming")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                local_appdata: Some(
+                    dir.join("AppData")
+                        .join("Local")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
+                ..crate::platform_paths::PlatformEnv::default()
+            }
+        } else {
+            crate::platform_paths::PlatformEnv {
+                home: Some(home_str),
+                ..crate::platform_paths::PlatformEnv::default()
+            }
         };
         crate::platform_paths::settings_file_path(&env, crate::platform_paths::Platform::current())
             .expect("settings path")
@@ -764,7 +785,12 @@ mod tests {
             .expect("second save");
 
             let mut stale_workspace = first.clone();
-            stale_workspace.workspace_path = Some("/tmp/workspace".into());
+            stale_workspace.workspace_path = Some(
+                std::env::temp_dir()
+                    .join("workspace")
+                    .to_string_lossy()
+                    .into_owned(),
+            );
             let err = save_with_revision_check(stale_workspace, Some(first.revision))
                 .expect_err("stale workspace write");
             assert_eq!(err, SETTINGS_CONFLICT_ERROR);
@@ -869,7 +895,12 @@ mod tests {
             let saved = save(AppSettings {
                 appearance: "light".into(),
                 enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
-                workspace_path: Some("/tmp/agent-workspace-scrub-missing".into()),
+                workspace_path: Some(
+                    std::env::temp_dir()
+                        .join("agent-workspace-scrub-missing")
+                        .to_string_lossy()
+                        .into_owned(),
+                ),
                 ..AppSettings::default()
             })
             .expect("seed save");

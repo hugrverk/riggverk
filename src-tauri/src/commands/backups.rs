@@ -142,10 +142,10 @@ fn is_timestamp_dir(name: &str) -> bool {
 }
 
 fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
-    let home = std::env::var("HOME").map_err(|_| "HOME is not set".to_string())?;
-    if home.is_empty() {
-        return Err("HOME is empty".to_string());
-    }
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )?;
     let rel = match target_id {
         "codex-rules" => ".codex/AGENTS.md",
         "opencode-rules" => ".config/opencode/AGENTS.md",
@@ -159,7 +159,7 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "claude" => ".claude/CLAUDE.md",
         _ => return Err(format!("unknown backup target id: {}", target_id)),
     };
-    Ok(PathBuf::from(&home).join(rel))
+    Ok(home.join(rel))
 }
 
 fn compare_files_match(a: &Path, b: &Path) -> Result<bool, String> {
@@ -294,10 +294,7 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
         .canonicalize()
         .map_err(|e| format!("cannot resolve run path: {}", e))?;
 
-    let root_str = canonical_root.to_string_lossy().into_owned();
-    let run_str = canonical_run.to_string_lossy().into_owned();
-    let root_prefix = format!("{}/", root_str);
-    if run_str != root_str && !run_str.starts_with(&root_prefix) {
+    if canonical_run != canonical_root && !canonical_run.starts_with(&canonical_root) {
         return Err("run directory is outside backup root".to_string());
     }
 
@@ -491,14 +488,14 @@ mod tests {
 
     #[test]
     fn resolve_current_target_known_ids() {
-        let home = std::env::var("HOME").unwrap_or_else(|_| "/tmp".into());
+        let home = crate::test_env::process_home();
         for tid in ALLOWED_TARGET_IDS {
             let result = resolve_current_target(tid);
             assert!(result.is_ok(), "resolve_current_target failed for {}", tid);
             let path = result.unwrap();
             assert!(
                 path.starts_with(&home),
-                "path {} not under HOME",
+                "path {} not under user home",
                 path.display()
             );
         }

@@ -1285,11 +1285,10 @@ pub(crate) fn normalize_repo_path_for_compare(path: &str) -> String {
 }
 
 pub(crate) fn repo_entry_label_from_path(path: &str) -> String {
-    path.trim_end_matches('/')
-        .rsplit('/')
-        .next()
-        .unwrap_or("Repository")
-        .to_string()
+    std::path::Path::new(path.trim_end_matches('/'))
+        .file_name()
+        .map(|name| name.to_string_lossy().into_owned())
+        .unwrap_or_else(|| "Repository".to_string())
 }
 
 fn resolve_parent_scan_path(raw: &str) -> Result<PathBuf, String> {
