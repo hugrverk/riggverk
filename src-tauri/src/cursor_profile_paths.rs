@@ -1,6 +1,7 @@
 use std::path::{Component, Path, PathBuf};
 
 use crate::settings;
+use crate::shell_runtime::env_path_for_bash;
 
 /// Resolve the user's home directory. On Windows, falls back to USERPROFILE when HOME is unset.
 pub fn resolve_user_home() -> Result<PathBuf, String> {
@@ -72,6 +73,9 @@ pub fn is_cursor_executable_like_path(path: &Path) -> bool {
     if normalized.contains("/resources/app/bin") {
         return true;
     }
+    if normalized.ends_with("/bin") && normalized.contains("/programs/cursor/") {
+        return true;
+    }
     if normalized.ends_with("/bin/cursor")
         || (normalized.ends_with("/cursor") && normalized.contains("/bin/"))
     {
@@ -134,16 +138,23 @@ pub enum CursorProfileRootSource {
 pub fn resolve_cursor_profile_paths() -> Result<CursorProfilePaths, String> {
     let user_home = resolve_user_home()?;
     let settings = settings::load();
-    let (profile_root, source) = if let Some(ref custom) = settings.cursor_profile_path {
-        match validate_cursor_profile_root(custom) {
-            Ok(path) => (path, CursorProfileRootSource::Custom),
-            Err(_) => (default_cursor_profile_root()?, CursorProfileRootSource::Default),
+    if let Some(ref custom) = settings.cursor_profile_path {
+        let trimmed = custom.trim();
+        if !trimmed.is_empty() {
+            let profile_root = validate_cursor_profile_root(trimmed)?;
+            return Ok(cursor_profile_paths_from_root(
+                user_home,
+                profile_root,
+                CursorProfileRootSource::Custom,
+            ));
         }
-    } else {
-        (default_cursor_profile_root()?, CursorProfileRootSource::Default)
-    };
+    }
 
-    Ok(cursor_profile_paths_from_root(user_home, profile_root, source))
+    Ok(cursor_profile_paths_from_root(
+        user_home,
+        default_cursor_profile_root()?,
+        CursorProfileRootSource::Default,
+    ))
 }
 
 pub fn cursor_profile_paths_from_root(
@@ -162,32 +173,40 @@ pub fn cursor_profile_paths_from_root(
     }
 }
 
-pub fn cursor_profile_env_pairs(paths: &CursorProfilePaths) -> Vec<(String, String)> {
+pub fn cursor_profile_env_pairs(
+    paths: &CursorProfilePaths,
+    bash: &str,
+    python: &str,
+) -> Vec<(String, String)> {
+    let bash_env = if Path::new(bash).is_absolute() || bash.contains('\\') || bash.contains('/') {
+        env_path_for_bash(Path::new(bash))
+    } else {
+        bash.to_string()
+    };
     vec![
-        (
-            "HOME".into(),
-            paths.user_home.to_string_lossy().into_owned(),
-        ),
+        ("HOME".into(), env_path_for_bash(&paths.user_home)),
+        ("AW_BASH".into(), bash_env),
         (
             "CURSOR_PROFILE_ROOT".into(),
-            paths.profile_root.to_string_lossy().into_owned(),
+            env_path_for_bash(&paths.profile_root),
         ),
         (
             "CURSOR_AGENTS_PATH".into(),
-            paths.agents.to_string_lossy().into_owned(),
+            env_path_for_bash(&paths.agents),
         ),
         (
             "CURSOR_SKILLS_PATH".into(),
-            paths.skills.to_string_lossy().into_owned(),
+            env_path_for_bash(&paths.skills),
         ),
         (
             "CURSOR_MCP_CONFIG_PATH".into(),
-            paths.mcp_config.to_string_lossy().into_owned(),
+            env_path_for_bash(&paths.mcp_config),
         ),
         (
             "CURSOR_PERMISSIONS_PATH".into(),
-            paths.permissions.to_string_lossy().into_owned(),
+            env_path_for_bash(&paths.permissions),
         ),
+        ("AW_PYTHON".into(), python.to_string()),
     ]
 }
 
@@ -276,6 +295,82 @@ mod tests {
         assert_eq!(paths.skills, profile_root.join("skills"));
         assert_eq!(paths.mcp_config, profile_root.join("mcp.json"));
         assert_eq!(paths.permissions, profile_root.join("permissions.json"));
+    }
+
+    #[test]
+    fn cursor_app_bin_directory_is_rejected_as_profile_root() {
+        let bin_dir = PathBuf::from(
+            r"C:\Users\me\AppData\Local\Programs\cursor\resources\app\bin",
+        );
+        assert!(is_cursor_executable_like_path(&bin_dir));
+        let err = validate_cursor_profile_root(&bin_dir.to_string_lossy()).expect_err("bin dir");
+        assert!(err.contains("CLI/program path"));
+    }
+
+    #[test]
+    fn custom_profile_root_maps_targets_under_custom_path() {
+        let user_home = PathBuf::from(r"C:\Users\me");
+        let profile_root = PathBuf::from(r"D:\AgentWorkspace\cursor-profile");
+        let paths = cursor_profile_paths_from_root(
+            user_home,
+            profile_root.clone(),
+            CursorProfileRootSource::Custom,
+        );
+        assert_eq!(paths.agents, profile_root.join("agents"));
+        assert_eq!(paths.skills, profile_root.join("skills"));
+        assert_eq!(paths.mcp_config, profile_root.join("mcp.json"));
+        assert_eq!(paths.permissions, profile_root.join("permissions.json"));
+    }
+
+    #[test]
+    fn env_pairs_strip_extended_prefix_for_bash() {
+        let paths = cursor_profile_paths_from_root(
+            PathBuf::from(r"\\?\C:\Users\Example"),
+            PathBuf::from(r"\\?\C:\Users\Example\Desktop\cursor-profile-test"),
+            CursorProfileRootSource::Custom,
+        );
+        let env = cursor_profile_env_pairs(&paths, "bash", "python");
+        let map: std::collections::HashMap<_, _> = env.into_iter().collect();
+        assert_eq!(
+            map.get("CURSOR_AGENTS_PATH").map(String::as_str),
+            Some("C:/Users/Example/Desktop/cursor-profile-test/agents")
+        );
+    }
+
+    #[test]
+    fn env_pairs_normalize_windows_paths_for_bash() {
+        let paths = cursor_profile_paths_from_root(
+            PathBuf::from(r"C:\Users\Example"),
+            PathBuf::from(r"C:\Users\Example\Desktop\cursor-profile-test"),
+            CursorProfileRootSource::Custom,
+        );
+        let env = cursor_profile_env_pairs(&paths, "bash", "python");
+        let map: std::collections::HashMap<_, _> = env.into_iter().collect();
+        assert_eq!(
+            map.get("CURSOR_AGENTS_PATH").map(String::as_str),
+            Some("C:/Users/Example/Desktop/cursor-profile-test/agents")
+        );
+    }
+
+    #[test]
+    fn env_pairs_include_explicit_target_paths_and_python() {
+        let paths = cursor_profile_paths_from_root(
+            PathBuf::from(r"C:\Users\Example"),
+            PathBuf::from(r"C:\Users\Example\Desktop\cursor-profile-test"),
+            CursorProfileRootSource::Custom,
+        );
+        let env = cursor_profile_env_pairs(&paths, "bash", "python");
+        let map: std::collections::HashMap<_, _> = env.into_iter().collect();
+        assert_eq!(
+            map.get("CURSOR_PROFILE_ROOT").map(String::as_str),
+            Some("C:/Users/Example/Desktop/cursor-profile-test")
+        );
+        assert_eq!(
+            map.get("CURSOR_AGENTS_PATH").map(String::as_str),
+            Some("C:/Users/Example/Desktop/cursor-profile-test/agents")
+        );
+        assert_eq!(map.get("AW_PYTHON").map(String::as_str), Some("python"));
+        assert_eq!(map.get("AW_BASH").map(String::as_str), Some("bash"));
     }
 
     #[test]

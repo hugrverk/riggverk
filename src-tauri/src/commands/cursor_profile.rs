@@ -4,8 +4,9 @@ use std::path::{Path, PathBuf};
 use super::content::safe_canonical_target;
 use super::process::{run_cmd_owned_env, ActionResult};
 use super::status::file_eq;
-use super::workspace::{path_arg, workspace_root};
+use super::workspace::workspace_root;
 use crate::cursor_profile_paths::{cursor_profile_env_pairs, resolve_cursor_profile_paths, CursorProfilePaths};
+use crate::shell_runtime::{path_arg_for_bash, resolve_bash, resolve_python};
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
@@ -753,7 +754,7 @@ fn cursor_script_arg(root: &Path) -> Result<String, String> {
     if !canonical.is_file() {
         return Err("workspace script not found: scripts/install-cursor-workspace.sh".into());
     }
-    path_arg(&canonical)
+    path_arg_for_bash(&canonical)
 }
 
 fn block_when_workspace_resources_stale(
@@ -784,6 +785,33 @@ fn block_when_workspace_resources_stale(
         ),
         Some(1),
     ))
+}
+
+fn cursor_profile_command_summary(
+    bash: &str,
+    args: &[String],
+    env: &[(String, String)],
+) -> String {
+    let env_keys: Vec<&str> = env
+        .iter()
+        .map(|(key, _)| key.as_str())
+        .filter(|key| *key != "HOME")
+        .collect();
+    format!(
+        "command: {} {}\nenv keys: {}",
+        bash,
+        args.iter()
+            .map(|arg| {
+                if arg.contains(' ') {
+                    format!("\"{arg}\"")
+                } else {
+                    arg.clone()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join(" "),
+        env_keys.join(", ")
+    )
 }
 
 #[tauri::command]
@@ -857,8 +885,19 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
 
     let (ok, out, err, code) = {
         let paths = resolve_cursor_profile_paths()?;
-        let env = cursor_profile_env_pairs(&paths);
-        run_cmd_owned_env("bash", &args, &root, &env)
+        let bash = resolve_bash()?;
+        let python = resolve_python()?;
+        let env = cursor_profile_env_pairs(&paths, &bash, &python);
+        let (ok, out, mut err, code) = run_cmd_owned_env(&bash, &args, &root, &env);
+        if !ok {
+            let summary = cursor_profile_command_summary(&bash, &args, &env);
+            err = if err.trim().is_empty() {
+                summary
+            } else {
+                format!("{summary}\n{err}")
+            };
+        }
+        (ok, out, err, code)
     };
     Ok(ActionResult::new(ok, action, out, err, code))
 }
@@ -866,6 +905,8 @@ pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::cursor_profile_paths::cursor_profile_env_pairs;
+    use crate::shell_runtime::path_arg_for_bash;
 
     #[test]
     fn global_playwright_permissions_template_is_not_unsafe() {
@@ -943,6 +984,40 @@ mod tests {
         let mut warnings = Vec::new();
         let status = workspace_resources_status(&root, &mut warnings);
         assert_eq!(status, "current", "warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn cursor_script_arg_strips_extended_prefix_for_bash() {
+        let path = PathBuf::from(
+            r"\\?\C:\Users\me\.config\agent-workspace\scripts\install-cursor-workspace.sh",
+        );
+        assert_eq!(
+            path_arg_for_bash(&path).expect("bash script path"),
+            "C:/Users/me/.config/agent-workspace/scripts/install-cursor-workspace.sh"
+        );
+    }
+
+    #[test]
+    fn command_summary_lists_cursor_target_env_keys() {
+        let paths = crate::cursor_profile_paths::cursor_profile_paths_from_root(
+            PathBuf::from(r"C:\Users\Example"),
+            PathBuf::from(r"D:\AgentWorkspace\cursor-profile"),
+            crate::cursor_profile_paths::CursorProfileRootSource::Custom,
+        );
+        let env = cursor_profile_env_pairs(
+            &paths,
+            r"C:\Program Files\Git\bin\bash.exe",
+            "python",
+        );
+        let summary = cursor_profile_command_summary(
+            r"C:\Program Files\Git\bin\bash.exe",
+            &["script.sh".into(), "--validate-global-profile".into()],
+            &env,
+        );
+        assert!(summary.contains("CURSOR_PROFILE_ROOT"));
+        assert!(summary.contains("CURSOR_AGENTS_PATH"));
+        assert!(summary.contains("AW_PYTHON"));
+        assert!(summary.contains("AW_BASH"));
     }
 
     #[test]

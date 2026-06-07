@@ -47,7 +47,7 @@ render_json_with_playwright_paths() {
   local config_path="$3"
   local browsers_path="$4"
   local version="$5"
-  python3 - "$src" "$dst" "$config_path" "$browsers_path" "$version" <<'PY'
+  "$AW_PYTHON" - "$src" "$dst" "$config_path" "$browsers_path" "$version" <<'PY'
 import json
 import sys
 
@@ -84,7 +84,7 @@ merge_cursor_playwright_mcp() {
   local config_path="$3"
   local browsers_path="$4"
   local version="$5"
-  python3 - "$template" "$target" "$config_path" "$browsers_path" "$version" <<'PY'
+  "$AW_PYTHON" - "$template" "$target" "$config_path" "$browsers_path" "$version" <<'PY'
 import json
 import sys
 from pathlib import Path

@@ -5,9 +5,8 @@ export function cursorProfilePathValidationError(path: string): string | null {
 
   const normalized = trimmed.replace(/\\/g, "/").toLowerCase();
   if (
-    normalized.includes("/programs/cursor/")
-    || normalized.includes("/resources/app/bin")
-    || normalized.endsWith("/bin/cursor")
+    normalized.endsWith("/bin/cursor")
+    || (normalized.endsWith("/bin") && normalized.includes("/programs/cursor/"))
     || (normalized.endsWith("/cursor") && normalized.includes("/bin/"))
   ) {
     return "This looks like the Cursor CLI/program path, not the Cursor profile/config directory.";

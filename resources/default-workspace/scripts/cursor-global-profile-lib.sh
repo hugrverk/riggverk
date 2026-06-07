@@ -2,6 +2,32 @@
 # Shared helpers for global Cursor profile diff/apply/validate.
 # Source from install-cursor-workspace.sh after WORKSPACE_ROOT is set.
 
+resolve_aw_python() {
+  if [ -n "${AW_PYTHON:-}" ] && command -v "$AW_PYTHON" >/dev/null 2>&1; then
+    printf '%s\n' "$AW_PYTHON"
+    return 0
+  fi
+  if command -v python3 >/dev/null 2>&1; then
+    printf '%s\n' python3
+    return 0
+  fi
+  if command -v python >/dev/null 2>&1; then
+    printf '%s\n' python
+    return 0
+  fi
+  echo "python3 or python is required but was not found on PATH. Install Python 3." >&2
+  return 1
+}
+
+if [ -z "${AW_PYTHON:-}" ]; then
+  AW_PYTHON="$(resolve_aw_python)" || exit 1
+elif ! command -v "$AW_PYTHON" >/dev/null 2>&1; then
+  echo "AW_PYTHON is set to '$AW_PYTHON' but that executable was not found." >&2
+  exit 1
+fi
+export AW_PYTHON
+AW_BASH="${AW_BASH:-bash}"
+
 # shellcheck source=scripts/playwright-mcp-lib.sh
 . "$WORKSPACE_ROOT/scripts/playwright-mcp-lib.sh"
 
@@ -23,39 +49,46 @@ TERMINAL_ALLOWLIST_DENY_RE='^(npx|npm|node|playwright|chrome|chromium|google-chr
 MCP_ALLOWLIST_RUN_EVERYTHING='^\*:\*$'
 
 validate_json_file() {
-  python3 -m json.tool "$1" >/dev/null 2>&1
+  "$AW_PYTHON" -m json.tool "$1" >/dev/null 2>&1
+}
+
+normalize_cursor_path() {
+  printf '%s' "$1" | tr '\\' '/'
 }
 
 ensure_global_write_target() {
   local path="$1"
   local label="$2"
   local profile_root="${CURSOR_PROFILE_ROOT:-$HOME/.cursor}"
+  local norm_path norm_root
+  norm_path="$(normalize_cursor_path "$path")"
+  norm_root="$(normalize_cursor_path "$profile_root")"
   [ -n "$path" ] || die "empty $label path"
-  case "$path" in
-    /|/Users|"$HOME"|"$HOME/") die "refusing broad $label path: $path" ;;
+  case "$norm_path" in
+    /|/Users|"$norm_root"|"$norm_root/") die "refusing broad $label path: $path" ;;
   esac
   case "$label" in
     mcp)
-      case "$path" in
-        "$profile_root/mcp.json") ;;
+      case "$norm_path" in
+        "$norm_root/mcp.json") ;;
         *) die "refusing non-allowlisted $label path: $path (expected under $profile_root)" ;;
       esac
       ;;
     permissions)
-      case "$path" in
-        "$profile_root/permissions.json") ;;
+      case "$norm_path" in
+        "$norm_root/permissions.json") ;;
         *) die "refusing non-allowlisted $label path: $path (expected under $profile_root)" ;;
       esac
       ;;
     agents)
-      case "$path" in
-        "$profile_root/agents") ;;
+      case "$norm_path" in
+        "$norm_root/agents") ;;
         *) die "refusing non-allowlisted agents path: $path (expected $profile_root/agents)" ;;
       esac
       ;;
     skills)
-      case "$path" in
-        "$profile_root/skills") ;;
+      case "$norm_path" in
+        "$norm_root/skills") ;;
         *) die "refusing non-allowlisted skills path: $path (expected $profile_root/skills)" ;;
       esac
       ;;
@@ -66,7 +99,7 @@ ensure_global_write_target() {
 merge_cursor_permissions() {
   local template="$1"
   local target="$2"
-  python3 - "$template" "$target" <<'PY'
+  "$AW_PYTHON" - "$template" "$target" <<'PY'
 import json
 import sys
 from pathlib import Path
@@ -111,7 +144,7 @@ PY
 
 permissions_json_unsafe() {
   local path="$1"
-  python3 - "$path" <<'PY'
+  "$AW_PYTHON" - "$path" <<'PY'
 import json
 import re
 import sys
@@ -188,7 +221,7 @@ PY
 diff_permissions_status() {
   local template="$1"
   local target="$2"
-  python3 - "$template" "$target" <<'PY'
+  "$AW_PYTHON" - "$template" "$target" <<'PY'
 import json
 import sys
 from pathlib import Path

@@ -3,6 +3,7 @@ mod commands;
 mod cursor_profile_paths;
 mod path_utils;
 mod settings;
+mod shell_runtime;
 
 #[cfg(test)]
 mod script_action_smoke;

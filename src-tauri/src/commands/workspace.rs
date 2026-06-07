@@ -207,9 +207,7 @@ pub(crate) fn scrub_stale_workspace_path(settings: &mut settings::AppSettings) -
 }
 
 pub(super) fn path_arg(path: &Path) -> Result<String, String> {
-    path.to_str()
-        .map(|s| s.to_string())
-        .ok_or_else(|| "path is not valid UTF-8".to_string())
+    crate::shell_runtime::path_arg_for_native_process(path)
 }
 
 /// Append a cursor rule marker status to the diagnostics markers vec.

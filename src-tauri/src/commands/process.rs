@@ -5,6 +5,8 @@ use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
+use crate::shell_runtime::format_spawn_error;
+
 #[derive(Serialize, Debug)]
 pub struct ActionResult {
     pub(crate) success: bool,
@@ -106,7 +108,7 @@ pub(super) fn run_cmd_bounded(
             return BoundedCmdResult {
                 success: false,
                 stdout: String::new(),
-                stderr: error.to_string(),
+                stderr: format_spawn_error(program, &error),
                 exit_code: None,
                 timed_out: false,
                 stdout_truncated: false,
@@ -216,7 +218,16 @@ pub(super) fn run_cmd_owned_env(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::shell_runtime::format_spawn_error;
     use std::process::{Command as StdCommand, Stdio as StdStdio};
+
+    #[test]
+    fn format_spawn_error_for_missing_bash_is_actionable() {
+        let error = std::io::Error::new(std::io::ErrorKind::NotFound, "program not found");
+        let message = format_spawn_error("bash", &error);
+        assert!(message.contains("bash"));
+        assert!(!message.eq("program not found"));
+    }
 
     #[test]
     fn bounded_cmd_truncates_stdout() {
