@@ -4775,6 +4775,7 @@ code {
 }
 
 .prompt-loops-main {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
@@ -5216,6 +5217,7 @@ code {
 }
 
 .repo-dashboard-main {
+  flex: 1;
   min-width: 0;
   min-height: 0;
   display: grid;
