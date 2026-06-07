@@ -5,7 +5,8 @@ use super::content::safe_canonical_target;
 use super::process::{run_cmd, ActionResult};
 use super::status::file_eq;
 use super::workspace::{path_arg, workspace_root};
-use crate::shell_runtime::path_arg_for_bash;
+use crate::cursor_profile_ops::run_global_agents_only;
+use crate::cursor_profile_paths::resolve_cursor_profile_paths;
 
 #[allow(dead_code)]
 struct ConfigRun {
@@ -207,15 +208,6 @@ fn workspace_script_arg(root: &std::path::Path, script_rel: &str) -> Result<Stri
     path_arg(&canonical)
 }
 
-fn cursor_workspace_script_arg(root: &std::path::Path) -> Result<String, String> {
-    let script = root.join("scripts/install-cursor-workspace.sh");
-    let canonical = safe_canonical_target(root, &script)?;
-    if !canonical.is_file() {
-        return Err("workspace script not found: scripts/install-cursor-workspace.sh".into());
-    }
-    path_arg_for_bash(&canonical)
-}
-
 #[tauri::command]
 pub fn run_action(action: String) -> Result<ActionResult, String> {
     let root = workspace_root()?;
@@ -314,15 +306,14 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             }
 
             if cursor_on {
-                let script_str = cursor_workspace_script_arg(&root)?;
-                let all_args: Vec<&str> = vec![&script_str, "--quiet", "--global-agents"];
-                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
-                if !ok {
+                let paths = resolve_cursor_profile_paths()?;
+                let result = run_global_agents_only(&root, &paths, false);
+                if !result.success {
                     all_ok = false;
                 }
-                last_code = code;
-                out.push_str(&o);
-                err.push_str(&e);
+                last_code = Some(result.exit_code);
+                out.push_str(&result.stdout);
+                err.push_str(&result.stderr);
             }
 
             Ok(ActionResult::new(
@@ -373,17 +364,15 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             }
 
             if cursor_on {
-                subsets_attempted.push("install-cursor-workspace");
-                let script_str = cursor_workspace_script_arg(&root)?;
-                let all_args: Vec<&str> =
-                    vec![&script_str, "--quiet", "--apply", "--global-agents"];
-                let (ok, o, e, code) = run_cmd("bash", &all_args, &root);
-                if !ok {
+                subsets_attempted.push("cursor-global-agents");
+                let paths = resolve_cursor_profile_paths()?;
+                let result = run_global_agents_only(&root, &paths, true);
+                if !result.success {
                     all_ok = false;
                 }
-                last_code = code;
-                out.push_str(&o);
-                err.push_str(&e);
+                last_code = Some(result.exit_code);
+                out.push_str(&result.stdout);
+                err.push_str(&result.stderr);
             }
 
             // When a subcommand fails with empty stdout+stderr, emit synthetic
