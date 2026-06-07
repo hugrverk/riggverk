@@ -159,6 +159,31 @@ fn remove_dir_all(path: &Path) -> Result<(), String> {
     Ok(())
 }
 
+fn cleanup_staging_dir(staging: &Path) -> Result<(), String> {
+    #[cfg(test)]
+    if let Ok(mut guard) = FAIL_NEXT_STAGING_CLEANUP.lock() {
+        if *guard {
+            *guard = false;
+            return Err(format!(
+                "remove dir {}: forced test failure",
+                staging.display()
+            ));
+        }
+    }
+    remove_dir_all(staging)
+}
+
+fn return_after_staging_cleanup(staging: &Path, operation_err: String) -> Result<(), String> {
+    match cleanup_staging_dir(staging) {
+        Ok(()) => Err(operation_err),
+        Err(cleanup_err) => Err(format!(
+            "{operation_err}; staging cleanup failed: {cleanup_err}; staging path: {}; \
+             manually remove the staging directory",
+            staging.display()
+        )),
+    }
+}
+
 #[cfg(test)]
 static FAIL_RENAME_TO: Mutex<Option<PathBuf>> = Mutex::new(None);
 
@@ -167,6 +192,9 @@ static FAIL_DEST_TO_ROLLBACK: Mutex<bool> = Mutex::new(false);
 
 #[cfg(test)]
 static FAIL_RESTORE_TO_DEST: Mutex<Option<PathBuf>> = Mutex::new(None);
+
+#[cfg(test)]
+static FAIL_NEXT_STAGING_CLEANUP: Mutex<bool> = Mutex::new(false);
 
 fn unique_dir_under_root(dest_root: &Path, prefix: &str) -> PathBuf {
     let nonce = SystemTime::now()
@@ -254,29 +282,26 @@ fn replace_skill_directory(
     }
 
     if let Err(err) = copy_dir_all(src_dir, &staging) {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(err);
+        return return_after_staging_cleanup(&staging, err);
     }
     if let Err(err) = validate_source_tree(&staging) {
-        let _ = fs::remove_dir_all(&staging);
-        return Err(err);
+        return return_after_staging_cleanup(&staging, err);
     }
 
     let rollback = if dest_dir.exists() {
         let rollback_dir = unique_dir_under_root(dest_root, "aw-skill-rollback");
         if rollback_dir.exists() {
-            let _ = fs::remove_dir_all(&staging);
-            return Err(format!(
-                "rollback path already exists: {}",
-                rollback_dir.display()
-            ));
+            return return_after_staging_cleanup(
+                &staging,
+                format!(
+                    "rollback path already exists: {}",
+                    rollback_dir.display()
+                ),
+            );
         }
         match rename_path(dest_dir, &rollback_dir) {
             Ok(()) => Some(rollback_dir),
-            Err(err) => {
-                let _ = fs::remove_dir_all(&staging);
-                return Err(err);
-            }
+            Err(err) => return return_after_staging_cleanup(&staging, err),
         }
     } else {
         None
@@ -292,25 +317,28 @@ fn replace_skill_directory(
         Err(replace_err) => {
             if let Some(rollback_dir) = &rollback {
                 match rename_path(rollback_dir, dest_dir) {
-                    Ok(()) => {
-                        let _ = fs::remove_dir_all(&staging);
-                        Err(replace_err)
-                    }
+                    Ok(()) => return_after_staging_cleanup(&staging, replace_err),
                     Err(restore_err) => {
-                        let _ = fs::remove_dir_all(&staging);
-                        Err(format!(
+                        let mut msg = format!(
                             "skill replacement failed: {replace_err}; \
                              restoration to active destination also failed: {restore_err}; \
                              previous installation preserved at {}; \
                              manually restore by moving that directory to {}",
                             rollback_dir.display(),
                             dest_dir.display()
-                        ))
+                        );
+                        if let Err(cleanup_err) = cleanup_staging_dir(&staging) {
+                            msg.push_str(&format!(
+                                "; staging cleanup failed: {cleanup_err}; staging path: {}; \
+                                 manually remove the staging directory",
+                                staging.display()
+                            ));
+                        }
+                        Err(msg)
                     }
                 }
             } else {
-                let _ = fs::remove_dir_all(&staging);
-                Err(replace_err)
+                return_after_staging_cleanup(&staging, replace_err)
             }
         }
     }
@@ -654,6 +682,7 @@ mod tests {
 
         let dest_dir =
             ensure_skill_dest_contained(&skills_dest, "diagnose").expect("canonical dest");
+        reset_failure_injection_hooks();
         {
             let mut guard = FAIL_RENAME_TO.lock().expect("rename fail lock");
             *guard = Some(dest_dir);
@@ -667,10 +696,7 @@ mod tests {
                 agent_dest_overrides: None,
             },
         );
-        {
-            let mut guard = FAIL_RENAME_TO.lock().expect("rename fail lock");
-            *guard = None;
-        }
+        reset_failure_injection_hooks();
 
         assert!(!result.success);
         assert_eq!(
@@ -784,9 +810,25 @@ mod tests {
         let _ = fs::remove_dir_all(&profile);
     }
 
+    fn reset_failure_injection_hooks() {
+        if let Ok(mut guard) = FAIL_RENAME_TO.lock() {
+            *guard = None;
+        }
+        if let Ok(mut guard) = FAIL_DEST_TO_ROLLBACK.lock() {
+            *guard = false;
+        }
+        if let Ok(mut guard) = FAIL_RESTORE_TO_DEST.lock() {
+            *guard = None;
+        }
+        if let Ok(mut guard) = FAIL_NEXT_STAGING_CLEANUP.lock() {
+            *guard = false;
+        }
+    }
+
     #[test]
     fn dest_to_rollback_rename_failure_cleans_staging() {
         let _guard = crate::test_env::guard::lock();
+        reset_failure_injection_hooks();
         let workspace = temp_root("rollback-rename-fail");
         let profile = temp_root("profile-rollback-rename-fail");
         fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
@@ -802,10 +844,7 @@ mod tests {
         let err =
             replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
                 .expect_err("dest to rollback rename should fail");
-        {
-            let mut guard = FAIL_DEST_TO_ROLLBACK.lock().expect("dest to rollback lock");
-            *guard = false;
-        }
+        reset_failure_injection_hooks();
         assert!(err.contains("forced test failure"));
         assert_eq!(
             fs::read_to_string(dest_dir.join("SKILL.md")).expect("old preserved"),
@@ -817,8 +856,81 @@ mod tests {
     }
 
     #[test]
+    fn staging_cleanup_success_returns_original_error() {
+        let _guard = crate::test_env::guard::lock();
+        reset_failure_injection_hooks();
+        let workspace = temp_root("staging-cleanup-ok");
+        let profile = temp_root("profile-staging-cleanup-ok");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let dest_dir = skills_dest.join("diagnose");
+        {
+            let mut guard = FAIL_DEST_TO_ROLLBACK.lock().expect("dest to rollback lock");
+            *guard = true;
+        }
+        let err =
+            replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
+                .expect_err("dest to rollback rename should fail");
+        reset_failure_injection_hooks();
+        assert!(err.contains("forced test failure"));
+        assert!(!err.contains("staging cleanup failed"));
+        assert!(staging_artifacts(&skills_dest).is_empty());
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+    }
+
+    #[test]
+    fn staging_cleanup_failure_reports_compound_error() {
+        let _guard = crate::test_env::guard::lock();
+        reset_failure_injection_hooks();
+        let workspace = temp_root("staging-cleanup-fail");
+        let profile = temp_root("profile-staging-cleanup-fail");
+        fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
+        fs::write(profile.join("skills/diagnose/SKILL.md"), "old content").expect("old md");
+        write_skill(&workspace, "diagnose", "diagnose");
+
+        let skills_dest = profile.join("skills");
+        let dest_dir = skills_dest.join("diagnose");
+        {
+            let mut guard = FAIL_DEST_TO_ROLLBACK.lock().expect("dest to rollback lock");
+            *guard = true;
+            let mut cleanup_guard = FAIL_NEXT_STAGING_CLEANUP.lock().expect("cleanup lock");
+            *cleanup_guard = true;
+        }
+        let err =
+            replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
+                .expect_err("cleanup failure should compound");
+        reset_failure_injection_hooks();
+
+        assert!(err.contains("forced test failure"));
+        assert!(err.contains("staging cleanup failed"));
+        assert!(err.contains("staging path:"));
+        assert!(err.contains("manually remove the staging directory"));
+        let staging_dirs: Vec<_> = staging_artifacts(&skills_dest)
+            .into_iter()
+            .filter(|path| {
+                path.file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with(".aw-skill-staging-"))
+            })
+            .collect();
+        assert_eq!(staging_dirs.len(), 1);
+        assert_eq!(
+            fs::read_to_string(dest_dir.join("SKILL.md")).expect("active preserved"),
+            "old content"
+        );
+        let _ = fs::remove_dir_all(&workspace);
+        let _ = fs::remove_dir_all(&profile);
+        let _ = fs::remove_dir_all(&staging_dirs[0]);
+    }
+
+    #[test]
     fn failed_restore_reports_rollback_path() {
         let _guard = crate::test_env::guard::lock();
+        reset_failure_injection_hooks();
         let workspace = temp_root("restore-fail");
         let profile = temp_root("profile-restore-fail");
         fs::create_dir_all(profile.join("skills/diagnose")).expect("old skill");
@@ -836,12 +948,7 @@ mod tests {
         let err =
             replace_skill_directory(&workspace.join("skills/diagnose"), &dest_dir, &skills_dest)
                 .expect_err("restore should fail");
-        {
-            let mut to_guard = FAIL_RENAME_TO.lock().expect("rename to lock");
-            *to_guard = None;
-            let mut restore_guard = FAIL_RESTORE_TO_DEST.lock().expect("restore lock");
-            *restore_guard = None;
-        }
+        reset_failure_injection_hooks();
 
         assert!(err.contains("skill replacement failed"));
         assert!(err.contains("restoration to active destination also failed"));
