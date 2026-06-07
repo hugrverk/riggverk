@@ -43,6 +43,7 @@ pub fn validate_skill_agent(agent: &str) -> Result<(), String> {
     }
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
     if dest.as_os_str().is_empty() {
         return Err("skill destination root is empty".into());
@@ -76,6 +77,7 @@ pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
 }
 
 /// Global skill install destination for an agent target.
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
     let home = resolve_user_home()?;
     let dest = match agent {
@@ -115,6 +117,7 @@ pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
     Ok(dest)
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result<PathBuf, String> {
     validate_skill_name(skill_name, "destination")?;
     validate_skill_dest_root(dest_root)?;

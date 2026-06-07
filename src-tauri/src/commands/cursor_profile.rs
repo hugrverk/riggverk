@@ -829,6 +829,7 @@ fn windows_shell_only_action_message(action: &str) -> ActionResult {
     )
 }
 
+#[cfg_attr(not(windows), allow(dead_code))]
 fn native_profile_result(
     action: &str,
     output: crate::cursor_profile_ops::ProfileRunOutput,
@@ -842,6 +843,7 @@ fn native_profile_result(
     )
 }
 
+#[allow(dead_code)]
 pub(crate) fn cursor_global_profile_backend() -> &'static str {
     #[cfg(windows)]
     {

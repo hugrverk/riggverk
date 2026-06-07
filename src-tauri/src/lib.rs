@@ -1,6 +1,7 @@
 mod agent_skill_targets;
 mod agent_targets;
 mod commands;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;
@@ -8,6 +9,7 @@ mod path_utils;
 mod platform_paths;
 mod settings;
 mod shell_runtime;
+#[cfg_attr(not(windows), allow(dead_code))]
 mod skills_install;
 
 #[cfg(test)]

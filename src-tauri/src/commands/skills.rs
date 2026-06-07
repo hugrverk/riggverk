@@ -174,6 +174,7 @@ fn validate_agent(agent: &str) -> Result<(), String> {
     validate_skill_agent(agent)
 }
 
+#[allow(dead_code)]
 pub(crate) fn skill_install_backend() -> &'static str {
     #[cfg(windows)]
     {
@@ -281,7 +282,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
     #[cfg(not(windows))]
     {
-        return install_skills_via_script(&root, &request);
+        install_skills_via_script(&root, &request)
     }
 }
 
