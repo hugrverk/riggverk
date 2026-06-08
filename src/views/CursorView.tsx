@@ -253,7 +253,7 @@ export function CursorView({
             onInstall={onInstallSkills}
             onToggleSkill={onToggleSkill}
             onSelectAllSkills={onSelectAllSkills}
-            onClearSelection={onClearSelectionSkills}
+            onClearSelectionSkills={onClearSelectionSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
