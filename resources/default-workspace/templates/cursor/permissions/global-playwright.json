@@ -3,9 +3,10 @@
     "playwright:*"
   ],
   "notes": [
-    "Merged into ~/.cursor/permissions.json by install-cursor-workspace.sh.",
-    "Enables Playwright MCP tools to auto-run when Cursor auto-run allowlist mode is enabled.",
-    "terminalAllowlist is intentionally omitted so shell/terminal remains restricted.",
-    "Do not add npx, npm, node, playwright, chrome, chromium, or *:* terminal patterns."
+    "Merged into the global Cursor permissions file by install-cursor-workspace.sh.",
+    "Compatibility entry for autonomous Playwright MCP calls; Cursor Auto Review and sandbox behavior remain controlled by the selected IDE run mode.",
+    "Agent Workspace does not inspect or change the active Cursor run mode.",
+    "terminalAllowlist is intentionally omitted.",
+    "Do not add broad shell command patterns or credentials to this file."
   ]
 }
