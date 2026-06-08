@@ -7,6 +7,8 @@ mod tests {
         get_cursor_profile_health, get_opencode_runtime_health, get_status,
         get_workspace_diagnostics, read_brain_setup_seed,
     };
+    use crate::cursor_profile_ops::run_global_profile;
+    use crate::cursor_profile_paths::cursor_profile_paths_from_root;
     use serde_json::Value;
     use std::path::PathBuf;
 
@@ -78,10 +80,25 @@ mod tests {
             field(&opencode, "summary")
         );
 
+        let home = std::env::var("HOME").expect("HOME for smoke");
+        let profile_root = PathBuf::from(&home).join(".cursor");
+        let paths = cursor_profile_paths_from_root(PathBuf::from(&home), profile_root);
+        let apply = run_global_profile(&workspace, &paths, true);
+        assert!(
+            apply.success,
+            "cursor smoke apply failed: stderr={} stdout={}",
+            apply.stderr, apply.stdout
+        );
+
         let cursor =
             serde_json::to_value(get_cursor_profile_health().expect("get_cursor_profile_health"))
                 .expect("serialize cursor health");
-        assert_eq!(field(&cursor, "status").as_str(), Some("synced"));
+        if field(&cursor, "status").as_str() != Some("synced") {
+            panic!(
+                "cursor health not synced: {}",
+                serde_json::to_string_pretty(&cursor).unwrap_or_else(|_| cursor.to_string())
+            );
+        }
         assert_eq!(
             field(&cursor, "global_agents_status").as_str(),
             Some("synced")

@@ -283,27 +283,18 @@ fi
 
 step "bundled default cursor setup"
 python3 resources/default-workspace/scripts/check-cursor-profile.py
-python3 resources/default-workspace/scripts/test_cursor_global_profile.py -q
+cargo test --manifest-path src-tauri/Cargo.toml cursor_profile_ops:: --quiet
 python3 -m json.tool resources/default-workspace/templates/cursor/manifest.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/global-profile.json >/dev/null
-python3 -m json.tool resources/default-workspace/templates/cursor/permissions/global-playwright.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/mcp/mcp.example.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/mcp/playwright.mcp.json >/dev/null
-for profile in safe playwright-safe playwright-full; do
-  python3 -m json.tool "resources/default-workspace/templates/cursor/sandbox/$profile.json" >/dev/null
-done
-printf '  Cursor manifest, global profile, permissions, MCP, and legacy sandbox JSON valid\n'
+printf '  Cursor manifest, global profile, MCP, and native profile ops tests valid\n'
 for required in \
   resources/default-workspace/templates/cursor/manifest.json \
   resources/default-workspace/templates/cursor/global-profile.json \
-  resources/default-workspace/templates/cursor/permissions/global-playwright.json \
   resources/default-workspace/templates/cursor/mcp/README.md \
   resources/default-workspace/templates/cursor/mcp/mcp.example.json \
-  resources/default-workspace/templates/cursor/mcp/playwright.mcp.json \
-  resources/default-workspace/templates/cursor/sandbox/README.md \
-  resources/default-workspace/templates/cursor/sandbox/safe.json \
-  resources/default-workspace/templates/cursor/sandbox/playwright-safe.json \
-  resources/default-workspace/templates/cursor/sandbox/playwright-full.json; do
+  resources/default-workspace/templates/cursor/mcp/playwright.mcp.json; do
   if [ ! -s "$required" ]; then
     printf 'FAIL: Cursor profile asset missing or empty: %s\n' "$required" >&2
     exit 1
@@ -319,12 +310,8 @@ if [ "$cursor_always" -ge "$cursor_rules" ]; then
   printf 'FAIL: not all Cursor rules may be always-apply\n' >&2
   exit 1
 fi
-if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp resources/default-workspace/templates/cursor/permissions resources/default-workspace/templates/cursor/sandbox; then
-  printf 'FAIL: Cursor MCP, permissions, or sandbox templates contain token-like literals\n' >&2
-  exit 1
-fi
-if rg -q '"terminalAllowlist"' resources/default-workspace/templates/cursor/permissions/global-playwright.json; then
-  printf 'FAIL: global Playwright permissions template must not define terminalAllowlist\n' >&2
+if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp; then
+  printf 'FAIL: Cursor MCP templates contain token-like literals\n' >&2
   exit 1
 fi
 python3 - <<'PY'
@@ -352,23 +339,13 @@ for name in manifest["rules"]:
 for name in manifest["mcp_examples"]:
     if not (root / "mcp" / name).is_file():
         raise SystemExit(f"FAIL: manifest-listed Cursor MCP example missing: {name}")
-for name in manifest["permissions_templates"]:
-    if not (root / "permissions" / name).is_file():
-        raise SystemExit(f"FAIL: manifest-listed Cursor permissions template missing: {name}")
-for name in manifest["legacy_sandbox_profiles"]:
-    if not (root / "sandbox" / name).is_file():
-        raise SystemExit(f"FAIL: manifest-listed legacy Cursor sandbox profile missing: {name}")
-for path in (root / "sandbox").glob("*.json"):
-    data = json.loads(path.read_text())
-    commands = data.get("command_allowlist", [])
-    if any(str(command).lower() in {"npx", "npm", "node", "playwright", "chrome", "chromium"} for command in commands):
-        raise SystemExit(f"FAIL: sandbox profile command-allowlists Playwright MCP support command: {path}")
-    if data.get("profile", "").startswith("playwright") and data.get("playwright_mcp", {}).get("requires_command_allowlist") is not False:
-        raise SystemExit(f"FAIL: Playwright profile must not require command allowlist entries: {path}")
-    if data.get("profile") != "playwright-full":
-        for item in data.get("mcp_allowlist", []):
-            if str(item).endswith(":*"):
-                raise SystemExit(f"FAIL: broad MCP allowlist outside full profile: {path}")
+if manifest.get("setup_runtime") != "native":
+    raise SystemExit("FAIL: Cursor manifest setup_runtime must be native")
+profile = json.loads((root / "global-profile.json").read_text())
+if profile.get("setup_runtime") != "native":
+    raise SystemExit("FAIL: global-profile.json setup_runtime must be native")
+if "permissions" in profile.get("surfaces", {}):
+    raise SystemExit("FAIL: global-profile.json must not define managed permissions surface")
 allowed = {"name", "description", "model", "readonly", "is_background"}
 blocked = {"permission", "mode", "temperature", "steps", "hidden"}
 for path in (root / "agents").glob("*.md"):
@@ -384,22 +361,20 @@ PY
 printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
 python3 scripts/check-cursor-action-compat.py
 printf '  Cursor backend action/script compatibility verified\n'
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--diff-global-profile'; then
-  printf 'FAIL: install-cursor-workspace.sh --help missing --diff-global-profile\n' >&2
+if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--copy-user-rules'; then
+  printf 'FAIL: install-cursor-workspace.sh --help missing --copy-user-rules\n' >&2
   exit 1
 fi
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--apply-global-profile'; then
-  printf 'FAIL: install-cursor-workspace.sh --help missing --apply-global-profile\n' >&2
-  exit 1
-fi
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '~/.cursor/permissions.json'; then
-  printf 'FAIL: install-cursor-workspace.sh --help missing ~/.cursor/permissions.json\n' >&2
+if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'native Rust operations'; then
+  : "ok"
+else
+  printf 'FAIL: install-cursor-workspace.sh --help must state global setup uses native Rust operations\n' >&2
   exit 1
 fi
 if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'no project writes'; then
   : "ok"
 else
-  printf 'FAIL: install-cursor-workspace.sh --help must state no project writes for global profile\n' >&2
+  printf 'FAIL: install-cursor-workspace.sh --help must state no project writes\n' >&2
   exit 1
 fi
 for agent in verifier.md security-reviewer.md release-checker.md browser-qa.md repo-scout.md; do
@@ -435,36 +410,19 @@ if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
   exit 1
 fi
 tmpdir="$(mktemp -d)"
-HOME="$tmpdir" \
-AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply-global-profile --quiet >/dev/null
-cursor_count="$(find "$tmpdir/.cursor/agents" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
-if [ "$cursor_count" -ne 5 ]; then
-  printf 'FAIL: Cursor global profile smoke wrote %s agents, expected 5\n' "$cursor_count" >&2
-  exit 1
-fi
-if [ ! -f "$tmpdir/.cursor/mcp.json" ] || [ ! -f "$tmpdir/.cursor/permissions.json" ]; then
-  printf 'FAIL: Cursor global profile smoke did not write MCP or permissions\n' >&2
-  exit 1
-fi
-python3 - <<PY
-import json
-from pathlib import Path
-perms = json.loads(Path("$tmpdir/.cursor/permissions.json").read_text())
-if "playwright:*" not in perms.get("mcpAllowlist", []):
-    raise SystemExit("FAIL: permissions merge missing playwright:*")
-if perms.get("terminalAllowlist"):
-    raise SystemExit("FAIL: global profile apply must not set terminalAllowlist")
-mcp = json.loads(Path("$tmpdir/.cursor/mcp.json").read_text())
-if "playwright" not in mcp.get("mcpServers", {}):
-    raise SystemExit("FAIL: MCP merge missing playwright server")
-PY
 fake_project="$tmpdir/project"
 mkdir -p "$fake_project/.git"
 HOME="$tmpdir" AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply-global-profile --quiet >/dev/null
-if [ -d "$fake_project/.cursor" ]; then
-  printf 'FAIL: global profile apply must not write project .cursor\n' >&2
+  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents --quiet >/dev/null
+cursor_count="$(find "$tmpdir/.cursor/agents" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
+if [ "$cursor_count" -ne 5 ]; then
+  printf 'FAIL: Cursor global-agents CLI smoke wrote %s agents, expected 5\n' "$cursor_count" >&2
+  exit 1
+fi
+HOME="$tmpdir" AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
+  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --project --target "$fake_project" --quiet >/dev/null
+if [ ! -d "$fake_project/.cursor/agents" ] || [ ! -d "$fake_project/.cursor/rules" ]; then
+  printf 'FAIL: Cursor project CLI smoke did not write project agents/rules\n' >&2
   exit 1
 fi
 rm -rf "$tmpdir"

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Verify Cursor backend actions map to install-cursor-workspace.sh flags."""
+"""Verify Cursor backend actions map to install-cursor-workspace.sh helpers."""
 
 from __future__ import annotations
 
+import json
 import re
 import sys
 from pathlib import Path
@@ -14,43 +15,26 @@ CURSOR_VIEW = ROOT / "src/views/CursorView.tsx"
 CURSOR_UI = ROOT / "src/lib/cursorWorkspaceResources.ts"
 MANIFEST = ROOT / "resources/default-workspace/templates/cursor/manifest.json"
 
-# action id -> argv tail after script path (from run_cursor_profile_action)
+# Shell-backed manual helpers only
 ACTION_FLAGS: dict[str, list[str]] = {
-    "cursor_diff_global_profile": ["--quiet", "--diff-global-profile"],
-    "cursor_apply_global_profile": ["--quiet", "--apply-global-profile"],
-    "cursor_validate_global_profile": ["--quiet", "--validate-global-profile"],
     "cursor_open_settings": ["--open-cursor-settings"],
     "cursor_copy_user_rules": ["--copy-user-rules"],
-    "cursor_show_playwright_mcp": ["--show-playwright-mcp"],
-    "cursor_copy_playwright_mcp": ["--copy-playwright-mcp"],
-    "cursor_show_sandbox_safe": ["--show-sandbox-profile", "safe"],
-    "cursor_copy_sandbox_safe": ["--copy-sandbox-profile", "safe"],
-    "cursor_show_sandbox_playwright_safe": [
-        "--show-sandbox-profile",
-        "playwright-safe",
-    ],
-    "cursor_copy_sandbox_playwright_safe": [
-        "--copy-sandbox-profile",
-        "playwright-safe",
-    ],
-    "cursor_show_sandbox_playwright_full": [
-        "--show-sandbox-profile",
-        "playwright-full",
-    ],
-    "cursor_copy_sandbox_playwright_full": [
-        "--copy-sandbox-profile",
-        "playwright-full",
-    ],
-    "cursor_diff_global_agents": ["--quiet", "--global-agents"],
-    "cursor_sync_global_agents": ["--quiet", "--apply", "--global-agents"],
 }
 
 RUST_MANIFEST_KEYS = [
     "agents",
     "rules",
     "mcp_examples",
-    "permissions_templates",
     "global_profile",
+    "setup_runtime",
+]
+
+NATIVE_ACTIONS = [
+    "cursor_diff_global_profile",
+    "cursor_apply_global_profile",
+    "cursor_validate_global_profile",
+    "cursor_diff_global_agents",
+    "cursor_sync_global_agents",
 ]
 
 
@@ -77,21 +61,27 @@ def main() -> None:
                     )
 
     rust_text = RUST.read_text(encoding="utf-8")
+    for action in NATIVE_ACTIONS:
+        if action not in rust_text:
+            fail(f"cursor_profile.rs missing native action handler: {action}")
+    if "run_global_profile_action_native" not in rust_text:
+        fail("cursor_profile.rs must route global profile actions through native implementation")
+
     for key in RUST_MANIFEST_KEYS:
         if key not in rust_text:
             fail(f"cursor_profile.rs health check missing manifest key: {key}")
-
-    import json
 
     manifest = json.loads(MANIFEST.read_text(encoding="utf-8"))
     for key in RUST_MANIFEST_KEYS:
         if key not in manifest:
             fail(f"manifest.json missing key expected by Rust health: {key}")
-        if key == "global_profile":
+        if key in {"global_profile", "setup_runtime"}:
             if not isinstance(manifest[key], str):
-                fail("manifest global_profile must be a string path")
+                fail(f"manifest {key} must be a string")
         elif not isinstance(manifest[key], list) or not manifest[key]:
             fail(f"manifest {key} must be a non-empty array")
+    if manifest.get("setup_runtime") != "native":
+        fail("manifest setup_runtime must be native")
 
     view_text = CURSOR_VIEW.read_text(encoding="utf-8")
     ui_text = CURSOR_UI.read_text(encoding="utf-8")
@@ -124,6 +114,8 @@ def main() -> None:
         "install-cursor-workspace.sh --project --target",
         "project rules (CLI-only",
         "See `templates/cursor/sandbox/`",
+        "permissions_templates",
+        "legacy_sandbox_profiles",
     ]
     for phrase in stale_doc_phrases:
         if phrase in docs_text:
