@@ -65,12 +65,6 @@ function surfaceTone(status: string): Tone {
   return "warn";
 }
 
-function shellTone(status: string): Tone {
-  if (status.startsWith("restricted")) return "ok";
-  if (status.includes("unsafe")) return "fail";
-  return "warn";
-}
-
 export function CursorView({
   appSettings,
   agentTargets,
@@ -96,11 +90,6 @@ export function CursorView({
   onCursorValidateGlobalProfile,
   onCursorOpenSettings,
   onCursorCopyUserRules,
-  onCursorShowPlaywrightMcp,
-  onCursorCopyPlaywrightMcp,
-  onCursorCopySandboxSafe,
-  onCursorCopySandboxPlaywrightSafe,
-  onCursorCopySandboxPlaywrightFull,
   skills,
   skillsLoaded,
   selectedSkills,
@@ -117,9 +106,13 @@ export function CursorView({
   const busy = wsRunning !== null;
   const health = cursorProfileHealth;
   const workspaceResourcesStale = isCursorWorkspaceResourcesStale(health);
-  const globalProfileActionsBlocked = workspaceResourcesStale || health?.status === "stale";
+  const setupActionsBlocked = workspaceResourcesStale || health?.status === "stale";
   const workspaceRepairActive = wsRunning === "repair workspace";
   const repairBusy = busy;
+  const nextAction = health?.status === "synced"
+    ? "Cursor setup is synced. Select Auto Review in Cursor Settings > Agents > Run Mode. Agent Workspace cannot verify the active run mode."
+    : health?.next_action;
+
   return (
     <section className="ws-layout target-page-layout">
       <div className="ws-shell">
@@ -127,7 +120,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Apply one global Playwright profile to your Cursor profile directory (agents, skills, MCP, permissions). This is separate from the Cursor CLI/executable path. No project files are written. Playwright MCP can run autonomously; shell stays restricted."
+            summary="Sync Cursor agents, Playwright MCP, compatibility permissions, and optional skills. Cursor Auto Review and sandbox behavior remain IDE-managed and must be selected in Cursor Settings."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
@@ -145,9 +138,9 @@ export function CursorView({
 
           {workspaceValid && (
             <HarnessActionCard
-              title="Global Cursor profile"
-              ariaLabel="Cursor global Playwright profile"
-              description="Syncs Cursor profile agents, skills, mcp.json (playwright server merge), and permissions.json (playwright:* MCP allowlist). Backups are created before overwriting existing files."
+              title="Cursor setup"
+              ariaLabel="Cursor setup"
+              description="Syncs Cursor agents, pinned starter skills, Playwright MCP, and the current compatibility permissions entry. Backups are created before overwriting existing files. Auto Review remains a Cursor run-mode setting."
               statusChip={health
                 ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
                 : { label: "loading", tone: "muted" }}
@@ -185,9 +178,9 @@ export function CursorView({
                   tone: surfaceTone(health.permissions_status),
                 },
                 {
-                  label: "Shell",
-                  value: health.shell_posture_status,
-                  tone: shellTone(health.shell_posture_status),
+                  label: "Run mode",
+                  value: "manual: Auto Review recommended",
+                  tone: "muted" as const,
                 },
               ] : undefined}
               warning={workspaceResourcesStale
@@ -195,23 +188,23 @@ export function CursorView({
                 : health && health.warnings.length > 0
                   ? health.warnings[0]
                   : undefined}
-              nextAction={workspaceResourcesStale ? undefined : health?.next_action}
+              nextAction={workspaceResourcesStale ? undefined : nextAction}
               nextActionTone={health?.status === "synced" ? "ok" : health?.status === "unsafe" ? "fail" : "warn"}
               secondaryActions={[
                 { label: "refresh", onClick: onRefreshCursorProfile, disabled: repairBusy },
                 {
-                  label: "diff global",
+                  label: "diff setup",
                   onClick: onCursorDiffGlobalProfile,
-                  disabled: repairBusy || globalProfileActionsBlocked,
-                  title: globalProfileActionsBlocked
-                    ? repairWorkspaceBlockedTitle("Diff global")
+                  disabled: repairBusy || setupActionsBlocked,
+                  title: setupActionsBlocked
+                    ? repairWorkspaceBlockedTitle("Diff setup")
                     : undefined,
                 },
                 {
                   label: "validate",
                   onClick: onCursorValidateGlobalProfile,
-                  disabled: repairBusy || globalProfileActionsBlocked,
-                  title: globalProfileActionsBlocked
+                  disabled: repairBusy || setupActionsBlocked,
+                  title: setupActionsBlocked
                     ? repairWorkspaceBlockedTitle("Validate")
                     : undefined,
                 },
@@ -224,43 +217,23 @@ export function CursorView({
                     disabled: repairBusy,
                   }
                 : {
-                    label: "apply global",
+                    label: "apply setup",
                     onClick: onCursorApplyGlobalProfile,
-                    disabled: repairBusy || globalProfileActionsBlocked,
-                    title: globalProfileActionsBlocked
-                      ? repairWorkspaceBlockedTitle("Apply global")
+                    disabled: repairBusy || setupActionsBlocked,
+                    title: setupActionsBlocked
+                      ? repairWorkspaceBlockedTitle("Apply setup")
                       : undefined,
                   }}
               footer={(
                 <div className="harness-advanced-section">
-                  <h4 className="harness-advanced-section-title">Advanced / debug</h4>
+                  <h4 className="harness-advanced-section-title">Manual Cursor settings</h4>
                   <p className="harness-advanced-note">
-                    User Rules are still manual in Cursor Settings. Legacy sandbox JSON templates are copy-only.
+                    Select Auto Review under Cursor Settings &gt; Agents &gt; Run Mode. User Rules remain manual. Legacy sandbox templates and MCP clipboard helpers are deprecated and no longer exposed in the normal workflow.
                   </p>
                   <div className="harness-advanced-actions">
                     <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>
                       copy user rules
                     </button>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorShowPlaywrightMcp}>
-                      show mcp template
-                    </button>
-                    <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyPlaywrightMcp}>
-                      copy mcp template
-                    </button>
-                  </div>
-                  <div className="harness-sandbox-actions">
-                    <div className="harness-sandbox-row">
-                      <span className="harness-sandbox-label">legacy safe</span>
-                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxSafe}>copy</button>
-                    </div>
-                    <div className="harness-sandbox-row">
-                      <span className="harness-sandbox-label">legacy playwright-safe</span>
-                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightSafe}>copy</button>
-                    </div>
-                    <div className="harness-sandbox-row">
-                      <span className="harness-sandbox-label">legacy playwright-full</span>
-                      <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopySandboxPlaywrightFull}>copy</button>
-                    </div>
                   </div>
                 </div>
               )}
@@ -280,7 +253,7 @@ export function CursorView({
             onInstall={onInstallSkills}
             onToggleSkill={onToggleSkill}
             onSelectAllSkills={onSelectAllSkills}
-            onClearSelectionSkills={onClearSelectionSkills}
+            onClearSelection={onClearSelectionSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
