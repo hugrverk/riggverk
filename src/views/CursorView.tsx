@@ -38,11 +38,6 @@ interface CursorViewProps {
   onCursorValidateGlobalProfile: () => void;
   onCursorOpenSettings: () => void;
   onCursorCopyUserRules: () => void;
-  onCursorShowPlaywrightMcp: () => void;
-  onCursorCopyPlaywrightMcp: () => void;
-  onCursorCopySandboxSafe: () => void;
-  onCursorCopySandboxPlaywrightSafe: () => void;
-  onCursorCopySandboxPlaywrightFull: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
   selectedSkills: Set<string>;
@@ -120,7 +115,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Sync Cursor agents, Playwright MCP, compatibility permissions, and optional skills. Cursor Auto Review and sandbox behavior remain IDE-managed and must be selected in Cursor Settings."
+            summary="Sync Cursor agents, starter skills, and Playwright MCP. Auto Review, sandbox behavior, and general permissions remain IDE-managed in Cursor Settings."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
@@ -140,7 +135,7 @@ export function CursorView({
             <HarnessActionCard
               title="Cursor setup"
               ariaLabel="Cursor setup"
-              description="Syncs Cursor agents, pinned starter skills, Playwright MCP, and the current compatibility permissions entry. Backups are created before overwriting existing files. Auto Review remains a Cursor run-mode setting."
+              description="Syncs Cursor agents, pinned starter skills, and Playwright MCP. A one-time cleanup removes the legacy Agent Workspace Playwright allowlist entry from permissions.json when present. Backups are created before overwriting existing files."
               statusChip={health
                 ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
                 : { label: "loading", tone: "muted" }}
@@ -171,11 +166,6 @@ export function CursorView({
                   label: "MCP",
                   value: health.mcp_status,
                   tone: surfaceTone(health.mcp_status),
-                },
-                {
-                  label: "Permissions",
-                  value: health.permissions_status,
-                  tone: surfaceTone(health.permissions_status),
                 },
                 {
                   label: "Run mode",
@@ -228,7 +218,7 @@ export function CursorView({
                 <div className="harness-advanced-section">
                   <h4 className="harness-advanced-section-title">Manual Cursor settings</h4>
                   <p className="harness-advanced-note">
-                    Select Auto Review under Cursor Settings &gt; Agents &gt; Run Mode. User Rules remain manual. Legacy sandbox templates and MCP clipboard helpers are deprecated and no longer exposed in the normal workflow.
+                    Select Auto Review under Cursor Settings &gt; Agents &gt; Run Mode. User Rules remain manual. Agent Workspace cannot verify Cursor run mode, sandbox behavior, or general permissions policy.
                   </p>
                   <div className="harness-advanced-actions">
                     <button type="button" className="btn btn-sm" disabled={busy} onClick={onCursorCopyUserRules}>

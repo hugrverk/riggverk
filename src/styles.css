@@ -4418,27 +4418,6 @@ code {
   gap: 6px;
 }
 
-.harness-sandbox-actions {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.harness-sandbox-row {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  align-items: center;
-}
-
-.harness-sandbox-label {
-  font-size: var(--text-xs);
-  font-weight: 500;
-  color: var(--text);
-  min-width: 88px;
-  flex-shrink: 0;
-}
-
 .harness-manual-badge {
   font-size: calc(var(--text-base) * 0.6);
   font-weight: 600;

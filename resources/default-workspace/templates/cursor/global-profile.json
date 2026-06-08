@@ -1,8 +1,9 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "id": "cursor-setup",
   "name": "Cursor Setup",
-  "description": "Global Cursor setup for agents, starter skills, Playwright MCP, and Auto Review-compatible permissions without project writes.",
+  "description": "Global Cursor setup for agents, starter skills, and Playwright MCP without project writes.",
+  "setup_runtime": "native",
   "surfaces": {
     "agents": {
       "source_dir": "templates/cursor/agents",
@@ -21,11 +22,6 @@
       "target": "${HOME}/.cursor/mcp.json",
       "writable": true,
       "merge_key": "mcpServers.playwright"
-    },
-    "permissions": {
-      "template": "templates/cursor/permissions/global-playwright.json",
-      "target": "${HOME}/.cursor/permissions.json",
-      "writable": true
     }
   },
   "run_mode": {
@@ -43,11 +39,9 @@
     ".cursorignore",
     "AGENTS.md"
   ],
-  "legacy_sandbox_profiles_dir": "templates/cursor/sandbox",
   "notes": [
-    "Apply via scripts/install-cursor-workspace.sh --apply-global-profile.",
-    "Diff via --diff-global-profile; validate via --validate-global-profile.",
+    "Apply via the Agent Workspace Cursor page.",
     "Select Auto Review manually in Cursor Settings; Agent Workspace does not inspect undocumented Cursor state.",
-    "Legacy sandbox JSON remains compatibility-only and is not exposed in the normal app workflow."
+    "Legacy permissions and sandbox profiles are no longer managed by Agent Workspace."
   ]
 }

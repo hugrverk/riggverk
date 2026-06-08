@@ -10,4 +10,4 @@ Rules:
 - Use Cursor environment interpolation for auth-like values, for example `${env:EXAMPLE_API_KEY}`.
 - Prefer local stdio examples for starter templates.
 - Keep project-specific MCP config outside this global profile.
-- Playwright MCP support belongs in MCP config plus `~/.cursor/permissions.json`, not in a shell command allowlist. See `templates/cursor/permissions/global-playwright.json`.
+- Playwright MCP support belongs in MCP config. Agent Workspace does not manage Cursor permissions templates or sandbox profiles.

@@ -11,10 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CURSOR = ROOT / "templates" / "cursor"
 MANIFEST = CURSOR / "manifest.json"
-MCP_EXAMPLE = CURSOR / "mcp" / "mcp.example.json"
 MCP_DIR = CURSOR / "mcp"
-SANDBOX_DIR = CURSOR / "sandbox"
-PERMISSIONS_DIR = CURSOR / "permissions"
 GLOBAL_PROFILE = CURSOR / "global-profile.json"
 
 ALLOWED_AGENT_KEYS = {"name", "description", "model", "readonly", "is_background"}
@@ -29,8 +26,6 @@ DOC_ONLY_KEYS = frozenset(
 )
 ENV_PLACEHOLDER = re.compile(r"\$\{env:[A-Z0-9_]+\}")
 PRIVATE_URL = re.compile(r"https?://[^/\s]*(localhost|127\.0\.0\.1|\.local|internal|private|corp)[^/\s]*", re.I)
-COMMAND_ALLOWLIST_DENY = {"npx", "npm", "node", "playwright", "chrome", "chromium", "google-chrome"}
-MCP_BROAD = re.compile(r"^[a-z0-9_-]+:\*$", re.I)
 FAKE_USER_RULES_PATH = re.compile(
     r"(\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md|global\s+Cursor\s+User\s+Rules\s+file)",
     re.I,
@@ -90,32 +85,29 @@ def validate_manifest() -> dict:
         fail("manifest root must be an object")
     for key in [
         "schema_version",
+        "setup_runtime",
         "profile",
         "global_profile",
         "user_rules",
         "agents_dir",
         "rules_dir",
         "mcp_examples_dir",
-        "permissions_dir",
-        "legacy_sandbox_profiles_dir",
         "recommended_pinned_skills",
         "agents",
         "rules",
         "mcp_examples",
-        "permissions_templates",
-        "legacy_sandbox_profiles",
         "notes",
     ]:
         if key not in data:
             fail(f"manifest missing key: {key}")
+    if data.get("setup_runtime") != "native":
+        fail("manifest setup_runtime must be native")
     for path_key in [
         "global_profile",
         "user_rules",
         "agents_dir",
         "rules_dir",
         "mcp_examples_dir",
-        "permissions_dir",
-        "legacy_sandbox_profiles_dir",
     ]:
         if not isinstance(data[path_key], str):
             fail(f"manifest {path_key} must be a string")
@@ -230,72 +222,25 @@ def validate_mcp(manifest: dict) -> None:
     ok("Cursor MCP example valid")
 
 
-def validate_permissions_templates(manifest: dict) -> None:
-    listed = manifest.get("permissions_templates", [])
-    if not isinstance(listed, list) or not listed:
-        fail("manifest permissions_templates must be a non-empty list")
-    actual = sorted(p.name for p in PERMISSIONS_DIR.glob("*.json"))
-    if sorted(listed) != actual:
-        fail(
-            "manifest permissions templates do not match files: "
-            f"listed={sorted(listed)} actual={actual}"
-        )
-    for name in listed:
-        path = PERMISSIONS_DIR / name
-        data = load_json(path)
-        validate_structured_credentials(data, path.relative_to(ROOT), label="permissions template")
-        if not isinstance(data, dict):
-            fail(f"{path.relative_to(ROOT)} root must be an object")
-        allowlist = data.get("mcpAllowlist", [])
-        if not isinstance(allowlist, list) or "playwright:*" not in [str(x) for x in allowlist]:
-            fail(f"{path.relative_to(ROOT)} must include playwright:* in mcpAllowlist")
-        if data.get("terminalAllowlist"):
-            fail(f"{path.relative_to(ROOT)} must not define terminalAllowlist")
+def validate_global_profile() -> None:
     profile = load_json(GLOBAL_PROFILE)
-    if profile.get("id") != "global-playwright":
-        fail("global-profile.json id must be global-playwright")
+    if not isinstance(profile, dict):
+        fail("global-profile.json root must be an object")
+    if profile.get("id") != "cursor-setup":
+        fail("global-profile.json id must be cursor-setup")
+    if profile.get("setup_runtime") != "native":
+        fail("global-profile.json setup_runtime must be native")
     if profile.get("project_writes") is not False:
         fail("global-profile.json must set project_writes false")
-    ok("Cursor permissions templates valid")
-
-
-def validate_sandbox_profiles(manifest: dict) -> None:
-    listed = manifest.get("legacy_sandbox_profiles", [])
-    if not isinstance(listed, list) or not listed:
-        fail("manifest legacy_sandbox_profiles must be a non-empty list")
-    actual = sorted(p.name for p in SANDBOX_DIR.iterdir() if p.is_file())
-    if sorted(listed) != actual:
-        fail(f"manifest sandbox profiles do not match files: listed={sorted(listed)} actual={actual}")
-    for name in listed:
-        path = SANDBOX_DIR / name
-        if path.suffix != ".json":
-            continue
-        data = load_json(path)
-        validate_structured_credentials(data, path.relative_to(ROOT), label="sandbox profile")
-        if not isinstance(data, dict):
-            fail(f"{path.relative_to(ROOT)} root must be an object")
-        profile = str(data.get("profile", ""))
-        commands = data.get("command_allowlist", [])
-        if not isinstance(commands, list):
-            fail(f"{path.relative_to(ROOT)} command_allowlist must be an array")
-        for command in commands:
-            value = str(command).strip().lower()
-            if value in COMMAND_ALLOWLIST_DENY:
-                fail(f"{path.relative_to(ROOT)} must not command-allowlist {value} for MCP support")
-        mcp_allowlist = data.get("mcp_allowlist", [])
-        if not isinstance(mcp_allowlist, list):
-            fail(f"{path.relative_to(ROOT)} mcp_allowlist must be an array")
-        for item in mcp_allowlist:
-            value = str(item)
-            if value.lower().startswith("fetch:*") and profile != "playwright-full":
-                fail(f"{path.relative_to(ROOT)} has broad fetch wildcard outside full profile")
-            if MCP_BROAD.match(value) and profile != "playwright-full":
-                warn(f"{path.relative_to(ROOT)} has broad MCP allowlist entry: {value}")
-        if profile.startswith("playwright"):
-            requires = data.get("playwright_mcp", {}).get("requires_command_allowlist")
-            if requires is not False:
-                fail(f"{path.relative_to(ROOT)} must confirm Playwright MCP does not require command allowlist entries")
-    ok("Cursor sandbox profiles valid")
+    surfaces = profile.get("surfaces", {})
+    if not isinstance(surfaces, dict):
+        fail("global-profile.json surfaces must be an object")
+    for required in ["agents", "skills", "mcp"]:
+        if required not in surfaces:
+            fail(f"global-profile.json missing surface: {required}")
+    if "permissions" in surfaces:
+        fail("global-profile.json must not define a managed permissions surface")
+    ok("Cursor global profile valid")
 
 
 def validate_no_fake_user_rules_path() -> None:
@@ -319,8 +264,7 @@ def main() -> int:
     validate_agents(manifest)
     validate_rules(manifest)
     validate_mcp(manifest)
-    validate_permissions_templates(manifest)
-    validate_sandbox_profiles(manifest)
+    validate_global_profile()
     validate_no_fake_user_rules_path()
     return 0
 

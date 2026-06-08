@@ -1,16 +1,16 @@
 # Cursor Setup
 
-Global Cursor setup for agents, optional skills, Playwright MCP, and compatibility permissions. Cursor Auto Review and sandbox behavior remain IDE-managed.
+Global Cursor setup for agents, starter skills, and Playwright MCP. Auto Review, sandbox behavior, and general permissions remain IDE-managed in Cursor Settings.
 
 ## Primary workflow
 
-Use `scripts/install-cursor-workspace.sh`:
+Use the Agent Workspace **Cursor** page. Setup runs through native Rust operations on all supported desktop platforms:
 
-- `--diff-global-profile` — preview the installed Cursor setup
-- `--apply-global-profile` — apply agents, starter skills, Playwright MCP, and compatibility permissions
-- `--validate-global-profile` — validate templates and installed setup state
+- diff setup — preview agents, starter skills, MCP merge, and any pending legacy permission cleanup
+- apply setup — sync managed surfaces with backup-before-write
+- validate — confirm managed surfaces are synced and legacy cleanup is complete
 
-The machine-readable setup is `global-profile.json`.
+The machine-readable contract is `global-profile.json` and `manifest.json` (`setup_runtime: native`).
 
 ## What the setup writes
 
@@ -19,7 +19,8 @@ The machine-readable setup is `global-profile.json`.
 | Agents | `~/.cursor/agents` |
 | Skills | `~/.cursor/skills` (recommended starter skills; the app Skills panel remains the normal selectable installer) |
 | MCP | `~/.cursor/mcp.json` (merges the `playwright` server only) |
-| Permissions | `~/.cursor/permissions.json` (merges the current Playwright compatibility entry only) |
+
+During apply, if `~/.cursor/permissions.json` still contains the legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry, setup removes that exact entry only. It does not install a replacement permissions template.
 
 Existing target files are backed up before changes.
 
@@ -33,13 +34,12 @@ Agent Workspace does not inspect or write undocumented Cursor runtime state and 
 
 - Project `.cursor/mcp.json`, `.cursor/rules`, `.cursor/agents`, or `.cursor/skills`
 - `.cursorignore` or `AGENTS.md`
-- Cursor run-mode state or undocumented Cursor internal storage
+- Cursor run-mode state, sandbox profiles, or a managed permissions template
 
 ## Other assets
 
-- `user-rules.md` — copy manually into Cursor Settings > Rules > User Rules
+- `user-rules.md` — copy manually into Cursor Settings > Rules > User Rules (`install-cursor-workspace.sh --copy-user-rules`)
 - `rules/*.mdc` — reference project-rule templates only; not installed by the app setup
 - `mcp/` — Playwright MCP template used by setup merge
-- `sandbox/` — deprecated compatibility/debug templates only; not exposed in the normal app workflow
 
-Scripts remain the source of truth for sync behavior on macOS and Linux. Windows uses the native adapter for the same supported setup actions.
+`scripts/install-cursor-workspace.sh` remains a small CLI helper for User Rules, opening Cursor Settings, and optional project-target installs. Global setup is not implemented in that script.

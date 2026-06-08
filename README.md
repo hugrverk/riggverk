@@ -116,7 +116,7 @@ Primary navigation:
 
 - **Workspace** — landing page and operations terminal. Shows install state for `~/.config/agent-workspace` with **install**, **repair**, **refresh**, and **open folder**. Verify section runs release-check and manages backups. No path chooser or pull workflow.
 - **Harness pages** (Codex, OpenCode, Cursor, Claude) — per-tool diff/sync/install actions and skills install for that tool.
-- **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, legacy sandbox profiles, adapter agents, project rules) stay in the workspace for scripts but are not listed as normal Library docs.
+- **Library** — browse and edit workspace sources: Docs (curated user-facing docs plus custom `docs/context/` notes), Rules, Skills, Agents, Configs, and Brain Setup. Prompt Templates appear under Library → Docs after install or repair has copied bundled `docs/prompt-templates/*` into the workspace. Internal Cursor implementation assets (manifest, MCP JSON, adapter agents, project rules) stay in the workspace for repair but are not listed as normal Library docs.
 - **Prompt Loops** — direct navigation destination for copy-ready prompt templates and the optional composer (see below).
 - **Repo Dashboard** — direct navigation destination for local-git-first repository insight (see below).
 - **Settings** — appearance, global text size (`small`, `medium`, `large`, `extra large`), and theme colors. Target profiles and sync toggles live on harness pages.
@@ -166,7 +166,7 @@ Supported data quality states:
 - No shell string concatenation. No `sh -c`. No Tauri shell plugin.
 - Sync targets are defined through an internal agent target registry (`agent_targets.rs`). This does not permit arbitrary file sync or arbitrary commands.
 - Config sync targets are managed through an internal allowlisted config target registry (also in `agent_targets.rs`). Config scripts are mapped by enum, not by frontend-supplied paths.
-- Editable config templates use a narrower allowlist. Cursor setup remains a script-backed sync/status target and is not exposed through the Library Configs editor.
+- Editable config templates use a narrower allowlist. Cursor setup is a native sync/status target and is not exposed through the Library Configs editor.
 - **Repo Dashboard** uses a dedicated backend module with fixed `git` and optional fixed `gh` invocations. Repo path is validated and normalized; command strings never come from the frontend.
 - Supported targets: Codex rules + config; OpenCode rules + shared runtime agents + config/TUI; Claude rules + shared runtime agents; Cursor adapter global agents (`templates/cursor/agents/`). Rules, agents, config, and skills are separate sync surfaces on harness pages.
 
@@ -191,7 +191,7 @@ On apply, existing diverged rule targets are backed up under `~/Library/Applicat
 | `--opencode` | `${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}` |
 | `--claude` | `${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}` |
 
-Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses the global Playwright profile via `install-cursor-workspace.sh --apply-global-profile` (agents, skills, MCP, permissions under `~/.cursor/`).
+Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses native setup from the Cursor page (agents, starter skills, Playwright MCP under `~/.cursor/`).
 
 ## Skill installation
 
@@ -203,7 +203,7 @@ Global destinations:
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)
 
-The app installs skills globally only (Codex, OpenCode, Claude, Cursor home skill folders). Cursor’s primary workflow applies one global Playwright profile from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), `~/.cursor/mcp.json` (playwright server merge), and `~/.cursor/permissions.json` (`playwright:*` MCP allowlist; shell/terminal stays restricted). User Rules remain manual (`templates/cursor/user-rules.md`). The global profile never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Legacy sandbox JSON templates are debug/copy-only.
+The app installs skills globally only (Codex, OpenCode, Claude, Cursor home skill folders). Cursor’s primary workflow applies native setup from the Cursor page: `~/.cursor/agents`, `~/.cursor/skills` (recommended pinned skills), and `~/.cursor/mcp.json` (playwright server merge). Apply may remove a legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry from `~/.cursor/permissions.json` when present; it does not install a replacement permissions template. User Rules remain manual (`templates/cursor/user-rules.md`). Setup never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Auto Review, sandbox behavior, and general permissions remain IDE-managed.
 
 ## Workspace Contract Validator
 

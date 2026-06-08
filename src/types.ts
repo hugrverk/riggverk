@@ -449,9 +449,7 @@ export interface CursorProfileHealth {
   global_skills_count: number;
   expected_global_skills_count: number;
   mcp_status: string;
-  permissions_status: string;
-  shell_posture_status: string;
-  legacy_sandbox_status: string;
+  legacy_permission_cleanup_status: string;
   warnings: string[];
   next_action: string;
 }

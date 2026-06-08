@@ -1,17 +1,16 @@
 {
-  "schema_version": "1.2",
+  "schema_version": "1.3",
+  "setup_runtime": "native",
   "profile": {
     "id": "agent-workspace-cursor",
     "name": "Agent Workspace Cursor Setup",
-    "description": "Cursor setup assets for global agents, Playwright MCP, compatibility permissions, and optional skills. Auto Review remains IDE-managed."
+    "description": "Cursor setup assets for global agents, Playwright MCP, and optional starter skills. Auto Review and permissions remain IDE-managed."
   },
   "global_profile": "templates/cursor/global-profile.json",
   "user_rules": "templates/cursor/user-rules.md",
   "agents_dir": "templates/cursor/agents",
   "rules_dir": "templates/cursor/rules",
   "mcp_examples_dir": "templates/cursor/mcp",
-  "permissions_dir": "templates/cursor/permissions",
-  "legacy_sandbox_profiles_dir": "templates/cursor/sandbox",
   "recommended_pinned_skills": [
     "diagnose",
     "implementation-plan",
@@ -41,21 +40,12 @@
     "mcp.example.json",
     "playwright.mcp.json"
   ],
-  "permissions_templates": [
-    "global-playwright.json"
-  ],
-  "legacy_sandbox_profiles": [
-    "README.md",
-    "safe.json",
-    "playwright-safe.json",
-    "playwright-full.json"
-  ],
   "notes": [
-    "Primary workflow: apply Cursor setup to the global Cursor agents, skills, MCP, and permissions files.",
+    "Primary workflow: apply Cursor setup from the app to global Cursor agents, starter skills, and Playwright MCP.",
     "Select Auto Review manually in Cursor Settings > Agents > Run Mode; Agent Workspace does not inspect or write undocumented Cursor runtime state.",
     "User Rules remain manually managed in Cursor Settings; this setup does not write a global User Rules file.",
     "Project rules, project MCP, project agents, project ignore files, and AGENTS.md are never written by the global setup flow.",
-    "Legacy sandbox JSON is compatibility-only and intentionally absent from the normal app workflow.",
+    "A one-time cleanup removes the legacy Agent Workspace-owned playwright:* mcpAllowlist entry during apply when present.",
     "Never store credentials or private configuration in workspace templates."
   ]
 }
