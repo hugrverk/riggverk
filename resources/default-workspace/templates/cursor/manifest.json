@@ -1,9 +1,9 @@
 {
-  "schema_version": "1.1",
+  "schema_version": "1.2",
   "profile": {
     "id": "agent-workspace-cursor",
-    "name": "Agent Workspace Cursor Profile",
-    "description": "Public-safe starter Cursor profile assets for global Playwright-oriented sync."
+    "name": "Agent Workspace Cursor Setup",
+    "description": "Cursor setup assets for global agents, Playwright MCP, compatibility permissions, and optional skills. Auto Review remains IDE-managed."
   },
   "global_profile": "templates/cursor/global-profile.json",
   "user_rules": "templates/cursor/user-rules.md",
@@ -51,10 +51,11 @@
     "playwright-full.json"
   ],
   "notes": [
-    "Primary workflow: apply the global Playwright profile to ~/.cursor/agents, ~/.cursor/skills, ~/.cursor/mcp.json, and ~/.cursor/permissions.json.",
-    "User Rules remain manually managed in Cursor Settings; this profile does not write a global User Rules file.",
-    "Project rules, project MCP, project agents, .cursorignore, and AGENTS.md are never written by the global profile flow.",
-    "Legacy sandbox/*.json templates are debug/copy-only.",
-    "Secrets must be supplied via Cursor-supported environment interpolation such as ${env:VARIABLE_NAME}."
+    "Primary workflow: apply Cursor setup to the global Cursor agents, skills, MCP, and permissions files.",
+    "Select Auto Review manually in Cursor Settings > Agents > Run Mode; Agent Workspace does not inspect or write undocumented Cursor runtime state.",
+    "User Rules remain manually managed in Cursor Settings; this setup does not write a global User Rules file.",
+    "Project rules, project MCP, project agents, project ignore files, and AGENTS.md are never written by the global setup flow.",
+    "Legacy sandbox JSON is compatibility-only and intentionally absent from the normal app workflow.",
+    "Never store credentials or private configuration in workspace templates."
   ]
 }
