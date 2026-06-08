@@ -1,8 +1,8 @@
 {
-  "schema_version": "1.0",
-  "id": "global-playwright",
-  "name": "Global Playwright Cursor Profile",
-  "description": "Global-only Cursor profile for autonomous Playwright MCP browser QA with restricted shell/terminal permissions.",
+  "schema_version": "1.1",
+  "id": "cursor-setup",
+  "name": "Cursor Setup",
+  "description": "Global Cursor setup for agents, starter skills, Playwright MCP, and Auto Review-compatible permissions without project writes.",
   "surfaces": {
     "agents": {
       "source_dir": "templates/cursor/agents",
@@ -28,12 +28,11 @@
       "writable": true
     }
   },
-  "shell_posture": {
-    "terminal_allowlist": "restricted",
-    "notes": [
-      "Do not add npx, npm, node, playwright, chrome, chromium, or broad shell wildcards to terminalAllowlist.",
-      "Playwright autonomy uses MCP tool allowlists only (playwright:*)."
-    ]
+  "run_mode": {
+    "recommended": "auto-review",
+    "managed_by": "cursor-settings",
+    "path": "Cursor Settings > Agents > Run Mode",
+    "verifiable_by_agent_workspace": false
   },
   "project_writes": false,
   "excluded_targets": [
@@ -48,6 +47,7 @@
   "notes": [
     "Apply via scripts/install-cursor-workspace.sh --apply-global-profile.",
     "Diff via --diff-global-profile; validate via --validate-global-profile.",
-    "Legacy sandbox/*.json templates are debug/copy-only and do not drive the primary workflow."
+    "Select Auto Review manually in Cursor Settings; Agent Workspace does not inspect undocumented Cursor state.",
+    "Legacy sandbox JSON remains compatibility-only and is not exposed in the normal app workflow."
   ]
 }
