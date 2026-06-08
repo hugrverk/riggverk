@@ -37,6 +37,13 @@ NATIVE_ACTIONS = [
     "cursor_sync_global_agents",
 ]
 
+FORBIDDEN_SHELL_PATTERNS = [
+    "--global-agents",
+    "--global-agents-only",
+    "CURSOR_AGENTS_TARGET",
+    "$HOME/.cursor/agents",
+]
+
 
 def fail(message: str) -> None:
     print(f"FAIL: {message}", file=sys.stderr)
@@ -51,6 +58,12 @@ def main() -> None:
         r"Usage:.*?(?=\n[A-Z]|\Z)", script_text, flags=re.DOTALL
     )
     help_text = help_match.group(0) if help_match else script_text
+
+    for pattern in FORBIDDEN_SHELL_PATTERNS:
+        if pattern in script_text:
+            fail(
+                f"install-cursor-workspace.sh must not implement global agent sync ({pattern})"
+            )
 
     for action, flags in ACTION_FLAGS.items():
         for flag in flags:

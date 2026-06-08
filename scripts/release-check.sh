@@ -371,10 +371,10 @@ else
   printf 'FAIL: install-cursor-workspace.sh --help must state global setup uses native Rust operations\n' >&2
   exit 1
 fi
-if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'no project writes'; then
+if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'never writes'; then
   : "ok"
 else
-  printf 'FAIL: install-cursor-workspace.sh --help must state no project writes\n' >&2
+  printf 'FAIL: install-cursor-workspace.sh --help must state it never writes global agents\n' >&2
   exit 1
 fi
 for agent in verifier.md security-reviewer.md release-checker.md browser-qa.md repo-scout.md; do
@@ -409,14 +409,21 @@ if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
   printf 'FAIL: cursor_setup must not be exposed as an editable config target\n' >&2
   exit 1
 fi
+for forbidden in '--global-agents' '--global-agents-only' 'CURSOR_AGENTS_TARGET' '$HOME/.cursor/agents'; do
+  if rg -qF -- "$forbidden" resources/default-workspace/scripts/install-cursor-workspace.sh; then
+    printf 'FAIL: install-cursor-workspace.sh must not contain global agent shell path: %s\n' "$forbidden" >&2
+    exit 1
+  fi
+done
 tmpdir="$(mktemp -d)"
 fake_project="$tmpdir/project"
 mkdir -p "$fake_project/.git"
-HOME="$tmpdir" AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
-  bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents --quiet >/dev/null
-cursor_count="$(find "$tmpdir/.cursor/agents" -maxdepth 1 -name '*.md' -type f 2>/dev/null | wc -l | tr -d ' ')"
-if [ "$cursor_count" -ne 5 ]; then
-  printf 'FAIL: Cursor global-agents CLI smoke wrote %s agents, expected 5\n' "$cursor_count" >&2
+if HOME="$tmpdir" bash resources/default-workspace/scripts/install-cursor-workspace.sh --apply --global-agents --quiet >/dev/null 2>&1; then
+  printf 'FAIL: install-cursor-workspace.sh accepted removed --global-agents flag\n' >&2
+  exit 1
+fi
+if [ -d "$tmpdir/.cursor/agents" ]; then
+  printf 'FAIL: install-cursor-workspace.sh must not write ~/.cursor/agents\n' >&2
   exit 1
 fi
 HOME="$tmpdir" AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
@@ -430,7 +437,7 @@ if bash resources/default-workspace/scripts/install-cursor-workspace.sh --projec
   printf 'FAIL: Cursor project sync accepted broad HOME target\n' >&2
   exit 1
 fi
-printf '  Cursor setup verified: help, adapters, project rule, global-agent smoke\n'
+printf '  Cursor setup verified: help, adapters, project install, no shell global agents\n'
 
 step "bundled default cursor user-rules"
 user_rules_file="resources/default-workspace/templates/cursor/user-rules.md"

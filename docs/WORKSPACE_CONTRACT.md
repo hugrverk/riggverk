@@ -22,7 +22,7 @@ workspace) and bundled default resources (shipped with the app, not strictly req
 | `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
 | `scripts/install-codex-config.sh` | file | Codex config sync script |
 | `scripts/install-skills.sh` | file | Skill install script |
-| `scripts/install-cursor-workspace.sh` | file | Cursor global profile and CLI-only project setup script |
+| `scripts/install-cursor-workspace.sh` | file | Cursor manual helpers and CLI-only project setup script (no global agent writes) |
 | `templates/global-agent-rules.md` | file | Agent rules template |
 | `templates/opencode.json` | file | OpenCode config template |
 | `templates/codex/config.toml` | file | Codex config template |

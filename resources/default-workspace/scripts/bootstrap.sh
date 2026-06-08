@@ -7,7 +7,6 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RULES_SCRIPT="$SCRIPT_DIR/install-agent-rules.sh"
 CONFIG_SCRIPT="$SCRIPT_DIR/install-opencode-config.sh"
 CODEX_CONFIG_SCRIPT="$SCRIPT_DIR/install-codex-config.sh"
-CURSOR_SCRIPT="$SCRIPT_DIR/install-cursor-workspace.sh"
 SKILLS_SCRIPT="$SCRIPT_DIR/install-skills.sh"
 
 usage() {
@@ -24,13 +23,13 @@ Options:
   --rules-only     Run only agent rules sync
   --opencode-only  Run only OpenCode config sync
   --codex-only     Run only Codex config diff/manual-review check
-  --cursor-only    Run only Cursor workspace setup
+  --cursor-only    Print Cursor global-setup reminder (app-native; no shell writes)
   --skip-skills    Skip skills install
   --skip-rules     Skip agent rules sync
   --skip-opencode  Skip OpenCode config sync
   --skip-codex     Skip Codex config diff/manual-review check
   --skip-cursor    Skip Cursor workspace setup
-  --cursor         Include Cursor workspace setup (not enabled by default)
+  --cursor         Print Cursor global-setup reminder (not enabled by default)
   --codex          Rule target: Codex (passed to rules script)
   --opencode       Rule target: OpenCode (passed to rules script)
   --claude         Rule target: Claude (passed to rules script)
@@ -143,19 +142,16 @@ $skip_cursor && run_cursor=false
 declare -a rules_args=()
 declare -a config_args=()
 declare -a codex_config_args=()
-declare -a cursor_args=()
 declare -a skills_args=()
 
 $quiet && rules_args+=(--quiet)
 $quiet && config_args+=(--quiet)
 $quiet && codex_config_args+=(--quiet)
-$quiet && cursor_args+=(--quiet)
 $quiet && skills_args+=(--quiet)
 
 if $apply; then
   rules_args+=(--apply)
   config_args+=(--apply)
-  cursor_args+=(--apply)
 elif $diff_mode; then
   rules_args+=(--diff)
   config_args+=(--diff)
@@ -218,8 +214,13 @@ if $run_codex_config; then
 fi
 
 if $run_cursor; then
-  if ! $quiet; then printf '  [cursor]\n'; fi
-  "$CURSOR_SCRIPT" --global-agents "${cursor_args[@]}" || exit_code=$?
+  if ! $quiet; then
+    printf '  [cursor]\n'
+    printf '  Cursor global setup is app-native; use the Agent Workspace Cursor page.\n'
+    printf '  install-cursor-workspace.sh supports CLI-only project installs and User Rules helpers.\n'
+  else
+    printf 'cursor skipped (global setup is app-native)\n'
+  fi
 fi
 
 if $run_skills; then

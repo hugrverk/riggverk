@@ -22,7 +22,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, and Claude rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
 - **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path, installs `~/.config/playwright-mcp/config.json`, and optionally merges Playwright MCP into `~/.cursor/mcp.json` (`--apply-cursor`). Uses pinned `@playwright/mcp@0.0.48`, Chromium (not Chrome channel), and a shared user-global browser cache — not `@latest` or `PLAYWRIGHT_BROWSERS_PATH=0`.
 - **`install-codex-config.sh`** — diffs Codex config template for manual review. Apply requires explicit `--force-overwrite`.
-- **`install-cursor-workspace.sh`** — manual Cursor helpers and CLI-only project installs. Global setup (agents, starter skills, Playwright MCP) is handled by the Agent Workspace app via native Rust operations.
+- **`install-cursor-workspace.sh`** — manual Cursor helpers and CLI-only project installs. Global setup (agents, starter skills, Playwright MCP) is handled by the Agent Workspace app via native Rust operations. The script never writes `~/.cursor/agents`.
 - **`install-skills.sh`** — installs skills to native agent skill folders. App uses `--global` only.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 

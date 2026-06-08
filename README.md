@@ -4,13 +4,13 @@ Local macOS control panel for skills, rules, config, and workflow sync.
 
 ## Purpose
 
-Thin GUI wrapper around the existing workspace scripts. On macOS and Linux, scripts remain the source of truth for Cursor profile and skill installation actions. On Windows, a narrow native adapter covers Bash-free support for those same actions while shell-only Cursor helpers still route through workspace scripts on Unix or fail clearly on Windows.
+Thin GUI wrapper around the existing workspace scripts. Cursor global setup (agents, skills, MCP) uses native Rust on all supported desktop platforms. Skills installation uses workspace scripts on macOS/Linux and a hardened native installer on Windows. Shell-only Cursor helpers (`--show-user-rules`, `--copy-user-rules`, `--open-cursor-settings`, CLI-only `--project*`) route through `install-cursor-workspace.sh` on Unix or fail clearly on Windows.
 
 App-triggered script actions use each script's `--quiet` option for compact terminal output. Running the scripts manually without `--quiet` keeps the more verbose CLI/debug output.
 
 ### Cross-platform notes
 
-- **Cursor profile:** macOS/Linux GUI actions invoke `scripts/install-cursor-workspace.sh` with the same templates, manifest, and `CURSOR_*` path env overrides as the CLI. Windows uses the native adapter for diff/apply/validate/global agents while preserving the same resolved targets under the user profile.
+- **Cursor profile:** GUI diff/apply/validate and global agent sync use native Rust on all platforms with the same templates, manifest, and `CURSOR_*` path env overrides. `install-cursor-workspace.sh` is for manual helpers and CLI-only project installs; it never writes `~/.cursor/agents`.
 - **Skills:** macOS/Linux route through `scripts/install-skills.sh`. Windows uses the hardened native installer with staged replacement and destination containment.
 - **Home resolution:** Windows prefers non-empty `USERPROFILE`, then `HOMEDRIVE`+`HOMEPATH`, then `HOME`. macOS/Linux prefer `HOME`.
 - **Safety:** Backup roots and skill destinations reject broad targets such as filesystem roots, Windows drive roots, UNC share roots, and the resolved user home directory.

@@ -47,7 +47,7 @@ Required scripts handle sync, install, and bootstrap operations:
 - `install-agent-rules.sh` — sync agent rules to tool paths
 - `install-opencode-config.sh` — sync OpenCode config and agents
 - `install-codex-config.sh` — diff Codex config template for manual review
-- `install-cursor-workspace.sh` — apply the global Cursor profile under `~/.cursor`
+- `install-cursor-workspace.sh` — manual Cursor helpers and CLI-only project installs (global setup is app-native)
 
 All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.
 

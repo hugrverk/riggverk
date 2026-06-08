@@ -8,11 +8,9 @@ WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules"
 AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
 USER_RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/user-rules.md"
-SKILLS_SCRIPT="$WORKSPACE_ROOT/scripts/install-skills.sh"
 
 apply=false
 quiet=false
-global_agents=false
 project_agents=false
 project_rules=false
 show_user_rules=false
@@ -20,31 +18,26 @@ copy_user_rules=false
 open_cursor_settings=false
 target=""
 
-CURSOR_AGENTS_TARGET="${CURSOR_AGENTS_PATH:-$HOME/.cursor/agents}"
-
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/install-cursor-workspace.sh [options]
 
 Manual helpers and CLI-only project installs. Global Cursor setup (agents, skills, MCP)
-is handled by the Agent Workspace app via native Rust operations.
+is handled by the Agent Workspace app via native Rust operations. This script never writes
+~/.cursor/agents.
 
 Options:
   --apply                  Write target files (default is dry-run)
-  --global-agents          Install Cursor subagents to ${CURSOR_AGENTS_PATH:-$HOME/.cursor/agents}
-  --global-agents-only     Alias for --global-agents (legacy)
   --project-agents         CLI-only: project agents to <target>/.cursor/agents
   --project-rules          CLI-only: project rules to <target>/.cursor/rules
   --project                Alias for --project-agents --project-rules (CLI-only)
-  --all                    CLI-only: all project + global agent targets
+  --all                    CLI-only: project agents + project rules
   --target <path>          CLI-only project path (default: current directory)
   --show-user-rules        Print versioned Cursor User Rules
   --copy-user-rules        Copy User Rules to clipboard (macOS pbcopy)
   --open-cursor-settings   Open Cursor Settings (macOS)
   --quiet                  Compact output
   --help                   Show this help
-
-The global setup flow has no project writes: it never writes project .cursor/*, .cursorignore, or AGENTS.md.
 USAGE
 }
 
@@ -110,8 +103,9 @@ backup_file() {
   cp "$path" "$backup_dir/$(basename "$path")"
 }
 
-install_agents() {
-  local dest_root="$1" label="$2"
+install_project_agents() {
+  local project="$1"
+  local dest_root="$project/.cursor/agents"
   local count=0 source name dest
   ensure_dest_root "$dest_root"
   [ -d "$AGENTS_SOURCE" ] || die "Cursor agents source not found: $AGENTS_SOURCE"
@@ -130,10 +124,10 @@ install_agents() {
   local verb
   if $apply; then verb=written; else verb=planned; fi
   if $quiet; then
-    printf '%-18s %s %s\n' "$label" "$verb" "$count"
+    printf '%-15s %s %s\n' "project-agents" "$verb" "$count"
   else
     if $apply; then verb=Installed; else verb=Planned; fi
-    printf '%s Cursor agents: %s -> %s (%s files)\n' "$verb" "$AGENTS_SOURCE" "$dest_root" "$count"
+    printf '%s Cursor project agents: %s -> %s (%s files)\n' "$verb" "$AGENTS_SOURCE" "$dest_root" "$count"
   fi
 }
 
@@ -173,11 +167,10 @@ while [ $# -gt 0 ]; do
     --show-user-rules) show_user_rules=true ;;
     --copy-user-rules) copy_user_rules=true ;;
     --open-cursor-settings) open_cursor_settings=true ;;
-    --global-agents|--global-agents-only) global_agents=true ;;
     --project-agents) project_agents=true ;;
     --project-rules) project_rules=true ;;
     --project) project_agents=true; project_rules=true ;;
-    --all) global_agents=true; project_agents=true; project_rules=true ;;
+    --all) project_agents=true; project_rules=true ;;
     --target)
       shift
       [ $# -gt 0 ] || die "--target requires a path"
@@ -212,21 +205,15 @@ if $open_cursor_settings; then
   exit 0
 fi
 
-if ! $global_agents && ! $project_agents && ! $project_rules; then
+if ! $project_agents && ! $project_rules; then
   usage >&2
   die "no action selected; global setup is handled by the Agent Workspace app"
 fi
 
-project_target=""
-if $project_agents || $project_rules; then
-  project_target="$(validate_project_target "${target:-$caller_dir}")"
-fi
+project_target="$(validate_project_target "${target:-$caller_dir}")"
 
-if $global_agents; then
-  install_agents "$CURSOR_AGENTS_TARGET" "global-agents"
-fi
 if $project_agents; then
-  install_agents "$project_target/.cursor/agents" "project-agents"
+  install_project_agents "$project_target"
 fi
 if $project_rules; then
   install_project_rules "$project_target"
