@@ -1,7 +1,6 @@
 mod agent_skill_targets;
 mod agent_targets;
 mod commands;
-#[cfg_attr(not(windows), allow(dead_code))]
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;

@@ -140,10 +140,6 @@ pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
     "templates/cursor/manifest.json",
     "templates/cursor/mcp/mcp.example.json",
     "templates/cursor/mcp/playwright.mcp.json",
-    "templates/cursor/sandbox/README.md",
-    "templates/cursor/sandbox/safe.json",
-    "templates/cursor/sandbox/playwright-safe.json",
-    "templates/cursor/sandbox/playwright-full.json",
     "templates/cursor/rules/core-safety.mdc",
     "templates/cursor/agents/verifier.md",
 ];

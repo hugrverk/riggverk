@@ -2496,15 +2496,10 @@ mod tests {
             "templates/cursor/README.md",
             "templates/cursor/manifest.json",
             "templates/cursor/global-profile.json",
-            "templates/cursor/permissions/global-playwright.json",
             "templates/cursor/user-rules.md",
             "templates/cursor/mcp/README.md",
             "templates/cursor/mcp/mcp.example.json",
             "templates/cursor/mcp/playwright.mcp.json",
-            "templates/cursor/sandbox/README.md",
-            "templates/cursor/sandbox/safe.json",
-            "templates/cursor/sandbox/playwright-safe.json",
-            "templates/cursor/sandbox/playwright-full.json",
             "templates/cursor/rules/core-safety.mdc",
             "templates/cursor/rules/prompt-contract.mdc",
             "templates/cursor/rules/repo-workflow.mdc",
@@ -2543,8 +2538,6 @@ mod tests {
             "scripts/install-opencode-config.sh",
             "scripts/install-codex-config.sh",
             "scripts/install-cursor-workspace.sh",
-            "scripts/cursor-global-profile-lib.sh",
-            "scripts/test_cursor_global_profile.py",
             "scripts/check-codex-profile.py",
             "scripts/check-cursor-profile.py",
         ] {
@@ -3209,13 +3202,13 @@ mod tests {
         let script =
             fs::read_to_string(target.join("scripts/install-cursor-workspace.sh")).unwrap();
         assert!(
-            script.contains("--apply-global-profile"),
-            "refreshed script must include --apply-global-profile"
+            !script.contains("cursor-global-profile-lib.sh"),
+            "refreshed script must not reference removed cursor-global-profile-lib.sh"
         );
         let manifest = fs::read_to_string(target.join("templates/cursor/manifest.json")).unwrap();
         assert!(
-            manifest.contains("permissions_templates"),
-            "refreshed manifest must include permissions_templates"
+            manifest.contains("\"setup_runtime\": \"native\""),
+            "refreshed manifest must include native setup_runtime"
         );
 
         cleanup(&source);

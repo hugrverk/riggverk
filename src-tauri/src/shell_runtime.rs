@@ -54,25 +54,6 @@ pub fn resolve_bash() -> Result<String, String> {
     Err(bash_missing_message())
 }
 
-/// Resolve Python for workspace scripts (`python3` preferred, `python` fallback).
-pub fn resolve_python() -> Result<String, String> {
-    if let Ok(from_env) = std::env::var("AW_PYTHON") {
-        if !from_env.trim().is_empty() && program_available(&from_env) {
-            return Ok(from_env);
-        }
-    }
-
-    if program_available("python3") {
-        return Ok("python3".into());
-    }
-
-    if program_available("python") {
-        return Ok("python".into());
-    }
-
-    Err(python_missing_message())
-}
-
 pub fn format_spawn_error(program: &str, error: &std::io::Error) -> String {
     let kind = error.kind();
     let raw = error.to_string();
@@ -235,14 +216,5 @@ mod tests {
         let message = format_spawn_error("bash", &error);
         assert!(message.contains("bash"));
         assert!(!message.eq("program not found"));
-    }
-
-    #[test]
-    fn resolve_python_prefers_python3_when_available() {
-        if program_available("python3") {
-            assert_eq!(resolve_python().expect("python3"), "python3");
-        } else if program_available("python") {
-            assert_eq!(resolve_python().expect("python"), "python");
-        }
     }
 }

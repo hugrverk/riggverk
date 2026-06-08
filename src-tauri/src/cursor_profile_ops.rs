@@ -3,10 +3,64 @@ use std::path::{Path, PathBuf};
 
 use crate::commands::backups::backup_root;
 use crate::commands::cursor_profile::{
-    cursor_root, default_playwright_browsers_path, default_playwright_mcp_config_path,
-    json_has_unsafe_literals, manifest_recommended_skills, mcp_allowlist_unsafe, sync_dir_status,
-    sync_skill_dirs_status, terminal_allowlist_unsafe, transform_playwright_template_value,
+    cursor_root, default_playwright_mcp_config_path, json_has_unsafe_literals,
+    manifest_recommended_skills, resolve_playwright_browsers_path, sync_dir_status,
+    sync_skill_dirs_status, transform_playwright_template_value,
 };
+
+pub(crate) const LEGACY_MCP_ALLOWLIST_ENTRY: &str = "playwright:*";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum LegacyPermissionCleanupStatus {
+    NotNeeded,
+    Clean,
+    Planned,
+    BlockedInvalidJson,
+    BlockedInvalidAllowlist,
+}
+
+impl LegacyPermissionCleanupStatus {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::NotNeeded => "not-needed",
+            Self::Clean => "clean",
+            Self::Planned => "planned",
+            Self::BlockedInvalidJson => "blocked-invalid-json",
+            Self::BlockedInvalidAllowlist => "blocked-invalid-allowlist",
+        }
+    }
+}
+
+pub(crate) fn legacy_permission_cleanup_status(path: &Path) -> LegacyPermissionCleanupStatus {
+    if !path.is_file() {
+        return LegacyPermissionCleanupStatus::NotNeeded;
+    }
+    let content = match fs::read_to_string(path) {
+        Ok(content) => content,
+        Err(_) => return LegacyPermissionCleanupStatus::BlockedInvalidJson,
+    };
+    let data: serde_json::Value = match serde_json::from_str(&content) {
+        Ok(data) => data,
+        Err(_) => return LegacyPermissionCleanupStatus::BlockedInvalidJson,
+    };
+    let Some(object) = data.as_object() else {
+        return LegacyPermissionCleanupStatus::BlockedInvalidJson;
+    };
+    let Some(mcp) = object.get("mcpAllowlist") else {
+        return LegacyPermissionCleanupStatus::Clean;
+    };
+    let Some(existing) = mcp.as_array() else {
+        return LegacyPermissionCleanupStatus::BlockedInvalidAllowlist;
+    };
+    if existing
+        .iter()
+        .any(|item| item.as_str() == Some(LEGACY_MCP_ALLOWLIST_ENTRY))
+    {
+        LegacyPermissionCleanupStatus::Planned
+    } else {
+        LegacyPermissionCleanupStatus::Clean
+    }
+}
 use crate::cursor_profile_paths::{normalized_path_key, CursorProfilePaths};
 use crate::skills_install::{
     discover_workspace_skills, install_skills_native, InstallSkillsRequest,
@@ -117,74 +171,8 @@ fn ensure_global_write_target(
     Ok(())
 }
 
-fn permissions_template_path(workspace_root: &Path) -> PathBuf {
-    cursor_root(workspace_root).join("permissions/global-playwright.json")
-}
-
 fn mcp_template_path(workspace_root: &Path) -> PathBuf {
     cursor_root(workspace_root).join("mcp/playwright.mcp.json")
-}
-
-fn diff_permissions_status(template_path: &Path, target_path: &Path) -> String {
-    let Ok(template_content) = fs::read_to_string(template_path) else {
-        return "missing".into();
-    };
-    let Ok(template) = serde_json::from_str::<serde_json::Value>(&template_content) else {
-        return "diverged".into();
-    };
-    let required: Vec<String> = template
-        .get("mcpAllowlist")
-        .and_then(|v| v.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-
-    if !target_path.is_file() {
-        return "missing".into();
-    }
-    let Ok(target_content) = fs::read_to_string(target_path) else {
-        return "unreadable".into();
-    };
-    let Ok(data) = serde_json::from_str::<serde_json::Value>(&target_content) else {
-        return "invalid".into();
-    };
-    let Some(existing) = data.get("mcpAllowlist").and_then(|v| v.as_array()) else {
-        return "diverged".into();
-    };
-    let existing_set: std::collections::HashSet<String> = existing
-        .iter()
-        .filter_map(|item| item.as_str().map(str::to_string))
-        .collect();
-    if required.iter().all(|item| existing_set.contains(item)) {
-        "synced".into()
-    } else {
-        "diverged".into()
-    }
-}
-
-fn permissions_value_unsafe(value: &serde_json::Value) -> bool {
-    if let Ok(serialized) = serde_json::to_string(value) {
-        if json_has_unsafe_literals(&serialized) {
-            return true;
-        }
-    } else {
-        return true;
-    }
-    if let Some(terminal) = value.get("terminalAllowlist") {
-        if terminal_allowlist_unsafe(terminal) {
-            return true;
-        }
-    }
-    if let Some(mcp) = value.get("mcpAllowlist") {
-        if mcp_allowlist_unsafe(mcp) {
-            return true;
-        }
-    }
-    false
 }
 
 fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, String> {
@@ -196,78 +184,43 @@ fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, Stri
     serde_json::from_str(&content).map_err(|e| format!("permissions target invalid JSON: {e}"))
 }
 
-fn prepare_permissions_merge(template_path: &Path, target_path: &Path) -> Result<String, String> {
-    let template_content =
-        fs::read_to_string(template_path).map_err(|e| format!("read permissions template: {e}"))?;
-    let template: serde_json::Value = serde_json::from_str(&template_content)
-        .map_err(|e| format!("permissions template invalid JSON: {e}"))?;
-    let managed: Vec<String> = template
-        .get("mcpAllowlist")
-        .and_then(|v| v.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default();
-    if managed.is_empty() {
-        return Err("permissions template missing mcpAllowlist entries".into());
+fn prepare_legacy_permission_cleanup(target_path: &Path) -> Result<Option<String>, String> {
+    if !target_path.is_file() {
+        return Ok(None);
     }
-
     let mut data = read_permissions_target(target_path)?;
-
-    let merged = match data.get("mcpAllowlist") {
-        None => managed,
-        Some(value) => {
-            let Some(existing) = value.as_array() else {
-                return Err("existing permissions mcpAllowlist must be an array".into());
-            };
-            let mut out: Vec<String> = existing
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_string))
-                .collect();
-            for entry in managed {
-                if !out.contains(&entry) {
-                    out.push(entry);
-                }
-            }
-            out
-        }
-    };
-
     let object = data
         .as_object_mut()
         .ok_or_else(|| "permissions data must be an object".to_string())?;
-    object.insert(
-        "mcpAllowlist".into(),
-        serde_json::Value::Array(merged.into_iter().map(serde_json::Value::String).collect()),
-    );
-
-    if permissions_value_unsafe(&data) {
-        return Err("permissions JSON failed safety check".into());
+    let Some(mcp) = object.get("mcpAllowlist") else {
+        return Ok(None);
+    };
+    let Some(existing) = mcp.as_array() else {
+        return Err("existing permissions mcpAllowlist must be an array".into());
+    };
+    let has_legacy = existing
+        .iter()
+        .any(|item| item.as_str() == Some(LEGACY_MCP_ALLOWLIST_ENTRY));
+    if !has_legacy {
+        return Ok(None);
     }
-
+    let cleaned: Vec<serde_json::Value> = existing
+        .iter()
+        .filter(|item| item.as_str() != Some(LEGACY_MCP_ALLOWLIST_ENTRY))
+        .cloned()
+        .collect();
+    if cleaned.is_empty() {
+        object.remove("mcpAllowlist");
+    } else {
+        object.insert("mcpAllowlist".into(), serde_json::Value::Array(cleaned));
+    }
     serde_json::to_string_pretty(&data)
-        .map(|s| s + "\n")
+        .map(|serialized| Some(serialized + "\n"))
         .map_err(|e| format!("serialize permissions: {e}"))
 }
 
-fn permissions_file_unsafe(path: &Path) -> bool {
-    let Ok(content) = fs::read_to_string(path) else {
-        return true;
-    };
-    if json_has_unsafe_literals(&content) {
-        return true;
-    }
-    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return true;
-    };
-    permissions_value_unsafe(&parsed)
-}
-
 fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf)> {
-    let browsers = default_playwright_browsers_path(home)?;
+    let browsers = resolve_playwright_browsers_path(home)?;
     let config = default_playwright_mcp_config_path(home);
     Some((config, browsers))
 }
@@ -376,8 +329,8 @@ fn prepare_mcp_merge(
 
 #[derive(Debug, Clone)]
 struct GlobalProfilePlan {
-    permissions_serialized: String,
     mcp_serialized: String,
+    permissions_cleanup: Option<String>,
 }
 
 fn install_agents(
@@ -530,21 +483,20 @@ fn preflight_global_profile(
         }
     }
 
-    let permissions_template = permissions_template_path(workspace_root);
-    let permissions_content = fs::read_to_string(&permissions_template)
-        .map_err(|e| format!("read permissions template: {e}"))?;
-    serde_json::from_str::<serde_json::Value>(&permissions_content)
-        .map_err(|e| format!("permissions template invalid JSON: {e}"))?;
-    if json_has_unsafe_literals(&permissions_content) {
-        return Err("permissions template contains unsafe literals".into());
-    }
-
-    if paths.permissions.is_file() {
-        let existing = read_permissions_target(&paths.permissions)?;
-        if permissions_value_unsafe(&existing) {
-            return Err("existing permissions JSON failed safety check".into());
+    let permissions_cleanup = if paths.permissions.is_file() {
+        let status = legacy_permission_cleanup_status(&paths.permissions);
+        match status {
+            LegacyPermissionCleanupStatus::BlockedInvalidJson => {
+                return Err("permissions target invalid JSON".into());
+            }
+            LegacyPermissionCleanupStatus::BlockedInvalidAllowlist => {
+                return Err("existing permissions mcpAllowlist must be an array".into());
+            }
+            _ => prepare_legacy_permission_cleanup(&paths.permissions)?,
         }
-    }
+    } else {
+        None
+    };
 
     let mcp_template = mcp_template_path(workspace_root);
     let mcp_content =
@@ -569,8 +521,6 @@ fn preflight_global_profile(
     let (config_path, browsers_path) = resolve_playwright_paths(&paths.user_home)
         .ok_or_else(|| "could not resolve Playwright MCP paths for this platform".to_string())?;
 
-    let permissions_serialized =
-        prepare_permissions_merge(&permissions_template, &paths.permissions)?;
     let mcp_serialized = prepare_mcp_merge(
         &mcp_template,
         &paths.mcp_config,
@@ -581,8 +531,8 @@ fn preflight_global_profile(
     backup_root()?;
 
     Ok(GlobalProfilePlan {
-        permissions_serialized,
         mcp_serialized,
+        permissions_cleanup,
     })
 }
 
@@ -595,29 +545,29 @@ fn stage_failure(stage: &str, err: String, stdout: String) -> ProfileRunOutput {
     }
 }
 
-fn apply_global_permissions(
-    workspace_root: &Path,
+fn apply_legacy_permission_cleanup(
     paths: &CursorProfilePaths,
     apply: bool,
     plan: Option<&GlobalProfilePlan>,
     stdout: &mut String,
 ) -> Result<(), String> {
-    ensure_global_write_target(paths, &paths.permissions, "permissions")?;
-    let template_path = permissions_template_path(workspace_root);
+    let status = legacy_permission_cleanup_status(&paths.permissions);
     if apply {
-        let serialized = plan
-            .ok_or_else(|| "internal error: missing permissions plan".to_string())?
-            .permissions_serialized
-            .clone();
-        if let Some(parent) = paths.permissions.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("create permissions parent: {e}"))?;
+        if let Some(serialized) = plan.and_then(|p| p.permissions_cleanup.clone()) {
+            ensure_global_write_target(paths, &paths.permissions, "permissions")?;
+            if let Some(parent) = paths.permissions.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("create permissions parent: {e}"))?;
+            }
+            backup_file_before_write(&paths.permissions, "cursor-permissions")?;
+            fs::write(&paths.permissions, serialized)
+                .map_err(|e| format!("write permissions: {e}"))?;
+            stdout.push_str("legacy-permissions  written 1\n");
+        } else {
+            stdout.push_str(&format!("legacy-permissions  {}\n", status.label()));
         }
-        backup_file_before_write(&paths.permissions, "cursor-permissions")?;
-        fs::write(&paths.permissions, serialized).map_err(|e| format!("write permissions: {e}"))?;
-        stdout.push_str("global-permissions  written 1\n");
     } else {
-        let status = diff_permissions_status(&template_path, &paths.permissions);
-        stdout.push_str(&format!("global-permissions  planned {status}\n"));
+        stdout.push_str(&format!("legacy-permissions  {}\n", status.label()));
     }
     Ok(())
 }
@@ -647,10 +597,8 @@ pub fn run_global_profile(
     if let Err(err) = apply_global_mcp(workspace_root, paths, apply, plan.as_ref(), &mut stdout) {
         return stage_failure("global-mcp", err, stdout);
     }
-    if let Err(err) =
-        apply_global_permissions(workspace_root, paths, apply, plan.as_ref(), &mut stdout)
-    {
-        return stage_failure("global-permissions", err, stdout);
+    if let Err(err) = apply_legacy_permission_cleanup(paths, apply, plan.as_ref(), &mut stdout) {
+        return stage_failure("legacy-permissions", err, stdout);
     }
 
     ProfileRunOutput {
@@ -674,30 +622,39 @@ pub fn validate_global_profile(
     let (skills_status, _, _) =
         sync_skill_dirs_status(&workspace_root.join("skills"), &paths.skills, &recommended);
     let mcp_status = mcp_diff_status(workspace_root, paths);
-    let perms_status = diff_permissions_status(
-        &permissions_template_path(workspace_root),
-        &paths.permissions,
-    );
-    let shell_unsafe = paths.permissions.is_file() && permissions_file_unsafe(&paths.permissions);
+    let legacy_status = legacy_permission_cleanup_status(&paths.permissions);
+    let legacy_label = legacy_status.label();
 
     let stdout = format!(
-        "agents {agents_status}\nskills {skills_status}\nmcp {mcp_status}\npermissions {perms_status}\n"
+        "agents {agents_status}\nskills {skills_status}\nmcp {mcp_status}\nlegacy-permissions {legacy_label}\n"
     );
 
+    let legacy_ok = matches!(
+        legacy_status,
+        LegacyPermissionCleanupStatus::NotNeeded | LegacyPermissionCleanupStatus::Clean
+    );
     let success = agents_status == "synced"
         && skills_status == "synced"
         && mcp_status == "synced"
-        && perms_status == "synced"
-        && !shell_unsafe;
+        && legacy_ok;
+
+    let stderr = match legacy_status {
+        LegacyPermissionCleanupStatus::Planned => format!(
+            "legacy permissions cleanup pending: remove exact entry {LEGACY_MCP_ALLOWLIST_ENTRY} from mcpAllowlist (run apply setup)"
+        ),
+        LegacyPermissionCleanupStatus::BlockedInvalidJson => {
+            "permissions.json is invalid JSON; fix before applying setup".into()
+        }
+        LegacyPermissionCleanupStatus::BlockedInvalidAllowlist => {
+            "permissions.json mcpAllowlist must be an array".into()
+        }
+        _ => String::new(),
+    };
 
     ProfileRunOutput {
         success,
         stdout,
-        stderr: if shell_unsafe {
-            "unsafe permissions detected".into()
-        } else {
-            String::new()
-        },
+        stderr,
         exit_code: if success { 0 } else { 1 },
     }
 }
@@ -748,87 +705,155 @@ mod tests {
     }
 
     #[test]
-    fn prepare_permissions_merge_adds_missing_mcp_allowlist() {
-        let root = temp_root("perms-missing");
-        let template = root.join("template.json");
+    fn legacy_cleanup_missing_permissions_file_is_not_needed() {
+        let root = temp_root("legacy-missing");
+        let target = root.join("permissions.json");
+        assert_eq!(
+            legacy_permission_cleanup_status(&target),
+            LegacyPermissionCleanupStatus::NotNeeded
+        );
+        assert!(prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_removes_only_legacy_entry() {
+        let root = temp_root("legacy-only");
+        let target = root.join("permissions.json");
+        fs::write(&target, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("target");
+        let serialized = prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .expect("change");
+        let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
+        assert!(merged.get("mcpAllowlist").is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_preserves_unrelated_strings() {
+        let root = temp_root("legacy-mixed");
         let target = root.join("permissions.json");
         fs::write(
-            &template,
-            r#"{"mcpAllowlist":["playwright:*"],"notes":"managed"}"#,
+            &target,
+            r#"{"mcpAllowlist":["custom:*","playwright:*"],"other":"keep"}"#,
         )
-        .expect("template");
-        fs::write(&target, r#"{"other":"keep"}"#).expect("target");
-
-        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
+        .expect("target");
+        let serialized = prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .expect("change");
         let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
         let allow = merged
             .get("mcpAllowlist")
             .and_then(|v| v.as_array())
             .expect("allowlist");
         let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
-        assert_eq!(entries, vec!["playwright:*"]);
+        assert_eq!(entries, vec!["custom:*"]);
         assert_eq!(merged.get("other").and_then(|v| v.as_str()), Some("keep"));
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
-    fn prepare_permissions_merge_rejects_non_array_string_mcp_allowlist() {
-        let root = temp_root("perms-string");
-        let template = root.join("template.json");
+    fn legacy_cleanup_removes_duplicate_legacy_entries() {
+        let root = temp_root("legacy-dup");
         let target = root.join("permissions.json");
-        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
-        fs::write(&target, r#"{"mcpAllowlist":"playwright:*"}"#).expect("target");
-
-        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
-        assert!(err.contains("mcpAllowlist"));
-        assert!(err.contains("array"));
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn prepare_permissions_merge_rejects_non_array_object_mcp_allowlist() {
-        let root = temp_root("perms-object");
-        let template = root.join("template.json");
-        let target = root.join("permissions.json");
-        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
-        fs::write(&target, r#"{"mcpAllowlist":{"server":"playwright:*"}}"#).expect("target");
-
-        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
-        assert!(err.contains("mcpAllowlist"));
-        assert!(err.contains("array"));
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn prepare_permissions_merge_rejects_non_array_null_mcp_allowlist() {
-        let root = temp_root("perms-null");
-        let template = root.join("template.json");
-        let target = root.join("permissions.json");
-        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
-        fs::write(&target, r#"{"mcpAllowlist":null}"#).expect("target");
-
-        let err = prepare_permissions_merge(&template, &target).expect_err("type error");
-        assert!(err.contains("mcpAllowlist"));
-        assert!(err.contains("array"));
-        let _ = fs::remove_dir_all(&root);
-    }
-
-    #[test]
-    fn prepare_permissions_merge_does_not_duplicate_managed_entries() {
-        let root = temp_root("perms-dedup");
-        let template = root.join("template.json");
-        let target = root.join("permissions.json");
-        fs::write(&template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("template");
-        fs::write(&target, r#"{"mcpAllowlist":["playwright:*","custom:*"]}"#).expect("target");
-
-        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
+        fs::write(
+            &target,
+            r#"{"mcpAllowlist":["playwright:*","playwright:*","custom:*"]}"#,
+        )
+        .expect("target");
+        let serialized = prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .expect("change");
         let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
         let allow = merged
             .get("mcpAllowlist")
             .and_then(|v| v.as_array())
             .expect("allowlist");
         let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
-        assert_eq!(entries, vec!["playwright:*", "custom:*"]);
+        assert_eq!(entries, vec!["custom:*"]);
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_preserves_non_string_array_values() {
+        let root = temp_root("legacy-non-string");
+        let target = root.join("permissions.json");
+        fs::write(
+            &target,
+            r#"{"mcpAllowlist":["playwright:*",{"server":"playwright:*"}],"notes":"keep"}"#,
+        )
+        .expect("target");
+        let serialized = prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .expect("change");
+        let merged: serde_json::Value = serde_json::from_str(&serialized).expect("json");
+        let allow = merged
+            .get("mcpAllowlist")
+            .and_then(|v| v.as_array())
+            .expect("allowlist");
+        assert_eq!(allow.len(), 1);
+        assert!(allow[0].is_object());
+        assert_eq!(merged.get("notes").and_then(|v| v.as_str()), Some("keep"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_noop_without_backup() {
+        let root = temp_root("legacy-noop");
+        let target = root.join("permissions.json");
+        fs::write(&target, r#"{"mcpAllowlist":["custom:*"]}"#).expect("target");
+        assert_eq!(
+            legacy_permission_cleanup_status(&target),
+            LegacyPermissionCleanupStatus::Clean
+        );
+        assert!(prepare_legacy_permission_cleanup(&target)
+            .expect("prepare")
+            .is_none());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_rejects_invalid_json() {
+        let root = temp_root("legacy-bad-json");
+        let target = root.join("permissions.json");
+        fs::write(&target, "{bad").expect("target");
+        assert_eq!(
+            legacy_permission_cleanup_status(&target),
+            LegacyPermissionCleanupStatus::BlockedInvalidJson
+        );
+        let err = prepare_legacy_permission_cleanup(&target).expect_err("invalid");
+        assert!(err.contains("invalid JSON"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_rejects_non_object_root() {
+        let root = temp_root("legacy-bad-root");
+        let target = root.join("permissions.json");
+        fs::write(&target, r#"["playwright:*"]"#).expect("target");
+        assert_eq!(
+            legacy_permission_cleanup_status(&target),
+            LegacyPermissionCleanupStatus::BlockedInvalidJson
+        );
+        let err = prepare_legacy_permission_cleanup(&target).expect_err("root");
+        assert!(err.contains("object"));
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn legacy_cleanup_rejects_non_array_mcp_allowlist() {
+        let root = temp_root("legacy-bad-allowlist");
+        let target = root.join("permissions.json");
+        fs::write(&target, r#"{"mcpAllowlist":"playwright:*"}"#).expect("target");
+        assert_eq!(
+            legacy_permission_cleanup_status(&target),
+            LegacyPermissionCleanupStatus::BlockedInvalidAllowlist
+        );
+        let err = prepare_legacy_permission_cleanup(&target).expect_err("type");
+        assert!(err.contains("mcpAllowlist"));
+        assert!(err.contains("array"));
         let _ = fs::remove_dir_all(&root);
     }
 
@@ -866,34 +891,6 @@ mod tests {
         assert!(!profile.join("backups").exists());
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
-    }
-
-    #[test]
-    fn merge_permissions_preserves_unrelated_user_servers() {
-        let root = temp_root("perms-merge");
-        let template = root.join("template.json");
-        let target = root.join("permissions.json");
-        fs::write(
-            &template,
-            r#"{"mcpAllowlist":["playwright:*"],"notes":"managed"}"#,
-        )
-        .expect("template");
-        fs::write(&target, r#"{"mcpAllowlist":["custom:*"],"other":"keep"}"#).expect("target");
-
-        let serialized = prepare_permissions_merge(&template, &target).expect("merge");
-        fs::write(&target, serialized).expect("write");
-        let merged: serde_json::Value =
-            serde_json::from_str(&fs::read_to_string(&target).expect("read")).expect("json");
-        let allow = merged
-            .get("mcpAllowlist")
-            .and_then(|v| v.as_array())
-            .expect("allowlist");
-        let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
-        assert!(entries.contains(&"custom:*"));
-        assert!(entries.contains(&"playwright:*"));
-        assert_eq!(merged.get("other").and_then(|v| v.as_str()), Some("keep"));
-        assert!(merged.get("terminalAllowlist").is_none());
-        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
@@ -947,9 +944,6 @@ mod tests {
             "---\nname: diagnose\ndescription: d\n---\n",
         )
         .expect("skill md");
-        let perms_template = workspace.join("templates/cursor/permissions/global-playwright.json");
-        fs::create_dir_all(perms_template.parent().expect("perms parent")).expect("perms dir");
-        fs::write(&perms_template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("perms template");
         let mcp_template = workspace.join("templates/cursor/mcp/playwright.mcp.json");
         fs::create_dir_all(mcp_template.parent().expect("mcp parent")).expect("mcp dir");
         fs::write(
@@ -977,7 +971,7 @@ mod tests {
 
         fs::write(
             profile.join("permissions.json"),
-            r#"{"mcpAllowlist":["custom:*"]}"#,
+            r#"{"mcpAllowlist":["playwright:*","custom:*"]}"#,
         )
         .expect("existing permissions");
 
@@ -994,8 +988,18 @@ mod tests {
                 .read_dir()
                 .map(|mut d| d.next().is_some())
                 .unwrap_or(false),
-            "expected backup before permissions overwrite"
+            "expected backup before legacy permissions cleanup"
         );
+        let perms: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(profile.join("permissions.json")).expect("perms"),
+        )
+        .expect("json");
+        let allow = perms
+            .get("mcpAllowlist")
+            .and_then(|v| v.as_array())
+            .expect("allowlist");
+        let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
+        assert_eq!(entries, vec!["custom:*"]);
         assert!(profile.join("agents/reviewer.md").is_file());
         assert!(profile.join("skills/diagnose/SKILL.md").is_file());
         assert!(profile.join("mcp.json").is_file());
@@ -1023,9 +1027,6 @@ mod tests {
             "---\nname: diagnose\ndescription: d\n---\n",
         )
         .expect("skill md");
-        let perms_template = workspace.join("templates/cursor/permissions/global-playwright.json");
-        fs::create_dir_all(perms_template.parent().expect("perms parent")).expect("perms dir");
-        fs::write(&perms_template, r#"{"mcpAllowlist":["playwright:*"]}"#).expect("perms template");
         let mcp_template = workspace.join("templates/cursor/mcp/playwright.mcp.json");
         fs::create_dir_all(mcp_template.parent().expect("mcp parent")).expect("mcp dir");
         fs::write(
@@ -1133,7 +1134,7 @@ mod tests {
         assert!(!result.success);
         assert!(result.stderr.contains("global-agents"));
         assert!(!result.stderr.contains("global-mcp"));
-        assert!(!result.stderr.contains("global-permissions"));
+        assert!(!result.stderr.contains("legacy-permissions"));
         assert_eq!(
             fs::read_to_string(profile.join("mcp.json")).expect("mcp after"),
             mcp_before
@@ -1232,70 +1233,6 @@ mod tests {
             perms_before
         );
         assert!(!profile.join("backups").exists());
-        let _ = fs::remove_dir_all(&workspace);
-        let _ = fs::remove_dir_all(&profile);
-    }
-
-    #[test]
-    fn preflight_rejects_unsafe_existing_permissions() {
-        let workspace = temp_root("preflight-unsafe-perms");
-        let profile = temp_root("preflight-unsafe-perms-profile");
-        write_minimal_profile_workspace(&workspace);
-        fs::write(
-            profile.join("mcp.json"),
-            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
-        )
-        .expect("mcp");
-        fs::write(
-            profile.join("permissions.json"),
-            r#"{"mcpAllowlist":["*:*"]}"#,
-        )
-        .expect("unsafe perms");
-
-        let (_guard, _restore) = profile_apply_env(&profile);
-        let paths = test_paths(&profile);
-        let perms_before =
-            fs::read_to_string(profile.join("permissions.json")).expect("perms before");
-        let result = run_global_profile(&workspace, &paths, true);
-        assert!(!result.success);
-        assert!(result.stderr.contains("preflight"));
-        assert!(result
-            .stderr
-            .contains("existing permissions JSON failed safety check"));
-        assert!(!profile.join("skills").exists());
-        assert_eq!(
-            fs::read_to_string(profile.join("permissions.json")).expect("perms after"),
-            perms_before
-        );
-        assert!(!profile.join("backups").exists());
-        let _ = fs::remove_dir_all(&workspace);
-        let _ = fs::remove_dir_all(&profile);
-    }
-
-    #[test]
-    fn preflight_rejects_unsafe_merged_permissions_terminal_allowlist() {
-        let workspace = temp_root("preflight-unsafe-merge");
-        let profile = temp_root("preflight-unsafe-merge-profile");
-        write_minimal_profile_workspace(&workspace);
-        fs::write(
-            profile.join("mcp.json"),
-            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
-        )
-        .expect("mcp");
-        fs::write(
-            profile.join("permissions.json"),
-            r#"{"terminalAllowlist":["npx foo"],"mcpAllowlist":["custom:*"]}"#,
-        )
-        .expect("unsafe terminal");
-
-        let (_guard, _restore) = profile_apply_env(&profile);
-        let paths = test_paths(&profile);
-        let result = run_global_profile(&workspace, &paths, true);
-        assert!(!result.success);
-        assert!(result.stderr.contains("preflight"));
-        assert!(result
-            .stderr
-            .contains("existing permissions JSON failed safety check"));
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
     }

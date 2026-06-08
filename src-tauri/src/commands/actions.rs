@@ -5,9 +5,7 @@ use super::content::safe_canonical_target;
 use super::process::{run_cmd, ActionResult};
 use super::status::file_eq;
 use super::workspace::{path_arg, workspace_root};
-#[cfg(windows)]
 use crate::cursor_profile_ops::run_global_agents_only;
-#[cfg(windows)]
 use crate::cursor_profile_paths::resolve_cursor_profile_paths;
 
 #[allow(dead_code)]
@@ -308,31 +306,14 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
             }
 
             if cursor_on {
-                #[cfg(windows)]
-                {
-                    let paths = resolve_cursor_profile_paths()?;
-                    let result = run_global_agents_only(&root, &paths, false);
-                    if !result.success {
-                        all_ok = false;
-                    }
-                    last_code = Some(result.exit_code);
-                    out.push_str(&result.stdout);
-                    err.push_str(&result.stderr);
+                let paths = resolve_cursor_profile_paths()?;
+                let result = run_global_agents_only(&root, &paths, false);
+                if !result.success {
+                    all_ok = false;
                 }
-                #[cfg(not(windows))]
-                {
-                    let result = super::cursor_profile::run_cursor_workspace_script(
-                        &root,
-                        "cursor_diff_global_agents",
-                        &["--quiet", "--global-agents"],
-                    )?;
-                    if !result.success {
-                        all_ok = false;
-                    }
-                    last_code = result.exit_code;
-                    out.push_str(&result.stdout);
-                    err.push_str(&result.stderr);
-                }
+                last_code = Some(result.exit_code);
+                out.push_str(&result.stdout);
+                err.push_str(&result.stderr);
             }
 
             Ok(ActionResult::new(
@@ -384,31 +365,14 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
 
             if cursor_on {
                 subsets_attempted.push("cursor-global-agents");
-                #[cfg(windows)]
-                {
-                    let paths = resolve_cursor_profile_paths()?;
-                    let result = run_global_agents_only(&root, &paths, true);
-                    if !result.success {
-                        all_ok = false;
-                    }
-                    last_code = Some(result.exit_code);
-                    out.push_str(&result.stdout);
-                    err.push_str(&result.stderr);
+                let paths = resolve_cursor_profile_paths()?;
+                let result = run_global_agents_only(&root, &paths, true);
+                if !result.success {
+                    all_ok = false;
                 }
-                #[cfg(not(windows))]
-                {
-                    let result = super::cursor_profile::run_cursor_workspace_script(
-                        &root,
-                        "cursor_sync_global_agents",
-                        &["--quiet", "--apply", "--global-agents"],
-                    )?;
-                    if !result.success {
-                        all_ok = false;
-                    }
-                    last_code = result.exit_code;
-                    out.push_str(&result.stdout);
-                    err.push_str(&result.stderr);
-                }
+                last_code = Some(result.exit_code);
+                out.push_str(&result.stdout);
+                err.push_str(&result.stderr);
             }
 
             // When a subcommand fails with empty stdout+stderr, emit synthetic
