@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "decision": "Option B: templates/global-agent-rules.md is the shared core owner; harness appendices in templates/rules/ compose generated sync outputs.",
+  "core": "templates/global-agent-rules.md",
+  "harnesses": {
+    "codex": {
+      "appendix": "templates/rules/codex.md",
+      "output": "templates/sync/codex-rules.md"
+    },
+    "opencode": {
+      "appendix": "templates/rules/opencode.md",
+      "output": "templates/sync/opencode-rules.md"
+    },
+    "claude": {
+      "appendix": "templates/rules/claude.md",
+      "output": "templates/sync/claude-rules.md"
+    },
+    "cursor": {
+      "appendix": "templates/rules/cursor.md",
+      "output": "templates/cursor/user-rules.md",
+      "title": "Cursor User Rules"
+    }
+  }
+}

@@ -3,13 +3,13 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-SOURCE_FILE="$WORKSPACE_ROOT/templates/global-agent-rules.md"
+CORE_RULES_FILE="$WORKSPACE_ROOT/templates/global-agent-rules.md"
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/install-agent-rules.sh [options]
 
-Sync agent rules from templates/global-agent-rules.md to tool-specific paths.
+Sync composed harness rule files (core + appendix) to tool-specific paths.
 
 Options:
   --apply          Write target files
@@ -25,10 +25,20 @@ Default mode is dry-run. Use --apply to write files.
 USAGE
 }
 
-if [ ! -f "$SOURCE_FILE" ]; then
-  printf 'install-agent-rules.sh: source file not found: %s\n' "$SOURCE_FILE" >&2
+if [ ! -f "$CORE_RULES_FILE" ]; then
+  printf 'install-agent-rules.sh: shared core rules not found: %s\n' "$CORE_RULES_FILE" >&2
   exit 1
 fi
+
+composed_rules_source() {
+  local agent_id="$1"
+  case "$agent_id" in
+    codex)    printf '%s' "$WORKSPACE_ROOT/templates/sync/codex-rules.md" ;;
+    opencode) printf '%s' "$WORKSPACE_ROOT/templates/sync/opencode-rules.md" ;;
+    claude)   printf '%s' "$WORKSPACE_ROOT/templates/sync/claude-rules.md" ;;
+    *)        printf 'install-agent-rules.sh: unknown agent: %s\n' "$agent_id" >&2; exit 1 ;;
+  esac
+}
 
 apply=false
 diff_mode=false
@@ -102,6 +112,12 @@ status_char() {
 
 handle_target() {
   local agent_id="$1"
+  local source_file
+  source_file="$(composed_rules_source "$agent_id")"
+  if [ ! -f "$source_file" ]; then
+    printf 'install-agent-rules.sh: composed rules source not found: %s\n' "$source_file" >&2
+    exit 1
+  fi
   local target
   target="$(resolve_target "$agent_id")"
   local label
@@ -109,7 +125,7 @@ handle_target() {
 
   if ! $diff_mode && ! $apply; then
     if [ -f "$target" ]; then
-      if cmp -s "$SOURCE_FILE" "$target"; then
+      if cmp -s "$source_file" "$target"; then
         if ! $quiet; then printf '  %s synced\n' "$label"; fi
       else
         if ! $quiet; then printf '  %s diverged (use --apply to sync)\n' "$label"; fi
@@ -122,11 +138,11 @@ handle_target() {
 
   if $diff_mode; then
     if [ -f "$target" ]; then
-      if cmp -s "$SOURCE_FILE" "$target"; then
+      if cmp -s "$source_file" "$target"; then
         printf '%s synced\n' "$label"
       else
         printf '\n--- %s diffs (%s)\n' "$label" "$target"
-        diff -u "$target" "$SOURCE_FILE" || true
+        diff -u "$target" "$source_file" || true
       fi
     else
       printf '\n--- %s missing (no target file at %s)\n' "$label" "$target"
@@ -136,7 +152,7 @@ handle_target() {
 
   if $apply; then
     if [ -f "$target" ]; then
-      if cmp -s "$SOURCE_FILE" "$target"; then
+      if cmp -s "$source_file" "$target"; then
         if ! $quiet; then printf '  %s already synced\n' "$label"; fi
         return 0
       fi
@@ -151,14 +167,14 @@ handle_target() {
       mkdir -p "$(dirname "$target")"
       if ! $quiet; then printf '  %s creating new\n' "$label"; fi
     fi
-    cp "$SOURCE_FILE" "$target"
+    cp "$source_file" "$target"
     if ! $quiet; then printf '  %s synced\n' "$label"; fi
   fi
 }
 
 if ! $quiet; then
   printf '\nAgent Rules Sync\n'
-  printf '  Source: %s\n' "$SOURCE_FILE"
+  printf '  Core: %s\n' "$CORE_RULES_FILE"
   if $diff_mode; then
     printf '  Mode: diff\n'
   elif $apply; then

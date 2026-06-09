@@ -644,6 +644,9 @@ python3 scripts/generate-default-opencode-config.py --check
 
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check
+
+step "bundled harness rule adapters are current"
+python3 scripts/generate-agent-rules.py --check
 python3 - <<'PY'
 import tomllib
 from pathlib import Path

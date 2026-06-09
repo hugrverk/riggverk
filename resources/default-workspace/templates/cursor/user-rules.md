@@ -1,15 +1,27 @@
 # Cursor User Rules
 
 ## Default operating mode
+
 Cursor rules, skills, subagents, and MCP are separate surfaces.
 Use subagents only when they reduce risk, context load, or verification burden.
 Do not duplicate workflow instructions across all surfaces.
+
+## Cursor harness
+
+- Use bundled Cursor agents, skills, User Rules, and MCP through native setup; Agent Workspace does not own project rules or Auto Review.
+- Manual Auto Review stays user-controlled; do not assume the app can trigger it.
+
+## Dev server lifecycle
+
+Before starting a local dev server for browser work, check whether the needed URL or port already responds and reuse it when possible. Do not start duplicate servers.
+If you start a dev server, record enough command, PID, session, and port detail to stop only the server you started. Stop it before the final report. If cleanup cannot be completed safely, report the exact port/process status and remaining risk.
+Do not claim browser smoke or `browser-qa` completed without reporting server lifecycle status. Kretsverket may use `http://localhost:1420/`; verify before starting a replacement server.
 
 ## Priority
 Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe.
 
 ## Communication
-Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. State uncertainty clearly.
+Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.
 
 ## Security
 Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, expose, summarize verbatim, or pass onward secrets, tokens, passwords, private keys, raw env values, cookies, sessions, auth headers, private tokenized URLs, or credential-bearing config. Summarize safely without values. Do not inspect `.env*`, private keys, dumps, credential stores, or unrelated personal files unless explicitly requested. Flag risky operations.
@@ -18,33 +30,27 @@ Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, 
 Optimize for correctness, bounded scope, repository consistency, low maintenance, and solo-developer cognitive load. Prefer boring robust solutions, smallest safe diffs, and existing patterns. Do not trade away correctness, security, or final judgment quality to save usage.
 
 ## Skill routing
-Use the installed skill system as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full bundled catalog when working inside this workspace.
-
-- **Code implementation and refactoring**: `minimal-implementation`.
-- **Bugs, regressions, flakes, or slowness**: `diagnose`; add `tdd` for a focused regression test.
-- **Unfamiliar or architectural code**: `zoom-out`; add `implementation-plan` before non-trivial edits.
-- **Multi-step work**: `implementation-plan`; add `context-budget` for broad or noisy work.
-- **Frontend**: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
-- **Security, auth, permissions, uploads, shell, or sensitive data**: `security-review`.
-- **Database or persisted data changes**: `database-migrations`; add `security-review` where access control or sensitive data is involved.
-- **Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies**: `current-docs`; add `security-review` when trusted surface expands.
-- **WordPress or WooCommerce**: `wordpress-woocommerce`, plus relevant generic implementation, QA, accessibility, security, or release skills.
-- **Kretsverket editor or canvas**: `kretsverket-editor-change`.
-- **Kretsverket persistence or file compatibility**: `kretsverket-file-compatibility`.
-- **Kretsverket symbols**: `kretsverket-symbol-system`.
-- **Kretsverket electrical drawing**: `kretsverket-electrical-drawing`.
-- **Release readiness**: `release-check`.
-- **Executor reports, paused work, or context transfer**: `handoff`.
+Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full catalog when working inside this repo.
+- Code implementation and refactoring: `minimal-implementation`.
+- Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
+- Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
+- Multi-step work: `implementation-plan`; add `context-budget` for broad or noisy work.
+- Frontend: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
+- Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
+- Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
+- Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
+- WordPress or WooCommerce: `wordpress-woocommerce`, plus relevant generic implementation, QA, accessibility, security, or release skills.
+- Kretsverket editor or canvas: `kretsverket-editor-change`.
+- Kretsverket persistence or file compatibility: `kretsverket-file-compatibility`.
+- Kretsverket symbols: `kretsverket-symbol-system`.
+- Kretsverket electrical drawing: `kretsverket-electrical-drawing`.
+- Release readiness: `release-check`.
+- Executor reports, paused work, or context transfer: `handoff`.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.
 Default flow: inspect context, identify root cause or affected surface, make a bounded plan, implement if requested and safe, verify with the lightest falsifying check, then report.
 Do not stop at diagnosis when implementation was requested. Investigate before asking for more context. If evidence contradicts the plan, stop and re-plan. Ask before choosing only when the choice materially affects architecture, scope, risk, data, deployment, or user-visible behavior.
-
-## Dev server lifecycle
-Before starting a local dev server for browser work, check whether the needed URL or port already responds and reuse it when possible. Do not start duplicate servers.
-If you start a dev server, record enough command, PID, session, and port detail to stop only the server you started. Stop it before the final report. If cleanup cannot be completed safely, report the exact port/process status and remaining risk.
-Do not claim browser smoke or `browser-qa` completed without reporting server lifecycle status. Kretsverket may use `http://localhost:1420/`; verify before starting a replacement server.
 
 ## Scope
 Do not touch files outside scope unless necessary. Do not expand scope for nearby cleanup. Do not propose broad rewrites unless requested. If a non-trivial refactor is needed, pause and ask. Never modify files marked AUDIT ONLY. Keep patches minimal, local, and reviewable.
