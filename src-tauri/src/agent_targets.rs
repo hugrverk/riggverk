@@ -77,6 +77,13 @@ pub fn targets() -> Vec<AgentSyncTarget> {
             source_rel: "agents",
         },
         AgentSyncTarget {
+            id: "codex_agents",
+            label: "codex agents",
+            kind: TargetKind::Agents,
+            target_rel: ".codex/agents",
+            source_rel: "templates/codex/agents",
+        },
+        AgentSyncTarget {
             id: "opencode_config",
             label: "opencode config",
             kind: TargetKind::Config,
@@ -157,8 +164,12 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
         TargetProfileMeta {
             id: "codex".into(),
             label: "Codex".into(),
-            description: "Codex rules. Config template is manual-review only to avoid clobbering Codex-owned settings.".into(),
-            target_ids: vec!["codex_rules".into()],
+            description: "Codex rules, native agents, and managed config sections.".into(),
+            target_ids: vec![
+                "codex_rules".into(),
+                "codex_agents".into(),
+                "codex_config".into(),
+            ],
         },
         TargetProfileMeta {
             id: "opencode".into(),
@@ -200,8 +211,9 @@ pub fn target_profiles() -> Vec<TargetProfileMeta> {
                 .into(),
             target_ids: vec![
                 "codex_rules".into(),
+                "codex_agents".into(),
+                "codex_config".into(),
                 "opencode_rules".into(),
-                "claude_rules".into(),
                 "opencode_agents".into(),
                 "claude_agents".into(),
                 "opencode_config".into(),

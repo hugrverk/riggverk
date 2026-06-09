@@ -2,7 +2,7 @@
 
 Versioned Codex config template for manual review.
 
-This workspace treats Codex support as rules sync plus config diff/manual review. It does not run Codex, start agents, manage project-specific Codex settings, or store target-project profiles.
+This workspace treats Codex support as rules sync, native TOML agent install, managed config merge, and skills sync. It does not run Codex, manage project-specific Codex settings, or store target-project profiles.
 
 Files:
 
@@ -15,4 +15,6 @@ Preview differences with:
 ./scripts/install-codex-config.sh --diff
 ```
 
-The app does not overwrite `~/.codex/config.toml`. Full-file replacement can remove Codex-managed or user-owned settings. The CLI script requires `--force-overwrite` with `--apply` for deliberate advanced use.
+`./scripts/install-codex-config.sh --apply` merges managed profile sections only. `./scripts/install-codex-agents.sh --apply` syncs bundled native agents to `~/.codex/agents`.
+
+Full-file replacement remains available with `--apply --force-overwrite` for deliberate advanced use.

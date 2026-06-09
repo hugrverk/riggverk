@@ -55,12 +55,14 @@ function App() {
     status,
     workspaceDiagnostics,
     opencodeRuntimeHealth,
+    codexRuntimeHealth,
     cursorProfileHealth,
     brainSetupText,
     brainSetupSource,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
+    loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadBrainSetupSeed,
     resetWorkspaceHealthState,
@@ -170,9 +172,10 @@ function App() {
       loadWorkspaceLibraryResources(generation),
       fetchStatus(generation).catch(() => {}),
       loadOpenCodeRuntimeHealth(generation).catch(() => {}),
+      loadCodexRuntimeHealth(generation).catch(() => {}),
       loadCursorProfileHealth(generation).catch(() => {}),
     ]);
-  }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCursorProfileHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, workspaceLoadGenerationRef]);
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -305,10 +308,11 @@ function App() {
       loadWorkspaceDiagnostics();
       loadCursorProfileHealth();
       loadOpenCodeRuntimeHealth();
+      loadCodexRuntimeHealth();
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadSettings, clearSettingsMsg]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadSettings, clearSettingsMsg]);
 
   // Shared state for the Prompt Loops + Repo Dashboard tools.
   // Lifted to App so context handoff and saved-repo entry identity stay consistent
@@ -428,6 +432,7 @@ function App() {
 
   const enabledTargetIds = status?.enabled_target_ids ?? [];
   const codexConfigEnabled = enabledTargetIds.includes("codex_config");
+  const codexAgentsEnabled = enabledTargetIds.includes("codex_agents") || codexConfigEnabled;
   const opencodeConfigEnabled = enabledTargetIds.includes("opencode_config");
   const opencodeAgentsEnabled = enabledTargetIds.includes("opencode_agents") || opencodeConfigEnabled;
   const codexRulesEnabled = enabledTargetIds.includes("codex_rules");
@@ -518,11 +523,53 @@ function App() {
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
             ruleTargetsEnabled={codexRulesEnabled}
+            codexAgentsEnabled={codexAgentsEnabled}
             codexConfigEnabled={codexConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_codex_rules", "diff codex rules")}
-            onSyncRules={() => runWsAction("sync_codex_rules", "sync codex rules")}
-            onDiffConfigs={() => runWsAction("diff_codex_config", "diff codex config")}
+            codexRuntimeHealth={codexRuntimeHealth}
+            onRefreshCodexRuntimeHealth={loadCodexRuntimeHealth}
+            onDiffRules={() => runWsTask({
+              label: "diff codex rules",
+              action: "diff_codex_rules",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_rules" }),
+              toActionResult: (r) => r,
+              refresh: loadCodexRuntimeHealth,
+            })}
+            onSyncRules={() => runWsTask({
+              label: "sync codex rules",
+              action: "sync_codex_rules",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_rules" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
+            })}
+            onDiffAgents={() => runWsTask({
+              label: "diff codex agents",
+              action: "diff_codex_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_agents" }),
+              toActionResult: (r) => r,
+              refresh: loadCodexRuntimeHealth,
+            })}
+            onSyncAgents={() => runWsTask({
+              label: "sync codex agents",
+              action: "sync_codex_agents",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_agents" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
+            })}
+            onDiffConfigs={() => runWsTask({
+              label: "diff codex config",
+              action: "diff_codex_config",
+              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_config" }),
+              toActionResult: (r) => r,
+              refresh: loadCodexRuntimeHealth,
+            })}
+            onSyncConfigs={() => runWsTask({
+              label: "sync codex config",
+              action: "sync_codex_config",
+              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_config" }),
+              toActionResult: (r) => r,
+              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
+            })}
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["codex"], "preview skills sync (codex)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}

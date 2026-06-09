@@ -19,4 +19,10 @@ Default target:
 
 - Codex config: `~/.codex/config.toml` or `CODEX_CONFIG_PATH`
 
-The app does not overwrite `~/.codex/config.toml`. Codex can update that file itself, and full-file replacement can remove user-owned model, profile, personality, MCP, or project-trust settings. Review diffs and update Codex config manually. The CLI script requires `--force-overwrite` with `--apply` for deliberate advanced use.
+`./scripts/install-codex-config.sh --apply` merges only managed sections listed in `metadata/codex-managed-keys.json` (safe profile defaults). User model, personality, MCP, and unknown tables are preserved.
+
+Native Codex agents live in `templates/codex/agents/*.toml` and sync to `~/.codex/agents` via `./scripts/install-codex-agents.sh`.
+
+Skills install to `~/.agents/skills`. Legacy `~/.codex/skills` migration is available from the Codex skills panel.
+
+The CLI still supports `--apply --force-overwrite` for deliberate full-file replacement after backup. The app uses managed-section merge only.

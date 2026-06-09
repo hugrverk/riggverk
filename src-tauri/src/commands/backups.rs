@@ -10,6 +10,7 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "claude-rules",
     "opencode-config",
     "opencode-agents",
+    "codex-agents",
     "claude-agents",
     "codex",
     "opencode",

@@ -81,13 +81,7 @@ fn run_codex_config_install(
             all_args.extend(["--quiet", "--diff"]);
         }
         agent_targets::ConfigScriptMode::Apply => {
-            return Ok(ActionResult::new(
-                false,
-                action,
-                "Codex config apply is disabled in the app. Use diff config and manually review templates/codex/config.toml before changing ~/.codex/config.toml.\n".into(),
-                String::new(),
-                Some(1),
-            ));
+            all_args.extend(["--quiet", "--apply"]);
         }
     }
     let (ok, out, err, code) = run_cmd("bash", &all_args, root);
@@ -110,6 +104,25 @@ fn target_enabled(target_id: &str) -> bool {
     settings::load()
         .enabled_target_ids
         .contains(&target_id.to_string())
+}
+
+fn run_codex_agents_install(
+    root: &std::path::Path,
+    action: &str,
+    mode: agent_targets::ConfigScriptMode,
+) -> Result<ActionResult, String> {
+    let script_str = workspace_script_arg(root, "scripts/install-codex-agents.sh")?;
+    let mut all_args: Vec<&str> = vec![&script_str];
+    match mode {
+        agent_targets::ConfigScriptMode::Diff => {
+            all_args.extend(["--quiet", "--diff"]);
+        }
+        agent_targets::ConfigScriptMode::Apply => {
+            all_args.extend(["--quiet", "--apply"]);
+        }
+    }
+    let (ok, out, err, code) = run_cmd("bash", &all_args, root);
+    Ok(ActionResult::new(ok, action, out, err, code))
 }
 
 fn run_runtime_agents_install(
@@ -541,6 +554,28 @@ pub fn run_action(action: String) -> Result<ActionResult, String> {
                 &root,
                 "sync_claude_agents",
                 "--claude",
+                agent_targets::ConfigScriptMode::Apply,
+            )
+        }
+
+        "diff_codex_agents" => {
+            if !runtime_agent_target_enabled("codex_agents") {
+                return Ok(no_enabled_agent_targets("diff_codex_agents"));
+            }
+            run_codex_agents_install(
+                &root,
+                "diff_codex_agents",
+                agent_targets::ConfigScriptMode::Diff,
+            )
+        }
+
+        "sync_codex_agents" => {
+            if !runtime_agent_target_enabled("codex_agents") {
+                return Ok(no_enabled_agent_targets("sync_codex_agents"));
+            }
+            run_codex_agents_install(
+                &root,
+                "sync_codex_agents",
                 agent_targets::ConfigScriptMode::Apply,
             )
         }

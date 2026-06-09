@@ -67,6 +67,9 @@ def main() -> None:
         "scripts/generate-opencode-config.py",
         "scripts/playwright-mcp-lib.sh",
         "scripts/check-playwright-mcp.sh",
+        "scripts/install-codex-config.sh",
+        "scripts/install-codex-agents.sh",
+        "scripts/merge-codex-config.py",
     }
     required_templates = {
         "templates/opencode.base.json",

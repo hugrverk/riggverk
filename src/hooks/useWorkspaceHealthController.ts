@@ -4,6 +4,7 @@ import { buildBrainSetupBlock } from "../lib/brainSetup";
 import { isInvalidWorkspaceError } from "../lib/workspaceErrors";
 import type {
   BrainSetupSeedResult,
+  CodexRuntimeHealth,
   CursorProfileHealth,
   OpenCodeRuntimeHealth,
   StatusData,
@@ -24,6 +25,7 @@ export function useWorkspaceHealthController({
   const [status, setStatus] = useState<StatusData | null>(null);
   const [workspaceDiagnostics, setWorkspaceDiagnostics] = useState<WorkspaceDiagnostics | null>(null);
   const [opencodeRuntimeHealth, setOpencodeRuntimeHealth] = useState<OpenCodeRuntimeHealth | null>(null);
+  const [codexRuntimeHealth, setCodexRuntimeHealth] = useState<CodexRuntimeHealth | null>(null);
   const [cursorProfileHealth, setCursorProfileHealth] = useState<CursorProfileHealth | null>(null);
   const [brainSetupSeed, setBrainSetupSeed] = useState<BrainSetupSeedResult | null>(null);
 
@@ -49,6 +51,17 @@ export function useWorkspaceHealthController({
       setError(`Workspace diagnostics: ${e}`);
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+
+  const loadCodexRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
+    try {
+      const health = await invoke<CodexRuntimeHealth>("get_codex_runtime_health");
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setCodexRuntimeHealth(health);
+    } catch {
+      if (!isWorkspaceLoadCurrent(generation)) return;
+      setCodexRuntimeHealth(null);
+    }
+  }, [isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
   const loadOpenCodeRuntimeHealth = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -86,6 +99,7 @@ export function useWorkspaceHealthController({
     setStatus(null);
     setWorkspaceDiagnostics(null);
     setOpencodeRuntimeHealth(null);
+    setCodexRuntimeHealth(null);
     setCursorProfileHealth(null);
   }, []);
 
@@ -104,6 +118,7 @@ export function useWorkspaceHealthController({
     status,
     workspaceDiagnostics,
     opencodeRuntimeHealth,
+    codexRuntimeHealth,
     cursorProfileHealth,
     brainSetupSeed,
     brainSetupText,
@@ -111,6 +126,7 @@ export function useWorkspaceHealthController({
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
+    loadCodexRuntimeHealth,
     loadCursorProfileHealth,
     loadBrainSetupSeed,
     resetWorkspaceHealthState,

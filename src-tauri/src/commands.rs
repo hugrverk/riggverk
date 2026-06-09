@@ -4,6 +4,7 @@ mod content;
 mod contract;
 pub(crate) mod cursor_profile;
 mod defaults;
+mod codex_runtime;
 mod opencode_runtime;
 mod process;
 pub(crate) use process::ActionResult;
@@ -28,6 +29,7 @@ pub use content::{
 };
 pub use contract::validate_workspace_contract;
 pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
+pub use codex_runtime::get_codex_runtime_health;
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,

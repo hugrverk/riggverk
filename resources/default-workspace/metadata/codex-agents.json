@@ -1,0 +1,14 @@
+{
+  "bundled_agents": [
+    "repo_scout.toml",
+    "inspector.toml",
+    "security_reviewer.toml",
+    "verifier.toml"
+  ],
+  "excluded_agents": {
+    "docs_researcher": {
+      "decision": "not_bundled",
+      "reason": "The current-docs skill and the main Codex agent already cover documentation lookup. Official Codex docs do not show a unique native docs_researcher role that warrants a separate bundled agent."
+    }
+  }
+}

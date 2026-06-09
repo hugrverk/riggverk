@@ -1,0 +1,6 @@
+{
+  "description": "Codex config sections merged by Agent Workspace. User model, personality, MCP, and unknown tables are preserved.",
+  "top_level_keys": ["profile"],
+  "managed_profiles": ["safe", "workspace-write"],
+  "managed_profile_fields": ["approval_policy", "sandbox_mode"]
+}

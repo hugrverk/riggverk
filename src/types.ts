@@ -456,6 +456,49 @@ export interface BrainSetupSeedResult {
   content: string;
 }
 
+export interface CodexRuntimeCheck {
+  id: string;
+  label: string;
+  status: string;
+  detail: string;
+}
+
+export interface CodexAgentMismatch {
+  filename: string;
+  status: string;
+  detail: string;
+}
+
+export interface CodexRuntimeHealth {
+  status: string;
+  rules_status: string;
+  rules_source_path: string;
+  rules_installed_path: string;
+  skills_status: string;
+  skills_synced_count: number;
+  skills_expected_count: number;
+  skills_missing_count: number;
+  skills_diverged_count: number;
+  legacy_skills_path: string;
+  legacy_skills_migratable_count: number;
+  legacy_skills_conflict_count: number;
+  agents_status: string;
+  bundled_agent_count: number;
+  installed_bundled_agent_count: number;
+  extra_installed_agent_count: number;
+  agent_mismatches: CodexAgentMismatch[];
+  config_status: string;
+  template_config_path: string;
+  installed_config_path: string;
+  profile: string | null;
+  approval_policy: string | null;
+  sandbox_mode: string | null;
+  checks: CodexRuntimeCheck[];
+  warnings: string[];
+  summary: string;
+  next_action: string;
+}
+
 export interface CursorProfileHealth {
   status: "synced" | "diverged" | "missing" | "partial" | "unsafe" | "stale" | "unknown" | string;
   profile_root: string;
