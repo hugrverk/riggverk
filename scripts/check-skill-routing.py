@@ -258,12 +258,14 @@ def scan_repo_for_removed_skills() -> None:
             continue
         rel_posix = path.relative_to(REPO_ROOT).as_posix()
         for removed in REMOVED_SKILLS:
-            if removed in text and rel_posix.startswith("resources/default-workspace/skills/"):
+            # Allow removed names only in:
+            # 1. Deprecated metadata files
+            if rel_posix == "resources/default-workspace/metadata/deprecated-skills.json":
                 continue
-            if removed in text and (
-                rel_posix == "resources/default-workspace/metadata/deprecated-skills.json"
-                or rel_posix.startswith(f"{DEPRECATED_METADATA_PREFIX}/")
-            ):
+            if rel_posix.startswith(f"{DEPRECATED_METADATA_PREFIX}/"):
+                continue
+            # 2. This checker script itself (documents the set)
+            if rel_posix == "scripts/check-skill-routing.py":
                 continue
             if removed in text:
                 rel = path.relative_to(REPO_ROOT)

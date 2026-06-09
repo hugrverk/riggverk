@@ -4,7 +4,7 @@ description: Work on WordPress/WooCommerce themes, templates, hooks, filters, pl
 category: commerce
 risk: high
 targets: codex, opencode, claude, cursor
-related: woocommerce-pdp-review, security-review, browser-qa, accessibility-review
+related: security-review, browser-qa, accessibility-review
 ---
 
 # WordPress WooCommerce

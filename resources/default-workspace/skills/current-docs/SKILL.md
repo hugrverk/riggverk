@@ -4,7 +4,6 @@ description: Check official or primary current documentation when implementation
 category: docs
 risk: low
 targets: codex, opencode, claude, cursor
-related: dependency-evaluation
 ---
 
 # Current Docs
