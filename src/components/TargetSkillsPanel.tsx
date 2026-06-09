@@ -28,6 +28,8 @@ interface TargetSkillsPanelProps {
   workspaceValid: boolean;
   onPreviewSync: () => void;
   onSyncAll: () => void;
+  onPreviewRemoveDeprecated?: () => void;
+  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -42,6 +44,8 @@ export function TargetSkillsPanel({
   workspaceValid,
   onPreviewSync,
   onSyncAll,
+  onPreviewRemoveDeprecated,
+  onRemoveDeprecated,
   onSetSkillSearch,
   onOpenInstallScript,
 }: TargetSkillsPanelProps) {
@@ -95,13 +99,19 @@ export function TargetSkillsPanel({
     ? `${health.synced_count}/${health.expected_count} synced`
     : `${skillsCount} bundled`;
 
+  const deprecatedHint = health && (health.deprecated_identical_count > 0 || health.deprecated_diverged_count > 0)
+    ? `${health.deprecated_identical_count} deprecated removable, ${health.deprecated_diverged_count} deprecated diverged`
+    : null;
+
   const statusHint = !skillsLoaded
     ? "Loading skills…"
     : skills.length === 0
       ? "No skills in workspace."
       : health && (health.missing_count > 0 || health.diverged_count > 0)
-        ? `${health.missing_count} missing, ${health.diverged_count} diverged`
-        : "Canonical bundled set installs to every enabled harness.";
+        ? `${health.missing_count} missing, ${health.diverged_count} diverged${deprecatedHint ? `; ${deprecatedHint}` : ""}`
+        : deprecatedHint ?? "Canonical bundled set installs to every enabled harness.";
+
+  const hasRemovableDeprecated = (health?.deprecated_identical_count ?? 0) > 0;
 
   return (
     <HarnessActionCard
@@ -112,6 +122,16 @@ export function TargetSkillsPanel({
       warning={statusHint}
       secondaryActions={[
         { label: "preview sync", onClick: onPreviewSync, disabled: !canSync || wsRunning !== null },
+        ...(onPreviewRemoveDeprecated && hasRemovableDeprecated ? [{
+          label: "preview deprecated removal",
+          onClick: onPreviewRemoveDeprecated,
+          disabled: wsRunning !== null,
+        }] : []),
+        ...(onRemoveDeprecated && hasRemovableDeprecated ? [{
+          label: "remove deprecated",
+          onClick: onRemoveDeprecated,
+          disabled: wsRunning !== null,
+        }] : []),
         ...(skillsLoaded && skillsCount > 0 ? [{
           label: showSkillList ? "hide list" : "inspect skills",
           onClick: () => setShowSkillList(prev => !prev),

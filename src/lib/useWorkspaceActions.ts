@@ -142,6 +142,55 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     }
   }, [allSkillNames, fetchStatus, setError]);
 
+  const runRemoveDeprecatedSkills = useCallback(async (
+    dry: boolean,
+    agents: InstallAgent[],
+    label?: string,
+  ) => {
+    if (workspaceActionLockRef.current) return;
+    const allowed = new Set<string>(INSTALL_AGENTS);
+    const normalized = agents.filter((a): a is InstallAgent => allowed.has(a));
+    if (normalized.length !== 1) return;
+
+    workspaceActionLockRef.current = true;
+    const requestId = workspaceActionRequestIdRef.current + 1;
+    workspaceActionRequestIdRef.current = requestId;
+    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
+    const runningLabel = label ?? (dry ? "preview deprecated removal" : "remove deprecated skills");
+    const startedAt = performance.now();
+    setWsRunning(runningLabel);
+    setError(null);
+    try {
+      const agent = normalized[0];
+      const result = await invoke<ActionResult>("remove_deprecated_skills", {
+        agent,
+        dry_run: dry,
+      });
+      if (!isCurrentAction()) return;
+      setWsLog(result);
+      setWsLogCompletedAt(Date.now());
+      if (!dry && result.success) {
+        setError(null);
+        fetchStatus();
+      }
+    } catch (e) {
+      if (!isCurrentAction()) return;
+      setWsLog({
+        success: false,
+        action: dry ? "remove_deprecated_skills:dry-run" : "remove_deprecated_skills",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+      setError(`Deprecated removal: ${e}`);
+    } finally {
+      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
+      if (remaining > 0) await wait(remaining);
+      if (isCurrentAction()) setWsRunning(null);
+      workspaceActionLockRef.current = false;
+    }
+  }, [fetchStatus, setError]);
+
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.
    *  Stable reference via useCallback with empty deps (uses refs and setStates). */
@@ -198,6 +247,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     activityCellClass,
     runWsAction,
     runWsInstallForAgents,
+    runRemoveDeprecatedSkills,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,

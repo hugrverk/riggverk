@@ -77,9 +77,14 @@ export interface SkillSyncHealthEntry {
   supported: boolean; state: string; next_action: string;
 }
 
+export interface DeprecatedSkillHealthEntry {
+  name: string; state: string; target_path: string; removable: boolean; next_action: string;
+}
+
 export interface SkillsSyncHealth {
   expected_count: number; synced_count: number; missing_count: number;
-  diverged_count: number; skills: SkillSyncHealthEntry[];
+  diverged_count: number; deprecated_identical_count: number; deprecated_diverged_count: number;
+  skills: SkillSyncHealthEntry[]; deprecated: DeprecatedSkillHealthEntry[];
 }
 
 export interface AgentTargetMeta {

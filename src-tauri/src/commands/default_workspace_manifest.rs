@@ -121,6 +121,24 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "skills/zoom-out/SKILL.md",
             ],
         ),
-        ("Metadata", &["metadata/agents.json"]),
+        (
+            "Metadata",
+            &[
+                "metadata/agents.json",
+                "metadata/deprecated-skills.json",
+                "metadata/deprecated-skills/agent-report-review/SKILL.md",
+                "metadata/deprecated-skills/caveman/SKILL.md",
+                "metadata/deprecated-skills/dependency-evaluation/SKILL.md",
+                "metadata/deprecated-skills/grill-me/SKILL.md",
+                "metadata/deprecated-skills/grill-with-docs/SKILL.md",
+                "metadata/deprecated-skills/improve-codebase-architecture/SKILL.md",
+                "metadata/deprecated-skills/nextjs-product-slice/SKILL.md",
+                "metadata/deprecated-skills/supabase-rls-review/SKILL.md",
+                "metadata/deprecated-skills/to-prd/SKILL.md",
+                "metadata/deprecated-skills/triage/SKILL.md",
+                "metadata/deprecated-skills/woocommerce-pdp-review/SKILL.md",
+                "metadata/deprecated-skills/write-a-skill/SKILL.md",
+            ],
+        ),
     ]
 }

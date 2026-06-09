@@ -61,7 +61,11 @@ ROUTING_SOURCES = [
 MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src/lib/brainSetup.test.ts",
     REPO_ROOT / "scripts/check-skill-routing.py",
+    REPO_ROOT / "src-tauri/src/deprecated_skills.rs",
+    REPO_ROOT / "src-tauri/src/commands/default_workspace_manifest.rs",
 }
+
+DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"
 
 FRONTMATTER_RE = re.compile(r"^---\s*$([\s\S]*?)^---\s*$", re.MULTILINE)
 FIELD_RE = re.compile(r"^([a-zA-Z0-9_-]+):\s*(.+?)\s*$")
@@ -177,9 +181,13 @@ def scan_repo_for_removed_skills() -> None:
             text = path.read_text(encoding="utf-8")
         except (UnicodeDecodeError, OSError):
             continue
+        rel_posix = path.relative_to(REPO_ROOT).as_posix()
         for removed in REMOVED_SKILLS:
-            if removed in text and path.relative_to(REPO_ROOT).as_posix().startswith(
-                "resources/default-workspace/skills/"
+            if removed in text and rel_posix.startswith("resources/default-workspace/skills/"):
+                continue
+            if removed in text and (
+                rel_posix == "resources/default-workspace/metadata/deprecated-skills.json"
+                or rel_posix.startswith(f"{DEPRECATED_METADATA_PREFIX}/")
             ):
                 continue
             if removed in text:

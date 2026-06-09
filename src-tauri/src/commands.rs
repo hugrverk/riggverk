@@ -6,6 +6,8 @@ pub(crate) mod cursor_profile;
 mod defaults;
 mod opencode_runtime;
 mod process;
+pub(crate) use process::ActionResult;
+pub(crate) use status::file_eq;
 mod repo_dashboard;
 mod repo_dashboard_commands;
 mod repo_dashboard_history;
@@ -34,8 +36,9 @@ pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };
 pub use skills::{
-    get_skills_sync_health, install_skills, list_skills, open_install_skills_script, open_skill,
-    read_skill,
+    get_skills_sync_health, install_skills, list_skills, open_install_skills_script,
+    open_skill, preview_remove_deprecated_skills, read_skill, remove_deprecated_skills,
+    rollback_deprecated_skills_removal,
 };
 pub use status::get_status;
 pub use workspace::{

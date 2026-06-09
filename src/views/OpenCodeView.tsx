@@ -54,6 +54,8 @@ interface OpenCodeViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onPreviewRemoveDeprecated?: () => void;
+  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -108,6 +110,8 @@ export function OpenCodeView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
+  onPreviewRemoveDeprecated,
+  onRemoveDeprecated,
   onSetSkillSearch,
   onOpenInstallScript,
 }: OpenCodeViewProps) {
@@ -270,6 +274,8 @@ export function OpenCodeView({
             workspaceValid={workspaceValid}
             onPreviewSync={onPreviewSyncSkills}
             onSyncAll={onSyncAllSkills}
+            onPreviewRemoveDeprecated={onPreviewRemoveDeprecated}
+            onRemoveDeprecated={onRemoveDeprecated}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

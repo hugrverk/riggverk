@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": [
+    "agent-report-review",
+    "caveman",
+    "dependency-evaluation",
+    "grill-me",
+    "grill-with-docs",
+    "improve-codebase-architecture",
+    "nextjs-product-slice",
+    "supabase-rls-review",
+    "to-prd",
+    "triage",
+    "woocommerce-pdp-review",
+    "write-a-skill"
+  ]
+}

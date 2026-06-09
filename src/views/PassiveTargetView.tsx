@@ -45,6 +45,8 @@ interface PassiveTargetViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onPreviewRemoveDeprecated?: () => void;
+  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -85,6 +87,8 @@ export function PassiveTargetView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
+  onPreviewRemoveDeprecated,
+  onRemoveDeprecated,
   onSetSkillSearch,
   onOpenInstallScript,
 }: PassiveTargetViewProps) {
@@ -171,6 +175,8 @@ export function PassiveTargetView({
             workspaceValid={workspaceValid}
             onPreviewSync={onPreviewSyncSkills}
             onSyncAll={onSyncAllSkills}
+            onPreviewRemoveDeprecated={onPreviewRemoveDeprecated}
+            onRemoveDeprecated={onRemoveDeprecated}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

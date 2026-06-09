@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::path::Path;
 
 use super::content::safe_canonical_target;
@@ -343,12 +344,24 @@ pub struct SkillSyncHealthEntry {
 }
 
 #[derive(Serialize)]
+pub struct DeprecatedSkillHealthEntry {
+    pub name: String,
+    pub state: String,
+    pub target_path: String,
+    pub removable: bool,
+    pub next_action: String,
+}
+
+#[derive(Serialize)]
 pub struct SkillsSyncHealth {
     pub expected_count: usize,
     pub synced_count: usize,
     pub missing_count: usize,
     pub diverged_count: usize,
+    pub deprecated_identical_count: usize,
+    pub deprecated_diverged_count: usize,
     pub skills: Vec<SkillSyncHealthEntry>,
+    pub deprecated: Vec<DeprecatedSkillHealthEntry>,
 }
 
 fn skill_install_state(source_md: &Path, target_md: &Path) -> (&'static str, &'static str) {
@@ -375,6 +388,8 @@ pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String>
     let mut synced_count = 0usize;
     let mut missing_count = 0usize;
     let mut diverged_count = 0usize;
+
+    let current_names: HashSet<String> = summaries.iter().map(|s| s.name.clone()).collect();
 
     for summary in summaries {
         let targets = &summary.targets;
@@ -404,13 +419,71 @@ pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String>
         });
     }
 
+    let deprecated_found =
+        crate::deprecated_skills::scan_deprecated_installed(&root, &dest_root, &current_names)?;
+    let mut deprecated_identical_count = 0usize;
+    let mut deprecated_diverged_count = 0usize;
+    let deprecated = deprecated_found
+        .into_iter()
+        .map(|entry| {
+            if entry.state == "deprecated-identical" {
+                deprecated_identical_count += 1;
+            } else if entry.state == "deprecated-diverged" {
+                deprecated_diverged_count += 1;
+            }
+            DeprecatedSkillHealthEntry {
+                name: entry.name,
+                state: entry.state,
+                target_path: entry.target_path,
+                removable: entry.removable,
+                next_action: entry.next_action,
+            }
+        })
+        .collect();
+
     Ok(SkillsSyncHealth {
         expected_count: skills.len(),
         synced_count,
         missing_count,
         diverged_count,
+        deprecated_identical_count,
+        deprecated_diverged_count,
         skills,
+        deprecated,
     })
+}
+
+#[tauri::command]
+pub fn preview_remove_deprecated_skills(
+    agent: String,
+) -> Result<crate::deprecated_skills::DeprecatedRemovalPreview, String> {
+    validate_agent(&agent)?;
+    let root = workspace_root()?;
+    let summaries = discover_skills(&root)?;
+    let current_names: HashSet<String> = summaries.iter().map(|s| s.name.clone()).collect();
+    let dest_root = agent_global_skills_dest(&agent)?;
+    crate::deprecated_skills::preview_removal(&agent, &root, &dest_root, &current_names)
+}
+
+#[tauri::command]
+pub fn rollback_deprecated_skills_removal(backup_path: String) -> Result<ActionResult, String> {
+    crate::deprecated_skills::rollback_removal(&backup_path)
+}
+
+#[tauri::command]
+pub fn remove_deprecated_skills(agent: String, dry_run: bool) -> Result<ActionResult, String> {
+    validate_agent(&agent)?;
+    let root = workspace_root()?;
+    let summaries = discover_skills(&root)?;
+    let current_names: HashSet<String> = summaries.iter().map(|s| s.name.clone()).collect();
+    let dest_root = agent_global_skills_dest(&agent)?;
+    crate::deprecated_skills::remove_identical_deprecated(
+        &agent,
+        &root,
+        &dest_root,
+        &current_names,
+        dry_run,
+    )
 }
 
 #[tauri::command]

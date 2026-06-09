@@ -32,6 +32,8 @@ interface ClaudeViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onPreviewRemoveDeprecated?: () => void;
+  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
