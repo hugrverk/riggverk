@@ -92,7 +92,6 @@ def validate_manifest() -> dict:
         "agents_dir",
         "rules_dir",
         "mcp_examples_dir",
-        "recommended_pinned_skills",
         "agents",
         "rules",
         "mcp_examples",
