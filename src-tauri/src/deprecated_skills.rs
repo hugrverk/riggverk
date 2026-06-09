@@ -3,7 +3,9 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::agent_skill_targets::{validate_skill_dest_root, validate_skill_name};
+use crate::agent_skill_targets::{
+    agent_global_skills_dest, validate_skill_agent, validate_skill_dest_root, validate_skill_name,
+};
 use crate::commands::backups::backup_root;
 use crate::commands::{file_eq, ActionResult};
 
@@ -117,6 +119,7 @@ fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
     }
 }
 
+#[cfg_attr(not(test), allow(dead_code))]
 fn path_under_root(child: &Path, root: &Path) -> bool {
     match (child.canonicalize(), root.canonicalize()) {
         (Ok(c), Ok(r)) => c == r || c.starts_with(&r),
@@ -615,31 +618,48 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
         ));
     }
 
-    let dest_root = PathBuf::from(&manifest.destination_root);
+    // ── Validate harness against known agent allowlist ──
+    validate_skill_agent(&manifest.harness)?;
 
-    // Validate the destination root
-    validate_skill_dest_root(&dest_root)?;
-    reject_symlink_path(&dest_root, "rollback destination root")?;
-
-    // Verify the destination_path matches the recorded destination in the manifest
-    if !path_under_root(&dest_root, &dest_root) {
-        return Err(format!(
-            "destination root validation failure: {}",
-            dest_root.display()
-        ));
-    }
-
-    // ── Preflight: ensure no destination currently has an existing skill dir ──
+    // ── Validate each manifest skill entry ──
+    let mut seen_names = std::collections::HashSet::new();
     for skill in &manifest.skills {
-        let dest = dest_root.join(&skill.name);
-        if dest.exists() {
+        // Validate skill name
+        validate_skill_name(&skill.name, "rollback manifest")?;
+        if !seen_names.insert(&skill.name) {
+            return Err(format!("duplicate skill name in manifest: {}", skill.name));
+        }
+
+        // Validate original_state
+        match skill.original_state.as_str() {
+            "deprecated-identical" | "deprecated-diverged" => {}
+            other => {
+                return Err(format!(
+                    "invalid original_state for skill '{}': {}",
+                    skill.name, other
+                ));
+            }
+        }
+
+        // Validate relative_backup_dir: must be a single path component
+        if skill.relative_backup_dir.is_empty() {
             return Err(format!(
-                "rollback blocked: destination already exists for skill '{}' at {}. Remove it manually or choose a different restore target.",
-                skill.name,
-                dest.display()
+                "empty relative_backup_dir for skill '{}'",
+                skill.name
             ));
         }
-        // Verify the backup source actually exists
+        if skill.relative_backup_dir.contains('/')
+            || skill.relative_backup_dir.contains('\\')
+            || skill.relative_backup_dir == "."
+            || skill.relative_backup_dir == ".."
+        {
+            return Err(format!(
+                "invalid relative_backup_dir for skill '{}': {}",
+                skill.name, skill.relative_backup_dir
+            ));
+        }
+
+        // Verify the backup source actually exists and reject symlinks
         let backup_src = backup_dir.join(&skill.relative_backup_dir);
         if !backup_src.is_dir() {
             return Err(format!(
@@ -649,10 +669,90 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
             ));
         }
         reject_symlink_path(&backup_src, "rollback source")?;
+
+        // Reject nested symlinks inside backup skill directories
+        fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
+            if !dir.is_dir() {
+                return Ok(());
+            }
+            let entries =
+                fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
+                let path = entry.path();
+                if path.is_symlink() {
+                    return Err(format!(
+                        "nested symlink found in {} backup: {}",
+                        label,
+                        path.display()
+                    ));
+                }
+                if path.is_dir() {
+                    // Bounded recursion: only check one level deep
+                    if let Ok(sub) = fs::read_dir(&path) {
+                        for sub_entry in sub.flatten() {
+                            if sub_entry.path().is_symlink() {
+                                return Err(format!(
+                                    "nested symlink in {} backup: {}",
+                                    label,
+                                    sub_entry.path().display()
+                                ));
+                            }
+                        }
+                    }
+                }
+            }
+            Ok(())
+        }
+        reject_nested_symlinks(&backup_src, &skill.name)?;
+    }
+
+    // ── Resolve current harness destination (do NOT trust manifest path) ──
+    let dest_root = agent_global_skills_dest(&manifest.harness)?;
+    validate_skill_dest_root(&dest_root)?;
+    reject_symlink_path(&dest_root, "rollback destination root")?;
+
+    // ── Canonicalize resolved destination where it exists ──
+    let canonical_dest = if dest_root.exists() {
+        dest_root
+            .canonicalize()
+            .map_err(|e| format!("cannot canonicalize destination: {e}"))?
+    } else {
+        dest_root.clone()
+    };
+
+    // ── Compare resolved destination with manifest (detect tampering or harness change) ──
+    let manifest_dest = PathBuf::from(&manifest.destination_root);
+    let canonical_manifest = if manifest_dest.exists() {
+        manifest_dest
+            .canonicalize()
+            .unwrap_or_else(|_| manifest_dest.clone())
+    } else {
+        manifest_dest
+    };
+    if canonical_dest != canonical_manifest {
+        return Err(format!(
+            "destination mismatch: current harness '{}' resolves to '{}' but manifest records '{:?}'. Refusing rollback.",
+            manifest.harness,
+            canonical_dest.display(),
+            canonical_manifest.as_os_str()
+        ));
+    }
+
+    // ── Preflight: ensure no destination currently has an existing skill dir ──
+    for skill in &manifest.skills {
+        let dest = canonical_dest.join(&skill.name);
+        if dest.exists() {
+            return Err(format!(
+                "rollback blocked: destination already exists for skill '{}' at {}. Remove it manually or choose a different restore target.",
+                skill.name,
+                dest.display()
+            ));
+        }
     }
 
     // ── Phase 1: Stage all restores in a same-filesystem staging area ──
-    let staging_base = dest_root
+    let staging_base = canonical_dest
         .parent()
         .ok_or_else(|| "cannot determine staging parent".to_string())?;
     let nonce = SystemTime::now()
@@ -693,11 +793,11 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
             let move_result = (|| -> Result<(), String> {
                 for name in &staged_skills {
                     let stage_path = staging_dir.join(name);
-                    let dest = dest_root.join(name);
+                    let dest = canonical_dest.join(name);
                     if let Err(e) = rename_path(&stage_path, &dest) {
                         // Attempt to return already-moved items back to staging
                         for moved_name in &moved {
-                            let moved_dest = dest_root.join(moved_name);
+                            let moved_dest = canonical_dest.join(moved_name);
                             let back_to_stage = staging_dir.join(moved_name);
                             let _ = rename_path(&moved_dest, &back_to_stage);
                         }
