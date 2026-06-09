@@ -226,16 +226,32 @@ printf '  Codex config template valid\n'
 release_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-release-check.XXXXXX")"
 tmp_home="$(mktemp -d "${release_tmp_dir}/home.XXXXXX")"
 codex_apply_log="${release_tmp_dir}/codex-apply.log"
-if HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$codex_apply_log" 2>&1; then
-  printf 'FAIL: install-codex-config.sh --apply must require --force-overwrite\n' >&2
+
+# --apply on missing config should succeed (creates config from source)
+if ! HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$codex_apply_log" 2>&1; then
+  printf 'FAIL: install-codex-config.sh --apply failed for missing config\n' >&2
+  cat "$codex_apply_log" >&2
   exit 1
 fi
-if ! rg -q 'manual-review only' "$codex_apply_log"; then
-  printf 'FAIL: install-codex-config.sh --apply refusal must explain manual review\n' >&2
+# Verify generated config parses as TOML
+if ! python3 -c "import tomllib; tomllib.load(open('$tmp_home/.codex/config.toml', 'rb'))" 2>/dev/null; then
+  printf 'FAIL: --apply produced invalid TOML\n' >&2
   exit 1
 fi
-if ! grep -q 'codex-config synced' resources/default-workspace/scripts/install-codex-config.sh; then
-  printf 'FAIL: install-codex-config.sh --diff must print codex-config synced when unchanged\n' >&2
+# Verify config has the safe profile
+if ! grep -q 'profile.*safe' "$codex_apply_log" && ! grep -q 'profile.*safe' "$tmp_home/.codex/config.toml"; then
+  printf 'FAIL: generated Codex config must default to safe profile\n' >&2
+  exit 1
+fi
+# Verify diff output is managed-only (no full config)
+diff_log="${release_tmp_dir}/codex-diff.log"
+HOME="$tmp_home" bash resources/default-workspace/scripts/install-codex-config.sh --diff >"$diff_log" 2>&1 || true
+if grep -qi 'secret\|token\|sk-[A-Za-z0-9]\|Bearer' "$diff_log" 2>/dev/null; then
+  printf 'FAIL: Codex diff output may contain secrets\n' >&2
+  exit 1
+fi
+if ! grep -q 'codex-config managed sections synced\|codex-config synced' resources/default-workspace/scripts/install-codex-config.sh; then
+  printf 'FAIL: install-codex-config.sh --diff must print synced status when unchanged\n' >&2
   exit 1
 fi
 printf '  Codex config apply guard verified\n'

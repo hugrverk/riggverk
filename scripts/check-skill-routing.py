@@ -60,6 +60,18 @@ ROUTING_SOURCES = [
     REPO_ROOT / "resources/default-workspace/metadata/agents.json",
 ]
 
+ACTIVE_DOC_SOURCES = [
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "docs/WORKSPACE_CONTRACT.md",
+    REPO_ROOT / "docs/SECURITY_MODEL.md",
+    REPO_ROOT / "resources/default-workspace/README.md",
+    REPO_ROOT / "resources/default-workspace/docs/SKILLS.md",
+    REPO_ROOT / "resources/default-workspace/docs/CONCEPTS.md",
+    REPO_ROOT / "resources/default-workspace/docs/USING_THE_APP.md",
+    REPO_ROOT / "resources/default-workspace/docs/OPENCODE_CONFIG.md",
+    REPO_ROOT / "resources/default-workspace/docs/CODEX_CONFIG.md",
+]
+
 MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src/lib/brainSetup.test.ts",
     REPO_ROOT / "scripts/check-skill-routing.py",
@@ -159,6 +171,51 @@ def extract_skill_tokens(text: str) -> set[str]:
     return tokens
 
 
+STALE_CLAIMS = [
+    # Count claims
+    ("28 bundled skill", "stale skill count 28"),
+    ("24 generic skill", "stale generic skill count"),
+    # Layout claims
+    ("flat-only", "stale flat-only source layout claim"),
+    ("root-level layout only", "stale flat-only source layout claim"),
+    # Profile claims
+    ("target profile preset", "stale target profile preset claim"),
+    ("Manual target selection", "stale manual target selection claim"),
+    # Config path claims (outside migration docs)
+    ("~/.codex/skills", "stale old Codex skills path (~/.codex/skills -> ~/.agents/skills)"),
+    # Skill selection claims
+    ("auto-selected skills", "stale auto-selected skills claim"),
+    ("per-workspace skill selection", "stale per-workspace skill selection claim"),
+    # Rollback claims
+    ("restore manually by copying", "stale manual rollback instruction claim"),
+]
+
+STALE_CLAIMS_ALLOWLIST = {
+    "resources/default-workspace/templates/cursor/README.md": {
+        "starter skills",  # Cursor cursor/README correctly describes agents AND skills as separate surfaces
+    },
+    "resources/default-workspace/templates/cursor/global-profile.json": {
+        "starter skills",  # Cursor profile describes skills surface, not the adapter agents
+    },
+    "resources/default-workspace/docs/CODEX_CONFIG.md": {
+        "~/.codex/skills",  # Documents legacy migration path alongside current ~/.agents/skills
+    },
+    "resources/default-workspace/README.md": {
+        "starter skills",  # Describes Cursor setup with separate agents and skills surfaces
+    },
+}
+
+def validate_active_docs() -> None:
+    for source in ACTIVE_DOC_SOURCES:
+        if not source.is_file():
+            continue
+        text = source.read_text(encoding="utf-8")
+        rel = source.relative_to(REPO_ROOT).as_posix()
+        allowlisted = STALE_CLAIMS_ALLOWLIST.get(rel, set())
+        for pattern, msg in STALE_CLAIMS:
+            if pattern in text and pattern not in allowlisted:
+                fail(f"{rel}: {msg}: found '{pattern}'")
+
 def validate_routing_sources(discovered: set[str]) -> None:
     for source in ROUTING_SOURCES:
         if not source.is_file():
@@ -229,6 +286,7 @@ def main() -> None:
 
     validate_skill_metadata(discovered_map)
     validate_routing_sources(discovered)
+    validate_active_docs()
     scan_repo_for_removed_skills()
 
     print(f"PASS: {EXPECTED_COUNT} bundled skills and routing sources aligned")

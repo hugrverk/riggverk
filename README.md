@@ -54,11 +54,11 @@ The app operates on a workspace folder — a user-owned data directory containin
 
 Workspace validation uses `.agent-workspace/workspace.json` and required workspace markers (scripts, templates, Cursor setup assets, README, skills directory).
 
-This repository is the Agent Workspace **app and runtime**: the Tauri GUI, bundled default workspace resources (28 skills, templates, scripts, docs), and release tooling. Installed user workspace content lives at `~/.config/agent-workspace` (or `AGENT_WORKSPACE_PATH` for dev/test) and is separate from this checkout.
+This repository is the Agent Workspace **app and runtime**: the Tauri GUI, bundled default workspace resources (21 skills, templates, scripts, docs), and release tooling. Installed user workspace content lives at `~/.config/agent-workspace` (or `AGENT_WORKSPACE_PATH` for dev/test) and is separate from this checkout.
 
 See [docs/WORKSPACE_CONTRACT.md](docs/WORKSPACE_CONTRACT.md) for the workspace contract.
 
-The app source includes a shared starter workspace under `resources/default-workspace/` with bundled default templates, scripts, docs, 28 skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
+The app source includes a shared default workspace under `resources/default-workspace/` with bundled templates, scripts, docs, 21 skills, and a workspace marker. These resources are bundled into the macOS app bundle as Tauri resources and are available in the installed app. They are also available in dev/source checkout mode.
 
 Bundled defaults are copied only when you click **install** or **repair** on the Workspace (Start) page. The app installs the local runtime workspace at `~/.config/agent-workspace` — it does not ask you to choose a folder. No files are created automatically on launch. Install and repair are explicit user actions; they do not overwrite existing files, do not run scripts, and only write under the canonical install path (or `AGENT_WORKSPACE_PATH` for dev/test overrides).
 
@@ -191,7 +191,7 @@ On apply, existing diverged rule targets are backed up under `~/Library/Applicat
 | `--opencode` | `${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}` |
 | `--claude` | `${CLAUDE_AGENTS_DIR:-$HOME/.claude/agents}` |
 
-Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses native setup from the Cursor page (agents, starter skills, Playwright MCP under `~/.cursor/`).
+Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). Cursor uses native setup from the Cursor page (agents, canonical bundled skills, Playwright MCP under `~/.cursor/`).
 
 ## Skill installation
 

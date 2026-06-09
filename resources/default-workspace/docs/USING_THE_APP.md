@@ -35,7 +35,7 @@ View and edit `templates/global-agent-rules.md`. Synced to agent rule paths from
 
 ### Skills
 
-Browse starter skills. Install from harness pages, not from Workspace.
+Browse bundled skills. Install from harness pages, not from Workspace.
 
 ### Agents
 

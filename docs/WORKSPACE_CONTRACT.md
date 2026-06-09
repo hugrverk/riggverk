@@ -92,7 +92,7 @@ Script-backed actions will remain allowlisted regardless of where the scripts li
 
 ## Bundled default workspace resources
 
-The app source carries a shared starter workspace under `resources/default-workspace/`. This tree includes a workspace marker, a starter README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 28 bundled skills.
+The app source carries a shared default workspace under `resources/default-workspace/`. This tree includes a workspace marker, a README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 21 bundled skills.
 
 These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
 
