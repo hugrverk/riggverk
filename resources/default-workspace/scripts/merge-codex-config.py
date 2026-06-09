@@ -133,7 +133,7 @@ def patch_toml_text(
         for i, line in enumerate(lines):
             stripped = line.strip()
             if stripped.startswith("["):
-                inside_table = stripped.startswith("[") and not stripped.startswith("[["))
+                inside_table = True
                 continue
             if inside_table:
                 continue

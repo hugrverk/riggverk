@@ -147,6 +147,7 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "opencode-config" => ".config/opencode/opencode.json",
         "opencode-agents" => ".config/opencode/agents",
         "claude-agents" => ".claude/agents",
+        "codex-agents" => ".codex/agents",
         // Legacy backwards-compatible IDs (read-only)
         "codex" => ".codex/AGENTS.md",
         "opencode" => ".config/opencode/AGENTS.md",
@@ -550,6 +551,7 @@ mod tests {
 
     #[test]
     fn opencode_agents_backup_file_maps_to_correct_current_path() {
+        let _guard = crate::test_env::guard::lock();
         let root = temp_root("agents-path-test");
         fs::create_dir_all(&root).expect("create backup root");
         let run_dir = root.join("20260501-143000");

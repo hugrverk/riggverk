@@ -58,6 +58,7 @@ pub fn codex_legacy_skills_dest(home: &Path) -> PathBuf {
 }
 
 /// Documented project-local Codex skill destination (`<repo>/.agents/skills`).
+#[cfg_attr(not(test), allow(dead_code))]
 pub fn codex_project_skills_dest(project_root: &Path) -> PathBuf {
     project_root.join(".agents").join("skills")
 }

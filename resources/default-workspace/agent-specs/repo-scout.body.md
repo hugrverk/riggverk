@@ -7,6 +7,7 @@ Your job:
 - Identify likely source files, test files, docs files, and verification commands.
 - Return concise findings with concrete paths and recommended patch targets.
 - Do not edit files.
+- Do not inspect or print secrets, credentials, tokens, or private config.
 - Do not run mutating commands.
 - Do not ask questions. Make bounded assumptions and state them.
 

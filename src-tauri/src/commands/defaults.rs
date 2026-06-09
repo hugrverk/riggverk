@@ -124,6 +124,7 @@ mod tests {
                 "Readme",
                 "Docs",
                 "Templates",
+                "Agent specs",
                 "Agents",
                 "Scripts",
                 "Skills",

@@ -281,9 +281,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     checks.push(CodexRuntimeCheck {
         id: "legacy_skills".into(),
         label: "Legacy ~/.codex/skills".into(),
-        status: if legacy_skills_conflict_count > 0 {
-            "warn".into()
-        } else if legacy_skills_migratable_count > 0 {
+        status: if legacy_skills_conflict_count > 0 || legacy_skills_migratable_count > 0 {
             "warn".into()
         } else {
             "pass".into()

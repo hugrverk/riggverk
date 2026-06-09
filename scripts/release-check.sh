@@ -1179,7 +1179,7 @@ CLAUDE_AGENTS_DIR="$tmpdir/claude/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
   bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --apply --quiet >/dev/null
 runtime_ok=true
-for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   dest="$tmpdir/claude/agents/$agent"
   if [ ! -f "$dest" ]; then
     printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
@@ -1188,7 +1188,7 @@ for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verif
 done
 rm -rf "$tmpdir"
 if ! $runtime_ok; then exit 1; fi
-printf '  install-runtime-agents.sh: claude agents written (6)\n'
+printf '  install-runtime-agents.sh: claude agents written (5)\n'
 
 step "harness pages use page-scoped agent sync actions"
 for required in \

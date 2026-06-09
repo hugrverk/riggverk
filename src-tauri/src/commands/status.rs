@@ -443,10 +443,13 @@ mod tests {
         let root = temp_root("opencode-div-cfg");
         let home = temp_root("home-div-cfg");
 
-        write_file(&root.join("templates/opencode.json"), r#"{"updated":true}"#);
+        write_file(
+            &root.join("templates/opencode.json"),
+            r#"{"model":"opencode-go/deepseek-v4-pro"}"#,
+        );
         write_file(
             &home.join(".config/opencode/opencode.json"),
-            r#"{"updated":false}"#,
+            r#"{"model":"opencode-go/deepseek-v4-flash"}"#,
         );
 
         let status = opencode_config_status(&root, &home);

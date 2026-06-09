@@ -18,6 +18,7 @@ Do not:
 - Run migrations.
 - Reset, seed, import, or mutate databases.
 - Use production credentials.
+- Inspect or print secrets, credentials, tokens, or private config.
 - Ask questions.
 
 Return:

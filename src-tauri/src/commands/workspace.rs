@@ -2484,6 +2484,14 @@ mod tests {
         }
         for &rel in &[
             "templates/global-agent-rules.md",
+            "templates/rules/codex.md",
+            "templates/rules/opencode.md",
+            "templates/rules/claude.md",
+            "templates/rules/cursor.md",
+            "templates/sync/codex-rules.md",
+            "templates/sync/opencode-rules.md",
+            "templates/sync/claude-rules.md",
+            "metadata/rules-adapters.json",
             "templates/opencode.json",
             "templates/opencode.base.json",
             "templates/opencode.policy.json",
@@ -2512,10 +2520,22 @@ mod tests {
             "templates/cursor/agents/release-checker.md",
             "templates/cursor/agents/browser-qa.md",
             "templates/cursor/agents/repo-scout.md",
+            "templates/cursor/agents/inspector.md",
             "templates/prompts/standard-prompt.md",
             "templates/prompts/masterprompt.md",
         ] {
             write_file(&root, rel, "template content\n");
+        }
+        for &rel in &[
+            "agent-specs/architect.body.md",
+            "agent-specs/repo-scout.body.md",
+            "agent-specs/inspector.body.md",
+            "agent-specs/sentinel.body.md",
+            "agent-specs/scribe.body.md",
+            "agent-specs/verifier.body.md",
+            "metadata/agent-adapters.json",
+        ] {
+            write_file(&root, rel, "spec content\n");
         }
         for &rel in &[
             "agents/architect.md",
@@ -2524,6 +2544,15 @@ mod tests {
             "agents/sentinel.md",
             "agents/scribe.md",
             "agents/verifier.md",
+            "templates/claude/agents/repo-scout.md",
+            "templates/claude/agents/inspector.md",
+            "templates/claude/agents/sentinel.md",
+            "templates/claude/agents/scribe.md",
+            "templates/claude/agents/verifier.md",
+            "templates/codex/agents/repo_scout.toml",
+            "templates/codex/agents/inspector.toml",
+            "templates/codex/agents/security_reviewer.toml",
+            "templates/codex/agents/verifier.toml",
         ] {
             write_file(&root, rel, "agent content\n");
         }
@@ -2536,7 +2565,10 @@ mod tests {
             "scripts/install-agent-rules.sh",
             "scripts/install-runtime-agents.sh",
             "scripts/install-opencode-config.sh",
+            "scripts/merge-opencode-config.py",
             "scripts/install-codex-config.sh",
+            "scripts/install-codex-agents.sh",
+            "scripts/merge-codex-config.py",
             "scripts/install-cursor-workspace.sh",
             "scripts/check-codex-profile.py",
             "scripts/check-cursor-profile.py",
@@ -2568,7 +2600,27 @@ mod tests {
         ] {
             write_file(&root, rel, "skill content\n");
         }
-        write_file(&root, "metadata/agents.json", "{\"agents\":{}}");
+        for &rel in &[
+            "metadata/agents.json",
+            "metadata/opencode-managed-keys.json",
+            "metadata/codex-managed-keys.json",
+            "metadata/codex-agents.json",
+            "metadata/deprecated-skills.json",
+            "metadata/deprecated-skills/agent-report-review/SKILL.md",
+            "metadata/deprecated-skills/caveman/SKILL.md",
+            "metadata/deprecated-skills/dependency-evaluation/SKILL.md",
+            "metadata/deprecated-skills/grill-me/SKILL.md",
+            "metadata/deprecated-skills/grill-with-docs/SKILL.md",
+            "metadata/deprecated-skills/improve-codebase-architecture/SKILL.md",
+            "metadata/deprecated-skills/nextjs-product-slice/SKILL.md",
+            "metadata/deprecated-skills/supabase-rls-review/SKILL.md",
+            "metadata/deprecated-skills/to-prd/SKILL.md",
+            "metadata/deprecated-skills/triage/SKILL.md",
+            "metadata/deprecated-skills/woocommerce-pdp-review/SKILL.md",
+            "metadata/deprecated-skills/write-a-skill/SKILL.md",
+        ] {
+            write_file(&root, rel, "metadata content\n");
+        }
         root
     }
 

@@ -77,6 +77,7 @@ MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "scripts/check-skill-routing.py",
     REPO_ROOT / "src-tauri/src/deprecated_skills.rs",
     REPO_ROOT / "src-tauri/src/commands/default_workspace_manifest.rs",
+    REPO_ROOT / "src-tauri/src/commands/workspace.rs",
 }
 
 DEPRECATED_METADATA_PREFIX = "resources/default-workspace/metadata/deprecated-skills"

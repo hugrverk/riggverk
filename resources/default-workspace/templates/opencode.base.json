@@ -3,9 +3,21 @@
   "share": "disabled",
   "autoupdate": "notify",
   "snapshot": true,
-  "model": "opencode-go/deepseek-v4-flash",
+  "model": "opencode-go/deepseek-v4-pro",
   "small_model": "opencode-go/deepseek-v4-flash",
   "default_agent": "architect",
+  "provider": {
+    "opencode-go": {
+      "models": {
+        "qwen3.6-plus": {
+          "limit": {
+            "context": 1000000,
+            "output": 65536
+          }
+        }
+      }
+    }
+  },
   "mcp": {
     "playwright": {
       "type": "local",
