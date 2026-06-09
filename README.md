@@ -198,7 +198,7 @@ Codex uses TOML custom agents under `~/.codex/agents/` (not this `.md` bundle). 
 Skills are installed into agent skill folders using local filesystem copy from validated workspace `skills/` directories (bash script on macOS/Linux, native adapter on Windows). No external package managers are used for install.
 
 Global destinations:
-- Codex: `${CODEX_HOME:-$HOME/.codex}/skills` (override with `CODEX_SKILLS_PATH` or `CODEX_HOME`)
+- Codex: `$HOME/.agents/skills` (override with `CODEX_SKILLS_PATH`; legacy installs may remain under `${CODEX_HOME:-$HOME/.codex}/skills`)
 - OpenCode: `$HOME/.config/opencode/skills` (override with `OPENCODE_SKILLS_PATH`)
 - Claude: `$HOME/.claude/skills` (override with `CLAUDE_SKILLS_PATH`)
 - Cursor: `$HOME/.cursor/skills` (override with `CURSOR_SKILLS_PATH`)

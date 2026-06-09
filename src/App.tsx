@@ -184,6 +184,7 @@ function App() {
     runWsAction,
     runWsInstallForAgents,
     runRemoveDeprecatedSkills,
+    runCodexLegacyMigration,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
@@ -527,6 +528,8 @@ function App() {
             onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}
             onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["codex"], "preview deprecated removal (codex)")}
             onRemoveDeprecated={() => runRemoveDeprecatedSkills(false, ["codex"], "remove deprecated skills (codex)")}
+            onPreviewCodexLegacyMigration={() => runCodexLegacyMigration(true, "preview codex legacy migration")}
+            onMigrateCodexLegacy={() => runCodexLegacyMigration(false, "migrate codex legacy skills")}
           />
         )}
 

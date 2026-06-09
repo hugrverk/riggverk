@@ -360,8 +360,14 @@ pub struct SkillsSyncHealth {
     pub diverged_count: usize,
     pub deprecated_identical_count: usize,
     pub deprecated_diverged_count: usize,
+    pub codex_legacy_migratable_count: usize,
+    pub codex_legacy_conflict_count: usize,
+    pub duplicate_identical_count: usize,
+    pub duplicate_diverged_count: usize,
     pub skills: Vec<SkillSyncHealthEntry>,
     pub deprecated: Vec<DeprecatedSkillHealthEntry>,
+    pub codex_legacy: Vec<crate::codex_legacy_migration::CodexLegacySkillEntry>,
+    pub duplicates: Vec<crate::skill_duplicate_audit::DuplicateSkillEntry>,
 }
 
 fn skill_install_state(source_md: &Path, target_md: &Path) -> (&'static str, &'static str) {
@@ -441,6 +447,38 @@ pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String>
         })
         .collect();
 
+    let (codex_legacy, codex_legacy_migratable_count, codex_legacy_conflict_count) =
+        if agent == "codex" {
+            let home = crate::cursor_profile_paths::resolve_user_home()?;
+            let preview = crate::codex_legacy_migration::preview_migration(&home)?;
+            (
+                preview.items,
+                preview.migratable_count,
+                preview.conflict_count,
+            )
+        } else {
+            (Vec::new(), 0, 0)
+        };
+
+    let duplicates = if agent == "opencode" {
+        let project_root = root.join(".opencode").join("skills");
+        crate::skill_duplicate_audit::audit_duplicate_skills(&[
+            ("global", dest_root.clone()),
+            ("project", project_root),
+        ])?
+    } else {
+        Vec::new()
+    };
+    let mut duplicate_identical_count = 0usize;
+    let mut duplicate_diverged_count = 0usize;
+    for entry in &duplicates {
+        if entry.state == "duplicate-identical" {
+            duplicate_identical_count += 1;
+        } else if entry.state == "duplicate-diverged" {
+            duplicate_diverged_count += 1;
+        }
+    }
+
     Ok(SkillsSyncHealth {
         expected_count: skills.len(),
         synced_count,
@@ -448,9 +486,27 @@ pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String>
         diverged_count,
         deprecated_identical_count,
         deprecated_diverged_count,
+        codex_legacy_migratable_count,
+        codex_legacy_conflict_count,
+        duplicate_identical_count,
+        duplicate_diverged_count,
         skills,
         deprecated,
+        codex_legacy,
+        duplicates,
     })
+}
+
+#[tauri::command]
+pub fn preview_codex_legacy_migration(
+) -> Result<crate::codex_legacy_migration::CodexLegacyMigrationPreview, String> {
+    let home = crate::cursor_profile_paths::resolve_user_home()?;
+    crate::codex_legacy_migration::preview_migration(&home)
+}
+
+#[tauri::command]
+pub fn migrate_codex_legacy_skills(dry_run: bool) -> Result<ActionResult, String> {
+    crate::codex_legacy_migration::migrate_legacy_skills(dry_run)
 }
 
 #[tauri::command]

@@ -1277,7 +1277,15 @@ scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
 scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'
 scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
-scan_forbidden '\.agents/skills' '.agents/skills'
+if ! search_has_match '\.agents/skills' src-tauri/src/agent_skill_targets.rs; then
+  printf 'FAIL: Codex global skills path must use ~/.agents/skills\n' >&2
+  exit 1
+fi
+if ! search_has_match '\.agents/skills' resources/default-workspace/scripts/install-skills.sh; then
+  printf 'FAIL: install-skills.sh must use ~/.agents/skills for Codex\n' >&2
+  exit 1
+fi
+printf '  Codex ~/.agents/skills path guard verified\n'
 
 step "routing profile bloat guard"
 scan_forbidden 'RoutingProfile|routing/profiles|get_routing_profiles|save_routing_profiles|read_routing_profiles_file|buildProfileHeader|copyMetadataBlock|profileStatus|RoutingMatrix|routingCompatibility|routingTemplates' 'routing profile bloat (removed profiles must not be reintroduced)'

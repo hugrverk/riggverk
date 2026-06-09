@@ -192,7 +192,7 @@ discover_skills() {
 agent_global_dest() {
   local agent="$1"
   case "$agent" in
-    codex)    printf '%s' "${CODEX_SKILLS_PATH:-${CODEX_HOME:-$HOME/.codex}/skills}" ;;
+    codex)    printf '%s' "${CODEX_SKILLS_PATH:-$HOME/.agents/skills}" ;;
     opencode) printf '%s' "${OPENCODE_SKILLS_PATH:-$HOME/.config/opencode/skills}" ;;
     claude)   printf '%s' "${CLAUDE_SKILLS_PATH:-$HOME/.claude/skills}" ;;
     cursor)   printf '%s' "${CURSOR_SKILLS_PATH:-$HOME/.cursor/skills}" ;;
@@ -202,7 +202,7 @@ agent_global_dest() {
 agent_project_dest() {
   local agent="$1" target="$2"
   case "$agent" in
-    codex)    printf '%s/.codex/skills' "$target" ;;
+    codex)    printf '%s/.agents/skills' "$target" ;;
     opencode) printf '%s/.opencode/skills' "$target" ;;
     claude)   printf '%s/.claude/skills' "$target" ;;
     cursor)   printf '%s/.cursor/skills' "$target" ;;

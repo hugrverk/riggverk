@@ -504,7 +504,7 @@ mod tests {
 
         let workspace = temp_root("ws-identical");
         setup_workspace_with_deprecated_refs(&workspace);
-        let dest = home.join(".codex/skills");
+        let dest = home.join(".agents/skills");
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
 
         let current = HashSet::from(["diagnose".to_string()]);
@@ -535,7 +535,7 @@ mod tests {
 
         let workspace = temp_root("ws-diverged");
         setup_workspace_with_deprecated_refs(&workspace);
-        let dest = home.join(".codex/skills");
+        let dest = home.join(".agents/skills");
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\ncustom: true\n");
 
         let current = HashSet::new();
@@ -565,7 +565,7 @@ mod tests {
 
         let workspace = temp_root("ws-dry");
         setup_workspace_with_deprecated_refs(&workspace);
-        let dest = home.join(".codex/skills");
+        let dest = home.join(".agents/skills");
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
 
         let current = HashSet::new();

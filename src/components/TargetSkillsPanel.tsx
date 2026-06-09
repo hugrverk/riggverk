@@ -30,6 +30,8 @@ interface TargetSkillsPanelProps {
   onSyncAll: () => void;
   onPreviewRemoveDeprecated?: () => void;
   onRemoveDeprecated?: () => void;
+  onPreviewCodexLegacyMigration?: () => void;
+  onMigrateCodexLegacy?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -46,6 +48,8 @@ export function TargetSkillsPanel({
   onSyncAll,
   onPreviewRemoveDeprecated,
   onRemoveDeprecated,
+  onPreviewCodexLegacyMigration,
+  onMigrateCodexLegacy,
   onSetSkillSearch,
   onOpenInstallScript,
 }: TargetSkillsPanelProps) {
@@ -102,14 +106,22 @@ export function TargetSkillsPanel({
   const deprecatedHint = health && (health.deprecated_identical_count > 0 || health.deprecated_diverged_count > 0)
     ? `${health.deprecated_identical_count} deprecated removable, ${health.deprecated_diverged_count} deprecated diverged`
     : null;
+  const legacyHint = health && agent === "codex" && (health.codex_legacy_migratable_count > 0 || health.codex_legacy_conflict_count > 0)
+    ? `${health.codex_legacy_migratable_count} legacy migratable, ${health.codex_legacy_conflict_count} legacy conflicts`
+    : null;
+  const duplicateHint = health && agent === "opencode" && (health.duplicate_identical_count > 0 || health.duplicate_diverged_count > 0)
+    ? `${health.duplicate_identical_count} duplicate identical, ${health.duplicate_diverged_count} duplicate diverged across OpenCode roots`
+    : null;
 
   const statusHint = !skillsLoaded
     ? "Loading skills…"
     : skills.length === 0
       ? "No skills in workspace."
       : health && (health.missing_count > 0 || health.diverged_count > 0)
-        ? `${health.missing_count} missing, ${health.diverged_count} diverged${deprecatedHint ? `; ${deprecatedHint}` : ""}`
-        : deprecatedHint ?? "Canonical bundled set installs to every enabled harness.";
+        ? `${health.missing_count} missing, ${health.diverged_count} diverged${deprecatedHint ? `; ${deprecatedHint}` : ""}${legacyHint ? `; ${legacyHint}` : ""}${duplicateHint ? `; ${duplicateHint}` : ""}`
+        : legacyHint ?? duplicateHint ?? deprecatedHint ?? "Canonical bundled set installs to every enabled harness.";
+
+  const hasMigratableLegacy = agent === "codex" && (health?.codex_legacy_migratable_count ?? 0) > 0;
 
   const hasRemovableDeprecated = (health?.deprecated_identical_count ?? 0) > 0;
 
@@ -130,6 +142,16 @@ export function TargetSkillsPanel({
         ...(onRemoveDeprecated && hasRemovableDeprecated ? [{
           label: "remove deprecated",
           onClick: onRemoveDeprecated,
+          disabled: wsRunning !== null,
+        }] : []),
+        ...(onPreviewCodexLegacyMigration && hasMigratableLegacy ? [{
+          label: "preview legacy migration",
+          onClick: onPreviewCodexLegacyMigration,
+          disabled: wsRunning !== null,
+        }] : []),
+        ...(onMigrateCodexLegacy && hasMigratableLegacy ? [{
+          label: "migrate legacy codex skills",
+          onClick: onMigrateCodexLegacy,
           disabled: wsRunning !== null,
         }] : []),
         ...(skillsLoaded && skillsCount > 0 ? [{

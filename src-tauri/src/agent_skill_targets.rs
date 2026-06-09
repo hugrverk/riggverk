@@ -35,6 +35,33 @@ pub fn validate_skill_name(name: &str, source: &str) -> Result<(), String> {
     }
 }
 
+pub fn codex_home(home: &Path) -> PathBuf {
+    std::env::var("CODEX_HOME")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".codex"))
+}
+
+/// Current documented global Codex skill destination (`~/.agents/skills`).
+pub fn codex_global_skills_dest(home: &Path) -> PathBuf {
+    std::env::var("CODEX_SKILLS_PATH")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+        .map(PathBuf::from)
+        .unwrap_or_else(|| home.join(".agents").join("skills"))
+}
+
+/// Legacy Codex global skill destination (`$CODEX_HOME/skills`, typically `~/.codex/skills`).
+pub fn codex_legacy_skills_dest(home: &Path) -> PathBuf {
+    codex_home(home).join("skills")
+}
+
+/// Documented project-local Codex skill destination (`<repo>/.agents/skills`).
+pub fn codex_project_skills_dest(project_root: &Path) -> PathBuf {
+    project_root.join(".agents").join("skills")
+}
+
 pub fn validate_skill_agent(agent: &str) -> Result<(), String> {
     if VALID_SKILL_AGENTS.contains(&agent) {
         Ok(())
@@ -81,18 +108,7 @@ pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
 pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
     let home = resolve_user_home()?;
     let dest = match agent {
-        "codex" => {
-            let codex_home = std::env::var("CODEX_HOME")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| home.join(".codex"));
-            std::env::var("CODEX_SKILLS_PATH")
-                .ok()
-                .filter(|value| !value.trim().is_empty())
-                .map(PathBuf::from)
-                .unwrap_or_else(|| codex_home.join("skills"))
-        }
+        "codex" => codex_global_skills_dest(&home),
         "opencode" => std::env::var("OPENCODE_SKILLS_PATH")
             .ok()
             .filter(|value| !value.trim().is_empty())
@@ -207,6 +223,53 @@ mod tests {
         }
         assert!(validate_skill_dest_root(&custom).is_ok());
         let _ = fs::remove_dir_all(&custom);
+    }
+
+    #[test]
+    fn codex_default_global_dest_uses_agents_skills() {
+        let home = std::env::temp_dir().join("aw-codex-agents-skills-test");
+        let _ = fs::create_dir_all(&home);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe {
+            std::env::remove_var("CODEX_SKILLS_PATH");
+            std::env::remove_var("CODEX_HOME");
+        }
+        let dest = agent_global_skills_dest("codex").expect("codex dest");
+        assert_eq!(dest, home.join(".agents").join("skills"));
+        assert_eq!(
+            codex_legacy_skills_dest(&home),
+            home.join(".codex").join("skills")
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn codex_project_skills_dest_matches_docs() {
+        let repo = PathBuf::from("/tmp/example-repo");
+        assert_eq!(
+            codex_project_skills_dest(&repo),
+            repo.join(".agents").join("skills")
+        );
+    }
+
+    #[test]
+    fn codex_skills_path_override_wins() {
+        let home = std::env::temp_dir().join("aw-codex-override-home");
+        let custom = std::env::temp_dir().join("aw-codex-override-skills");
+        let _ = fs::create_dir_all(&home);
+        let _ = fs::create_dir_all(&custom);
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var("CODEX_SKILLS_PATH", &custom);
+        }
+        let dest = agent_global_skills_dest("codex").expect("codex dest");
+        assert_eq!(dest, custom);
+        let _ = fs::remove_dir_all(&custom);
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

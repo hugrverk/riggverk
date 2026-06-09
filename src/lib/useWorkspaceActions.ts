@@ -142,6 +142,47 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     }
   }, [allSkillNames, fetchStatus, setError]);
 
+  const runCodexLegacyMigration = useCallback(async (
+    dry: boolean,
+    label?: string,
+  ) => {
+    if (workspaceActionLockRef.current) return;
+
+    workspaceActionLockRef.current = true;
+    const requestId = workspaceActionRequestIdRef.current + 1;
+    workspaceActionRequestIdRef.current = requestId;
+    const isCurrentAction = () => workspaceActionRequestIdRef.current === requestId;
+    const runningLabel = label ?? (dry ? "preview codex legacy migration" : "migrate codex legacy skills");
+    const startedAt = performance.now();
+    setWsRunning(runningLabel);
+    setError(null);
+    try {
+      const result = await invoke<ActionResult>("migrate_codex_legacy_skills", { dry_run: dry });
+      if (!isCurrentAction()) return;
+      setWsLog(result);
+      setWsLogCompletedAt(Date.now());
+      if (!dry && result.success) {
+        setError(null);
+        fetchStatus();
+      }
+    } catch (e) {
+      if (!isCurrentAction()) return;
+      setWsLog({
+        success: false,
+        action: dry ? "migrate_codex_legacy_skills:dry-run" : "migrate_codex_legacy_skills",
+        stdout: "",
+        stderr: String(e),
+        exit_code: null,
+      });
+      setError(`Codex legacy migration: ${e}`);
+    } finally {
+      const remaining = MIN_RUNNING_MS - (performance.now() - startedAt);
+      if (remaining > 0) await wait(remaining);
+      if (isCurrentAction()) setWsRunning(null);
+      workspaceActionLockRef.current = false;
+    }
+  }, [fetchStatus, setError]);
+
   const runRemoveDeprecatedSkills = useCallback(async (
     dry: boolean,
     agents: InstallAgent[],
@@ -248,6 +289,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     runWsAction,
     runWsInstallForAgents,
     runRemoveDeprecatedSkills,
+    runCodexLegacyMigration,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,

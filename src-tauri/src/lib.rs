@@ -1,7 +1,9 @@
 mod agent_skill_targets;
 mod agent_targets;
 mod commands;
+mod codex_legacy_migration;
 mod deprecated_skills;
+mod skill_duplicate_audit;
 mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod executable_resolver;
@@ -25,7 +27,8 @@ use commands::{
     get_cursor_profile_health, get_docs_health, get_opencode_runtime_health,
     get_repo_dashboard_snapshot, get_repo_prompt_context, get_settings, get_status,
     get_skills_sync_health, get_target_profiles, get_workspace_diagnostics,
-    install_default_workspace, install_skills, preview_remove_deprecated_skills,
+    install_default_workspace, install_skills, migrate_codex_legacy_skills,
+    preview_codex_legacy_migration, preview_remove_deprecated_skills,
     remove_deprecated_skills, rollback_deprecated_skills_removal,
     list_agent_metadata, list_agent_sources, list_backups, list_docs,
     list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
@@ -61,6 +64,8 @@ pub fn run() {
             run_cursor_profile_action,
             list_skills,
             get_skills_sync_health,
+            preview_codex_legacy_migration,
+            migrate_codex_legacy_skills,
             preview_remove_deprecated_skills,
             remove_deprecated_skills,
             rollback_deprecated_skills_removal,

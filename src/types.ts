@@ -84,7 +84,11 @@ export interface DeprecatedSkillHealthEntry {
 export interface SkillsSyncHealth {
   expected_count: number; synced_count: number; missing_count: number;
   diverged_count: number; deprecated_identical_count: number; deprecated_diverged_count: number;
+  codex_legacy_migratable_count: number; codex_legacy_conflict_count: number;
+  duplicate_identical_count: number; duplicate_diverged_count: number;
   skills: SkillSyncHealthEntry[]; deprecated: DeprecatedSkillHealthEntry[];
+  codex_legacy: { name: string; state: string; legacy_path: string; target_path: string; next_action: string }[];
+  duplicates: { name: string; state: string; locations: { root_id: string; root_path: string }[]; next_action: string }[];
 }
 
 export interface AgentTargetMeta {
