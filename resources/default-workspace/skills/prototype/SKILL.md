@@ -15,23 +15,29 @@ related: frontend-design, zoom-out, implementation-plan
 - Explore UI variants, state-machine or data-model options, interaction behavior, or technical feasibility.
 - Keep prototype code clearly separate from production decisions.
 
+## When to diverge
+
+Only create multiple variants when the direction is genuinely unclear. For simple feasibility tests, one approach is sufficient.
+
 ## Process
 
-1. Define the throwaway boundary: what can be temporary, where it lives, and what must not be treated as production-ready.
-2. State the question the prototype must answer.
-3. Build the smallest runnable or inspectable version that answers that question.
-4. Avoid persistence by default unless persistence is the thing being tested.
-5. Capture visible state, tradeoffs, and the decision made from the result.
-6. Provide one run command when the prototype is runnable.
-7. End with a delete-or-absorb follow-up: remove the prototype, promote selected ideas into production work, or keep it only as a named reference.
+1. **Define the decision question.** What must be learned? Example: *Which layout handles overflow better for long status messages?*
+2. **Define comparison criteria** before building. Examples: render time, keyboard reachability, scroll handling, developer ergonomics.
+3. **Build variants** (two or three materially different) only if the question requires it. Keep copy, data, and functional requirements identical across variants.
+4. Capture tradeoffs and visible state.
+5. **Recommend one direction.** Absorb only selected ideas into the production path.
+6. Delete unused prototype code. Do not create a permanent variant system.
+7. End with a delete-or-absorb follow-up.
+
+Boundary: prototype code lives in a clearly named throwaway directory or file. It is never imported by production modules.
 
 ## Output
 
-- Prototype goal.
-- Throwaway boundary.
+- Decision question.
+- Comparison criteria.
 - Files or commands used.
-- Result and decision.
-- Run command, if runnable.
+- Tradeoffs between variants.
+- Recommended direction.
 - Delete-or-absorb follow-up.
 
 ## Guardrails
@@ -39,3 +45,5 @@ related: frontend-design, zoom-out, implementation-plan
 - Do not let prototype shortcuts leak into production code without review.
 - Do not add durable storage, migrations, long-lived config, or external services unless that is the prototype target.
 - Do not present unverified prototype behavior as production evidence.
+- Do not require multiple variants when a simple feasibility test answers the question.
+- Keep the throwaway boundary; do not create a permanent variant system.
