@@ -1,0 +1,38 @@
+---
+name: kretsverket-electrical-drawing
+description: Protect wire semantics, terminal bindings, crossings, references, transforms, and the boundary between drawing data and a future netlist.
+category: kretsverket
+risk: high
+targets: codex, opencode, claude, cursor
+related: kretsverket-editor-change, kretsverket-symbol-system, tdd, minimal-implementation
+---
+
+# Kretsverket Electrical Drawing
+
+Use for wire semantics, terminal bindings, crossings, references, transforms, and drawing-versus-netlist boundaries.
+
+## Required surfaces
+
+- Wires versus neutral lines
+- Dimension arrows as annotations
+- Symbol connection points
+- Endpoint bindings
+- Junction and crossing behavior
+- wirePathId
+- Cross-sheet references
+- Move, rotate, resize, duplicate, delete, save, and load
+- Cross-project move where supported
+- Derived BOM and Dellista behavior
+- Explicit electrical references
+
+## Core invariant
+
+Kretsverket has drawing data and explicit bindings. It does not currently have an inferred or validated netlist.
+
+## Do not introduce
+
+- implicit netlist truth
+- automatic connectivity inference outside approved scope
+- hidden endpoint mutation
+- conflation of Wire and Line
+- persisted derived BOM data without an approved model change

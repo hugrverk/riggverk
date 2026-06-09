@@ -1,0 +1,38 @@
+---
+name: minimal-implementation
+description: Implement the smallest complete change that fits existing ownership without speculative abstraction, duplicate paths, or unrelated cleanup.
+category: implementation
+risk: low
+targets: codex, opencode, claude, cursor
+related: implementation-plan, diagnose, tdd
+---
+
+# Minimal Implementation
+
+Use for code implementation and refactoring. Build the smallest complete, clear, and verifiable solution. Minimize necessary complexity, not line count.
+
+## Rules
+
+- Inspect the owning code and existing patterns before editing.
+- Extend the current owner; do not create a parallel path.
+- Implement only the requested outcome.
+- Avoid unrelated cleanup, renaming, formatting, or modernization.
+- Reuse existing types, utilities, components, state, validation, and configuration.
+- Add an abstraction only when it removes real duplication, names a stable domain concept, or creates a required safety or test boundary.
+- Do not add dependencies, configuration options, extension points, caching, concurrency, or generalized infrastructure for hypothetical future work.
+- Keep control flow explicit and ownership local.
+- Preserve existing validation, permissions, persistence, backup, and migration boundaries.
+
+## Simplification pass
+
+Before finishing, remove anything unnecessary:
+
+- new files, helpers, types, state, branches, or config
+- duplicate rules or ownership
+- speculative abstractions
+- second paths for existing operations
+- changes outside the requested scope
+
+Stop and report if the task requires an unapproved rewrite, dependency, architecture change, or materially broader scope.
+
+Verify with the narrowest check that can falsify the change. Report what ran, what did not run, and residual risk.

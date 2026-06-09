@@ -1,43 +1,37 @@
 ---
 name: handoff
-description: Use to compact long sessions, paused workflows, branch state, or agent chains into a useful handoff.
+description: Review executor evidence and produce a compact, trustworthy handoff with verified state, risks, and the safest next action.
 category: workflow
 risk: low
-targets: codex, opencode, claude
-related: agent-report-review, release-check, implementation-plan
+targets: codex, opencode, claude, cursor
+related: diagnose, implementation-plan, release-check
 ---
 
 # Handoff
 
-## Purpose
-
-- Preserve useful state when work pauses, changes owner, or moves between agents.
-- Compact long sessions without duplicating existing artifacts.
-- Make the next action clear and verifiable.
+Use when reviewing an executor report, pausing work, transferring context, or deciding the next action.
 
 ## Process
 
-1. Identify the handoff audience and immediate next action.
-2. Reference existing PRDs, ADRs, issues, commits, diffs, reports, or docs by path or URL instead of duplicating them.
-3. Separate verified facts from unverified claims or assumptions.
-4. Summarize current state, changed files if known, blockers, risks, and open decisions.
-5. Include commands already run and their results. Do not invent verification.
-6. Recommend the next skills to use based on the remaining work.
-7. Keep the handoff compact enough for a new agent to act without re-reading the full session first.
+1. Extract the goal, current state, changed files, commands run, results, blockers, and stated risks.
+2. Separate verified facts from unsupported claims, assumptions, and checks not run.
+3. Decide the safest next action:
+   - accept
+   - verify
+   - fix
+   - revert
+   - continue with a bounded slice
+4. Reference existing commits, diffs, docs, issues, and reports instead of duplicating them.
+5. Produce a compact handoff that another agent can act on without rereading the full session.
 
 ## Output
 
-- Current state.
-- Existing artifacts to read.
-- Changed files, if known.
-- Verified facts.
-- Unverified claims or assumptions.
-- Risks and blockers.
-- Next action.
-- Recommended next skills.
+- Current state
+- Changed files or existing artifacts
+- Verified
+- Not verified
+- Risks and blockers
+- Next action
+- Relevant skills
 
-## Guardrails
-
-- Do not duplicate long source material, reports, diffs, or docs already available by path or URL.
-- Do not hide uncertainty.
-- Do not claim tests, builds, screenshots, or reviews happened unless they actually did.
+Do not invent verification, hide uncertainty, repeat long source material, or demand exhaustive checks without risk justification.
