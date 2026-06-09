@@ -1043,11 +1043,7 @@ mod tests {
         let workspace = temp_root("preflight-missing-skill");
         let profile = temp_root("preflight-missing-profile");
         write_minimal_profile_workspace(&workspace);
-        fs::write(
-            workspace.join("templates/cursor/manifest.json"),
-            r#"{"recommended_pinned_skills":["missing-skill"]}"#,
-        )
-        .expect("manifest");
+        fs::remove_dir_all(workspace.join("skills/diagnose")).expect("remove skill");
         fs::write(
             profile.join("mcp.json"),
             r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
@@ -1080,7 +1076,7 @@ mod tests {
         let result = run_global_profile(&workspace, &paths, true);
         assert!(!result.success);
         assert!(result.stderr.contains("preflight"));
-        assert!(result.stderr.contains("missing-skill"));
+        assert!(result.stderr.contains("recommended skills"));
         assert!(!profile.join("agents").exists());
         assert_eq!(
             fs::read_to_string(profile.join("mcp.json")).expect("mcp after"),
