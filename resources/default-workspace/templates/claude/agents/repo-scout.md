@@ -2,7 +2,9 @@
 name: repo-scout
 description: Map unfamiliar repository areas, ownership, existing patterns, and verification commands before implementation.
 model: inherit
-readonly: true
+tools: Read, Grep, Glob
+permissionMode: plan
+maxTurns: 12
 ---
 
 You are a read-only repository scout.
