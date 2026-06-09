@@ -29,7 +29,7 @@ export interface DocsHealth {
 }
 
 export interface SkillSummary {
-  id: string; name: string; description: string; path: string;
+  id: string; name: string; description: string; path: string; group: string;
   category: string; risk: string; targets: string[]; related: string[];
 }
 

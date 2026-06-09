@@ -128,31 +128,33 @@ fn validate_skills(root: &Path, checks: &mut Vec<ContractCheck>, errors: &mut Ve
         detail: "skills/ found".into(),
     });
 
-    // Discover root-level skills (skills/<skill>/SKILL.md)
-    let (root_skills, legacy_paths) = discover_contract_skills(root);
-    let skill_count = root_skills.len();
+    // Discover root-level and one-level grouped skills
+    let (discovered_skills, legacy_paths) = discover_contract_skills(root);
+    let skill_count = discovered_skills.len();
 
-    // Root-level skills count
     if skill_count == 0 {
         checks.push(ContractCheck {
             id: "skills-root".into(),
-            label: "Root-level skills discovered".into(),
+            label: "Skills discovered".into(),
             status: CheckStatus::Warn,
-            detail: "No root-level skills found at skills/<skill>/SKILL.md".into(),
+            detail: "No skills found at skills/<skill>/SKILL.md or skills/<group>/<skill>/SKILL.md"
+                .into(),
         });
     } else {
         checks.push(ContractCheck {
             id: "skills-root".into(),
-            label: "Root-level skills discovered".into(),
+            label: "Skills discovered".into(),
             status: CheckStatus::Pass,
-            detail: format!("{skill_count} skill(s) found at skills/<skill>/SKILL.md"),
+            detail: format!(
+                "{skill_count} skill(s) found at root or one-level grouped source layout"
+            ),
         });
     }
 
     // Check each SKILL.md has name and description
     let mut missing_name: Vec<String> = Vec::new();
     let mut missing_desc: Vec<String> = Vec::new();
-    for skill in &root_skills {
+    for skill in &discovered_skills {
         if skill.name.is_empty() {
             missing_name.push(skill.rel_path.clone());
         }
@@ -187,7 +189,7 @@ fn validate_skills(root: &Path, checks: &mut Vec<ContractCheck>, errors: &mut Ve
     // Duplicate skill names
     let mut seen: HashSet<&str> = HashSet::new();
     let mut duplicates: Vec<String> = Vec::new();
-    for skill in &root_skills {
+    for skill in &discovered_skills {
         if !seen.insert(&skill.name) {
             duplicates.push(skill.name.clone());
         }
@@ -209,22 +211,22 @@ fn validate_skills(root: &Path, checks: &mut Vec<ContractCheck>, errors: &mut Ve
         });
     }
 
-    // Legacy nested skills (skills/engineering/*/SKILL.md etc.)
+    // Deeper-than-one-group nesting (skills/<group>/<subgroup>/<skill>/SKILL.md)
     if legacy_paths.is_empty() {
         checks.push(ContractCheck {
             id: "skills-legacy".into(),
-            label: "No legacy nested skills".into(),
+            label: "No unsupported deep skill nesting".into(),
             status: CheckStatus::Pass,
-            detail: "No skills under nested subdirectories (skills/engineering/*/SKILL.md)".into(),
+            detail: "No skills nested deeper than one source group level".into(),
         });
     } else {
         let detail = format!(
-            "Legacy nested skills found (not valid for public app contract): {}",
+            "Unsupported deep skill nesting found: {}",
             legacy_paths.join(", ")
         );
         checks.push(ContractCheck {
             id: "skills-legacy".into(),
-            label: "No legacy nested skills".into(),
+            label: "No unsupported deep skill nesting".into(),
             status: CheckStatus::Fail,
             detail,
         });
@@ -235,6 +237,7 @@ struct ContractSkill {
     name: String,
     description: String,
     rel_path: String,
+    group: String,
 }
 
 fn extract_frontmatter_field(content: &str, key: &str) -> String {
@@ -252,25 +255,40 @@ fn extract_frontmatter_field(content: &str, key: &str) -> String {
     String::new()
 }
 
+fn contract_has_deeper_skill_md(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.join("SKILL.md").is_file() {
+            return true;
+        }
+    }
+    false
+}
+
 fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
     let skills_dir = root.join("skills");
-    let mut root_skills: Vec<ContractSkill> = Vec::new();
+    let mut discovered_skills: Vec<ContractSkill> = Vec::new();
     let mut legacy_paths: Vec<String> = Vec::new();
 
     let entries = match std::fs::read_dir(&skills_dir) {
         Ok(e) => e,
-        Err(_) => return (root_skills, legacy_paths),
+        Err(_) => return (discovered_skills, legacy_paths),
     };
 
     for entry in entries.flatten() {
         let path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
+        let entry_name = entry.file_name().to_string_lossy().into_owned();
 
         if !path.is_dir() {
             continue;
         }
 
-        // Check for root-level skill: skills/<name>/SKILL.md
         let flat_md = path.join("SKILL.md");
         if flat_md.is_file() {
             let content = std::fs::read_to_string(&flat_md).unwrap_or_default();
@@ -282,19 +300,19 @@ fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
                 .to_string_lossy()
                 .into_owned();
 
-            root_skills.push(ContractSkill {
+            discovered_skills.push(ContractSkill {
                 name: if skill_name.is_empty() {
-                    name.clone()
+                    entry_name.clone()
                 } else {
                     skill_name
                 },
                 description,
                 rel_path: rel,
+                group: String::new(),
             });
             continue;
         }
 
-        // This is a category directory — check for legacy nested skills inside it
         let sub_entries = match std::fs::read_dir(&path) {
             Ok(e) => e,
             Err(_) => continue,
@@ -305,22 +323,63 @@ fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
             if !sub_path.is_dir() {
                 continue;
             }
+            let sub_name = sub.file_name().to_string_lossy().into_owned();
             let sub_md = sub_path.join("SKILL.md");
             if sub_md.is_file() {
+                let content = std::fs::read_to_string(&sub_md).unwrap_or_default();
+                let skill_name = extract_frontmatter_field(&content, "name");
+                let description = extract_frontmatter_field(&content, "description");
                 let rel = sub_md
                     .strip_prefix(root)
                     .unwrap_or(&sub_md)
                     .to_string_lossy()
                     .into_owned();
-                legacy_paths.push(rel);
+                discovered_skills.push(ContractSkill {
+                    name: if skill_name.is_empty() {
+                        sub_name
+                    } else {
+                        skill_name
+                    },
+                    description,
+                    rel_path: rel,
+                    group: entry_name.clone(),
+                });
+            } else if contract_has_deeper_skill_md(&sub_path) {
+                collect_deep_skill_paths(root, &sub_path, &mut legacy_paths);
             }
         }
     }
 
-    root_skills.sort_by(|a, b| a.name.cmp(&b.name));
+    discovered_skills.sort_by(|a, b| match a.group.cmp(&b.group) {
+        std::cmp::Ordering::Equal => a.name.cmp(&b.name),
+        other => other,
+    });
     legacy_paths.sort();
 
-    (root_skills, legacy_paths)
+    (discovered_skills, legacy_paths)
+}
+
+fn collect_deep_skill_paths(root: &Path, dir: &Path, legacy_paths: &mut Vec<String>) {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        let skill_md = path.join("SKILL.md");
+        if skill_md.is_file() {
+            let rel = skill_md
+                .strip_prefix(root)
+                .unwrap_or(&skill_md)
+                .to_string_lossy()
+                .into_owned();
+            legacy_paths.push(rel);
+        } else {
+            collect_deep_skill_paths(root, &path, legacy_paths);
+        }
+    }
 }
 
 // ─── Agent metadata validation ───
@@ -621,20 +680,37 @@ mod tests {
         fs::write(path, "# No frontmatter\n").expect("write skill");
     }
 
-    fn write_legacy_skill(root: &Path, category: &str, skill_name: &str) {
+    fn write_grouped_skill(root: &Path, group: &str, skill_name: &str) {
         let path = root
             .join("skills")
-            .join(category)
+            .join(group)
             .join(skill_name)
             .join("SKILL.md");
         if let Some(parent) = path.parent() {
-            fs::create_dir_all(parent).expect("create legacy skill dir");
+            fs::create_dir_all(parent).expect("create grouped skill dir");
         }
         fs::write(
             path,
-            format!("---\nname: {}\ndescription: legacy\n---\n", skill_name),
+            format!("---\nname: {}\ndescription: grouped\n---\n", skill_name),
         )
-        .expect("write legacy skill");
+        .expect("write grouped skill");
+    }
+
+    fn write_deep_nested_skill(root: &Path, group: &str, subgroup: &str, skill_name: &str) {
+        let path = root
+            .join("skills")
+            .join(group)
+            .join(subgroup)
+            .join(skill_name)
+            .join("SKILL.md");
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent).expect("create deep nested skill dir");
+        }
+        fs::write(
+            path,
+            format!("---\nname: {}\ndescription: deep\n---\n", skill_name),
+        )
+        .expect("write deep nested skill");
     }
 
     fn write_agent(root: &Path, agent_name: &str) {
@@ -776,10 +852,28 @@ mod tests {
     }
 
     #[test]
-    fn legacy_nested_skill_fails() {
-        let root = setup_valid_workspace("legacy-skills");
-        write_skill(&root, "diagnose"); // root-level
-        write_legacy_skill(&root, "engineering", "debug-tools"); // legacy nested
+    fn grouped_skill_passes_contract() {
+        let root = setup_valid_workspace("grouped-skills");
+        write_skill(&root, "diagnose");
+        write_grouped_skill(&root, "kretsverket", "kretsverket-editor-change");
+
+        let mut checks = Vec::new();
+        let mut errors = Vec::new();
+        validate_skills(&root, &mut checks, &mut errors);
+
+        cleanup(&root);
+
+        let root_check = checks.iter().find(|c| c.id == "skills-root").unwrap();
+        assert_eq!(root_check.status, CheckStatus::Pass);
+        let legacy_check = checks.iter().find(|c| c.id == "skills-legacy").unwrap();
+        assert_eq!(legacy_check.status, CheckStatus::Pass);
+    }
+
+    #[test]
+    fn deep_nested_skill_fails() {
+        let root = setup_valid_workspace("deep-skills");
+        write_skill(&root, "diagnose");
+        write_deep_nested_skill(&root, "engineering", "debug", "debug-tools");
 
         let mut checks = Vec::new();
         let mut errors = Vec::new();
@@ -791,7 +885,7 @@ mod tests {
         assert_eq!(
             legacy_check.status,
             CheckStatus::Fail,
-            "legacy nested skills should fail: {legacy_check:?}"
+            "deep nested skills should fail: {legacy_check:?}"
         );
     }
 

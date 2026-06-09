@@ -19,10 +19,23 @@ pub struct SkillSummary {
     pub(crate) name: String,
     pub(crate) description: String,
     pub(crate) path: String,
+    pub(crate) group: String,
     pub(crate) category: String,
     pub(crate) risk: String,
     pub(crate) targets: Vec<String>,
     pub(crate) related: Vec<String>,
+}
+
+fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    let meta = std::fs::symlink_metadata(path)
+        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
+    if meta.file_type().is_symlink() {
+        return Err(format!("refusing symlink {label}: {}", path.display()));
+    }
+    Ok(())
 }
 
 fn skill_summary_from_path(
@@ -30,6 +43,7 @@ fn skill_summary_from_path(
     skill_md: &Path,
     id: String,
     fallback_name: String,
+    group: String,
 ) -> SkillSummary {
     let content = std::fs::read_to_string(skill_md).unwrap_or_default();
     let name = extract_frontmatter(&content, "name");
@@ -49,6 +63,7 @@ fn skill_summary_from_path(
         name: if name.is_empty() { fallback_name } else { name },
         description: desc,
         path: rel,
+        group,
         category,
         risk,
         targets,
@@ -56,43 +71,111 @@ fn skill_summary_from_path(
     }
 }
 
+fn has_deeper_skill_md(dir: &Path) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if !path.is_dir() {
+            continue;
+        }
+        if path.join("SKILL.md").is_file() {
+            return true;
+        }
+    }
+    false
+}
+
 pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> {
     let skills_dir = root.join("skills");
     let mut discovered: Vec<SkillSummary> = Vec::new();
+
+    reject_symlink_path(&skills_dir, "skills root")?;
 
     let entries =
         std::fs::read_dir(&skills_dir).map_err(|e| format!("cannot read skills dir: {}", e))?;
 
     for entry in entries {
         let entry = entry.map_err(|e| format!("read error: {}", e))?;
-        if !entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+        let file_type = entry
+            .file_type()
+            .map_err(|e| format!("file type error: {}", e))?;
+        if file_type.is_symlink() {
+            return Err(format!(
+                "refusing symlink skill directory: {}",
+                entry.path().display()
+            ));
+        }
+        if !file_type.is_dir() {
             continue;
         }
 
-        let skill_path = entry.path();
-        let name = entry.file_name().to_string_lossy().into_owned();
-        let skill_md = skill_path.join("SKILL.md");
-        if skill_md.is_file() {
+        let entry_path = entry.path();
+        let entry_name = entry.file_name().to_string_lossy().into_owned();
+        let root_skill_md = entry_path.join("SKILL.md");
+        reject_symlink_path(&root_skill_md, "skill file")?;
+        if root_skill_md.is_file() {
             discovered.push(skill_summary_from_path(
                 root,
-                &skill_md,
-                format!("workspace/{}", name),
-                name,
+                &root_skill_md,
+                format!("workspace/{}", entry_name),
+                entry_name,
+                String::new(),
             ));
+            continue;
+        }
+
+        let sub_entries = std::fs::read_dir(&entry_path)
+            .map_err(|e| format!("cannot read skills group dir: {}", e))?;
+        for sub in sub_entries {
+            let sub = sub.map_err(|e| format!("read error: {}", e))?;
+            let sub_type = sub
+                .file_type()
+                .map_err(|e| format!("file type error: {}", e))?;
+            if sub_type.is_symlink() {
+                return Err(format!(
+                    "refusing symlink skill directory: {}",
+                    sub.path().display()
+                ));
+            }
+            if !sub_type.is_dir() {
+                continue;
+            }
+            let sub_path = sub.path();
+            let sub_name = sub.file_name().to_string_lossy().into_owned();
+            let grouped_skill_md = sub_path.join("SKILL.md");
+            reject_symlink_path(&grouped_skill_md, "skill file")?;
+            if grouped_skill_md.is_file() {
+                discovered.push(skill_summary_from_path(
+                    root,
+                    &grouped_skill_md,
+                    format!("workspace/{}/{}", entry_name, sub_name),
+                    sub_name,
+                    entry_name.clone(),
+                ));
+            } else if has_deeper_skill_md(&sub_path) {
+                return Err(format!(
+                    "skill nesting deeper than one group level is not supported: {}",
+                    sub_path.display()
+                ));
+            }
         }
     }
 
-    discovered.sort_by(|a, b| a.id.cmp(&b.id));
+    discovered.sort_by(|a, b| match a.group.cmp(&b.group) {
+        std::cmp::Ordering::Equal => a.name.cmp(&b.name),
+        other => other,
+    });
 
     let mut names = std::collections::HashSet::new();
-    let mut skills: Vec<SkillSummary> = Vec::new();
-    for skill in discovered {
-        if names.insert(skill.name.clone()) {
-            skills.push(skill);
+    for skill in &discovered {
+        if !names.insert(skill.name.clone()) {
+            return Err(format!("duplicate skill name in repository: {}", skill.name));
         }
     }
 
-    Ok(skills)
+    Ok(discovered)
 }
 
 #[tauri::command]
@@ -377,29 +460,92 @@ mod tests {
     }
 
     #[test]
-    fn nested_skill_layout_is_ignored() {
-        let root = temp_root("nested-ignored");
-        write_skill(&root, "skills/debug/diagnose", "diagnose");
+    fn grouped_skill_layout_is_listed() {
+        let root = temp_root("grouped-skills");
+        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
-        assert_eq!(skills.len(), 0, "nested skills must be ignored");
+        assert_eq!(skills.len(), 1);
+        assert_eq!(skills[0].id, "workspace/kretsverket/kretsverket-editor-change");
+        assert_eq!(skills[0].name, "kretsverket-editor-change");
+        assert_eq!(skills[0].group, "kretsverket");
+        assert_eq!(
+            skills[0].path,
+            "skills/kretsverket/kretsverket-editor-change/SKILL.md"
+        );
     }
 
     #[test]
-    fn root_skill_wins_without_descending() {
-        let root = temp_root("root-wins");
+    fn mixed_root_and_grouped_discovery() {
+        let root = temp_root("mixed-skills");
         write_skill(&root, "skills/diagnose", "diagnose");
-        write_skill(&root, "skills/debug/diagnose", "diagnose");
+        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
-        // Only root-level diagnose should be discovered
-        assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].id, "workspace/diagnose");
-        assert_eq!(skills[0].path, "skills/diagnose/SKILL.md");
+        assert_eq!(skills.len(), 2);
+        assert_eq!(skills[0].name, "diagnose");
+        assert_eq!(skills[0].group, "");
+        assert_eq!(skills[1].name, "kretsverket-editor-change");
+        assert_eq!(skills[1].group, "kretsverket");
+    }
+
+    #[test]
+    fn duplicate_frontmatter_name_across_groups_is_rejected() {
+        let root = temp_root("dup-groups");
+        write_skill(&root, "skills/alpha/shared-skill", "shared-skill");
+        write_skill(&root, "skills/beta/shared-skill", "shared-skill");
+
+        match discover_skills(&root) {
+            Err(err) => assert!(err.contains("duplicate skill name")),
+            Ok(_) => panic!("duplicate names must fail"),
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn deeper_nesting_is_rejected() {
+        let root = temp_root("deep-nesting");
+        write_skill(&root, "skills/debug/nested/diagnose", "diagnose");
+
+        match discover_skills(&root) {
+            Err(err) => assert!(err.contains("deeper than one group level")),
+            Ok(_) => panic!("deep nesting must fail"),
+        }
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn deterministic_ordering_by_group_and_name() {
+        let root = temp_root("ordering");
+        write_skill(&root, "skills/zeta/z-skill", "z-skill");
+        write_skill(&root, "skills/alpha/a-skill", "a-skill");
+        write_skill(&root, "skills/diagnose", "diagnose");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let _ = fs::remove_dir_all(&root);
+
+        let names: Vec<&str> = skills.iter().map(|s| s.name.as_str()).collect();
+        assert_eq!(names, vec!["diagnose", "a-skill", "z-skill"]);
+    }
+
+    #[test]
+    fn grouped_skill_open_and_read_paths_resolve() {
+        let root = temp_root("grouped-open");
+        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
+
+        let skills = discover_skills(&root).expect("discover skills");
+        let found = skills
+            .iter()
+            .find(|s| s.id == "workspace/kretsverket/kretsverket-editor-change")
+            .expect("grouped skill id exists");
+        let path = root.join(&found.path);
+        let exists = path.is_file();
+        let _ = fs::remove_dir_all(&root);
+        assert!(exists);
     }
 
     #[test]
@@ -419,19 +565,16 @@ mod tests {
     }
 
     #[test]
-    fn duplicate_root_skill_names_choose_deterministic_first_id() {
+    fn duplicate_root_skill_names_are_rejected() {
         let root = temp_root("duplicate-root-skills");
-        // Two root-level directories, both with same name: frontmatter
-        // ids sort as workspace/diagnose-b < workspace/diagnose-c
         write_skill(&root, "skills/diagnose-c", "duplicate-skill");
         write_skill(&root, "skills/diagnose-b", "duplicate-skill");
 
-        let skills = discover_skills(&root).expect("discover skills");
+        match discover_skills(&root) {
+            Err(err) => assert!(err.contains("duplicate skill name")),
+            Ok(_) => panic!("duplicate names must fail"),
+        }
         let _ = fs::remove_dir_all(&root);
-
-        assert_eq!(skills.len(), 1);
-        // First in sorted order by id wins
-        assert_eq!(skills[0].id, "workspace/diagnose-b");
     }
 
     #[test]

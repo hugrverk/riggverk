@@ -121,33 +121,68 @@ ensure_contained() {
   esac
 }
 
+has_deeper_skill_md() {
+  local dir="$1"
+  local child
+  for child in "$dir"/*/; do
+    [ -d "$child" ] || continue
+    if [ -f "${child}SKILL.md" ]; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+register_discovered_skill() {
+  local src_dir="$1"
+  local skill_md="$2"
+  local fallback_name="$3"
+  local rel_dir="$4"
+  local name
+  name="$(extract_frontmatter "$skill_md" "name")"
+  if [ -z "$name" ]; then
+    name="$fallback_name"
+  fi
+  if ! validate_skill_name "$name" "$skill_md"; then
+    exit 1
+  fi
+  local desc
+  desc="$(extract_frontmatter "$skill_md" "description")"
+  if printf '%s\n' "$names_seen" | grep -qxF "$name"; then
+    printf 'install-skills.sh: duplicate skill name in repository: %s\n' "$name" >&2
+    exit 1
+  fi
+  names_seen="${names_seen}${name}
+"
+  printf '%s\t%s\t%s\n' "$name" "$rel_dir" "$desc"
+  found=$((found + 1))
+}
+
 discover_skills() {
   local found=0
   local names_seen=""
-  for skill_dir in "$SKILLS_DIR"/*/; do
-    [ -d "$skill_dir" ] || continue
-    local skill_md="$skill_dir/SKILL.md"
-    [ -f "$skill_md" ] || continue
-    local dir_name
-    dir_name="$(basename "$skill_dir")"
-    local name
-    name="$(extract_frontmatter "$skill_md" "name")"
-    if [ -z "$name" ]; then
-      name="$dir_name"
+  for entry in "$SKILLS_DIR"/*/; do
+    [ -d "$entry" ] || continue
+    local entry_name
+    entry_name="$(basename "$entry")"
+    local root_skill_md="$entry/SKILL.md"
+    if [ -f "$root_skill_md" ]; then
+      register_discovered_skill "$entry" "$root_skill_md" "$entry_name" "$entry_name"
+      continue
     fi
-    if ! validate_skill_name "$name" "$skill_md"; then
-      exit 1
-    fi
-    local desc
-    desc="$(extract_frontmatter "$skill_md" "description")"
-    if printf '%s\n' "$names_seen" | grep -qxF "$name"; then
-      printf 'install-skills.sh: duplicate skill name in repository: %s\n' "$name" >&2
-      exit 1
-    fi
-    names_seen="${names_seen}${name}
-"
-    printf '%s\t%s\t%s\n' "$name" "$dir_name" "$desc"
-    found=$((found + 1))
+    local sub
+    for sub in "$entry"/*/; do
+      [ -d "$sub" ] || continue
+      local sub_name
+      sub_name="$(basename "$sub")"
+      local grouped_skill_md="$sub/SKILL.md"
+      if [ -f "$grouped_skill_md" ]; then
+        register_discovered_skill "$sub" "$grouped_skill_md" "$sub_name" "${entry_name}/${sub_name}"
+      elif has_deeper_skill_md "$sub"; then
+        printf 'install-skills.sh: skill nesting deeper than one group level is not supported: %s\n' "$sub" >&2
+        exit 1
+      fi
+    done
   done
   if [ "$found" -eq 0 ]; then
     return 1
