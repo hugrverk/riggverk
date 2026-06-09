@@ -214,15 +214,35 @@ export function OpenCodeView({
             <HarnessActionCard
               title="Config"
               ariaLabel="OpenCode config sync"
-              description="OpenCode config, TUI config, and Playwright MCP paths. Uses generated templates/opencode.json snapshot. Does not install bundled agents."
+              description="Merge bundled managed keys into ~/.config/opencode/opencode.json (model, permissions, Playwright MCP, compaction). Preserves provider and other MCP servers. TUI is full-file sync."
               statusChip={health && configStatus
                 ? { label: runtimeChipLabel(configStatus), tone: opencodeConfigTone(health) }
                 : { label: "loading", tone: "muted" }}
               details={health ? [
                 {
-                  label: "Config",
+                  label: "Managed keys",
                   value: runtimeChipLabel(configCheckStatusLabel(health, "configs_match")).toLowerCase(),
                   tone: configCheckTone(health, "configs_match"),
+                },
+                {
+                  label: "Model",
+                  value: health.model ?? "(not set)",
+                  tone: "muted",
+                },
+                {
+                  label: "Default agent",
+                  value: health.default_agent ?? "(not set)",
+                  tone: "muted",
+                },
+                {
+                  label: "Autoupdate",
+                  value: health.autoupdate ?? "(not set)",
+                  tone: "muted",
+                },
+                {
+                  label: "Session snapshot",
+                  value: health.snapshot == null ? "(not set)" : health.snapshot ? "enabled" : "disabled",
+                  tone: "muted",
                 },
                 {
                   label: "TUI",
@@ -230,7 +250,7 @@ export function OpenCodeView({
                   tone: tuiTone(health.tui_status),
                 },
                 {
-                  label: "Snapshot",
+                  label: "Template snapshot",
                   value: health.generated_snapshot_status,
                   tone: snapshotTone(health.generated_snapshot_status),
                   detail: health.generated_snapshot_status === "stale"

@@ -1,0 +1,16 @@
+{
+  "description": "OpenCode config keys managed by Agent Workspace install/health. User provider blocks and non-playwright MCP servers are preserved.",
+  "top_level": [
+    "$schema",
+    "share",
+    "autoupdate",
+    "snapshot",
+    "model",
+    "small_model",
+    "default_agent",
+    "compaction",
+    "watcher",
+    "permission"
+  ],
+  "mcp_servers": ["playwright"]
+}

@@ -28,6 +28,8 @@ pub struct OpenCodeRuntimeHealth {
     pub default_agent: Option<String>,
     pub model: Option<String>,
     pub small_model: Option<String>,
+    pub autoupdate: Option<String>,
+    pub snapshot: Option<bool>,
     pub qwen_context: Option<u64>,
     pub qwen_output: Option<u64>,
     pub bundled_agent_count: usize,
@@ -110,6 +112,63 @@ fn file_eq(a: &Path, b: &Path) -> bool {
 const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = "0.0.48";
 const PLAYWRIGHT_MCP_CONFIG_PLACEHOLDER: &str = "__PLAYWRIGHT_MCP_CONFIG_PATH__";
 const PLAYWRIGHT_BROWSERS_PLACEHOLDER: &str = "__PLAYWRIGHT_BROWSERS_PATH__";
+
+/// Keys merged by `scripts/merge-opencode-config.py` / `metadata/opencode-managed-keys.json`.
+const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
+    "$schema",
+    "share",
+    "autoupdate",
+    "snapshot",
+    "model",
+    "small_model",
+    "default_agent",
+    "compaction",
+    "watcher",
+    "permission",
+];
+
+fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Value {
+    let mut managed = serde_json::Map::new();
+    if let Some(obj) = config.as_object() {
+        for key in MANAGED_TOP_LEVEL_KEYS {
+            if let Some(value) = obj.get(*key) {
+                managed.insert((*key).to_string(), value.clone());
+            }
+        }
+        if let Some(playwright) = obj
+            .get("mcp")
+            .and_then(|mcp| mcp.get("playwright"))
+        {
+            let mut mcp = serde_json::Map::new();
+            mcp.insert("playwright".to_string(), playwright.clone());
+            managed.insert("mcp".to_string(), serde_json::Value::Object(mcp));
+        }
+    }
+    serde_json::Value::Object(managed)
+}
+
+fn managed_opencode_keys_match(installed: &serde_json::Value, rendered: &serde_json::Value) -> bool {
+    extract_managed_opencode_config(installed) == extract_managed_opencode_config(rendered)
+}
+
+fn is_legacy_aw_scout(path: &Path) -> bool {
+    let content = match std::fs::read_to_string(path) {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    if !content.starts_with("---") {
+        return false;
+    }
+    let Some(end) = content.find("\n---") else {
+        return false;
+    };
+    if end < 3 {
+        return false;
+    }
+    content[3..end]
+        .lines()
+        .any(|line| line.trim() == "name: scout")
+}
 
 /// Default browser cache path (mirrors `playwright-mcp-lib.sh`).
 fn default_playwright_browsers_path(home_dir: &Path) -> Option<std::path::PathBuf> {
@@ -196,14 +255,14 @@ pub(crate) fn render_expected_opencode_config(
     ))
 }
 
-/// Compare installed OpenCode config to rendered workspace template (not raw template bytes).
+/// Compare installed managed OpenCode keys to rendered workspace template.
 fn installed_config_matches_rendered(
     template_json: &serde_json::Value,
     installed_json: &serde_json::Value,
     home_dir: &Path,
 ) -> Option<bool> {
     render_expected_opencode_config(template_json, home_dir)
-        .map(|expected| expected == *installed_json)
+        .map(|expected| managed_opencode_keys_match(installed_json, &expected))
 }
 
 /// Sync status for `get_status` / dashboard (same staged output as `install-opencode-config.sh`).
@@ -235,7 +294,9 @@ pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path
     };
 
     match render_expected_opencode_config(&template_json, home_dir) {
-        Some(expected) if expected == installed_json => "synced".into(),
+        Some(expected) if managed_opencode_keys_match(&installed_json, &expected) => {
+            "synced".into()
+        }
         Some(_) => "diverged".into(),
         None => "diverged".into(),
     }
@@ -335,6 +396,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     let mut default_agent: Option<String> = None;
     let mut model: Option<String> = None;
     let mut small_model: Option<String> = None;
+    let mut autoupdate: Option<String> = None;
+    let mut snapshot: Option<bool> = None;
     let mut qwen_context: Option<u64> = None;
     let mut qwen_output: Option<u64> = None;
 
@@ -463,6 +526,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         default_agent = extract_string_field(i_json, &["default_agent"]);
         model = extract_string_field(i_json, &["model"]);
         small_model = extract_string_field(i_json, &["small_model"]);
+        autoupdate = extract_string_field(i_json, &["autoupdate"]);
+        snapshot = i_json.get("snapshot").and_then(|v| v.as_bool());
         qwen_context = extract_u64_field(
             i_json,
             &[
@@ -510,6 +575,22 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
             detail: small_model.clone().unwrap_or_else(|| "(not set)".into()),
         });
 
+        checks.push(OpenCodeRuntimeCheck {
+            id: "autoupdate".into(),
+            label: "Autoupdate".into(),
+            status: "pass".into(),
+            detail: autoupdate.clone().unwrap_or_else(|| "(not set)".into()),
+        });
+
+        checks.push(OpenCodeRuntimeCheck {
+            id: "snapshot".into(),
+            label: "Snapshot".into(),
+            status: "pass".into(),
+            detail: snapshot
+                .map(|enabled| if enabled { "enabled".into() } else { "disabled".into() })
+                .unwrap_or_else(|| "(not set)".into()),
+        });
+
         // Check qwen3.6-plus context
         if let Some(ctx) = qwen_context {
             checks.push(OpenCodeRuntimeCheck {
@@ -551,20 +632,20 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         let configs_match = configs_match_result.unwrap_or(false);
         checks.push(OpenCodeRuntimeCheck {
             id: "configs_match".into(),
-            label: "Installed config matches rendered workspace config".into(),
+            label: "Managed config keys match bundled workspace".into(),
             status: if configs_match {
                 "pass".into()
             } else {
                 "warn".into()
             },
             detail: if configs_match {
-                "rendered workspace config matches installed".into()
+                "managed keys match bundled workspace (provider and other MCP servers preserved)"
+                    .into()
             } else if configs_match_result.is_none() {
                 "unable to render expected config for comparison (set PLAYWRIGHT_BROWSERS_PATH)"
                     .into()
             } else {
-                "installed config differs from rendered workspace config. Run diff before sync."
-                    .into()
+                "managed keys differ from bundled workspace. Run diff before sync.".into()
             },
         });
         if !configs_match {
@@ -861,9 +942,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         }
     }
 
+    let legacy_scout_path = agents_target_dir.join("scout.md");
+    let legacy_scout_present = is_legacy_aw_scout(&legacy_scout_path);
+
     // Extra installed agents (informational only — do not affect status)
     let extra_installed: Vec<String> = installed_agent_names
         .difference(&bundled_set)
+        .filter(|name| !(legacy_scout_present && name.as_str() == "scout.md"))
         .cloned()
         .collect();
     let extra_installed_agent_count = extra_installed.len();
@@ -876,6 +961,20 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         ));
     }
     // Note: extra agents are informational only and do NOT set has_warn = true
+
+    if legacy_scout_present {
+        warnings.push(
+            "Legacy scout.md agent conflicts with repo-scout rename — sync agents to remove."
+                .to_string(),
+        );
+        checks.push(OpenCodeRuntimeCheck {
+            id: "legacy_scout".into(),
+            label: "Legacy scout agent".into(),
+            status: "warn".into(),
+            detail: legacy_scout_path.to_string_lossy().into_owned(),
+        });
+        has_warn = true;
+    }
 
     // Agent summary check
     checks.push(OpenCodeRuntimeCheck {
@@ -942,6 +1041,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         default_agent,
         model,
         small_model,
+        autoupdate,
+        snapshot,
         qwen_context,
         qwen_output,
         bundled_agent_count,
@@ -1273,7 +1374,56 @@ mod tests {
             .find(|c| c.id == "configs_match")
             .unwrap();
         assert_eq!(match_check.status, "warn");
-        assert!(match_check.detail.contains("rendered workspace config"));
+        assert!(match_check.detail.contains("managed keys"));
+    }
+
+    #[test]
+    fn test_managed_keys_match_preserves_user_provider() {
+        let ws = temp_root("managed-provider-ws");
+        let home = temp_root("managed-provider-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"bundled-model","mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+        );
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        let rendered = render_expected_opencode_config(
+            &serde_json::from_str(
+                r#"{"model":"bundled-model","mcp":{"playwright":{"environment":{"PLAYWRIGHT_BROWSERS_PATH":"__PLAYWRIGHT_BROWSERS_PATH__"}}}}"#,
+            )
+            .expect("parse template"),
+            &home,
+        )
+        .expect("render expected");
+        let mut installed = rendered.clone();
+        if let Some(obj) = installed.as_object_mut() {
+            obj.insert(
+                "provider".to_string(),
+                serde_json::json!({"custom": {"api": "secret"}}),
+            );
+            obj.insert("version".to_string(), serde_json::json!(99));
+        }
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            &serde_json::to_string_pretty(&installed).expect("serialize"),
+        );
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        add_tui(&ws, &home);
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "synced");
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "pass");
     }
 
     #[test]
@@ -1353,13 +1503,21 @@ mod tests {
     }
 
     #[test]
-    fn test_diverged_when_configs_differ() {
+    fn test_diverged_when_managed_keys_differ() {
         let ws = temp_root("div-cfg-ws");
         let home = temp_root("div-cfg-home");
 
-        write_file(&ws, "templates/opencode.json", r#"{"version":2}"#);
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"bundled-model","version":2}"#,
+        );
         write_file(&ws, "agents/architect.md", "# architect");
-        write_file(&home, ".config/opencode/opencode.json", r#"{"version":1}"#);
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"user-model","version":1}"#,
+        );
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
         add_tui(&ws, &home);
 
@@ -1374,6 +1532,32 @@ mod tests {
             .find(|c| c.id == "configs_match")
             .unwrap();
         assert_eq!(match_check.status, "warn");
+    }
+
+    #[test]
+    fn test_legacy_scout_warns_and_excludes_extra_count() {
+        let ws = temp_root("legacy-scout-ws");
+        let home = temp_root("legacy-scout-home");
+
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+        write_file(
+            &home,
+            ".config/opencode/agents/scout.md",
+            "---\nname: scout\n---\n# legacy\n",
+        );
+        add_tui(&ws, &home);
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.extra_installed_agent_count, 0);
+        let legacy = health.checks.iter().find(|c| c.id == "legacy_scout").unwrap();
+        assert_eq!(legacy.status, "warn");
+        assert_eq!(health.status, "diverged");
     }
 
     #[test]
@@ -1764,11 +1948,19 @@ mod tests {
         let ws = temp_root("sum-div-ws");
         let home = temp_root("sum-div-home");
 
-        write_file(&ws, "templates/opencode.json", r#"{"version":2}"#);
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"bundled-model","version":2}"#,
+        );
         write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
         write_file(&ws, "agents/architect.md", "# architect");
 
-        write_file(&home, ".config/opencode/opencode.json", r#"{"version":1}"#);
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"user-model","version":1}"#,
+        );
         write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
 

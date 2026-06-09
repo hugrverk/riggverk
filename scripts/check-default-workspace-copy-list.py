@@ -63,6 +63,7 @@ def main() -> None:
         "scripts/install-agent-rules.sh",
         "scripts/install-runtime-agents.sh",
         "scripts/install-opencode-config.sh",
+        "scripts/merge-opencode-config.py",
         "scripts/generate-opencode-config.py",
         "scripts/playwright-mcp-lib.sh",
         "scripts/check-playwright-mcp.sh",

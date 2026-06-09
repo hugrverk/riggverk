@@ -118,6 +118,7 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "scripts/install-agent-rules.sh",
                 "scripts/install-runtime-agents.sh",
                 "scripts/install-opencode-config.sh",
+                "scripts/merge-opencode-config.py",
                 "scripts/install-codex-config.sh",
                 "scripts/install-cursor-workspace.sh",
                 "scripts/check-codex-profile.py",
@@ -154,6 +155,7 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
             "Metadata",
             &[
                 "metadata/agents.json",
+                "metadata/opencode-managed-keys.json",
                 "metadata/deprecated-skills.json",
                 "metadata/deprecated-skills/agent-report-review/SKILL.md",
                 "metadata/deprecated-skills/caveman/SKILL.md",

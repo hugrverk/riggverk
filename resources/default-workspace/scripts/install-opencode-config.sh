@@ -161,6 +161,22 @@ validate_json() {
   fi
 }
 
+MERGE_SCRIPT="$WORKSPACE_ROOT/scripts/merge-opencode-config.py"
+
+opencode_config_managed_match() {
+  [ -f "$TARGET" ] || return 1
+  python3 "$MERGE_SCRIPT" --managed-match "$TARGET" "$rendered_opencode"
+}
+
+opencode_config_merge_preview() {
+  local dest="$1"
+  if [ -f "$TARGET" ]; then
+    python3 "$MERGE_SCRIPT" --merge "$TARGET" "$rendered_opencode" --output "$dest"
+  else
+    cp "$rendered_opencode" "$dest"
+  fi
+}
+
 # ── Agent file helpers ──
 
 # Lists agent source files, one per line.
@@ -206,13 +222,16 @@ fi
 if $diff_mode; then
   has_diffs=false
 
-  # Config diffs
+  # Config diffs (managed keys only; provider and other MCP servers are preserved)
   if should_sync_config && [ -f "$TARGET" ]; then
-    if ! cmp -s "$rendered_opencode" "$TARGET"; then
-      printf '\n--- opencode config diffs (%s)\n' "$TARGET"
-      diff -u "$TARGET" "$rendered_opencode" || true
+    merged_preview="$(mktemp)"
+    opencode_config_merge_preview "$merged_preview"
+    if ! cmp -s "$merged_preview" "$TARGET"; then
+      printf '\n--- opencode config managed-key diffs (%s)\n' "$TARGET"
+      diff -u "$TARGET" "$merged_preview" || true
       has_diffs=true
     fi
+    rm -f "$merged_preview"
   elif should_sync_config; then
     printf '\n--- opencode config missing (no target file at %s)\n' "$TARGET"
     has_diffs=true
@@ -325,10 +344,10 @@ if $apply; then
     if ! $quiet; then printf '  cursor mcp updated (playwright server only)\n'; fi
   fi
 
-  # ── Apply config ──
+  # ── Apply config (merge managed keys; preserve provider and non-playwright MCP) ──
   if should_sync_config && [ -f "$TARGET" ]; then
-    if cmp -s "$rendered_opencode" "$TARGET"; then
-      if ! $quiet; then printf '  opencode config already synced\n'; fi
+    if opencode_config_managed_match; then
+      if ! $quiet; then printf '  opencode config managed keys already synced\n'; fi
     else
       ts="$(date -u +%Y%m%d-%H%M%S)"
       backup_dir="$BACKUP_ROOT/$ts/opencode-config"
@@ -336,8 +355,8 @@ if $apply; then
       backup_file="$backup_dir/opencode.json"
       cp "$TARGET" "$backup_file"
       if ! $quiet; then printf '  opencode config backed up to %s\n' "$backup_file"; fi
-      cp "$rendered_opencode" "$TARGET"
-      if ! $quiet; then printf '  opencode config synced\n'; fi
+      python3 "$MERGE_SCRIPT" --apply "$TARGET" "$rendered_opencode"
+      if ! $quiet; then printf '  opencode config managed keys synced\n'; fi
     fi
   elif should_sync_config; then
     mkdir -p "$(dirname "$TARGET")"
@@ -391,12 +410,12 @@ fi
 
 all_synced=true
 
-# Config check
+# Config check (managed keys only)
 if should_sync_config && [ -f "$TARGET" ]; then
-  if cmp -s "$rendered_opencode" "$TARGET"; then
-    if ! $quiet; then printf '  opencode config synced\n'; fi
+  if opencode_config_managed_match; then
+    if ! $quiet; then printf '  opencode config managed keys synced\n'; fi
   else
-    if ! $quiet; then printf '  opencode config diverged (use --apply to sync)\n'; fi
+    if ! $quiet; then printf '  opencode config managed keys diverged (use --apply to sync)\n'; fi
     all_synced=false
   fi
 elif should_sync_config; then

@@ -108,6 +108,53 @@ agent_stem() {
   printf '%s' "${name%.md}"
 }
 
+is_legacy_aw_scout() {
+  local file="$1"
+  [ -f "$file" ] || return 1
+  python3 - "$file" <<'PY'
+import re
+import sys
+from pathlib import Path
+
+path = Path(sys.argv[1])
+text = path.read_text(encoding="utf-8")
+if not text.startswith("---"):
+    sys.exit(1)
+end = text.find("\n---", 3)
+if end == -1:
+    sys.exit(1)
+front = text[3:end]
+if re.search(r"^name:\s*scout\s*$", front, re.MULTILINE):
+    sys.exit(0)
+sys.exit(1)
+PY
+}
+
+handle_legacy_opencode_scout() {
+  local target_dir="$1"
+  local legacy="$target_dir/scout.md"
+  is_legacy_aw_scout "$legacy" || return 0
+
+  if $apply; then
+    local ts backup_dir
+    ts="$(date -u +%Y%m%d-%H%M%S)"
+    backup_dir="$BACKUP_ROOT/$ts/opencode-agents"
+    mkdir -p "$backup_dir"
+    cp "$legacy" "$backup_dir/scout.md"
+    rm -f "$legacy"
+    if ! $quiet; then printf '  opencode-agents removed legacy scout.md (backed up)\n'; fi
+    return 0
+  fi
+
+  if $diff_mode; then
+    printf '\n--- opencode-agents legacy scout.md removable (%s)\n' "$legacy"
+    return 0
+  fi
+
+  if ! $quiet; then printf '  opencode-agents legacy scout.md present (use --apply to remove)\n'; fi
+  return 1
+}
+
 # Refuse unsafe agent target directories (must be a dedicated agents folder, not home root).
 refuse_unsafe_agents_dir() {
   local dir="$1" label="$2"
@@ -194,6 +241,9 @@ handle_harness() {
 
   if ! $diff_mode && ! $apply; then
     local any_issue=false
+    if [ "$harness" = "opencode" ]; then
+      handle_legacy_opencode_scout "$target_dir" || any_issue=true
+    fi
     while IFS= read -r agent_src || [ -n "$agent_src" ]; do
       [ -n "$agent_src" ] || continue
       local agent_name agent_target
@@ -214,6 +264,12 @@ handle_harness() {
 
   if $diff_mode; then
     local has_diffs=false
+    if [ "$harness" = "opencode" ]; then
+      if is_legacy_aw_scout "$target_dir/scout.md"; then
+        printf '\n--- opencode-agents legacy scout.md removable (%s)\n' "$target_dir/scout.md"
+        has_diffs=true
+      fi
+    fi
     while IFS= read -r agent_src || [ -n "$agent_src" ]; do
       [ -n "$agent_src" ] || continue
       local agent_name agent_target staged
@@ -246,6 +302,9 @@ handle_harness() {
     mkdir -p "$target_dir"
     local ts
     ts="$(date -u +%Y%m%d-%H%M%S)"
+    if [ "$harness" = "opencode" ]; then
+      handle_legacy_opencode_scout "$target_dir" || true
+    fi
     while IFS= read -r agent_src || [ -n "$agent_src" ]; do
       [ -n "$agent_src" ] || continue
       local agent_name agent_target staged

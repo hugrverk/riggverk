@@ -94,10 +94,16 @@ The default template is conservative:
 
 `templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It is synced by the same install script as the main config.
 
+## Managed-key merge
+
+`./scripts/install-opencode-config.sh --apply` does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved.
+
+Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
+
 ## Sync workflow
 
 1. Review the template at `templates/opencode.json` and `templates/tui.json`
-2. Run `--diff` to see differences between the templates and your current configs
+2. Run `--diff` to see managed-key differences between the bundled template and your installed config
 3. Run `--apply` to write the templates to `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`
 
 The sync validates both JSON files before applying. It also installs agent files to `~/.config/opencode/agents/*.md`. Extra existing runtime agent files in that directory are not deleted.

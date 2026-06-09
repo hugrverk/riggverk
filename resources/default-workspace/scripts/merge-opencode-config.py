@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+"""Merge bundled OpenCode managed keys into an installed opencode.json."""
+
+from __future__ import annotations
+
+import argparse
+import json
+import shutil
+import sys
+from pathlib import Path
+from typing import Any
+
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+WORKSPACE_ROOT = SCRIPT_DIR.parent
+MANAGED_KEYS_PATH = WORKSPACE_ROOT / "metadata" / "opencode-managed-keys.json"
+
+
+def fail(message: str) -> None:
+    print(f"merge-opencode-config.py: {message}", file=sys.stderr)
+    raise SystemExit(1)
+
+
+def load_managed_keys() -> tuple[list[str], list[str]]:
+    if not MANAGED_KEYS_PATH.is_file():
+        fail(f"managed keys metadata not found: {MANAGED_KEYS_PATH}")
+    data = json.loads(MANAGED_KEYS_PATH.read_text(encoding="utf-8"))
+    top_level = list(data.get("top_level") or [])
+    mcp_servers = list(data.get("mcp_servers") or [])
+    if not top_level:
+        fail("managed keys metadata missing top_level")
+    return top_level, mcp_servers
+
+
+def load_json(path: Path) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"invalid JSON in {path}: {exc}")
+    except OSError as exc:
+        fail(f"unable to read {path}: {exc}")
+
+
+def merge_managed(installed: dict[str, Any], managed: dict[str, Any]) -> dict[str, Any]:
+    top_level, mcp_servers = load_managed_keys()
+    merged = json.loads(json.dumps(installed))
+    for key in top_level:
+        if key in managed:
+            merged[key] = json.loads(json.dumps(managed[key]))
+    managed_mcp = managed.get("mcp")
+    if isinstance(managed_mcp, dict):
+        target_mcp = merged.setdefault("mcp", {})
+        if not isinstance(target_mcp, dict):
+            target_mcp = {}
+            merged["mcp"] = target_mcp
+        for server in mcp_servers:
+            if server in managed_mcp:
+                target_mcp[server] = json.loads(json.dumps(managed_mcp[server]))
+    return merged
+
+
+def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
+    top_level, mcp_servers = load_managed_keys()
+    extracted: dict[str, Any] = {}
+    for key in top_level:
+        if key in config:
+            extracted[key] = json.loads(json.dumps(config[key]))
+    mcp = config.get("mcp")
+    if isinstance(mcp, dict):
+        managed_mcp: dict[str, Any] = {}
+        for server in mcp_servers:
+            if server in mcp:
+                managed_mcp[server] = json.loads(json.dumps(mcp[server]))
+        if managed_mcp:
+            extracted["mcp"] = managed_mcp
+    return extracted
+
+
+def managed_keys_match(installed: dict[str, Any], managed: dict[str, Any]) -> bool:
+    return extract_managed(installed) == extract_managed(managed)
+
+
+def write_json(path: Path, value: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
+    if target.is_file():
+        installed = load_json(target)
+        if not isinstance(installed, dict):
+            fail(f"installed config must be a JSON object: {target}")
+        merged = merge_managed(installed, managed)
+        if managed_keys_match(installed, managed):
+            return
+        if backup_dir is not None:
+            backup_dir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(target, backup_dir / target.name)
+        write_json(target, merged)
+        return
+
+    if not isinstance(managed, dict):
+        fail("managed config must be a JSON object")
+    write_json(target, managed)
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("target", nargs="?", type=Path, help="Installed opencode.json path")
+    parser.add_argument("managed", nargs="?", type=Path, help="Rendered bundled managed config path")
+    parser.add_argument("--managed-match", action="store_true", help="Exit 0 when managed keys already match")
+    parser.add_argument("--merge", action="store_true", help="Print merged JSON to stdout")
+    parser.add_argument("--apply", action="store_true", help="Merge managed keys into target with optional backup")
+    parser.add_argument("--output", type=Path, help="Write merged JSON to this path instead of stdout")
+    parser.add_argument("--backup-dir", type=Path, help="Backup directory used with --apply")
+    args = parser.parse_args()
+
+    if args.target is None or args.managed is None:
+        parser.error("target and managed paths are required")
+
+    managed_value = load_json(args.managed)
+    if not isinstance(managed_value, dict):
+        fail(f"managed config must be a JSON object: {args.managed}")
+
+    if args.managed_match:
+        if not args.target.is_file():
+            raise SystemExit(1)
+        installed_value = load_json(args.target)
+        if not isinstance(installed_value, dict):
+            fail(f"installed config must be a JSON object: {args.target}")
+        raise SystemExit(0 if managed_keys_match(installed_value, managed_value) else 1)
+
+    if args.merge or args.output:
+        if args.target.is_file():
+            installed_value = load_json(args.target)
+            if not isinstance(installed_value, dict):
+                fail(f"installed config must be a JSON object: {args.target}")
+            merged = merge_managed(installed_value, managed_value)
+        else:
+            merged = json.loads(json.dumps(managed_value))
+        payload = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(payload, encoding="utf-8")
+        else:
+            sys.stdout.write(payload)
+        return
+
+    if args.apply:
+        apply_merge(args.target, managed_value, args.backup_dir)
+        return
+
+    parser.error("one of --managed-match, --merge, or --apply is required")
+
+
+if __name__ == "__main__":
+    main()

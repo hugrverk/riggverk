@@ -65,6 +65,7 @@ export function configCheckStatusLabel(health: OpenCodeRuntimeHealth, id: string
 
 export function opencodeAgentsStatus(health: OpenCodeRuntimeHealth): string {
   if (health.bundled_agent_count === 0) return "invalid";
+  if (findCheck(health, "legacy_scout")?.status === "warn") return "diverged";
   if (health.installed_bundled_agent_count < health.bundled_agent_count) return "missing";
   if (health.agent_mismatches.length > 0) return "diverged";
   return "synced";
@@ -143,6 +144,9 @@ export function opencodeAgentsIssues(health: OpenCodeRuntimeHealth): string[] {
   }
   if (missing > 0) issues.push(`${missing} agent(s) missing`);
   if (diverged > 0) issues.push(`${diverged} agent(s) diverged`);
+  if (findCheck(health, "legacy_scout")?.status === "warn") {
+    issues.push("legacy scout.md present");
+  }
   if (health.extra_installed_agent_count > 0) {
     issues.push(`${health.extra_installed_agent_count} extra installed`);
   }
@@ -189,6 +193,8 @@ export function runOpencodeRuntimeUiSelfTests(): void {
     default_agent: null,
     model: null,
     small_model: null,
+    autoupdate: null,
+    snapshot: null,
     qwen_context: null,
     qwen_output: null,
     bundled_agent_count: 6,
