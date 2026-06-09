@@ -97,6 +97,25 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
             backup_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target, backup_dir / target.name)
         write_json(target, merged)
+        # Post-write validation
+        try:
+            post_parsed = load_json(target)
+        except SystemExit:
+            if backup_dir is not None and (backup_dir / target.name).exists():
+                shutil.copy2(backup_dir / target.name, target)
+            fail(f"post-write validation failed for {target}: invalid JSON")
+        if not isinstance(post_parsed, dict):
+            if backup_dir is not None and (backup_dir / target.name).exists():
+                shutil.copy2(backup_dir / target.name, target)
+            fail(f"post-write validation failed for {target}: not a JSON object")
+        if not managed_keys_match(post_parsed, managed):
+            if backup_dir is not None and (backup_dir / target.name).exists():
+                shutil.copy2(backup_dir / target.name, target)
+            fail(f"post-write validation failed for {target}: managed keys mismatch")
+        # Verify user provider still present
+        user_provider = installed.get("provider")
+        if user_provider is not None and post_parsed.get("provider") != user_provider:
+            fail(f"post-write validation failed for {target}: provider block modified")
         return
 
     if not isinstance(managed, dict):

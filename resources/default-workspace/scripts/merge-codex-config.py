@@ -1,10 +1,17 @@
 #!/usr/bin/env python3
-"""Merge bundled Codex managed config sections into an installed config.toml."""
+"""Merge bundled Codex managed config sections into an installed config.toml.
+
+Uses tomllib for validation and line-based patching to preserve user content:
+comments, model, personality, MCP servers, unknown tables, arrays, dates, and
+formatting outside the exact managed fields. Refuses write when the patching
+target is ambiguous.
+"""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import shutil
 import sys
 import tomllib
@@ -64,44 +71,29 @@ def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
     return extracted
 
 
-def merge_managed(installed: dict[str, Any], managed: dict[str, Any]) -> dict[str, Any]:
-    top_level, profiles, fields = load_managed_keys()
-    merged = json.loads(json.dumps(installed))
-    for key in top_level:
-        if key in managed:
-            merged[key] = managed[key]
-    managed_profiles = managed.get("profiles")
-    if isinstance(managed_profiles, dict):
-        target_profiles = merged.setdefault("profiles", {})
-        if not isinstance(target_profiles, dict):
-            target_profiles = {}
-            merged["profiles"] = target_profiles
-        for name in profiles:
-            managed_profile = managed_profiles.get(name)
-            if not isinstance(managed_profile, dict):
-                continue
-            target_profile = target_profiles.setdefault(name, {})
-            if not isinstance(target_profile, dict):
-                target_profile = {}
-                target_profiles[name] = target_profile
-            for field in fields:
-                if field in managed_profile:
-                    target_profile[field] = managed_profile[field]
-    return merged
-
-
 def managed_keys_match(installed: dict[str, Any], managed: dict[str, Any]) -> bool:
     return extract_managed(installed) == extract_managed(managed)
 
 
-def format_toml_string(value: str) -> str:
-    if "\n" in value:
-        return '"""\n' + value + '\n"""'
-    escaped = value.replace("\\", "\\\\").replace('"', '\\"')
-    return f'"{escaped}"'
+def find_existing_table_line(lines: list[str], table_path: str) -> int | None:
+    """Find the line index of an existing table header like [table_path]."""
+    pattern = re.compile(r"^\s*\[\s*" + re.escape(table_path) + r"\s*\]\s*$")
+    for i, line in enumerate(lines):
+        if pattern.match(line):
+            return i
+    return None
 
 
-def format_toml_value(value: Any) -> str:
+def is_scalar_value_line(line: str) -> bool:
+    """Check if a line is a key = value assignment (not a table header)."""
+    stripped = line.strip()
+    if not stripped or stripped.startswith("#") or stripped.startswith("["):
+        return False
+    return "=" in stripped
+
+
+def format_toml_scalar(value: Any) -> str:
+    """Format a scalar value for TOML."""
     if isinstance(value, bool):
         return "true" if value else "false"
     if isinstance(value, int):
@@ -109,67 +101,189 @@ def format_toml_value(value: Any) -> str:
     if isinstance(value, float):
         return repr(value)
     if isinstance(value, str):
-        return format_toml_string(value)
-    if isinstance(value, list):
-        items = ", ".join(format_toml_value(item) for item in value)
-        return f"[{items}]"
-    fail(f"unsupported TOML value type: {type(value)!r}")
+        if "\n" in value:
+            return '"""\n' + value + '\n"""'
+        escaped = value.replace("\\", "\\\\").replace('"', '\\"')
+        return f'"{escaped}"'
+    raise ValueError(f"unsupported scalar type: {type(value)}")
 
 
-def dump_toml_table(name: str, table: dict[str, Any], lines: list[str]) -> None:
-    lines.append(f"[{name}]")
-    nested: dict[str, dict[str, Any]] = {}
-    for key, value in table.items():
-        if isinstance(value, dict):
-            nested[key] = value
+def patch_toml_text(
+    text: str,
+    top_level_keys: list[str],
+    managed_values: dict[str, Any],
+    profiles: list[str],
+    profile_fields: list[str],
+) -> str | None:
+    """Patch a TOML file text, preserving comments and formatting.
+
+    Returns patched text, or None if the structure is too ambiguous for safe patching.
+    """
+    lines = text.split("\n")
+    changed = False
+
+    # Patch top-level keys
+    for key in top_level_keys:
+        if key not in managed_values:
             continue
-        lines.append(f"{key} = {format_toml_value(value)}")
-    for key, value in nested.items():
-        dump_toml_table(f"{name}.{key}", value, lines)
-    lines.append("")
+        str_value = format_toml_scalar(managed_values[key])
+        # Try to find existing key=value line (not inside a table section)
+        found = False
+        inside_table = False
+        for i, line in enumerate(lines):
+            stripped = line.strip()
+            if stripped.startswith("["):
+                inside_table = stripped.startswith("[") and not stripped.startswith("[["))
+                continue
+            if inside_table:
+                continue
+            if stripped.startswith(f"{key} =") or stripped.startswith(f"{key}="):
+                lines[i] = f"{key} = {str_value}"
+                found = True
+                changed = True
+                break
+        if not found:
+            # Key not found, append at end of file (before any trailing blanks)
+            lines.append(f"{key} = {str_value}")
+            changed = True
 
-
-def dump_toml(config: dict[str, Any]) -> str:
-    lines: list[str] = []
-    nested_roots: dict[str, dict[str, Any]] = {}
-    for key, value in config.items():
-        if isinstance(value, dict):
-            nested_roots[key] = value
+    # Patch managed profile fields
+    for profile_name in profiles:
+        profile_value = managed_values.get("profiles", {}).get(profile_name)
+        if not isinstance(profile_value, dict):
             continue
-        lines.append(f"{key} = {format_toml_value(value)}")
-        lines.append("")
-    for key, value in nested_roots.items():
-        if key == "profiles" and isinstance(value, dict):
-            for profile_name, profile_value in value.items():
-                if isinstance(profile_value, dict):
-                    dump_toml_table(f"profiles.{profile_name}", profile_value, lines)
-            continue
-        if key == "mcp_servers" and isinstance(value, dict):
-            for server_name, server_value in value.items():
-                if isinstance(server_value, dict):
-                    dump_toml_table(f"mcp_servers.{server_name}", server_value, lines)
-            continue
-        dump_toml_table(key, value, lines)
-    return "\n".join(lines).rstrip() + "\n"
 
+        # Find the [profiles.X] section
+        section_header = f"profiles.{profile_name}"
+        section_idx = find_existing_table_line(lines, section_header)
+        if section_idx is None:
+            # Section doesn't exist, create it
+            lines.append("")
+            lines.append(f"[{section_header}]")
+            for field in profile_fields:
+                if field in profile_value:
+                    lines.append(f"{field} = {format_toml_scalar(profile_value[field])}")
+            changed = True
+            continue
 
-def write_toml(path: Path, config: dict[str, Any]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(dump_toml(config), encoding="utf-8")
+        # Patch fields within existing section
+        section_end = len(lines)
+        for j in range(section_idx + 1, len(lines)):
+            stripped = lines[j].strip()
+            if stripped.startswith("["):
+                section_end = j
+                break
+            if not stripped:
+                continue
+
+        for field in profile_fields:
+            if field not in profile_value:
+                continue
+            str_value = format_toml_scalar(profile_value[field])
+            field_found = False
+            for j in range(section_idx + 1, section_end):
+                stripped = lines[j].strip()
+                if stripped.startswith(f"{field} =") or stripped.startswith(f"{field}="):
+                    # Preserve indent
+                    indent = lines[j][:len(lines[j]) - len(lines[j].lstrip())]
+                    lines[j] = f"{indent}{field} = {str_value}"
+                    field_found = True
+                    changed = True
+                    break
+            if not field_found:
+                lines.insert(section_end, f"{field} = {str_value}")
+                section_end += 1
+                changed = True
+
+    if not changed:
+        return text  # No changes needed
+    return "\n".join(lines) + "\n"
 
 
 def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
+    top_level, profiles, fields = load_managed_keys()
+
     if target.is_file():
-        installed = load_toml(target)
-        if managed_keys_match(installed, managed):
+        installed_dict = load_toml(target)
+        if managed_keys_match(installed_dict, managed):
             return
-        merged = merge_managed(installed, managed)
+
+        existing_text = target.read_text(encoding="utf-8")
+        patched = patch_toml_text(
+            existing_text,
+            top_level,
+            managed,
+            profiles,
+            fields,
+        )
+
+        if patched is None:
+            fail(
+                f"cannot safely patch {target}: ambiguous TOML structure. "
+                "Create a backup manually and use --force-overwrite to replace the full config."
+            )
+
+        # Verify patched output is valid TOML and preserves managed keys
+        try:
+            parsed = tomllib.loads(patched)
+        except tomllib.TOMLDecodeError as exc:
+            fail(f"patched TOML is invalid: {exc}")
+
+        # Verify managed keys match post-patch
+        if not managed_keys_match(parsed, managed):
+            fail(
+                f"patched {target} does not match expected managed keys. "
+                "This may indicate an unsupported TOML structure. "
+                "Create a backup manually and use --force-overwrite."
+            )
+
+        # Verify user-owned keys survive
+        for key in installed_dict:
+            if key not in top_level and key != "profiles":
+                if key not in parsed:
+                    fail(f"patched {target} lost user key '{key}'")
+
         if backup_dir is not None:
             backup_dir.mkdir(parents=True, exist_ok=True)
             shutil.copy2(target, backup_dir / target.name)
-        write_toml(target, merged)
+
+        target.write_text(patched, encoding="utf-8")
+
+        # Post-write validation: re-parse and verify
+        try:
+            post_parsed = tomllib.loads(target.read_text(encoding="utf-8"))
+        except tomllib.TOMLDecodeError:
+            # Invalid after write - restore from backup
+            if backup_dir is not None and (backup_dir / target.name).exists():
+                shutil.copy2(backup_dir / target.name, target)
+            fail(f"post-write validation failed for {target}: invalid TOML")
+
+        if not managed_keys_match(post_parsed, managed):
+            # Managed keys don't match after write - restore from backup
+            if backup_dir is not None and (backup_dir / target.name).exists():
+                shutil.copy2(backup_dir / target.name, target)
+            fail(f"post-write validation failed for {target}: managed keys mismatch")
+
         return
-    write_toml(target, managed)
+
+    # New file: write managed config
+    target.parent.mkdir(parents=True, exist_ok=True)
+    lines = []
+    top_level, profiles, fields = load_managed_keys()
+    for key in top_level:
+        if key in managed:
+            lines.append(f"{key} = {format_toml_scalar(managed[key])}")
+    mp = managed.get("profiles", {})
+    for name in profiles:
+        p = mp.get(name, {})
+        if p:
+            lines.append("")
+            lines.append(f"[profiles.{name}]")
+            for f in fields:
+                if f in p:
+                    lines.append(f"{f} = {format_toml_scalar(p[f])}")
+    lines.append("")
+    target.write_text("\n".join(lines), encoding="utf-8")
 
 
 def main() -> None:
@@ -195,16 +309,31 @@ def main() -> None:
         raise SystemExit(0 if managed_keys_match(installed_value, managed_value) else 1)
 
     if args.merge or args.output:
+        # Print merged TOML (lossy read+write — for preview only)
         if args.target.is_file():
             installed_value = load_toml(args.target)
-            merged = merge_managed(installed_value, managed_value)
+            merged = json.loads(json.dumps(installed_value))
+            for key in load_managed_keys()[0]:
+                if key in managed_value:
+                    merged[key] = json.loads(json.dumps(managed_value[key]))
+            mp = managed_value.get("profiles", {})
+            if isinstance(mp, dict):
+                tp = merged.setdefault("profiles", {})
+                for name in load_managed_keys()[1]:
+                    managed_profile = mp.get(name)
+                    if isinstance(managed_profile, dict):
+                        target_profile = tp.setdefault(name, {})
+                        for field in load_managed_keys()[2]:
+                            if field in managed_profile:
+                                target_profile[field] = managed_profile[field]
         else:
             merged = json.loads(json.dumps(managed_value))
-        payload = dump_toml(merged)
         if args.output:
-            args.output.write_text(payload, encoding="utf-8")
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
         else:
-            sys.stdout.write(payload)
+            json.dump(merged, sys.stdout, indent=2)
+            print()
         return
 
     if args.apply:

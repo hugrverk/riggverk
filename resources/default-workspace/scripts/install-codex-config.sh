@@ -87,15 +87,39 @@ fi
 
 if [ "$show_diff" -eq 1 ]; then
   if [ -f "$target_config" ]; then
-    merged_preview="$(mktemp)"
-    codex_config_merge_preview "$merged_preview"
-    if cmp -s "$merged_preview" "$target_config"; then
+    if codex_config_managed_match; then
       printf 'codex-config managed sections synced\n'
     else
-      printf '--- codex config managed-section diffs (%s)\n' "$target_config"
-      diff -u "$target_config" "$merged_preview" || true
+      python3 -c "
+import json, sys, tomllib
+from pathlib import Path
+ws = Path('$repo_root')
+managed = json.loads((ws / 'metadata/codex-managed-keys.json').read_text())
+top = set(managed.get('top_level_keys', []))
+profiles = set(managed.get('managed_profiles', []))
+fields = set(managed.get('managed_profile_fields', []))
+installed = tomllib.loads(Path('$target_config').read_text())
+source = tomllib.loads(Path('$source_config').read_text())
+diff_items = []
+for k in top:
+    iv = installed.get(k)
+    sv = source.get(k)
+    if iv != sv:
+        diff_items.append(f'managed key \"{k}\" would change')
+for p in profiles:
+    ip = installed.get('profiles', {}).get(p, {})
+    sp = source.get('profiles', {}).get(p, {})
+    for f in fields:
+        if ip.get(f) != sp.get(f):
+            diff_items.append(f'managed profile \"{p}.{f}\" would change')
+if diff_items:
+    print('--- codex-config managed-section diffs')
+    for d in diff_items:
+        print(f'  {d}')
+else:
+    print('  codex-config managed sections differ (structural change)')
+" || true
     fi
-    rm -f "$merged_preview"
   else
     printf 'Codex config missing: %s\n' "$target_config"
   fi

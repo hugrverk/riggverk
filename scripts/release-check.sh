@@ -254,7 +254,60 @@ if ! grep -q 'codex-config managed sections synced\|codex-config synced' resourc
   printf 'FAIL: install-codex-config.sh --diff must print synced status when unchanged\n' >&2
   exit 1
 fi
-printf '  Codex config apply guard verified\n'
+
+# ── Secret marker tests ──
+secret_home="$(mktemp -d "${release_tmp_dir}/secret-home.XXXXXX")"
+mkdir -p "$secret_home/.codex"
+# Create a Codex config with secret-like markers
+python3 -c "
+import tomllib
+from pathlib import Path
+# Read managed source
+source = tomllib.loads((Path('resources/default-workspace/templates/codex/config.toml').read_text()))
+# Create test config with secret markers
+test_config = '''# User Codex config
+profile = \"safe\"
+model = \"gpt-4\"
+personality = \"helpful\"
+
+[test-secret-section]
+api_key = \"sk-test-secret-key-12345\"
+token = \"ghp_test_secret_token_54321\"
+
+[mcp_servers.custom-server]
+command = \"custom\"
+args = []
+env = {API_KEY = \"test-secret-value-98765\"}
+
+[profiles.safe]
+sandbox_mode = false
+model = \"gpt-4\"
+
+[unknown-table]
+value = \"should-be-preserved\"
+'''
+Path('$secret_home/.codex/config.toml').write_text(test_config)
+"
+# Run apply and verify no secret markers in output
+secret_apply_log="${release_tmp_dir}/codex-secret-apply.log"
+HOME="$secret_home" bash resources/default-workspace/scripts/install-codex-config.sh --apply >"$secret_apply_log" 2>&1 || \
+  { printf 'FAIL: secret-marker apply failed\n' >&2; cat "$secret_apply_log" >&2; exit 1; }
+for marker in 'sk-test-secret' 'ghp_test_secret' 'test-secret-value-98765'; do
+  if grep -qF "$marker" "$secret_apply_log" 2>/dev/null; then
+    printf 'FAIL: Codex apply output leaked secret marker: %s\n' "$marker" >&2
+    exit 1
+  fi
+done
+# Verify user values preserved in resulting config
+python3 -c "
+import tomllib
+result = tomllib.load(open('$secret_home/.codex/config.toml', 'rb'))
+assert result.get('model') == 'gpt-4', 'model should be preserved'
+assert result.get('personality') == 'helpful', 'personality should be preserved'
+assert result.get('unknown-table', {}).get('value') == 'should-be-preserved', 'unknown table should survive'
+print('  secret-marker apply: user values preserved')
+"
+printf '  Codex config apply and secret-marker guard verified\n'
 
 step "bundled default scripts are real (no placeholder phrases)"
 for pattern in "placeholder" "No files are written" "future app flows"; do
@@ -994,6 +1047,73 @@ fi
 rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh --apply smoke: 1 config + 1 tui + 6 agents written, content checks passed\n'
+
+step "opencode secret-marker apply test"
+op_secret_home="$(mktemp -d "${release_tmp_dir}/op-secret-home.XXXXXX")"
+mkdir -p "$op_secret_home/.config/opencode"
+# Create an opencode.json with secret-like markers
+python3 -c "
+from pathlib import Path
+test_config = '''{
+  \"model\": \"test-model\",
+  \"small_model\": \"test-small\",
+  \"default_agent\": \"architect\",
+  \"provider\": {
+    \"custom-provider\": {
+      \"api_key\": \"test-secret-openkey-12345\",
+      \"models\": {
+        \"gpt-4\": {\"limit\": {\"context\": 100000}}
+      }
+    }
+  },
+  \"mcp\": {
+    \"playwright\": {
+      \"command\": [\"npx\", \"-y\", \"@playwright/mcp@0.0.48\", \"--config\", \"/tmp/test-config.json\"],
+      \"environment\": {\"PLAYWRIGHT_BROWSERS_PATH\": \"/tmp/test-browsers\"}
+    },
+    \"custom-mcp\": {
+      \"command\": [\"custom\"],
+      \"env\": {\"TOKEN\": \"test-secret-token-value-55555\"}
+    }
+  },
+  \"unknown-key\": \"should-preserve\"
+}'''
+Path('$op_secret_home/.config/opencode/opencode.json').write_text(test_config)
+"
+# Set up playwright paths for the opencode script
+op_playwright_config="$op_secret_home/playwright-mcp/config.json"
+op_browsers_path="$op_secret_home/ms-playwright"
+mkdir -p "$(dirname "$op_playwright_config")"
+echo '{}' > "$op_playwright_config"
+op_apply_log="${release_tmp_dir}/op-secret-apply.log"
+OPENCODE_CONFIG_PATH="$op_secret_home/.config/opencode/opencode.json" \
+OPENCODE_TUI_CONFIG_PATH="$op_secret_home/.config/opencode/tui.json" \
+OPENCODE_AGENTS_DIR="$op_secret_home/.config/opencode/agents" \
+AGENT_WORKSPACE_BACKUP_DIR="$op_secret_home/backups" \
+PLAYWRIGHT_MCP_CONFIG_PATH="$op_playwright_config" \
+PLAYWRIGHT_BROWSERS_PATH="$op_browsers_path" \
+  bash resources/default-workspace/scripts/install-opencode-config.sh --apply >"$op_apply_log" 2>&1 || \
+  { printf 'FAIL: opencode secret-marker apply failed\n' >&2; cat "$op_apply_log" >&2; exit 1; }
+for marker in 'test-secret-openkey' 'test-secret-token-value'; do
+  if grep -qF "$marker" "$op_apply_log" 2>/dev/null; then
+    printf 'FAIL: OpenCode apply output leaked secret marker: %s\n' "$marker" >&2
+    exit 1
+  fi
+done
+# Verify user values preserved
+python3 -c "
+import json
+result = json.load(open('$op_secret_home/.config/opencode/opencode.json'))
+provider = result.get('provider', {})
+assert 'custom-provider' in provider, 'user provider should be preserved'
+assert provider['custom-provider']['api_key'] == 'test-secret-openkey-12345', 'provider api_key should survive'
+mcp = result.get('mcp', {})
+assert 'custom-mcp' in mcp, 'custom MCP entry should survive'
+assert mcp['custom-mcp']['env']['TOKEN'] == 'test-secret-token-value-55555', 'custom MCP env should survive'
+assert result.get('unknown-key') == 'should-preserve', 'unknown key should survive'
+print('  secret-marker opencode apply: user values preserved')
+"
+printf '  opencode secret-marker apply test passed\n'
 
 step "bundled default install-opencode-config.sh --agents-only temp apply"
 tmpdir="$(mktemp -d)"

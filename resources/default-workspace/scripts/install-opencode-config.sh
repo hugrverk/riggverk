@@ -222,40 +222,62 @@ fi
 if $diff_mode; then
   has_diffs=false
 
-  # Config diffs (managed keys only; provider and other MCP servers are preserved)
+  # Config diffs (managed keys only; no full config output)
   if should_sync_config && [ -f "$TARGET" ]; then
-    merged_preview="$(mktemp)"
-    opencode_config_merge_preview "$merged_preview"
-    if ! cmp -s "$merged_preview" "$TARGET"; then
-      printf '\n--- opencode config managed-key diffs (%s)\n' "$TARGET"
-      diff -u "$TARGET" "$merged_preview" || true
+    if opencode_config_managed_match; then
+      if ! $quiet; then printf '  opencode config managed keys synced\n'; fi
+    else
+      python3 -c "
+import json, sys
+from pathlib import Path
+ws = Path('$WORKSPACE_ROOT')
+managed = json.loads((ws / 'metadata/opencode-managed-keys.json').read_text())
+top = set(managed.get('top_level', []))
+mcp = set(managed.get('mcp_servers', []))
+installed = json.loads(Path('$TARGET').read_text())
+rendered = json.loads(Path('$rendered_opencode').read_text())
+diff_keys = []
+for k in top:
+    iv = installed.get(k)
+    rv = rendered.get(k)
+    if iv != rv:
+        diff_keys.append(f'managed key \"{k}\" would change')
+for s in mcp:
+    im = installed.get('mcp', {}).get(s)
+    rm = rendered.get('mcp', {}).get(s)
+    if im != rm:
+        diff_keys.append(f'managed MCP entry \"{s}\" would update')
+if diff_keys:
+    print('--- opencode config managed-key diffs')
+    for d in diff_keys:
+        print(f'  {d}')
+else:
+    print('  opencode config diffs: managed keys differ (structural change)')
+" || true
       has_diffs=true
     fi
-    rm -f "$merged_preview"
   elif should_sync_config; then
-    printf '\n--- opencode config missing (no target file at %s)\n' "$TARGET"
+    printf '  opencode config missing (no target file at %s)\n' "$TARGET"
     has_diffs=true
   fi
 
   if should_sync_config && [ -f "$PLAYWRIGHT_MCP_TARGET" ]; then
     if ! cmp -s "$PLAYWRIGHT_MCP_SOURCE" "$PLAYWRIGHT_MCP_TARGET"; then
-      printf '\n--- playwright mcp config diffs (%s)\n' "$PLAYWRIGHT_MCP_TARGET"
-      diff -u "$PLAYWRIGHT_MCP_TARGET" "$PLAYWRIGHT_MCP_SOURCE" || true
+      printf '  playwright mcp config differs (template update available)\n'
       has_diffs=true
     fi
   elif should_sync_config; then
-    printf '\n--- playwright mcp config missing (no target file at %s)\n' "$PLAYWRIGHT_MCP_TARGET"
+    printf '  playwright mcp config missing (no target file at %s)\n' "$PLAYWRIGHT_MCP_TARGET"
     has_diffs=true
   fi
 
   if should_sync_config && [ -f "$TUI_TARGET" ]; then
     if ! cmp -s "$TUI_SOURCE_FILE" "$TUI_TARGET"; then
-      printf '\n--- tui config diffs (%s)\n' "$TUI_TARGET"
-      diff -u "$TUI_TARGET" "$TUI_SOURCE_FILE" || true
+      printf '  tui config differs (template update available)\n'
       has_diffs=true
     fi
   elif should_sync_config; then
-    printf '\n--- tui config missing (no target file at %s)\n' "$TUI_TARGET"
+    printf '  tui config missing (no target file at %s)\n' "$TUI_TARGET"
     has_diffs=true
   fi
 
