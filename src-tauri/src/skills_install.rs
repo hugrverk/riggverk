@@ -67,15 +67,40 @@ fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
 }
 
 fn has_deeper_skill_md(dir: &Path) -> bool {
+    scan_deeper_skill_md(dir, 0)
+}
+
+/// Recursively scan for SKILL.md files at depths deeper than one group level.
+/// Bounded to prevent infinite recursion on deep trees.
+fn scan_deeper_skill_md(dir: &Path, depth: usize) -> bool {
+    const MAX_ENTRIES: usize = 10_000;
+    const MAX_DEPTH: usize = 20;
+
+    if depth > MAX_DEPTH {
+        return true;
+    }
+
     let Ok(entries) = fs::read_dir(dir) else {
         return false;
     };
+
+    let mut count = 0;
     for entry in entries.flatten() {
+        count += 1;
+        if count > MAX_ENTRIES {
+            return true;
+        }
         let path = entry.path();
+        if path.is_symlink() {
+            return true;
+        }
         if !path.is_dir() {
             continue;
         }
         if path.join("SKILL.md").is_file() {
+            return true;
+        }
+        if scan_deeper_skill_md(&path, depth + 1) {
             return true;
         }
     }

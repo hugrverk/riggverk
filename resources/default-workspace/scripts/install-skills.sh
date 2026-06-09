@@ -122,13 +122,27 @@ ensure_contained() {
 }
 
 has_deeper_skill_md() {
-  local dir="$1"
+  scan_deeper_skill_md "$1" 0
+}
+
+# Recursively scan for SKILL.md at depths deeper than one group level.
+# Bounded to MAX_ENTRIES to prevent infinite recursion on deep trees.
+scan_deeper_skill_md() {
+  local dir="$1" depth="$2"
+  [ "$depth" -gt 20 ] && return 0
+  local count=0
   local child
   for child in "$dir"/*/; do
     [ -d "$child" ] || continue
+    count=$((count + 1))
+    [ "$count" -gt 10000 ] && return 0
+    if [ -L "$child" ]; then
+      return 0
+    fi
     if [ -f "${child}SKILL.md" ]; then
       return 0
     fi
+    scan_deeper_skill_md "$child" $((depth + 1)) && return 0
   done
   return 1
 }
