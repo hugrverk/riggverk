@@ -65,6 +65,10 @@ ROLES = {
                 "output": "templates/codex/agents/inspector.toml",
                 "meta": "templates/codex/agents/inspector.meta.json",
             },
+            "cursor": {
+                "output": "templates/cursor/agents/inspector.md",
+                "header": "templates/cursor/agents/inspector.header.yaml",
+            },
         },
     },
     "sentinel": {

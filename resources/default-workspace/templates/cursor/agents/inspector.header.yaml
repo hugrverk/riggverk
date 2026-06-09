@@ -1,0 +1,4 @@
+name: inspector
+description: Strict read-only code review for correctness, security, test gaps, overengineering, and pattern consistency.
+model: inherit
+readonly: true

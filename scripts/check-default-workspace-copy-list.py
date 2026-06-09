@@ -92,6 +92,7 @@ def main() -> None:
         "templates/cursor/agents/release-checker.md",
         "templates/cursor/agents/browser-qa.md",
         "templates/cursor/agents/repo-scout.md",
+        "templates/cursor/agents/inspector.md",
     }
 
     for rel in sorted(required_scripts - scripts):

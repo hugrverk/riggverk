@@ -16,7 +16,8 @@
     "security-reviewer.md",
     "release-checker.md",
     "browser-qa.md",
-    "repo-scout.md"
+    "repo-scout.md",
+    "inspector.md"
   ],
   "rules": [
     "core-safety.mdc",
@@ -33,7 +34,7 @@
     "playwright.mcp.json"
   ],
   "notes": [
-    "Primary workflow: apply Cursor setup from the app to global Cursor agents, starter skills, and Playwright MCP.",
+    "Primary workflow: apply Cursor setup from the app to Cursor agents, canonical bundled skills, and Playwright MCP.",
     "Select Auto Review manually in Cursor Settings > Agents > Run Mode; Agent Workspace does not inspect or write undocumented Cursor runtime state.",
     "User Rules remain manually managed in Cursor Settings; this setup does not write a global User Rules file.",
     "Project rules, project MCP, project agents, project ignore files, and AGENTS.md are never written by the global setup flow.",
