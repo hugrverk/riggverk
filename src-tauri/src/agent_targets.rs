@@ -167,8 +167,6 @@ pub fn home_dir() -> Result<PathBuf, String> {
     crate::cursor_profile_paths::resolve_user_home()
 }
 
-// ── config target registry ──
-
 pub enum ConfigScript {
     OpenCode,
     Codex,
@@ -257,8 +255,6 @@ pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
     ]
 }
 
-// ── config editor sources ──
-
 #[derive(Serialize, Clone)]
 pub struct ConfigEditorSourceMeta {
     pub id: String,
@@ -324,4 +320,147 @@ pub fn opencode_config_editor_source_meta_list() -> Vec<ConfigEditorSourceMeta> 
             helper: s.helper.to_string(),
         })
         .collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::collections::HashSet;
+
+    #[test]
+    fn default_enabled_ids_only_contain_known_targets() {
+        let known: HashSet<&str> = targets().iter().map(|t| t.id).collect();
+        for id in default_enabled_ids() {
+            assert!(
+                known.contains(id.as_str()),
+                "Default enabled target '{}' is not a known target",
+                id
+            );
+        }
+    }
+
+    #[test]
+    fn codex_config_is_not_default_enabled() {
+        assert!(
+            !default_enabled_ids().contains(&"codex_config".to_string()),
+            "Codex config must stay manual-review only by default"
+        );
+    }
+
+    #[test]
+    fn claude_agents_use_native_adapter_source() {
+        let target = targets()
+            .into_iter()
+            .find(|target| target.id == "claude_agents")
+            .expect("claude_agents target");
+        assert_eq!(target.source_rel, "templates/claude/agents");
+    }
+
+    #[test]
+    fn opencode_config_in_config_sync_targets() {
+        let targets = config_sync_targets();
+        let opencode = targets.iter().find(|t| t.id == "opencode_config");
+        assert!(opencode.is_some(), "opencode_config must be in config_sync_targets");
+        let t = opencode.unwrap();
+        assert_eq!(t.source_rel, "templates/opencode.json");
+        assert_eq!(t.target_rel, ".config/opencode/opencode.json");
+    }
+
+    #[test]
+    fn cursor_setup_not_in_config_sync_targets() {
+        let targets = config_sync_targets();
+        assert!(targets.iter().all(|t| t.id != "cursor_setup"));
+    }
+
+    #[test]
+    fn config_sync_target_ids_are_unique() {
+        let targets = config_sync_targets();
+        let mut seen = HashSet::new();
+        for t in &targets {
+            assert!(seen.insert(t.id), "Duplicate config sync target id '{}'", t.id);
+        }
+    }
+
+    #[test]
+    fn config_sync_paths_are_relative_and_contained() {
+        for t in config_sync_targets() {
+            assert!(!t.source_rel.starts_with('/'));
+            assert!(!t.target_rel.starts_with('/'));
+            assert!(!t.source_rel.contains(".."));
+            assert!(!t.target_rel.contains(".."));
+        }
+    }
+
+    #[test]
+    fn cursor_setup_is_agents_not_rules() {
+        let rules = rule_targets();
+        assert!(rules.iter().all(|t| t.id != "cursor_setup"));
+        let cursor = targets()
+            .into_iter()
+            .find(|t| t.id == "cursor_setup")
+            .expect("cursor_setup target");
+        assert!(matches!(cursor.kind, TargetKind::Agents));
+    }
+
+    #[test]
+    fn opencode_install_args_supports_scoped_sync() {
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::AgentsOnly),
+            vec!["--quiet", "--diff", "--agents-only"]
+        );
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Apply, OpenCodeInstallScope::ConfigOnly),
+            vec!["--quiet", "--apply", "--config-only"]
+        );
+        assert_eq!(
+            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::Full),
+            vec!["--quiet", "--diff"]
+        );
+    }
+
+    #[test]
+    fn editable_config_targets_exclude_cursor_setup() {
+        let ids: Vec<&str> = editable_config_targets().iter().map(|t| t.id).collect();
+        assert_eq!(ids, &["opencode_config"]);
+    }
+
+    #[test]
+    fn opencode_config_editor_sources_are_safe() {
+        let sources = opencode_config_editor_sources();
+        assert_eq!(sources.len(), 3);
+        assert_eq!(
+            sources.iter().map(|source| source.id).collect::<Vec<_>>(),
+            vec!["base", "policy", "snapshot"]
+        );
+        for source in sources {
+            assert!(!source.rel_path.starts_with('/'));
+            assert!(!source.rel_path.contains(".."));
+            assert!(!source.helper.is_empty());
+        }
+    }
+
+    #[test]
+    fn opencode_config_editor_source_metadata_matches_contract() {
+        let base = opencode_config_editor_source_by_id("base").expect("base source");
+        assert!(base.editable);
+        assert_eq!(base.rel_path, "templates/opencode.base.json");
+
+        let policy = opencode_config_editor_source_by_id("policy").expect("policy source");
+        assert!(policy.editable);
+        assert_eq!(policy.rel_path, "templates/opencode.policy.json");
+
+        let snapshot = opencode_config_editor_source_by_id("snapshot").expect("snapshot source");
+        assert!(!snapshot.editable);
+        assert_eq!(snapshot.rel_path, "templates/opencode.json");
+        assert!(opencode_config_editor_source_by_id("unknown").is_none());
+    }
+
+    #[test]
+    fn opencode_config_editor_source_meta_serializable() {
+        let meta = opencode_config_editor_source_meta_list();
+        assert_eq!(meta.len(), 3);
+        let snapshot = meta.iter().find(|m| m.id == "snapshot").unwrap();
+        assert!(!snapshot.editable);
+        assert_eq!(snapshot.rel_path, "templates/opencode.json");
+    }
 }
