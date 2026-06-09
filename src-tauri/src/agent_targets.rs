@@ -151,8 +151,6 @@ pub fn default_enabled_ids() -> Vec<String> {
     ids
 }
 
-
-
 pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
     let known: Vec<&str> = targets().iter().map(|t| t.id).collect();
     let mut seen = std::collections::HashSet::new();

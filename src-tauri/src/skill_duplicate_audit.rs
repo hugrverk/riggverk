@@ -65,7 +65,9 @@ fn scan_root(root_id: &str, root: &Path) -> Result<HashMap<String, PathBuf>, Str
     Ok(found)
 }
 
-pub fn audit_duplicate_skills(roots: &[(&str, PathBuf)]) -> Result<Vec<DuplicateSkillEntry>, String> {
+pub fn audit_duplicate_skills(
+    roots: &[(&str, PathBuf)],
+) -> Result<Vec<DuplicateSkillEntry>, String> {
     let mut by_name: HashMap<String, Vec<(String, PathBuf)>> = HashMap::new();
 
     for (root_id, root) in roots {
@@ -143,11 +145,9 @@ mod tests {
         let root_b = temp_root("b");
         write_skill(&root_a, "diagnose", "name: diagnose\n");
         write_skill(&root_b, "diagnose", "name: diagnose\n");
-        let dups = audit_duplicate_skills(&[
-            ("global", root_a.clone()),
-            ("project", root_b.clone()),
-        ])
-        .expect("audit");
+        let dups =
+            audit_duplicate_skills(&[("global", root_a.clone()), ("project", root_b.clone())])
+                .expect("audit");
         assert_eq!(dups.len(), 1);
         assert_eq!(dups[0].state, "duplicate-identical");
     }
@@ -158,7 +158,8 @@ mod tests {
         let root_b = temp_root("b-div");
         write_skill(&root_a, "diagnose", "name: diagnose\na: true\n");
         write_skill(&root_b, "diagnose", "name: diagnose\nb: true\n");
-        let dups = audit_duplicate_skills(&[("global", root_a), ("project", root_b)]).expect("audit");
+        let dups =
+            audit_duplicate_skills(&[("global", root_a), ("project", root_b)]).expect("audit");
         assert_eq!(dups.len(), 1);
         assert_eq!(dups[0].state, "duplicate-diverged");
     }

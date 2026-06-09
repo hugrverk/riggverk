@@ -1,7 +1,9 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::agent_skill_targets::{codex_global_skills_dest, codex_legacy_skills_dest, validate_skill_dest_root};
+use crate::agent_skill_targets::{
+    codex_global_skills_dest, codex_legacy_skills_dest, validate_skill_dest_root,
+};
 use crate::commands::{file_eq, ActionResult};
 use crate::cursor_profile_paths::resolve_user_home;
 
@@ -131,8 +133,13 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &target)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), &target)
-                .map_err(|e| format!("copy {} -> {}: {e}", entry.path().display(), target.display()))?;
+            fs::copy(entry.path(), &target).map_err(|e| {
+                format!(
+                    "copy {} -> {}: {e}",
+                    entry.path().display(),
+                    target.display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -197,7 +204,11 @@ pub fn migrate_legacy_skills(dry_run: bool) -> Result<ActionResult, String> {
             ));
         }
         migrated.push(item.name.clone());
-        lines.push(format!("migrated {} to {}", item.name, target_dir.display()));
+        lines.push(format!(
+            "migrated {} to {}",
+            item.name,
+            target_dir.display()
+        ));
     }
 
     lines.push("legacy directories were not deleted".into());
@@ -249,11 +260,19 @@ mod tests {
             std::env::remove_var("CODEX_HOME");
         }
 
-        write_skill(&codex_legacy_skills_dest(&home), "diagnose", "name: diagnose\n");
+        write_skill(
+            &codex_legacy_skills_dest(&home),
+            "diagnose",
+            "name: diagnose\n",
+        );
         let result = migrate_legacy_skills(false).expect("migrate");
         assert!(result.success);
-        assert!(codex_global_skills_dest(&home).join("diagnose/SKILL.md").is_file());
-        assert!(codex_legacy_skills_dest(&home).join("diagnose/SKILL.md").is_file());
+        assert!(codex_global_skills_dest(&home)
+            .join("diagnose/SKILL.md")
+            .is_file());
+        assert!(codex_legacy_skills_dest(&home)
+            .join("diagnose/SKILL.md")
+            .is_file());
     }
 
     #[test]
@@ -268,14 +287,24 @@ mod tests {
             std::env::remove_var("CODEX_HOME");
         }
 
-        write_skill(&codex_legacy_skills_dest(&home), "diagnose", "name: diagnose\nlegacy: true\n");
-        write_skill(&codex_global_skills_dest(&home), "diagnose", "name: diagnose\n");
+        write_skill(
+            &codex_legacy_skills_dest(&home),
+            "diagnose",
+            "name: diagnose\nlegacy: true\n",
+        );
+        write_skill(
+            &codex_global_skills_dest(&home),
+            "diagnose",
+            "name: diagnose\n",
+        );
 
         let preview = preview_migration(&home).expect("preview");
         assert_eq!(preview.conflict_count, 1);
         let result = migrate_legacy_skills(false).expect("migrate");
         assert!(result.success);
-        assert!(codex_legacy_skills_dest(&home).join("diagnose/SKILL.md").is_file());
+        assert!(codex_legacy_skills_dest(&home)
+            .join("diagnose/SKILL.md")
+            .is_file());
         let target = fs::read_to_string(codex_global_skills_dest(&home).join("diagnose/SKILL.md"))
             .expect("target");
         let legacy = fs::read_to_string(codex_legacy_skills_dest(&home).join("diagnose/SKILL.md"))

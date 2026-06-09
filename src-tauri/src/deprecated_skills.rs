@@ -181,9 +181,8 @@ pub fn scan_deprecated_installed(
     validate_skill_dest_root(dest_root)?;
     reject_symlink_path(dest_root, "skill destination root")?;
 
-    let deprecated_names: HashSet<String> = load_deprecated_names(workspace_root)?
-        .into_iter()
-        .collect();
+    let deprecated_names: HashSet<String> =
+        load_deprecated_names(workspace_root)?.into_iter().collect();
     if deprecated_names.is_empty() {
         return Ok(Vec::new());
     }
@@ -232,7 +231,9 @@ fn planned_backup_dir(agent: &str) -> Result<PathBuf, String> {
         .duration_since(UNIX_EPOCH)
         .expect("clock")
         .as_nanos();
-    Ok(root.join("deprecated-skills").join(format!("{agent}-{nonce}")))
+    Ok(root
+        .join("deprecated-skills")
+        .join(format!("{agent}-{nonce}")))
 }
 
 fn create_backup_dir(agent: &str) -> Result<PathBuf, String> {
@@ -258,8 +259,13 @@ fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
         if file_type.is_dir() {
             copy_dir_all(&entry.path(), &target)?;
         } else if file_type.is_file() {
-            fs::copy(entry.path(), &target)
-                .map_err(|e| format!("copy {} -> {}: {e}", entry.path().display(), target.display()))?;
+            fs::copy(entry.path(), &target).map_err(|e| {
+                format!(
+                    "copy {} -> {}: {e}",
+                    entry.path().display(),
+                    target.display()
+                )
+            })?;
         }
     }
     Ok(())
@@ -293,17 +299,16 @@ fn remove_dir_all(path: &Path) -> Result<(), String> {
 fn validate_backup_path(backup_dir: &Path) -> Result<(), String> {
     reject_symlink_path(backup_dir, "rollback backup")?;
     if !backup_dir.is_dir() {
-        return Err(format!("rollback backup not found: {}", backup_dir.display()));
+        return Err(format!(
+            "rollback backup not found: {}",
+            backup_dir.display()
+        ));
     }
 
     let parent = backup_dir
         .parent()
         .ok_or_else(|| "rollback backup has no parent".to_string())?;
-    if parent
-        .file_name()
-        .and_then(|name| name.to_str())
-        != Some("deprecated-skills")
-    {
+    if parent.file_name().and_then(|name| name.to_str()) != Some("deprecated-skills") {
         return Err(format!(
             "refusing rollback outside deprecated-skills backups: {}",
             backup_dir.display()
@@ -443,7 +448,11 @@ pub fn remove_identical_deprecated(
         match copy_dir_all(&skill_dir, &backup_target) {
             Ok(()) => {
                 backed_up.push(item.name.clone());
-                lines.push(format!("backed up {} to {}", item.name, backup_target.display()));
+                lines.push(format!(
+                    "backed up {} to {}",
+                    item.name,
+                    backup_target.display()
+                ));
             }
             Err(err) => {
                 // Backup failed. We have a partial backup directory.
@@ -504,16 +513,25 @@ pub fn remove_identical_deprecated(
         match remove_dir_all(&skill_dir) {
             Ok(()) => {
                 removed.push(item.name.clone());
-                lines.push(format!("removed {} (backup: {}/{})", item.name, backup_dir.display(), item.name));
+                lines.push(format!(
+                    "removed {} (backup: {}/{})",
+                    item.name,
+                    backup_dir.display(),
+                    item.name
+                ));
             }
             Err(err) => {
                 // Removal failed after some removals. Auto-restore.
-                let restore_outcome = attempt_auto_restore(&backup_dir, dest_root, &removed, &removable);
+                let restore_outcome =
+                    attempt_auto_restore(&backup_dir, dest_root, &removed, &removable);
                 let restore_msg = match restore_outcome {
                     Ok(()) => "auto-restore completed".to_string(),
                     Err(e) => format!("auto-restore error: {e}"),
                 };
-                lines.push(format!("removal failed for {}: {err}; {restore_msg}", item.name));
+                lines.push(format!(
+                    "removal failed for {}: {err}; {restore_msg}",
+                    item.name
+                ));
                 return Err(format!(
                     "removal failed for {} after removing [{}]: {err}; {restore_msg}",
                     item.name,
@@ -578,10 +596,10 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
             manifest_path.display()
         ));
     }
-    let manifest_raw = fs::read_to_string(&manifest_path)
-        .map_err(|e| format!("cannot read manifest: {e}"))?;
-    let manifest: TransactionManifest = serde_json::from_str(&manifest_raw)
-        .map_err(|e| format!("invalid manifest JSON: {e}"))?;
+    let manifest_raw =
+        fs::read_to_string(&manifest_path).map_err(|e| format!("cannot read manifest: {e}"))?;
+    let manifest: TransactionManifest =
+        serde_json::from_str(&manifest_raw).map_err(|e| format!("invalid manifest JSON: {e}"))?;
 
     if manifest.schema_version != SCHEMA_VERSION {
         return Err(format!(
@@ -725,13 +743,7 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
 }
 
 fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
-    fs::rename(from, to).map_err(|e| {
-        format!(
-            "rename {} -> {}: {e}",
-            from.display(),
-            to.display()
-        )
-    })
+    fs::rename(from, to).map_err(|e| format!("rename {} -> {}: {e}", from.display(), to.display()))
 }
 
 #[cfg(test)]
@@ -819,7 +831,10 @@ mod tests {
         let workspace = temp_root("ws-diverged");
         setup_workspace_with_deprecated_refs(&workspace);
         let dest = home.join(".agents/skills");
-        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\ncustom: true\n");
+        write_file(
+            &dest.join("caveman/SKILL.md"),
+            "name: caveman\ncustom: true\n",
+        );
 
         let current = HashSet::new();
         let preview = preview_removal("codex", &workspace, &dest, &current).expect("preview");
@@ -856,8 +871,15 @@ mod tests {
             .expect("dry run");
         assert!(result.success);
         assert!(dest.join("caveman").exists());
-        assert!(home.join("backups/deprecated-skills").read_dir().is_err()
-            || home.join("backups/deprecated-skills").read_dir().unwrap().count() == 0);
+        assert!(
+            home.join("backups/deprecated-skills").read_dir().is_err()
+                || home
+                    .join("backups/deprecated-skills")
+                    .read_dir()
+                    .unwrap()
+                    .count()
+                    == 0
+        );
     }
 
     #[test]
@@ -895,8 +917,15 @@ mod tests {
         let preview = preview_removal("codex", &workspace, &dest, &current).expect("preview");
         assert_eq!(preview.removable_count, 1);
         // Verify no backup was created by preview
-        assert!(home.join("backups/deprecated-skills").read_dir().is_err()
-            || home.join("backups/deprecated-skills").read_dir().unwrap().count() == 0);
+        assert!(
+            home.join("backups/deprecated-skills").read_dir().is_err()
+                || home
+                    .join("backups/deprecated-skills")
+                    .read_dir()
+                    .unwrap()
+                    .count()
+                    == 0
+        );
         // Skill still exists
         assert!(dest.join("caveman").exists());
     }
@@ -921,8 +950,7 @@ mod tests {
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
 
         let current = HashSet::new();
-        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
-            .expect("remove");
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
 
         // Find backup dir and verify manifest
         let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
@@ -931,9 +959,13 @@ mod tests {
             .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
             .expect("backup dir");
         let manifest_path = backup_dir_entry.path().join("manifest.json");
-        assert!(manifest_path.is_file(), "manifest.json must exist after successful removal");
+        assert!(
+            manifest_path.is_file(),
+            "manifest.json must exist after successful removal"
+        );
         let manifest_raw = fs::read_to_string(&manifest_path).expect("read manifest");
-        let manifest: TransactionManifest = serde_json::from_str(&manifest_raw).expect("parse manifest");
+        let manifest: TransactionManifest =
+            serde_json::from_str(&manifest_raw).expect("parse manifest");
         assert_eq!(manifest.schema_version, 1);
         assert_eq!(manifest.harness, "codex");
         assert_eq!(manifest.operation, "deprecated-removal");
@@ -961,8 +993,7 @@ mod tests {
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
 
         let current = HashSet::new();
-        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
-            .expect("remove");
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
         assert!(!dest.join("caveman").exists(), "skill should be removed");
 
         // Find backup dir
@@ -975,7 +1006,10 @@ mod tests {
 
         let result = rollback_removal(&backup_path).expect("rollback");
         assert!(result.success, "rollback should succeed: {}", result.stderr);
-        assert!(dest.join("caveman").exists(), "skill should be restored after rollback");
+        assert!(
+            dest.join("caveman").exists(),
+            "skill should be restored after rollback"
+        );
     }
 
     #[test]
@@ -999,7 +1033,10 @@ mod tests {
         let result = rollback_removal(&backup_like.to_string_lossy());
         assert!(result.is_err(), "rollback must reject arbitrary path");
         let err = result.unwrap_err();
-        assert!(err.contains("outside deprecated-skills backups"), "error should mention backup parent check: got: {err}");
+        assert!(
+            err.contains("outside deprecated-skills backups"),
+            "error should mention backup parent check: got: {err}"
+        );
     }
 
     #[test]
@@ -1045,12 +1082,14 @@ mod tests {
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
 
         let current = HashSet::new();
-        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
-            .expect("remove");
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
         assert!(!dest.join("caveman").exists());
 
         // Re-create the destination (simulating external interference)
-        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\ninterfered: true\n");
+        write_file(
+            &dest.join("caveman/SKILL.md"),
+            "name: caveman\ninterfered: true\n",
+        );
 
         // Find backup dir
         let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
@@ -1063,7 +1102,10 @@ mod tests {
         let result = rollback_removal(&backup_path);
         assert!(result.is_err(), "rollback must reject occupied destination");
         let err = result.unwrap_err();
-        assert!(err.contains("destination already exists"), "error should mention existing destination");
+        assert!(
+            err.contains("destination already exists"),
+            "error should mention existing destination"
+        );
     }
 
     #[test]
@@ -1151,7 +1193,10 @@ mod tests {
         let dest = home.join(".agents/skills");
         write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
         // diverged: has extra content
-        write_file(&dest.join("diagnose/SKILL.md"), "name: diagnose\ncustom: true\n");
+        write_file(
+            &dest.join("diagnose/SKILL.md"),
+            "name: diagnose\ncustom: true\n",
+        );
 
         let current = HashSet::new();
         let result = remove_identical_deprecated("codex", &workspace, &dest, &current, false)
@@ -1171,6 +1216,9 @@ mod tests {
         let result = rollback_removal(&backup_path).expect("rollback");
         assert!(result.success);
         assert!(dest.join("caveman").exists(), "removed skill restored");
-        assert!(dest.join("diagnose").exists(), "diverged skill still present");
+        assert!(
+            dest.join("diagnose").exists(),
+            "diverged skill still present"
+        );
     }
 }

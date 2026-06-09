@@ -4,9 +4,7 @@ use std::path::Path;
 
 use super::skills::discover_skills;
 use super::status::file_eq;
-use crate::agent_skill_targets::{
-    codex_global_skills_dest, codex_home, codex_legacy_skills_dest,
-};
+use crate::agent_skill_targets::{codex_global_skills_dest, codex_home, codex_legacy_skills_dest};
 use crate::codex_legacy_migration::preview_migration;
 
 #[derive(Serialize, Clone, Debug)]
@@ -112,7 +110,10 @@ fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
                     }
                 }
                 if !managed_profile.is_empty() {
-                    managed_profiles.insert(profile_name.to_string(), toml::Value::Table(managed_profile));
+                    managed_profiles.insert(
+                        profile_name.to_string(),
+                        toml::Value::Table(managed_profile),
+                    );
                 }
             }
             if !managed_profiles.is_empty() {
@@ -289,9 +290,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         },
         detail: format!(
             "{} migratable, {} conflicts at {}",
-            legacy_skills_migratable_count,
-            legacy_skills_conflict_count,
-            legacy_skills_path_str
+            legacy_skills_migratable_count, legacy_skills_conflict_count, legacy_skills_path_str
         ),
     });
 
@@ -474,7 +473,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
             "No runtime action needed.".to_string(),
         ),
         "diverged" => (
-            "Codex runtime differs from bundled templates. Review diff before applying.".to_string(),
+            "Codex runtime differs from bundled templates. Review diff before applying."
+                .to_string(),
             "Run diff or sync for diverged surfaces.".to_string(),
         ),
         _ => (

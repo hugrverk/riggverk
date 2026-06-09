@@ -166,12 +166,7 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
             let sub_name = sub.file_name().to_string_lossy().into_owned();
             let grouped_skill_md = sub_path.join("SKILL.md");
             if grouped_skill_md.is_file() {
-                register_discovered_skill(
-                    &mut mapping,
-                    &sub_path,
-                    &grouped_skill_md,
-                    &sub_name,
-                )?;
+                register_discovered_skill(&mut mapping, &sub_path, &grouped_skill_md, &sub_name)?;
             } else if has_deeper_skill_md(&sub_path) {
                 return Err(format!(
                     "skill nesting deeper than one group level is not supported: {}",
@@ -619,7 +614,11 @@ mod tests {
                 agent_dest_overrides: None,
             },
         );
-        assert!(result.success, "stdout={} stderr={}", result.stdout, result.stderr);
+        assert!(
+            result.success,
+            "stdout={} stderr={}",
+            result.stdout, result.stderr
+        );
         let installed = skills_dest.join("kretsverket-editor-change/SKILL.md");
         assert!(installed.is_file());
         assert!(!skills_dest.join("kretsverket").exists());

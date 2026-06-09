@@ -34,4 +34,3 @@ pub fn get_agent_targets() -> Result<Vec<agent_targets::AgentTargetMeta>, String
         })
         .collect())
 }
-

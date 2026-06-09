@@ -9,9 +9,9 @@ use super::process::run_cmd_owned_env;
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
 use crate::agent_skill_targets::{agent_global_skills_dest, validate_skill_agent};
-use crate::skills_install::discover_workspace_skills;
 #[cfg(not(windows))]
 use crate::shell_runtime::resolve_bash;
+use crate::skills_install::discover_workspace_skills;
 #[cfg(windows)]
 use crate::skills_install::{install_skills_native, InstallSkillsRequest as NativeInstallRequest};
 
@@ -179,7 +179,10 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
     let mut names = std::collections::HashSet::new();
     for skill in &discovered {
         if !names.insert(skill.name.clone()) {
-            return Err(format!("duplicate skill name in repository: {}", skill.name));
+            return Err(format!(
+                "duplicate skill name in repository: {}",
+                skill.name
+            ));
         }
     }
 
@@ -405,8 +408,7 @@ pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String>
 
     for summary in summaries {
         let targets = &summary.targets;
-        let supported = targets.is_empty()
-            || targets.iter().any(|target| target.as_str() == agent);
+        let supported = targets.is_empty() || targets.iter().any(|target| target.as_str() == agent);
         let source_md = root.join(&summary.path);
         let target_md = dest_root.join(&summary.name).join("SKILL.md");
         let (state, next_action) = if !supported {
@@ -699,13 +701,20 @@ mod tests {
     #[test]
     fn grouped_skill_layout_is_listed() {
         let root = temp_root("grouped-skills");
-        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
+        write_skill(
+            &root,
+            "skills/kretsverket/kretsverket-editor-change",
+            "kretsverket-editor-change",
+        );
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
 
         assert_eq!(skills.len(), 1);
-        assert_eq!(skills[0].id, "workspace/kretsverket/kretsverket-editor-change");
+        assert_eq!(
+            skills[0].id,
+            "workspace/kretsverket/kretsverket-editor-change"
+        );
         assert_eq!(skills[0].name, "kretsverket-editor-change");
         assert_eq!(skills[0].group, "kretsverket");
         assert_eq!(
@@ -718,7 +727,11 @@ mod tests {
     fn mixed_root_and_grouped_discovery() {
         let root = temp_root("mixed-skills");
         write_skill(&root, "skills/diagnose", "diagnose");
-        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
+        write_skill(
+            &root,
+            "skills/kretsverket/kretsverket-editor-change",
+            "kretsverket-editor-change",
+        );
 
         let skills = discover_skills(&root).expect("discover skills");
         let _ = fs::remove_dir_all(&root);
@@ -772,7 +785,11 @@ mod tests {
     #[test]
     fn grouped_skill_open_and_read_paths_resolve() {
         let root = temp_root("grouped-open");
-        write_skill(&root, "skills/kretsverket/kretsverket-editor-change", "kretsverket-editor-change");
+        write_skill(
+            &root,
+            "skills/kretsverket/kretsverket-editor-change",
+            "kretsverket-editor-change",
+        );
 
         let skills = discover_skills(&root).expect("discover skills");
         let found = skills

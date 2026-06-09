@@ -605,7 +605,8 @@ mod tests {
 
         let source = "---\ndescription: test agent\nmode: subagent\n---\n# body\n";
         write_file(&root.join("templates/claude/agents/repo-scout.md"), source);
-        let stemmed = "---\ndescription: test agent\nmode: subagent\nname: repo-scout\n\n---\n# body\n";
+        let stemmed =
+            "---\ndescription: test agent\nmode: subagent\nname: repo-scout\n\n---\n# body\n";
         write_file(&home.join(".claude/agents/repo-scout.md"), stemmed);
 
         let status = shared_runtime_agents_status(&root, &home, ".claude/agents");

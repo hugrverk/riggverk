@@ -135,10 +135,7 @@ fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Va
                 managed.insert((*key).to_string(), value.clone());
             }
         }
-        if let Some(playwright) = obj
-            .get("mcp")
-            .and_then(|mcp| mcp.get("playwright"))
-        {
+        if let Some(playwright) = obj.get("mcp").and_then(|mcp| mcp.get("playwright")) {
             let mut mcp = serde_json::Map::new();
             mcp.insert("playwright".to_string(), playwright.clone());
             managed.insert("mcp".to_string(), serde_json::Value::Object(mcp));
@@ -147,7 +144,10 @@ fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Va
     serde_json::Value::Object(managed)
 }
 
-fn managed_opencode_keys_match(installed: &serde_json::Value, rendered: &serde_json::Value) -> bool {
+fn managed_opencode_keys_match(
+    installed: &serde_json::Value,
+    rendered: &serde_json::Value,
+) -> bool {
     extract_managed_opencode_config(installed) == extract_managed_opencode_config(rendered)
 }
 
@@ -587,7 +587,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
             label: "Snapshot".into(),
             status: "pass".into(),
             detail: snapshot
-                .map(|enabled| if enabled { "enabled".into() } else { "disabled".into() })
+                .map(|enabled| {
+                    if enabled {
+                        "enabled".into()
+                    } else {
+                        "disabled".into()
+                    }
+                })
                 .unwrap_or_else(|| "(not set)".into()),
         });
 
@@ -1555,7 +1561,11 @@ mod tests {
         cleanup(&home);
 
         assert_eq!(health.extra_installed_agent_count, 0);
-        let legacy = health.checks.iter().find(|c| c.id == "legacy_scout").unwrap();
+        let legacy = health
+            .checks
+            .iter()
+            .find(|c| c.id == "legacy_scout")
+            .unwrap();
         assert_eq!(legacy.status, "warn");
         assert_eq!(health.status, "diverged");
     }
