@@ -446,19 +446,7 @@ else
   printf 'FAIL: install-cursor-workspace.sh --help must state it never writes global agents\n' >&2
   exit 1
 fi
-for agent in verifier.md security-reviewer.md release-checker.md browser-qa.md repo-scout.md; do
-  file="resources/default-workspace/templates/cursor/agents/$agent"
-  if [ ! -s "$file" ]; then
-    printf 'FAIL: Cursor agent adapter missing or empty: %s\n' "$file" >&2
-    exit 1
-  fi
-  for key in '^permission:' '^mode:' '^temperature:' '^steps:' '^hidden:'; do
-    if grep -q "$key" "$file"; then
-      printf 'FAIL: Cursor agent adapter contains OpenCode-only frontmatter key %s: %s\n' "$key" "$file" >&2
-      exit 1
-    fi
-  done
-done
+# Validation handled by check-cursor-profile.py (manifest-driven, covers all agents)
 if ! grep -q 'fn editable_config_targets' src-tauri/src/agent_targets.rs; then
   printf 'FAIL: editable config target allowlist missing\n' >&2
   exit 1
