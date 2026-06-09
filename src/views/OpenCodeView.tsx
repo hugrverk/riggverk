@@ -51,13 +51,9 @@ interface OpenCodeViewProps {
   onSyncOpenCodeConfig: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
-  selectedSkills: Set<string>;
   skillSearch: string;
-  onDryRunSkills: () => void;
-  onInstallSkills: () => void;
-  onToggleSkill: (name: string) => void;
-  onSelectAllSkills: () => void;
-  onClearSelectionSkills: () => void;
+  onPreviewSyncSkills: () => void;
+  onSyncAllSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -109,13 +105,9 @@ export function OpenCodeView({
   onSyncOpenCodeConfig,
   skills,
   skillsLoaded,
-  selectedSkills,
   skillSearch,
-  onDryRunSkills,
-  onInstallSkills,
-  onToggleSkill,
-  onSelectAllSkills,
-  onClearSelectionSkills,
+  onPreviewSyncSkills,
+  onSyncAllSkills,
   onSetSkillSearch,
   onOpenInstallScript,
 }: OpenCodeViewProps) {
@@ -273,15 +265,11 @@ export function OpenCodeView({
             installAgents={["opencode"]}
             skills={skills}
             skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             wsRunning={wsRunning}
             workspaceValid={workspaceValid}
-            onDryRun={onDryRunSkills}
-            onInstall={onInstallSkills}
-            onToggleSkill={onToggleSkill}
-            onSelectAllSkills={onSelectAllSkills}
-            onClearSelectionSkills={onClearSelectionSkills}
+            onPreviewSync={onPreviewSyncSkills}
+            onSyncAll={onSyncAllSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

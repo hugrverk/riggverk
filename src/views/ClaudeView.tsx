@@ -29,13 +29,9 @@ interface ClaudeViewProps {
   onSyncAgents: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
-  selectedSkills: Set<string>;
   skillSearch: string;
-  onDryRunSkills: () => void;
-  onInstallSkills: () => void;
-  onToggleSkill: (name: string) => void;
-  onSelectAllSkills: () => void;
-  onClearSelectionSkills: () => void;
+  onPreviewSyncSkills: () => void;
+  onSyncAllSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }

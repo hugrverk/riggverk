@@ -11,7 +11,7 @@ interface UseWorkspaceActionsOptions {
   fetchStatus: (generation?: number) => Promise<void>;
   isInvalidWorkspaceError: (e: unknown) => boolean;
   workspaceDiagnostics: WorkspaceDiagnostics | null;
-  selectedSkills: Set<string>;
+  allSkillNames: string[];
   setError: (msg: string | null) => void;
 }
 
@@ -20,7 +20,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     fetchStatus,
     isInvalidWorkspaceError,
     workspaceDiagnostics,
-    selectedSkills,
+    allSkillNames,
     setError,
   } = opts;
 
@@ -113,7 +113,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     try {
       const req: InstallSkillsRequest = {
         agents: normalized,
-        skills: Array.from(selectedSkills),
+        skills: allSkillNames,
         dry_run: dry,
       };
       const result = await invoke<ActionResult>("install_skills", { request: req });
@@ -140,7 +140,7 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
       if (isCurrentAction()) setWsRunning(null);
       workspaceActionLockRef.current = false;
     }
-  }, [selectedSkills, fetchStatus, setError]);
+  }, [allSkillNames, fetchStatus, setError]);
 
   /** Generic terminal task runner. Wraps an async task with action lock,
    *  request cancellation, min-running delay, wsRunning/wsLog/wsLogCompletedAt.

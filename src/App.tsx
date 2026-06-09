@@ -74,14 +74,10 @@ function App() {
   const {
     skills,
     skillsLoaded,
-    selectedSkills,
     activeSkillId,
     activeSkillContent,
     skillSearch,
     setSkillSearch,
-    toggleSkill,
-    selectAllSkills,
-    clearSkillSelection,
     openSkill,
     readSkill,
     openInstallScript,
@@ -194,7 +190,7 @@ function App() {
     fetchStatus,
     isInvalidWorkspaceError,
     workspaceDiagnostics,
-    selectedSkills,
+    allSkillNames: skills.map(s => s.name),
     setError,
   });
 
@@ -447,11 +443,7 @@ function App() {
   const targetSkillsShared = {
     skills,
     skillsLoaded,
-    selectedSkills,
     skillSearch,
-    onToggleSkill: toggleSkill,
-    onSelectAllSkills: selectAllSkills,
-    onClearSelectionSkills: clearSkillSelection,
     onSetSkillSearch: setSkillSearch,
     onOpenInstallScript: openInstallScript,
   };
@@ -530,8 +522,8 @@ function App() {
             onSyncRules={() => runWsAction("sync_codex_rules", "sync codex rules")}
             onDiffConfigs={() => runWsAction("diff_codex_config", "diff codex config")}
             {...targetSkillsShared}
-            onDryRunSkills={() => runWsInstallForAgents(true, ["codex"], "install skills dry-run (codex)")}
-            onInstallSkills={() => runWsInstallForAgents(false, ["codex"], "install skills (codex)")}
+            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["codex"], "preview skills sync (codex)")}
+            onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}
           />
         )}
 
@@ -634,8 +626,8 @@ function App() {
               refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
             })}
             {...targetSkillsShared}
-            onDryRunSkills={() => runWsInstallForAgents(true, ["opencode"], "install skills dry-run (opencode)")}
-            onInstallSkills={() => runWsInstallForAgents(false, ["opencode"], "install skills (opencode)")}
+            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["opencode"], "preview skills sync (opencode)")}
+            onSyncAllSkills={() => runWsInstallForAgents(false, ["opencode"], "sync all skills (opencode)")}
           />
         )}
 
@@ -666,8 +658,8 @@ function App() {
             onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
             onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
             {...targetSkillsShared}
-            onDryRunSkills={() => runWsInstallForAgents(true, ["cursor"], "install skills dry-run (cursor)")}
-            onInstallSkills={() => runWsInstallForAgents(false, ["cursor"], "install skills (cursor)")}
+            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["cursor"], "preview skills sync (cursor)")}
+            onSyncAllSkills={() => runWsInstallForAgents(false, ["cursor"], "sync all skills (cursor)")}
           />
         )}
 
@@ -709,8 +701,8 @@ function App() {
               refresh: fetchStatus,
             })}
             {...targetSkillsShared}
-            onDryRunSkills={() => runWsInstallForAgents(true, ["claude"], "install skills dry-run (claude)")}
-            onInstallSkills={() => runWsInstallForAgents(false, ["claude"], "install skills (claude)")}
+            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["claude"], "preview skills sync (claude)")}
+            onSyncAllSkills={() => runWsInstallForAgents(false, ["claude"], "sync all skills (claude)")}
           />
         )}
 

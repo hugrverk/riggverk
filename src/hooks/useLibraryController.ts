@@ -40,8 +40,6 @@ export function useLibraryController({
 }: LibraryControllerDeps) {
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
-  const [selectedSkills, setSelectedSkills] = useState<Set<string>>(new Set());
-  const skillsSelectionTouched = useRef(false);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
   const [activeSkillContent, setActiveSkillContent] = useState<DocumentContent | null>(null);
   const [skillSearch, setSkillSearch] = useState("");
@@ -171,9 +169,6 @@ export function useLibraryController({
       if (!isWorkspaceLoadCurrent(generation)) return;
       setSkills(loaded);
       setSkillsLoaded(true);
-      if (!skillsSelectionTouched.current && loaded.length > 0) {
-        setSelectedSkills(new Set(loaded.map(s => s.name)));
-      }
       if (loaded.length > 0) {
         const persistedId = activeSkillIdRef.current;
         const stillExists = persistedId && loaded.some(s => s.id === persistedId);
@@ -317,8 +312,6 @@ export function useLibraryController({
     invalidateEditorSaveOperations();
     setSkills([]);
     setSkillsLoaded(false);
-    skillsSelectionTouched.current = false;
-    setSelectedSkills(new Set());
     activeSkillIdRef.current = null;
     activeSkillContentIdRef.current = null;
     setActiveSkillId(null);
@@ -729,25 +722,6 @@ export function useLibraryController({
     setConfigSaveResult(null);
   }, [activeConfigSourceType, configDirty]);
 
-  const toggleSkill = useCallback((name: string) => {
-    skillsSelectionTouched.current = true;
-    setSelectedSkills(prev => {
-      const next = new Set(prev);
-      if (next.has(name)) next.delete(name); else next.add(name);
-      return next;
-    });
-  }, []);
-
-  const selectAllSkills = useCallback(() => {
-    skillsSelectionTouched.current = true;
-    setSelectedSkills(new Set(skills.map(s => s.name)));
-  }, [skills]);
-
-  const clearSkillSelection = useCallback(() => {
-    skillsSelectionTouched.current = true;
-    setSelectedSkills(new Set());
-  }, []);
-
   const openSkill = useCallback((id: string) => {
     invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));
   }, [setError]);
@@ -826,14 +800,10 @@ export function useLibraryController({
   return {
     skills,
     skillsLoaded,
-    selectedSkills,
     activeSkillId,
     activeSkillContent,
     skillSearch,
     setSkillSearch,
-    toggleSkill,
-    selectAllSkills,
-    clearSkillSelection,
     openSkill,
     readSkill,
     openInstallScript,

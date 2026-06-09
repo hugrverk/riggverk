@@ -4,21 +4,13 @@
   "profile": {
     "id": "agent-workspace-cursor",
     "name": "Agent Workspace Cursor Setup",
-    "description": "Cursor setup assets for global agents, Playwright MCP, and optional starter skills. Auto Review and permissions remain IDE-managed."
+    "description": "Cursor setup assets for global agents, canonical bundled skills, and Playwright MCP. Auto Review and permissions remain IDE-managed."
   },
   "global_profile": "templates/cursor/global-profile.json",
   "user_rules": "templates/cursor/user-rules.md",
   "agents_dir": "templates/cursor/agents",
   "rules_dir": "templates/cursor/rules",
   "mcp_examples_dir": "templates/cursor/mcp",
-  "recommended_pinned_skills": [
-    "diagnose",
-    "implementation-plan",
-    "release-check",
-    "browser-qa",
-    "security-review",
-    "frontend-design"
-  ],
   "agents": [
     "verifier.md",
     "security-reviewer.md",

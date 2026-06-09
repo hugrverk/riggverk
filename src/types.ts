@@ -72,6 +72,16 @@ export interface InstallSkillsRequest {
   agents: string[]; skills: string[]; dry_run: boolean;
 }
 
+export interface SkillSyncHealthEntry {
+  name: string; group: string; source_path: string; target_path: string;
+  supported: boolean; state: string; next_action: string;
+}
+
+export interface SkillsSyncHealth {
+  expected_count: number; synced_count: number; missing_count: number;
+  diverged_count: number; skills: SkillSyncHealthEntry[];
+}
+
 export interface AgentTargetMeta {
   id: string; label: string; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
 }

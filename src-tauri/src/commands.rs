@@ -33,7 +33,10 @@ pub use repo_dashboard_commands::{
 pub use settings_commands::{
     get_agent_targets, get_settings, get_target_profiles, update_settings,
 };
-pub use skills::{install_skills, list_skills, open_install_skills_script, open_skill, read_skill};
+pub use skills::{
+    get_skills_sync_health, install_skills, list_skills, open_install_skills_script, open_skill,
+    read_skill,
+};
 pub use status::get_status;
 pub use workspace::{
     apply_workspace_repair, get_workspace_diagnostics, install_default_workspace,

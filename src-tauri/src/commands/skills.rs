@@ -7,7 +7,8 @@ use super::content::DocumentContent;
 use super::process::run_cmd_owned_env;
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
-use crate::agent_skill_targets::validate_skill_agent;
+use crate::agent_skill_targets::{agent_global_skills_dest, validate_skill_agent};
+use crate::skills_install::discover_workspace_skills;
 #[cfg(not(windows))]
 use crate::shell_runtime::resolve_bash;
 #[cfg(windows)]
@@ -322,6 +323,96 @@ pub struct InstallSkillsRequest {
     dry_run: bool,
 }
 
+pub(crate) fn workspace_skill_names(root: &Path) -> Result<Vec<String>, String> {
+    let mut names: Vec<String> = discover_workspace_skills(&root.join("skills"))?
+        .into_keys()
+        .collect();
+    names.sort();
+    Ok(names)
+}
+
+#[derive(Serialize)]
+pub struct SkillSyncHealthEntry {
+    pub name: String,
+    pub group: String,
+    pub source_path: String,
+    pub target_path: String,
+    pub supported: bool,
+    pub state: String,
+    pub next_action: String,
+}
+
+#[derive(Serialize)]
+pub struct SkillsSyncHealth {
+    pub expected_count: usize,
+    pub synced_count: usize,
+    pub missing_count: usize,
+    pub diverged_count: usize,
+    pub skills: Vec<SkillSyncHealthEntry>,
+}
+
+fn skill_install_state(source_md: &Path, target_md: &Path) -> (&'static str, &'static str) {
+    if !source_md.is_file() {
+        return ("invalid", "repair workspace source");
+    }
+    if !target_md.is_file() {
+        return ("missing", "sync skill");
+    }
+    if super::status::file_eq(source_md, target_md) {
+        ("synced", "none")
+    } else {
+        ("diverged", "review or repair")
+    }
+}
+
+#[tauri::command]
+pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String> {
+    validate_agent(&agent)?;
+    let root = workspace_root()?;
+    let summaries = discover_skills(&root)?;
+    let dest_root = agent_global_skills_dest(&agent)?;
+    let mut skills = Vec::new();
+    let mut synced_count = 0usize;
+    let mut missing_count = 0usize;
+    let mut diverged_count = 0usize;
+
+    for summary in summaries {
+        let targets = &summary.targets;
+        let supported = targets.is_empty()
+            || targets.iter().any(|target| target.as_str() == agent);
+        let source_md = root.join(&summary.path);
+        let target_md = dest_root.join(&summary.name).join("SKILL.md");
+        let (state, next_action) = if !supported {
+            ("unsupported", "not installed for this harness")
+        } else {
+            skill_install_state(&source_md, &target_md)
+        };
+        match state {
+            "synced" => synced_count += 1,
+            "missing" => missing_count += 1,
+            "diverged" => diverged_count += 1,
+            _ => {}
+        }
+        skills.push(SkillSyncHealthEntry {
+            name: summary.name.clone(),
+            group: summary.group.clone(),
+            source_path: summary.path.clone(),
+            target_path: target_md.to_string_lossy().into_owned(),
+            supported,
+            state: state.into(),
+            next_action: next_action.into(),
+        });
+    }
+
+    Ok(SkillsSyncHealth {
+        expected_count: skills.len(),
+        synced_count,
+        missing_count,
+        diverged_count,
+        skills,
+    })
+}
+
 #[tauri::command]
 pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, String> {
     if request.agents.is_empty() {
@@ -331,13 +422,17 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
         validate_agent(a)?;
     }
 
-    if request.skills.is_empty() {
-        return Err("no skills selected".into());
+    let available = list_skills()?;
+    let mut skills_to_install = request.skills;
+    if skills_to_install.is_empty() {
+        skills_to_install = available.iter().map(|s| s.name.clone()).collect();
+    }
+    if skills_to_install.is_empty() {
+        return Err("no skills available to install".into());
     }
 
-    let available = list_skills()?;
     let valid_names: Vec<&str> = available.iter().map(|s| s.name.as_str()).collect();
-    for skill in &request.skills {
+    for skill in &skills_to_install {
         if !valid_names.contains(&skill.as_str()) {
             return Err(format!("unknown skill: {}", skill));
         }
@@ -350,7 +445,7 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
             &root,
             &NativeInstallRequest {
                 agents: request.agents,
-                skills: request.skills,
+                skills: skills_to_install,
                 dry_run: request.dry_run,
                 agent_dest_overrides: None,
             },
@@ -369,7 +464,14 @@ pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, Str
     }
     #[cfg(not(windows))]
     {
-        install_skills_via_script(&root, &request)
+        install_skills_via_script(
+            &root,
+            &InstallSkillsRequest {
+                agents: request.agents,
+                skills: skills_to_install,
+                dry_run: request.dry_run,
+            },
+        )
     }
 }
 

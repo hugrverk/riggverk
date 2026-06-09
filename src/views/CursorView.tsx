@@ -40,13 +40,9 @@ interface CursorViewProps {
   onCursorCopyUserRules: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
-  selectedSkills: Set<string>;
   skillSearch: string;
-  onDryRunSkills: () => void;
-  onInstallSkills: () => void;
-  onToggleSkill: (name: string) => void;
-  onSelectAllSkills: () => void;
-  onClearSelectionSkills: () => void;
+  onPreviewSyncSkills: () => void;
+  onSyncAllSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -87,13 +83,9 @@ export function CursorView({
   onCursorCopyUserRules,
   skills,
   skillsLoaded,
-  selectedSkills,
   skillSearch,
-  onDryRunSkills,
-  onInstallSkills,
-  onToggleSkill,
-  onSelectAllSkills,
-  onClearSelectionSkills,
+  onPreviewSyncSkills,
+  onSyncAllSkills,
   onSetSkillSearch,
   onOpenInstallScript,
 }: CursorViewProps) {
@@ -115,7 +107,7 @@ export function CursorView({
           <TargetPageHeader
             icon="cursor"
             title="Cursor"
-            summary="Sync Cursor agents, starter skills, and Playwright MCP. Auto Review, sandbox behavior, and general permissions remain IDE-managed in Cursor Settings."
+            summary="Sync Cursor agents, canonical bundled skills, and Playwright MCP. Auto Review, sandbox behavior, and general permissions remain IDE-managed in Cursor Settings."
             facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
@@ -135,7 +127,7 @@ export function CursorView({
             <HarnessActionCard
               title="Cursor setup"
               ariaLabel="Cursor setup"
-              description="Syncs Cursor agents, pinned starter skills, and Playwright MCP. A one-time cleanup removes the legacy Agent Workspace Playwright allowlist entry from permissions.json when present. Backups are created before overwriting existing files."
+              description="Syncs Cursor agents, all bundled skills, and Playwright MCP. A one-time cleanup removes the legacy Agent Workspace Playwright allowlist entry from permissions.json when present. Backups are created before overwriting existing files."
               statusChip={health
                 ? { label: runtimeChipLabel(health.status), tone: runtimeChipTone(health.status) }
                 : { label: "loading", tone: "muted" }}
@@ -235,15 +227,11 @@ export function CursorView({
             installAgents={["cursor"]}
             skills={skills}
             skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             wsRunning={wsRunning}
             workspaceValid={workspaceValid}
-            onDryRun={onDryRunSkills}
-            onInstall={onInstallSkills}
-            onToggleSkill={onToggleSkill}
-            onSelectAllSkills={onSelectAllSkills}
-            onClearSelectionSkills={onClearSelectionSkills}
+            onPreviewSync={onPreviewSyncSkills}
+            onSyncAll={onSyncAllSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

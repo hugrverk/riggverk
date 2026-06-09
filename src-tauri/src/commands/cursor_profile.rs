@@ -216,23 +216,7 @@ pub(crate) fn json_has_unsafe_literals(content: &str) -> bool {
 }
 
 pub(crate) fn manifest_recommended_skills(root: &Path) -> Vec<String> {
-    let path = cursor_root(root).join("manifest.json");
-    let Ok(content) = std::fs::read_to_string(&path) else {
-        return Vec::new();
-    };
-    let Ok(parsed) = serde_json::from_str::<serde_json::Value>(&content) else {
-        return Vec::new();
-    };
-    parsed
-        .get("recommended_pinned_skills")
-        .and_then(|v| v.as_array())
-        .map(|items| {
-            items
-                .iter()
-                .filter_map(|item| item.as_str().map(str::to_string))
-                .collect()
-        })
-        .unwrap_or_default()
+    super::skills::workspace_skill_names(root).unwrap_or_default()
 }
 
 pub(crate) fn default_playwright_mcp_config_path(home: &Path) -> PathBuf {

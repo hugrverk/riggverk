@@ -31,13 +31,9 @@ interface CodexViewProps {
   onDiffConfigs: () => void;
   skills: SkillSummary[];
   skillsLoaded: boolean;
-  selectedSkills: Set<string>;
   skillSearch: string;
-  onDryRunSkills: () => void;
-  onInstallSkills: () => void;
-  onToggleSkill: (name: string) => void;
-  onSelectAllSkills: () => void;
-  onClearSelectionSkills: () => void;
+  onPreviewSyncSkills: () => void;
+  onSyncAllSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -66,13 +62,9 @@ export function CodexView({
   onDiffConfigs,
   skills,
   skillsLoaded,
-  selectedSkills,
   skillSearch,
-  onDryRunSkills,
-  onInstallSkills,
-  onToggleSkill,
-  onSelectAllSkills,
-  onClearSelectionSkills,
+  onPreviewSyncSkills,
+  onSyncAllSkills,
   onSetSkillSearch,
   onOpenInstallScript,
 }: CodexViewProps) {
@@ -150,15 +142,11 @@ export function CodexView({
             installAgents={["codex"]}
             skills={skills}
             skillsLoaded={skillsLoaded}
-            selectedSkills={selectedSkills}
             skillSearch={skillSearch}
             wsRunning={wsRunning}
             workspaceValid={workspaceValid}
-            onDryRun={onDryRunSkills}
-            onInstall={onInstallSkills}
-            onToggleSkill={onToggleSkill}
-            onSelectAllSkills={onSelectAllSkills}
-            onClearSelectionSkills={onClearSelectionSkills}
+            onPreviewSync={onPreviewSyncSkills}
+            onSyncAll={onSyncAllSkills}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
