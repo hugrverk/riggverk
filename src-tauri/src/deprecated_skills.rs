@@ -9,6 +9,7 @@ use crate::commands::{file_eq, ActionResult};
 
 const MANIFEST_REL: &str = "metadata/deprecated-skills.json";
 const REFERENCE_ROOT_REL: &str = "metadata/deprecated-skills";
+const SCHEMA_VERSION: u32 = 1;
 
 #[derive(Debug, Clone, serde::Serialize)]
 pub struct DeprecatedSkillEntry {
@@ -34,6 +35,23 @@ pub struct DeprecatedRemovalPreviewItem {
     pub state: String,
     pub target_path: String,
     pub action: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TransactionManifest {
+    schema_version: u32,
+    harness: String,
+    destination_root: String,
+    created_at: String,
+    skills: Vec<TransactionSkill>,
+    operation: String,
+}
+
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
+struct TransactionSkill {
+    name: String,
+    original_state: String,
+    relative_backup_dir: String,
 }
 
 pub fn load_deprecated_names(workspace_root: &Path) -> Result<Vec<String>, String> {
@@ -96,6 +114,13 @@ fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
             "skill path escapes destination root: {}",
             child.display()
         ))
+    }
+}
+
+fn path_under_root(child: &Path, root: &Path) -> bool {
+    match (child.canonicalize(), root.canonicalize()) {
+        (Ok(c), Ok(r)) => c == r || c.starts_with(&r),
+        _ => false,
     }
 }
 
@@ -265,6 +290,45 @@ fn remove_dir_all(path: &Path) -> Result<(), String> {
     fs::remove_dir(path).map_err(|e| format!("remove dir {}: {e}", path.display()))
 }
 
+fn validate_backup_path(backup_dir: &Path) -> Result<(), String> {
+    reject_symlink_path(backup_dir, "rollback backup")?;
+    if !backup_dir.is_dir() {
+        return Err(format!("rollback backup not found: {}", backup_dir.display()));
+    }
+
+    let parent = backup_dir
+        .parent()
+        .ok_or_else(|| "rollback backup has no parent".to_string())?;
+    if parent
+        .file_name()
+        .and_then(|name| name.to_str())
+        != Some("deprecated-skills")
+    {
+        return Err(format!(
+            "refusing rollback outside deprecated-skills backups: {}",
+            backup_dir.display()
+        ));
+    }
+
+    let canonical_backup = backup_dir
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve backup path: {e}"))?;
+
+    let backup_root_val = backup_root()?;
+    let canonical_backup_root = backup_root_val
+        .canonicalize()
+        .map_err(|e| format!("cannot resolve backup root: {e}"))?;
+
+    if !canonical_backup.starts_with(&canonical_backup_root) {
+        return Err(format!(
+            "backup path {} is outside the canonical backup root",
+            backup_dir.display()
+        ));
+    }
+
+    Ok(())
+}
+
 pub fn preview_removal(
     agent: &str,
     workspace_root: &Path,
@@ -354,34 +418,109 @@ pub fn remove_identical_deprecated(
         ));
     }
 
-    let backup_dir = create_backup_dir(agent)?;
-    let mut removed: Vec<String> = Vec::new();
-    for item in preview
+    let removable: Vec<&DeprecatedRemovalPreviewItem> = preview
         .items
         .iter()
         .filter(|item| item.action == "remove after backup")
-    {
+        .collect();
+
+    // ── Preflight: all destinations within dest_root ──
+    validate_skill_dest_root(dest_root)?;
+    reject_symlink_path(dest_root, "skill destination root")?;
+    for item in &removable {
         let skill_dir = PathBuf::from(&item.target_path);
         path_within_root(&skill_dir, dest_root)?;
+    }
+
+    // ── Preflight: backup path is valid ──
+    let backup_dir = create_backup_dir(agent)?;
+
+    // ── Phase 1: Back up ALL removable skills before any deletion ──
+    let mut backed_up: Vec<String> = Vec::new();
+    for item in &removable {
         let backup_target = backup_dir.join(&item.name);
-        if let Err(err) = copy_dir_all(&skill_dir, &backup_target) {
+        let skill_dir = PathBuf::from(&item.target_path);
+        match copy_dir_all(&skill_dir, &backup_target) {
+            Ok(()) => {
+                backed_up.push(item.name.clone());
+                lines.push(format!("backed up {} to {}", item.name, backup_target.display()));
+            }
+            Err(err) => {
+                // Backup failed. We have a partial backup directory.
+                // We should NOT remove the backup dir — it contains partial data.
+                // Return the error; nothing was deleted yet.
+                return Err(format!(
+                    "backup failed for {} after backing up [{}]: {err}; no skills were removed. Partial backup at {}",
+                    item.name,
+                    backed_up.join(", "),
+                    backup_dir.display()
+                ));
+            }
+        }
+    }
+
+    // ── Verify all backups exist ──
+    for item in &removable {
+        let backup_target = backup_dir.join(&item.name);
+        if !backup_target.is_dir() {
             return Err(format!(
-                "backup failed for {} after removing [{}]: {err}; rollback from {}",
+                "backup verification failed for {}: backup dir missing after copy; no skills were removed. Backup at {}",
                 item.name,
-                removed.join(", "),
                 backup_dir.display()
             ));
         }
-        if let Err(err) = remove_dir_all(&skill_dir) {
-            return Err(format!(
-                "removal failed for {} after removing [{}]: {err}; rollback from {}",
-                item.name,
-                removed.join(", "),
-                backup_dir.display()
-            ));
+    }
+
+    // ── Write transaction manifest ──
+    let now = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_secs();
+    let manifest = TransactionManifest {
+        schema_version: SCHEMA_VERSION,
+        harness: agent.to_string(),
+        destination_root: dest_root.to_string_lossy().into_owned(),
+        created_at: now.to_string(),
+        operation: "deprecated-removal".to_string(),
+        skills: removable
+            .iter()
+            .map(|item| TransactionSkill {
+                name: item.name.clone(),
+                original_state: item.state.clone(),
+                relative_backup_dir: item.name.clone(),
+            })
+            .collect(),
+    };
+    let manifest_json = serde_json::to_string_pretty(&manifest)
+        .map_err(|e| format!("cannot serialize manifest: {e}"))?;
+    let manifest_path = backup_dir.join("manifest.json");
+    fs::write(&manifest_path, &manifest_json)
+        .map_err(|e| format!("cannot write manifest {}: {e}", manifest_path.display()))?;
+
+    // ── Phase 2: Remove all skills (stop on first failure, auto-restore) ──
+    let mut removed: Vec<String> = Vec::new();
+    for item in &removable {
+        let skill_dir = PathBuf::from(&item.target_path);
+        match remove_dir_all(&skill_dir) {
+            Ok(()) => {
+                removed.push(item.name.clone());
+                lines.push(format!("removed {} (backup: {}/{})", item.name, backup_dir.display(), item.name));
+            }
+            Err(err) => {
+                // Removal failed after some removals. Auto-restore.
+                let restore_outcome = attempt_auto_restore(&backup_dir, dest_root, &removed, &removable);
+                let restore_msg = match restore_outcome {
+                    Ok(()) => "auto-restore completed".to_string(),
+                    Err(e) => format!("auto-restore error: {e}"),
+                };
+                lines.push(format!("removal failed for {}: {err}; {restore_msg}", item.name));
+                return Err(format!(
+                    "removal failed for {} after removing [{}]: {err}; {restore_msg}",
+                    item.name,
+                    removed.join(", "),
+                ));
+            }
         }
-        removed.push(item.name.clone());
-        lines.push(format!("removed {} (backup: {})", item.name, backup_target.display()));
     }
 
     lines.push(format!("backup root: {}", backup_dir.display()));
@@ -394,61 +533,205 @@ pub fn remove_identical_deprecated(
     ))
 }
 
+/// Attempt to restore already-removed skills from backup after a partial removal failure.
+fn attempt_auto_restore(
+    backup_dir: &Path,
+    dest_root: &Path,
+    already_removed: &[String],
+    _all_removable: &[&DeprecatedRemovalPreviewItem],
+) -> Result<(), String> {
+    let mut restore_errors: Vec<String> = Vec::new();
+    for name in already_removed {
+        let backup_src = backup_dir.join(name);
+        let dest = dest_root.join(name);
+        if !backup_src.is_dir() {
+            restore_errors.push(format!("backup missing for {name}"));
+            continue;
+        }
+        if dest.exists() {
+            restore_errors.push(format!("cannot restore {name}: destination already exists"));
+            continue;
+        }
+        if let Err(e) = copy_dir_all(&backup_src, &dest) {
+            restore_errors.push(format!("failed to restore {name}: {e}"));
+        }
+    }
+    if restore_errors.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "auto-restore completed with errors: {}",
+            restore_errors.join("; ")
+        ))
+    }
+}
+
 pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
     let backup_dir = PathBuf::from(backup_path);
-    reject_symlink_path(&backup_dir, "rollback backup")?;
-    if !backup_dir.is_dir() {
-        return Err(format!("rollback backup not found: {}", backup_dir.display()));
-    }
+    validate_backup_path(&backup_dir)?;
 
-    let parent = backup_dir
-        .parent()
-        .ok_or_else(|| "rollback backup has no parent".to_string())?;
-    if parent
-        .file_name()
-        .and_then(|name| name.to_str())
-        != Some("deprecated-skills")
-    {
+    // Read and validate manifest
+    let manifest_path = backup_dir.join("manifest.json");
+    if !manifest_path.is_file() {
         return Err(format!(
-            "refusing rollback outside deprecated-skills backups: {}",
-            backup_dir.display()
+            "transaction manifest not found in backup: {}",
+            manifest_path.display()
+        ));
+    }
+    let manifest_raw = fs::read_to_string(&manifest_path)
+        .map_err(|e| format!("cannot read manifest: {e}"))?;
+    let manifest: TransactionManifest = serde_json::from_str(&manifest_raw)
+        .map_err(|e| format!("invalid manifest JSON: {e}"))?;
+
+    if manifest.schema_version != SCHEMA_VERSION {
+        return Err(format!(
+            "unsupported manifest schema version {} (expected {})",
+            manifest.schema_version, SCHEMA_VERSION
         ));
     }
 
-    let mut restored = Vec::new();
-    for entry in fs::read_dir(&backup_dir)
-        .map_err(|e| format!("cannot read rollback backup {}: {e}", backup_dir.display()))?
-    {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
-        if file_type.is_symlink() {
-            return Err(format!(
-                "refusing symlink in rollback backup: {}",
-                entry.path().display()
-            ));
-        }
-        if !file_type.is_dir() {
-            continue;
-        }
-        let name = entry.file_name().to_string_lossy().into_owned();
-        validate_skill_name(&name, "rollback skill")?;
-        restored.push(name);
+    if manifest.operation != "deprecated-removal" {
+        return Err(format!(
+            "unexpected manifest operation: {}",
+            manifest.operation
+        ));
     }
 
-    Ok(ActionResult::new(
-        true,
-        "rollback_deprecated_skills_removal",
+    let dest_root = PathBuf::from(&manifest.destination_root);
+
+    // Validate the destination root
+    validate_skill_dest_root(&dest_root)?;
+    reject_symlink_path(&dest_root, "rollback destination root")?;
+
+    // Verify the destination_path matches the recorded destination in the manifest
+    if !path_under_root(&dest_root, &dest_root) {
+        return Err(format!(
+            "destination root validation failure: {}",
+            dest_root.display()
+        ));
+    }
+
+    // ── Preflight: ensure no destination currently has an existing skill dir ──
+    for skill in &manifest.skills {
+        let dest = dest_root.join(&skill.name);
+        if dest.exists() {
+            return Err(format!(
+                "rollback blocked: destination already exists for skill '{}' at {}. Remove it manually or choose a different restore target.",
+                skill.name,
+                dest.display()
+            ));
+        }
+        // Verify the backup source actually exists
+        let backup_src = backup_dir.join(&skill.relative_backup_dir);
+        if !backup_src.is_dir() {
+            return Err(format!(
+                "rollback backup source missing for skill '{}': {}",
+                skill.name,
+                backup_src.display()
+            ));
+        }
+        reject_symlink_path(&backup_src, "rollback source")?;
+    }
+
+    // ── Phase 1: Stage all restores in a same-filesystem staging area ──
+    let staging_base = dest_root
+        .parent()
+        .ok_or_else(|| "cannot determine staging parent".to_string())?;
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("clock")
+        .as_nanos();
+    let staging_dir = staging_base.join(format!(".aw-rollback-staging-{nonce}"));
+
+    let mut staged: Vec<String> = Vec::new();
+
+    let result = (|| -> Result<Vec<String>, String> {
+        for skill in &manifest.skills {
+            let backup_src = backup_dir.join(&skill.relative_backup_dir);
+            let stage_target = staging_dir.join(&skill.name);
+            copy_dir_all(&backup_src, &stage_target)?;
+            staged.push(skill.name.clone());
+        }
+        Ok(staged.clone())
+    })();
+
+    match result {
+        Ok(staged_skills) => {
+            // ── Phase 2: Verify staged content ──
+            for name in &staged_skills {
+                let stage_target = staging_dir.join(name);
+                if !stage_target.join("SKILL.md").is_file() {
+                    // Clean up staging on verification failure
+                    let _ = fs::remove_dir_all(&staging_dir);
+                    return Err(format!(
+                        "staged restore for '{}' missing SKILL.md; rollback aborted",
+                        name
+                    ));
+                }
+            }
+
+            // ── Phase 3: Move staged dirs to final destinations ──
+            let mut moved: Vec<String> = Vec::new();
+            let move_result = (|| -> Result<(), String> {
+                for name in &staged_skills {
+                    let stage_path = staging_dir.join(name);
+                    let dest = dest_root.join(name);
+                    if let Err(e) = rename_path(&stage_path, &dest) {
+                        // Attempt to return already-moved items back to staging
+                        for moved_name in &moved {
+                            let moved_dest = dest_root.join(moved_name);
+                            let back_to_stage = staging_dir.join(moved_name);
+                            let _ = rename_path(&moved_dest, &back_to_stage);
+                        }
+                        return Err(format!("failed to move '{}' to destination: {e}", name));
+                    }
+                    moved.push(name.clone());
+                }
+                Ok(())
+            })();
+
+            match move_result {
+                Ok(()) => {
+                    // Clean up staging
+                    let _ = fs::remove_dir_all(&staging_dir);
+                    Ok(ActionResult::new(
+                        true,
+                        "rollback_deprecated_skills_removal",
+                        format!(
+                            "Successfully restored {} skill(s) from backup: {}",
+                            moved.len(),
+                            moved.join(", ")
+                        ),
+                        String::new(),
+                        Some(0),
+                    ))
+                }
+                Err(e) => {
+                    // Some moves may have succeeded, some may have been returned to staging
+                    let _ = fs::remove_dir_all(&staging_dir);
+                    Err(format!(
+                        "Rollback move failed after staging: {e}. Moved: [{}]. Check destination and staging area.",
+                        moved.join(", ")
+                    ))
+                }
+            }
+        }
+        Err(e) => {
+            // Clean up staging if anything was staged
+            let _ = fs::remove_dir_all(&staging_dir);
+            Err(format!("Rollback staging failed: {e}"))
+        }
+    }
+}
+
+fn rename_path(from: &Path, to: &Path) -> Result<(), String> {
+    fs::rename(from, to).map_err(|e| {
         format!(
-            "rollback backup contains {} skill directories: {}",
-            restored.len(),
-            restored.join(", ")
-        ),
-        format!(
-            "restore manually by copying each directory from {} back to the harness skills destination",
-            backup_dir.display()
-        ),
-        Some(0),
-    ))
+            "rename {} -> {}: {e}",
+            from.display(),
+            to.display()
+        )
+    })
 }
 
 #[cfg(test)]
@@ -587,5 +870,307 @@ mod tests {
         let current = HashSet::from(["caveman".to_string()]);
         let found = scan_deprecated_installed(&workspace, &dest, &current).expect("scan");
         assert!(found.is_empty());
+    }
+
+    #[test]
+    fn preview_creates_no_backup() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-preview");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-preview");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        let preview = preview_removal("codex", &workspace, &dest, &current).expect("preview");
+        assert_eq!(preview.removable_count, 1);
+        // Verify no backup was created by preview
+        assert!(home.join("backups/deprecated-skills").read_dir().is_err()
+            || home.join("backups/deprecated-skills").read_dir().unwrap().count() == 0);
+        // Skill still exists
+        assert!(dest.join("caveman").exists());
+    }
+
+    #[test]
+    fn successful_removal_creates_transaction_manifest() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-manifest");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-manifest");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+
+        // Find backup dir and verify manifest
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let manifest_path = backup_dir_entry.path().join("manifest.json");
+        assert!(manifest_path.is_file(), "manifest.json must exist after successful removal");
+        let manifest_raw = fs::read_to_string(&manifest_path).expect("read manifest");
+        let manifest: TransactionManifest = serde_json::from_str(&manifest_raw).expect("parse manifest");
+        assert_eq!(manifest.schema_version, 1);
+        assert_eq!(manifest.harness, "codex");
+        assert_eq!(manifest.operation, "deprecated-removal");
+        assert_eq!(manifest.skills.len(), 1);
+        assert_eq!(manifest.skills[0].name, "caveman");
+    }
+
+    #[test]
+    fn successful_rollback_restores_all_removed_skills() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-rollback");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-rollback");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+        assert!(!dest.join("caveman").exists(), "skill should be removed");
+
+        // Find backup dir
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_path = backup_dir_entry.path().to_string_lossy().to_string();
+
+        let result = rollback_removal(&backup_path).expect("rollback");
+        assert!(result.success, "rollback should succeed: {}", result.stderr);
+        assert!(dest.join("caveman").exists(), "skill should be restored after rollback");
+    }
+
+    #[test]
+    fn rollback_rejects_arbitrary_backup_path() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-reject-arb");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        // Create a directory that is NOT under deprecated-skills parent
+        let backup_like = home.join("not-deprecated").join("fake-backup");
+        fs::create_dir_all(&backup_like).expect("create backup-like dir");
+        write_file(&backup_like.join("manifest.json"), r#"{}"#);
+        let result = rollback_removal(&backup_like.to_string_lossy());
+        assert!(result.is_err(), "rollback must reject arbitrary path");
+        let err = result.unwrap_err();
+        assert!(err.contains("outside deprecated-skills backups"), "error should mention backup parent check: got: {err}");
+    }
+
+    #[test]
+    fn rollback_rejects_backup_outside_canonical_root() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-outside");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        // Create a backup-like directory NOT under the backup root
+        let fake_backup = temp_root("fake-backup");
+        let fake_dir = fake_backup.join("deprecated-skills").join("fake-123");
+        fs::create_dir_all(&fake_dir).expect("create fake");
+        let result = rollback_removal(&fake_dir.to_string_lossy());
+        assert!(result.is_err(), "must reject backup outside canonical root");
+    }
+
+    #[test]
+    fn rollback_rejects_occupied_destination() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-occupied");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-occupied");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        fs::create_dir_all(&dest).expect("create dest");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+        assert!(!dest.join("caveman").exists());
+
+        // Re-create the destination (simulating external interference)
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\ninterfered: true\n");
+
+        // Find backup dir
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_path = backup_dir_entry.path().to_string_lossy().to_string();
+
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "rollback must reject occupied destination");
+        let err = result.unwrap_err();
+        assert!(err.contains("destination already exists"), "error should mention existing destination");
+    }
+
+    #[test]
+    fn all_backups_complete_before_first_removal() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-all-backups");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        // Set up two deprecated skills
+        let workspace = temp_root("ws-all-backups");
+        write_file(
+            &workspace.join("metadata/deprecated-skills.json"),
+            r#"{"version":1,"skills":["caveman","diagnose"]}"#,
+        );
+        write_file(
+            &workspace.join("metadata/deprecated-skills/caveman/SKILL.md"),
+            "name: caveman\n",
+        );
+        write_file(
+            &workspace.join("metadata/deprecated-skills/diagnose/SKILL.md"),
+            "name: diagnose\n",
+        );
+
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+        write_file(&dest.join("diagnose/SKILL.md"), "name: diagnose\n");
+
+        let current = HashSet::new();
+        // Remove both skills
+        let result = remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+        assert!(result.success);
+        // Both should be removed
+        assert!(!dest.join("caveman").exists());
+        assert!(!dest.join("diagnose").exists());
+
+        // Verify backup has both
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        assert!(backup_dir_entry.path().join("caveman/SKILL.md").is_file());
+        assert!(backup_dir_entry.path().join("diagnose/SKILL.md").is_file());
+        assert!(backup_dir_entry.path().join("manifest.json").is_file());
+    }
+
+    #[test]
+    fn rollback_leaves_diverged_skills_untouched() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-diverged-rollback");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-diverged-rollback");
+        // Two dl skills: caveman (identical, removable) and diagnose (deprecated + diverged)
+        write_file(
+            &workspace.join("metadata/deprecated-skills.json"),
+            r#"{"version":1,"skills":["caveman","diagnose"]}"#,
+        );
+        write_file(
+            &workspace.join("metadata/deprecated-skills/caveman/SKILL.md"),
+            "name: caveman\n",
+        );
+        write_file(
+            &workspace.join("metadata/deprecated-skills/diagnose/SKILL.md"),
+            "name: diagnose\n",
+        );
+
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+        // diverged: has extra content
+        write_file(&dest.join("diagnose/SKILL.md"), "name: diagnose\ncustom: true\n");
+
+        let current = HashSet::new();
+        let result = remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+        assert!(result.success);
+        assert!(!dest.join("caveman").exists(), "identical skill removed");
+        assert!(dest.join("diagnose").exists(), "diverged skill preserved");
+
+        // Find backup dir
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_path = backup_dir_entry.path().to_string_lossy().to_string();
+
+        let result = rollback_removal(&backup_path).expect("rollback");
+        assert!(result.success);
+        assert!(dest.join("caveman").exists(), "removed skill restored");
+        assert!(dest.join("diagnose").exists(), "diverged skill still present");
     }
 }
