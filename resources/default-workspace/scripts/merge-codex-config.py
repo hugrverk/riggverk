@@ -200,90 +200,120 @@ def patch_toml_text(
     return "\n".join(lines) + "\n"
 
 
+def validate_backup_dir(backup_dir: Path | None, target: Path) -> None:
+    """Validate backup_dir when target exists and --apply is requested."""
+    if backup_dir is None:
+        fail(
+            f"--backup-dir is required when applying to existing file: {target}. "
+            "Refusing to mutate existing config without a backup."
+        )
+    if not backup_dir.is_absolute():
+        fail(f"backup_dir must be an absolute path: {backup_dir}")
+    if backup_dir == target.parent:
+        fail(f"backup_dir must not be the target parent directory: {backup_dir}")
+    resolved = backup_dir.resolve()
+    if resolved == Path("/").resolve():
+        fail(f"backup_dir must not be filesystem root: {backup_dir}")
+
+
 def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
     top_level, profiles, fields = load_managed_keys()
 
-    if target.is_file():
-        installed_dict = load_toml(target)
-        if managed_keys_match(installed_dict, managed):
-            return
-
-        existing_text = target.read_text(encoding="utf-8")
-        patched = patch_toml_text(
-            existing_text,
-            top_level,
-            managed,
-            profiles,
-            fields,
-        )
-
-        if patched is None:
-            fail(
-                f"cannot safely patch {target}: ambiguous TOML structure. "
-                "Create a backup manually and use --force-overwrite to replace the full config."
-            )
-
-        # Verify patched output is valid TOML and preserves managed keys
-        try:
-            parsed = tomllib.loads(patched)
-        except tomllib.TOMLDecodeError as exc:
-            fail(f"patched TOML is invalid: {exc}")
-
-        # Verify managed keys match post-patch
-        if not managed_keys_match(parsed, managed):
-            fail(
-                f"patched {target} does not match expected managed keys. "
-                "This may indicate an unsupported TOML structure. "
-                "Create a backup manually and use --force-overwrite."
-            )
-
-        # Verify user-owned keys survive
-        for key in installed_dict:
-            if key not in top_level and key != "profiles":
-                if key not in parsed:
-                    fail(f"patched {target} lost user key '{key}'")
-
-        if backup_dir is not None:
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, backup_dir / target.name)
-
-        target.write_text(patched, encoding="utf-8")
-
-        # Post-write validation: re-parse and verify
-        try:
-            post_parsed = tomllib.loads(target.read_text(encoding="utf-8"))
-        except tomllib.TOMLDecodeError:
-            # Invalid after write - restore from backup
-            if backup_dir is not None and (backup_dir / target.name).exists():
-                shutil.copy2(backup_dir / target.name, target)
-            fail(f"post-write validation failed for {target}: invalid TOML")
-
-        if not managed_keys_match(post_parsed, managed):
-            # Managed keys don't match after write - restore from backup
-            if backup_dir is not None and (backup_dir / target.name).exists():
-                shutil.copy2(backup_dir / target.name, target)
-            fail(f"post-write validation failed for {target}: managed keys mismatch")
-
+    if not target.is_file():
+        # New file: write managed config
+        target.parent.mkdir(parents=True, exist_ok=True)
+        new_lines = []
+        for key in top_level:
+            if key in managed:
+                new_lines.append(f"{key} = {format_toml_scalar(managed[key])}")
+        mp = managed.get("profiles", {})
+        for name in profiles:
+            p = mp.get(name, {})
+            if p:
+                new_lines.append("")
+                new_lines.append(f"[profiles.{name}]")
+                for fld in fields:
+                    if fld in p:
+                        new_lines.append(f"{fld} = {format_toml_scalar(p[fld])}")
+        new_lines.append("")
+        target.write_text("\n".join(new_lines), encoding="utf-8")
         return
 
-    # New file: write managed config
-    target.parent.mkdir(parents=True, exist_ok=True)
-    lines = []
-    top_level, profiles, fields = load_managed_keys()
-    for key in top_level:
-        if key in managed:
-            lines.append(f"{key} = {format_toml_scalar(managed[key])}")
-    mp = managed.get("profiles", {})
-    for name in profiles:
-        p = mp.get(name, {})
-        if p:
-            lines.append("")
-            lines.append(f"[profiles.{name}]")
-            for f in fields:
-                if f in p:
-                    lines.append(f"{f} = {format_toml_scalar(p[f])}")
-    lines.append("")
-    target.write_text("\n".join(lines), encoding="utf-8")
+    # Existing file: backup is mandatory
+    validate_backup_dir(backup_dir, target)
+
+    installed_dict = load_toml(target)
+    if managed_keys_match(installed_dict, managed):
+        return
+
+    existing_text = target.read_text(encoding="utf-8")
+    patched = patch_toml_text(existing_text, top_level, managed, profiles, fields)
+    if patched is None:
+        fail(
+            f"cannot safely patch {target}: ambiguous TOML structure. "
+            "Create a backup manually and use --force-overwrite to replace the full config."
+        )
+
+    # Verify patched output
+    try:
+        parsed = tomllib.loads(patched)
+    except tomllib.TOMLDecodeError as exc:
+        fail(f"patched TOML is invalid: {exc}")
+    if not managed_keys_match(parsed, managed):
+        fail(f"patched {target} does not match expected managed keys")
+    for key in installed_dict:
+        if key not in top_level and key != "profiles":
+            if key not in parsed:
+                fail(f"patched {target} lost user key '{key}'")
+
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / target.name
+    shutil.copy2(target, backup_path)
+    if not backup_path.is_file():
+        fail(f"backup creation failed: {backup_path}")
+
+    # Write through staged file
+    staged = target.with_suffix(target.suffix + ".tmp")
+    try:
+        staged.write_text(patched, encoding="utf-8")
+    except OSError as exc:
+        if staged.exists():
+            staged.unlink()
+        fail(f"staged write failed for {staged}: {exc}")
+
+    # Validate staged file
+    try:
+        post_parsed = tomllib.loads(staged.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError:
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(f"staged validation failed for {target}: invalid TOML, restored from backup")
+    if not managed_keys_match(post_parsed, managed):
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(f"staged validation failed for {target}: managed keys mismatch, restored from backup")
+    for key in installed_dict:
+        if key not in top_level and key != "profiles":
+            if key not in post_parsed:
+                staged.unlink()
+                shutil.copy2(backup_path, target)
+                fail(f"staged validation failed for {target}: lost user key '{key}', restored from backup")
+
+    # Atomic replace
+    staged.replace(target)
+    if not target.is_file():
+        shutil.copy2(backup_path, target)
+        fail(f"atomic replace failed for {target}, restored from backup")
+
+    # Final verification
+    try:
+        final_parsed = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError:
+        shutil.copy2(backup_path, target)
+        fail(f"final validation failed for {target}: invalid TOML, restored from backup")
+    if not managed_keys_match(final_parsed, managed):
+        shutil.copy2(backup_path, target)
+        fail(f"final validation failed for {target}: managed keys mismatch, restored from backup")
 
 
 def main() -> None:

@@ -119,7 +119,7 @@ fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
     }
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[allow(dead_code)]
 fn path_under_root(child: &Path, root: &Path) -> bool {
     match (child.canonicalize(), root.canonicalize()) {
         (Ok(c), Ok(r)) => c == r || c.starts_with(&r),

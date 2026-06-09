@@ -374,10 +374,8 @@ if $apply; then
       ts="$(date -u +%Y%m%d-%H%M%S)"
       backup_dir="$BACKUP_ROOT/$ts/opencode-config"
       mkdir -p "$backup_dir"
-      backup_file="$backup_dir/opencode.json"
-      cp "$TARGET" "$backup_file"
-      if ! $quiet; then printf '  opencode config backed up to %s\n' "$backup_file"; fi
-      python3 "$MERGE_SCRIPT" --apply "$TARGET" "$rendered_opencode"
+      if ! $quiet; then printf '  opencode config will be backed up to %s\n' "$backup_dir/opencode.json"; fi
+      python3 "$MERGE_SCRIPT" --apply "$TARGET" "$rendered_opencode" --backup-dir "$backup_dir"
       if ! $quiet; then printf '  opencode config managed keys synced\n'; fi
     fi
   elif should_sync_config; then

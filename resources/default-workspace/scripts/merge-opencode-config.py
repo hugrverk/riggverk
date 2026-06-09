@@ -85,42 +85,102 @@ def write_json(path: Path, value: dict[str, Any]) -> None:
     path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def validate_backup_dir(backup_dir: Path | None, target: Path) -> None:
+    """Validate backup_dir when target exists and --apply is requested."""
+    if backup_dir is None:
+        fail(
+            f"--backup-dir is required when applying to existing file: {target}. "
+            "Refusing to mutate existing config without a backup."
+        )
+    if not backup_dir.is_absolute():
+        fail(f"backup_dir must be an absolute path: {backup_dir}")
+    if backup_dir == target.parent:
+        fail(f"backup_dir must not be the target parent directory: {backup_dir}")
+    resolved = backup_dir.resolve()
+    if resolved == Path("/").resolve():
+        fail(f"backup_dir must not be filesystem root: {backup_dir}")
+
+
 def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
-    if target.is_file():
-        installed = load_json(target)
-        if not isinstance(installed, dict):
-            fail(f"installed config must be a JSON object: {target}")
-        merged = merge_managed(installed, managed)
-        if managed_keys_match(installed, managed):
-            return
-        if backup_dir is not None:
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            shutil.copy2(target, backup_dir / target.name)
-        write_json(target, merged)
-        # Post-write validation
-        try:
-            post_parsed = load_json(target)
-        except SystemExit:
-            if backup_dir is not None and (backup_dir / target.name).exists():
-                shutil.copy2(backup_dir / target.name, target)
-            fail(f"post-write validation failed for {target}: invalid JSON")
-        if not isinstance(post_parsed, dict):
-            if backup_dir is not None and (backup_dir / target.name).exists():
-                shutil.copy2(backup_dir / target.name, target)
-            fail(f"post-write validation failed for {target}: not a JSON object")
-        if not managed_keys_match(post_parsed, managed):
-            if backup_dir is not None and (backup_dir / target.name).exists():
-                shutil.copy2(backup_dir / target.name, target)
-            fail(f"post-write validation failed for {target}: managed keys mismatch")
-        # Verify user provider still present
-        user_provider = installed.get("provider")
-        if user_provider is not None and post_parsed.get("provider") != user_provider:
-            fail(f"post-write validation failed for {target}: provider block modified")
+    if not target.is_file():
+        if not isinstance(managed, dict):
+            fail("managed config must be a JSON object")
+        write_json(target, managed)
         return
 
-    if not isinstance(managed, dict):
-        fail("managed config must be a JSON object")
-    write_json(target, managed)
+    installed = load_json(target)
+    if not isinstance(installed, dict):
+        fail(f"installed config must be a JSON object: {target}")
+    merged = merge_managed(installed, managed)
+    if managed_keys_match(installed, managed):
+        return
+
+    # Backup is mandatory when mutating an existing file
+    validate_backup_dir(backup_dir, target)
+    backup_dir = backup_dir  # type: ignore[assignment] - validated non-None above
+
+    backup_dir.mkdir(parents=True, exist_ok=True)
+    backup_path = backup_dir / target.name
+    shutil.copy2(target, backup_path)
+    if not backup_path.is_file():
+        fail(f"backup creation failed: {backup_path}")
+
+    # Write through a staged file in the target directory
+    staged = target.with_suffix(target.suffix + ".tmp")
+    try:
+        write_json(staged, merged)
+    except Exception as exc:
+        if staged.exists():
+            staged.unlink()
+        fail(f"staged write failed for {staged}: {exc}")
+
+    # Validate staged file
+    try:
+        post_parsed = load_json(staged)
+    except SystemExit:
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(f"staged validation failed for {target}: invalid JSON")
+
+    if not isinstance(post_parsed, dict):
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(f"staged validation failed for {target}: not a JSON object")
+
+    if not managed_keys_match(post_parsed, managed):
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(f"staged validation failed for {target}: managed keys mismatch")
+
+    # Verify user provider still present
+    user_provider = installed.get("provider")
+    if user_provider is not None and post_parsed.get("provider") != user_provider:
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(
+            f"staged validation failed for {target}: provider block modified. "
+            f"Original restored from {backup_path}."
+        )
+
+    # Atomic replace: rename staged -> target
+    staged.replace(target)
+    # Verify final state
+    if not target.is_file():
+        shutil.copy2(backup_path, target)
+        fail(f"atomic replace failed for {target}, restored from backup")
+
+    try:
+        final_parsed = load_json(target)
+    except SystemExit:
+        shutil.copy2(backup_path, target)
+        fail(f"final validation failed for {target}: invalid JSON, restored from backup")
+
+    if not managed_keys_match(final_parsed, managed):
+        shutil.copy2(backup_path, target)
+        fail(
+            f"final validation failed for {target}: managed keys mismatch, "
+            f"restored from {backup_path}"
+        )
 
 
 def main() -> None:

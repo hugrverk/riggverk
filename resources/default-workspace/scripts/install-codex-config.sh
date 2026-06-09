@@ -148,8 +148,7 @@ if [ "$apply" -eq 1 ]; then
     ts="$(date -u +%Y%m%d-%H%M%S)"
     backup_dir="$(backup_root)/$ts/codex-config"
     mkdir -p "$backup_dir"
-    cp "$target_config" "$backup_dir/config.toml"
-    python3 "$MERGE_SCRIPT" --apply "$target_config" "$source_config"
+    python3 "$MERGE_SCRIPT" --apply "$target_config" "$source_config" --backup-dir "$backup_dir"
     [ "$quiet" -eq 1 ] && printf '%-15s merged\n' "codex-config" || printf 'Merged managed sections into: %s\n' "$target_config"
   else
     mkdir -p "$(dirname "$target_config")"
