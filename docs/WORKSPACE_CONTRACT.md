@@ -1,129 +1,158 @@
 # Workspace Contract
 
-## What a workspace folder is
+## Scope
 
-A workspace folder is a user-owned data directory containing configuration, documentation, skills, templates, and scripts that can be synced to agent tool folders. It is identified by `.agent-workspace/workspace.json` and a set of required workspace markers.
+A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and allowlisted scripts. It is separate from the Agent Workspace source repository.
 
-Workspace contents are user-writable and can be git-versioned. The workspace folder does not need to contain the Agent Workspace app source code. The app operates on a workspace folder, not the other way around.
+The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`; `AGENT_WORKSPACE_PATH` may override it for development and tests.
 
-## Current required markers
+## Required runtime markers
 
-Workspace validation checks for these markers inside the workspace root.
-Markers are split into two categories: generic runtime markers (required for every
-workspace) and bundled default resources (shipped with the app, not strictly required).
+A valid workspace contains:
 
-### Generic runtime markers (always required)
+- `.agent-workspace/workspace.json`
+- `README.md`
+- `skills/`
+- `templates/global-agent-rules.md`
+- `templates/opencode.json`
+- `templates/codex/config.toml`
+- `templates/cursor/manifest.json`
+- `templates/cursor/agents/`
+- `templates/cursor/rules/`
+- `templates/cursor/mcp/mcp.example.json`
+- `scripts/bootstrap.sh`
+- `scripts/install-agent-rules.sh`
+- `scripts/install-runtime-agents.sh`
+- `scripts/install-opencode-config.sh`
+- `scripts/install-codex-config.sh`
+- `scripts/install-skills.sh`
+- `scripts/install-cursor-workspace.sh`
 
-| Marker | Kind | Purpose |
-|--------|------|---------|
-| `.agent-workspace/workspace.json` | file | Workspace identity marker |
-| `scripts/bootstrap.sh` | file | Full bootstrap script |
-| `scripts/install-agent-rules.sh` | file | Agent rules sync script |
-| `scripts/install-opencode-config.sh` | file | OpenCode config sync script |
-| `scripts/install-codex-config.sh` | file | Codex config sync script |
-| `scripts/install-skills.sh` | file | Skill install script |
-| `scripts/install-cursor-workspace.sh` | file | Cursor manual helpers and CLI-only project setup script (no global agent writes) |
-| `templates/global-agent-rules.md` | file | Agent rules template |
-| `templates/opencode.json` | file | OpenCode config template |
-| `templates/codex/config.toml` | file | Codex config template |
-| `templates/cursor/agents/` | directory | Cursor subagent adapter templates |
-| `templates/cursor/rules/` | directory | Cursor project rule templates dir (must contain at least one `.mdc` file) |
-| `templates/cursor/manifest.json` | file | Cursor profile manifest |
-| `templates/cursor/mcp/mcp.example.json` | file | Cursor MCP example using env placeholders |
-| `README.md` | file | Workspace readme |
-| `skills/` | directory | Skill definitions |
+Validation is read-only. It does not run scripts, install files, or inspect credential-bearing state.
 
-Cursor project rules are split into focused `.mdc` files. At least one rule must be always-applied, and not all rules should be always-applied.
+## Bundled resources
 
-All generic markers must be present for a workspace to pass validation. A folder
-missing any marker is rejected.
+The default workspace currently contains 21 bundled skills, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
-### Bundled default workspace resources (app-shipped, not runtime-required)
+Bundled resources are copied only by explicit install, repair, or update-resources actions. These actions:
 
-The following files are shipped with the app as bundled starter content but are
-**not** required for generic workspace validity:
+- write only below the resolved workspace root
+- copy missing or zero-byte bundled files
+- never overwrite non-empty user edits
+- never execute copied scripts
+- reject unsafe paths and symlink escapes
 
-| Resource | Purpose |
-|----------|---------|
- | `templates/cursor/README.md` | Cursor setup source note (bundled default doc) |
-| `templates/cursor/rules/core-safety.mdc` | Always-applied Cursor core safety project rule |
-| `templates/tui.json` | OpenCode TUI config template |
-| `templates/opencode.base.json` | OpenCode config base (non-permission settings) |
-| `templates/opencode.policy.json` | OpenCode permission policy (compact format) |
-| `scripts/generate-opencode-config.py` | OpenCode config snapshot generator (workspace-relative) |
-| `agents/` directory + 6 agent files | OpenCode agent definitions |
+## Skill source layout
 
-These files are included when creating a new workspace from defaults but are
-not validated against arbitrary existing workspaces.
+The source workspace supports exactly these layouts:
 
-## What a workspace is not
+```text
+skills/<skill>/SKILL.md
+skills/<group>/<skill>/SKILL.md
+```
 
-- The workspace folder is not the app source checkout. The app source lives in the repository root and is separate from any workspace folder.
-- The workspace is not a generic sync target. All backend actions remain allowlisted and only operate on known-marker paths within the validated workspace root.
-- The workspace does not contain secrets, private keys, or credential-bearing data. `.env` files and similar are outside the workspace contract.
+One optional group level is supported for source organization. Kretsverket skills use `skills/kretsverket/<skill>/SKILL.md`.
 
-## User ownership
+Any deeper `SKILL.md` is invalid. Validators scan descendants only to detect illegal nesting; they do not recursively discover arbitrary skill trees. Symlinked skill roots, groups, skill directories, and nested descendants are rejected.
 
-All workspace contents (docs, skills, templates, scripts) are user-owned and user-editable. The app reads and displays these files; it does not hide or encrypt them. Users can version their workspace with git like any normal directory.
+Skill names from frontmatter must be globally unique across root-level and grouped sources.
 
-The app supports editing curated workspace docs through an allowlisted doc registry and editing custom context docs under `docs/context/`. Only known doc ids and valid custom slugs can be written, and only within the validated workspace root. Existing content is backed up before overwrite when changed. Custom docs are app-managed by strict slug format (`^[a-z0-9][a-z0-9-]*$`), stored at `docs/context/<slug>.md`. No subdirectories or recursion. Custom doc title is persisted as a Markdown H1 in the document content; when no H1 is present, the title falls back to the slug-derived name. `save_doc` rejects missing custom docs — `create_doc` owns creation.
+## Installed skill layout
 
-The app supports editing allowlisted config templates. OpenCode config sources are editable through the Library Configs editor and writes stay inside the workspace source templates, not installed target config paths. Cursor setup is native setup, so it remains available to sync/status flows but is not editable as a config template or README pseudo-config. Save is separate from sync — sync applies enabled config/setup targets via allowlisted scripts or native adapters.
+Source grouping never changes harness installation layout. Every supported skill installs flat:
 
-The app supports editing `templates/global-agent-rules.md` through the allowlisted `save_agent_template` command. The command resolves the template path internally under the validated workspace root and accepts no frontend-supplied paths. Save writes only the workspace source template; it does not sync installed rule targets. Installed agent rule files (e.g., `~/.codex/AGENTS.md`) are updated only by the separate sync/apply action.
+```text
+<harness-skill-root>/<skill-name>/SKILL.md
+```
 
-Cursor support is native and scoped: skills install to Cursor skill folders; the app applies a **global setup** only (`~/.cursor/agents`, `~/.cursor/skills`, `~/.cursor/mcp.json`) and never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Apply may remove a legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry from `~/.cursor/permissions.json` when present. Project rules and project-target installs exist only for manual CLI use (`install-cursor-workspace.sh --project`, `--project-rules`). Cursor User Rules are version-controlled as `templates/cursor/user-rules.md` (separate from cross-tool `templates/global-agent-rules.md`). The app must not auto-write a file-backed Cursor User Rules path. The versioned file supports `--show-user-rules` and `--copy-user-rules` for manual setup. MCP examples must use environment interpolation for auth-like values.
+Global destinations:
 
-## Workspace lifecycle
+- Codex: `~/.agents/skills`
+- OpenCode: `~/.config/opencode/skills`
+- Claude Code: `~/.claude/skills`
+- Cursor: `~/.cursor/skills`
 
-The workspace marker directory `.agent-workspace/` and the `AGENT_WORKSPACE_PATH` / `AGENT_WORKSPACE_BACKUP_DIR` environment variables are established parts of the workspace contract.
+All 21 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
-User-owned workspace folders store docs, skills, templates, and config without containing app source code. Workspace create uses bundled defaults from `resources/default-workspace/`. Repair and **update resources** copy only missing (or zero-byte) bundled files and never overwrite non-empty user edits.
+## Skill ownership and cleanup
 
-## Script location
+Installed skill files are user-owned after installation. Agent Workspace may:
 
-Currently, workspace scripts (bootstrap, install, sync) live inside the workspace folder. The app executes them via allowlisted arguments. In a future model these scripts could be:
+- create missing managed copies
+- report synced or diverged copies
+- repair missing copies
+- remove only known deprecated copies that still match an Agent Workspace reference snapshot
 
-- Bundled with the app (generic versions).
-- Upgraded in-place by the app from bundled defaults.
-- Kept entirely in the workspace (user-customized copies).
+Diverged deprecated copies and unknown skills are preserved.
 
-Script-backed actions will remain allowlisted regardless of where the scripts live.
+Deprecated removal creates a transaction backup before deletion. Rollback validates the transaction, resolves the current destination from the harness registry, rejects destination mismatch and occupied targets, stages restores, and preserves the backup transaction.
 
-## Bundled default workspace resources
+## Rules
 
-The app source carries a shared default workspace under `resources/default-workspace/`. This tree includes a workspace marker, a README, docs, templates, agents, real install/sync scripts, Cursor setup assets, and 21 bundled skills.
+`templates/global-agent-rules.md` is the editable shared core. Harness appendices live under `templates/rules/`. Generated composed rules live under `templates/sync/`.
 
-These resources are bundled as Tauri app resources and are available at runtime in both the built `.app` bundle and dev/source checkout mode. They are resolved via the Tauri resource directory in built apps, with a source-tree fallback for dev mode.
+Installed rule targets:
 
-A newly created default workspace includes real sync and install scripts plus five focused Cursor adapter templates under `templates/cursor/agents/`. Rule sync targets: Codex, OpenCode, Claude. Skill install targets (app: global only): Codex, OpenCode, Claude, Cursor. Config/setup sync targets: OpenCode config (snapshot + TUI + Playwright MCP), shared runtime agents (`agents/*.md` → OpenCode/Claude agent dirs via `install-runtime-agents.sh`), and Cursor adapter agents (`templates/cursor/agents/` → `~/.cursor/agents`). All app writes are explicit apply/install actions to global/home paths and are allowlisted. Backups are created before overwriting diverged target files. The app does not drive project checkout sync or install. Bundled CLI scripts may still accept `--project --target` when run manually; those flags are CLI-only and outside app workflow.
+- Codex: `~/.codex/AGENTS.md`
+- OpenCode: `~/.config/opencode/AGENTS.md`
+- Claude Code: `~/.claude/CLAUDE.md`
 
-These resources are not automatically copied into the active workspace. A repair flow (`plan_workspace_repair` / `apply_workspace_repair`) copies only missing bundled files into an existing workspace. Repair never overwrites user edits, never executes scripts, and rejects unsafe paths.
+Rule writes are explicit, allowlisted, backed up when replacing diverged files, and separate from editing workspace source templates.
 
-The default workspace content is read-only source material. It does not contain user data or secrets. User workspaces remain user-owned and are separate from the bundled defaults.
+## Agents
 
-The Workspace (Start) page shows install/repair diagnostics and a missing-bundled-files count. It does not render a full bundled-file preview list. **Install** creates the canonical runtime workspace; **repair** and **update resources** copy only missing bundled files into the resolved workspace path (`AGENT_WORKSPACE_PATH`, valid saved `workspace_path`, or the canonical install path). Those actions never overwrite existing user files and never execute scripts.
+Shared semantic instructions live under `agent-specs/`. `scripts/generate-agent-adapters.py` creates harness-native adapters.
 
-Workspace creation planning exists in the backend for tests and future use; the app UI does not expose a path chooser or create-workspace flow.
+Harness ownership:
 
-## Skill layout
+- OpenCode: Markdown agents under `agents/`
+- Claude Code: native Markdown subagents under `templates/claude/agents/`
+- Codex: TOML agents under `templates/codex/agents/`
+- Cursor: native Markdown agents under `templates/cursor/agents/`
 
-Canonical skill files live at `skills/<skill>/SKILL.md` — one directory per skill, directly under `skills/`.
+Claude Code receives five native subagents: repo-scout, inspector, sentinel, scribe, and verifier. Claude-specific tool and permission metadata belongs in Claude headers, not shared semantic bodies.
 
-Nested layouts such as `skills/<group>/<skill>/SKILL.md` are not part of the workspace contract. Skill discovery ignores nested skills entirely, and the workspace contract validator reports them as a failure when they are present. All skills must follow the root-level layout.
+Cursor receives six global agents: repo-scout, inspector, security-reviewer, verifier, browser-qa, and release-checker.
 
-This is generic app behavior, not specific to any particular workspace or group.
+Generated outputs must match their source bodies and native metadata. Repository checks fail on stale adapters.
 
-## Validation
+## Config ownership
 
-Workspace validation is read-only. It checks for required markers and reports their presence. It does not execute scripts, read file contents beyond marker existence checks, or write to the filesystem. Diagnostics are visible in the app Workspace view; the backend command `get_workspace_diagnostics` reports marker-level results without running any scripts.
+### OpenCode
 
-The workspace path is resolved in this order:
+Agent Workspace owns only allowlisted managed keys and the named Playwright MCP entry. Unknown keys, user provider blocks, and other MCP entries are preserved.
 
-1. `AGENT_WORKSPACE_PATH` environment variable (when set and non-empty; dev/test override).
-2. `workspace_path` in app settings (when set to a valid non-legacy custom path).
-3. Canonical installed path: `~/.config/agent-workspace`.
+The editable sources are:
 
-The previous default `~/Agent Workspace` is deprecated. Saved settings that still point at the old path are normalized away on load. The app does not delete or modify an existing `~/Agent Workspace` folder automatically.
+- `templates/opencode.base.json`
+- `templates/opencode.policy.json`
 
-Validation passes when all markers exist at the resolved canonical path. It fails with a descriptive error when any marker is missing or when the path cannot be resolved.
+`templates/opencode.json` is generated and read-only in the Library editor.
+
+### Codex
+
+Agent Workspace manages a narrow set of documented top-level and profile fields in `~/.codex/config.toml`. User model selection, unrelated profiles, MCP entries, comments, and unsupported structures are preserved or cause a manual-review refusal.
+
+### Claude Code
+
+Agent Workspace manages Claude rules, native subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
+
+### Cursor
+
+Cursor global agents, canonical skills, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
+
+## Backups and writes
+
+Writes use allowlisted targets and explicit arguments. Existing managed files are backed up before replacement. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes.
+
+The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
+
+## Repair
+
+Workspace repair and update-resources restore missing bundled source files only. Harness repair installs missing managed resources but does not silently overwrite diverged user files or delete unknown resources.
+
+## Security boundaries
+
+The workspace must not contain credentials or private runtime state. Agent Workspace does not inspect `.env` files, private keys, auth stores, OAuth state, shell history, Claude trust state, or unrelated personal files.
+
+No frontend-supplied shell strings, `sh -c`, unrestricted paths, or generic filesystem browsing are part of the contract.
