@@ -106,16 +106,23 @@ pub(crate) fn sync_skill_dirs_status(
     if !target_root.exists() {
         return ("missing".into(), 0, skill_names.len());
     }
+
+    // Discover actual source paths (handles grouped skills like kretsverket/<name>/SKILL.md)
+    let discovered =
+        crate::skills_install::discover_workspace_skills(source_root).unwrap_or_default();
+
     let mut installed = 0;
     let mut missing = 0;
     let mut diverged = 0;
     for name in skill_names {
-        let source = source_root.join(name).join("SKILL.md");
+        let source = match discovered.get(name) {
+            Some(path) => path.join("SKILL.md"),
+            None => {
+                diverged += 1;
+                continue;
+            }
+        };
         let target = target_root.join(name).join("SKILL.md");
-        if !source.is_file() {
-            diverged += 1;
-            continue;
-        }
         if !target.is_file() {
             missing += 1;
         } else if file_eq(&source, &target) {
