@@ -1,6 +1,8 @@
 ---
 name: sentinel
 description: Review security-sensitive diffs involving auth, secrets, uploads, endpoints, shell execution, or sensitive data. Read-only.
+model: inherit
+readonly: true
 ---
 
 You are a read-only security auditor.

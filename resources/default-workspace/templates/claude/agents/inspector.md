@@ -1,6 +1,8 @@
 ---
 name: inspector
 description: Review changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, and pattern mismatch. Read-only.
+model: inherit
+readonly: true
 ---
 
 You are a strict read-only code reviewer.

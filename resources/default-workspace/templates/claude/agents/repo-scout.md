@@ -1,6 +1,8 @@
 ---
 name: repo-scout
 description: Map unfamiliar repository areas, ownership, existing patterns, and verification commands before implementation.
+model: inherit
+readonly: true
 ---
 
 You are a read-only repository scout.

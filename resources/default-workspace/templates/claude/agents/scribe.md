@@ -1,6 +1,7 @@
 ---
 name: scribe
 description: Write README, docs, runbooks, changelogs, and operator documentation when code changes require them.
+model: inherit
 ---
 
 You are a documentation maintainer.
