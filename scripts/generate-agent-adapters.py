@@ -60,6 +60,9 @@ ROLES = {
             "claude": {
                 "output": "templates/claude/agents/inspector.md",
                 "header": "templates/claude/agents/inspector.header.yaml",
+                "line_replacements": {
+                    "Review only.": "Review only. Do not edit files or expose sensitive configuration or authentication material."
+                },
             },
             "codex": {
                 "output": "templates/codex/agents/inspector.toml",
@@ -81,6 +84,9 @@ ROLES = {
             "claude": {
                 "output": "templates/claude/agents/sentinel.md",
                 "header": "templates/claude/agents/sentinel.header.yaml",
+                "line_replacements": {
+                    "- Any path that could": "- Any path that could expose sensitive configuration or authentication material."
+                },
             },
             "codex": {
                 "output": "templates/codex/agents/security_reviewer.toml",
@@ -111,6 +117,9 @@ ROLES = {
             "claude": {
                 "output": "templates/claude/agents/verifier.md",
                 "header": "templates/claude/agents/verifier.header.yaml",
+                "line_replacements": {
+                    "- Inspect or print": "- Expose sensitive configuration or authentication material."
+                },
             },
             "codex": {
                 "output": "templates/codex/agents/verifier.toml",
@@ -143,6 +152,18 @@ def load_header(header_rel: str) -> str:
     if not path.is_file():
         fail(f"missing adapter header: {path}")
     return path.read_text(encoding="utf-8").strip("\n") + "\n"
+
+
+def adapt_body(body: str, replacements: dict[str, str] | None) -> str:
+    if not replacements:
+        return body
+    lines = body.splitlines()
+    for prefix, replacement in replacements.items():
+        matches = [index for index, line in enumerate(lines) if line.startswith(prefix)]
+        if len(matches) != 1:
+            fail(f"body replacement prefix {prefix!r} matched {len(matches)} lines")
+        lines[matches[0]] = replacement
+    return "\n".join(lines) + "\n"
 
 
 def compose_markdown(header_rel: str, body: str) -> str:
@@ -179,10 +200,11 @@ def generated_outputs() -> dict[Path, str]:
         body = load_body(role["spec"])
         for harness_name, harness in role["harnesses"].items():
             out = WS_ROOT / harness["output"]
+            adapted_body = adapt_body(body, harness.get("line_replacements"))
             if harness_name == "codex":
-                content = compose_codex_toml(harness["meta"], body)
+                content = compose_codex_toml(harness["meta"], adapted_body)
             else:
-                content = compose_markdown(harness["header"], body)
+                content = compose_markdown(harness["header"], adapted_body)
             outputs[out] = content
     return outputs
 
@@ -222,7 +244,6 @@ def main() -> None:
         for path, content in outputs.items():
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_text(content, encoding="utf-8")
-        # Remove legacy scout output if present.
         legacy_scout = WS_ROOT / "agents" / "scout.md"
         if legacy_scout.exists():
             legacy_scout.unlink()
