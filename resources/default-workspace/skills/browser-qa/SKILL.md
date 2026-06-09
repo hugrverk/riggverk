@@ -3,7 +3,7 @@ name: browser-qa
 description: Verify frontend changes in a live browser or browser automation with route smoke tests, interactions, responsive checks, console/network review, and concise evidence.
 category: frontend
 risk: medium
-targets: codex, opencode, claude
+targets: codex, opencode, claude, cursor
 related: screenshot-review, accessibility-review, frontend-design
 ---
 

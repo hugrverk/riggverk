@@ -137,6 +137,12 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
         let entry_name = entry.file_name().to_string_lossy().into_owned();
         let root_skill_md = entry_path.join("SKILL.md");
         if root_skill_md.is_file() {
+            if has_deeper_skill_md(&entry_path) {
+                return Err(format!(
+                    "skill nesting deeper than one group level is not supported: {}",
+                    entry_path.display()
+                ));
+            }
             register_discovered_skill(&mut mapping, &entry_path, &root_skill_md, &entry_name)?;
             continue;
         }

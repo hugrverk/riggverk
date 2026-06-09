@@ -3,7 +3,7 @@ name: accessibility-review
 description: Review user interfaces for practical WCAG 2.2 AA accessibility risks around semantics, controls, keyboard, focus, labels, contrast, and responsive usability.
 category: accessibility
 risk: low
-targets: codex, opencode, claude
+targets: codex, opencode, claude, cursor
 related: frontend-design, browser-qa
 ---
 

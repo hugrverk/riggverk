@@ -3,7 +3,7 @@ name: current-docs
 description: Check official or primary current documentation when implementation depends on version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior.
 category: docs
 risk: low
-targets: codex, opencode, claude
+targets: codex, opencode, claude, cursor
 related: dependency-evaluation
 ---
 

@@ -167,6 +167,10 @@ discover_skills() {
     entry_name="$(basename "$entry")"
     local root_skill_md="$entry/SKILL.md"
     if [ -f "$root_skill_md" ]; then
+      if has_deeper_skill_md "$entry"; then
+        printf 'install-skills.sh: skill nesting deeper than one group level is not supported: %s\n' "$entry" >&2
+        exit 1
+      fi
       register_discovered_skill "$entry" "$root_skill_md" "$entry_name" "$entry_name"
       continue
     fi

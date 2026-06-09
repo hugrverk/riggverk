@@ -3,7 +3,7 @@ name: security-review
 description: Review security risks when code touches auth, authorization, user input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data.
 category: security
 risk: high
-targets: codex, opencode, claude
+targets: codex, opencode, claude, cursor
 related: diagnose, release-check
 ---
 

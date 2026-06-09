@@ -35,6 +35,8 @@ EXPECTED_SKILLS = {
     "zoom-out",
 }
 
+ALL_HARNESSES = {"codex", "opencode", "claude", "cursor"}
+
 REMOVED_SKILLS = {
     "agent-report-review",
     "caveman",
@@ -99,6 +101,10 @@ def discover_skills() -> dict[str, Path]:
             continue
         root_md = entry / "SKILL.md"
         if root_md.is_file():
+            # Reject nested SKILL.md under a flat root skill
+            for sub in sorted(entry.iterdir()):
+                if sub.is_dir() and (sub / "SKILL.md").is_file():
+                    fail(f"unsupported deep skill nesting: {(sub / 'SKILL.md')}")
             meta = parse_frontmatter(root_md)
             name = meta.get("name") or entry.name
             if name in discovered:
@@ -131,6 +137,17 @@ def validate_skill_metadata(discovered: dict[str, Path]) -> None:
             fail(f"{path}: missing description frontmatter")
         if meta.get("name") != name:
             fail(f"{path}: frontmatter name {meta.get('name')!r} != discovered {name!r}")
+        targets_raw = meta.get("targets", "")
+        targets = {t.strip() for t in targets_raw.split(",") if t.strip()}
+        if targets != ALL_HARNESSES:
+            missing = ALL_HARNESSES - targets
+            extra = targets - ALL_HARNESSES
+            msg_parts = []
+            if missing:
+                msg_parts.append(f"missing targets: {sorted(missing)}")
+            if extra:
+                msg_parts.append(f"unknown targets: {sorted(extra)}")
+            fail(f"{path}: {name} targets must be exactly {sorted(ALL_HARNESSES)}; {'; '.join(msg_parts)}")
 
 
 def extract_skill_tokens(text: str) -> set[str]:

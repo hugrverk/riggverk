@@ -118,6 +118,12 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
         let root_skill_md = entry_path.join("SKILL.md");
         reject_symlink_path(&root_skill_md, "skill file")?;
         if root_skill_md.is_file() {
+            if has_deeper_skill_md(&entry_path) {
+                return Err(format!(
+                    "skill nesting deeper than one group level is not supported: {}",
+                    entry_path.display()
+                ));
+            }
             discovered.push(skill_summary_from_path(
                 root,
                 &root_skill_md,

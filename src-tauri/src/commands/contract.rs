@@ -291,6 +291,10 @@ fn discover_contract_skills(root: &Path) -> (Vec<ContractSkill>, Vec<String>) {
 
         let flat_md = path.join("SKILL.md");
         if flat_md.is_file() {
+            if contract_has_deeper_skill_md(&path) {
+                collect_deep_skill_paths(root, &path, &mut legacy_paths);
+                continue;
+            }
             let content = std::fs::read_to_string(&flat_md).unwrap_or_default();
             let skill_name = extract_frontmatter_field(&content, "name");
             let description = extract_frontmatter_field(&content, "description");
