@@ -1209,54 +1209,8 @@ if ! search_quiet 'get_webview_window\("main"\)' src-tauri/src/lib.rs \
 fi
 printf '  main window startup maximize hook verified\n'
 
-step "bundled default skills non-empty"
-skill_files="$(find resources/default-workspace/skills -type f -name SKILL.md)"
-if [ -z "$skill_files" ]; then
-  printf 'FAIL: bundled default skills must be non-empty\n' >&2
-  exit 1
-fi
-invalid="$(printf '%s\n' "$skill_files" | grep -vE '/skills/[^/]+/SKILL\.md$' || true)"
-if [ -n "$invalid" ]; then
-  printf 'FAIL: SKILL.md at unexpected depth (must be skills/<name>/SKILL.md):\n%s\n' "$invalid" >&2
-  exit 1
-fi
-
-step "bundled default skill frontmatter names valid"
-while IFS= read -r f; do
-  skill_dir="$(basename "$(dirname "$f")")"
-  name_line="$(sed -n 's/^name:[[:space:]]*//p' "$f" | head -n 1)"
-  if [ -z "$name_line" ]; then
-    printf 'FAIL: %s missing name frontmatter\n' "$f" >&2
-    exit 1
-  fi
-  if [ "$name_line" != "$skill_dir" ]; then
-    printf 'FAIL: %s frontmatter name "%s" does not match directory "%s"\n' "$f" "$name_line" "$skill_dir" >&2
-    exit 1
-  fi
-done < <(printf '%s\n' "$skill_files")
-
-step "bundled default baseline skills exist"
-for baseline in diagnose security-review context-budget to-prd grill-with-docs improve-codebase-architecture prototype handoff; do
-  if [ ! -f "resources/default-workspace/skills/${baseline}/SKILL.md" ]; then
-    printf 'FAIL: baseline bundled skill missing: skills/%s/SKILL.md\n' "$baseline" >&2
-    exit 1
-  fi
-done
-
-step "bundled default shared skill count"
-skill_count="$(find resources/default-workspace/skills -type f -name SKILL.md | wc -l | tr -d ' ')"
-if [ "$skill_count" -ne 28 ]; then
-  printf 'FAIL: expected 28 shared bundled skills, found %s\n' "$skill_count" >&2
-  exit 1
-fi
-
-step "bundled default shared domain skills exist"
-for domain_skill in wordpress-woocommerce woocommerce-pdp-review nextjs-product-slice supabase-rls-review; do
-  if [ ! -f "resources/default-workspace/skills/${domain_skill}/SKILL.md" ]; then
-    printf 'FAIL: shared domain skill missing: skills/%s/SKILL.md\n' "$domain_skill" >&2
-    exit 1
-  fi
-done
+step "bundled skill catalog and routing alignment"
+python3 scripts/check-skill-routing.py
 
 step "bundled default private context boundary"
 for forbidden_file in \

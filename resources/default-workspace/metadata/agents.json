@@ -5,7 +5,7 @@
       "summary": "Primary executor for most user tasks. Breaks work into bounded slices, inspects repository reality first, delegates investigation, review, docs, security, and QA work to subagents when useful, implements safe patches, verifies, commits when requested, and reports exact changes.",
       "targets": ["opencode", "claude"],
       "risk": "medium",
-      "default_skills": ["diagnose", "implementation-plan", "agent-report-review"],
+      "default_skills": ["minimal-implementation", "implementation-plan", "diagnose", "handoff"],
       "safe_to_edit_runtime": false,
       "notes": [
         "The only primary-mode agent.",
@@ -29,7 +29,7 @@
       "summary": "Reviews changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, unnecessary complexity, and mismatch with existing project patterns. Read-only.",
       "targets": ["opencode", "claude"],
       "risk": "low",
-      "default_skills": ["agent-report-review"],
+      "default_skills": ["minimal-implementation", "handoff"],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically after implementation or before commit."
@@ -37,10 +37,10 @@
     },
     "sentinel.md": {
       "role": "Security-focused sentinel/auditor",
-      "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, Supabase RLS, service-role usage, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
+      "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
       "targets": ["opencode", "claude"],
       "risk": "high",
-      "default_skills": ["security-review", "supabase-rls-review"],
+      "default_skills": ["security-review"],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically for security-sensitive surfaces.",
@@ -52,7 +52,7 @@
       "summary": "Writes README, docs, runbook, QA checklist, changelog, usage notes, operator documentation, setup docs, troubleshooting notes, and project-facing implementation notes when code changes require them.",
       "targets": ["opencode", "claude"],
       "risk": "low",
-      "default_skills": ["write-a-skill", "current-docs"],
+      "default_skills": ["current-docs"],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically when code changes require documentation updates."
@@ -63,7 +63,7 @@
       "summary": "Runs relevant non-destructive verification commands, inspects failures, summarizes evidence, and identifies remaining manual checks. Read-only except for normal test/build artifacts.",
       "targets": ["opencode", "claude"],
       "risk": "low",
-      "default_skills": ["browser-qa", "diagnose"],
+      "default_skills": ["browser-qa", "diagnose", "handoff"],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically after implementation to run non-destructive verification."

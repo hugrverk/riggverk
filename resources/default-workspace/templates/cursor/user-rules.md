@@ -18,22 +18,23 @@ Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, 
 Optimize for correctness, bounded scope, repository consistency, low maintenance, and solo-developer cognitive load. Prefer boring robust solutions, smallest safe diffs, and existing patterns. Do not trade away correctness, security, or final judgment quality to save usage.
 
 ## Skill routing
-Use the installed skill system as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full bundled starter catalog when working inside this workspace.
+Use the installed skill system as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full bundled catalog when working inside this workspace.
 
-- **Bugs/regressions/performance/flakes**: `diagnose`; add `tdd` for narrow regression tests.
-- **Unfamiliar/risky areas**: `zoom-out`; add `implementation-plan` for edits.
-- **Multi-step work**: `implementation-plan`; add `context-budget` for broad prompts or token overhead.
-- **UI/frontend**: `frontend-design`; add `screenshot-review`, `browser-qa`, or `accessibility-review` as needed.
-- **Security/auth/uploads/endpoints/secrets/shell/payments**: `security-review`.
-- **DB/schema/data changes**: `database-migrations`.
-- **Dependencies/SDKs/CLIs/packages**: `dependency-evaluation`; add `current-docs` for fast-moving APIs.
-- **Prototyping before implementation**: `prototype`; add `frontend-design` for UI prototypes or `zoom-out`/`implementation-plan` when repo context is needed.
+- **Code implementation and refactoring**: `minimal-implementation`.
+- **Bugs, regressions, flakes, or slowness**: `diagnose`; add `tdd` for a focused regression test.
+- **Unfamiliar or architectural code**: `zoom-out`; add `implementation-plan` before non-trivial edits.
+- **Multi-step work**: `implementation-plan`; add `context-budget` for broad or noisy work.
+- **Frontend**: `frontend-design`; add `screenshot-review`, `browser-qa`, `accessibility-review`, or `prototype` as needed.
+- **Security, auth, permissions, uploads, shell, or sensitive data**: `security-review`.
+- **Database or persisted data changes**: `database-migrations`; add `security-review` where access control or sensitive data is involved.
+- **Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies**: `current-docs`; add `security-review` when trusted surface expands.
+- **WordPress or WooCommerce**: `wordpress-woocommerce`, plus relevant generic implementation, QA, accessibility, security, or release skills.
+- **Kretsverket editor or canvas**: `kretsverket-editor-change`.
+- **Kretsverket persistence or file compatibility**: `kretsverket-file-compatibility`.
+- **Kretsverket symbols**: `kretsverket-symbol-system`.
+- **Kretsverket electrical drawing**: `kretsverket-electrical-drawing`.
 - **Release readiness**: `release-check`.
-- **Handoff/continuation**: `handoff`; add `agent-report-review` when based on executor reports.
-- **Executor reports**: `agent-report-review`.
-- **Product/spec/triage/planning**: `to-prd`, `triage`, `grill-me`, or `grill-with-docs`.
-- **Skill authoring**: `write-a-skill`.
-- **Compressed technical output**: `caveman` only when explicitly requested.
+- **Executor reports, paused work, or context transfer**: `handoff`.
 
 ## Task flow
 For non-trivial tasks, start with a short plan. Non-trivial means 3+ meaningful steps, multiple approaches, architectural impact, unclear requirements, cross-file behavior, frontend/design judgment, or security/deployment/database/release risk.
