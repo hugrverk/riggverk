@@ -642,6 +642,18 @@ bash resources/default-workspace/scripts/check-playwright-mcp.sh
 step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check
 
+step "bundled harness agent adapters are current"
+python3 scripts/generate-agent-adapters.py --check
+python3 - <<'PY'
+import tomllib
+from pathlib import Path
+
+root = Path("resources/default-workspace/templates/codex/agents")
+for path in sorted(root.glob("*.toml")):
+    tomllib.loads(path.read_text(encoding="utf-8"))
+print(f"  validated {len(list(root.glob('*.toml')))} codex agent toml files")
+PY
+
 step "workspace generator --check from temp workspace copy"
 tmpdir_gen="$(mktemp -d)"
 cp -R resources/default-workspace "$tmpdir_gen/gen-test"
@@ -721,7 +733,7 @@ PY
 printf '  tui.json: theme=system diff_style=auto mouse=true leader_timeout=2000 scroll_acceleration.enabled=true\n'
 
 step "bundled default agents exist and non-empty"
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -s "resources/default-workspace/agents/$agent" ]; then
     printf 'FAIL: bundled default agent missing or empty: agents/%s\n' "$agent" >&2
     exit 1
@@ -734,7 +746,7 @@ from pathlib import Path
 
 required = {
     "architect.md",
-    "scout.md",
+    "repo-scout.md",
     "inspector.md",
     "sentinel.md",
     "scribe.md",
@@ -763,7 +775,7 @@ if keys != required:
 PY
 printf '  shared runtime agents dir + metadata/agents.json keys verified (6)\n'
 # Agents are model-agnostic — model selection is centralized in templates/opencode.json
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if grep -q "^model:" "resources/default-workspace/agents/$agent"; then
     printf 'FAIL: bundled %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
     exit 1
@@ -775,7 +787,7 @@ if ! grep -q 'mode: primary' resources/default-workspace/agents/architect.md; th
   exit 1
 fi
 printf '  architect.md: mode=primary\n'
-for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for subagent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if ! grep -q 'mode: subagent' "resources/default-workspace/agents/$subagent"; then
     printf 'FAIL: bundled %s missing mode: subagent\n' "$subagent" >&2
     exit 1
@@ -796,7 +808,7 @@ if search_has_match "$old_workspace_pattern" resources/default-workspace src-tau
   printf 'FAIL: bundled default workspace contains old workspace naming\n' >&2
   exit 1
 fi
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   file="resources/default-workspace/agents/$agent"
   if grep -q '^model:' "$file"; then
     printf 'FAIL: bundled %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
@@ -841,7 +853,7 @@ fi
 printf '  bundled architect.md npm run dev is ask-gated\n'
 
 step "bundled agents bash deny coverage for expanded secret patterns"
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   file="resources/default-workspace/agents/$agent"
   for pat in id_rsa id_ed25519 kubeconfig terraform.tfstate terraform.tfvars master.key .pgpass .my.cnf; do
     if ! grep -q "\"cat ${pat}" "$file" || ! grep -q "\"grep \* ${pat}" "$file"; then
@@ -889,7 +901,7 @@ if ! python3 -m json.tool "$tmpdir/tui.json" >/dev/null 2>&1; then
   printf 'FAIL: smoke tui.json is not valid JSON\n' >&2
   apply_ok=false
 fi
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -f "$tmpdir/agents/$agent" ]; then
     printf 'FAIL: install-opencode-config.sh --apply did not write agents/%s\n' "$agent" >&2
     apply_ok=false
@@ -914,7 +926,7 @@ if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.
   apply_ok=false
 fi
 # Model-agnostic agents — no model frontmatter expected
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if grep -q "^model:" "$tmpdir/agents/$agent"; then
     printf 'FAIL: smoke %s has model frontmatter (should be model-agnostic)\n' "$agent" >&2
     apply_ok=false
@@ -924,7 +936,7 @@ if ! grep -q 'mode: primary' "$tmpdir/agents/architect.md"; then
   printf 'FAIL: smoke architect.md missing mode: primary\n' >&2
   apply_ok=false
 fi
-for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for subagent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if ! grep -q 'mode: subagent' "$tmpdir/agents/$subagent"; then
     printf 'FAIL: smoke %s missing mode: subagent\n' "$subagent" >&2
     apply_ok=false
@@ -976,7 +988,7 @@ PLAYWRIGHT_MCP_CONFIG_PATH="$playwright_config" \
 PLAYWRIGHT_BROWSERS_PATH="$browsers_path" \
   bash resources/default-workspace/scripts/install-opencode-config.sh --apply --agents-only >/dev/null
 agents_only_ok=true
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -f "$tmpdir/agents/$agent" ]; then
     printf 'FAIL: --agents-only did not write agents/%s\n' "$agent" >&2
     agents_only_ok=false
@@ -1028,7 +1040,7 @@ CLAUDE_AGENTS_DIR="$tmpdir/claude/agents" \
 AGENT_WORKSPACE_BACKUP_DIR="$tmpdir/backups" \
   bash resources/default-workspace/scripts/install-runtime-agents.sh --claude --apply --quiet >/dev/null
 runtime_ok=true
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   dest="$tmpdir/claude/agents/$agent"
   if [ ! -f "$dest" ]; then
     printf 'FAIL: install-runtime-agents.sh did not write %s\n' "$dest" >&2
@@ -1111,7 +1123,7 @@ if ! grep -q '"default_agent": "architect"' "$runtime_config"; then
   apply_ok=false
 fi
 
-for agent in architect.md scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if [ ! -f "$runtime_agents/$agent" ]; then
     printf 'FAIL: space-in-path apply did not create agents/%s\n' "$agent" >&2
     apply_ok=false
@@ -1173,7 +1185,7 @@ echo "config" > "$tmpdir/$ts/opencode-config/opencode.json"
 echo "rules" > "$tmpdir/$ts/codex-rules/AGENTS.md"
 echo "rules" > "$tmpdir/$ts/opencode-rules/AGENTS.md"
 echo "agent" > "$tmpdir/$ts/opencode-agents/architect.md"
-echo "agent" > "$tmpdir/$ts/opencode-agents/scout.md"
+echo "agent" > "$tmpdir/$ts/opencode-agents/repo-scout.md"
 echo "agent" > "$tmpdir/$ts/claude-agents/architect.md"
 
 # Verify the timestamp format is readable by app (via Rust test)

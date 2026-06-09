@@ -3,13 +3,14 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/agents"
+OPENCODE_AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/agents"
+CLAUDE_AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/templates/claude/agents"
 
 usage() {
   cat <<'USAGE'
 Usage: ./scripts/install-runtime-agents.sh [options]
 
-Sync shared runtime agents (agents/*.md) to harness-specific agent directories.
+Sync harness-native runtime agents to OpenCode and Claude agent directories.
 
 Targets:
   --opencode   ~/.config/opencode/agents/*.md
@@ -30,8 +31,12 @@ Default mode is dry-run. Use --apply to write files.
 USAGE
 }
 
-if [ ! -d "$AGENTS_SOURCE_DIR" ]; then
-  printf 'install-runtime-agents.sh: agents source dir not found: %s\n' "$AGENTS_SOURCE_DIR" >&2
+if [ ! -d "$OPENCODE_AGENTS_SOURCE_DIR" ]; then
+  printf 'install-runtime-agents.sh: OpenCode agents source dir not found: %s\n' "$OPENCODE_AGENTS_SOURCE_DIR" >&2
+  exit 1
+fi
+if [ ! -d "$CLAUDE_AGENTS_SOURCE_DIR" ]; then
+  printf 'install-runtime-agents.sh: Claude agents source dir not found: %s\n' "$CLAUDE_AGENTS_SOURCE_DIR" >&2
   exit 1
 fi
 
@@ -77,9 +82,19 @@ case "$BACKUP_ROOT" in
   /|"$HOME"|"") printf 'install-runtime-agents.sh: refusing broad backup root: %s\n' "$BACKUP_ROOT" >&2; exit 1 ;;
 esac
 
+agents_source_dir() {
+  case "$1" in
+    opencode) printf '%s' "$OPENCODE_AGENTS_SOURCE_DIR" ;;
+    claude) printf '%s' "$CLAUDE_AGENTS_SOURCE_DIR" ;;
+  esac
+}
+
 list_agent_files() {
-  if [ -d "$AGENTS_SOURCE_DIR" ]; then
-    find "$AGENTS_SOURCE_DIR" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | tr '\0' '\n'
+  local harness="$1"
+  local source_dir
+  source_dir="$(agents_source_dir "$harness")"
+  if [ -d "$source_dir" ]; then
+    find "$source_dir" -maxdepth 1 -name '*.md' -type f -print0 | sort -z | tr '\0' '\n'
   fi
 }
 
@@ -193,7 +208,7 @@ handle_harness() {
         if ! $quiet; then printf '  %s %s missing (use --apply to create)\n' "$label" "$agent_name"; fi
         any_issue=true
       fi
-    done < <(list_agent_files)
+    done < <(list_agent_files "$harness")
     $any_issue && return 1 || return 0
   fi
 
@@ -219,7 +234,7 @@ handle_harness() {
         has_diffs=true
       fi
       rm -f "$staged"
-    done < <(list_agent_files)
+    done < <(list_agent_files "$harness")
     if ! $has_diffs && $quiet; then
       printf '%s synced\n' "$label"
     fi
@@ -253,7 +268,7 @@ handle_harness() {
         if ! $quiet; then printf '  %s %s created\n' "$label" "$agent_name"; fi
       fi
       rm -f "$staged"
-    done < <(list_agent_files)
+    done < <(list_agent_files "$harness")
     if ! $quiet; then printf '  %s runtime agents applied to %s\n' "$label" "$target_dir"; fi
   fi
 }

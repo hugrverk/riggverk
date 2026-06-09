@@ -1,0 +1,5 @@
+{
+  "name": "inspector",
+  "description": "Read-only code reviewer for correctness, regressions, security, tests, and pattern fit.",
+  "sandbox_mode": "read-only"
+}

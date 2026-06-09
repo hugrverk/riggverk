@@ -1,0 +1,103 @@
+{
+  "version": 1,
+  "roles": {
+    "architect": {
+      "spec": "architect.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/architect.md",
+          "header": "templates/opencode/agents/architect.header.yaml"
+        }
+      }
+    },
+    "repo-scout": {
+      "spec": "repo-scout.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/repo-scout.md",
+          "header": "templates/opencode/agents/repo-scout.header.yaml"
+        },
+        "claude": {
+          "output": "templates/claude/agents/repo-scout.md",
+          "header": "templates/claude/agents/repo-scout.header.yaml"
+        },
+        "codex": {
+          "output": "templates/codex/agents/repo_scout.toml",
+          "meta": "templates/codex/agents/repo_scout.meta.json"
+        },
+        "cursor": {
+          "output": "templates/cursor/agents/repo-scout.md",
+          "header": "templates/cursor/agents/repo-scout.header.yaml"
+        }
+      }
+    },
+    "inspector": {
+      "spec": "inspector.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/inspector.md",
+          "header": "templates/opencode/agents/inspector.header.yaml"
+        },
+        "claude": {
+          "output": "templates/claude/agents/inspector.md",
+          "header": "templates/claude/agents/inspector.header.yaml"
+        },
+        "codex": {
+          "output": "templates/codex/agents/inspector.toml",
+          "meta": "templates/codex/agents/inspector.meta.json"
+        }
+      }
+    },
+    "sentinel": {
+      "spec": "sentinel.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/sentinel.md",
+          "header": "templates/opencode/agents/sentinel.header.yaml"
+        },
+        "claude": {
+          "output": "templates/claude/agents/sentinel.md",
+          "header": "templates/claude/agents/sentinel.header.yaml"
+        },
+        "codex": {
+          "output": "templates/codex/agents/security_reviewer.toml",
+          "meta": "templates/codex/agents/security_reviewer.meta.json"
+        }
+      }
+    },
+    "scribe": {
+      "spec": "scribe.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/scribe.md",
+          "header": "templates/opencode/agents/scribe.header.yaml"
+        },
+        "claude": {
+          "output": "templates/claude/agents/scribe.md",
+          "header": "templates/claude/agents/scribe.header.yaml"
+        }
+      }
+    },
+    "verifier": {
+      "spec": "verifier.body.md",
+      "harnesses": {
+        "opencode": {
+          "output": "agents/verifier.md",
+          "header": "templates/opencode/agents/verifier.header.yaml"
+        },
+        "claude": {
+          "output": "templates/claude/agents/verifier.md",
+          "header": "templates/claude/agents/verifier.header.yaml"
+        },
+        "codex": {
+          "output": "templates/codex/agents/verifier.toml",
+          "meta": "templates/codex/agents/verifier.meta.json"
+        },
+        "cursor": {
+          "output": "templates/cursor/agents/verifier.md",
+          "header": "templates/cursor/agents/verifier.header.yaml"
+        }
+      }
+    }
+  }
+}

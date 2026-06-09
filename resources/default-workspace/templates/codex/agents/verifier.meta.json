@@ -1,0 +1,5 @@
+{
+  "name": "verifier",
+  "description": "QA verifier that runs non-destructive checks and reports evidence and residual risk.",
+  "sandbox_mode": "read-only"
+}

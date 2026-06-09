@@ -66,7 +66,7 @@ npx -y playwright install chromium
 OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled agents are provided:
 
 - `agents/architect.md` — Default coding architect/orchestrator
-- `agents/scout.md` — Repository structure explorer
+- `agents/repo-scout.md` — Repository structure explorer
 - `agents/inspector.md` — Code inspection/review agent
 - `agents/sentinel.md` — Security sentinel/audit review
 - `agents/scribe.md` — Documentation writer

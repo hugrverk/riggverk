@@ -1,0 +1,5 @@
+{
+  "name": "security_reviewer",
+  "description": "Security reviewer for auth, secrets, uploads, shell execution, and sensitive data exposure.",
+  "sandbox_mode": "read-only"
+}

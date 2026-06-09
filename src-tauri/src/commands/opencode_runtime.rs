@@ -1094,7 +1094,7 @@ mod tests {
             r#"{"read":{"default":"allow","deny":[]}}"#,
         );
         write_file(&ws, "agents/architect.md", "# architect");
-        write_file(&ws, "agents/scout.md", "# scout");
+        write_file(&ws, "agents/repo-scout.md", "# scout");
 
         write_file(
             &home,
@@ -1103,7 +1103,7 @@ mod tests {
         );
         write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-        write_file(&home, ".config/opencode/agents/scout.md", "# scout");
+        write_file(&home, ".config/opencode/agents/repo-scout.md", "# scout");
 
         (ws, home)
     }
@@ -1327,7 +1327,7 @@ mod tests {
 
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "agents/architect.md", "# architect v2");
-        write_file(&ws, "agents/scout.md", "# scout");
+        write_file(&ws, "agents/repo-scout.md", "# scout");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(
@@ -1335,7 +1335,7 @@ mod tests {
             ".config/opencode/agents/architect.md",
             "# architect v1",
         );
-        write_file(&home, ".config/opencode/agents/scout.md", "# scout");
+        write_file(&home, ".config/opencode/agents/repo-scout.md", "# scout");
         add_tui(&ws, &home);
 
         let health = compute_health(&ws, &home);
@@ -1383,12 +1383,12 @@ mod tests {
 
         write_file(&ws, "templates/opencode.json", r#"{}"#);
         write_file(&ws, "agents/architect.md", "# architect");
-        write_file(&ws, "agents/scout.md", "# scout");
+        write_file(&ws, "agents/repo-scout.md", "# scout");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
         add_tui(&ws, &home);
-        // scout.md missing from installed
+        // repo-scout.md missing from installed
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -1396,7 +1396,7 @@ mod tests {
 
         assert_eq!(health.status, "diverged");
         assert_eq!(health.agent_mismatches.len(), 1);
-        assert_eq!(health.agent_mismatches[0].filename, "scout.md");
+        assert_eq!(health.agent_mismatches[0].filename, "repo-scout.md");
         assert_eq!(health.agent_mismatches[0].status, "missing");
     }
 

@@ -13,7 +13,7 @@
         "Delegates to subagents via the task tool."
       ]
     },
-    "scout.md": {
+    "repo-scout.md": {
       "role": "Repository structure scout",
       "summary": "Explores repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, and risk boundaries before implementation. Read-only.",
       "targets": ["opencode", "claude"],

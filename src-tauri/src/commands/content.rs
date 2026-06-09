@@ -1616,7 +1616,7 @@ mod tests {
     #[test]
     fn is_safe_agent_basename_accepts_known() {
         assert!(is_safe_agent_basename("architect.md"));
-        assert!(is_safe_agent_basename("scout.md"));
+        assert!(is_safe_agent_basename("repo-scout.md"));
         assert!(is_safe_agent_basename("inspector.md"));
         assert!(is_safe_agent_basename("sentinel.md"));
         assert!(is_safe_agent_basename("scribe.md"));
@@ -1694,7 +1694,7 @@ mod tests {
     fn agent_source_list_includes_all_known() {
         let root = temp_root("ag-list-all");
         write_agent_file(&root, "architect.md", "# architect\n");
-        write_agent_file(&root, "scout.md", "# scout\n");
+        write_agent_file(&root, "repo-scout.md", "# scout\n");
 
         let mut results: Vec<AgentSourceSummary> = Vec::new();
         for filename in KNOWN_AGENT_FILES {
@@ -1714,9 +1714,9 @@ mod tests {
         let architect = results.iter().find(|r| r.id == "architect.md").unwrap();
         assert!(architect.exists);
         assert_eq!(architect.title, "Architect");
-        let scout = results.iter().find(|r| r.id == "scout.md").unwrap();
+        let scout = results.iter().find(|r| r.id == "repo-scout.md").unwrap();
         assert!(scout.exists);
-        assert_eq!(scout.title, "Scout");
+        assert_eq!(scout.title, "Repo Scout");
         let missing = results.iter().find(|r| r.id == "inspector.md").unwrap();
         assert!(!missing.exists);
     }
@@ -1776,7 +1776,7 @@ mod tests {
     #[test]
     fn agent_source_title_from_filename() {
         assert_eq!(agent_title_from_filename("architect.md"), "Architect");
-        assert_eq!(agent_title_from_filename("scout.md"), "Scout");
+        assert_eq!(agent_title_from_filename("repo-scout.md"), "Repo Scout");
         assert_eq!(agent_title_from_filename("inspector.md"), "Inspector");
         assert_eq!(agent_title_from_filename("sentinel.md"), "Sentinel");
         assert_eq!(agent_title_from_filename("scribe.md"), "Scribe");
@@ -2112,7 +2112,7 @@ const AGENTS_DIR: &str = "agents";
 pub(crate) fn known_agent_files() -> &'static [&'static str] {
     &[
         "architect.md",
-        "scout.md",
+        "repo-scout.md",
         "inspector.md",
         "sentinel.md",
         "scribe.md",
@@ -2122,7 +2122,7 @@ pub(crate) fn known_agent_files() -> &'static [&'static str] {
 
 const KNOWN_AGENT_FILES: &[&str] = &[
     "architect.md",
-    "scout.md",
+    "repo-scout.md",
     "inspector.md",
     "sentinel.md",
     "scribe.md",
@@ -2507,7 +2507,7 @@ mod agent_metadata_tests {
     fn valid_metadata_loads_for_known_agents() {
         let root = temp_root("valid-meta");
         write_agent_file(&root, "architect.md");
-        write_agent_file(&root, "scout.md");
+        write_agent_file(&root, "repo-scout.md");
         write_metadata(
             &root,
             r#"{"agents":{"architect.md":{"role":"primary","summary":"test","targets":["opencode"],"risk":"medium","default_skills":["diagnose"],"safe_to_edit_runtime":false,"notes":[]}}}"#,

@@ -2519,7 +2519,7 @@ mod tests {
         }
         for &rel in &[
             "agents/architect.md",
-            "agents/scout.md",
+            "agents/repo-scout.md",
             "agents/inspector.md",
             "agents/sentinel.md",
             "agents/scribe.md",

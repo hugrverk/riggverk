@@ -1,0 +1,5 @@
+{
+  "name": "repo_scout",
+  "description": "Repository scout for structure, ownership, patterns, and verification commands before implementation.",
+  "sandbox_mode": "read-only"
+}

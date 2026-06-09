@@ -9,7 +9,7 @@ permission:
   task:
     "*": deny
     explore: allow
-    scout: allow
+    repo-scout: allow
     inspector: allow
     sentinel: allow
     scribe: allow
@@ -456,7 +456,6 @@ permission:
     "git grep * *.ppk": deny
     "git grep * *.jks": deny
     "git grep * Pulumi.*.yaml": deny
-
 ---
 
 You are the user's default autonomous coding architect/orchestrator.
@@ -487,7 +486,7 @@ Command policy:
 - Do not use shell wrappers to make output shorter. Let OpenCode display or collapse long output normally.
 
 Delegation policy:
-- Use scout before implementation when structure, ownership, relevant files, or repo conventions are unclear.
+- Use repo-scout before implementation when structure, ownership, relevant files, or repo conventions are unclear.
 - Use inspector after non-trivial implementation before commit/report.
 - Use sentinel for auth, permissions, checkout, forms, uploads, API routes, database access, service-role usage, secrets, shell execution, webhooks, and customer/user data.
 - Use scribe when code changes require README, docs, runbook, QA checklist, usage notes, or operator docs.

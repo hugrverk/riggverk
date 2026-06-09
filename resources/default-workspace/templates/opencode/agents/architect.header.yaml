@@ -1,35 +1,123 @@
----
-name: scout
-description: Use proactively before implementation when repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, or risk boundaries are unclear. Read-only. Return concise file map, constraints, and recommended patch targets.
-mode: subagent
-temperature: 0.1
-steps: 30
-hidden: true
+name: architect
+description: Default autonomous implementation architect/orchestrator. Use for most user tasks. Break work into bounded slices, inspect repository reality first, delegate investigation/review/docs/security/QA work to subagents when useful, implement safe patches, verify, commit when requested or when the prompt asks for a complete slice, and report exact changes.
+mode: primary
+temperature: 0.2
+steps: 100
 permission:
-  edit: deny
   question: deny
-  task: deny
-  webfetch: ask
-  websearch: ask
+  task:
+    "*": deny
+    explore: allow
+    repo-scout: allow
+    inspector: allow
+    sentinel: allow
+    scribe: allow
+    verifier: allow
   skill:
     "*": allow
   bash:
     "*": ask
+
     pwd: allow
-    "ls*": allow
-    "tree*": allow
+    "ls": allow
+    "ls *": allow
+    "tree": allow
+    "tree *": allow
     "find *": allow
-    "rg *": ask
     "grep *": ask
-    "git status*": allow
-    "git diff*": allow
-    "git diff --stat*": allow
-    "git log*": allow
-    "git show*": allow
-    "git branch*": allow
-    "git rev-parse*": allow
-    "git ls-files*": allow
-    "git grep*": ask
+    "rg *": ask
+    "cat *": ask
+    "head *": ask
+    "echo": allow
+    "echo *": allow
+
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git branch": allow
+    "git branch *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "git grep *": ask
+    "git add *": allow
+    "git commit *": allow
+    "git checkout *": ask
+    "git pull": ask
+    "git pull *": ask
+    "git fetch": allow
+    "git fetch *": allow
+
+    "npm test": allow
+    "npm test *": allow
+    "npm run test": allow
+    "npm run test *": allow
+    "npm run lint": allow
+    "npm run lint *": allow
+    "npm run build": allow
+    "npm run build *": allow
+    "npm run verify": allow
+    "npm run verify *": allow
+    "npm run dev": ask
+    "npm run dev *": ask
+    "npm run typecheck": allow
+    "npm run typecheck *": allow
+    "cargo fmt*": allow
+    "cargo check*": allow
+    "cargo clippy*": allow
+    "cargo test*": allow
+
+    "node scripts/*": allow
+    "node ./scripts/*": allow
+    "node *": ask
+
+    "npx *": ask
+    "npm install": ask
+    "npm install *": ask
+    "npm update": ask
+    "npm update *": ask
+    "npm audit fix": ask
+    "npm audit fix *": ask
+
+    "git push": ask
+    "git push *": ask
+    "git switch *": ask
+    "git restore *": ask
+    "git reset *": ask
+    "git clean *": ask
+    "git merge *": ask
+    "git rebase *": ask
+    "git stash *": ask
+    "git tag *": ask
+
+    "git push --force": deny
+    "git push --force *": deny
+    "git push -f": deny
+    "git push -f *": deny
+    "git reset --hard": deny
+    "git reset --hard *": deny
+    "git clean -fd": deny
+    "git clean -fd *": deny
+    "git clean -fdx": deny
+    "git clean -fdx *": deny
+
+    "rm *": ask
+    "rm -r *": ask
+    "rm -rf": deny
+    "rm -rf *": deny
+    "rm -fr": deny
+    "rm -fr *": deny
+    "sudo *": deny
+
+
+    "*>*": ask
+    "*>>*": ask
     "rg *--hidden*": ask
     "git push --force*": deny
     "git push -f*": deny
@@ -367,23 +455,3 @@ permission:
     "git grep * *.ppk": deny
     "git grep * *.jks": deny
     "git grep * Pulumi.*.yaml": deny
----
-
-You are a read-only repository scout.
-
-Your job:
-- Inspect relevant files and project structure.
-- Identify existing patterns before implementation.
-- Find canonical docs, AGENTS.md, README files, scripts, tests, and ownership boundaries.
-- Identify likely source files, test files, docs files, and verification commands.
-- Return concise findings with concrete paths and recommended patch targets.
-- Do not edit files.
-- Do not run mutating commands.
-- Do not ask questions. Make bounded assumptions and state them.
-
-Return format:
-- Relevant files
-- Existing patterns
-- Constraints and risks
-- Recommended patch targets
-- Suggested verification

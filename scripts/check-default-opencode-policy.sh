@@ -72,7 +72,7 @@ if [ "$no_model_agents" -eq 0 ]; then
 fi
 
 # --- Agent files exist ---
-expected_agents=(architect.md scout.md inspector.md sentinel.md scribe.md verifier.md)
+expected_agents=(architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md)
 for agent in "${expected_agents[@]}"; do
   if [ -f "$dw/agents/$agent" ]; then
     pass "default-workspace/agents/$agent exists"
@@ -89,7 +89,7 @@ else
 fi
 
 # --- subagents mode: subagent ---
-for subagent in scout.md inspector.md sentinel.md scribe.md verifier.md; do
+for subagent in repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do
   if grep -q '^mode: subagent' "$dw/agents/$subagent"; then
     pass "default-workspace/$subagent mode: subagent"
   else
@@ -139,7 +139,7 @@ for pat in "${cred_read_patterns[@]}"; do
 done
 
 # --- Read-only agents do not allow broad edit ---
-ro_agents=(scout.md inspector.md sentinel.md verifier.md)
+ro_agents=(repo-scout.md inspector.md sentinel.md verifier.md)
 for agent in "${ro_agents[@]}"; do
   if grep -q 'edit: deny' "$dw/agents/$agent"; then
     pass "default-workspace/$agent edit is denied (read-only)"

@@ -1,5 +1,5 @@
 use serde::Serialize;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use crate::agent_targets;
 use crate::settings;
@@ -130,8 +130,16 @@ fn runtime_agent_matches_installed(source: &Path, target: &Path, target_rel: &st
     target_bytes == expected.as_bytes()
 }
 
+fn runtime_agents_source_dir(root: &Path, harness: RuntimeAgentsHarness) -> PathBuf {
+    match harness {
+        RuntimeAgentsHarness::Opencode => root.join("agents"),
+        RuntimeAgentsHarness::Claude => root.join("templates/claude/agents"),
+    }
+}
+
 fn shared_runtime_agents_status(root: &Path, home: &Path, target_rel: &str) -> String {
-    let agents_dir = root.join("agents");
+    let harness = runtime_agents_harness_for_target_rel(target_rel);
+    let agents_dir = runtime_agents_source_dir(root, harness);
     if !agents_dir.is_dir() {
         return "diverged".into();
     }
@@ -508,7 +516,7 @@ mod tests {
         let home = temp_root("home-agent-missing");
 
         write_file(&root.join("agents/architect.md"), "architect");
-        write_file(&root.join("agents/scout.md"), "scout");
+        write_file(&root.join("agents/repo-scout.md"), "scout");
         write_file(
             &home.join(".config/opencode/agents/architect.md"),
             "architect",
@@ -596,9 +604,9 @@ mod tests {
         let home = temp_root("home-claude-agent-staged");
 
         let source = "---\ndescription: test agent\nmode: subagent\n---\n# body\n";
-        write_file(&root.join("agents/scout.md"), source);
-        let stemmed = "---\ndescription: test agent\nmode: subagent\nname: scout\n\n---\n# body\n";
-        write_file(&home.join(".claude/agents/scout.md"), stemmed);
+        write_file(&root.join("templates/claude/agents/repo-scout.md"), source);
+        let stemmed = "---\ndescription: test agent\nmode: subagent\nname: repo-scout\n\n---\n# body\n";
+        write_file(&home.join(".claude/agents/repo-scout.md"), stemmed);
 
         let status = shared_runtime_agents_status(&root, &home, ".claude/agents");
         let _ = fs::remove_dir_all(&root);
@@ -612,12 +620,12 @@ mod tests {
         let home = temp_root("home-claude-agent-staged-div");
 
         write_file(
-            &root.join("agents/scout.md"),
+            &root.join("templates/claude/agents/repo-scout.md"),
             "---\ndescription: test agent\nmode: subagent\n---\n# body\n",
         );
         write_file(
-            &home.join(".claude/agents/scout.md"),
-            "---\nname: scout\n---\nold\n",
+            &home.join(".claude/agents/repo-scout.md"),
+            "---\nname: repo-scout\n---\nold\n",
         );
 
         let status = shared_runtime_agents_status(&root, &home, ".claude/agents");
