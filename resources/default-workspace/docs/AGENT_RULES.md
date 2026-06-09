@@ -1,55 +1,89 @@
-# Agent Rules
+# Agent Rules and Native Agents
 
-## Source template
+## Shared rules source
 
-The source template for agent behavior rules is `templates/global-agent-rules.md`. This file defines:
+`templates/global-agent-rules.md` is the editable shared rules core. It defines communication, security, bounded implementation, skill routing, verification, git behavior, and reporting.
 
-- Communication style and language preferences
-- Security boundaries (no secrets, no credential-bearing data)
-- Working model (small diffs, boring solutions, bounded scope)
-- Skill routing (task-specific skill selection with concrete routing bullets)
-- Task flow (inspect, plan, implement, verify, report)
-- Verification requirements (never claim done without evidence)
-- Git conventions
-- Final report format
+Harness-specific appendices live under `templates/rules/`. `scripts/generate-agent-rules.py` composes the installed rule sources under `templates/sync/`.
 
-## Sync destinations
+Installed rule targets:
 
-When synced, the template is written to tool-specific global rule paths:
-
-| Tool | Default path |
-|------|-------------|
+| Harness | Default path |
+| --- | --- |
 | Codex | `~/.codex/AGENTS.md` |
 | OpenCode | `~/.config/opencode/AGENTS.md` |
-| Claude | `~/.claude/CLAUDE.md` |
+| Claude Code | `~/.claude/CLAUDE.md` |
 
-Cursor global profile sync is separate from this global rules sync. The app writes only global Cursor profile files under `~/.cursor/` and never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
+Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md` and copied manually into Cursor Settings. Agent Workspace does not write undocumented Cursor rule state.
 
-Cursor User Rules are version-controlled separately in `templates/cursor/user-rules.md`. Copy them manually into Cursor Settings > Rules > User Rules when needed. Cursor User Rules are not synced as a file-backed target; the script does not write to undocumented Cursor internal storage.
+## Shared semantic agent bodies
 
-Paths can be overridden via environment variables.
+Shared role instructions live under `agent-specs/`.
 
-## Shared runtime agents (separate from rules)
+`scripts/generate-agent-adapters.py` combines each shared body with harness-native metadata. Generated files must not be edited independently.
 
-Bundled runtime agent prompts live in `agents/*.md` (six agents). They are **not** the same as global rules in `templates/global-agent-rules.md`.
+## Harness-native adapters
 
-| Tool | Default agents directory | Sync script |
-|------|------------------------|-------------|
-| OpenCode | `~/.config/opencode/agents/*.md` | `scripts/install-runtime-agents.sh --opencode` |
-| Claude Code | `~/.claude/agents/*.md` | `scripts/install-runtime-agents.sh --claude` |
+### OpenCode
 
-Codex custom agents use **TOML** files under `~/.codex/agents/` (see Codex docs), not this shared `.md` set. The app syncs Codex **rules**; Codex config is manual-review only.
+OpenCode Markdown agents live under `agents/` and install to `~/.config/opencode/agents/`.
 
-Cursor adapter agents are a separate five-file set under `templates/cursor/agents/`. The primary Cursor workflow applies native setup from the Agent Workspace Cursor page to `~/.cursor/agents`, `~/.cursor/skills`, and `~/.cursor/mcp.json` (Playwright MCP merge only; no project writes). Apply may remove a legacy Agent Workspace-owned `playwright:*` mcpAllowlist entry from `~/.cursor/permissions.json` when present.
+OpenCode includes:
+
+- architect
+- repo-scout
+- inspector
+- sentinel
+- scribe
+- verifier
+
+### Claude Code
+
+Claude-native Markdown subagents live under `templates/claude/agents/` and install to `~/.claude/agents/`.
+
+Claude Code includes:
+
+- repo-scout
+- inspector
+- sentinel
+- scribe
+- verifier
+
+Claude-specific tools, permission mode, and turn limits belong in Claude headers. Claude settings, authentication, trust state, and MCP credentials remain Claude-managed.
+
+### Codex
+
+Codex custom agents are TOML files under `templates/codex/agents/` and install to `~/.codex/agents/`.
+
+Codex includes:
+
+- repo_scout
+- inspector
+- security_reviewer
+- verifier
+
+### Cursor
+
+Cursor agents live under `templates/cursor/agents/` and install through native Rust setup to `~/.cursor/agents/`.
+
+Cursor includes:
+
+- repo-scout
+- inspector
+- security-reviewer
+- verifier
+- browser-qa
+- release-checker
+
+Cursor global setup also manages the canonical skill catalog and the named Playwright MCP entry. User Rules, Auto Review, general permissions, and project `.cursor/*` remain manual or project-owned.
 
 ## Sync workflow
 
-1. Review the template at `templates/global-agent-rules.md`
-2. Run `--diff` to see differences between the template and each target
-3. Run `--apply` to write the template to enabled targets
+1. Edit shared rules or semantic agent bodies.
+2. Run the relevant generator with `--write` when generated files change.
+3. Run the generator again with `--check`.
+4. Review target diffs.
+5. Apply the selected harness sync action.
+6. Verify the installed status.
 
-Backups are created before overwriting diverged targets.
-
-## Customization
-
-The template is user-editable. Modify it to match your workflow, then sync to your tools.
+Existing diverged managed files are backed up before replacement. Unknown and unrelated harness files are preserved.
