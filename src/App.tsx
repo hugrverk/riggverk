@@ -211,7 +211,6 @@ function App() {
     settingsMsg,
     setSettingsMsg,
     agentTargets,
-    targetProfiles,
     settingsDirty,
     settingsSaving,
     settingsSaveStatus,
@@ -226,8 +225,6 @@ function App() {
     setBackgroundColor,
     setForegroundColor,
     toggleTarget,
-    applyTargetProfile,
-    activeProfileId,
     clearSettingsMsg,
     mutateAppSettings,
   } = useAppSettingsController({
@@ -509,11 +506,8 @@ function App() {
           <CodexView
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
@@ -584,11 +578,8 @@ function App() {
           <OpenCodeView
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
@@ -690,11 +681,8 @@ function App() {
           <CursorView
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
@@ -724,11 +712,8 @@ function App() {
           <ClaudeView
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
-            onApplyProfile={applyTargetProfile}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}

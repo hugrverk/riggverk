@@ -16,16 +16,13 @@ import {
 import { runtimeChipLabel } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, OpenCodeRuntimeHealth, SkillSummary, StatusData } from "../types";
 
 interface OpenCodeViewProps {
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
-  targetProfiles: TargetProfileMeta[];
-  activeProfileId: string | null;
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
-  onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -77,11 +74,8 @@ function tuiTone(status: string): "ok" | "warn" | "fail" | "muted" {
 export function OpenCodeView({
   appSettings,
   agentTargets,
-  targetProfiles,
-  activeProfileId,
   settingsSaveStatus,
   onToggleTarget,
-  onApplyProfile,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -146,11 +140,8 @@ export function OpenCodeView({
             page="opencode"
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
-            onApplyProfile={onApplyProfile}
           />
 
           {workspaceValid && (

@@ -151,77 +151,7 @@ pub fn default_enabled_ids() -> Vec<String> {
     ids
 }
 
-#[derive(Serialize)]
-pub struct TargetProfileMeta {
-    pub id: String,
-    pub label: String,
-    pub description: String,
-    pub target_ids: Vec<String>,
-}
 
-pub fn target_profiles() -> Vec<TargetProfileMeta> {
-    vec![
-        TargetProfileMeta {
-            id: "codex".into(),
-            label: "Codex".into(),
-            description: "Codex rules, native agents, and managed config sections.".into(),
-            target_ids: vec![
-                "codex_rules".into(),
-                "codex_agents".into(),
-                "codex_config".into(),
-            ],
-        },
-        TargetProfileMeta {
-            id: "opencode".into(),
-            label: "OpenCode".into(),
-            description: "OpenCode rules + shared runtime agents + config".into(),
-            target_ids: vec![
-                "opencode_rules".into(),
-                "opencode_agents".into(),
-                "opencode_config".into(),
-            ],
-        },
-        TargetProfileMeta {
-            id: "cursor".into(),
-            label: "Cursor".into(),
-            description: "Cursor User Rules template, global subagents, project rules, skills install support.".into(),
-            target_ids: vec!["cursor_setup".into()],
-        },
-        TargetProfileMeta {
-            id: "claude".into(),
-            label: "Claude".into(),
-            description: "Claude rules + shared runtime agents".into(),
-            target_ids: vec!["claude_rules".into(), "claude_agents".into()],
-        },
-        TargetProfileMeta {
-            id: "all_rules".into(),
-            label: "All rules".into(),
-            description: "Codex, OpenCode, Claude rules + Cursor setup".into(),
-            target_ids: vec![
-                "codex_rules".into(),
-                "opencode_rules".into(),
-                "claude_rules".into(),
-                "cursor_setup".into(),
-            ],
-        },
-        TargetProfileMeta {
-            id: "all_supported".into(),
-            label: "All supported".into(),
-            description: "All supported rules, shared runtime agents, configs, and Cursor global agents"
-                .into(),
-            target_ids: vec![
-                "codex_rules".into(),
-                "codex_agents".into(),
-                "codex_config".into(),
-                "opencode_rules".into(),
-                "opencode_agents".into(),
-                "claude_agents".into(),
-                "opencode_config".into(),
-                "cursor_setup".into(),
-            ],
-        },
-    ]
-}
 
 pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
     let known: Vec<&str> = targets().iter().map(|t| t.id).collect();
@@ -406,36 +336,6 @@ mod tests {
     use std::collections::HashSet;
 
     #[test]
-    fn target_profiles_only_reference_known_targets() {
-        let known: HashSet<&str> = targets().iter().map(|t| t.id).collect();
-        for profile in target_profiles() {
-            for target_id in &profile.target_ids {
-                assert!(
-                    known.contains(target_id.as_str()),
-                    "Profile '{}' references unknown target '{}'",
-                    profile.id,
-                    target_id
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn target_profiles_have_no_duplicate_target_ids() {
-        for profile in target_profiles() {
-            let mut seen = HashSet::new();
-            for target_id in &profile.target_ids {
-                assert!(
-                    seen.insert(target_id.as_str()),
-                    "Profile '{}' has duplicate target id '{}'",
-                    profile.id,
-                    target_id
-                );
-            }
-        }
-    }
-
-    #[test]
     fn default_enabled_ids_only_contain_known_targets() {
         let known: HashSet<&str> = targets().iter().map(|t| t.id).collect();
         for id in default_enabled_ids() {
@@ -453,40 +353,6 @@ mod tests {
             !default_enabled_ids().contains(&"codex_config".to_string()),
             "Codex config must stay manual-review only by default"
         );
-    }
-
-    #[test]
-    fn target_profile_ids_are_unique() {
-        let mut seen = HashSet::new();
-        for profile in target_profiles() {
-            assert!(
-                seen.insert(profile.id.clone()),
-                "Duplicate profile id '{}'",
-                profile.id
-            );
-        }
-    }
-
-    #[test]
-    fn target_profile_labels_are_non_empty() {
-        for profile in target_profiles() {
-            assert!(!profile.id.is_empty(), "Profile has empty id");
-            assert!(
-                !profile.label.is_empty(),
-                "Profile '{}' has empty label",
-                profile.id
-            );
-            assert!(
-                !profile.description.is_empty(),
-                "Profile '{}' has empty description",
-                profile.id
-            );
-            assert!(
-                !profile.target_ids.is_empty(),
-                "Profile '{}' has empty target_ids",
-                profile.id
-            );
-        }
     }
 
     // ── config target registry tests ──
@@ -581,18 +447,6 @@ mod tests {
         let cursor = all.iter().find(|t| t.id == "cursor_setup");
         assert!(cursor.is_some(), "cursor_setup must exist");
         assert!(matches!(cursor.unwrap().kind, TargetKind::Agents));
-    }
-
-    #[test]
-    fn all_rules_profile_includes_cursor() {
-        let profile = target_profiles()
-            .into_iter()
-            .find(|p| p.id == "all_rules")
-            .expect("all_rules profile must exist");
-        assert!(
-            profile.target_ids.contains(&"cursor_setup".to_string()),
-            "all_rules profile must include cursor_setup"
-        );
     }
 
     #[test]

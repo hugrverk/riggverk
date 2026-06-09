@@ -11,16 +11,13 @@ import {
 import { runtimeChipLabel, runtimeChipTone } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, CursorProfileHealth, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, CursorProfileHealth, SkillSummary, StatusData } from "../types";
 
 interface CursorViewProps {
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
-  targetProfiles: TargetProfileMeta[];
-  activeProfileId: string | null;
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
-  onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -61,11 +58,8 @@ function surfaceTone(status: string): Tone {
 export function CursorView({
   appSettings,
   agentTargets,
-  targetProfiles,
-  activeProfileId,
   settingsSaveStatus,
   onToggleTarget,
-  onApplyProfile,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -120,11 +114,8 @@ export function CursorView({
             page="cursor"
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
-            onApplyProfile={onApplyProfile}
           />
 
           {workspaceValid && (

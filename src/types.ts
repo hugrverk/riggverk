@@ -103,13 +103,6 @@ export interface ConfigEditorSourceMeta {
   helper: string;
 }
 
-export interface TargetProfileMeta {
-  id: string;
-  label: string;
-  description: string;
-  target_ids: string[];
-}
-
 export interface AppSettings {
   appearance: "dark" | "light" | "system";
   app_font_size: "small" | "medium" | "large" | "extra-large";

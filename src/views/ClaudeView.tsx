@@ -1,16 +1,13 @@
 import { PassiveTargetView } from "./PassiveTargetView";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData } from "../types";
 
 interface ClaudeViewProps {
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
-  targetProfiles: TargetProfileMeta[];
-  activeProfileId: string | null;
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
-  onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;

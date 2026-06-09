@@ -35,7 +35,7 @@ pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
 pub use settings_commands::{
-    get_agent_targets, get_settings, get_target_profiles, update_settings,
+    get_agent_targets, get_settings, update_settings,
 };
 pub use skills::{
     get_skills_sync_health, install_skills, list_skills, open_install_skills_script,

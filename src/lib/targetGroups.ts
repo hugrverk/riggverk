@@ -1,4 +1,4 @@
-import type { AgentTargetMeta, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta } from "../types";
 
 export type TargetPage = "codex" | "opencode" | "cursor" | "claude";
 
@@ -9,20 +9,9 @@ export const PAGE_TARGET_IDS: Record<TargetPage, readonly string[]> = {
   claude: ["claude_rules", "claude_agents"],
 };
 
-const CROSS_PROFILE_IDS = new Set(["all_rules", "all_supported"]);
-const PASSIVE_PAGES = new Set<TargetPage>(["claude"]);
-
 export function filterTargetsForPage(targets: AgentTargetMeta[], page: TargetPage): AgentTargetMeta[] {
   const ids = new Set(PAGE_TARGET_IDS[page]);
   return targets.filter(t => ids.has(t.id));
-}
-
-export function filterProfilesForPage(profiles: TargetProfileMeta[], page: TargetPage): TargetProfileMeta[] {
-  const pageProfile = profiles.filter(p => p.id === page);
-  const crossProfiles = PASSIVE_PAGES.has(page)
-    ? profiles.filter(p => CROSS_PROFILE_IDS.has(p.id))
-    : [];
-  return [...pageProfile, ...crossProfiles];
 }
 
 export function pageLabelToTargetPage(label: string | undefined): TargetPage | undefined {

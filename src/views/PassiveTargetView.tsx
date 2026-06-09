@@ -5,7 +5,7 @@ import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
-import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, InstallAgent, SkillSummary, StatusData } from "../types";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
 import type { TargetPage } from "../lib/targetGroups";
 
@@ -19,11 +19,8 @@ interface PassiveTargetViewProps {
   installAgents: InstallAgent[];
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
-  targetProfiles: TargetProfileMeta[];
-  activeProfileId: string | null;
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
-  onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -61,11 +58,8 @@ export function PassiveTargetView({
   installAgents,
   appSettings,
   agentTargets,
-  targetProfiles,
-  activeProfileId,
   settingsSaveStatus,
   onToggleTarget,
-  onApplyProfile,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -111,11 +105,8 @@ export function PassiveTargetView({
             page={page}
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
-            onApplyProfile={onApplyProfile}
           />
 
           {workspaceValid && onDiffAgents && onSyncAgents && (

@@ -13,7 +13,7 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
-import type { AgentTargetMeta, AppSettings, GetSettingsResponse, TargetProfileMeta } from "../types";
+import type { AgentTargetMeta, AppSettings, GetSettingsResponse } from "../types";
 
 export interface AppSettingsControllerDeps {
   setError: (message: string | null) => void;
@@ -51,7 +51,7 @@ export function useAppSettingsController({
   }, []);
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
-  const [targetProfiles, setTargetProfiles] = useState<TargetProfileMeta[]>([]);
+
   const [settingsSaving, setSettingsSaving] = useState(false);
   const [settingsAutoSaveError, setSettingsAutoSaveError] = useState<string | null>(null);
   const [colorResetKey, setColorResetKey] = useState(0);
@@ -77,10 +77,9 @@ export function useAppSettingsController({
 
   const loadSettings = useCallback(async () => {
     try {
-      const [settingsResponse, targets, profiles] = await Promise.all([
+      const [settingsResponse, targets] = await Promise.all([
         invoke<GetSettingsResponse>("get_settings"),
         invoke<AgentTargetMeta[]>("get_agent_targets"),
-        invoke<TargetProfileMeta[]>("get_target_profiles"),
       ]);
       const settings = settingsResponse.settings;
       if (appliedWorkspacePathRef.current === undefined) {
@@ -95,7 +94,6 @@ export function useAppSettingsController({
         setSettingsMsg(null);
       }
       setAgentTargets(targets);
-      setTargetProfiles(profiles);
       applyThemeSettings(settings);
       setSettingsAutoSaveError(null);
       settingsLoadedRef.current = true;
@@ -306,27 +304,6 @@ export function useAppSettingsController({
     });
   }, []);
 
-  const applyTargetProfile = useCallback((profileId: string) => {
-    const profile = targetProfiles.find(item => item.id === profileId);
-    if (!profile) return;
-    setSettingsMsg(null);
-    setAppSettings(prev => prev ? { ...prev, enabled_target_ids: [...profile.target_ids] } : prev);
-  }, [targetProfiles]);
-
-  const activeProfileId = useMemo(() => {
-    if (!appSettings) return null;
-    const currentSet = new Set(appSettings.enabled_target_ids);
-    const match = targetProfiles.find(profile => {
-      const profileSet = new Set(profile.target_ids);
-      if (profileSet.size !== currentSet.size) return false;
-      for (const id of profileSet) {
-        if (!currentSet.has(id)) return false;
-      }
-      return true;
-    });
-    return match ? match.id : null;
-  }, [appSettings, targetProfiles]);
-
   const persistActiveWorkspace = useCallback(async (path: string) => {
     if (!appSettings) return;
     const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
@@ -417,7 +394,6 @@ export function useAppSettingsController({
     setAppSettings,
     settingsMsg,
     agentTargets,
-    targetProfiles,
     settingsDirty,
     settingsSaving,
     settingsSaveStatus,
@@ -435,8 +411,6 @@ export function useAppSettingsController({
     setBackgroundColor,
     setForegroundColor,
     toggleTarget,
-    applyTargetProfile,
-    activeProfileId,
     clearSettingsMsg,
     setSettingsMsg,
     mutateAppSettings,

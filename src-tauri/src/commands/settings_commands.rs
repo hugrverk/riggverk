@@ -35,7 +35,3 @@ pub fn get_agent_targets() -> Result<Vec<agent_targets::AgentTargetMeta>, String
         .collect())
 }
 
-#[tauri::command]
-pub fn get_target_profiles() -> Result<Vec<agent_targets::TargetProfileMeta>, String> {
-    Ok(agent_targets::target_profiles())
-}

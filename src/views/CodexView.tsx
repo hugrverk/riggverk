@@ -22,17 +22,13 @@ import type {
   CodexRuntimeHealth,
   SkillSummary,
   StatusData,
-  TargetProfileMeta,
 } from "../types";
 
 interface CodexViewProps {
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
-  targetProfiles: TargetProfileMeta[];
-  activeProfileId: string | null;
   settingsSaveStatus: SettingsSaveStatus;
   onToggleTarget: (id: string) => void;
-  onApplyProfile: (profileId: string) => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
@@ -69,11 +65,8 @@ interface CodexViewProps {
 export function CodexView({
   appSettings,
   agentTargets,
-  targetProfiles,
-  activeProfileId,
   settingsSaveStatus,
   onToggleTarget,
-  onApplyProfile,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -130,11 +123,8 @@ export function CodexView({
             page="codex"
             appSettings={appSettings}
             agentTargets={agentTargets}
-            targetProfiles={targetProfiles}
-            activeProfileId={activeProfileId}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
-            onApplyProfile={onApplyProfile}
           />
 
           {workspaceValid && (
