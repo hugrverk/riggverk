@@ -1,4 +1,5 @@
 mod actions;
+mod claude_runtime;
 #[cfg_attr(not(test), allow(dead_code))]
 mod setup;
 pub(crate) mod backups;
@@ -20,6 +21,7 @@ mod status;
 mod workspace;
 
 pub use actions::run_action;
+pub use claude_runtime::get_claude_runtime_health;
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
