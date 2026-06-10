@@ -151,6 +151,34 @@ pub(crate) fn managed_opencode_keys_match(
     extract_managed_opencode_config(installed) == extract_managed_opencode_config(rendered)
 }
 
+/// Merge managed keys from `managed` into `installed`, preserving unrelated user-owned fields.
+pub(crate) fn merge_managed_opencode_config(
+    installed: &serde_json::Value,
+    managed: &serde_json::Value,
+) -> serde_json::Value {
+    let mut merged = installed.clone();
+    let Some(target) = merged.as_object_mut() else {
+        return merged;
+    };
+    let Some(managed_obj) = managed.as_object() else {
+        return merged;
+    };
+    for key in MANAGED_TOP_LEVEL_KEYS {
+        if let Some(value) = managed_obj.get(*key) {
+            target.insert((*key).to_string(), value.clone());
+        }
+    }
+    if let Some(managed_mcp) = managed_obj.get("mcp").and_then(|v| v.get("playwright")) {
+        let mcp = target
+            .entry("mcp")
+            .or_insert_with(|| serde_json::Value::Object(serde_json::Map::new()));
+        if let Some(mcp_obj) = mcp.as_object_mut() {
+            mcp_obj.insert("playwright".to_string(), managed_mcp.clone());
+        }
+    }
+    merged
+}
+
 fn is_legacy_aw_scout(path: &Path) -> bool {
     let content = match std::fs::read_to_string(path) {
         Ok(c) => c,

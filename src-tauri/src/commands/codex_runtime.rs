@@ -128,6 +128,47 @@ pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
 }
 
+/// Merge managed sections from `managed` into `installed`, preserving unrelated user-owned fields.
+pub(crate) fn merge_managed_codex_config(
+    installed: &toml::Value,
+    managed: &toml::Value,
+) -> toml::Value {
+    let mut merged = installed.clone();
+    let Some(target) = merged.as_table_mut() else {
+        return merged;
+    };
+    let Some(managed_table) = managed.as_table() else {
+        return merged;
+    };
+    for key in MANAGED_TOP_LEVEL_KEYS {
+        if let Some(value) = managed_table.get(*key) {
+            target.insert(key.to_string(), value.clone());
+        }
+    }
+    if let Some(managed_profiles) = managed_table.get("profiles").and_then(|v| v.as_table()) {
+        let profiles = target
+            .entry("profiles")
+            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+        if let Some(profiles_table) = profiles.as_table_mut() {
+            for (profile_name, managed_profile) in managed_profiles {
+                let profile = profiles_table
+                    .entry(profile_name.clone())
+                    .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
+                if let (Some(profile_table), Some(managed_profile_table)) =
+                    (profile.as_table_mut(), managed_profile.as_table())
+                {
+                    for field in MANAGED_PROFILE_FIELDS {
+                        if let Some(value) = managed_profile_table.get(*field) {
+                            profile_table.insert(field.to_string(), value.clone());
+                        }
+                    }
+                }
+            }
+        }
+    }
+    merged
+}
+
 fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {
     let mut current = table;
     for key in path {

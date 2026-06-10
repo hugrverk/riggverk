@@ -4,6 +4,7 @@
 //! integrity detects divergence on either side.
 
 use std::collections::hash_map::DefaultHasher;
+use std::collections::BTreeMap;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -240,6 +241,86 @@ pub fn artifact_installed_managed_digest(
             "unsupported artifact for installed digest: {:?}",
             artifact
         )),
+    }
+}
+
+fn hash_directory_tree(dir: &Path, label: &str) -> Result<String, String> {
+    if !dir.is_dir() {
+        return Ok(ABSENT_DIGEST.into());
+    }
+    let mut hasher = DefaultHasher::new();
+    let mut entries: BTreeMap<String, PathBuf> = BTreeMap::new();
+    collect_directory_entries(dir, dir, label, &mut entries)?;
+    for (rel, path) in entries {
+        rel.hash(&mut hasher);
+        let meta = fs::symlink_metadata(&path)
+            .map_err(|e| format!("inspect {label} {}: {e}", path.display()))?;
+        if meta.file_type().is_symlink() {
+            return Err(format!("refusing symlink in {label}: {}", path.display()));
+        }
+        if meta.is_dir() {
+            "dir".hash(&mut hasher);
+        } else if meta.is_file() {
+            "file".hash(&mut hasher);
+            hash_file(&path)?.hash(&mut hasher);
+        } else {
+            return Err(format!("unreadable entry in {label}: {}", path.display()));
+        }
+    }
+    Ok(format!("{:016x}", hasher.finish()))
+}
+
+fn collect_directory_entries(
+    root: &Path,
+    current: &Path,
+    label: &str,
+    out: &mut BTreeMap<String, PathBuf>,
+) -> Result<(), String> {
+    for entry in
+        fs::read_dir(current).map_err(|e| format!("read {label} {}: {e}", current.display()))?
+    {
+        let entry = entry.map_err(|e| format!("read {label} entry: {e}"))?;
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            return Err(format!(
+                "refusing symlink in {label}: {}",
+                entry.path().display()
+            ));
+        }
+        let path = entry.path();
+        let rel = path
+            .strip_prefix(root)
+            .map_err(|_| format!("path escapes {label} root"))?
+            .to_string_lossy()
+            .into_owned();
+        let is_dir = path.is_dir();
+        out.insert(rel, path.clone());
+        if is_dir {
+            collect_directory_entries(root, &path, label, out)?;
+        }
+    }
+    Ok(())
+}
+
+/// Hash installed full-file or full-directory content for rollback safety.
+pub fn artifact_installed_full_digest(
+    artifact: &ArtifactId,
+    _workspace_root: &Path,
+    home: &Path,
+) -> Result<String, String> {
+    let dest = artifact.resolve_dest(home)?;
+    match artifact_kind(artifact) {
+        ArtifactKind::SkillDir => hash_directory_tree(&dest, "skill directory"),
+        ArtifactKind::ConfigFile
+        | ArtifactKind::TuiConfig
+        | ArtifactKind::RulesFile
+        | ArtifactKind::AgentFile
+        | ArtifactKind::McpConfig => {
+            if dest.is_file() {
+                hash_file(&dest)
+            } else {
+                Ok(ABSENT_DIGEST.into())
+            }
+        }
     }
 }
 
