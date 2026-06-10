@@ -2,6 +2,15 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SetupPlan, SetupResult, OperationKind, SetupSurfaceId } from "../types";
 
+interface RepairPreview {
+  missing_artifacts: string[];
+  skipped_updates: number;
+  skipped_conflicts: number;
+  skipped_unavailable: number;
+  repair_fingerprint: string | null;
+  message: string;
+}
+
 // ── Helpers ──
 
 function opLabel(kind: OperationKind): string {
@@ -57,6 +66,12 @@ function setupResultToTerminal(result: SetupResult, action: string) {
   };
 }
 
+function sanitizePreviewError(err: unknown): string {
+  const raw = err instanceof Error ? err.message : String(err);
+  if (raw.length > 240) return `${raw.slice(0, 240)}…`;
+  return raw;
+}
+
 // ── Component ──
 
 export interface SetupLifecycleProps {
@@ -72,38 +87,82 @@ export interface SetupLifecycleProps {
 
 export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps) {
   const [plan, setPlan] = useState<SetupPlan | null>(null);
+  const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [result, setResult] = useState<SetupResult | null>(null);
-  const genRef = useRef(0);
+  const [repairPreview, setRepairPreview] = useState<RepairPreview | null>(null);
+  const [repairPreviewLoading, setRepairPreviewLoading] = useState(false);
+  const [rollbackDryRun, setRollbackDryRun] = useState<SetupResult | null>(null);
+  const previewGenRef = useRef(0);
+  const repairGenRef = useRef(0);
   const rollbackTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const confirmDialogRef = useRef<HTMLDivElement | null>(null);
   const [confirmRollback, setConfirmRollback] = useState(false);
+  const lastTransactionRef = useRef<SetupResult | null>(null);
 
   const globalMutationBusy = wsRunning !== null;
   const mutationLabel = wsRunning ?? "";
+  const activeTransaction = result ?? lastTransactionRef.current;
 
   const refresh = useCallback(async () => {
-    const gen = ++genRef.current;
+    const gen = ++previewGenRef.current;
     setPreviewLoading(true);
+    setPreviewError(null);
     try {
       const p = await invoke<SetupPlan>("preview_setup", { surfaces: [] });
-      if (gen !== genRef.current) return;
+      if (gen !== previewGenRef.current) return;
       setPlan(p);
-    } catch {
-      if (gen !== genRef.current) return;
-      setPlan(null);
+    } catch (err) {
+      if (gen !== previewGenRef.current) return;
+      setPreviewError(sanitizePreviewError(err));
     } finally {
-      if (gen === genRef.current) setPreviewLoading(false);
+      if (gen === previewGenRef.current) setPreviewLoading(false);
+    }
+  }, []);
+
+  const loadRepairPreview = useCallback(async () => {
+    const gen = ++repairGenRef.current;
+    setRepairPreviewLoading(true);
+    try {
+      const preview = await invoke<RepairPreview>("preview_repair_setup");
+      if (gen !== repairGenRef.current) return;
+      setRepairPreview(preview);
+    } catch (err) {
+      if (gen !== repairGenRef.current) return;
+      setPreviewError(sanitizePreviewError(err));
+    } finally {
+      if (gen === repairGenRef.current) setRepairPreviewLoading(false);
     }
   }, []);
 
   useEffect(() => { refresh(); }, [refresh]);
+  useEffect(() => { loadRepairPreview(); }, [loadRepairPreview]);
 
   useEffect(() => {
     if (!confirmRollback) return;
+    const dialog = confirmDialogRef.current;
+    const focusable = dialog?.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+    const first = focusable?.[0];
+    const last = focusable?.[focusable.length - 1];
+    first?.focus();
+
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         setConfirmRollback(false);
+        setRollbackDryRun(null);
         rollbackTriggerRef.current?.focus();
+        return;
+      }
+      if (e.key === "Tab" && focusable && focusable.length > 0) {
+        if (e.shiftKey && document.activeElement === first) {
+          e.preventDefault();
+          last?.focus();
+        } else if (!e.shiftKey && document.activeElement === last) {
+          e.preventDefault();
+          first?.focus();
+        }
       }
     };
     window.addEventListener("keydown", onKey);
@@ -126,55 +185,105 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
         planFingerprint: plan.plan_fingerprint,
       }),
       toActionResult: (res) => setupResultToTerminal(res, "apply_setup"),
-      refresh: async () => { await refresh(); },
+      refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
-    if (r) setResult(r);
-  }, [plan, runSetupTask, refresh]);
+    if (r) {
+      setResult(r);
+      lastTransactionRef.current = r;
+    }
+  }, [plan, runSetupTask, refresh, loadRepairPreview]);
 
   const repair = useCallback(async () => {
+    if (!repairPreview?.repair_fingerprint) return;
     const r = await runSetupTask({
       label: "setup repair",
       action: "repair_setup_command",
-      task: () => invoke<SetupResult>("repair_setup_command", { skipManual: true }),
+      task: () => invoke<SetupResult>("repair_setup_command", {
+        skipManual: true,
+        repairFingerprint: repairPreview.repair_fingerprint,
+      }),
       toActionResult: (res) => setupResultToTerminal(res, "repair_setup_command"),
-      refresh: async () => { await refresh(); },
+      refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
-    if (r) setResult(r);
-  }, [runSetupTask, refresh]);
+    if (r) {
+      setResult(r);
+      lastTransactionRef.current = r;
+    }
+  }, [repairPreview, runSetupTask, refresh, loadRepairPreview]);
+
+  const openRollbackConfirm = useCallback(async () => {
+    if (!activeTransaction?.transaction_id) return;
+    setConfirmRollback(true);
+    setRollbackDryRun(null);
+    try {
+      const dry = await invoke<SetupResult>("rollback_setup_transaction", {
+        transactionId: activeTransaction.transaction_id,
+        dryRun: true,
+      });
+      setRollbackDryRun(dry);
+    } catch (err) {
+      setPreviewError(sanitizePreviewError(err));
+      setConfirmRollback(false);
+    }
+  }, [activeTransaction]);
 
   const rollbackTxn = useCallback(async () => {
-    if (!result?.transaction_id) return;
+    if (!activeTransaction?.transaction_id) return;
     const r = await runSetupTask({
       label: "setup rollback",
       action: "rollback_setup_transaction",
       task: () => invoke<SetupResult>("rollback_setup_transaction", {
-        transactionId: result.transaction_id,
+        transactionId: activeTransaction.transaction_id,
         dryRun: false,
       }),
       toActionResult: (res) => setupResultToTerminal(res, "rollback_setup_transaction"),
-      refresh: async () => { await refresh(); },
+      refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
     if (r) {
       setResult(r);
+      if (r.success) {
+        lastTransactionRef.current = r;
+      }
       setConfirmRollback(false);
+      setRollbackDryRun(null);
       rollbackTriggerRef.current?.focus();
     }
-  }, [result, runSetupTask, refresh]);
+  }, [activeTransaction, runSetupTask, refresh, loadRepairPreview]);
 
   const needsApply = plan?.operations.some(op => op.kind === "create" || op.kind === "update") ?? false;
   const isBlocked = plan?.is_blocked ?? false;
-  const hasResult = result !== null;
   const canApply = Boolean(plan?.plan_fingerprint) && needsApply && !isBlocked;
+  const canRepair = Boolean(repairPreview?.repair_fingerprint) && !repairPreviewLoading;
+  const rollbackSucceeded =
+    activeTransaction?.success === true &&
+    activeTransaction.rolled_back.length > 0 &&
+    activeTransaction.applied.length === 0;
+  const canRollback =
+    Boolean(activeTransaction?.transaction_id) &&
+    (activeTransaction?.applied?.length ?? 0) > 0 &&
+    !rollbackSucceeded;
+
+  const applyBusy = mutationLabel === "setup apply";
+  const repairBusy = mutationLabel === "setup repair";
+  const rollbackBusy = mutationLabel === "setup rollback";
 
   return (
     <div className="ws-panel" role="region" aria-label="Unified setup lifecycle">
       <div className="ws-panel-header">
         <span className="ws-panel-title">SETUP LIFECYCLE</span>
-        {previewLoading && <span className="ws-status-dim" role="status">detecting\u2026</span>}
+        {previewLoading && (
+          <span className="ws-status-dim" role="status" aria-live="polite">detecting…</span>
+        )}
         {plan && !previewLoading && (
           <span className="ws-status-chip ws-status-valid">{plan.summary}</span>
         )}
       </div>
+
+      {previewError && (
+        <p className="ws-path-status-detail ws-status-invalid" role="alert" aria-live="assertive">
+          Preview error: {previewError}
+        </p>
+      )}
 
       {plan && !previewLoading && (
         <div className="start-workspace-path-block">
@@ -204,68 +313,98 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
         </div>
       )}
 
+      {repairPreview && repairPreview.missing_artifacts.length > 0 && (
+        <div className="ws-repair-box" role="status" aria-live="polite">
+          <div className="ws-repair-title">Repair preview</div>
+          <p className="ws-repair-hint">{repairPreview.message}</p>
+          <p className="ws-repair-hint">
+            Missing: {repairPreview.missing_artifacts.slice(0, 6).join(", ")}
+            {repairPreview.missing_artifacts.length > 6 ? "…" : ""}
+          </p>
+        </div>
+      )}
+
       <div className="ws-action-row start-workspace-actions">
         <button
           className="btn btn-sm"
           onClick={refresh}
           disabled={globalMutationBusy}
           aria-label="Refresh setup detection"
+          aria-busy={previewLoading}
         >
-          {previewLoading ? "detecting\u2026" : "refresh"}
+          {previewLoading ? "detecting…" : "refresh"}
         </button>
 
         <button
           className="btn btn-sm btn-primary"
           onClick={applyPlan}
           disabled={globalMutationBusy || !canApply || !plan}
+          aria-busy={applyBusy}
           title={isBlocked ? "Resolve conflicts before applying" : needsApply ? "Apply pending changes" : "All surfaces synced"}
         >
-          {mutationLabel === "setup apply" ? "applying\u2026" : "apply"}
+          {applyBusy ? "applying…" : "apply"}
         </button>
 
         <button
           className="btn btn-sm"
           onClick={repair}
-          disabled={globalMutationBusy || !plan}
+          disabled={globalMutationBusy || !canRepair}
+          aria-busy={repairBusy || repairPreviewLoading}
+          title={canRepair ? "Create missing artifacts only" : "No repair preview or nothing to repair"}
         >
-          {mutationLabel === "setup repair" ? "repairing\u2026" : "repair"}
+          {repairBusy ? "repairing…" : "repair"}
         </button>
 
         <button
           ref={rollbackTriggerRef}
           className="btn btn-sm btn-warn"
-          onClick={() => setConfirmRollback(true)}
-          disabled={globalMutationBusy || !hasResult || !result?.transaction_id}
+          onClick={openRollbackConfirm}
+          disabled={globalMutationBusy || !canRollback}
+          aria-busy={rollbackBusy}
           title={
-            result?.transaction_id
-              ? `Rollback transaction ${result.transaction_id.slice(0, 8)}`
-              : "No transaction to roll back"
+            canRollback
+              ? `Rollback transaction ${activeTransaction?.transaction_id.slice(0, 8)}`
+              : "No rollbackable transaction"
           }
         >
           rollback
         </button>
       </div>
 
-      {confirmRollback && result && (
-        <div className="ws-repair-box" role="alertdialog" aria-label="Confirm rollback">
+      {confirmRollback && activeTransaction && (
+        <div
+          ref={confirmDialogRef}
+          className="ws-repair-box"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="Confirm rollback"
+        >
           <div className="ws-repair-title">Rollback transaction?</div>
           <p className="ws-repair-hint">
-            This will restore the previous state of {result.applied.length} artifact(s).
-            Transaction: {result.transaction_id.slice(0, 12)}\u2026
+            Transaction: {activeTransaction.transaction_id.slice(0, 12)}…
           </p>
+          {rollbackDryRun && (
+            <p className="ws-repair-hint" role="status" aria-live="polite">
+              Dry run: would restore {rollbackDryRun.rolled_back.length} artifact(s)
+              {rollbackDryRun.rolled_back.length > 0
+                ? `: ${rollbackDryRun.rolled_back.slice(0, 4).join(", ")}`
+                : ""}
+            </p>
+          )}
           <div className="ws-repair-actions">
             <button
               className="btn btn-sm btn-warn"
               onClick={rollbackTxn}
-              disabled={globalMutationBusy}
-              autoFocus
+              disabled={globalMutationBusy || !rollbackDryRun?.success}
+              aria-busy={rollbackBusy}
             >
-              {mutationLabel === "setup rollback" ? "rolling back\u2026" : "confirm rollback"}
+              {rollbackBusy ? "rolling back…" : "confirm rollback"}
             </button>
             <button
               className="btn btn-sm"
               onClick={() => {
                 setConfirmRollback(false);
+                setRollbackDryRun(null);
                 rollbackTriggerRef.current?.focus();
               }}
               disabled={globalMutationBusy}

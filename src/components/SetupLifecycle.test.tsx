@@ -26,6 +26,16 @@ describe("SetupLifecycle", () => {
     vi.mocked(invoke).mockReset();
     vi.mocked(invoke).mockImplementation(async (cmd: string) => {
       if (cmd === "preview_setup") return previewPlan;
+      if (cmd === "preview_repair_setup") {
+        return {
+          missing_artifacts: [],
+          skipped_updates: 0,
+          skipped_conflicts: 0,
+          skipped_unavailable: 0,
+          repair_fingerprint: null,
+          message: "No missing artifacts",
+        };
+      }
       if (cmd === "apply_setup") {
         return {
           success: true,
