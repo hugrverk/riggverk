@@ -1354,41 +1354,34 @@ pub fn detect_surface_state(
                 OperationKind::Create
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
-            } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(
-                    &skills_root,
-                    "claude",
-                );
-                if expected.is_empty() {
-                    OperationKind::Unavailable
-                } else {
-                    let mut any_missing = false;
-                    let mut any_diverged = false;
-                    for skill_name in &expected {
-                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                        if !installed_skill_md.is_file() {
-                            any_missing = true;
-                            continue;
-                        }
-                        // Find source
-                        let source_dir =
-                            crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
-                                .resolve_source(workspace_root);
-                        if let Some(src_dir) = source_dir {
-                            let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file()
-                                && !file_eq(&installed_skill_md, &source_skill_md)
-                            {
-                                any_diverged = true;
-                            }
-                        }
+            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "claude") {
+                let mut any_missing = false;
+                let mut any_diverged = false;
+                for skill_name in &expected {
+                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                    if !installed_skill_md.is_file() {
+                        any_missing = true;
+                        continue;
                     }
-                    if any_missing || any_diverged {
-                        OperationKind::Update
-                    } else {
-                        OperationKind::NoChange
+                    let source_dir =
+                        crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                    if let Some(src_dir) = source_dir {
+                        let source_skill_md = src_dir.join("SKILL.md");
+                        if source_skill_md.is_file()
+                            && !file_eq(&installed_skill_md, &source_skill_md)
+                        {
+                            any_diverged = true;
+                        }
                     }
                 }
+                if any_missing || any_diverged {
+                    OperationKind::Update
+                } else {
+                    OperationKind::NoChange
+                }
+            } else {
+                OperationKind::Unavailable
             }
         }
         // Cursor agents — check individual agent files, not whole ~/.cursor
@@ -1416,29 +1409,35 @@ pub fn detect_surface_state(
             let target_dir = paths.skills;
             if !target_dir.is_dir() {
                 OperationKind::Create
-            } else {
-                // Check if expected skills are present
-                let skills_root = workspace_root.join("skills");
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(
-                    &skills_root,
-                    "cursor",
-                );
-                if expected.is_empty() {
-                    OperationKind::Unavailable
-                } else {
-                    let mut missing = false;
-                    for skill in &expected {
-                        if !target_dir.join(skill.as_str()).is_dir() {
-                            missing = true;
+            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "cursor") {
+                let mut any_issue = false;
+                for skill_name in &expected {
+                    let installed_skill_md =
+                        target_dir.join(skill_name.as_str()).join("SKILL.md");
+                    if !installed_skill_md.is_file() {
+                        any_issue = true;
+                        break;
+                    }
+                    let source_dir =
+                        crate::artifact_registry::ArtifactId::CursorSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                    if let Some(src_dir) = source_dir {
+                        let source_skill_md = src_dir.join("SKILL.md");
+                        if source_skill_md.is_file()
+                            && !file_eq(&installed_skill_md, &source_skill_md)
+                        {
+                            any_issue = true;
                             break;
                         }
                     }
-                    if missing {
-                        OperationKind::Update
-                    } else {
-                        OperationKind::NoChange
-                    }
                 }
+                if any_issue {
+                    OperationKind::Update
+                } else {
+                    OperationKind::NoChange
+                }
+            } else {
+                OperationKind::Unavailable
             }
         }
         // Cursor MCP — check Playwright MCP merge state
@@ -1466,40 +1465,34 @@ pub fn detect_surface_state(
                 OperationKind::Create
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
-            } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(
-                    &skills_root,
-                    "opencode",
-                );
-                if expected.is_empty() {
-                    OperationKind::Unavailable
-                } else {
-                    let mut any_issue = false;
-                    for skill_name in &expected {
-                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                        if !installed_skill_md.is_file() {
+            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "opencode") {
+                let mut any_issue = false;
+                for skill_name in &expected {
+                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                    if !installed_skill_md.is_file() {
+                        any_issue = true;
+                        break;
+                    }
+                    let source_dir =
+                        crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                    if let Some(src_dir) = source_dir {
+                        let source_skill_md = src_dir.join("SKILL.md");
+                        if source_skill_md.is_file()
+                            && !file_eq(&installed_skill_md, &source_skill_md)
+                        {
                             any_issue = true;
                             break;
                         }
-                        let source_dir =
-                            crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
-                                .resolve_source(workspace_root);
-                        if let Some(src_dir) = source_dir {
-                            let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file()
-                                && !file_eq(&installed_skill_md, &source_skill_md)
-                            {
-                                any_issue = true;
-                                break;
-                            }
-                        }
-                    }
-                    if any_issue {
-                        OperationKind::Update
-                    } else {
-                        OperationKind::NoChange
                     }
                 }
+                if any_issue {
+                    OperationKind::Update
+                } else {
+                    OperationKind::NoChange
+                }
+            } else {
+                OperationKind::Unavailable
             }
         }
         // Codex skills — compare content
@@ -1510,40 +1503,34 @@ pub fn detect_surface_state(
                 OperationKind::Create
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
-            } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(
-                    &skills_root,
-                    "codex",
-                );
-                if expected.is_empty() {
-                    OperationKind::Unavailable
-                } else {
-                    let mut any_issue = false;
-                    for skill_name in &expected {
-                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                        if !installed_skill_md.is_file() {
+            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "codex") {
+                let mut any_issue = false;
+                for skill_name in &expected {
+                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                    if !installed_skill_md.is_file() {
+                        any_issue = true;
+                        break;
+                    }
+                    let source_dir =
+                        crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                    if let Some(src_dir) = source_dir {
+                        let source_skill_md = src_dir.join("SKILL.md");
+                        if source_skill_md.is_file()
+                            && !file_eq(&installed_skill_md, &source_skill_md)
+                        {
                             any_issue = true;
                             break;
                         }
-                        let source_dir =
-                            crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
-                                .resolve_source(workspace_root);
-                        if let Some(src_dir) = source_dir {
-                            let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file()
-                                && !file_eq(&installed_skill_md, &source_skill_md)
-                            {
-                                any_issue = true;
-                                break;
-                            }
-                        }
-                    }
-                    if any_issue {
-                        OperationKind::Update
-                    } else {
-                        OperationKind::NoChange
                     }
                 }
+                if any_issue {
+                    OperationKind::Update
+                } else {
+                    OperationKind::NoChange
+                }
+            } else {
+                OperationKind::Unavailable
             }
         }
         // Deprecated cleanup — always manual
@@ -1560,6 +1547,13 @@ pub fn detect_surface_state(
     };
 
     (surface, kind, summary)
+}
+
+fn expected_skills_for_harness(
+    workspace_root: &Path,
+    harness: &str,
+) -> Option<Vec<crate::artifact_registry::SkillName>> {
+    crate::artifact_registry::discover_skill_names_for_harness(workspace_root, harness).ok()
 }
 
 /// Compare a single file target with its source.

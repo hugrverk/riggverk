@@ -76,10 +76,9 @@ impl AgentName {
             return None;
         }
         // Allow lowercase, digits, hyphens
-        if !name
-            .chars()
-            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-')
-        {
+        if !name.chars().all(|ch| {
+            ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_'
+        }) {
             return None;
         }
         Some(Self(name))
@@ -91,6 +90,10 @@ impl AgentName {
 
     pub fn file_name(&self) -> String {
         format!("{}.md", self.0)
+    }
+
+    pub fn file_name_with_extension(&self, extension: &str) -> String {
+        format!("{}.{}", self.0, extension)
     }
 }
 
@@ -164,7 +167,10 @@ impl ArtifactId {
             }
             ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
             ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
-            ArtifactId::CodexAgent(name) => Ok(home.join(".codex/agents").join(name.file_name())),
+            ArtifactId::CodexAgent(name) => Ok(
+                home.join(".codex/agents")
+                    .join(name.file_name_with_extension("toml")),
+            ),
             ArtifactId::CodexSkill(name) => Ok(home.join(".agents/skills").join(name.as_str())),
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
@@ -195,28 +201,36 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Some(workspace_root.join("agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
+            ArtifactId::OpenCodeSkill(name) => {
+                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+            }
             ArtifactId::CodexConfig => Some(workspace_root.join("templates/codex/config.toml")),
             ArtifactId::CodexRules => Some(workspace_root.join("templates/sync/codex-rules.md")),
             ArtifactId::CodexAgent(name) => Some(
                 workspace_root
                     .join("templates/codex/agents")
-                    .join(name.file_name()),
+                    .join(name.file_name_with_extension("toml")),
             ),
-            ArtifactId::CodexSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
+            ArtifactId::CodexSkill(name) => {
+                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+            }
             ArtifactId::ClaudeRules => Some(workspace_root.join("templates/sync/claude-rules.md")),
             ArtifactId::ClaudeAgent(name) => Some(
                 workspace_root
                     .join("templates/claude/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::ClaudeSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
+            ArtifactId::ClaudeSkill(name) => {
+                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+            }
             ArtifactId::CursorAgent(name) => Some(
                 workspace_root
                     .join("templates/cursor/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::CursorSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
+            ArtifactId::CursorSkill(name) => {
+                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+            }
             ArtifactId::CursorMcp => Some(
                 crate::commands::cursor_profile::cursor_root(workspace_root)
                     .join("mcp/playwright.mcp.json"),
@@ -249,169 +263,50 @@ fn resolve_cursor_paths() -> Result<crate::cursor_profile_paths::CursorProfilePa
     crate::cursor_profile_paths::resolve_cursor_profile_paths()
 }
 
-/// Search for a skill source under skills/ supporting both:
-///   skills/<skill>/SKILL.md (root-level)
-///   skills/<group>/<skill>/SKILL.md (grouped)
-fn find_skill_source_dir(workspace_root: &Path, name: &str) -> Option<PathBuf> {
-    let skills_root = workspace_root.join("skills");
-    // Root-level: skills/name/SKILL.md
-    let root_level = skills_root.join(name).join("SKILL.md");
-    if root_level.is_file() {
-        return Some(skills_root.join(name));
-    }
-    // Grouped: skills/*/name/SKILL.md
-    if let Ok(entries) = std::fs::read_dir(&skills_root) {
-        for entry in entries.flatten() {
-            let group_path = entry.path();
-            if !group_path.is_dir() {
-                continue;
-            }
-            let grouped = group_path.join(name).join("SKILL.md");
-            if grouped.is_file() {
-                return Some(group_path.join(name));
-            }
-        }
-    }
-    None
-}
-
 // ── Surface-to-artifact expansion ──
 
-/// Discover agent names from a source directory (files ending in .md).
-pub fn discover_agent_names(source_dir: &Path) -> Vec<AgentName> {
-    let mut names: Vec<AgentName> = Vec::new();
-    if let Ok(entries) = std::fs::read_dir(source_dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_file() {
-                continue;
-            }
-            if path.extension().and_then(|e| e.to_str()) != Some("md") {
-                continue;
-            }
-            if let Some(stem) = path.file_stem() {
-                if let Some(name) = AgentName::new(stem.to_string_lossy().as_ref()) {
-                    names.push(name);
-                }
-            }
-        }
-    }
-    names.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-    names
-}
-
-/// Discover skill names from the workspace skills directory that target a
-/// specific harness agent. Supports both root-level and grouped layouts.
-///
-/// Uses frontmatter targets field if available, falls back to simple agent check.
-pub fn discover_skill_names_for_harness(skills_root: &Path, harness_agent: &str) -> Vec<SkillName> {
-    let mut names: Vec<SkillName> = Vec::new();
-    discover_skill_names_recursive(skills_root, harness_agent, 0, &mut names);
-    names.sort_by(|a, b| a.as_str().cmp(b.as_str()));
-    names
-}
-
-fn discover_skill_names_recursive(
-    dir: &Path,
+/// Discover skill names for a harness using canonical skill discovery.
+pub fn discover_skill_names_for_harness(
+    workspace_root: &Path,
     harness_agent: &str,
-    depth: u32,
-    out: &mut Vec<SkillName>,
-) {
-    if depth > 2 {
-        return; // reject deeper nesting
+) -> Result<Vec<SkillName>, String> {
+    let names = crate::skill_discovery::skill_names_for_harness(workspace_root, harness_agent)?;
+    let mut out = Vec::new();
+    for n in names {
+        let Some(sn) = SkillName::new(n) else {
+            return Err("invalid skill name in catalog".to_string());
+        };
+        out.push(sn);
     }
-    if let Ok(entries) = std::fs::read_dir(dir) {
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !path.is_dir() {
-                continue;
-            }
-            // Check for SKILL.md in this directory
-            let skill_md = path.join("SKILL.md");
-            if skill_md.is_file() && skill_targets_harness(&skill_md, harness_agent) {
-                if let Some(name) = path.file_name() {
-                    if let Some(sn) = SkillName::new(name.to_string_lossy().as_ref()) {
-                        if !out.iter().any(|existing| existing.as_str() == sn.as_str()) {
-                            out.push(sn);
-                        }
-                    }
-                }
-            }
-            // Recurse into subdirectories (for grouped layout) up to depth 2
-            if depth < 2 {
-                discover_skill_names_recursive(&path, harness_agent, depth + 1, out);
-            }
-        }
+    if out.is_empty() {
+        return Err(format!("no skills target harness {harness_agent}"));
     }
+    out.sort_by(|a, b| a.as_str().cmp(b.as_str()));
+    Ok(out)
 }
 
-/// Check if a SKILL.md targets a specific harness agent.
-/// Uses frontmatter targets metadata if present, falls back to agent field.
-fn skill_targets_harness(skill_md: &Path, harness_agent: &str) -> bool {
-    let content = match std::fs::read_to_string(skill_md) {
-        Ok(c) => c,
-        Err(_) => return false,
-    };
-    // Try parsing frontmatter for targets or agent field
-    parse_skill_targets(&content, harness_agent)
+fn expand_skill_surface(
+    workspace_root: &Path,
+    harness: &str,
+    map: impl Fn(SkillName) -> ArtifactId,
+) -> Vec<ArtifactId> {
+    discover_skill_names_for_harness(workspace_root, harness)
+        .unwrap_or_default()
+        .into_iter()
+        .map(map)
+        .collect()
 }
 
-/// Parse SKILL.md frontmatter to check if the given agent is targeted.
-/// Handles `targets: [agent1, agent2]` and `agent: agent1` fields.
-fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
-    // Simple YAML frontmatter parser for skill metadata
-    let body = if let Some(rest) = content.strip_prefix("---") {
-        if let Some(end) = rest.find("---") {
-            &rest[..end]
-        } else {
-            return false;
-        }
-    } else {
-        return false;
-    };
-
-    for line in body.lines() {
-        let trimmed = line.trim();
-        // Check `targets:` field (list or inline)
-        if let Some(rest) = trimmed.strip_prefix("targets:") {
-            let rest = rest.trim();
-            // Inline: targets: [opencode, claude, cursor, codex]
-            if rest.starts_with('[') {
-                let inner = rest.trim_start_matches('[').trim_end_matches(']');
-                for target in inner.split(',') {
-                    if target.trim().trim_matches('"').trim_matches('\'') == harness_agent {
-                        return true;
-                    }
-                }
-            }
-            // Could be a multiline list starting with a single value
-            if rest == harness_agent {
-                return true;
-            }
-        }
-        // Check for list items under targets:
-        if trimmed.starts_with("- ")
-            && harness_agent == trimmed[2..].trim().trim_matches('"').trim_matches('\'')
-        {
-            // Simple: check if previous non-empty line was "targets:"
-            // For robustness, we also just check if the value matches
-            // and we're within likely YAML context
-        }
-        // Check `agent:` field
-        if let Some(rest) = trimmed.strip_prefix("agent:") {
-            let rest = rest.trim();
-            if rest == harness_agent
-                || rest == format!("\"{harness_agent}\"")
-                || rest == format!("'{harness_agent}'")
-            {
-                return true;
-            }
-        }
-    }
-
-    // Fallback: check if content mentions the agent in targets-related context
-    // (broader match used by existing Claude health check)
-    false
+fn expand_agent_surface(
+    workspace_root: &Path,
+    harness: crate::agent_discovery::AgentHarness,
+    map: impl Fn(AgentName) -> ArtifactId,
+) -> Vec<ArtifactId> {
+    crate::agent_discovery::discover_agent_names(harness, workspace_root)
+        .unwrap_or_default()
+        .into_iter()
+        .map(map)
+        .collect()
 }
 
 /// Expand a surface ID to its constituent artifact IDs.
@@ -421,65 +316,41 @@ fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
 pub fn expand_surface(surface: SetupSurfaceId, workspace_root: &Path) -> Vec<ArtifactId> {
     match surface {
         SetupSurfaceId::OpenCodeConfig => vec![ArtifactId::OpenCodeConfig, ArtifactId::OpenCodeTui],
-        SetupSurfaceId::OpenCodeAgents => {
-            let source_dir = workspace_root.join("agents");
-            discover_agent_names(&source_dir)
-                .into_iter()
-                .map(ArtifactId::OpenCodeAgent)
-                .collect()
-        }
+        SetupSurfaceId::OpenCodeAgents => expand_agent_surface(
+            workspace_root,
+            crate::agent_discovery::AgentHarness::OpenCode,
+            ArtifactId::OpenCodeAgent,
+        ),
         SetupSurfaceId::OpenCodeRules => vec![ArtifactId::OpenCodeRules],
         SetupSurfaceId::OpenCodeSkills => {
-            let skills_root = workspace_root.join("skills");
-            discover_skill_names_for_harness(&skills_root, "opencode")
-                .into_iter()
-                .map(ArtifactId::OpenCodeSkill)
-                .collect()
+            expand_skill_surface(workspace_root, "opencode", ArtifactId::OpenCodeSkill)
         }
         SetupSurfaceId::CodexConfig => vec![ArtifactId::CodexConfig],
-        SetupSurfaceId::CodexAgents => {
-            let source_dir = workspace_root.join("templates/codex/agents");
-            discover_agent_names(&source_dir)
-                .into_iter()
-                .map(ArtifactId::CodexAgent)
-                .collect()
-        }
+        SetupSurfaceId::CodexAgents => expand_agent_surface(
+            workspace_root,
+            crate::agent_discovery::AgentHarness::Codex,
+            ArtifactId::CodexAgent,
+        ),
         SetupSurfaceId::CodexRules => vec![ArtifactId::CodexRules],
         SetupSurfaceId::CodexSkills => {
-            let skills_root = workspace_root.join("skills");
-            discover_skill_names_for_harness(&skills_root, "codex")
-                .into_iter()
-                .map(ArtifactId::CodexSkill)
-                .collect()
+            expand_skill_surface(workspace_root, "codex", ArtifactId::CodexSkill)
         }
         SetupSurfaceId::ClaudeRules => vec![ArtifactId::ClaudeRules],
-        SetupSurfaceId::ClaudeAgents => {
-            let source_dir = workspace_root.join("templates/claude/agents");
-            discover_agent_names(&source_dir)
-                .into_iter()
-                .map(ArtifactId::ClaudeAgent)
-                .collect()
-        }
+        SetupSurfaceId::ClaudeAgents => expand_agent_surface(
+            workspace_root,
+            crate::agent_discovery::AgentHarness::Claude,
+            ArtifactId::ClaudeAgent,
+        ),
         SetupSurfaceId::ClaudeSkills => {
-            let skills_root = workspace_root.join("skills");
-            discover_skill_names_for_harness(&skills_root, "claude")
-                .into_iter()
-                .map(ArtifactId::ClaudeSkill)
-                .collect()
+            expand_skill_surface(workspace_root, "claude", ArtifactId::ClaudeSkill)
         }
-        SetupSurfaceId::CursorAgents => {
-            let source_dir = workspace_root.join("templates/cursor/agents");
-            discover_agent_names(&source_dir)
-                .into_iter()
-                .map(ArtifactId::CursorAgent)
-                .collect()
-        }
+        SetupSurfaceId::CursorAgents => expand_agent_surface(
+            workspace_root,
+            crate::agent_discovery::AgentHarness::Cursor,
+            ArtifactId::CursorAgent,
+        ),
         SetupSurfaceId::CursorSkills => {
-            let skills_root = workspace_root.join("skills");
-            discover_skill_names_for_harness(&skills_root, "cursor")
-                .into_iter()
-                .map(ArtifactId::CursorSkill)
-                .collect()
+            expand_skill_surface(workspace_root, "cursor", ArtifactId::CursorSkill)
         }
         SetupSurfaceId::CursorMcp => vec![ArtifactId::CursorMcp],
         SetupSurfaceId::DeprecatedSkillCleanup => {
@@ -544,6 +415,15 @@ mod tests {
             fs::create_dir_all(parent).unwrap();
         }
         fs::write(path, content).unwrap();
+    }
+
+    fn write_skill(ws: &Path, rel: &str, name: &str, targets: &str) {
+        write_file(
+            &ws.join(rel).join("SKILL.md"),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: {targets}\n---\n# {name}\n"
+            ),
+        );
     }
 
     // ── Surface expansion tests ──
@@ -670,10 +550,7 @@ mod tests {
     #[test]
     fn duplicate_surfaces_do_not_duplicate_artifacts() {
         let ws = temp_dir("dup-surface");
-        write_file(
-            &ws.join("skills/my-skill/SKILL.md"),
-            "---\ntargets: [opencode]\n---\n# Skill",
-        );
+        write_skill(&ws, "skills/my-skill", "my-skill", "opencode");
 
         // Expanding OpenCodeSkills twice should produce same result
         let a1 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
@@ -693,13 +570,17 @@ mod tests {
     #[test]
     fn skill_discovery_supports_root_level() {
         let ws = temp_dir("skill-root");
-        write_file(
-            &ws.join("skills/accessibility-review/SKILL.md"),
-            "---\ntargets: [opencode, claude, cursor, codex]\n---\n# Skill",
+        write_skill(
+            &ws,
+            "skills/accessibility-review",
+            "accessibility-review",
+            "codex, opencode, claude, cursor",
         );
-        write_file(
-            &ws.join("skills/browser-qa/SKILL.md"),
-            "---\ntargets: [opencode, claude, cursor, codex]\n---\n# Skill",
+        write_skill(
+            &ws,
+            "skills/browser-qa",
+            "browser-qa",
+            "codex, opencode, claude, cursor",
         );
 
         let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
@@ -715,9 +596,11 @@ mod tests {
     #[test]
     fn skill_discovery_supports_grouped() {
         let ws = temp_dir("skill-grouped");
-        write_file(
-            &ws.join("skills/ux/accessibility-review/SKILL.md"),
-            "---\ntargets: [opencode, claude, cursor, codex]\n---\n# Skill",
+        write_skill(
+            &ws,
+            "skills/ux/accessibility-review",
+            "accessibility-review",
+            "codex, opencode, claude, cursor",
         );
 
         let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws);
@@ -737,10 +620,7 @@ mod tests {
             &ws.join("templates/cursor/agents/inspector.md"),
             "# inspector",
         );
-        write_file(
-            &ws.join("skills/accessibility-review/SKILL.md"),
-            "---\ntargets: [cursor]\n---\n# Skill",
-        );
+        write_skill(&ws, "skills/accessibility-review", "accessibility-review", "cursor");
 
         let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws);
         let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws);
@@ -801,14 +681,8 @@ mod tests {
         let ws = temp_dir("cursor-no-overlap");
         write_file(&ws.join("templates/cursor/agents/a.md"), "# a");
         write_file(&ws.join("templates/cursor/agents/b.md"), "# b");
-        write_file(
-            &ws.join("skills/skill-a/SKILL.md"),
-            "---\ntargets: [cursor]\n---\n# A",
-        );
-        write_file(
-            &ws.join("skills/skill-b/SKILL.md"),
-            "---\ntargets: [cursor]\n---\n# B",
-        );
+        write_skill(&ws, "skills/skill-a", "skill-a", "cursor");
+        write_skill(&ws, "skills/skill-b", "skill-b", "cursor");
 
         let all_cursor: Vec<ArtifactId> = [
             SetupSurfaceId::CursorAgents,

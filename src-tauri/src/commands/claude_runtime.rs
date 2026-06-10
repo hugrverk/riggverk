@@ -165,12 +165,16 @@ fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
     }
 
     // Use canonical skill discovery with targets metadata
-    let expected =
-        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude");
+    let expected = match crate::artifact_registry::discover_skill_names_for_harness(
+        workspace_root,
+        "claude",
+    ) {
+        Ok(v) => v,
+        Err(_) => return false,
+    };
 
     if expected.is_empty() {
-        // No Claude-targeted skills in workspace — consider synced
-        return true;
+        return false;
     }
 
     // Compare every expected skill's SKILL.md content
@@ -207,12 +211,10 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
 
     let source_skills_dir = workspace_root.join("skills");
     let installed_skills_dir = home.join(".claude/skills");
-    let expected_skill_count = if source_skills_dir.is_dir() {
-        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude")
-            .len()
-    } else {
-        0
-    };
+    let expected_skill_count =
+        crate::artifact_registry::discover_skill_names_for_harness(workspace_root, "claude")
+            .map(|v| v.len())
+            .unwrap_or(0);
     let installed_skill_count = if installed_skills_dir.is_dir() {
         std::fs::read_dir(&installed_skills_dir)
             .map(|entries| {
@@ -360,13 +362,13 @@ mod tests {
         // Set up workspace skills source with a Claude-eligible skill
         write_file(
             &ws.join("skills/test-group/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
         );
 
         // Install matching skill in Claude skills dir
         write_file(
             &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
         );
 
         let health = compute_health(&ws, &home);
@@ -503,11 +505,11 @@ mod tests {
         // Add a Claude-eligible skill so skills_synced can be verified
         write_file(
             &ws.join("skills/group/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
         );
         write_file(
             &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
         );
 
         write_file(&home.join(".claude/CLAUDE.md"), "rules");
