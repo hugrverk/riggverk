@@ -42,14 +42,16 @@ pub enum SetupSurfaceId {
     ClaudeAgents,
     /// Claude skills (.claude/skills)
     ClaudeSkills,
-    /// Cursor global setup (agents, skills, MCP, permissions)
-    CursorSetup,
     /// OpenCode skills (.config/opencode/skills)
     OpenCodeSkills,
     /// Codex skills (.agents/skills)
     CodexSkills,
-    /// Cursor global skills (~/.cursor/skills)
+    /// Cursor global agents (~/.cursor/agents — individual files, not whole dir)
+    CursorAgents,
+    /// Cursor global skills (~/.cursor/skills — individual skill dirs)
     CursorSkills,
+    /// Cursor Playwright MCP state (mcp.json merge)
+    CursorMcp,
     /// Bundled deprecated skill removal (separate destructive workflow)
     DeprecatedSkillCleanup,
 }
@@ -66,10 +68,11 @@ impl SetupSurfaceId {
         SetupSurfaceId::ClaudeRules,
         SetupSurfaceId::ClaudeAgents,
         SetupSurfaceId::ClaudeSkills,
-        SetupSurfaceId::CursorSetup,
         SetupSurfaceId::OpenCodeSkills,
         SetupSurfaceId::CodexSkills,
+        SetupSurfaceId::CursorAgents,
         SetupSurfaceId::CursorSkills,
+        SetupSurfaceId::CursorMcp,
         SetupSurfaceId::DeprecatedSkillCleanup,
     ];
 
@@ -85,10 +88,11 @@ impl SetupSurfaceId {
             SetupSurfaceId::ClaudeRules => "Claude Rules",
             SetupSurfaceId::ClaudeAgents => "Claude Agents",
             SetupSurfaceId::ClaudeSkills => "Claude Skills",
-            SetupSurfaceId::CursorSetup => "Cursor Setup",
             SetupSurfaceId::OpenCodeSkills => "OpenCode Skills",
             SetupSurfaceId::CodexSkills => "Codex Skills",
+            SetupSurfaceId::CursorAgents => "Cursor Agents",
             SetupSurfaceId::CursorSkills => "Cursor Skills",
+            SetupSurfaceId::CursorMcp => "Cursor MCP",
             SetupSurfaceId::DeprecatedSkillCleanup => "Deprecated Skills",
         }
     }
@@ -471,10 +475,10 @@ mod tests {
     #[test]
     fn unavailable_blocks_plan() {
         let request = SetupRequest {
-            surfaces: vec![SetupSurfaceId::CursorSetup],
+            surfaces: vec![SetupSurfaceId::CursorAgents],
             skip_manual: false,
         };
-        let states = vec![unavailable(SetupSurfaceId::CursorSetup)];
+        let states = vec![unavailable(SetupSurfaceId::CursorAgents)];
         let plan = plan_setup(&request, &states);
         assert!(plan.is_blocked);
         assert!(!plan.has_pending_changes);
@@ -517,7 +521,7 @@ mod tests {
             create(SetupSurfaceId::OpenCodeConfig),
             update(SetupSurfaceId::CodexRules),
             no_change(SetupSurfaceId::ClaudeRules),
-            conflict(SetupSurfaceId::CursorSetup),
+            conflict(SetupSurfaceId::CursorAgents),
             manual(SetupSurfaceId::ClaudeSkills),
             unavailable(SetupSurfaceId::CodexAgents),
         ];

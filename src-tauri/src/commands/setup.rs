@@ -102,10 +102,15 @@ fn resolve_surface_path(surface: SetupSurfaceId) -> Result<PathBuf, String> {
         SetupSurfaceId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
         SetupSurfaceId::ClaudeAgents => Ok(home.join(".claude/agents")),
         SetupSurfaceId::ClaudeSkills => Ok(home.join(".claude/skills")),
-        SetupSurfaceId::CursorSetup => Ok(home.join(".cursor")),
         SetupSurfaceId::OpenCodeSkills => Ok(home.join(".config/opencode/skills")),
         SetupSurfaceId::CodexSkills => Ok(home.join(".agents/skills")),
+        SetupSurfaceId::CursorAgents => Ok(home.join(".cursor/agents")),
         SetupSurfaceId::CursorSkills => Ok(home.join(".cursor/skills")),
+        SetupSurfaceId::CursorMcp => Ok({
+            let paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
+                .map_err(|e| format!("cursor paths: {e}"))?;
+            paths.mcp_config
+        }),
         SetupSurfaceId::DeprecatedSkillCleanup => Ok(home.join(".agents/skills")),
     }
 }
@@ -338,23 +343,54 @@ fn execute_operation_and_validate(
             Ok(())
         }
 
-        // Cursor global setup — native Rust, not install-cursor-workspace.sh
-        SetupSurfaceId::CursorSetup => {
+        // Cursor global agents — native Rust only, never install-cursor-workspace.sh
+        SetupSurfaceId::CursorAgents => {
             let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
                 .map_err(|e| format!("resolve Cursor profile: {e}"))?;
-            let result = crate::cursor_profile_ops::run_global_profile(
+            let result = crate::cursor_profile_ops::run_global_agents_only(
                 workspace_root,
                 &cursor_paths,
                 true,
             );
             if !result.success {
-                return Err(format!("Cursor setup failed: {}", result.stderr));
+                return Err(format!("Cursor agents apply failed: {}", result.stderr));
+            }
+            Ok(())
+        }
+
+        // Cursor global skills — use install-skills.sh with --agent cursor
+        SetupSurfaceId::CursorSkills => {
+            let script = workspace_root.join("scripts/install-skills.sh");
+            let script_str = super::workspace::path_arg(&script)?;
+            let agent = surface_agent(op.surface).unwrap_or("cursor");
+            let (ok, _stdout, stderr, _code) = run_cmd(
+                "bash",
+                &[&script_str, "--agent", agent, "--apply"],
+                workspace_root,
+            );
+            if !ok {
+                return Err(format!("Cursor skill install failed: {stderr}"));
+            }
+            Ok(())
+        }
+
+        // Cursor Playwright MCP — use install-cursor-workspace.sh with --mcp-only
+        SetupSurfaceId::CursorMcp => {
+            let script = workspace_root.join("scripts/install-cursor-workspace.sh");
+            let script_str = super::workspace::path_arg(&script)?;
+            let (ok, _stdout, stderr, _code) = run_cmd(
+                "bash",
+                &[&script_str, "--mcp-only", "--apply"],
+                workspace_root,
+            );
+            if !ok {
+                return Err(format!("Cursor MCP apply failed: {stderr}"));
             }
             Ok(())
         }
 
         // Skills — use install-skills.sh
-        SetupSurfaceId::OpenCodeSkills | SetupSurfaceId::CodexSkills | SetupSurfaceId::ClaudeSkills | SetupSurfaceId::CursorSkills => {
+        SetupSurfaceId::OpenCodeSkills | SetupSurfaceId::CodexSkills | SetupSurfaceId::ClaudeSkills => {
             let script = workspace_root.join("scripts/install-skills.sh");
             let script_str = super::workspace::path_arg(&script)?;
             let agent = surface_agent(op.surface).unwrap_or("opencode");
@@ -1057,28 +1093,64 @@ pub fn detect_surface_state(
                 OperationKind::Create
             }
         }
-        // Cursor global setup — use existing health check
-        SetupSurfaceId::CursorSetup => {
-            let target = home.join(".cursor");
-            if !target.is_dir() {
+        // Cursor agents — check individual agent files, not whole ~/.cursor
+        SetupSurfaceId::CursorAgents => {
+            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
+                Ok(p) => p,
+                Err(_) => {
+                    let summary = "Cursor profile unavailable".to_string();
+                    return (surface, OperationKind::Unavailable, summary);
+                }
+            };
+            let source_dir = workspace_root.join("templates/cursor/agents");
+            let target_dir = paths.agents;
+            compare_agent_dir(&source_dir, &target_dir)
+        }
+        // Cursor skills — check per-skill directories, not just existence
+        SetupSurfaceId::CursorSkills => {
+            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
+                Ok(p) => p,
+                Err(_) => {
+                    let summary = "Cursor profile unavailable".to_string();
+                    return (surface, OperationKind::Unavailable, summary);
+                }
+            };
+            let target_dir = paths.skills;
+            if !target_dir.is_dir() {
                 OperationKind::Create
             } else {
-                // Check agents at minimum
-                let agents_target = home.join(".cursor/agents");
-                let agents_source = workspace_root.join("templates/cursor/agents");
-                let status = compare_agent_dir(&agents_source, &agents_target);
-                match status {
-                    OperationKind::NoChange => {
-                        // Check skills
-                        let skills_target = home.join(".cursor/skills");
-                        if skills_target.is_dir() {
-                            OperationKind::NoChange
-                        } else {
-                            OperationKind::Update
+                // Check if expected skills are present
+                let skills_root = workspace_root.join("skills");
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "cursor");
+                if expected.is_empty() {
+                    OperationKind::Unavailable
+                } else {
+                    let mut missing = false;
+                    for skill in &expected {
+                        if !target_dir.join(skill.as_str()).is_dir() {
+                            missing = true;
+                            break;
                         }
                     }
-                    other => other,
+                    if missing { OperationKind::Update } else { OperationKind::NoChange }
                 }
+            }
+        }
+        // Cursor MCP — check Playwright MCP merge state
+        SetupSurfaceId::CursorMcp => {
+            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
+                Ok(p) => p,
+                Err(_) => {
+                    let summary = "Cursor profile unavailable".to_string();
+                    return (surface, OperationKind::Unavailable, summary);
+                }
+            };
+            let status = crate::cursor_profile_ops::mcp_diff_status(workspace_root, &paths);
+            match status.as_str() {
+                "synced" => OperationKind::NoChange,
+                "missing" => OperationKind::Create,
+                "diverged" => OperationKind::Update,
+                _ => OperationKind::Unavailable,
             }
         }
         // OpenCode skills
@@ -1093,15 +1165,6 @@ pub fn detect_surface_state(
         // Codex skills
         SetupSurfaceId::CodexSkills => {
             let target = home.join(".agents/skills");
-            if target.is_dir() {
-                OperationKind::NoChange
-            } else {
-                OperationKind::Create
-            }
-        }
-        // Cursor skills
-        SetupSurfaceId::CursorSkills => {
-            let target = home.join(".cursor/skills");
             if target.is_dir() {
                 OperationKind::NoChange
             } else {

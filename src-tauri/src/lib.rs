@@ -1,5 +1,6 @@
 mod agent_skill_targets;
 mod agent_targets;
+mod artifact_registry;
 mod codex_legacy_migration;
 mod commands;
 mod cursor_profile_ops;

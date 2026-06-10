@@ -225,7 +225,7 @@ fn resolve_playwright_paths(home: &Path) -> Option<(PathBuf, PathBuf)> {
     Some((config, browsers))
 }
 
-fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths) -> String {
+pub(crate) fn mcp_diff_status(workspace_root: &Path, paths: &CursorProfilePaths) -> String {
     let template_path = mcp_template_path(workspace_root);
     if !template_path.is_file() {
         return "template-missing".into();
