@@ -64,7 +64,7 @@ def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
     extracted: dict[str, Any] = {}
     for key in top_level:
         if key in config:
-            extracted[key] = json.loads(json.dumps(config[key]))
+            extracted[key] = json.loads(json.dumps(configkey]))
     mcp = config.get("mcp")
     if isinstance(mcp, dict):
         managed_mcp: dict[str, Any] = {}
@@ -188,9 +188,13 @@ def main() -> None:
     parser.add_argument("target", nargs="?", type=Path, help="Installed opencode.json path")
     parser.add_argument("managed", nargs="?", type=Path, help="Rendered bundled managed config path")
     parser.add_argument("--managed-match", action="store_true", help="Exit 0 when managed keys already match")
-    parser.add_argument("--merge", action="store_true", help="Print merged JSON to stdout")
+    parser.add_argument(
+        "--merge",
+        action="store_true",
+        help="Write merged JSON to --output without printing user configuration",
+    )
     parser.add_argument("--apply", action="store_true", help="Merge managed keys into target with optional backup")
-    parser.add_argument("--output", type=Path, help="Write merged JSON to this path instead of stdout")
+    parser.add_argument("--output", type=Path, help="Required output path for --merge")
     parser.add_argument("--backup-dir", type=Path, help="Backup directory used with --apply")
     args = parser.parse_args()
 
@@ -209,7 +213,9 @@ def main() -> None:
             fail(f"installed config must be a JSON object: {args.target}")
         raise SystemExit(0 if managed_keys_match(installed_value, managed_value) else 1)
 
-    if args.merge or args.output:
+    if args.merge:
+        if args.output is None:
+            fail("--merge requires --output; refusing to print merged user configuration")
         if args.target.is_file():
             installed_value = load_json(args.target)
             if not isinstance(installed_value, dict):
@@ -217,13 +223,11 @@ def main() -> None:
             merged = merge_managed(installed_value, managed_value)
         else:
             merged = json.loads(json.dumps(managed_value))
-        payload = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(payload, encoding="utf-8")
-        else:
-            sys.stdout.write(payload)
+        write_json(args.output, merged)
         return
+
+    if args.output is not None:
+        fail("--output is only valid with --merge")
 
     if args.apply:
         apply_merge(args.target, managed_value, args.backup_dir)
