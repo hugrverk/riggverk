@@ -511,6 +511,16 @@ export interface CursorProfileHealth {
   next_action: string;
 }
 
+export interface ClaudeRuntimeHealth {
+  rules_synced: boolean;
+  agents_synced: boolean;
+  skills_synced: boolean;
+  expected_agent_count: number;
+  installed_agent_count: number;
+  claude_cli_available: boolean;
+  summary: string;
+}
+
 // ── Unified setup lifecycle types ──
 
 export type SetupSurfaceId =

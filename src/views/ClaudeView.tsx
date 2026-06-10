@@ -3,9 +3,10 @@ import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
+import { runtimeChipLabel } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, SkillSummary, StatusData } from "../types";
+import type { AgentTargetMeta, AppSettings, ClaudeRuntimeHealth, SkillSummary, StatusData } from "../types";
 
 interface ClaudeViewProps {
   appSettings: AppSettings | null;
@@ -36,6 +37,8 @@ interface ClaudeViewProps {
   onPreviewRemoveDeprecated?: () => void;
   onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
+  claudeRuntimeHealth: ClaudeRuntimeHealth | null;
+  onRefreshClaudeHealth: () => void;
   onOpenInstallScript: () => void;
 }
 
@@ -48,7 +51,7 @@ export function ClaudeView(props: ClaudeViewProps) {
     onDiffRules, onSyncRules, onDiffAgents, onSyncAgents,
     skills, skillsLoaded, skillSearch, onPreviewSyncSkills, onSyncAllSkills,
     onPreviewRemoveDeprecated, onRemoveDeprecated, onSetSkillSearch,
-    onOpenInstallScript,
+    claudeRuntimeHealth, onRefreshClaudeHealth, onOpenInstallScript,
   } = props;
   const busy = wsRunning !== null;
   const statusText = workspaceValid ? "valid" : "setup needed";
@@ -73,12 +76,27 @@ export function ClaudeView(props: ClaudeViewProps) {
             onToggleTarget={onToggleTarget}
           />
 
+          {workspaceValid && claudeRuntimeHealth && (
+            <HarnessActionCard
+              title="Health Overview"
+              ariaLabel="Claude runtime health"
+              description={claudeRuntimeHealth.summary}
+              details={[
+                { label: "Agent count", value: `${claudeRuntimeHealth.installed_agent_count}/${claudeRuntimeHealth.expected_agent_count}`, tone: claudeRuntimeHealth.agents_synced ? "ok" : "warn" },
+                { label: "Rules", value: claudeRuntimeHealth.rules_synced ? "synced" : "diverged", tone: claudeRuntimeHealth.rules_synced ? "ok" : "warn" },
+                { label: "Skills", value: claudeRuntimeHealth.skills_synced ? "synced" : "pending", tone: claudeRuntimeHealth.skills_synced ? "ok" : "warn" },
+                { label: "CLI", value: claudeRuntimeHealth.claude_cli_available ? "found" : "not found", tone: claudeRuntimeHealth.claude_cli_available ? "ok" : "muted" },
+              ]}
+              primaryAction={{ label: "refresh health", onClick: onRefreshClaudeHealth, disabled: busy }}
+            />
+          )}
+
           {workspaceValid && (
             <HarnessActionCard
               title="Rules"
               ariaLabel="Claude rules sync"
               description="Sync composed global rules to ~/.claude/CLAUDE.md."
-              statusChip={{ label: ruleTargetsEnabled ? "ready" : "off", tone: ruleTargetsEnabled ? "ok" : "muted" }}
+              statusChip={{ label: runtimeChipLabel(claudeRuntimeHealth?.rules_synced ? "synced" : ruleTargetsEnabled ? "ready" : "off"), tone: claudeRuntimeHealth?.rules_synced ? "ok" : ruleTargetsEnabled ? "warn" : "muted" }}
               secondaryActions={[{ label: "diff rules", onClick: onDiffRules, disabled: busy || !ruleTargetsEnabled }]}
               primaryAction={{ label: "sync rules", onClick: onSyncRules, disabled: busy || !ruleTargetsEnabled }}
             />
@@ -94,7 +112,7 @@ export function ClaudeView(props: ClaudeViewProps) {
                 tone: agentsTargetsEnabled ? "ok" : "muted",
               }}
               details={[
-                { label: "Expected", value: "5 native agents", tone: agentsTargetsEnabled ? "ok" : "muted" },
+                { label: "Expected", value: `${claudeRuntimeHealth?.expected_agent_count ?? "?"} native agents`, tone: agentsTargetsEnabled ? "ok" : "muted" },
                 { label: "Source", value: "templates/claude/agents", tone: "muted" },
               ]}
               secondaryActions={[{ label: "diff agents", onClick: onDiffAgents, disabled: busy || !agentsTargetsEnabled }]}

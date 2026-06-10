@@ -63,7 +63,9 @@ function App() {
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
+    claudeRuntimeHealth,
     loadCursorProfileHealth,
+    loadClaudeRuntimeHealth,
     loadBrainSetupSeed,
     resetWorkspaceHealthState,
     isInvalidWorkspaceError,
@@ -174,8 +176,9 @@ function App() {
       loadOpenCodeRuntimeHealth(generation).catch(() => {}),
       loadCodexRuntimeHealth(generation).catch(() => {}),
       loadCursorProfileHealth(generation).catch(() => {}),
+      loadClaudeRuntimeHealth(generation).catch(() => {}),
     ]);
-  }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, loadClaudeRuntimeHealth, workspaceLoadGenerationRef]);
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -743,6 +746,8 @@ function App() {
               refresh: fetchStatus,
             })}
             {...targetSkillsShared}
+            claudeRuntimeHealth={claudeRuntimeHealth}
+            onRefreshClaudeHealth={() => loadClaudeRuntimeHealth()}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["claude"], "preview skills sync (claude)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["claude"], "sync all skills (claude)")}
             onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["claude"], "preview deprecated removal (claude)")}
