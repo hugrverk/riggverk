@@ -733,4 +733,120 @@ mod tests {
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains(&ArtifactId::ClaudeSkill(SkillName::new("accessibility-review").unwrap())));
     }
+
+    // ── Cursor ownership tests ──
+
+    #[test]
+    fn cursor_agents_and_skills_have_separate_ownership() {
+        let ws = temp_dir("cursor-owners");
+        write_file(&ws.join("templates/cursor/agents/repo-scout.md"), "# scout");
+        write_file(&ws.join("templates/cursor/agents/inspector.md"), "# inspector");
+        write_file(
+            &ws.join("skills/accessibility-review/SKILL.md"),
+            "---\ntargets: [cursor]\n---\n# Skill",
+        );
+
+        let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws);
+        let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws);
+        let mcp = expand_surface(SetupSurfaceId::CursorMcp, &ws);
+
+        // No overlap between agents and skills
+        for a in &agents {
+            assert!(
+                !skills.contains(a),
+                "Cursor agent artifact should not appear in skills: {a:?}"
+            );
+        }
+        for s in &skills {
+            assert!(
+                !agents.contains(s),
+                "Cursor skill artifact should not appear in agents: {s:?}"
+            );
+        }
+
+        // MCP is separate
+        assert!(!mcp.is_empty());
+        for m in &mcp {
+            assert!(!agents.contains(m));
+            assert!(!skills.contains(m));
+        }
+
+        // Agents should resolve correctly
+        assert_eq!(agents.len(), 2);
+        assert!(agents.contains(&ArtifactId::CursorAgent(AgentName::new("repo-scout").unwrap())));
+        assert!(agents.contains(&ArtifactId::CursorAgent(AgentName::new("inspector").unwrap())));
+    }
+
+    #[test]
+    fn cursor_agents_do_not_own_home_cursor_root() {
+        let ws = temp_dir("cursor-not-root");
+        write_file(&ws.join("templates/cursor/agents/repo-scout.md"), "# scout");
+
+        let artifacts = expand_surface(SetupSurfaceId::CursorAgents, &ws);
+        // Each artifact should be an individual agent, not the whole directory
+        for a in &artifacts {
+            match a {
+                ArtifactId::CursorAgent(name) => {
+                    // Agent name should be bounded, not a broad path
+                    assert!(name.as_str().len() > 0);
+                    assert!(!name.as_str().contains('/'));
+                }
+                other => panic!("Unexpected artifact type from CursorAgents: {other:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn cursor_surfaces_have_no_overlapping_artifacts() {
+        let ws = temp_dir("cursor-no-overlap");
+        write_file(&ws.join("templates/cursor/agents/a.md"), "# a");
+        write_file(&ws.join("templates/cursor/agents/b.md"), "# b");
+        write_file(
+            &ws.join("skills/skill-a/SKILL.md"),
+            "---\ntargets: [cursor]\n---\n# A",
+        );
+        write_file(
+            &ws.join("skills/skill-b/SKILL.md"),
+            "---\ntargets: [cursor]\n---\n# B",
+        );
+
+        let all_cursor: Vec<ArtifactId> = [
+            SetupSurfaceId::CursorAgents,
+            SetupSurfaceId::CursorSkills,
+            SetupSurfaceId::CursorMcp,
+        ]
+        .iter()
+        .flat_map(|s| expand_surface(*s, &ws))
+        .collect();
+
+        // Every artifact should have exactly one surface owner
+        let mut seen = std::collections::HashSet::new();
+        for a in &all_cursor {
+            assert!(
+                seen.insert(a.clone()),
+                "Duplicate Cursor artifact across surfaces: {a:?}"
+            );
+        }
+
+        // Verify the surface() method returns correct owner
+        for a in &all_cursor {
+            let surface = a.surface();
+            match a {
+                ArtifactId::CursorAgent(_) => assert_eq!(surface, SetupSurfaceId::CursorAgents),
+                ArtifactId::CursorSkill(_) => assert_eq!(surface, SetupSurfaceId::CursorSkills),
+                ArtifactId::CursorMcp => assert_eq!(surface, SetupSurfaceId::CursorMcp),
+                _ => panic!("Non-Cursor artifact in Cursor set: {a:?}"),
+            }
+        }
+    }
+
+    #[test]
+    fn cursor_mcp_surface_is_single_bounded_artifact() {
+        // CursorMcp maps to exactly one artifact - not a broad root
+        let ws = temp_dir("cursor-mcp-bounded");
+        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws);
+        assert_eq!(artifacts.len(), 1);
+        assert_eq!(artifacts[0], ArtifactId::CursorMcp);
+        assert_eq!(artifacts[0].surface(), SetupSurfaceId::CursorMcp);
+    }
 }

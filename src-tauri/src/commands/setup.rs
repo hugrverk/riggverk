@@ -374,17 +374,17 @@ fn execute_operation_and_validate(
             Ok(())
         }
 
-        // Cursor Playwright MCP — use install-cursor-workspace.sh with --mcp-only
+        // Cursor Playwright MCP — native Rust only, never install-cursor-workspace.sh
         SetupSurfaceId::CursorMcp => {
-            let script = workspace_root.join("scripts/install-cursor-workspace.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--mcp-only", "--apply"],
+            let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
+                .map_err(|e| format!("resolve Cursor profile: {e}"))?;
+            let result = crate::cursor_profile_ops::run_global_mcp_only(
                 workspace_root,
+                &cursor_paths,
+                true,
             );
-            if !ok {
-                return Err(format!("Cursor MCP apply failed: {stderr}"));
+            if !result.success {
+                return Err(format!("Cursor MCP apply failed: {}", result.stderr));
             }
             Ok(())
         }

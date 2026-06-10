@@ -681,6 +681,114 @@ pub fn run_global_agents_only(
     }
 }
 
+/// Run only the Cursor Playwright MCP merge (native Rust only).
+/// Never delegates to install-cursor-workspace.sh for global setup.
+pub fn run_global_mcp_only(
+    workspace_root: &Path,
+    paths: &CursorProfilePaths,
+    apply: bool,
+) -> ProfileRunOutput {
+    let mut stdout = String::new();
+
+    // Preflight
+    if let Err(err) = ensure_global_write_target(paths, &paths.mcp_config, "mcp") {
+        return ProfileRunOutput {
+            success: false,
+            stdout,
+            stderr: format!("MCP preflight: {err}"),
+            exit_code: 1,
+        };
+    }
+
+    let template_path = mcp_template_path(workspace_root);
+
+    // Resolve Playwright paths
+    let (config_path, browsers_path) = match resolve_playwright_paths(&paths.user_home) {
+        Some((c, b)) => (c, b),
+        None => {
+            return ProfileRunOutput {
+                success: false,
+                stdout,
+                stderr: "could not resolve Playwright MCP paths for this platform".into(),
+                exit_code: 1,
+            };
+        }
+    };
+
+    if apply {
+        // Preflight full merge
+        let mcp_serialized = match prepare_mcp_merge(
+            &template_path,
+            &paths.mcp_config,
+            &config_path,
+            &browsers_path,
+        ) {
+            Ok(s) => s,
+            Err(err) => {
+                return ProfileRunOutput {
+                    success: false,
+                    stdout,
+                    stderr: format!("MCP merge preflight: {err}"),
+                    exit_code: 1,
+                };
+            }
+        };
+
+        // Ensure backup root is accessible
+        if let Err(e) = backup_root() {
+            return ProfileRunOutput {
+                success: false,
+                stdout,
+                stderr: format!("backup root unavailable: {e}"),
+                exit_code: 1,
+            };
+        }
+
+        // Create parent dir
+        if let Some(parent) = paths.mcp_config.parent() {
+            if let Err(e) = fs::create_dir_all(parent) {
+                return ProfileRunOutput {
+                    success: false,
+                    stdout,
+                    stderr: format!("create MCP parent: {e}"),
+                    exit_code: 1,
+                };
+            }
+        }
+
+        // Backup existing MCP config
+        if let Err(e) = backup_file_before_write(&paths.mcp_config, "cursor-mcp") {
+            return ProfileRunOutput {
+                success: false,
+                stdout,
+                stderr: format!("backup MCP: {e}"),
+                exit_code: 1,
+            };
+        }
+
+        // Write merged MCP config
+        if let Err(e) = fs::write(&paths.mcp_config, &mcp_serialized) {
+            return ProfileRunOutput {
+                success: false,
+                stdout,
+                stderr: format!("write MCP: {e}"),
+                exit_code: 1,
+            };
+        }
+        stdout.push_str("global-mcp          written 1\n");
+    } else {
+        let status = mcp_diff_status(workspace_root, paths);
+        stdout.push_str(&format!("global-mcp          planned {status}\n"));
+    }
+
+    ProfileRunOutput {
+        success: true,
+        stdout,
+        stderr: String::new(),
+        exit_code: 0,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
