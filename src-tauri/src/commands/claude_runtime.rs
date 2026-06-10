@@ -28,12 +28,16 @@ pub struct ClaudeRuntimeHealth {
     pub rules_synced: bool,
     /// Whether Claude native agents (~/.claude/agents) are synced.
     pub agents_synced: bool,
-    /// Whether Claude skills (~/.claude/skills/ with SKILL.md) are present.
+    /// Whether Claude skills (~/.claude/skills/ with SKILL.md) are synced.
     pub skills_synced: bool,
     /// Number of expected Claude agents (from agent adapters manifest).
     pub expected_agent_count: usize,
     /// Number of installed Claude agent files found.
     pub installed_agent_count: usize,
+    /// Number of expected Claude-targeted skills (from canonical metadata).
+    pub expected_skill_count: usize,
+    /// Number of installed Claude skill directories found.
+    pub installed_skill_count: usize,
     /// Claude CLI availability (binary found in PATH).
     pub claude_cli_available: bool,
     /// Human-readable summary for the UI.
@@ -99,6 +103,7 @@ fn check_rules_synced(home: &Path, workspace_root: &Path) -> bool {
 }
 
 /// Check whether the source Claude agents match the installed ones.
+/// Source read errors and installed file read errors fail closed.
 fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
     let installed_dir = home.join(".claude/agents");
     if !installed_dir.is_dir() {
@@ -106,21 +111,28 @@ fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
     }
     let source_dir = workspace_root.join("templates/claude/agents");
     if !source_dir.is_dir() {
+        // Source missing — fail closed, don't report synced
         return false;
     }
 
     // Compare every source .md file with the installed version
     let source_entries = match std::fs::read_dir(&source_dir) {
         Ok(e) => e,
-        Err(_) => return false,
+        Err(_) => return false, // source read error — fail closed
     };
 
+    let mut found_any = false;
     for entry in source_entries.flatten() {
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("md") {
             continue;
         }
-        let name = path.file_name().unwrap();
+        // Safe unwrap: file_name() only fails for paths ending in .. which
+        // read_dir won't produce for matching .md files
+        let Some(name) = path.file_name() else {
+            continue;
+        };
+        found_any = true;
         let installed_path = installed_dir.join(name);
         if !installed_path.is_file() {
             return false;
@@ -129,11 +141,16 @@ fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
             return false;
         }
     }
-    true
+    // At least one source agent must exist
+    found_any
 }
 
-/// Check whether Claude skills are synced by verifying all skills in the workspace
-/// skills directory that have Claude as a target agent are installed in ~/.claude/skills.
+/// Check whether Claude skills are synced using canonical target metadata.
+///
+/// Uses the artifact_registry's skill discovery which parses frontmatter
+/// targets metadata, not substring matching. Supports root-level and
+/// grouped skill layouts. Compares installed SKILL.md content against
+/// source, not just file existence.
 fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
     let installed_skills_dir = home.join(".claude/skills");
     if !installed_skills_dir.is_dir() {
@@ -142,69 +159,44 @@ fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
 
     let source_skills_dir = workspace_root.join("skills");
     if !source_skills_dir.is_dir() {
-        // No skills source — skills are present but we can't verify sync
-        // Still count as synced if the installed dir has content
-        return std::fs::read_dir(installed_skills_dir)
-            .map(|mut e| e.any(|e| e.is_ok()))
-            .unwrap_or(false);
+        // No skills source — skills are present but we can't verify sync.
+        // Fail closed: return false instead of assuming synced.
+        return false;
     }
 
-    // Find all Claude-eligible skills in the workspace
-    let mut expected_skill_names: Vec<String> = Vec::new();
+    // Use canonical skill discovery with targets metadata
+    let expected = crate::artifact_registry::discover_skill_names_for_harness(
+        &source_skills_dir,
+        "claude",
+    );
 
-    let group_entries = match std::fs::read_dir(&source_skills_dir) {
-        Ok(e) => e,
-        Err(_) => return true,
-    };
-
-    for group_entry in group_entries.flatten() {
-        let group_path = group_entry.path();
-        if !group_path.is_dir() {
-            continue;
-        }
-        // Each subdirectory is a skill group
-        let skill_entries = match std::fs::read_dir(&group_path) {
-            Ok(e) => e,
-            Err(_) => continue,
-        };
-        for skill_entry in skill_entries.flatten() {
-            let skill_path = skill_entry.path();
-            if !skill_path.is_dir() {
-                continue;
-            }
-            let skill_md = skill_path.join("SKILL.md");
-            if !skill_md.is_file() {
-                continue;
-            }
-            // Read SKILL.md to check if agent includes "claude"
-            if let Some(skill_name) = skill_path.file_name() {
-                let name_str = skill_name.to_string_lossy();
-                if has_claude_agent(&skill_md) {
-                    expected_skill_names.push(name_str.to_string());
-                }
-            }
-        }
-    }
-
-    if expected_skill_names.is_empty() {
-        // No Claude-specific skills — consider synced
+    if expected.is_empty() {
+        // No Claude-targeted skills in workspace — consider synced
         return true;
     }
 
-    // Check every expected skill is installed
-    expected_skill_names.iter().all(|name| {
-        let installed = installed_skills_dir.join(name).join("SKILL.md");
-        installed.is_file()
+    // Compare every expected skill's SKILL.md content
+    expected.iter().all(|skill_name| {
+        let installed_skill_md = installed_skills_dir
+            .join(skill_name.as_str())
+            .join("SKILL.md");
+        if !installed_skill_md.is_file() {
+            return false;
+        }
+        // Find source and compare content
+        let source_dir = crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
+            .resolve_source(workspace_root);
+        if let Some(src_dir) = source_dir {
+            let source_skill_md = src_dir.join("SKILL.md");
+            if source_skill_md.is_file() {
+                // Compare actual content, not just existence
+                if !file_eq(&installed_skill_md, &source_skill_md) {
+                    return false;
+                }
+            }
+        }
+        true
     })
-}
-
-/// Read SKILL.md frontmatter to check if "claude" appears in the agent field.
-fn has_claude_agent(skill_md: &Path) -> bool {
-    if let Ok(content) = std::fs::read_to_string(skill_md) {
-        content.contains("agent:") && content.contains("claude")
-    } else {
-        false
-    }
 }
 
 /// Compute Claude runtime health from inspected managed surfaces only.
@@ -215,20 +207,52 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
     let installed_count = installed_agent_count(home);
     let expected_count = expected_agent_count(workspace_root);
 
+    let source_skills_dir = workspace_root.join("skills");
+    let installed_skills_dir = home.join(".claude/skills");
+    let expected_skill_count = if source_skills_dir.is_dir() {
+        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude").len()
+    } else {
+        0
+    };
+    let installed_skill_count = if installed_skills_dir.is_dir() {
+        std::fs::read_dir(&installed_skills_dir)
+            .map(|entries| entries.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).count())
+            .unwrap_or(0)
+    } else {
+        0
+    };
+
     let cli_ok = claude_cli_available();
 
     let summary = if !home.join(".claude").exists() {
         "Claude not configured (no ~/.claude directory)".to_string()
     } else {
-        let parts: Vec<&str> = [
-            (rules_synced, "rules synced"),
-            (agents_synced, "agents synced"),
-            (skills_synced, "skills synced"),
-        ]
-        .iter()
-        .filter_map(|(ok, label)| if *ok { Some(label) } else { None })
-        .copied()
-        .collect();
+        let mut parts: Vec<String> = Vec::new();
+        if rules_synced {
+            parts.push("rules synced".to_string());
+        }
+        if agents_synced {
+            parts.push(format!(
+                "agents synced ({}/{})",
+                expected_count, installed_count
+            ));
+        } else if installed_count > 0 {
+            parts.push(format!(
+                "agents partial ({}/{})",
+                expected_count, installed_count
+            ));
+        }
+        if skills_synced {
+            parts.push(format!(
+                "skills synced ({}/{})",
+                expected_skill_count, installed_skill_count
+            ));
+        } else if installed_skill_count > 0 {
+            parts.push(format!(
+                "skills partial ({}/{})",
+                expected_skill_count, installed_skill_count
+            ));
+        }
 
         if parts.is_empty() {
             "Claude surfaces need setup".to_string()
@@ -243,6 +267,8 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
         skills_synced,
         expected_agent_count: expected_count,
         installed_agent_count: installed_count,
+        expected_skill_count,
+        installed_skill_count,
         claude_cli_available: cli_ok,
         summary,
     }
