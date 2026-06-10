@@ -510,3 +510,58 @@ export interface CursorProfileHealth {
   warnings: string[];
   next_action: string;
 }
+
+// ── Unified setup lifecycle types ──
+
+export type SetupSurfaceId =
+  | "opencode_config"
+  | "opencode_agents"
+  | "opencode_rules"
+  | "codex_config"
+  | "codex_agents"
+  | "codex_rules"
+  | "claude_rules"
+  | "claude_agents"
+  | "claude_skills"
+  | "cursor_setup"
+  | "opencode_skills"
+  | "codex_skills"
+  | "cursor_skills"
+  | "deprecated_skill_cleanup";
+
+export type OperationKind =
+  | "no_change"
+  | "create"
+  | "update"
+  | "conflict"
+  | "manual"
+  | "unavailable";
+
+export interface PlannedOperation {
+  surface: SetupSurfaceId;
+  kind: OperationKind;
+  summary: string;
+  details: string[];
+  conflict_description: string | null;
+  manual_step: string | null;
+}
+
+export interface SetupPlan {
+  operations: PlannedOperation[];
+  synced: SetupSurfaceId[];
+  conflicts: PlannedOperation[];
+  manual_steps: PlannedOperation[];
+  summary: string;
+  has_pending_changes: boolean;
+  is_blocked: boolean;
+}
+
+export interface SetupResult {
+  success: boolean;
+  transaction_id: string;
+  applied: string[];
+  failed: string[];
+  rolled_back: string[];
+  manual_steps: string[];
+  message: string;
+}

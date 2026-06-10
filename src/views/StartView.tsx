@@ -1,3 +1,4 @@
+import { SetupLifecycle } from "../components/SetupLifecycle";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -288,6 +289,13 @@ export function StartView({
                 Skills install moved to target pages. Open a harness page to preview and install skills for that tool only.
               </p>
             </div>
+          )}
+
+          {workspaceValid && (
+            <SetupLifecycle
+              onError={(_msg) => { /* errors shown in result box */ }}
+              onLog={(_msg) => { /* log to terminal */ }}
+            />
           )}
 
           <WorkspaceVerify
