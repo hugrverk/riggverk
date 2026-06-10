@@ -33,9 +33,6 @@ impl AgentHarness {
         }
     }
 
-    pub fn destination_filename(&self, name: &AgentName) -> String {
-        format!("{}.{}", name.as_str(), self.native_extension())
-    }
 }
 
 /// One discovered agent from a harness source directory.
@@ -138,9 +135,52 @@ pub fn discover_agent_names(
         .map(|agents| agents.into_iter().map(|a| a.name).collect())
 }
 
+/// Compare an installed agent directory against canonical harness sources.
+///
+/// Unknown extra agents in the target directory are allowed. Fails closed when
+/// the canonical source is missing or unreadable.
+pub fn compare_agents_for_harness(
+    harness: AgentHarness,
+    workspace_root: &Path,
+    target_dir: &Path,
+) -> crate::setup_lifecycle::OperationKind {
+    use crate::setup_lifecycle::OperationKind;
+
+    let agents = match discover_agents(harness, workspace_root) {
+        Ok(a) => a,
+        Err(_) => return OperationKind::Unavailable,
+    };
+    if !target_dir.exists() {
+        return OperationKind::Create;
+    }
+    if reject_symlink(target_dir, "agent target directory").is_err() {
+        return OperationKind::Conflict;
+    }
+    if !target_dir.is_dir() {
+        return OperationKind::Conflict;
+    }
+    let ext = harness.native_extension();
+    for agent in &agents {
+        let installed = target_dir.join(format!("{}.{}", agent.name.as_str(), ext));
+        if reject_symlink(&installed, "installed agent file").is_err() {
+            return OperationKind::Conflict;
+        }
+        if !installed.is_file() {
+            return OperationKind::Update;
+        }
+        match (fs::read(&agent.source_path), fs::read(&installed)) {
+            (Ok(src), Ok(dst)) if src == dst => {}
+            (Err(_), _) | (_, Err(_)) => return OperationKind::Conflict,
+            _ => return OperationKind::Update,
+        }
+    }
+    OperationKind::NoChange
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::setup_lifecycle::OperationKind;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -185,9 +225,11 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
         for a in &agents {
             assert!(a.source_path.extension().and_then(|e| e.to_str()) == Some("toml"));
-            assert_eq!(
-                AgentHarness::Codex.destination_filename(&a.name),
-                format!("{}.toml", a.name.as_str())
+            assert!(
+                a.source_path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.ends_with(".toml"))
             );
         }
     }
@@ -239,6 +281,39 @@ mod tests {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let agents = discover_agents(AgentHarness::Cursor, &repo).expect("cursor");
         assert_eq!(agents.len(), 6);
+    }
+
+    #[test]
+    fn compare_missing_source_is_unavailable() {
+        let ws = temp_root("cmp-missing-src");
+        let target = ws.join("agents");
+        fs::create_dir_all(&target).unwrap();
+        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
+        let _ = fs::remove_dir_all(&ws);
+        assert!(matches!(kind, OperationKind::Unavailable));
+    }
+
+    #[test]
+    fn compare_missing_target_dir_is_create() {
+        let ws = temp_root("cmp-create");
+        write_file(&ws.join("agents/scout.md"), "# scout");
+        let target = ws.join("missing-agents");
+        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
+        let _ = fs::remove_dir_all(&ws);
+        assert!(matches!(kind, OperationKind::Create));
+    }
+
+    #[test]
+    fn compare_extra_unknown_agent_still_synced() {
+        let ws = temp_root("cmp-extra");
+        write_file(&ws.join("agents/scout.md"), "# scout");
+        let target = ws.join("installed");
+        fs::create_dir_all(&target).unwrap();
+        write_file(&target.join("scout.md"), "# scout");
+        write_file(&target.join("user-custom.md"), "# custom");
+        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
+        let _ = fs::remove_dir_all(&ws);
+        assert!(matches!(kind, OperationKind::NoChange));
     }
 
     #[test]

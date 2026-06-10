@@ -321,8 +321,11 @@ fn user_home() -> Result<PathBuf, String> {
 
 // ── Apply ──
 
-/// Apply a setup plan using artifact-owned transactions.
-pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
+/// Apply artifact-level operations using artifact-owned transactions.
+fn apply_planned_artifacts(
+    pending: &[setup_transaction::PlannedArtifact],
+    manual_steps: Vec<String>,
+) -> SetupResult {
     let transaction_id = match new_transaction_id() {
         Ok(id) => id,
         Err(e) => {
@@ -337,19 +340,8 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
             };
         }
     };
-    let manual_steps: Vec<String> = plan
-        .manual_steps
-        .iter()
-        .filter_map(|m| m.manual_step.clone())
-        .collect();
 
-    let surface_ops: Vec<&PlannedOperation> = plan
-        .operations
-        .iter()
-        .filter(|op| op.kind.needs_apply())
-        .collect();
-
-    if surface_ops.is_empty() {
+    if pending.is_empty() {
         return SetupResult {
             success: true,
             transaction_id,
@@ -357,7 +349,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
             failed: vec![],
             rolled_back: vec![],
             manual_steps,
-            message: "No operations to apply".to_string(),
+            message: "No artifact operations to apply".to_string(),
         };
     }
 
@@ -390,37 +382,11 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
         }
     };
 
-    let surfaces: Vec<SetupSurfaceId> = surface_ops.iter().map(|op| op.surface).collect();
-    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
-        Ok(p) => p,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id,
-                applied: vec![],
-                failed: vec![e.clone()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: e,
-            };
-        }
-    };
+    let mut surfaces: Vec<SetupSurfaceId> = pending.iter().map(|p| p.surface).collect();
+    surfaces.sort_by_key(|s| format!("{s:?}"));
+    surfaces.dedup();
 
-    let pending: Vec<&setup_transaction::PlannedArtifact> =
-        planned.iter().filter(|p| p.kind.needs_apply()).collect();
-    if pending.is_empty() {
-        return SetupResult {
-            success: true,
-            transaction_id,
-            applied: vec![],
-            failed: vec![],
-            rolled_back: vec![],
-            manual_steps,
-            message: "No artifact operations to apply".to_string(),
-        };
-    }
-
-    for p in &pending {
+    for p in pending {
         let dest = match p.artifact.resolve_dest(&home) {
             Ok(d) => d,
             Err(e) => {
@@ -479,7 +445,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
     };
 
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
-    for p in &pending {
+    for p in pending {
         let backup_rel = match setup_transaction::backup_artifact(&p.artifact, &backup_dir, &home) {
             Ok(rel) => rel,
             Err(e) => {
@@ -590,7 +556,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
         };
     }
 
-    let surfaces_to_execute = setup_transaction::surfaces_needing_apply(&planned);
+    let surfaces_to_execute = setup_transaction::surfaces_needing_apply(pending);
     let mut applied: Vec<String> = Vec::new();
     let mut completed_manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
 
@@ -662,6 +628,88 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
     }
 }
 
+/// Apply a setup plan using artifact-owned transactions.
+pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
+    let manual_steps: Vec<String> = plan
+        .manual_steps
+        .iter()
+        .filter_map(|m| m.manual_step.clone())
+        .collect();
+
+    let surface_ops: Vec<&PlannedOperation> = plan
+        .operations
+        .iter()
+        .filter(|op| op.kind.needs_apply())
+        .collect();
+
+    if surface_ops.is_empty() {
+        let transaction_id = new_transaction_id().unwrap_or_default();
+        return SetupResult {
+            success: true,
+            transaction_id,
+            applied: vec![],
+            failed: vec![],
+            rolled_back: vec![],
+            manual_steps,
+            message: "No operations to apply".to_string(),
+        };
+    }
+
+    let ws_root = match workspace_root() {
+        Ok(r) => r,
+        Err(e) => {
+            let transaction_id = new_transaction_id().unwrap_or_default();
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec!["resolve workspace".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Cannot resolve workspace root: {e}"),
+            };
+        }
+    };
+    let home = match user_home() {
+        Ok(h) => h,
+        Err(e) => {
+            let transaction_id = new_transaction_id().unwrap_or_default();
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
+
+    let surfaces: Vec<SetupSurfaceId> = surface_ops.iter().map(|op| op.surface).collect();
+    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
+        Ok(p) => p,
+        Err(e) => {
+            let transaction_id = new_transaction_id().unwrap_or_default();
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
+
+    let pending: Vec<setup_transaction::PlannedArtifact> = planned
+        .into_iter()
+        .filter(|p| p.kind.needs_apply())
+        .collect();
+    apply_planned_artifacts(&pending, manual_steps)
+}
+
 // ── Repair ──
 
 /// Result of a repair preflight.
@@ -673,48 +721,102 @@ pub struct RepairPreflight {
     pub message: String,
 }
 
-/// Repair a setup plan — only creates missing managed resources.
+/// Repair managed artifacts — only creates safely absent resources.
 ///
-/// Does not overwrite diverged user-owned files or remove unknown resources.
-/// Returns manual conflict steps when automatic repair is unsafe.
-pub fn repair_setup(plan: &SetupPlan) -> SetupResult {
-    // Only repair create operations (missing resources).
-    // Skip update/conflict — those would overwrite user changes.
-    let create_ops: Vec<&PlannedOperation> = plan
-        .operations
+/// Uses fresh artifact detection. Does not overwrite diverged content, update
+/// configs, or remove unknown user artifacts.
+pub fn repair_setup_artifacts() -> SetupResult {
+    let ws_root = match workspace_root() {
+        Ok(r) => r,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec!["resolve workspace".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Cannot resolve workspace root: {e}"),
+            };
+        }
+    };
+    let home = match user_home() {
+        Ok(h) => h,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
+
+    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
         .iter()
-        .filter(|op| matches!(op.kind, OperationKind::Create))
+        .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
+        .copied()
         .collect();
 
-    if create_ops.is_empty() {
+    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)
+    {
+        Ok(p) => p,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
+
+    let synced_count = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::NoChange))
+        .count();
+    let conflict_count = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Update | OperationKind::Conflict))
+        .count();
+    let unavailable_count = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Unavailable))
+        .count();
+
+    let create_pending: Vec<setup_transaction::PlannedArtifact> = planned
+        .into_iter()
+        .filter(|p| matches!(p.kind, OperationKind::Create))
+        .collect();
+
+    if create_pending.is_empty() {
         return SetupResult {
             success: true,
             transaction_id: new_transaction_id().unwrap_or_default(),
             applied: vec![],
             failed: vec![],
             rolled_back: vec![],
-            manual_steps: plan
-                .manual_steps
-                .iter()
-                .map(|m| m.manual_step.clone().unwrap_or_default())
-                .collect(),
-            message: "No missing resources to repair".to_string(),
+            manual_steps: vec![],
+            message: format!(
+                "No missing artifacts to repair ({synced_count} synced, {conflict_count} conflicts, {unavailable_count} unavailable)"
+            ),
         };
     }
 
-    // Create a sub-plan with only create operations
-    let sub_plan = SetupPlan {
-        operations: create_ops.clone().into_iter().cloned().collect(),
-        synced: vec![],
-        conflicts: vec![],
-        manual_steps: plan.manual_steps.clone(),
-        summary: format!("repair {} missing surface(s)", create_ops.len()),
-        has_pending_changes: true,
-        is_blocked: false,
-        plan_fingerprint: None,
-    };
-
-    apply_setup_plan(&sub_plan)
+    let mut result = apply_planned_artifacts(&create_pending, vec![]);
+    if result.success {
+        result.message = format!(
+            "Repaired {} artifact(s); {synced_count} synced; {conflict_count} conflicts skipped; {unavailable_count} unavailable",
+            result.applied.len()
+        );
+    }
+    result
 }
 
 /// Preflight repair: report what's missing without applying.
@@ -981,11 +1083,14 @@ pub fn detect_surface_state(
                 }
             }
         }
-        // Codex agents — compare directory contents
+        // Codex agents — harness-native file comparison
         SetupSurfaceId::CodexAgents => {
             let target_dir = home.join(".codex/agents");
-            let source_dir = workspace_root.join("templates/codex/agents");
-            compare_agent_dir(&source_dir, &target_dir)
+            crate::agent_discovery::compare_agents_for_harness(
+                crate::agent_discovery::AgentHarness::Codex,
+                workspace_root,
+                &target_dir,
+            )
         }
         // Codex rules
         SetupSurfaceId::CodexRules => {
@@ -1056,8 +1161,11 @@ pub fn detect_surface_state(
         // OpenCode agents
         SetupSurfaceId::OpenCodeAgents => {
             let target_dir = home.join(".config/opencode/agents");
-            let source_dir = workspace_root.join("agents");
-            compare_agent_dir(&source_dir, &target_dir)
+            crate::agent_discovery::compare_agents_for_harness(
+                crate::agent_discovery::AgentHarness::OpenCode,
+                workspace_root,
+                &target_dir,
+            )
         }
         // OpenCode rules
         SetupSurfaceId::OpenCodeRules => {
@@ -1074,8 +1182,11 @@ pub fn detect_surface_state(
         // Claude agents
         SetupSurfaceId::ClaudeAgents => {
             let target_dir = home.join(".claude/agents");
-            let source_dir = workspace_root.join("templates/claude/agents");
-            compare_agent_dir(&source_dir, &target_dir)
+            crate::agent_discovery::compare_agents_for_harness(
+                crate::agent_discovery::AgentHarness::Claude,
+                workspace_root,
+                &target_dir,
+            )
         }
         // Skills — compare actual SKILL.md content per skill, not just directory existence
         SetupSurfaceId::ClaudeSkills => {
@@ -1124,9 +1235,12 @@ pub fn detect_surface_state(
                     return (surface, OperationKind::Unavailable, summary);
                 }
             };
-            let source_dir = workspace_root.join("templates/cursor/agents");
             let target_dir = paths.agents;
-            compare_agent_dir(&source_dir, &target_dir)
+            crate::agent_discovery::compare_agents_for_harness(
+                crate::agent_discovery::AgentHarness::Cursor,
+                workspace_root,
+                &target_dir,
+            )
         }
         // Cursor skills — check per-skill directories, not just existence
         SetupSurfaceId::CursorSkills => {
@@ -1288,42 +1402,23 @@ fn expected_skills_for_harness(
 
 /// Compare a single file target with its source.
 fn compare_single_file(target: &Path, source: &Path) -> OperationKind {
+    if !source.exists() {
+        return OperationKind::Unavailable;
+    }
+    if reject_symlink(source, "source").is_err() {
+        return OperationKind::Unavailable;
+    }
     if !target.exists() {
-        OperationKind::Create
-    } else if source.exists() && file_eq(target, source) {
+        return OperationKind::Create;
+    }
+    if reject_symlink(target, "destination").is_err() {
+        return OperationKind::Conflict;
+    }
+    if file_eq(target, source) {
         OperationKind::NoChange
     } else {
         OperationKind::Update
     }
-}
-
-/// Compare agent directory contents between source and target.
-fn compare_agent_dir(source_dir: &Path, target_dir: &Path) -> OperationKind {
-    if !target_dir.is_dir() {
-        return OperationKind::Create;
-    }
-    if !source_dir.is_dir() {
-        return OperationKind::NoChange;
-    }
-    // Check every source file exists and matches in target
-    let entries = match std::fs::read_dir(source_dir) {
-        Ok(e) => e,
-        Err(_) => return OperationKind::NoChange,
-    };
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
-        }
-        let Some(name) = path.file_name() else {
-            continue;
-        };
-        let installed = target_dir.join(name);
-        if !installed.is_file() || !file_eq(&path, &installed) {
-            return OperationKind::Update;
-        }
-    }
-    OperationKind::NoChange
 }
 
 /// Validate transaction ID format — must be only digits (nanosecond timestamp).
@@ -1427,30 +1522,6 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
     }
 }
 
-/// Detect current state for all surfaces and return a plan.
-/// This is the internal detection used by apply and repair.
-pub fn detect_all_surfaces() -> Result<SetupPlan, String> {
-    let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
-    let home = crate::platform_paths::resolve_user_home(
-        &crate::platform_paths::PlatformEnv::from_process_env(),
-        crate::platform_paths::Platform::current(),
-    )
-    .map_err(|e| format!("user home: {e}"))?;
-
-    let states: Vec<_> = SetupSurfaceId::ALL
-        .iter()
-        .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
-        .map(|s| detect_surface_state(*s, &ws_root, &home))
-        .collect();
-
-    let request = SetupRequest {
-        surfaces: vec![],
-        skip_manual: true,
-    };
-
-    Ok(crate::setup_lifecycle::plan_setup(&request, &states))
-}
-
 #[tauri::command]
 pub fn apply_setup(
     surfaces: Vec<String>,
@@ -1537,9 +1608,7 @@ pub fn apply_setup(
 
 #[tauri::command]
 pub fn repair_setup_command(_skip_manual: bool) -> Result<SetupResult, String> {
-    // Use real detection to find only truly missing surfaces
-    let plan = detect_all_surfaces()?;
-    Ok(repair_setup(&plan))
+    Ok(repair_setup_artifacts())
 }
 
 #[tauri::command]
@@ -1652,11 +1721,32 @@ mod tests {
     }
 
     #[test]
-    fn repair_empty_plan_succeeds() {
-        let plan = test_plan(vec![]);
-        let result = repair_setup(&plan);
-        assert!(result.success);
-        assert_eq!(result.message, "No missing resources to repair");
+    fn repair_only_applies_create_artifacts() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let home = std::env::temp_dir().join("aw-repair-filter-home");
+        let ws = std::env::temp_dir().join("aw-repair-filter-ws");
+        let _ = fs::remove_dir_all(&home);
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&home).expect("create home");
+        set_test_user_dirs(&home);
+        fs::create_dir_all(ws.join("templates/sync")).expect("sync dir");
+        fs::write(ws.join("templates/sync/opencode-rules.md"), "rules").expect("source");
+        fs::create_dir_all(home.join(".config/opencode")).expect("opencode dir");
+        fs::write(home.join(".config/opencode/AGENTS.md"), "rules").expect("installed");
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+        }
+
+        let surfaces = vec![SetupSurfaceId::OpenCodeRules];
+        let planned = setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws, &home)
+            .expect("plan artifacts");
+        assert_eq!(planned.len(), 1);
+        assert!(
+            matches!(planned[0].kind, OperationKind::NoChange),
+            "synced rules artifact should be NoChange, got {:?}",
+            planned[0].kind
+        );
     }
 
     #[test]
