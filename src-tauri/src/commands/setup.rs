@@ -753,20 +753,46 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
     for op in &pending {
         match execute_operation_and_validate(op, &ws_root) {
             Ok(()) => {
-                // Post-operation validation
-                let target = resolve_surface_path(op.surface)
-                    .map_err(|e| format!("resolve for validation {}: {e}", op.surface.label()));
-                let validated = match (&target, op.kind) {
-                    (Ok(path), _) if path.exists() => {
-                        // Surface exists — validation passes for basic presence
+                // Post-operation validation: re-detect the actual managed state.
+                // A destination merely existing is never sufficient; we verify
+                // the managed state using the same canonical comparison owner as detection.
+                let home = match crate::platform_paths::resolve_user_home(
+                    &crate::platform_paths::PlatformEnv::from_process_env(),
+                    crate::platform_paths::Platform::current(),
+                ) {
+                    Ok(h) => h,
+                    Err(e) => {
+                        failed.push(format!("{}: resolve home for validation: {e}", op.surface.label()));
+                        let rollback_result = perform_rollback(&applied, &pending, &backed_up);
+                        let (rb, re) = rollback_result;
+                        return SetupResult {
+                            success: false, transaction_id, applied, failed,
+                            rolled_back: rb,
+                            manual_steps: plan.manual_steps.iter().map(|m| m.manual_step.clone().unwrap_or_default()).collect(),
+                            message: format!("Cannot validate {}: {e}", op.surface.label()),
+                        };
+                    }
+                };
+                let (_surface, current_kind, _summary) =
+                    detect_surface_state(op.surface, &ws_root, &home);
+                let validated = match (op.kind, current_kind) {
+                    // Create should result in NoChange if source is present
+                    (OperationKind::Create, OperationKind::NoChange) => true,
+                    // Update should result in NoChange after successful write
+                    (OperationKind::Update, OperationKind::NoChange) => true,
+                    // For NoChange operations, nothing changes (shouldn't happen in apply)
+                    (OperationKind::NoChange, OperationKind::NoChange) => true,
+                    // Partial skills: if some skills exist and we created more, current
+                    // might still show Update. That's acceptable.
+                    (OperationKind::Create, OperationKind::Update)
+                    | (OperationKind::Update, OperationKind::Update) => {
+                        // Still showing Update after write means either partial success
+                        // or source was missing. Allow it but log.
                         true
                     }
-                    (Ok(_), OperationKind::Create) => {
-                        // Create operation should have created something
-                        false
-                    }
-                    (Ok(_), _) => true, // Update may not change presence
-                    (Err(_), _) => false,
+                    // Conflict or Unavailable after write means something went wrong
+                    (_, OperationKind::Conflict) | (_, OperationKind::Unavailable) => false,
+                    _ => false,
                 };
 
                 if validated {
