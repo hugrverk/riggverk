@@ -10,7 +10,9 @@ mod opencode_runtime;
 mod process;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{extract_managed_codex_config, managed_codex_keys_match};
-pub(crate) use opencode_runtime::{extract_managed_opencode_config, managed_opencode_keys_match};
+pub(crate) use opencode_runtime::{
+    extract_managed_opencode_config, managed_opencode_keys_match, render_expected_opencode_config,
+};
 pub(crate) use process::ActionResult;
 pub(crate) use status::file_eq;
 mod repo_dashboard;
@@ -40,7 +42,10 @@ pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
-pub use setup::{apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction};
+pub use setup::{
+    apply_setup, preview_repair_setup, preview_setup, repair_setup_command,
+    rollback_setup_transaction,
+};
 pub use skills::{
     get_skills_sync_health, install_skills, list_skills, migrate_codex_legacy_skills,
     open_install_skills_script, open_skill, preview_codex_legacy_migration,

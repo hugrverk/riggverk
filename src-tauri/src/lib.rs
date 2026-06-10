@@ -11,6 +11,7 @@ mod executable_resolver;
 mod path_utils;
 mod platform_paths;
 mod settings;
+mod setup_fingerprint;
 mod setup_lifecycle;
 mod setup_transaction;
 mod shell_runtime;
@@ -37,13 +38,13 @@ use commands::{
     migrate_codex_legacy_skills, open_agent_source, open_agent_template, open_backups_folder,
     open_config_template, open_default_workspace_folder, open_doc, open_install_skills_script,
     open_opencode_config_source, open_skill, plan_workspace_repair, preview_codex_legacy_migration,
-    preview_remove_deprecated_skills, preview_setup, read_agent_source, read_agent_template,
-    read_brain_setup_seed, read_config_template, read_doc, read_opencode_config_source, read_skill,
-    remove_deprecated_skills, repair_default_workspace, repair_setup_command,
-    rollback_deprecated_skills_removal, rollback_setup_transaction, run_action,
-    run_cursor_profile_action, save_agent_source, save_agent_template, save_config_template,
-    save_doc, save_opencode_config_source, try_set_active_workspace_path, update_settings,
-    validate_workspace_contract,
+    preview_remove_deprecated_skills, preview_repair_setup, preview_setup, read_agent_source,
+    read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
+    read_opencode_config_source, read_skill, remove_deprecated_skills, repair_default_workspace,
+    repair_setup_command, rollback_deprecated_skills_removal, rollback_setup_transaction,
+    run_action, run_cursor_profile_action, save_agent_source, save_agent_template,
+    save_config_template, save_doc, save_opencode_config_source, try_set_active_workspace_path,
+    update_settings, validate_workspace_contract,
 };
 use tauri::Manager;
 
@@ -117,6 +118,7 @@ pub fn run() {
             get_repo_prompt_context,
             discover_local_git_repos,
             preview_setup,
+            preview_repair_setup,
             apply_setup,
             repair_setup_command,
             rollback_setup_transaction,

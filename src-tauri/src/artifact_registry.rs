@@ -25,8 +25,10 @@ pub enum ArtifactId {
     // ── OpenCode ──
     /// opencode.json managed keys portion
     OpenCodeConfig,
-    /// tui.json (if written by config installer)
+    /// tui.json (written by config installer)
     OpenCodeTui,
+    /// Playwright MCP sidecar config for OpenCode (`PLAYWRIGHT_MCP_CONFIG_PATH`)
+    OpenCodePlaywrightMcp,
     /// .config/opencode/AGENTS.md rules file
     OpenCodeRules,
     /// A managed OpenCode agent file
@@ -137,6 +139,9 @@ impl ArtifactId {
         match self {
             ArtifactId::OpenCodeConfig => Ok(home.join(".config/opencode/opencode.json")),
             ArtifactId::OpenCodeTui => Ok(home.join(".config/opencode/tui.json")),
+            ArtifactId::OpenCodePlaywrightMcp => {
+                Ok(crate::commands::cursor_profile::default_playwright_mcp_config_path(home))
+            }
             ArtifactId::OpenCodeRules => Ok(home.join(".config/opencode/AGENTS.md")),
             ArtifactId::OpenCodeAgent(name) => {
                 Ok(home.join(".config/opencode/agents").join(name.file_name()))
@@ -172,7 +177,10 @@ impl ArtifactId {
     pub fn resolve_source(&self, workspace_root: &Path) -> Option<PathBuf> {
         match self {
             ArtifactId::OpenCodeConfig => Some(workspace_root.join("templates/opencode.json")),
-            ArtifactId::OpenCodeTui => None, // generated, not sourced directly
+            ArtifactId::OpenCodeTui => Some(workspace_root.join("templates/tui.json")),
+            ArtifactId::OpenCodePlaywrightMcp => {
+                Some(workspace_root.join("templates/playwright-mcp.config.json"))
+            }
             ArtifactId::OpenCodeRules => {
                 Some(workspace_root.join("templates/sync/opencode-rules.md"))
             }
@@ -219,7 +227,9 @@ impl ArtifactId {
     /// Returns the parent SetupSurfaceId for this artifact.
     pub fn surface(&self) -> SetupSurfaceId {
         match self {
-            ArtifactId::OpenCodeConfig | ArtifactId::OpenCodeTui => SetupSurfaceId::OpenCodeConfig,
+            ArtifactId::OpenCodeConfig
+            | ArtifactId::OpenCodeTui
+            | ArtifactId::OpenCodePlaywrightMcp => SetupSurfaceId::OpenCodeConfig,
             ArtifactId::OpenCodeRules => SetupSurfaceId::OpenCodeRules,
             ArtifactId::OpenCodeAgent(_) => SetupSurfaceId::OpenCodeAgents,
             ArtifactId::OpenCodeSkill(_) => SetupSurfaceId::OpenCodeSkills,
@@ -295,9 +305,11 @@ pub fn expand_surface(
     workspace_root: &Path,
 ) -> Result<Vec<ArtifactId>, String> {
     match surface {
-        SetupSurfaceId::OpenCodeConfig => {
-            Ok(vec![ArtifactId::OpenCodeConfig, ArtifactId::OpenCodeTui])
-        }
+        SetupSurfaceId::OpenCodeConfig => Ok(vec![
+            ArtifactId::OpenCodeConfig,
+            ArtifactId::OpenCodeTui,
+            ArtifactId::OpenCodePlaywrightMcp,
+        ]),
         SetupSurfaceId::OpenCodeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::OpenCode,
@@ -407,12 +419,13 @@ mod tests {
     // ── Surface expansion tests ──
 
     #[test]
-    fn opencode_config_expands_to_config_and_tui() {
+    fn opencode_config_expands_to_full_write_set() {
         let ws = temp_dir("oc-config");
         let artifacts = expand_surface(SetupSurfaceId::OpenCodeConfig, &ws).expect("expand");
-        assert_eq!(artifacts.len(), 2);
+        assert_eq!(artifacts.len(), 3);
         assert!(artifacts.contains(&ArtifactId::OpenCodeConfig));
         assert!(artifacts.contains(&ArtifactId::OpenCodeTui));
+        assert!(artifacts.contains(&ArtifactId::OpenCodePlaywrightMcp));
     }
 
     #[test]

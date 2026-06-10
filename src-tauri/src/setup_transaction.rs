@@ -17,7 +17,7 @@ use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 
-pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 2;
+pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 3;
 const MAX_MANIFEST_OPERATIONS: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -47,8 +47,22 @@ pub enum RollbackAction {
 pub enum ApplyStatus {
     #[default]
     Pending,
+    InFlight,
     Applied,
     Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+#[serde(rename_all = "snake_case")]
+pub enum TransactionStatus {
+    #[default]
+    Prepared,
+    Applying,
+    Completed,
+    Failed,
+    RollingBack,
+    RolledBack,
+    RollbackFailed,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -107,6 +121,8 @@ pub struct ArtifactTransactionManifest {
     pub workspace_key: String,
     pub created_at: String,
     pub surface_ids: Vec<SetupSurfaceId>,
+    #[serde(default)]
+    pub transaction_status: TransactionStatus,
     pub operations: Vec<ArtifactManifestOperation>,
 }
 
@@ -218,105 +234,11 @@ pub fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn digest_file(path: &Path) -> Result<String, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    bytes.hash(&mut hasher);
-    Ok(format!("{:016x}", hasher.finish()))
-}
-
-fn digest_managed_config_json(installed: &Path, source: &Path) -> Result<String, String> {
-    let installed_str =
-        fs::read_to_string(installed).map_err(|e| format!("read installed config: {e}"))?;
-    let source_str = fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
-    let installed_json: serde_json::Value =
-        serde_json::from_str(&installed_str).map_err(|e| format!("parse installed json: {e}"))?;
-    let source_json: serde_json::Value =
-        serde_json::from_str(&source_str).map_err(|e| format!("parse source json: {e}"))?;
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    format!(
-        "{:?}",
-        crate::commands::extract_managed_opencode_config(&installed_json)
-    )
-    .hash(&mut hasher);
-    format!(
-        "{:?}",
-        crate::commands::extract_managed_opencode_config(&source_json)
-    )
-    .hash(&mut hasher);
-    Ok(format!("{:016x}", hasher.finish()))
-}
-
-fn digest_managed_config_toml(installed: &Path, source: &Path) -> Result<String, String> {
-    let installed_str =
-        fs::read_to_string(installed).map_err(|e| format!("read installed config: {e}"))?;
-    let source_str = fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
-    let installed_toml: toml::Value = installed_str
-        .parse()
-        .map_err(|e| format!("parse installed toml: {e}"))?;
-    let source_toml: toml::Value = source_str
-        .parse()
-        .map_err(|e| format!("parse source toml: {e}"))?;
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    format!(
-        "{:?}",
-        crate::commands::extract_managed_codex_config(&installed_toml)
-    )
-    .hash(&mut hasher);
-    format!(
-        "{:?}",
-        crate::commands::extract_managed_codex_config(&source_toml)
-    )
-    .hash(&mut hasher);
-    Ok(format!("{:016x}", hasher.finish()))
-}
-
-pub fn artifact_managed_digest(
-    artifact: &ArtifactId,
-    workspace_root: &Path,
-    home: &Path,
-) -> Result<String, String> {
-    let dest = artifact.resolve_dest(home)?;
-    let source = artifact
-        .resolve_source(workspace_root)
-        .ok_or_else(|| format!("no source for artifact {:?}", artifact))?;
-    match artifact_kind(artifact) {
-        ArtifactKind::ConfigFile | ArtifactKind::TuiConfig => {
-            if artifact == &ArtifactId::CodexConfig {
-                if dest.exists() && source.exists() {
-                    digest_managed_config_toml(&dest, &source)
-                } else {
-                    Ok("absent".into())
-                }
-            } else if dest.exists() && source.exists() {
-                digest_managed_config_json(&dest, &source)
-            } else {
-                Ok("absent".into())
-            }
-        }
-        ArtifactKind::RulesFile | ArtifactKind::AgentFile | ArtifactKind::McpConfig => {
-            if dest.exists() && source.exists() {
-                digest_file(&dest)
-            } else {
-                Ok("absent".into())
-            }
-        }
-        ArtifactKind::SkillDir => {
-            let dest_md = dest.join("SKILL.md");
-            let source_md = source.join("SKILL.md");
-            if dest_md.is_file() && source_md.is_file() {
-                digest_file(&source_md)
-            } else {
-                Ok("absent".into())
-            }
-        }
-    }
-}
-
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
+        ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
         ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules => {
             ArtifactKind::RulesFile
         }
@@ -350,13 +272,14 @@ pub fn compute_plan_fingerprint(
     artifacts.sort_by_key(|a| format!("{a:?}"));
     for artifact in &artifacts {
         format!("{artifact:?}").hash(&mut hasher);
-        let source_digest = artifact_managed_digest(artifact, workspace_root, home)?;
+        let source_digest =
+            crate::setup_fingerprint::artifact_source_digest(artifact, workspace_root, home)?;
         source_digest.hash(&mut hasher);
-        let installed_digest = if user_home().is_ok() {
-            artifact_managed_digest(artifact, workspace_root, home).unwrap_or_else(|_| "err".into())
-        } else {
-            "no-home".into()
-        };
+        let installed_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            artifact,
+            workspace_root,
+            home,
+        )?;
         installed_digest.hash(&mut hasher);
         if let Some(op) = artifact_ops.iter().find(|o| o.artifact == *artifact) {
             format!("{:?}", op.kind).hash(&mut hasher);
@@ -382,16 +305,7 @@ pub fn detect_artifact_state(
     };
     let source = match artifact.resolve_source(workspace_root) {
         Some(p) => p,
-        None => {
-            if artifact == &ArtifactId::OpenCodeTui {
-                return if dest.exists() {
-                    (OperationKind::NoChange, PreviousState::MergeableConfigFile)
-                } else {
-                    (OperationKind::Create, PreviousState::Absent)
-                };
-            }
-            return (OperationKind::Unavailable, PreviousState::Unavailable);
-        }
+        None => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
 
     if reject_symlink(&dest, "destination").is_err() {
@@ -403,14 +317,7 @@ pub fn detect_artifact_state(
 
     match artifact_kind(artifact) {
         ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source),
-        ArtifactKind::TuiConfig => {
-            if !dest.exists() {
-                (OperationKind::Create, PreviousState::Absent)
-            } else {
-                (OperationKind::NoChange, PreviousState::MergeableConfigFile)
-            }
-        }
-        ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
+        ArtifactKind::TuiConfig | ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             if !dest.exists() {
                 (OperationKind::Create, PreviousState::Absent)
             } else if !source.exists() {
@@ -432,6 +339,17 @@ pub fn detect_artifact_state(
                 (OperationKind::NoChange, PreviousState::ManagedDirectory)
             } else {
                 (OperationKind::Update, PreviousState::ManagedDirectory)
+            }
+        }
+        ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
+            if !dest.exists() {
+                (OperationKind::Create, PreviousState::Absent)
+            } else if !source.exists() {
+                (OperationKind::Unavailable, PreviousState::Unavailable)
+            } else if file_eq(&dest, &source) {
+                (OperationKind::NoChange, PreviousState::ManagedFile)
+            } else {
+                (OperationKind::Update, PreviousState::ManagedFile)
             }
         }
         ArtifactKind::McpConfig => {
@@ -554,8 +472,95 @@ fn rollback_action_for(
 }
 
 pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
-    let json = serde_json::to_string(artifact).unwrap_or_else(|_| "artifact".into());
-    json.replace('/', "_").replace('"', "")
+    const MAX_LEN: usize = 120;
+    let id = match artifact {
+        ArtifactId::OpenCodeConfig => "opencode-config".into(),
+        ArtifactId::OpenCodeTui => "opencode-tui".into(),
+        ArtifactId::OpenCodePlaywrightMcp => "opencode-playwright-mcp".into(),
+        ArtifactId::OpenCodeRules => "opencode-rules".into(),
+        ArtifactId::CodexConfig => "codex-config".into(),
+        ArtifactId::CodexRules => "codex-rules".into(),
+        ArtifactId::ClaudeRules => "claude-rules".into(),
+        ArtifactId::CursorMcp => "cursor-mcp".into(),
+        ArtifactId::OpenCodeAgent(name) => format!("opencode-agent-{}", name.as_str()),
+        ArtifactId::CodexAgent(name) => format!("codex-agent-{}", name.as_str()),
+        ArtifactId::ClaudeAgent(name) => format!("claude-agent-{}", name.as_str()),
+        ArtifactId::CursorAgent(name) => format!("cursor-agent-{}", name.as_str()),
+        ArtifactId::OpenCodeSkill(name) => format!("opencode-skill-{}", name.as_str()),
+        ArtifactId::CodexSkill(name) => format!("codex-skill-{}", name.as_str()),
+        ArtifactId::ClaudeSkill(name) => format!("claude-skill-{}", name.as_str()),
+        ArtifactId::CursorSkill(name) => format!("cursor-skill-{}", name.as_str()),
+    };
+    if id.len() > MAX_LEN {
+        id[..MAX_LEN].to_string()
+    } else {
+        id
+    }
+}
+
+pub fn operation_may_have_been_modified(status: ApplyStatus) -> bool {
+    matches!(
+        status,
+        ApplyStatus::InFlight | ApplyStatus::Applied | ApplyStatus::Failed
+    )
+}
+
+pub fn operation_eligible_for_explicit_rollback(
+    op: &ArtifactManifestOperation,
+    txn_status: TransactionStatus,
+) -> bool {
+    if operation_may_have_been_modified(op.apply_status) {
+        return true;
+    }
+    matches!(
+        txn_status,
+        TransactionStatus::Completed
+            | TransactionStatus::Failed
+            | TransactionStatus::RollbackFailed
+    ) && matches!(op.kind, OperationKind::Create | OperationKind::Update)
+}
+
+pub fn persist_manifest_atomic(
+    path: &Path,
+    manifest: &ArtifactTransactionManifest,
+) -> Result<(), String> {
+    reject_symlink(path, "manifest path")?;
+    let json =
+        serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {e}"))?;
+    let _: ArtifactTransactionManifest =
+        serde_json::from_str(&json).map_err(|e| format!("validate manifest json: {e}"))?;
+    let temp_path = path.with_extension("json.tmp");
+    fs::write(&temp_path, &json).map_err(|e| format!("write manifest temp: {e}"))?;
+    fs::rename(&temp_path, path).map_err(|e| format!("replace manifest: {e}"))?;
+    let read_back = fs::read_to_string(path).map_err(|e| format!("re-read manifest: {e}"))?;
+    let parsed: ArtifactTransactionManifest =
+        serde_json::from_str(&read_back).map_err(|e| format!("parse re-read manifest: {e}"))?;
+    if parsed.schema_version != manifest.schema_version
+        || parsed.operations.len() != manifest.operations.len()
+    {
+        return Err("manifest re-read mismatch".into());
+    }
+    Ok(())
+}
+
+pub fn mark_surface_group_in_flight(
+    operations: &mut [ArtifactManifestOperation],
+    surface: SetupSurfaceId,
+) {
+    for op in operations.iter_mut() {
+        if op.surface == surface && op.apply_status == ApplyStatus::Pending {
+            op.apply_status = ApplyStatus::InFlight;
+        }
+    }
+}
+
+pub fn rollback_candidates(
+    operations: &[ArtifactManifestOperation],
+) -> Vec<&ArtifactManifestOperation> {
+    operations
+        .iter()
+        .filter(|op| operation_may_have_been_modified(op.apply_status))
+        .collect()
 }
 
 pub fn backup_artifact(
@@ -687,9 +692,22 @@ pub fn restore_artifact_from_backup(
             Ok(())
         }
         RollbackAction::RemoveCreatedSkillDirectory => {
-            if dest.is_dir() {
-                fs::remove_dir_all(&dest).map_err(|e| format!("remove created skill: {e}"))?;
+            if !dest.is_dir() {
+                return Ok(());
             }
+            reject_symlink(&dest, "created skill directory")?;
+            let unexpected = fs::read_dir(&dest)
+                .map_err(|e| format!("inspect created skill dir: {e}"))?
+                .filter_map(|e| e.ok())
+                .any(|entry| {
+                    let name = entry.file_name();
+                    let name = name.to_string_lossy();
+                    name != "SKILL.md" && entry.path().is_file()
+                });
+            if unexpected {
+                return Err("refusing remove skill directory with unexpected user files".into());
+            }
+            fs::remove_dir_all(&dest).map_err(|e| format!("remove created skill: {e}"))?;
             Ok(())
         }
         RollbackAction::NoAction => Ok(()),
@@ -749,6 +767,7 @@ mod tests {
             workspace_key: workspace_key(&ws).unwrap_or_default(),
             created_at: "1".into(),
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
+            transaction_status: TransactionStatus::Prepared,
             operations: vec![
                 ArtifactManifestOperation {
                     artifact: ArtifactId::OpenCodeRules,
