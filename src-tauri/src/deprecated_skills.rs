@@ -554,6 +554,56 @@ pub fn remove_identical_deprecated(
     ))
 }
 
+const MAX_SYMLINK_CHECK_DEPTH: usize = 32;
+
+/// Recursively reject symlinks at any depth within a directory tree.
+///
+/// Does not follow symlinks. Bounded by MAX_SYMLINK_CHECK_DEPTH to prevent
+/// stack overflow on deeply nested structures.
+fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
+    fn recurse(dir: &Path, label: &str, depth: usize) -> Result<(), String> {
+        if depth > MAX_SYMLINK_CHECK_DEPTH {
+            return Err(format!(
+                "max symlink check depth exceeded in {}: {}",
+                label,
+                dir.display()
+            ));
+        }
+        if !dir.is_dir() {
+            return Ok(());
+        }
+        let meta = fs::symlink_metadata(dir)
+            .map_err(|e| format!("cannot inspect {}: {e}", dir.display()))?;
+        if meta.file_type().is_symlink() {
+            return Err(format!(
+                "refusing symlink in {}: {}",
+                label,
+                dir.display()
+            ));
+        }
+        let entries = fs::read_dir(dir)
+            .map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        for entry in entries {
+            let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
+            let path = entry.path();
+            let ft = entry.file_type()
+                .map_err(|e| format!("file type error: {e}"))?;
+            if ft.is_symlink() {
+                return Err(format!(
+                    "nested symlink in {}: {}",
+                    label,
+                    path.display()
+                ));
+            }
+            if ft.is_dir() {
+                recurse(&path, label, depth + 1)?;
+            }
+        }
+        Ok(())
+    }
+    recurse(dir, label, 0)
+}
+
 /// Attempt to restore already-removed skills from backup after a partial removal failure.
 fn attempt_auto_restore(
     backup_dir: &Path,
@@ -670,40 +720,7 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
         }
         reject_symlink_path(&backup_src, "rollback source")?;
 
-        // Reject nested symlinks inside backup skill directories
-        fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
-            if !dir.is_dir() {
-                return Ok(());
-            }
-            let entries =
-                fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-            for entry in entries {
-                let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
-                let path = entry.path();
-                if path.is_symlink() {
-                    return Err(format!(
-                        "nested symlink found in {} backup: {}",
-                        label,
-                        path.display()
-                    ));
-                }
-                if path.is_dir() {
-                    // Bounded recursion: only check one level deep
-                    if let Ok(sub) = fs::read_dir(&path) {
-                        for sub_entry in sub.flatten() {
-                            if sub_entry.path().is_symlink() {
-                                return Err(format!(
-                                    "nested symlink in {} backup: {}",
-                                    label,
-                                    sub_entry.path().display()
-                                ));
-                            }
-                        }
-                    }
-                }
-            }
-            Ok(())
-        }
+        // Reject nested symlinks at any depth inside backup skill directories
         reject_nested_symlinks(&backup_src, &skill.name)?;
     }
 
@@ -1320,5 +1337,361 @@ mod tests {
             dest.join("diagnose").exists(),
             "diverged skill still present"
         );
+    }
+
+    // ── Symlink rejection tests ──
+
+    #[test]
+    fn rollback_rejects_nested_symlink_to_external_dir() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-nested-sym-dir");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-nested-sym-dir");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
+
+        // Find backup dir and add a nested symlink to external dir
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_dir = backup_dir_entry.path();
+
+        // Create a symlink inside the backup skill dir pointing to an external dir
+        let external = temp_root("external-dir");
+        fs::create_dir_all(&external).expect("create external");
+        let symlink_target = backup_dir.join("caveman").join("external_link");
+        std::os::unix::fs::symlink(&external, &symlink_target)
+            .expect("create symlink");
+
+        let backup_path = backup_dir.to_string_lossy().to_string();
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "must reject nested symlink to external dir");
+        let err = result.unwrap_err();
+        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+    }
+
+    #[test]
+    fn rollback_rejects_nested_symlink_to_external_file() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-nested-sym-file");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-nested-sym-file");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
+
+        // Find backup dir and add a nested symlink to external file
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_dir = backup_dir_entry.path();
+
+        // Create symlink to external file inside backup
+        let external_file = temp_root("external-file").join("secret.txt");
+        write_file(&external_file, "secret content");
+        let symlink_target = backup_dir.join("caveman").join("secret_link.txt");
+        std::os::unix::fs::symlink(&external_file, &symlink_target)
+            .expect("create symlink to file");
+
+        let backup_path = backup_dir.to_string_lossy().to_string();
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "must reject nested symlink to external file");
+        let err = result.unwrap_err();
+        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+    }
+
+    #[test]
+    fn rollback_rejects_symlink_chain() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-sym-chain");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-sym-chain");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
+
+        // Create a chain: backup/caveman/middle -> backup/other -> external
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_dir = backup_dir_entry.path();
+
+        let external = temp_root("chain-external");
+        fs::create_dir_all(&external).expect("create external");
+        write_file(&external.join("payload.txt"), "chain payload");
+
+        // chain: backup/stepping_stone -> external
+        let stepping_stone = backup_dir.join("stepping_stone");
+        std::os::unix::fs::symlink(&external, &stepping_stone)
+            .expect("create stepping stone symlink");
+
+        // chain: backup/caveman/chain_link -> stepping_stone
+        let chain_link = backup_dir.join("caveman").join("chain_link");
+        std::os::unix::fs::symlink(&stepping_stone, &chain_link)
+            .expect("create chain symlink");
+
+        let backup_path = backup_dir.to_string_lossy().to_string();
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "must reject symlink chain");
+        let err = result.unwrap_err();
+        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+    }
+
+    #[test]
+    fn rollback_rejects_destination_mismatch() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-dest-mismatch");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-dest-mismatch");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
+
+        // Find backup dir and tamper with manifest destination_root
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_dir = backup_dir_entry.path();
+        let manifest_path = backup_dir.join("manifest.json");
+        let mut manifest: TransactionManifest =
+            serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read manifest"))
+                .expect("parse manifest");
+        manifest.destination_root = "/tmp/fake-destination".to_string();
+        fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).expect("serialize"))
+            .expect("write tampered manifest");
+
+        let backup_path = backup_dir.to_string_lossy().to_string();
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "must reject destination mismatch");
+        let err = result.unwrap_err();
+        assert!(err.contains("destination mismatch"), "error should mention destination mismatch: {err}");
+    }
+
+    #[test]
+    fn rollback_failure_before_first_mutation_has_no_staging() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-no-mutation");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-no-mutation");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        remove_identical_deprecated("codex", &workspace, &dest, &current, false).expect("remove");
+
+        // Find backup dir and corrupt the manifest to cause early failure
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_dir = backup_dir_entry.path();
+        let manifest_path = backup_dir.join("manifest.json");
+        fs::write(&manifest_path, "invalid json").expect("corrupt manifest");
+
+        let backup_path = backup_dir.to_string_lossy().to_string();
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "must fail on corrupt manifest");
+        // Verify no staging dir was created — no filesystem state was harmed
+        let has_staging = fs::read_dir(dest.parent().unwrap())
+            .map(|entries| {
+                entries.filter_map(|e| e.ok())
+                    .any(|e| e.file_name().to_string_lossy().starts_with(".aw-rollback-staging-"))
+            })
+            .unwrap_or(false);
+        assert!(!has_staging, "no staging dir should remain after early failure");
+    }
+
+    #[test]
+    fn multi_skill_removal_and_rollback() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-multi-skill");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-multi-skill");
+        write_file(
+            &workspace.join("metadata/deprecated-skills.json"),
+            r#"{"version":1,"skills":["caveman","diagnose","prototype"]}"#,
+        );
+        for skill in &["caveman", "diagnose", "prototype"] {
+            write_file(
+                &workspace.join(format!("metadata/deprecated-skills/{skill}/SKILL.md")),
+                &format!("name: {skill}\n"),
+            );
+        }
+
+        let dest = home.join(".agents/skills");
+        for skill in &["caveman", "diagnose", "prototype"] {
+            write_file(
+                &dest.join(format!("{skill}/SKILL.md")),
+                &format!("name: {skill}\n"),
+            );
+        }
+
+        // Remove all three — use "codex" agent so dest matches codex_global_skills_dest
+        let current = HashSet::new();
+        let result = remove_identical_deprecated("codex", &workspace, &dest, &current, false)
+            .expect("remove");
+        assert!(result.success);
+        for skill in &["caveman", "diagnose", "prototype"] {
+            assert!(!dest.join(skill).exists(), "{skill} should be removed");
+        }
+
+        // Find backup dir and rollback
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("codex-"))
+            .expect("backup dir");
+        let backup_path = backup_dir_entry.path().to_string_lossy().to_string();
+
+        let result = rollback_removal(&backup_path).expect("rollback");
+        assert!(result.success);
+        for skill in &["caveman", "diagnose", "prototype"] {
+            assert!(dest.join(skill).exists(), "{skill} should be restored");
+            assert!(
+                dest.join(format!("{skill}/SKILL.md")).is_file(),
+                "{skill}/SKILL.md should exist"
+            );
+        }
+    }
+
+    #[test]
+    fn reject_nested_symlinks_deeply_nested() {
+        let root = temp_root("deep-nested-symlinks");
+        fs::create_dir_all(&root).expect("create root");
+        let deep = root.join("a").join("b").join("c").join("d");
+        fs::create_dir_all(&deep).expect("create deep dir");
+
+        // No symlinks — should pass
+        assert!(reject_nested_symlinks(&root, "test").is_ok());
+
+        // Add a symlink at depth 4
+        let external = temp_root("deep-external");
+        fs::create_dir_all(&external).expect("create external");
+        let sym_at_depth = deep.join("evil_link");
+        std::os::unix::fs::symlink(&external, &sym_at_depth)
+            .expect("create deep symlink");
+
+        let result = reject_nested_symlinks(&root, "test");
+        assert!(result.is_err(), "must reject deeply nested symlink");
+        let err = result.unwrap_err();
+        assert!(err.contains("nested symlink"), "error mentions nested symlink: {err}");
+    }
+
+    #[test]
+    fn rollback_rejects_agent_not_in_skill_allowlist() {
+        let _guard = guard::lock();
+        let _local = ENV_TEST_LOCK.lock().expect("lock");
+        let home = temp_root("home-invalid-agent-rollback");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        let workspace = temp_root("ws-invalid-agent-rollback");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = home.join(".agents/skills");
+        write_file(&dest.join("caveman/SKILL.md"), "name: caveman\n");
+
+        let current = HashSet::new();
+        // remove allows any agent name (used as label); rollback validates
+        let result = remove_identical_deprecated("nonexistent", &workspace, &dest, &current, false)
+            .expect("remove should work with any agent label");
+        assert!(result.success);
+        assert!(!dest.join("caveman").exists());
+
+        // Find backup dir
+        let backup_dir_entry = fs::read_dir(home.join("backups/deprecated-skills"))
+            .expect("read backups")
+            .filter_map(|e| e.ok())
+            .find(|e| e.file_name().to_string_lossy().starts_with("nonexistent-"))
+            .expect("backup dir");
+        let backup_path = backup_dir_entry.path().to_string_lossy().to_string();
+
+        // Rollback must reject invalid agent in manifest
+        let result = rollback_removal(&backup_path);
+        assert!(result.is_err(), "rollback must reject invalid agent");
+        let err = result.unwrap_err();
+        assert!(err.contains("invalid agent"), "error mentions invalid agent: {err}");
     }
 }
