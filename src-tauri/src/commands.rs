@@ -11,6 +11,8 @@ mod process;
 pub(crate) mod setup;
 pub(crate) use process::ActionResult;
 pub(crate) use status::file_eq;
+pub(crate) use codex_runtime::{extract_managed_codex_config, managed_codex_keys_match};
+pub(crate) use opencode_runtime::{extract_managed_opencode_config, managed_opencode_keys_match};
 mod repo_dashboard;
 mod repo_dashboard_commands;
 mod repo_dashboard_history;

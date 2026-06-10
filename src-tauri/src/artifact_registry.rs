@@ -7,10 +7,6 @@
 //! The registry maps SetupSurfaceId variants to their constituent artifacts
 //! and provides metadata for detection, apply, validation, and rollback.
 //!
-//! Types in this module are progressively wired into the transaction system.
-//! Dead code warnings are allowed during the transition.
-#![allow(dead_code)]
-
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
@@ -289,53 +285,56 @@ fn expand_skill_surface(
     workspace_root: &Path,
     harness: &str,
     map: impl Fn(SkillName) -> ArtifactId,
-) -> Vec<ArtifactId> {
-    discover_skill_names_for_harness(workspace_root, harness)
-        .unwrap_or_default()
+) -> Result<Vec<ArtifactId>, String> {
+    Ok(discover_skill_names_for_harness(workspace_root, harness)?
         .into_iter()
         .map(map)
-        .collect()
+        .collect())
 }
 
 fn expand_agent_surface(
     workspace_root: &Path,
     harness: crate::agent_discovery::AgentHarness,
     map: impl Fn(AgentName) -> ArtifactId,
-) -> Vec<ArtifactId> {
-    crate::agent_discovery::discover_agent_names(harness, workspace_root)
-        .unwrap_or_default()
+) -> Result<Vec<ArtifactId>, String> {
+    Ok(crate::agent_discovery::discover_agent_names(harness, workspace_root)?
         .into_iter()
         .map(map)
-        .collect()
+        .collect())
 }
 
 /// Expand a surface ID to its constituent artifact IDs.
 ///
-/// Returns an empty vec for surfaces that don't produce artifacts
-/// (e.g., DeprecatedSkillCleanup which is a separate workflow).
-pub fn expand_surface(surface: SetupSurfaceId, workspace_root: &Path) -> Vec<ArtifactId> {
+/// Returns an empty vec for DeprecatedSkillCleanup only.
+pub fn expand_surface(
+    surface: SetupSurfaceId,
+    workspace_root: &Path,
+) -> Result<Vec<ArtifactId>, String> {
     match surface {
-        SetupSurfaceId::OpenCodeConfig => vec![ArtifactId::OpenCodeConfig, ArtifactId::OpenCodeTui],
+        SetupSurfaceId::OpenCodeConfig => Ok(vec![
+            ArtifactId::OpenCodeConfig,
+            ArtifactId::OpenCodeTui,
+        ]),
         SetupSurfaceId::OpenCodeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::OpenCode,
             ArtifactId::OpenCodeAgent,
         ),
-        SetupSurfaceId::OpenCodeRules => vec![ArtifactId::OpenCodeRules],
+        SetupSurfaceId::OpenCodeRules => Ok(vec![ArtifactId::OpenCodeRules]),
         SetupSurfaceId::OpenCodeSkills => {
             expand_skill_surface(workspace_root, "opencode", ArtifactId::OpenCodeSkill)
         }
-        SetupSurfaceId::CodexConfig => vec![ArtifactId::CodexConfig],
+        SetupSurfaceId::CodexConfig => Ok(vec![ArtifactId::CodexConfig]),
         SetupSurfaceId::CodexAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::Codex,
             ArtifactId::CodexAgent,
         ),
-        SetupSurfaceId::CodexRules => vec![ArtifactId::CodexRules],
+        SetupSurfaceId::CodexRules => Ok(vec![ArtifactId::CodexRules]),
         SetupSurfaceId::CodexSkills => {
             expand_skill_surface(workspace_root, "codex", ArtifactId::CodexSkill)
         }
-        SetupSurfaceId::ClaudeRules => vec![ArtifactId::ClaudeRules],
+        SetupSurfaceId::ClaudeRules => Ok(vec![ArtifactId::ClaudeRules]),
         SetupSurfaceId::ClaudeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::Claude,
@@ -352,12 +351,8 @@ pub fn expand_surface(surface: SetupSurfaceId, workspace_root: &Path) -> Vec<Art
         SetupSurfaceId::CursorSkills => {
             expand_skill_surface(workspace_root, "cursor", ArtifactId::CursorSkill)
         }
-        SetupSurfaceId::CursorMcp => vec![ArtifactId::CursorMcp],
-        SetupSurfaceId::DeprecatedSkillCleanup => {
-            // Deprecated cleanup is a separate explicit destructive workflow.
-            // It is never part of normal unified setup.
-            vec![]
-        }
+        SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
+        SetupSurfaceId::DeprecatedSkillCleanup => Ok(vec![]),
     }
 }
 
@@ -431,7 +426,7 @@ mod tests {
     #[test]
     fn opencode_config_expands_to_config_and_tui() {
         let ws = temp_dir("oc-config");
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeConfig, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeConfig, &ws).expect("expand");
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::OpenCodeConfig));
         assert!(artifacts.contains(&ArtifactId::OpenCodeTui));
@@ -440,7 +435,7 @@ mod tests {
     #[test]
     fn opencode_rules_expands_to_one_artifact() {
         let ws = temp_dir("oc-rules");
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeRules, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeRules, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::OpenCodeRules);
     }
@@ -448,14 +443,14 @@ mod tests {
     #[test]
     fn codex_config_is_single_artifact() {
         let ws = temp_dir("codex-cfg");
-        let artifacts = expand_surface(SetupSurfaceId::CodexConfig, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::CodexConfig, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
     }
 
     #[test]
     fn claude_rules_is_single_artifact() {
         let ws = temp_dir("claude-rules");
-        let artifacts = expand_surface(SetupSurfaceId::ClaudeRules, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::ClaudeRules, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::ClaudeRules);
     }
@@ -467,7 +462,7 @@ mod tests {
         write_file(&ws.join("agents/inspector.md"), "# inspector");
         write_file(&ws.join("agents/.gitkeep"), "");
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws).expect("expand");
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(
             AgentName::new("inspector").unwrap()
@@ -487,7 +482,7 @@ mod tests {
     #[test]
     fn cursor_mcp_is_single_artifact() {
         let ws = temp_dir("cursor-mcp");
-        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
     }
@@ -495,7 +490,7 @@ mod tests {
     #[test]
     fn deprecated_cleanup_produces_no_artifacts() {
         let ws = temp_dir("dep-cleanup");
-        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
         assert!(
             artifacts.is_empty(),
             "deprecated cleanup must not produce artifacts"
@@ -508,7 +503,7 @@ mod tests {
         write_file(&ws.join("agents/a.md"), "# a");
         write_file(&ws.join("agents/b.md"), "# b");
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws).expect("expand");
         let mut seen = std::collections::HashSet::new();
         for a in &artifacts {
             assert!(seen.insert(a.clone()), "duplicate artifact: {a:?}");
@@ -553,8 +548,8 @@ mod tests {
         write_skill(&ws, "skills/my-skill", "my-skill", "opencode");
 
         // Expanding OpenCodeSkills twice should produce same result
-        let a1 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
-        let a2 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
+        let a1 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
+        let a2 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
         assert_eq!(a1, a2);
     }
 
@@ -563,7 +558,7 @@ mod tests {
         // Validating that parse_skill_targets doesn't crash on invalid input
         // This is tested through the expansion which only processes valid surfaces
         let ws = temp_dir("unknown-surface");
-        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
         assert!(artifacts.is_empty());
     }
 
@@ -583,7 +578,7 @@ mod tests {
             "codex, opencode, claude, cursor",
         );
 
-        let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws).expect("expand");
         assert_eq!(artifacts.len(), 2);
         assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(
             SkillName::new("accessibility-review").unwrap()
@@ -603,7 +598,7 @@ mod tests {
             "codex, opencode, claude, cursor",
         );
 
-        let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert!(artifacts.contains(&ArtifactId::ClaudeSkill(
             SkillName::new("accessibility-review").unwrap()
@@ -622,9 +617,9 @@ mod tests {
         );
         write_skill(&ws, "skills/accessibility-review", "accessibility-review", "cursor");
 
-        let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws);
-        let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws);
-        let mcp = expand_surface(SetupSurfaceId::CursorMcp, &ws);
+        let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws).expect("expand");
+        let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws).expect("expand");
+        let mcp = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
 
         // No overlap between agents and skills
         for a in &agents {
@@ -662,7 +657,7 @@ mod tests {
         let ws = temp_dir("cursor-not-root");
         write_file(&ws.join("templates/cursor/agents/repo-scout.md"), "# scout");
 
-        let artifacts = expand_surface(SetupSurfaceId::CursorAgents, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::CursorAgents, &ws).expect("expand");
         // Each artifact should be an individual agent, not the whole directory
         for a in &artifacts {
             match a {
@@ -690,7 +685,7 @@ mod tests {
             SetupSurfaceId::CursorMcp,
         ]
         .iter()
-        .flat_map(|s| expand_surface(*s, &ws))
+        .flat_map(|s| expand_surface(*s, &ws).expect("expand"))
         .collect();
 
         // Every artifact should have exactly one surface owner
@@ -718,7 +713,7 @@ mod tests {
     fn cursor_mcp_surface_is_single_bounded_artifact() {
         // CursorMcp maps to exactly one artifact - not a broad root
         let ws = temp_dir("cursor-mcp-bounded");
-        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws);
+        let artifacts = expand_surface(SetupSurfaceId::CursorMcp, &ws).expect("expand");
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
         assert_eq!(artifacts[0].surface(), SetupSurfaceId::CursorMcp);

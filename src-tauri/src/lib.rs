@@ -13,6 +13,7 @@ mod path_utils;
 mod platform_paths;
 mod settings;
 mod setup_lifecycle;
+mod setup_transaction;
 mod shell_runtime;
 mod skill_duplicate_audit;
 #[cfg_attr(not(windows), allow(dead_code))]

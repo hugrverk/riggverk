@@ -127,7 +127,7 @@ const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
     "permission",
 ];
 
-fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Value {
+pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Value {
     let mut managed = serde_json::Map::new();
     if let Some(obj) = config.as_object() {
         for key in MANAGED_TOP_LEVEL_KEYS {
