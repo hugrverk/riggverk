@@ -338,8 +338,10 @@ def main() -> None:
         installed_value = load_toml(args.target)
         raise SystemExit(0 if managed_keys_match(installed_value, managed_value) else 1)
 
-    if args.merge or args.output:
-        # Print merged TOML (lossy read+write — for preview only)
+    if args.merge:
+        if args.output is None:
+            parser.error("--merge requires --output <path> to prevent sensitive config disclosure")
+        # Merge managed values into installed config (lossy read+write — preview only)
         if args.target.is_file():
             installed_value = load_toml(args.target)
             merged = json.loads(json.dumps(installed_value))
@@ -358,13 +360,12 @@ def main() -> None:
                                 target_profile[field] = managed_profile[field]
         else:
             merged = json.loads(json.dumps(managed_value))
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
-        else:
-            json.dump(merged, sys.stdout, indent=2)
-            print()
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(json.dumps(merged, indent=2) + "\n", encoding="utf-8")
         return
+
+    if args.output:
+        parser.error("--output requires --merge (use --merge --output <path>)")
 
     if args.apply:
         apply_merge(args.target, managed_value, args.backup_dir)
