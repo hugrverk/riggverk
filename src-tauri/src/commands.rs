@@ -8,8 +8,7 @@ pub(crate) mod cursor_profile;
 mod defaults;
 mod opencode_runtime;
 mod process;
-#[cfg_attr(not(test), allow(dead_code))]
-mod setup;
+pub(crate) mod setup;
 pub(crate) use process::ActionResult;
 pub(crate) use status::file_eq;
 mod repo_dashboard;
@@ -44,6 +43,9 @@ pub use skills::{
     open_install_skills_script, open_skill, preview_codex_legacy_migration,
     preview_remove_deprecated_skills, read_skill, remove_deprecated_skills,
     rollback_deprecated_skills_removal,
+};
+pub use setup::{
+    apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction, SetupResult,
 };
 pub use status::get_status;
 pub use workspace::{

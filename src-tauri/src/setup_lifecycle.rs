@@ -4,13 +4,13 @@
 //! lifecycle for all Agent Workspace managed surfaces.
 //!
 //! Phase ownership:
-//! - detect / compare  → runtime health commands (opencode_runtime, codex_runtime, etc.)
+//! - detect / compare  → this module's detect_surface_state
 //! - preview            → this planner
-//! - apply / repair     → workspace / actions commands (Item 7)
-//! - rollback           → workspace / backups commands (Item 8)
+//! - apply / repair     → commands/setup.rs (execute through existing owners)
+//! - rollback           → commands/setup.rs
 //!
-//! This module defines narrow serializable types and the preview planner only.
-//! No write execution is included.
+//! This module defines narrow serializable types, the preview planner,
+//! and real detection helpers. No write execution is included.
 
 use serde::{Deserialize, Serialize};
 
@@ -18,6 +18,9 @@ use serde::{Deserialize, Serialize};
 
 /// Identifies a managed setup surface that can be detected, compared,
 /// created, updated, repaired, or rolled back.
+///
+/// Each variant maps to a concrete write set with one canonical owner.
+/// Manual-only surfaces are explicit — those the app cannot automate.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SetupSurfaceId {
@@ -39,13 +42,15 @@ pub enum SetupSurfaceId {
     ClaudeAgents,
     /// Claude skills (.claude/skills)
     ClaudeSkills,
-    /// Cursor workspace setup (agents, rules, profile)
+    /// Cursor global setup (agents, skills, MCP, permissions)
     CursorSetup,
     /// OpenCode skills (.config/opencode/skills)
     OpenCodeSkills,
     /// Codex skills (.agents/skills)
     CodexSkills,
-    /// Bundled deprecated skill removal
+    /// Cursor global skills (~/.cursor/skills)
+    CursorSkills,
+    /// Bundled deprecated skill removal (separate destructive workflow)
     DeprecatedSkillCleanup,
 }
 
@@ -64,6 +69,7 @@ impl SetupSurfaceId {
         SetupSurfaceId::CursorSetup,
         SetupSurfaceId::OpenCodeSkills,
         SetupSurfaceId::CodexSkills,
+        SetupSurfaceId::CursorSkills,
         SetupSurfaceId::DeprecatedSkillCleanup,
     ];
 
@@ -82,13 +88,17 @@ impl SetupSurfaceId {
             SetupSurfaceId::CursorSetup => "Cursor Setup",
             SetupSurfaceId::OpenCodeSkills => "OpenCode Skills",
             SetupSurfaceId::CodexSkills => "Codex Skills",
+            SetupSurfaceId::CursorSkills => "Cursor Skills",
             SetupSurfaceId::DeprecatedSkillCleanup => "Deprecated Skills",
         }
     }
 
-    /// Returns true if this surface is read-only in the app (managed externally).
+    /// Returns true if this surface requires manual user action.
+    /// Currently no surfaces are fully manual — all have automation paths.
+    /// Manual steps are surfaced through the planner's manual_step field
+    /// when specific conditions require user intervention.
     pub fn is_manual_only(&self) -> bool {
-        matches!(self, SetupSurfaceId::ClaudeSkills)
+        false
     }
 }
 
@@ -146,7 +156,6 @@ pub struct PlannedOperation {
 
 /// Summary of validation results after an apply or repair.
 #[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
 pub struct ValidationResult {
     pub surface: SetupSurfaceId,
     pub passed: bool,
@@ -239,11 +248,6 @@ pub fn plan_setup(
     };
 
     for surface in &requested {
-        if *surface == SetupSurfaceId::ClaudeSkills && request.skip_manual {
-            synced.push(*surface);
-            continue;
-        }
-
         let state = surface_states.iter().find(|(s, _, _)| s == surface);
         let (kind, summary) = match state {
             Some((_, kind, summary)) => (*kind, summary.clone()),
@@ -487,18 +491,17 @@ mod tests {
     }
 
     #[test]
-    fn skip_manual_excludes_manual_surfaces() {
+    fn manual_surface_in_plan_when_skip_manual_enabled() {
+        // skip_manual has no effect when no surfaces are manual_only.
+        // The planner still includes manual-status surfaces in the plan.
         let request = SetupRequest {
-            surfaces: vec![SetupSurfaceId::ClaudeSkills],
+            surfaces: vec![SetupSurfaceId::OpenCodeConfig],
             skip_manual: true,
         };
-        let states = vec![manual(SetupSurfaceId::ClaudeSkills)];
+        let states = vec![manual(SetupSurfaceId::OpenCodeConfig)];
         let plan = plan_setup(&request, &states);
-        assert!(
-            plan.operations.is_empty(),
-            "manual surface excluded by skip_manual"
-        );
-        assert!(plan.synced.contains(&SetupSurfaceId::ClaudeSkills));
+        assert_eq!(plan.manual_steps.len(), 1, "manual step present");
+        assert!(!plan.is_blocked, "manual steps should not block");
     }
 
     #[test]
@@ -541,9 +544,10 @@ mod tests {
     }
 
     #[test]
-    fn claude_skills_is_manual_only() {
-        assert!(SetupSurfaceId::ClaudeSkills.is_manual_only());
-        assert!(!SetupSurfaceId::OpenCodeConfig.is_manual_only());
+    fn no_surface_is_manual_only() {
+        for s in SetupSurfaceId::ALL {
+            assert!(!s.is_manual_only(), "{:?} should not be manual-only", s);
+        }
     }
 
     #[test]

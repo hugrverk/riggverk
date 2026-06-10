@@ -9,7 +9,6 @@ mod executable_resolver;
 mod path_utils;
 mod platform_paths;
 mod settings;
-#[cfg_attr(not(test), allow(dead_code))]
 mod setup_lifecycle;
 mod shell_runtime;
 mod skill_duplicate_audit;
@@ -24,7 +23,7 @@ mod smoke_runtime;
 mod test_env;
 
 use commands::{
-    apply_workspace_repair, create_doc, discover_local_git_repos,
+    apply_setup, apply_workspace_repair, create_doc, discover_local_git_repos,
     generate_opencode_config_snapshot, get_agent_targets, get_backup_details,
     get_claude_runtime_health, get_codex_runtime_health, get_cursor_profile_health,
     get_docs_health, get_opencode_runtime_health, get_repo_dashboard_snapshot,
@@ -34,12 +33,13 @@ use commands::{
     migrate_codex_legacy_skills, open_agent_source, open_agent_template, open_backups_folder,
     open_config_template, open_default_workspace_folder, open_doc, open_install_skills_script,
     open_opencode_config_source, open_skill, plan_workspace_repair, preview_codex_legacy_migration,
-    preview_remove_deprecated_skills, read_agent_source, read_agent_template,
+    preview_remove_deprecated_skills, preview_setup, read_agent_source, read_agent_template,
     read_brain_setup_seed, read_config_template, read_doc, read_opencode_config_source, read_skill,
-    remove_deprecated_skills, repair_default_workspace, rollback_deprecated_skills_removal,
-    run_action, run_cursor_profile_action, save_agent_source, save_agent_template,
-    save_config_template, save_doc, save_opencode_config_source, try_set_active_workspace_path,
-    update_settings, validate_workspace_contract,
+    remove_deprecated_skills, repair_default_workspace, repair_setup_command,
+    rollback_deprecated_skills_removal, rollback_setup_transaction, run_action,
+    run_cursor_profile_action, save_agent_source, save_agent_template, save_config_template,
+    save_doc, save_opencode_config_source, try_set_active_workspace_path, update_settings,
+    validate_workspace_contract,
 };
 use tauri::Manager;
 
@@ -112,6 +112,10 @@ pub fn run() {
             get_repo_dashboard_snapshot,
             get_repo_prompt_context,
             discover_local_git_repos,
+            preview_setup,
+            apply_setup,
+            repair_setup_command,
+            rollback_setup_transaction,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
