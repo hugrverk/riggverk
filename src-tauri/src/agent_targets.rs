@@ -403,6 +403,105 @@ mod tests {
     }
 
     #[test]
+    fn cursor_setup_not_in_runtime_agent_targets() {
+        let runtime = runtime_agent_targets();
+        assert!(
+            runtime.iter().all(|t| t.id != "cursor_setup"),
+            "cursor_setup must be excluded from runtime_agent_targets"
+        );
+    }
+
+    #[test]
+    fn all_target_ids_are_unique() {
+        let all = targets();
+        let mut seen = HashSet::new();
+        for t in &all {
+            assert!(
+                seen.insert(t.id),
+                "Duplicate target id '{}' across all targets",
+                t.id
+            );
+        }
+    }
+
+    #[test]
+    fn all_target_paths_are_relative_and_contained() {
+        for t in targets() {
+            assert!(
+                !t.source_rel.starts_with('/'),
+                "source_rel for '{}' must not be absolute: {}",
+                t.id,
+                t.source_rel
+            );
+            assert!(
+                !t.target_rel.starts_with('/'),
+                "target_rel for '{}' must not be absolute: {}",
+                t.id,
+                t.target_rel
+            );
+            assert!(
+                !t.source_rel.contains(".."),
+                "source_rel for '{}' must not contain parent traversal: {}",
+                t.id,
+                t.source_rel
+            );
+            assert!(
+                !t.target_rel.contains(".."),
+                "target_rel for '{}' must not contain parent traversal: {}",
+                t.id,
+                t.target_rel
+            );
+        }
+    }
+
+    #[test]
+    fn unknown_target_ids_are_rejected_by_normalize() {
+        let raw = vec![
+            "opencode_rules".to_string(),
+            "unknown_target".to_string(),
+            "claude_agents".to_string(),
+            "".to_string(),
+        ];
+        let normalized = normalize_enabled_ids(&raw);
+        assert!(normalized.contains(&"opencode_rules".to_string()));
+        assert!(normalized.contains(&"claude_agents".to_string()));
+        assert!(!normalized.contains(&"unknown_target".to_string()));
+        assert!(!normalized.contains(&"".to_string()));
+    }
+
+    #[test]
+    fn normalize_empty_input_returns_empty() {
+        let normalized = normalize_enabled_ids(&[]);
+        assert!(normalized.is_empty());
+    }
+
+    #[test]
+    fn normalize_unknown_only_returns_empty() {
+        let normalized = normalize_enabled_ids(&["nonexistent".to_string()]);
+        assert!(normalized.is_empty());
+    }
+
+    #[test]
+    fn targets_contains_all_expected_ids() {
+        let ids: std::collections::BTreeSet<&str> =
+            targets().iter().map(|t| t.id).collect();
+        let expected: std::collections::BTreeSet<&str> = [
+            "codex_rules",
+            "opencode_rules",
+            "claude_rules",
+            "opencode_agents",
+            "claude_agents",
+            "codex_agents",
+            "opencode_config",
+            "codex_config",
+            "cursor_setup",
+        ]
+        .into_iter()
+        .collect();
+        assert_eq!(ids, expected, "targets() must contain exactly 9 known IDs");
+    }
+
+    #[test]
     fn opencode_install_args_supports_scoped_sync() {
         assert_eq!(
             opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::AgentsOnly),
