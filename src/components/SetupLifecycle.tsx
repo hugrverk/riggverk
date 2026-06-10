@@ -47,142 +47,136 @@ function surfaceLabel(id: SetupSurfaceId): string {
   return map[id] ?? id;
 }
 
+function setupResultToTerminal(result: SetupResult, action: string) {
+  return {
+    success: result.success,
+    action,
+    stdout: result.message,
+    stderr: result.failed.length > 0 ? result.failed.join("; ") : "",
+    exit_code: result.success ? 0 : 1,
+  };
+}
+
 // ── Component ──
 
 export interface SetupLifecycleProps {
-  onError: (msg: string) => void;
-  onLog: (msg: string) => void;
+  wsRunning: string | null;
+  runSetupTask: <T>(opts: {
+    label: string;
+    action: string;
+    task: () => Promise<T>;
+    toActionResult: (result: T) => ReturnType<typeof setupResultToTerminal>;
+    refresh?: () => void | Promise<void>;
+  }) => Promise<T | null>;
 }
 
-export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
+export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps) {
   const [plan, setPlan] = useState<SetupPlan | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
   const [result, setResult] = useState<SetupResult | null>(null);
-  const [busy, setBusy] = useState<string | null>(null);
   const genRef = useRef(0);
+  const rollbackTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const [confirmRollback, setConfirmRollback] = useState(false);
 
-  // Refresh detection — preserves last transaction result for rollback
+  const globalMutationBusy = wsRunning !== null;
+  const mutationLabel = wsRunning ?? "";
+
   const refresh = useCallback(async () => {
     const gen = ++genRef.current;
-    setLoading(true);
-    setPlan(null);
-    // Do NOT clear result — preserve transaction_id for rollback
+    setPreviewLoading(true);
     try {
       const p = await invoke<SetupPlan>("preview_setup", { surfaces: [] });
       if (gen !== genRef.current) return;
       setPlan(p);
-      onLog("Setup detection refreshed");
-    } catch (e) {
+    } catch {
       if (gen !== genRef.current) return;
-      onError(`Preview failed: ${e}`);
+      setPlan(null);
     } finally {
-      if (gen === genRef.current) setLoading(false);
+      if (gen === genRef.current) setPreviewLoading(false);
     }
-  }, [onError, onLog]);
+  }, []);
 
-  // Refresh on mount
   useEffect(() => { refresh(); }, [refresh]);
 
-  // Apply setup plan
+  useEffect(() => {
+    if (!confirmRollback) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setConfirmRollback(false);
+        rollbackTriggerRef.current?.focus();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [confirmRollback]);
+
   const applyPlan = useCallback(async () => {
-    if (!plan) return;
-    
-    // Preview must be fresh
-    const gen = ++genRef.current;
-    setBusy("Applying\u2026");
-    setResult(null);
-    
-    // Collect surfaces that need apply
+    if (!plan?.plan_fingerprint) return;
     const surfaces = plan.operations
       .filter(op => op.kind === "create" || op.kind === "update")
       .map(op => op.surface);
+    if (surfaces.length === 0) return;
 
-    if (surfaces.length === 0) {
-      setBusy(null);
-      onLog("Nothing to apply");
-      return;
-    }
-
-    try {
-      const r = await invoke<SetupResult>("apply_setup", {
+    const r = await runSetupTask({
+      label: "setup apply",
+      action: "apply_setup",
+      task: () => invoke<SetupResult>("apply_setup", {
         surfaces,
         skipManual: true,
-        planFingerprint: plan.plan_fingerprint ?? null,
-      });
-      if (gen !== genRef.current) return;
-      // Set result BEFORE refresh so it survives the refresh
-      setResult(r);
-      onLog(`Apply result: ${r.message}`);
-      // Re-preview after apply (result is preserved)
-      await refresh();
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      onError(`Apply failed: ${e}`);
-    } finally {
-      if (gen === genRef.current) setBusy(null);
-    }
-  }, [plan, onError, onLog, refresh]);
+        planFingerprint: plan.plan_fingerprint,
+      }),
+      toActionResult: (res) => setupResultToTerminal(res, "apply_setup"),
+      refresh: async () => { await refresh(); },
+    });
+    if (r) setResult(r);
+  }, [plan, runSetupTask, refresh]);
 
-  // Repair missing resources
   const repair = useCallback(async () => {
-    const gen = ++genRef.current;
-    setBusy("Repairing\u2026");
-    setResult(null);
-    try {
-      const r = await invoke<SetupResult>("repair_setup_command", { skipManual: true });
-      if (gen !== genRef.current) return;
-      setResult(r);
-      onLog(`Repair result: ${r.message}`);
-      await refresh();
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      onError(`Repair failed: ${e}`);
-    } finally {
-      if (gen === genRef.current) setBusy(null);
-    }
-  }, [onError, onLog, refresh]);
+    const r = await runSetupTask({
+      label: "setup repair",
+      action: "repair_setup_command",
+      task: () => invoke<SetupResult>("repair_setup_command", { skipManual: true }),
+      toActionResult: (res) => setupResultToTerminal(res, "repair_setup_command"),
+      refresh: async () => { await refresh(); },
+    });
+    if (r) setResult(r);
+  }, [runSetupTask, refresh]);
 
-  // Rollback last transaction
-  const [confirmRollback, setConfirmRollback] = useState(false);
   const rollbackTxn = useCallback(async () => {
     if (!result?.transaction_id) return;
-    const gen = ++genRef.current;
-    setBusy("Rolling back\u2026");
-    try {
-      const r = await invoke<SetupResult>("rollback_setup_transaction", {
+    const r = await runSetupTask({
+      label: "setup rollback",
+      action: "rollback_setup_transaction",
+      task: () => invoke<SetupResult>("rollback_setup_transaction", {
         transactionId: result.transaction_id,
         dryRun: false,
-      });
-      if (gen !== genRef.current) return;
+      }),
+      toActionResult: (res) => setupResultToTerminal(res, "rollback_setup_transaction"),
+      refresh: async () => { await refresh(); },
+    });
+    if (r) {
       setResult(r);
       setConfirmRollback(false);
-      onLog(`Rollback result: ${r.message}`);
-      await refresh();
-    } catch (e) {
-      if (gen !== genRef.current) return;
-      onError(`Rollback failed: ${e}`);
-    } finally {
-      if (gen === genRef.current) setBusy(null);
+      rollbackTriggerRef.current?.focus();
     }
-  }, [result, onError, onLog, refresh]);
+  }, [result, runSetupTask, refresh]);
 
-  const actionDisabled = busy !== null;
   const needsApply = plan?.operations.some(op => op.kind === "create" || op.kind === "update") ?? false;
   const isBlocked = plan?.is_blocked ?? false;
   const hasResult = result !== null;
+  const canApply = Boolean(plan?.plan_fingerprint) && needsApply && !isBlocked;
 
   return (
     <div className="ws-panel" role="region" aria-label="Unified setup lifecycle">
       <div className="ws-panel-header">
         <span className="ws-panel-title">SETUP LIFECYCLE</span>
-        {loading && <span className="ws-status-dim" role="status">detecting\u2026</span>}
-        {plan && !loading && (
+        {previewLoading && <span className="ws-status-dim" role="status">detecting\u2026</span>}
+        {plan && !previewLoading && (
           <span className="ws-status-chip ws-status-valid">{plan.summary}</span>
         )}
       </div>
 
-      {/* Detection results */}
-      {plan && !loading && (
+      {plan && !previewLoading && (
         <div className="start-workspace-path-block">
           {plan.operations.map((op, i) => (
             <div key={i} className="start-workspace-path-entry">
@@ -196,14 +190,10 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
                 </span>
               )}
               {op.manual_step && (
-                <span className="ws-path-status-detail">
-                  {op.manual_step}
-                </span>
+                <span className="ws-path-status-detail">{op.manual_step}</span>
               )}
             </div>
           ))}
-
-          {/* Synced surfaces */}
           {plan.synced.length > 0 && (
             <div className="start-workspace-path-entry">
               <span className="start-workspace-path-label">
@@ -214,38 +204,38 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
         </div>
       )}
 
-      {/* Action buttons */}
       <div className="ws-action-row start-workspace-actions">
         <button
           className="btn btn-sm"
           onClick={refresh}
-          disabled={actionDisabled}
+          disabled={globalMutationBusy}
           aria-label="Refresh setup detection"
         >
-          {loading ? "detecting\u2026" : "refresh"}
+          {previewLoading ? "detecting\u2026" : "refresh"}
         </button>
 
         <button
           className="btn btn-sm btn-primary"
           onClick={applyPlan}
-          disabled={actionDisabled || !needsApply || isBlocked || !plan}
+          disabled={globalMutationBusy || !canApply || !plan}
           title={isBlocked ? "Resolve conflicts before applying" : needsApply ? "Apply pending changes" : "All surfaces synced"}
         >
-          {busy === "Applying\u2026" ? "applying\u2026" : "apply"}
+          {mutationLabel === "setup apply" ? "applying\u2026" : "apply"}
         </button>
 
         <button
           className="btn btn-sm"
           onClick={repair}
-          disabled={actionDisabled || !plan}
+          disabled={globalMutationBusy || !plan}
         >
-          {busy === "Repairing\u2026" ? "repairing\u2026" : "repair"}
+          {mutationLabel === "setup repair" ? "repairing\u2026" : "repair"}
         </button>
 
         <button
+          ref={rollbackTriggerRef}
           className="btn btn-sm btn-warn"
           onClick={() => setConfirmRollback(true)}
-          disabled={actionDisabled || !hasResult || !result?.transaction_id}
+          disabled={globalMutationBusy || !hasResult || !result?.transaction_id}
           title={
             result?.transaction_id
               ? `Rollback transaction ${result.transaction_id.slice(0, 8)}`
@@ -256,27 +246,29 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
         </button>
       </div>
 
-      {/* Rollback confirmation */}
       {confirmRollback && result && (
         <div className="ws-repair-box" role="alertdialog" aria-label="Confirm rollback">
           <div className="ws-repair-title">Rollback transaction?</div>
           <p className="ws-repair-hint">
-            This will restore the previous state of {result.applied.length} surface(s).
+            This will restore the previous state of {result.applied.length} artifact(s).
             Transaction: {result.transaction_id.slice(0, 12)}\u2026
           </p>
           <div className="ws-repair-actions">
             <button
               className="btn btn-sm btn-warn"
               onClick={rollbackTxn}
-              disabled={actionDisabled}
+              disabled={globalMutationBusy}
               autoFocus
             >
-              {busy === "Rolling back\u2026" ? "rolling back\u2026" : "confirm rollback"}
+              {mutationLabel === "setup rollback" ? "rolling back\u2026" : "confirm rollback"}
             </button>
             <button
               className="btn btn-sm"
-              onClick={() => setConfirmRollback(false)}
-              disabled={actionDisabled}
+              onClick={() => {
+                setConfirmRollback(false);
+                rollbackTriggerRef.current?.focus();
+              }}
+              disabled={globalMutationBusy}
             >
               cancel
             </button>
@@ -284,7 +276,6 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
         </div>
       )}
 
-      {/* Result display */}
       {result && (
         <div className="ws-repair-box" role="status" aria-live="polite">
           <div className="ws-panel-title-row">
@@ -308,7 +299,6 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
         </div>
       )}
 
-      {/* Error when blocked */}
       {isBlocked && plan && (
         <p className="ws-path-status-detail" role="alert">
           Conflicts or unavailable surfaces block apply. Resolve them or refresh.

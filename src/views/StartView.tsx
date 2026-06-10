@@ -1,4 +1,4 @@
-import { SetupLifecycle } from "../components/SetupLifecycle";
+import { SetupLifecycle, type SetupLifecycleProps } from "../components/SetupLifecycle";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -31,6 +31,7 @@ interface StartViewProps {
   backupCount: number;
   onRefreshBackups: () => void;
   onOpenBackupsFolder: () => void;
+  runSetupTask: SetupLifecycleProps["runSetupTask"];
 }
 
 function chipClass(state: InstalledWorkspaceChip): string {
@@ -161,6 +162,7 @@ export function StartView({
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
+  runSetupTask,
 }: StartViewProps) {
   const resolvedPath = workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? null;
   const showUpdateResources = needsBundledResourcesUpdate(workspaceDiagnostics);
@@ -292,10 +294,7 @@ export function StartView({
           )}
 
           {workspaceValid && (
-            <SetupLifecycle
-              onError={(_msg) => { /* errors shown in result box */ }}
-              onLog={(_msg) => { /* log to terminal */ }}
-            />
+            <SetupLifecycle wsRunning={wsRunning} runSetupTask={runSetupTask} />
           )}
 
           <WorkspaceVerify

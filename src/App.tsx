@@ -502,6 +502,7 @@ function App() {
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
+            runSetupTask={runWsTask}
           />
         )}
 
