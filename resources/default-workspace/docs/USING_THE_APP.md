@@ -11,7 +11,7 @@ The landing page and operations terminal. Shows whether the runtime workspace at
 - **open folder** — open the installed workspace in Finder
 - **VERIFY** — release-check and backup management when the workspace is valid
 
-Sync, diff, and install actions for each agent tool live on that tool's harness page (Codex, OpenCode, Cursor, Claude), not on Workspace.
+Harness pages (Codex, OpenCode, Cursor, Claude) provide detailed per-tool diff, sync, and install actions. The Workspace page provides a complementary unified **setup lifecycle** — preview, apply, repair, and rollback across managed surfaces. Use either path; they are not mutually exclusive.
 
 ## Harness pages (Codex, OpenCode, Cursor, Claude)
 
@@ -51,7 +51,7 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance, global text size, and theme colors. Settings autosave. Harness sync and setup surfaces are managed on the Workspace page.
+Appearance, global text size, and theme colors. Settings autosave.
 
 ## Tools
 
@@ -69,9 +69,16 @@ In-app utilities separate from harness sync:
 | Codex config | Preview in setup lifecycle | Apply managed fields |
 | Skills install | Dry-run Skills | Install Skills |
 
+## Setup lifecycle (Workspace)
+
+- **Preview** issues a short-lived token and fingerprint; **apply** and **repair** consume the token only after complete backend preflight and immediately before the first mutation.
+- Failed preflight leaves the token valid for retry.
+- Failed apply with automatic rollback remains visible; use **rollback** to retry when dry-run shows eligible artifacts.
+- Symlinked parents and dangling symlinks in managed paths are rejected.
+
 ## Backups
 
-Applying changes that overwrite diverged target files creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups`.
+Applying changes that overwrite diverged target files creates backups under the platform-resolved Agent Workspace backup root (for example `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS).
 
 ## Release check
 

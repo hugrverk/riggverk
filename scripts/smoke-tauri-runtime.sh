@@ -92,6 +92,7 @@ fi
   export PATH="$CARGO_HOME/bin:$PATH"
   "$CARGO_BIN" test smoke_runtime::tests::runtime_smoke_end_to_end -- --exact --nocapture
   "$CARGO_BIN" test script_action_smoke::tests::harness_diff_actions_return_successful_previews -- --exact --nocapture
+  "$CARGO_BIN" test setup_lifecycle_smoke::tests -- --nocapture
 )
 
 printf '\nsmoke-tauri-runtime passed\n'

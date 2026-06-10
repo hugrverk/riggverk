@@ -13,6 +13,7 @@ TAURI_SRC = REPO / "src-tauri/src"
 SETUP_RS = TAURI_SRC / "commands/setup.rs"
 ARTIFACT_REGISTRY = TAURI_SRC / "artifact_registry.rs"
 SETUP_TRANSACTION = TAURI_SRC / "setup_transaction.rs"
+PATH_SAFETY = TAURI_SRC / "path_safety.rs"
 SETUP_FINGERPRINT = TAURI_SRC / "setup_fingerprint.rs"
 CLAUDE_RUNTIME = TAURI_SRC / "commands/claude_runtime.rs"
 SETUP_LIFECYCLE_TSX = REPO / "src/components/SetupLifecycle.tsx"
@@ -180,6 +181,28 @@ def assert_rust_contracts() -> None:
         fail("repair must use create-only per-artifact execution")
     if "repair_preview_token" not in setup_text:
         fail("repair must issue and require preview tokens")
+    if "consume_preview_token(token)" not in setup_text:
+        fail("setup apply/repair must consume preview tokens inside apply_planned_artifacts")
+    if setup_text.find("consume_preview_token") < setup_text.find("apply_planned_artifacts"):
+        fail("preview token consumption must occur inside apply_planned_artifacts after preflight")
+    if "validate_artifact_source_dest" not in txn_text:
+        fail("setup_transaction must validate artifact source and destination paths")
+    if "run_persisted_automatic_rollback" not in setup_text:
+        fail("automatic rollback must persist manifest progress")
+    if "post_apply_full_digest" not in txn_text:
+        fail("manifest must record post-apply full digests for rollback safety")
+    if "merge_managed_opencode_config" not in read(REPO / "src-tauri/src/commands/opencode_runtime.rs"):
+        fail("OpenCode managed merge owner required for rollback")
+    if "validate_directory_backup_tree" not in txn_text or "entry count mismatch" not in txn_text:
+        fail("directory backup validation must be bidirectional")
+    path_text = read(PATH_SAFETY)
+    if "if !path.exists()" in path_text and "reject_symlink" in path_text:
+        fail("path_safety reject_symlink must not gate symlink_metadata on path.exists()")
+    if "rollbackEligible" not in read(SETUP_LIFECYCLE_TSX):
+        fail("SetupLifecycle must use dry-run rollback eligibility")
+    using_app = read(REPO / "resources/default-workspace/docs/USING_THE_APP.md")
+    if "not on Workspace" in using_app and "setup lifecycle" in using_app:
+        fail("USING_THE_APP.md must not contradict harness vs Workspace setup paths")
     claude_text = read(CLAUDE_RUNTIME)
     if re.search(r"agent:\s*claude", claude_text):
         fail("Claude health must not parse obsolete agent: claude metadata")

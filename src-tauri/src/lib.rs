@@ -24,6 +24,8 @@ mod skills_install;
 #[cfg(test)]
 mod script_action_smoke;
 #[cfg(test)]
+mod setup_lifecycle_smoke;
+#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
