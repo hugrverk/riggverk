@@ -91,6 +91,40 @@ describe("SetupLifecycle", () => {
     expect(runSetupTask.mock.calls[0][0].label).toBe("setup apply");
   });
 
+  it("preserves failed apply transaction for rollback retry", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "preview_setup") return previewPlan;
+      if (cmd === "preview_repair_setup") {
+        return { missing_artifacts: [], skipped_updates: 0, skipped_conflicts: 0, skipped_unavailable: 0, repair_fingerprint: null, message: "none" };
+      }
+      if (cmd === "apply_setup") {
+        return {
+          success: false,
+          transaction_id: "888",
+          applied: ["OpenCodeRules"],
+          failed: ["apply failed"],
+          rolled_back: ["OpenCodeRules"],
+          manual_steps: [],
+          message: "apply failed with rollback",
+        };
+      }
+      if (cmd === "rollback_setup_transaction") {
+        return { success: true, transaction_id: "888", applied: [], failed: [], rolled_back: ["OpenCodeRules"], manual_steps: [], message: "dry" };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const runSetupTask = vi.fn(async (opts) => {
+      const res = await opts.task();
+      opts.toActionResult(res);
+      return res;
+    });
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
+    await screen.findByText("OpenCode Rules");
+    fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
+    await screen.findByText("FAILED");
+    await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).not.toBeDisabled());
+  });
+
   it("cancels rollback confirmation on Escape after apply result", async () => {
     const runSetupTask = vi.fn(async (opts) => {
       const res = await opts.task();
@@ -101,6 +135,7 @@ describe("SetupLifecycle", () => {
     await screen.findByText("OpenCode Rules");
     fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
     await screen.findByText("SUCCESS");
+    await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).not.toBeDisabled());
     fireEvent.click(screen.getByRole("button", { name: /rollback/i }));
     await screen.findByRole("alertdialog");
     fireEvent.keyDown(window, { key: "Escape" });

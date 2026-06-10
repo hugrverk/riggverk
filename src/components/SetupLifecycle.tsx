@@ -97,6 +97,7 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
   const [repairPreview, setRepairPreview] = useState<RepairPreview | null>(null);
   const [repairPreviewLoading, setRepairPreviewLoading] = useState(false);
   const [rollbackDryRun, setRollbackDryRun] = useState<SetupResult | null>(null);
+  const [rollbackEligible, setRollbackEligible] = useState(false);
   const previewGenRef = useRef(0);
   const repairGenRef = useRef(0);
   const rollbackTriggerRef = useRef<HTMLButtonElement | null>(null);
@@ -117,8 +118,38 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
     setRepairResult(null);
     setRollbackResult(null);
     setRollbackDryRun(null);
+    setRollbackEligible(false);
     setConfirmRollback(false);
   }, [workspacePath]);
+
+  useEffect(() => {
+    const txn = lastCompletedApplyRef.current;
+    const alreadyRolledBack =
+      rollbackResult?.success === true &&
+      rollbackResult.transaction_id === txn?.transaction_id &&
+      rollbackResult.rolled_back.length > 0;
+    if (!txn?.transaction_id || alreadyRolledBack) {
+      setRollbackEligible(false);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const dry = await invoke<SetupResult>("rollback_setup_transaction", {
+          transactionId: txn.transaction_id,
+          dryRun: true,
+        });
+        if (!cancelled) {
+          setRollbackEligible(dry.success && dry.rolled_back.length > 0);
+        }
+      } catch {
+        if (!cancelled) setRollbackEligible(false);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [applyResult, repairResult, rollbackResult, workspacePath]);
 
   const refresh = useCallback(async () => {
     const gen = ++previewGenRef.current;
@@ -209,6 +240,8 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
       if (r.success) {
         lastCompletedApplyRef.current = r;
         setRollbackResult(null);
+      } else if (r.transaction_id) {
+        lastCompletedApplyRef.current = r;
       }
     }
   }, [plan, runSetupTask, refresh, loadRepairPreview]);
@@ -288,7 +321,7 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
     rollbackResult.rolled_back.length > 0;
   const canRollback =
     Boolean(activeApplyTransaction?.transaction_id) &&
-    (activeApplyTransaction?.applied?.length ?? 0) > 0 &&
+    rollbackEligible &&
     !rollbackSucceeded;
 
   const applyBusy = mutationLabel === "setup apply";
@@ -467,9 +500,14 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
           {statusResult.manual_steps.length > 0 && (
             <p className="ws-repair-hint">Manual steps: {statusResult.manual_steps.join("; ")}</p>
           )}
-          {rollbackResult && !rollbackResult.success && activeApplyTransaction && (
+          {rollbackResult && !rollbackResult.success && activeApplyTransaction && canRollback && (
             <p className="ws-repair-hint" role="alert">
               Rollback failed for transaction {activeApplyTransaction.transaction_id.slice(0, 12)}… — retry is available.
+            </p>
+          )}
+          {applyResult && !applyResult.success && activeApplyTransaction && canRollback && (
+            <p className="ws-repair-hint" role="alert">
+              Apply failed for transaction {activeApplyTransaction.transaction_id.slice(0, 12)}… — rollback retry is available.
             </p>
           )}
         </div>
