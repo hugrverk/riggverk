@@ -1,4 +1,6 @@
 mod actions;
+#[cfg_attr(not(test), allow(dead_code))]
+mod setup;
 pub(crate) mod backups;
 mod codex_runtime;
 mod content;

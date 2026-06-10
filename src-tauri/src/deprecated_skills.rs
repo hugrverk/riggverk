@@ -246,7 +246,7 @@ fn create_backup_dir(agent: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
+pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
     reject_symlink_path(src, "backup source")?;
     fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
     for entry in fs::read_dir(src).map_err(|e| format!("read dir {}: {e}", src.display()))? {
