@@ -524,19 +524,20 @@ export interface ClaudeRuntimeHealth {
 // ── Unified setup lifecycle types ──
 
 export type SetupSurfaceId =
-  | "opencode_config"
-  | "opencode_agents"
-  | "opencode_rules"
+  | "open_code_config"
+  | "open_code_agents"
+  | "open_code_rules"
   | "codex_config"
   | "codex_agents"
   | "codex_rules"
   | "claude_rules"
   | "claude_agents"
   | "claude_skills"
-  | "cursor_setup"
-  | "opencode_skills"
+  | "open_code_skills"
   | "codex_skills"
+  | "cursor_agents"
   | "cursor_skills"
+  | "cursor_mcp"
   | "deprecated_skill_cleanup";
 
 export type OperationKind =
@@ -564,6 +565,7 @@ export interface SetupPlan {
   summary: string;
   has_pending_changes: boolean;
   is_blocked: boolean;
+  plan_fingerprint: string | null;
 }
 
 export interface SetupResult {

@@ -28,19 +28,20 @@ function opClass(kind: OperationKind): string {
 
 function surfaceLabel(id: SetupSurfaceId): string {
   const map: Record<string, string> = {
-    opencode_config: "OpenCode Config",
-    opencode_agents: "OpenCode Agents",
-    opencode_rules: "OpenCode Rules",
+    open_code_config: "OpenCode Config",
+    open_code_agents: "OpenCode Agents",
+    open_code_rules: "OpenCode Rules",
     codex_config: "Codex Config",
     codex_agents: "Codex Agents",
     codex_rules: "Codex Rules",
     claude_rules: "Claude Rules",
     claude_agents: "Claude Agents",
     claude_skills: "Claude Skills",
-    cursor_setup: "Cursor Setup",
-    opencode_skills: "OpenCode Skills",
+    cursor_agents: "Cursor Agents",
+    open_code_skills: "OpenCode Skills",
     codex_skills: "Codex Skills",
     cursor_skills: "Cursor Skills",
+    cursor_mcp: "Cursor MCP",
     deprecated_skill_cleanup: "Deprecated Skills",
   };
   return map[id] ?? id;
@@ -60,12 +61,12 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
   const [busy, setBusy] = useState<string | null>(null);
   const genRef = useRef(0);
 
-  // Refresh detection
+  // Refresh detection — preserves last transaction result for rollback
   const refresh = useCallback(async () => {
     const gen = ++genRef.current;
     setLoading(true);
     setPlan(null);
-    setResult(null);
+    // Do NOT clear result — preserve transaction_id for rollback
     try {
       const p = await invoke<SetupPlan>("preview_setup", { surfaces: [] });
       if (gen !== genRef.current) return;
@@ -106,11 +107,13 @@ export function SetupLifecycle({ onError, onLog }: SetupLifecycleProps) {
       const r = await invoke<SetupResult>("apply_setup", {
         surfaces,
         skipManual: true,
+        planFingerprint: plan.plan_fingerprint ?? null,
       });
       if (gen !== genRef.current) return;
+      // Set result BEFORE refresh so it survives the refresh
       setResult(r);
       onLog(`Apply result: ${r.message}`);
-      // Re-preview after apply
+      // Re-preview after apply (result is preserved)
       await refresh();
     } catch (e) {
       if (gen !== genRef.current) return;
