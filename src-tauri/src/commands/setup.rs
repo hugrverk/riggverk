@@ -473,20 +473,39 @@ fn perform_rollback(
                 match resolve_surface_path(surface) {
                     Ok(target) if target.exists() => {
                         if target.is_dir() {
-                            // Only remove if it's a managed dir we can safely remove
-                            // Check it's not a broad directory (e.g., ~/.cursor)
-                            let parent_is_managed = target
-                                .parent()
-                                .map(|p| {
-                                    let p_str = p.to_string_lossy();
-                                    p_str.contains(".cursor")
-                                        || p_str.contains(".config/opencode")
-                                        || p_str.contains(".codex")
-                                        || p_str.contains(".claude")
-                                        || p_str.contains(".agents")
+                            // Only remove if it's a managed dir we can safely remove.
+                            // Use exact path comparison, not substring matching.
+                            let safe_to_remove = {
+                                let home = match crate::platform_paths::resolve_user_home(
+                                    &crate::platform_paths::PlatformEnv::from_process_env(),
+                                    crate::platform_paths::Platform::current(),
+                                ) {
+                                    Ok(h) => h,
+                                    Err(_) => {
+                                        reverse_errors.push(format!(
+                                            "cannot resolve home for create rollback of {}",
+                                            applied_op
+                                        ));
+                                        continue;
+                                    }
+                                };
+                                let broad_roots: &[&str] = &[
+                                    ".cursor", ".claude", ".codex", ".agents", ".config/opencode"
+                                ];
+                                let target_str = target.to_string_lossy();
+                                // Only allow removal if the target is a known sub-path
+                                // under a harness root, not the harness root itself.
+                                !broad_roots.iter().any(|root| {
+                                    let root_path = home.join(root);
+                                    let root_str = root_path.to_string_lossy();
+                                    let root_str_trailing = format!("{}/", root_str);
+                                    // Reject if target is the harness root itself
+                                    let t: &str = target_str.as_ref();
+                                    let r: &str = root_str.as_ref();
+                                    t == r || t == root_str_trailing.as_str()
                                 })
-                                .unwrap_or(false);
-                            if parent_is_managed {
+                            };
+                            if safe_to_remove {
                                 if let Err(e) = fs::remove_dir_all(&target) {
                                     reverse_errors.push(format!(
                                         "remove {} on create rollback: {e}",
@@ -919,7 +938,7 @@ pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
 /// - The backup files are present
 /// - The destination paths are resolvable from the current registry
 #[allow(dead_code)]
-pub fn rollback_transaction(transaction_id: &str, _dry_run: bool) -> SetupResult {
+pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult {
     let backup_root = match backup_root() {
         Ok(r) => r,
         Err(e) => {
@@ -991,6 +1010,82 @@ pub fn rollback_transaction(transaction_id: &str, _dry_run: bool) -> SetupResult
             };
         }
     };
+
+    // Validate manifest
+    if manifest.schema_version != MANIFEST_SCHEMA_VERSION {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![format!(
+                "unsupported manifest schema version {}",
+                manifest.schema_version
+            )],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Transaction manifest schema version not supported".to_string(),
+        };
+    }
+    if manifest.operations.len() > 100 {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec!["excessive operation count".to_string()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Transaction manifest contains too many operations".to_string(),
+        };
+    }
+
+    // Preflight all backup paths and surface IDs before any restore
+    let mut preflight_errors: Vec<String> = Vec::new();
+    for op in &manifest.operations {
+        // Validate backup path is relative
+        if let Some(ref rel) = op.backup_rel {
+            if rel.starts_with('/') || rel.contains("..") {
+                preflight_errors.push(format!(
+                    "{}: backup path contains traversal or is absolute",
+                    op.label
+                ));
+                continue;
+            }
+        }
+    }
+    if !preflight_errors.is_empty() {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: preflight_errors,
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Transaction manifest contains unsafe backup paths".to_string(),
+        };
+    }
+
+    // If dry-run, validate everything but don't restore
+    if dry_run {
+        let would_restore: Vec<String> = manifest
+            .operations
+            .iter()
+            .rev()
+            .map(|op| op.label.clone())
+            .collect();
+        return SetupResult {
+            success: true,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!(
+                "Dry run: would restore {} operation(s): {}",
+                would_restore.len(),
+                would_restore.join(", ")
+            ),
+        };
+    }
 
     // Restore each operation in reverse order
     let mut restored: Vec<String> = Vec::new();
