@@ -1335,6 +1335,9 @@ printf '  main window startup maximize hook verified\n'
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py
 
+step "setup lifecycle contract guards"
+python3 scripts/check-setup-lifecycle-contract.py
+
 step "bundled default private context boundary"
 for forbidden_file in \
   saved-memory.md \

@@ -51,7 +51,7 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance, global text size, and theme colors. Settings autosave. Target profiles and per-tool sync toggles are on harness pages.
+Appearance, global text size, and theme colors. Settings autosave. Harness sync and setup surfaces are managed on the Workspace page.
 
 ## Tools
 
