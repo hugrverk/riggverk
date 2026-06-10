@@ -6,6 +6,10 @@
 //!
 //! The registry maps SetupSurfaceId variants to their constituent artifacts
 //! and provides metadata for detection, apply, validation, and rollback.
+//!
+//! Types in this module are progressively wired into the transaction system.
+//! Dead code warnings are allowed during the transition.
+#![allow(dead_code)]
 
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -155,22 +159,16 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Ok(home.join(".config/opencode/agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => Ok(home
-                .join(".config/opencode/skills")
-                .join(name.as_str())),
+            ArtifactId::OpenCodeSkill(name) => {
+                Ok(home.join(".config/opencode/skills").join(name.as_str()))
+            }
             ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
             ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
-            ArtifactId::CodexAgent(name) => {
-                Ok(home.join(".codex/agents").join(name.file_name()))
-            }
+            ArtifactId::CodexAgent(name) => Ok(home.join(".codex/agents").join(name.file_name())),
             ArtifactId::CodexSkill(name) => Ok(home.join(".agents/skills").join(name.as_str())),
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
-            ArtifactId::ClaudeAgent(name) => {
-                Ok(home.join(".claude/agents").join(name.file_name()))
-            }
-            ArtifactId::ClaudeSkill(name) => {
-                Ok(home.join(".claude/skills").join(name.as_str()))
-            }
+            ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
+            ArtifactId::ClaudeSkill(name) => Ok(home.join(".claude/skills").join(name.as_str())),
             ArtifactId::CursorAgent(name) => {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.agents.join(name.file_name()))
@@ -197,40 +195,28 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Some(workspace_root.join("agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => {
-                find_skill_source_dir(workspace_root, name.as_str())
-            }
+            ArtifactId::OpenCodeSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
             ArtifactId::CodexConfig => Some(workspace_root.join("templates/codex/config.toml")),
-            ArtifactId::CodexRules => {
-                Some(workspace_root.join("templates/sync/codex-rules.md"))
-            }
+            ArtifactId::CodexRules => Some(workspace_root.join("templates/sync/codex-rules.md")),
             ArtifactId::CodexAgent(name) => Some(
                 workspace_root
                     .join("templates/codex/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::CodexSkill(name) => {
-                find_skill_source_dir(workspace_root, name.as_str())
-            }
-            ArtifactId::ClaudeRules => {
-                Some(workspace_root.join("templates/sync/claude-rules.md"))
-            }
+            ArtifactId::CodexSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
+            ArtifactId::ClaudeRules => Some(workspace_root.join("templates/sync/claude-rules.md")),
             ArtifactId::ClaudeAgent(name) => Some(
                 workspace_root
                     .join("templates/claude/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::ClaudeSkill(name) => {
-                find_skill_source_dir(workspace_root, name.as_str())
-            }
+            ArtifactId::ClaudeSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
             ArtifactId::CursorAgent(name) => Some(
                 workspace_root
                     .join("templates/cursor/agents")
                     .join(name.file_name()),
             ),
-            ArtifactId::CursorSkill(name) => {
-                find_skill_source_dir(workspace_root, name.as_str())
-            }
+            ArtifactId::CursorSkill(name) => find_skill_source_dir(workspace_root, name.as_str()),
             ArtifactId::CursorMcp => Some(
                 crate::commands::cursor_profile::cursor_root(workspace_root)
                     .join("mcp/playwright.mcp.json"),
@@ -318,10 +304,7 @@ pub fn discover_agent_names(source_dir: &Path) -> Vec<AgentName> {
 /// specific harness agent. Supports both root-level and grouped layouts.
 ///
 /// Uses frontmatter targets field if available, falls back to simple agent check.
-pub fn discover_skill_names_for_harness(
-    skills_root: &Path,
-    harness_agent: &str,
-) -> Vec<SkillName> {
+pub fn discover_skill_names_for_harness(skills_root: &Path, harness_agent: &str) -> Vec<SkillName> {
     let mut names: Vec<SkillName> = Vec::new();
     discover_skill_names_recursive(skills_root, harness_agent, 0, &mut names);
     names.sort_by(|a, b| a.as_str().cmp(b.as_str()));
@@ -345,13 +328,11 @@ fn discover_skill_names_recursive(
             }
             // Check for SKILL.md in this directory
             let skill_md = path.join("SKILL.md");
-            if skill_md.is_file() {
-                if skill_targets_harness(&skill_md, harness_agent) {
-                    if let Some(name) = path.file_name() {
-                        if let Some(sn) = SkillName::new(name.to_string_lossy().as_ref()) {
-                            if !out.iter().any(|existing| existing.as_str() == sn.as_str()) {
-                                out.push(sn);
-                            }
+            if skill_md.is_file() && skill_targets_harness(&skill_md, harness_agent) {
+                if let Some(name) = path.file_name() {
+                    if let Some(sn) = SkillName::new(name.to_string_lossy().as_ref()) {
+                        if !out.iter().any(|existing| existing.as_str() == sn.as_str()) {
+                            out.push(sn);
                         }
                     }
                 }
@@ -379,9 +360,9 @@ fn skill_targets_harness(skill_md: &Path, harness_agent: &str) -> bool {
 /// Handles `targets: [agent1, agent2]` and `agent: agent1` fields.
 fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
     // Simple YAML frontmatter parser for skill metadata
-    let body = if content.starts_with("---") {
-        if let Some(end) = content[3..].find("---") {
-            &content[3..3 + end]
+    let body = if let Some(rest) = content.strip_prefix("---") {
+        if let Some(end) = rest.find("---") {
+            &rest[..end]
         } else {
             return false;
         }
@@ -392,8 +373,8 @@ fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
     for line in body.lines() {
         let trimmed = line.trim();
         // Check `targets:` field (list or inline)
-        if trimmed.starts_with("targets:") {
-            let rest = trimmed[8..].trim();
+        if let Some(rest) = trimmed.strip_prefix("targets:") {
+            let rest = rest.trim();
             // Inline: targets: [opencode, claude, cursor, codex]
             if rest.starts_with('[') {
                 let inner = rest.trim_start_matches('[').trim_end_matches(']');
@@ -409,15 +390,20 @@ fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
             }
         }
         // Check for list items under targets:
-        if trimmed.starts_with("- ") && harness_agent == trimmed[2..].trim().trim_matches('"').trim_matches('\'') {
+        if trimmed.starts_with("- ")
+            && harness_agent == trimmed[2..].trim().trim_matches('"').trim_matches('\'')
+        {
             // Simple: check if previous non-empty line was "targets:"
             // For robustness, we also just check if the value matches
             // and we're within likely YAML context
         }
         // Check `agent:` field
-        if trimmed.starts_with("agent:") {
-            let rest = trimmed[6..].trim();
-            if rest == harness_agent || rest == format!("\"{harness_agent}\"") || rest == format!("'{harness_agent}'") {
+        if let Some(rest) = trimmed.strip_prefix("agent:") {
+            let rest = rest.trim();
+            if rest == harness_agent
+                || rest == format!("\"{harness_agent}\"")
+                || rest == format!("'{harness_agent}'")
+            {
                 return true;
             }
         }
@@ -432,15 +418,9 @@ fn parse_skill_targets(content: &str, harness_agent: &str) -> bool {
 ///
 /// Returns an empty vec for surfaces that don't produce artifacts
 /// (e.g., DeprecatedSkillCleanup which is a separate workflow).
-pub fn expand_surface(
-    surface: SetupSurfaceId,
-    workspace_root: &Path,
-) -> Vec<ArtifactId> {
+pub fn expand_surface(surface: SetupSurfaceId, workspace_root: &Path) -> Vec<ArtifactId> {
     match surface {
-        SetupSurfaceId::OpenCodeConfig => vec![
-            ArtifactId::OpenCodeConfig,
-            ArtifactId::OpenCodeTui,
-        ],
+        SetupSurfaceId::OpenCodeConfig => vec![ArtifactId::OpenCodeConfig, ArtifactId::OpenCodeTui],
         SetupSurfaceId::OpenCodeAgents => {
             let source_dir = workspace_root.join("agents");
             discover_agent_names(&source_dir)
@@ -609,16 +589,17 @@ mod tests {
 
         let artifacts = expand_surface(SetupSurfaceId::OpenCodeAgents, &ws);
         assert_eq!(artifacts.len(), 2);
-        assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(AgentName::new("inspector").unwrap())));
-        assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(AgentName::new("repo-scout").unwrap())));
+        assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(
+            AgentName::new("inspector").unwrap()
+        )));
+        assert!(artifacts.contains(&ArtifactId::OpenCodeAgent(
+            AgentName::new("repo-scout").unwrap()
+        )));
 
         // .gitkeep should not be counted
         for a in &artifacts {
-            match a {
-                ArtifactId::OpenCodeAgent(name) => {
-                    assert!(!name.as_str().contains("gitkeep"));
-                }
-                _ => {}
+            if let ArtifactId::OpenCodeAgent(name) = a {
+                assert!(!name.as_str().contains("gitkeep"));
             }
         }
     }
@@ -635,7 +616,10 @@ mod tests {
     fn deprecated_cleanup_produces_no_artifacts() {
         let ws = temp_dir("dep-cleanup");
         let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws);
-        assert!(artifacts.is_empty(), "deprecated cleanup must not produce artifacts");
+        assert!(
+            artifacts.is_empty(),
+            "deprecated cleanup must not produce artifacts"
+        );
     }
 
     #[test]
@@ -686,7 +670,10 @@ mod tests {
     #[test]
     fn duplicate_surfaces_do_not_duplicate_artifacts() {
         let ws = temp_dir("dup-surface");
-        write_file(&ws.join("skills/my-skill/SKILL.md"), "---\ntargets: [opencode]\n---\n# Skill");
+        write_file(
+            &ws.join("skills/my-skill/SKILL.md"),
+            "---\ntargets: [opencode]\n---\n# Skill",
+        );
 
         // Expanding OpenCodeSkills twice should produce same result
         let a1 = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
@@ -717,8 +704,12 @@ mod tests {
 
         let artifacts = expand_surface(SetupSurfaceId::OpenCodeSkills, &ws);
         assert_eq!(artifacts.len(), 2);
-        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(SkillName::new("accessibility-review").unwrap())));
-        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(SkillName::new("browser-qa").unwrap())));
+        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(
+            SkillName::new("accessibility-review").unwrap()
+        )));
+        assert!(artifacts.contains(&ArtifactId::OpenCodeSkill(
+            SkillName::new("browser-qa").unwrap()
+        )));
     }
 
     #[test]
@@ -731,7 +722,9 @@ mod tests {
 
         let artifacts = expand_surface(SetupSurfaceId::ClaudeSkills, &ws);
         assert_eq!(artifacts.len(), 1);
-        assert!(artifacts.contains(&ArtifactId::ClaudeSkill(SkillName::new("accessibility-review").unwrap())));
+        assert!(artifacts.contains(&ArtifactId::ClaudeSkill(
+            SkillName::new("accessibility-review").unwrap()
+        )));
     }
 
     // ── Cursor ownership tests ──
@@ -740,7 +733,10 @@ mod tests {
     fn cursor_agents_and_skills_have_separate_ownership() {
         let ws = temp_dir("cursor-owners");
         write_file(&ws.join("templates/cursor/agents/repo-scout.md"), "# scout");
-        write_file(&ws.join("templates/cursor/agents/inspector.md"), "# inspector");
+        write_file(
+            &ws.join("templates/cursor/agents/inspector.md"),
+            "# inspector",
+        );
         write_file(
             &ws.join("skills/accessibility-review/SKILL.md"),
             "---\ntargets: [cursor]\n---\n# Skill",
@@ -773,8 +769,12 @@ mod tests {
 
         // Agents should resolve correctly
         assert_eq!(agents.len(), 2);
-        assert!(agents.contains(&ArtifactId::CursorAgent(AgentName::new("repo-scout").unwrap())));
-        assert!(agents.contains(&ArtifactId::CursorAgent(AgentName::new("inspector").unwrap())));
+        assert!(agents.contains(&ArtifactId::CursorAgent(
+            AgentName::new("repo-scout").unwrap()
+        )));
+        assert!(agents.contains(&ArtifactId::CursorAgent(
+            AgentName::new("inspector").unwrap()
+        )));
     }
 
     #[test]
@@ -788,7 +788,7 @@ mod tests {
             match a {
                 ArtifactId::CursorAgent(name) => {
                     // Agent name should be bounded, not a broad path
-                    assert!(name.as_str().len() > 0);
+                    assert!(!name.as_str().is_empty());
                     assert!(!name.as_str().contains('/'));
                 }
                 other => panic!("Unexpected artifact type from CursorAgents: {other:?}"),

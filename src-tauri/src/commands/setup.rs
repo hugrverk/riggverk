@@ -12,9 +12,9 @@
 //!   8. Preserve transaction evidence
 
 use std::fs;
+use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
-use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
@@ -68,9 +68,7 @@ const MANIFEST_SCHEMA_VERSION: u32 = 1;
 ///
 /// Used for preview integrity: the backend re-detects before apply and
 /// rejects the request if the fingerprint does not match (stale preview).
-fn compute_plan_fingerprint(
-    states: &[(SetupSurfaceId, OperationKind, String)],
-) -> String {
+fn compute_plan_fingerprint(states: &[(SetupSurfaceId, OperationKind, String)]) -> String {
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     // Hash surface IDs and their detected kind (not the summary, which may
     // vary without state change). Hash only the surfaces included in the plan.
@@ -490,7 +488,11 @@ fn perform_rollback(
                                     }
                                 };
                                 let broad_roots: &[&str] = &[
-                                    ".cursor", ".claude", ".codex", ".agents", ".config/opencode"
+                                    ".cursor",
+                                    ".claude",
+                                    ".codex",
+                                    ".agents",
+                                    ".config/opencode",
                                 ];
                                 let target_str = target.to_string_lossy();
                                 // Only allow removal if the target is a known sub-path
@@ -762,13 +764,23 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
                 ) {
                     Ok(h) => h,
                     Err(e) => {
-                        failed.push(format!("{}: resolve home for validation: {e}", op.surface.label()));
+                        failed.push(format!(
+                            "{}: resolve home for validation: {e}",
+                            op.surface.label()
+                        ));
                         let rollback_result = perform_rollback(&applied, &pending, &backed_up);
-                        let (rb, re) = rollback_result;
+                        let (rb, _re) = rollback_result;
                         return SetupResult {
-                            success: false, transaction_id, applied, failed,
+                            success: false,
+                            transaction_id,
+                            applied,
+                            failed,
                             rolled_back: rb,
-                            manual_steps: plan.manual_steps.iter().map(|m| m.manual_step.clone().unwrap_or_default()).collect(),
+                            manual_steps: plan
+                                .manual_steps
+                                .iter()
+                                .map(|m| m.manual_step.clone().unwrap_or_default())
+                                .collect(),
                             message: format!("Cannot validate {}: {e}", op.surface.label()),
                         };
                     }
@@ -1182,23 +1194,52 @@ pub fn detect_surface_state(
                 // Use managed-field comparison from Codex runtime owner
                 let installed_str = match std::fs::read_to_string(&target) {
                     Ok(s) => s,
-                    Err(_) => return (surface, OperationKind::Conflict, "Codex config unreadable".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Conflict,
+                            "Codex config unreadable".to_string(),
+                        )
+                    }
                 };
                 let source_str = match std::fs::read_to_string(&source) {
                     Ok(s) => s,
-                    Err(_) => return (surface, OperationKind::Unavailable, "Codex source unreadable".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Unavailable,
+                            "Codex source unreadable".to_string(),
+                        )
+                    }
                 };
                 let installed_toml: toml::Value = match installed_str.parse() {
                     Ok(v) => v,
-                    Err(_) => return (surface, OperationKind::Conflict, "Codex config invalid TOML".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Conflict,
+                            "Codex config invalid TOML".to_string(),
+                        )
+                    }
                 };
                 let source_toml: toml::Value = match source_str.parse() {
                     Ok(v) => v,
-                    Err(_) => return (surface, OperationKind::Unavailable, "Codex source invalid TOML".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Unavailable,
+                            "Codex source invalid TOML".to_string(),
+                        )
+                    }
                 };
-                let managed_installed = crate::commands::codex_runtime::extract_managed_codex_config(&installed_toml);
-                let managed_source = crate::commands::codex_runtime::extract_managed_codex_config(&source_toml);
-                if crate::commands::codex_runtime::managed_codex_keys_match(&installed_toml, &source_toml) {
+                let managed_installed =
+                    crate::commands::codex_runtime::extract_managed_codex_config(&installed_toml);
+                let managed_source =
+                    crate::commands::codex_runtime::extract_managed_codex_config(&source_toml);
+                if crate::commands::codex_runtime::managed_codex_keys_match(
+                    &installed_toml,
+                    &source_toml,
+                ) {
                     OperationKind::NoChange
                 } else if managed_installed == managed_source {
                     // Managed sections match, but full config differs (user-owned fields)
@@ -1232,22 +1273,49 @@ pub fn detect_surface_state(
             } else {
                 let installed_str = match std::fs::read_to_string(&target) {
                     Ok(s) => s,
-                    Err(_) => return (surface, OperationKind::Conflict, "OpenCode config unreadable".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Conflict,
+                            "OpenCode config unreadable".to_string(),
+                        )
+                    }
                 };
                 let source_str = match std::fs::read_to_string(&source) {
                     Ok(s) => s,
-                    Err(_) => return (surface, OperationKind::Unavailable, "OpenCode source unreadable".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Unavailable,
+                            "OpenCode source unreadable".to_string(),
+                        )
+                    }
                 };
                 let installed_json: serde_json::Value = match serde_json::from_str(&installed_str) {
                     Ok(v) => v,
-                    Err(_) => return (surface, OperationKind::Conflict, "OpenCode config invalid JSON".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Conflict,
+                            "OpenCode config invalid JSON".to_string(),
+                        )
+                    }
                 };
                 let source_json: serde_json::Value = match serde_json::from_str(&source_str) {
                     Ok(v) => v,
-                    Err(_) => return (surface, OperationKind::Unavailable, "OpenCode source invalid JSON".to_string()),
+                    Err(_) => {
+                        return (
+                            surface,
+                            OperationKind::Unavailable,
+                            "OpenCode source invalid JSON".to_string(),
+                        )
+                    }
                 };
                 // Use managed-key comparison from OpenCode runtime owner
-                if crate::commands::opencode_runtime::managed_opencode_keys_match(&installed_json, &source_json) {
+                if crate::commands::opencode_runtime::managed_opencode_keys_match(
+                    &installed_json,
+                    &source_json,
+                ) {
                     OperationKind::NoChange
                 } else {
                     OperationKind::Update
@@ -1287,7 +1355,10 @@ pub fn detect_surface_state(
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
             } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "claude");
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(
+                    &skills_root,
+                    "claude",
+                );
                 if expected.is_empty() {
                     OperationKind::Unavailable
                 } else {
@@ -1300,18 +1371,19 @@ pub fn detect_surface_state(
                             continue;
                         }
                         // Find source
-                        let source_dir = crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
+                        let source_dir =
+                            crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
+                                .resolve_source(workspace_root);
                         if let Some(src_dir) = source_dir {
                             let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                            if source_skill_md.is_file()
+                                && !file_eq(&installed_skill_md, &source_skill_md)
+                            {
                                 any_diverged = true;
                             }
                         }
                     }
-                    if any_missing && !any_diverged {
-                        OperationKind::Update
-                    } else if any_diverged {
+                    if any_missing || any_diverged {
                         OperationKind::Update
                     } else {
                         OperationKind::NoChange
@@ -1347,7 +1419,10 @@ pub fn detect_surface_state(
             } else {
                 // Check if expected skills are present
                 let skills_root = workspace_root.join("skills");
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "cursor");
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(
+                    &skills_root,
+                    "cursor",
+                );
                 if expected.is_empty() {
                     OperationKind::Unavailable
                 } else {
@@ -1358,7 +1433,11 @@ pub fn detect_surface_state(
                             break;
                         }
                     }
-                    if missing { OperationKind::Update } else { OperationKind::NoChange }
+                    if missing {
+                        OperationKind::Update
+                    } else {
+                        OperationKind::NoChange
+                    }
                 }
             }
         }
@@ -1388,7 +1467,10 @@ pub fn detect_surface_state(
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
             } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "opencode");
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(
+                    &skills_root,
+                    "opencode",
+                );
                 if expected.is_empty() {
                     OperationKind::Unavailable
                 } else {
@@ -1399,17 +1481,24 @@ pub fn detect_surface_state(
                             any_issue = true;
                             break;
                         }
-                        let source_dir = crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
+                        let source_dir =
+                            crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
+                                .resolve_source(workspace_root);
                         if let Some(src_dir) = source_dir {
                             let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                            if source_skill_md.is_file()
+                                && !file_eq(&installed_skill_md, &source_skill_md)
+                            {
                                 any_issue = true;
                                 break;
                             }
                         }
                     }
-                    if any_issue { OperationKind::Update } else { OperationKind::NoChange }
+                    if any_issue {
+                        OperationKind::Update
+                    } else {
+                        OperationKind::NoChange
+                    }
                 }
             }
         }
@@ -1422,7 +1511,10 @@ pub fn detect_surface_state(
             } else if !skills_root.is_dir() {
                 OperationKind::Unavailable
             } else {
-                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "codex");
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(
+                    &skills_root,
+                    "codex",
+                );
                 if expected.is_empty() {
                     OperationKind::Unavailable
                 } else {
@@ -1433,17 +1525,24 @@ pub fn detect_surface_state(
                             any_issue = true;
                             break;
                         }
-                        let source_dir = crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
+                        let source_dir =
+                            crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
+                                .resolve_source(workspace_root);
                         if let Some(src_dir) = source_dir {
                             let source_skill_md = src_dir.join("SKILL.md");
-                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                            if source_skill_md.is_file()
+                                && !file_eq(&installed_skill_md, &source_skill_md)
+                            {
                                 any_issue = true;
                                 break;
                             }
                         }
                     }
-                    if any_issue { OperationKind::Update } else { OperationKind::NoChange }
+                    if any_issue {
+                        OperationKind::Update
+                    } else {
+                        OperationKind::NoChange
+                    }
                 }
             }
         }
@@ -1657,9 +1756,10 @@ pub fn apply_setup(
     if let Some(ref expected_fingerprint) = plan_fingerprint {
         let current_fingerprint = compute_plan_fingerprint(&states);
         if current_fingerprint != *expected_fingerprint {
-            return Err(format!(
+            return Err(
                 "Plan fingerprint mismatch: state changed after preview. Re-run preview before applying."
-            ));
+                    .to_string(),
+            );
         }
     }
 
@@ -1899,12 +1999,13 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
         fs::create_dir_all(&ws).expect("create ws");
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::OpenCodeConfig,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::Create,
+            "missing config should be Create"
         );
-        assert_eq!(kind, OperationKind::Create, "missing config should be Create");
     }
 
     #[test]
@@ -1923,12 +2024,13 @@ mod tests {
         fs::write(home.join(".config/opencode/opencode.json"), config).unwrap();
         fs::write(ws.join("templates/opencode.json"), config).unwrap();
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::OpenCodeConfig,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::NoChange,
+            "matching managed keys should be NoChange"
         );
-        assert_eq!(kind, OperationKind::NoChange, "matching managed keys should be NoChange");
     }
 
     #[test]
@@ -1948,12 +2050,13 @@ mod tests {
         fs::write(home.join(".config/opencode/opencode.json"), installed).unwrap();
         fs::write(ws.join("templates/opencode.json"), source).unwrap();
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::OpenCodeConfig,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::Update,
+            "diff managed keys should be Update"
         );
-        assert_eq!(kind, OperationKind::Update, "diff managed keys should be Update");
     }
 
     #[test]
@@ -1972,12 +2075,13 @@ mod tests {
         fs::write(home.join(".codex/config.toml"), config).unwrap();
         fs::write(ws.join("templates/codex/config.toml"), config).unwrap();
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::CodexConfig,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::CodexConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::NoChange,
+            "matching managed fields should be NoChange"
         );
-        assert_eq!(kind, OperationKind::NoChange, "matching managed fields should be NoChange");
     }
 
     #[test]
@@ -1991,12 +2095,13 @@ mod tests {
         fs::create_dir_all(&ws).expect("create ws");
         // No skills directory in home
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::ClaudeSkills,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::ClaudeSkills, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::Create,
+            "missing skills dir should be Create"
         );
-        assert_eq!(kind, OperationKind::Create, "missing skills dir should be Create");
     }
 
     #[test]
@@ -2015,12 +2120,13 @@ mod tests {
         fs::write(home.join(".codex/config.toml"), "not valid toml {{{").unwrap();
         fs::write(ws.join("templates/codex/config.toml"), "[profile]\n").unwrap();
 
-        let (_surface, kind, summary) = detect_surface_state(
-            SetupSurfaceId::CodexConfig,
-            &ws,
-            &home,
+        let (_surface, kind, summary) =
+            detect_surface_state(SetupSurfaceId::CodexConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::Conflict,
+            "invalid TOML should be Conflict, got {kind:?}: {summary}"
         );
-        assert_eq!(kind, OperationKind::Conflict, "invalid TOML should be Conflict, got {kind:?}: {summary}");
     }
 
     #[test]
@@ -2038,12 +2144,13 @@ mod tests {
         fs::write(home.join(".config/opencode/opencode.json"), "not json {{{").unwrap();
         fs::write(ws.join("templates/opencode.json"), "{}").unwrap();
 
-        let (_surface, kind, summary) = detect_surface_state(
-            SetupSurfaceId::OpenCodeConfig,
-            &ws,
-            &home,
+        let (_surface, kind, summary) =
+            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::Conflict,
+            "invalid JSON should be Conflict, got {kind:?}: {summary}"
         );
-        assert_eq!(kind, OperationKind::Conflict, "invalid JSON should be Conflict, got {kind:?}: {summary}");
     }
 
     #[test]
@@ -2059,12 +2166,13 @@ mod tests {
         fs::write(home.join(".codex/AGENTS.md"), "same rules").unwrap();
         fs::write(ws.join("templates/sync/codex-rules.md"), "same rules").unwrap();
 
-        let (_surface, kind, _summary) = detect_surface_state(
-            SetupSurfaceId::CodexRules,
-            &ws,
-            &home,
+        let (_surface, kind, _summary) =
+            detect_surface_state(SetupSurfaceId::CodexRules, &ws, &home);
+        assert_eq!(
+            kind,
+            OperationKind::NoChange,
+            "matching rules should be NoChange"
         );
-        assert_eq!(kind, OperationKind::NoChange, "matching rules should be NoChange");
     }
 
     // ── Preview integrity tests ──
@@ -2072,12 +2180,28 @@ mod tests {
     #[test]
     fn plan_fingerprint_is_stable_for_same_state() {
         let states1 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
-            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+            (
+                SetupSurfaceId::OpenCodeConfig,
+                OperationKind::NoChange,
+                "synced".to_string(),
+            ),
+            (
+                SetupSurfaceId::CodexRules,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
         ];
         let states2 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
-            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+            (
+                SetupSurfaceId::OpenCodeConfig,
+                OperationKind::NoChange,
+                "synced".to_string(),
+            ),
+            (
+                SetupSurfaceId::CodexRules,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
         ];
         assert_eq!(
             compute_plan_fingerprint(&states1),
@@ -2088,12 +2212,16 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_state_differs() {
-        let states1 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
-        ];
-        let states2 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
-        ];
+        let states1 = vec![(
+            SetupSurfaceId::OpenCodeConfig,
+            OperationKind::NoChange,
+            "synced".to_string(),
+        )];
+        let states2 = vec![(
+            SetupSurfaceId::OpenCodeConfig,
+            OperationKind::Create,
+            "missing".to_string(),
+        )];
         assert_ne!(
             compute_plan_fingerprint(&states1),
             compute_plan_fingerprint(&states2),
@@ -2103,12 +2231,16 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_surfaces_differ() {
-        let states1 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
-        ];
-        let states2 = vec![
-            (SetupSurfaceId::CodexRules, OperationKind::NoChange, "synced".to_string()),
-        ];
+        let states1 = vec![(
+            SetupSurfaceId::OpenCodeConfig,
+            OperationKind::NoChange,
+            "synced".to_string(),
+        )];
+        let states2 = vec![(
+            SetupSurfaceId::CodexRules,
+            OperationKind::NoChange,
+            "synced".to_string(),
+        )];
         assert_ne!(
             compute_plan_fingerprint(&states1),
             compute_plan_fingerprint(&states2),
@@ -2119,12 +2251,22 @@ mod tests {
     #[test]
     fn plan_fingerprint_different_for_different_surface_sets() {
         let states1 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
-            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+            (
+                SetupSurfaceId::OpenCodeConfig,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
+            (
+                SetupSurfaceId::CodexRules,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
         ];
-        let states2 = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
-        ];
+        let states2 = vec![(
+            SetupSurfaceId::OpenCodeConfig,
+            OperationKind::Create,
+            "missing".to_string(),
+        )];
         assert_ne!(
             compute_plan_fingerprint(&states1),
             compute_plan_fingerprint(&states2),
@@ -2136,8 +2278,16 @@ mod tests {
     fn preview_returns_plan_with_fingerprint() {
         // Test that fingerprint computation works correctly
         let states = vec![
-            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
-            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+            (
+                SetupSurfaceId::OpenCodeConfig,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
+            (
+                SetupSurfaceId::CodexRules,
+                OperationKind::Create,
+                "missing".to_string(),
+            ),
         ];
         let fp = compute_plan_fingerprint(&states);
         assert!(!fp.is_empty(), "fingerprint should not be empty");
@@ -2211,7 +2361,10 @@ mod tests {
         let result = apply_setup_plan(&plan);
         assert!(result.success);
         assert!(!result.transaction_id.is_empty());
-        assert!(result.transaction_id.chars().all(|c| c.is_ascii_digit() || c == '-'));
+        assert!(result
+            .transaction_id
+            .chars()
+            .all(|c| c.is_ascii_digit() || c == '-'));
     }
 
     #[test]

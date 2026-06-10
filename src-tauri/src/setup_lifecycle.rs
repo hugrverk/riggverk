@@ -661,4 +661,3 @@ mod tests {
         assert!(!OperationKind::NoChange.is_blocking());
     }
 }
-

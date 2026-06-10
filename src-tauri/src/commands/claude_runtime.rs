@@ -165,10 +165,8 @@ fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
     }
 
     // Use canonical skill discovery with targets metadata
-    let expected = crate::artifact_registry::discover_skill_names_for_harness(
-        &source_skills_dir,
-        "claude",
-    );
+    let expected =
+        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude");
 
     if expected.is_empty() {
         // No Claude-targeted skills in workspace — consider synced
@@ -210,13 +208,19 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
     let source_skills_dir = workspace_root.join("skills");
     let installed_skills_dir = home.join(".claude/skills");
     let expected_skill_count = if source_skills_dir.is_dir() {
-        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude").len()
+        crate::artifact_registry::discover_skill_names_for_harness(&source_skills_dir, "claude")
+            .len()
     } else {
         0
     };
     let installed_skill_count = if installed_skills_dir.is_dir() {
         std::fs::read_dir(&installed_skills_dir)
-            .map(|entries| entries.filter_map(|e| e.ok()).filter(|e| e.path().is_dir()).count())
+            .map(|entries| {
+                entries
+                    .filter_map(|e| e.ok())
+                    .filter(|e| e.path().is_dir())
+                    .count()
+            })
             .unwrap_or(0)
     } else {
         0
