@@ -32,7 +32,6 @@ impl AgentHarness {
             Self::OpenCode | Self::Claude | Self::Cursor => "md",
         }
     }
-
 }
 
 /// One discovered agent from a harness source directory.
@@ -225,12 +224,11 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
         for a in &agents {
             assert!(a.source_path.extension().and_then(|e| e.to_str()) == Some("toml"));
-            assert!(
-                a.source_path
-                    .file_name()
-                    .and_then(|n| n.to_str())
-                    .is_some_and(|n| n.ends_with(".toml"))
-            );
+            assert!(a
+                .source_path
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.ends_with(".toml")));
         }
     }
 

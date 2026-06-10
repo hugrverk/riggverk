@@ -761,8 +761,7 @@ pub fn repair_setup_artifacts() -> SetupResult {
         .copied()
         .collect();
 
-    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)
-    {
+    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
         Ok(p) => p,
         Err(e) => {
             return SetupResult {
