@@ -165,7 +165,7 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 | `app_font_size` | `"medium"` | UI font scale. Values: `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 
 Sync targets excluded from defaults:
-- `codex_config` — manual review only; not enabled by default.
+- `codex_config` — managed-field merge; user-owned TOML preserved.
 - `claude_rules`, `claude_agents`, `codex_agents`, `opencode_agents`, `cursor_setup` — must be toggled on explicitly.
 
 ## Security model

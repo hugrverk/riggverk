@@ -34,7 +34,7 @@ See [AGENT_RULES.md](AGENT_RULES.md).
 
 ## Tool Configuration
 
-Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`. Codex config is diff/manual-review only because `~/.codex/config.toml` is user-owned and can be updated by Codex itself.
+Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`, `templates/tui.json`, and `templates/playwright-mcp.config.json`. Codex managed fields in `templates/codex/config.toml` are merged into `~/.codex/config.toml` while user model, personality, MCP entries, and unknown tables remain user-owned.
 
 See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md).
 
@@ -46,7 +46,7 @@ Required scripts handle sync, install, and bootstrap operations:
 - `install-skills.sh` — install skills to agent tool directories
 - `install-agent-rules.sh` — sync agent rules to tool paths
 - `install-opencode-config.sh` — sync OpenCode config and agents
-- `install-codex-config.sh` — diff Codex config template for manual review
+- `install-codex-config.sh` — merge Codex managed fields with user-owned TOML preserved
 - `install-cursor-workspace.sh` — manual Cursor helpers and CLI-only project installs (global setup is app-native)
 
 All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.

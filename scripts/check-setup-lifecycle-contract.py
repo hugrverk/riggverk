@@ -13,6 +13,7 @@ TAURI_SRC = REPO / "src-tauri/src"
 SETUP_RS = TAURI_SRC / "commands/setup.rs"
 ARTIFACT_REGISTRY = TAURI_SRC / "artifact_registry.rs"
 SETUP_TRANSACTION = TAURI_SRC / "setup_transaction.rs"
+SETUP_FINGERPRINT = TAURI_SRC / "setup_fingerprint.rs"
 CLAUDE_RUNTIME = TAURI_SRC / "commands/claude_runtime.rs"
 SETUP_LIFECYCLE_TSX = REPO / "src/components/SetupLifecycle.tsx"
 START_VIEW = REPO / "src/views/StartView.tsx"
@@ -39,9 +40,17 @@ FORBIDDEN_DOC_PATTERNS = [
     (r"target profile", "target profile claims"),
     (r"profile chip", "profile chip claims"),
     (r"select individual skills", "individual persistent skill selection claims"),
+    (r"select the skill", "manual per-skill selection claim"),
+    (r"select skills", "manual skill selection claim"),
     (r"flat-only", "flat-only source layout claim"),
+    (r"flat skill creation", "flat skill creation instruction claim"),
     (r"Codex config is manual-only", "Codex manual-only claim"),
     (r"app does not write Codex", "app does not write Codex claim"),
+    (r"Manual review only", "Codex manual review only claim"),
+    (r"update Codex manually", "manual Codex update claim"),
+    (r"The app does not overwrite Codex config", "app does not write Codex claim"),
+    (r"diff/manual-review only", "Codex diff manual-only claim"),
+    (r"repair without preview", "repair without preview claim"),
 ]
 
 TARGETS_RE = re.compile(r"^targets:\s*(.+)$", re.MULTILINE)
@@ -132,6 +141,15 @@ def assert_rust_contracts() -> None:
         fail("setup_transaction.rs must define artifact manifest operations")
     if "plan_fingerprint" not in setup_text and "fingerprint" not in setup_text:
         fail("setup apply must require preview fingerprint")
+    fp_text = read(SETUP_FINGERPRINT)
+    if "artifact_source_digest" not in fp_text or "artifact_installed_managed_digest" not in fp_text:
+        fail("setup fingerprint must use independent source and installed digests")
+    if "OpenCodePlaywrightMcp" not in artifact_text:
+        fail("OpenCode config write set must include Playwright MCP artifact")
+    if "serde_json::to_string(artifact)" in txn_text:
+        fail("backup filenames must not derive from JSON serialization")
+    if "preview_repair_setup" not in setup_text:
+        fail("repair must expose read-only preview command")
     claude_text = read(CLAUDE_RUNTIME)
     if re.search(r"agent:\s*claude", claude_text):
         fail("Claude health must not parse obsolete agent: claude metadata")

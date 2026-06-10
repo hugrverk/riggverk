@@ -66,7 +66,7 @@ In-app utilities separate from harness sync:
 |-----------|---------|-------|
 | Rules sync | Diff Rules | Sync Rules |
 | OpenCode config sync | Diff Configs | Sync Configs |
-| Codex config | Diff Config | Manual review only |
+| Codex config | Preview in setup lifecycle | Apply managed fields |
 | Skills install | Dry-run Skills | Install Skills |
 
 ## Backups

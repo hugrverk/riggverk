@@ -1,6 +1,6 @@
 # Codex Config
 
-Versioned Codex config template for manual review.
+Versioned Codex config template with managed-field merge.
 
 This workspace treats Codex support as rules sync, native TOML agent install, managed config merge, and skills sync. It does not run Codex, manage project-specific Codex settings, or store target-project profiles.
 
