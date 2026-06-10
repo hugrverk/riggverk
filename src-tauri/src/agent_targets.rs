@@ -360,7 +360,10 @@ mod tests {
     fn opencode_config_in_config_sync_targets() {
         let targets = config_sync_targets();
         let opencode = targets.iter().find(|t| t.id == "opencode_config");
-        assert!(opencode.is_some(), "opencode_config must be in config_sync_targets");
+        assert!(
+            opencode.is_some(),
+            "opencode_config must be in config_sync_targets"
+        );
         let t = opencode.unwrap();
         assert_eq!(t.source_rel, "templates/opencode.json");
         assert_eq!(t.target_rel, ".config/opencode/opencode.json");
@@ -377,7 +380,11 @@ mod tests {
         let targets = config_sync_targets();
         let mut seen = HashSet::new();
         for t in &targets {
-            assert!(seen.insert(t.id), "Duplicate config sync target id '{}'", t.id);
+            assert!(
+                seen.insert(t.id),
+                "Duplicate config sync target id '{}'",
+                t.id
+            );
         }
     }
 
@@ -483,8 +490,7 @@ mod tests {
 
     #[test]
     fn targets_contains_all_expected_ids() {
-        let ids: std::collections::BTreeSet<&str> =
-            targets().iter().map(|t| t.id).collect();
+        let ids: std::collections::BTreeSet<&str> = targets().iter().map(|t| t.id).collect();
         let expected: std::collections::BTreeSet<&str> = [
             "codex_rules",
             "opencode_rules",

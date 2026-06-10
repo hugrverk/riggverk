@@ -575,25 +575,18 @@ fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
         let meta = fs::symlink_metadata(dir)
             .map_err(|e| format!("cannot inspect {}: {e}", dir.display()))?;
         if meta.file_type().is_symlink() {
-            return Err(format!(
-                "refusing symlink in {}: {}",
-                label,
-                dir.display()
-            ));
+            return Err(format!("refusing symlink in {}: {}", label, dir.display()));
         }
-        let entries = fs::read_dir(dir)
-            .map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        let entries =
+            fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
         for entry in entries {
             let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
             let path = entry.path();
-            let ft = entry.file_type()
+            let ft = entry
+                .file_type()
                 .map_err(|e| format!("file type error: {e}"))?;
             if ft.is_symlink() {
-                return Err(format!(
-                    "nested symlink in {}: {}",
-                    label,
-                    path.display()
-                ));
+                return Err(format!("nested symlink in {}: {}", label, path.display()));
             }
             if ft.is_dir() {
                 recurse(&path, label, depth + 1)?;
@@ -1375,14 +1368,19 @@ mod tests {
         let external = temp_root("external-dir");
         fs::create_dir_all(&external).expect("create external");
         let symlink_target = backup_dir.join("caveman").join("external_link");
-        std::os::unix::fs::symlink(&external, &symlink_target)
-            .expect("create symlink");
+        std::os::unix::fs::symlink(&external, &symlink_target).expect("create symlink");
 
         let backup_path = backup_dir.to_string_lossy().to_string();
         let result = rollback_removal(&backup_path);
-        assert!(result.is_err(), "must reject nested symlink to external dir");
+        assert!(
+            result.is_err(),
+            "must reject nested symlink to external dir"
+        );
         let err = result.unwrap_err();
-        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+        assert!(
+            err.contains("nested symlink"),
+            "error should mention nested symlink: {err}"
+        );
     }
 
     #[test]
@@ -1424,9 +1422,15 @@ mod tests {
 
         let backup_path = backup_dir.to_string_lossy().to_string();
         let result = rollback_removal(&backup_path);
-        assert!(result.is_err(), "must reject nested symlink to external file");
+        assert!(
+            result.is_err(),
+            "must reject nested symlink to external file"
+        );
         let err = result.unwrap_err();
-        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+        assert!(
+            err.contains("nested symlink"),
+            "error should mention nested symlink: {err}"
+        );
     }
 
     #[test]
@@ -1470,14 +1474,16 @@ mod tests {
 
         // chain: backup/caveman/chain_link -> stepping_stone
         let chain_link = backup_dir.join("caveman").join("chain_link");
-        std::os::unix::fs::symlink(&stepping_stone, &chain_link)
-            .expect("create chain symlink");
+        std::os::unix::fs::symlink(&stepping_stone, &chain_link).expect("create chain symlink");
 
         let backup_path = backup_dir.to_string_lossy().to_string();
         let result = rollback_removal(&backup_path);
         assert!(result.is_err(), "must reject symlink chain");
         let err = result.unwrap_err();
-        assert!(err.contains("nested symlink"), "error should mention nested symlink: {err}");
+        assert!(
+            err.contains("nested symlink"),
+            "error should mention nested symlink: {err}"
+        );
     }
 
     #[test]
@@ -1514,14 +1520,20 @@ mod tests {
             serde_json::from_str(&fs::read_to_string(&manifest_path).expect("read manifest"))
                 .expect("parse manifest");
         manifest.destination_root = "/tmp/fake-destination".to_string();
-        fs::write(&manifest_path, serde_json::to_string_pretty(&manifest).expect("serialize"))
-            .expect("write tampered manifest");
+        fs::write(
+            &manifest_path,
+            serde_json::to_string_pretty(&manifest).expect("serialize"),
+        )
+        .expect("write tampered manifest");
 
         let backup_path = backup_dir.to_string_lossy().to_string();
         let result = rollback_removal(&backup_path);
         assert!(result.is_err(), "must reject destination mismatch");
         let err = result.unwrap_err();
-        assert!(err.contains("destination mismatch"), "error should mention destination mismatch: {err}");
+        assert!(
+            err.contains("destination mismatch"),
+            "error should mention destination mismatch: {err}"
+        );
     }
 
     #[test]
@@ -1562,11 +1574,17 @@ mod tests {
         // Verify no staging dir was created — no filesystem state was harmed
         let has_staging = fs::read_dir(dest.parent().unwrap())
             .map(|entries| {
-                entries.filter_map(|e| e.ok())
-                    .any(|e| e.file_name().to_string_lossy().starts_with(".aw-rollback-staging-"))
+                entries.filter_map(|e| e.ok()).any(|e| {
+                    e.file_name()
+                        .to_string_lossy()
+                        .starts_with(".aw-rollback-staging-")
+                })
             })
             .unwrap_or(false);
-        assert!(!has_staging, "no staging dir should remain after early failure");
+        assert!(
+            !has_staging,
+            "no staging dir should remain after early failure"
+        );
     }
 
     #[test]
@@ -1645,13 +1663,15 @@ mod tests {
         let external = temp_root("deep-external");
         fs::create_dir_all(&external).expect("create external");
         let sym_at_depth = deep.join("evil_link");
-        std::os::unix::fs::symlink(&external, &sym_at_depth)
-            .expect("create deep symlink");
+        std::os::unix::fs::symlink(&external, &sym_at_depth).expect("create deep symlink");
 
         let result = reject_nested_symlinks(&root, "test");
         assert!(result.is_err(), "must reject deeply nested symlink");
         let err = result.unwrap_err();
-        assert!(err.contains("nested symlink"), "error mentions nested symlink: {err}");
+        assert!(
+            err.contains("nested symlink"),
+            "error mentions nested symlink: {err}"
+        );
     }
 
     #[test]
@@ -1692,6 +1712,9 @@ mod tests {
         let result = rollback_removal(&backup_path);
         assert!(result.is_err(), "rollback must reject invalid agent");
         let err = result.unwrap_err();
-        assert!(err.contains("invalid agent"), "error mentions invalid agent: {err}");
+        assert!(
+            err.contains("invalid agent"),
+            "error mentions invalid agent: {err}"
+        );
     }
 }

@@ -1,8 +1,6 @@
 mod actions;
-mod claude_runtime;
-#[cfg_attr(not(test), allow(dead_code))]
-mod setup;
 pub(crate) mod backups;
+mod claude_runtime;
 mod codex_runtime;
 mod content;
 mod contract;
@@ -10,6 +8,8 @@ pub(crate) mod cursor_profile;
 mod defaults;
 mod opencode_runtime;
 mod process;
+#[cfg_attr(not(test), allow(dead_code))]
+mod setup;
 pub(crate) use process::ActionResult;
 pub(crate) use status::file_eq;
 mod repo_dashboard;
@@ -21,8 +21,8 @@ mod status;
 mod workspace;
 
 pub use actions::run_action;
-pub use claude_runtime::get_claude_runtime_health;
 pub use backups::{get_backup_details, list_backups, open_backups_folder};
+pub use claude_runtime::get_claude_runtime_health;
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
     create_doc, get_docs_health, list_agent_metadata, list_agent_sources, list_docs,

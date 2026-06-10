@@ -12,7 +12,7 @@
 //! Claude settings and MCP configuration remain an explicit manual boundary
 //! (see the Claude UI "Settings and MCP" card).
 
-use std::path::PathBuf;
+use std::path::Path;
 
 use serde::Serialize;
 
@@ -41,6 +41,7 @@ pub struct ClaudeRuntimeHealth {
 }
 
 /// Check whether the `claude` CLI is on PATH.
+#[allow(clippy::unnecessary_literal_unwrap)]
 fn claude_cli_available() -> bool {
     std::process::Command::new("which")
         .arg("claude")
@@ -52,7 +53,7 @@ fn claude_cli_available() -> bool {
 }
 
 /// Count installed Claude agent files in ~/.claude/agents.
-fn installed_agent_count(home: &PathBuf) -> usize {
+fn installed_agent_count(home: &Path) -> usize {
     let agents_dir = home.join(".claude/agents");
     if !agents_dir.is_dir() {
         return 0;
@@ -72,7 +73,7 @@ fn installed_agent_count(home: &PathBuf) -> usize {
 
 /// Check whether the workspace's Claude rules template would produce
 /// the same content as the installed target.
-fn check_rules_synced(home: &PathBuf, workspace_root: &PathBuf) -> bool {
+fn check_rules_synced(home: &Path, workspace_root: &Path) -> bool {
     let target = home.join(".claude/CLAUDE.md");
     if !target.is_file() {
         return false;
@@ -85,7 +86,7 @@ fn check_rules_synced(home: &PathBuf, workspace_root: &PathBuf) -> bool {
 }
 
 /// Check whether the source Claude agents match the installed ones.
-fn check_agents_synced(home: &PathBuf, workspace_root: &PathBuf) -> bool {
+fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
     let installed_dir = home.join(".claude/agents");
     if !installed_dir.is_dir() {
         return false;
@@ -119,7 +120,7 @@ fn check_agents_synced(home: &PathBuf, workspace_root: &PathBuf) -> bool {
 }
 
 /// Check whether Claude skills are installed (at least one SKILL.md present).
-fn check_skills_synced(home: &PathBuf) -> bool {
+fn check_skills_synced(home: &Path) -> bool {
     let skills_dir = home.join(".claude/skills");
     if !skills_dir.is_dir() {
         return false;
@@ -138,7 +139,7 @@ fn check_skills_synced(home: &PathBuf) -> bool {
 }
 
 /// Compute Claude runtime health from inspected managed surfaces only.
-fn compute_health(workspace_root: &PathBuf, home: &PathBuf) -> ClaudeRuntimeHealth {
+fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
     let rules_synced = check_rules_synced(home, workspace_root);
     let agents_synced = check_agents_synced(home, workspace_root);
     let skills_synced = check_skills_synced(home);
@@ -186,15 +187,15 @@ fn compute_health(workspace_root: &PathBuf, home: &PathBuf) -> ClaudeRuntimeHeal
 #[tauri::command]
 pub fn get_claude_runtime_health() -> Result<ClaudeRuntimeHealth, String> {
     let workspace_root = configured_workspace_path(&settings::load()).unwrap_or_default();
-    let home = agent_targets::home_dir()?;
-    Ok(compute_health(&workspace_root, &home))
+    let home_path = agent_targets::home_dir()?;
+    Ok(compute_health(&workspace_root, &home_path))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
-    use std::path::Path;
+    use std::path::{Path, PathBuf};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn temp_dir(label: &str) -> PathBuf {

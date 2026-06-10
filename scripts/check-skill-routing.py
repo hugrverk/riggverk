@@ -204,6 +204,9 @@ STALE_CLAIMS_ALLOWLIST = {
     "resources/default-workspace/README.md": {
         "starter skills",  # Describes Cursor setup with separate agents and skills surfaces
     },
+    "README.md": {
+        "~/.codex/skills",  # Documents legacy migration path alongside current ~/.agents/skills
+    },
 }
 
 def validate_active_docs() -> None:

@@ -146,6 +146,7 @@ pub struct PlannedOperation {
 
 /// Summary of validation results after an apply or repair.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ValidationResult {
     pub surface: SetupSurfaceId,
     pub passed: bool,
@@ -154,6 +155,7 @@ pub struct ValidationResult {
 
 /// Summary of a completed or planned transaction.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct TransactionSummary {
     pub transaction_id: String,
     pub surface_count: usize,
@@ -330,15 +332,9 @@ pub fn plan_setup(
         OperationKind::NoChange => 5,
     });
 
-    let change_count = operations
-        .iter()
-        .filter(|op| op.kind.needs_apply())
-        .count();
+    let change_count = operations.iter().filter(|op| op.kind.needs_apply()).count();
     let summary = if is_blocked {
-        format!(
-            "Blocked: {} conflict(s) prevent apply",
-            conflicts.len()
-        )
+        format!("Blocked: {} conflict(s) prevent apply", conflicts.len())
     } else if has_pending_changes {
         format!("{} surface(s) need update", change_count)
     } else {
@@ -369,7 +365,11 @@ mod tests {
     }
 
     fn update(surface: SetupSurfaceId) -> (SetupSurfaceId, OperationKind, String) {
-        (surface, OperationKind::Update, "version differs".to_string())
+        (
+            surface,
+            OperationKind::Update,
+            "version differs".to_string(),
+        )
     }
 
     fn conflict(surface: SetupSurfaceId) -> (SetupSurfaceId, OperationKind, String) {
@@ -404,10 +404,7 @@ mod tests {
             surfaces: vec![],
             skip_manual: false,
         };
-        let states: Vec<_> = SetupSurfaceId::ALL
-            .iter()
-            .map(|s| no_change(*s))
-            .collect();
+        let states: Vec<_> = SetupSurfaceId::ALL.iter().map(|s| no_change(*s)).collect();
         let plan = plan_setup(&request, &states);
         assert!(!plan.has_pending_changes);
         assert!(!plan.is_blocked);
@@ -451,10 +448,7 @@ mod tests {
     #[test]
     fn conflict_blocks_plan() {
         let request = SetupRequest {
-            surfaces: vec![
-                SetupSurfaceId::OpenCodeConfig,
-                SetupSurfaceId::CodexRules,
-            ],
+            surfaces: vec![SetupSurfaceId::OpenCodeConfig, SetupSurfaceId::CodexRules],
             skip_manual: false,
         };
         let states = vec![
@@ -538,7 +532,11 @@ mod tests {
     #[test]
     fn surface_id_labels_are_non_empty() {
         for surface in SetupSurfaceId::ALL {
-            assert!(!surface.label().is_empty(), "{:?} must have a label", surface);
+            assert!(
+                !surface.label().is_empty(),
+                "{:?} must have a label",
+                surface
+            );
         }
     }
 
@@ -622,10 +620,7 @@ mod tests {
             surfaces: vec![],
             skip_manual: false,
         };
-        let states: Vec<_> = SetupSurfaceId::ALL
-            .iter()
-            .map(|s| no_change(*s))
-            .collect();
+        let states: Vec<_> = SetupSurfaceId::ALL.iter().map(|s| no_change(*s)).collect();
         let plan = plan_setup(&request, &states);
         assert!(!plan.has_pending_changes);
         assert!(!plan.is_blocked);

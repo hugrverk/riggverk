@@ -131,14 +131,14 @@ fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[allow(dead_code)]
 fn copy_single_file(src: &Path, dst: &Path) -> Result<(), String> {
     reject_symlink(src, "source file")?;
     if let Some(parent) = dst.parent() {
         fs::create_dir_all(parent)
             .map_err(|e| format!("cannot create parent {}: {e}", parent.display()))?;
     }
-    fs::copy(src, dst)
-        .map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
+    fs::copy(src, dst).map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
     Ok(())
 }
 
@@ -157,11 +157,9 @@ fn backup_target(backup_dir: &Path, surface: SetupSurfaceId) -> Result<Option<Pa
             .map_err(|e| format!("backup dir {}: {e}", surface.label()))?;
     } else {
         if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create backup parent: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
         }
-        fs::copy(&target, &dest)
-            .map_err(|e| format!("backup file {}: {e}", surface.label()))?;
+        fs::copy(&target, &dest).map_err(|e| format!("backup file {}: {e}", surface.label()))?;
     }
     Ok(Some(dest))
 }
@@ -195,8 +193,7 @@ fn restore_from_backup(backup_path: &Path, surface: SetupSurfaceId) -> Result<()
             .map_err(|e| format!("restore dir {}: {e}", surface.label()))?;
     } else {
         if let Some(parent) = target.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create target parent: {e}"))?;
+            fs::create_dir_all(parent).map_err(|e| format!("create target parent: {e}"))?;
         }
         fs::copy(backup_path, &target)
             .map_err(|e| format!("restore file {}: {e}", surface.label()))?;
@@ -214,7 +211,6 @@ fn execute_operation(
     op: &PlannedOperation,
     workspace_root: &Path,
 ) -> Result<(), String> {
-
     match op.surface {
         // OpenCode config — use install-opencode-config.sh
         SetupSurfaceId::OpenCodeConfig => {
@@ -405,7 +401,11 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
             applied,
             failed,
             rolled_back,
-            manual_steps: plan.manual_steps.iter().filter_map(|m| m.manual_step.clone()).collect(),
+            manual_steps: plan
+                .manual_steps
+                .iter()
+                .filter_map(|m| m.manual_step.clone())
+                .collect(),
             message: "No operations to apply".to_string(),
         };
     }
@@ -566,10 +566,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
 
                 let mut message = format!("Apply failed at {}: {e}", op.surface.label());
                 if !reverse_errors.is_empty() {
-                    message.push_str(&format!(
-                        ". Rollback errors: {}",
-                        reverse_errors.join("; ")
-                    ));
+                    message.push_str(&format!(". Rollback errors: {}", reverse_errors.join("; ")));
                 }
 
                 return SetupResult {
@@ -578,7 +575,11 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
                     applied,
                     failed,
                     rolled_back,
-                    manual_steps: plan.manual_steps.iter().map(|m| m.manual_step.clone().unwrap_or_default()).collect(),
+                    manual_steps: plan
+                        .manual_steps
+                        .iter()
+                        .map(|m| m.manual_step.clone().unwrap_or_default())
+                        .collect(),
                     message,
                 };
             }
@@ -593,11 +594,12 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
         applied,
         failed,
         rolled_back,
-        manual_steps: plan.manual_steps.iter().map(|m| m.manual_step.clone().unwrap_or_default()).collect(),
-        message: format!(
-            "Successfully applied {} surface(s)",
-            change_count
-        ),
+        manual_steps: plan
+            .manual_steps
+            .iter()
+            .map(|m| m.manual_step.clone().unwrap_or_default())
+            .collect(),
+        message: format!("Successfully applied {} surface(s)", change_count),
     }
 }
 
@@ -673,7 +675,10 @@ pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
         RepairPreflight {
             missing,
             safe: true,
-            message: format!("{} missing resource(s) can be repaired", plan.operations.len()),
+            message: format!(
+                "{} missing resource(s) can be repaired",
+                plan.operations.len()
+            ),
         }
     }
 }
@@ -686,10 +691,8 @@ pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
 /// - The transaction manifest exists
 /// - The backup files are present
 /// - The destination paths are resolvable from the current registry
-pub fn rollback_transaction(
-    transaction_id: &str,
-    dry_run: bool,
-) -> SetupResult {
+#[allow(dead_code)]
+pub fn rollback_transaction(transaction_id: &str, _dry_run: bool) -> SetupResult {
     let backup_root = match backup_root() {
         Ok(r) => r,
         Err(e) => {
@@ -802,7 +805,7 @@ pub fn rollback_transaction(
         message: if success {
             format!("Successfully restored {} surface(s)", restored_count)
         } else {
-            format!("Rollback completed with errors")
+            "Rollback completed with errors".to_string()
         },
     }
 }
@@ -815,29 +818,21 @@ pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResu
     let unknown: Vec<&String> = surfaces
         .iter()
         .filter(|s| {
-            serde_json::from_value::<SetupSurfaceId>(
-                serde_json::Value::String(s.to_string()),
-            )
-            .is_err()
+            serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
+                .is_err()
         })
         .collect();
 
     if !unknown.is_empty() {
         let ids: Vec<&str> = unknown.iter().map(|s| s.as_str()).collect();
-        return Err(format!(
-            "Unknown surface ID(s): {}",
-            ids.join(", ")
-        ));
+        return Err(format!("Unknown surface ID(s): {}", ids.join(", ")));
     }
 
     // Parse validated IDs
     let surface_ids: Vec<SetupSurfaceId> = surfaces
         .iter()
         .filter_map(|s| {
-            serde_json::from_value::<SetupSurfaceId>(
-                serde_json::Value::String(s.to_string()),
-            )
-            .ok()
+            serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string())).ok()
         })
         .collect();
 
@@ -850,7 +845,13 @@ pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResu
     // detected states from health commands.
     let states: Vec<(SetupSurfaceId, OperationKind, String)> = surface_ids
         .iter()
-        .map(|s| (*s, OperationKind::Create, format!("Need to set up {}", s.label())))
+        .map(|s| {
+            (
+                *s,
+                OperationKind::Create,
+                format!("Need to set up {}", s.label()),
+            )
+        })
         .collect();
 
     let request = SetupRequest {
@@ -869,6 +870,7 @@ pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResu
     Ok(apply_setup_plan(&plan))
 }
 
+#[allow(dead_code)]
 #[tauri::command]
 pub fn repair_setup_command(skip_manual: bool) -> Result<SetupResult, String> {
     // Detect current state — all surfaces as missing to trigger repair
@@ -878,14 +880,24 @@ pub fn repair_setup_command(skip_manual: bool) -> Result<SetupResult, String> {
     };
     let states: Vec<(SetupSurfaceId, OperationKind, String)> = SetupSurfaceId::ALL
         .iter()
-        .map(|s| (*s, OperationKind::Create, format!("{} needs setup", s.label())))
+        .map(|s| {
+            (
+                *s,
+                OperationKind::Create,
+                format!("{} needs setup", s.label()),
+            )
+        })
         .collect();
     let plan = crate::setup_lifecycle::plan_setup(&request, &states);
     Ok(repair_setup(&plan))
 }
 
+#[allow(dead_code)]
 #[tauri::command]
-pub fn rollback_setup_transaction(transaction_id: String, dry_run: bool) -> Result<SetupResult, String> {
+pub fn rollback_setup_transaction(
+    transaction_id: String,
+    dry_run: bool,
+) -> Result<SetupResult, String> {
     if transaction_id.is_empty() {
         return Err("transaction_id is required".to_string());
     }
@@ -941,7 +953,10 @@ mod tests {
         let _ = std::os::unix::fs::symlink(&real, &link);
 
         // reject_symlink should reject symlinks
-        assert!(reject_symlink(&real, "file").is_ok(), "real file should pass");
+        assert!(
+            reject_symlink(&real, "file").is_ok(),
+            "real file should pass"
+        );
         let err = reject_symlink(&link, "link").unwrap_err();
         assert!(err.contains("symlink"), "should mention symlink: {err}");
 
@@ -974,13 +989,19 @@ mod tests {
         let _restore = guard::EnvRestore::capture();
         set_test_user_dirs(&home);
         unsafe {
-            std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", home.join("backups").to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("backups").to_string_lossy().as_ref(),
+            );
         }
 
         let result = rollback_transaction("nonexistent", true);
         // Dry-run on nonexistent should still fail — dry-run only affects
         // the existence check stage
-        assert!(!result.success, "dry-run should still validate transaction exists");
+        assert!(
+            !result.success,
+            "dry-run should still validate transaction exists"
+        );
     }
 
     #[test]
@@ -1063,10 +1084,7 @@ mod tests {
 
     #[test]
     fn apply_setup_command_rejects_unknown_surface() {
-        let result = apply_setup(
-            vec!["totally_fake_surface".to_string()],
-            false,
-        );
+        let result = apply_setup(vec!["totally_fake_surface".to_string()], false);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown surface"), "error: {err}");
