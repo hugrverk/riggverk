@@ -9,6 +9,8 @@ mod executable_resolver;
 mod path_utils;
 mod platform_paths;
 mod settings;
+#[cfg_attr(not(test), allow(dead_code))]
+mod setup_lifecycle;
 mod shell_runtime;
 mod skill_duplicate_audit;
 #[cfg_attr(not(windows), allow(dead_code))]
