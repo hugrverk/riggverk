@@ -8,6 +8,7 @@ mod cursor_profile_ops;
 mod cursor_profile_paths;
 mod deprecated_skills;
 mod executable_resolver;
+mod path_safety;
 mod path_utils;
 mod platform_paths;
 mod settings;
