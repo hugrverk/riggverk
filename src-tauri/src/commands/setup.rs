@@ -304,12 +304,40 @@ fn perform_artifact_rollback(
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
     for op in manifest_ops.iter().rev() {
+        if !setup_transaction::operation_may_have_been_modified(op.apply_status) {
+            continue;
+        }
         match setup_transaction::restore_artifact_from_backup(op, backup_dir, home) {
             Ok(()) => rolled_back.push(artifact_label(&op.artifact)),
             Err(e) => errors.push(format!("{}: {e}", artifact_label(&op.artifact))),
         }
     }
     (rolled_back, errors)
+}
+
+fn persist_setup_manifest(
+    manifest_path: &Path,
+    manifest: &mut ArtifactTransactionManifest,
+    status: setup_transaction::TransactionStatus,
+) -> Result<(), String> {
+    manifest.transaction_status = status;
+    setup_transaction::persist_manifest_atomic(manifest_path, manifest)
+}
+
+fn rollback_surface_groups(
+    manifest_ops: &[ArtifactManifestOperation],
+    backup_dir: &Path,
+    home: &Path,
+) -> (Vec<String>, Vec<String>) {
+    let candidates: Vec<_> = setup_transaction::rollback_candidates(manifest_ops);
+    perform_artifact_rollback(
+        &candidates
+            .iter()
+            .map(|op| (*op).clone())
+            .collect::<Vec<_>>(),
+        backup_dir,
+        home,
+    )
 }
 
 fn user_home() -> Result<PathBuf, String> {
@@ -471,11 +499,12 @@ fn apply_planned_artifacts(
         });
     }
 
-    let manifest = ArtifactTransactionManifest {
+    let mut manifest = ArtifactTransactionManifest {
         schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
         workspace_key: setup_transaction::workspace_key(&ws_root).unwrap_or_default(),
         created_at: transaction_id.clone(),
         surface_ids: surfaces.clone(),
+        transaction_status: setup_transaction::TransactionStatus::Prepared,
         operations: manifest_ops.clone(),
     };
     if let Err(e) = setup_transaction::validate_manifest(&manifest, &ws_root) {
@@ -491,60 +520,22 @@ fn apply_planned_artifacts(
     }
 
     let manifest_path = backup_dir.join("manifest.json");
-    let manifest_json = match serde_json::to_string_pretty(&manifest) {
-        Ok(j) => j,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id,
-                applied: vec![],
-                failed: vec![format!("serialize manifest: {e}")],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Cannot serialize transaction manifest: {e}"),
-            };
-        }
-    };
-    if let Err(e) = fs::write(&manifest_path, &manifest_json) {
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Prepared,
+    ) {
         return SetupResult {
             success: false,
             transaction_id,
             applied: vec![],
-            failed: vec![format!("write manifest: {e}")],
+            failed: vec![e.clone()],
             rolled_back: vec![],
             manual_steps: vec![],
             message: format!("Cannot write transaction manifest: {e}"),
         };
     }
-    let read_back = match fs::read_to_string(&manifest_path) {
-        Ok(r) => r,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id,
-                applied: vec![],
-                failed: vec![format!("re-read manifest: {e}")],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Cannot re-read transaction manifest: {e}"),
-            };
-        }
-    };
-    let parsed: ArtifactTransactionManifest = match serde_json::from_str(&read_back) {
-        Ok(m) => m,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id,
-                applied: vec![],
-                failed: vec![format!("validate manifest: {e}")],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Transaction manifest validation failed: {e}"),
-            };
-        }
-    };
-    if let Err(e) = setup_transaction::validate_manifest(&parsed, &ws_root) {
+    if let Err(e) = setup_transaction::validate_manifest(&manifest, &ws_root) {
         return SetupResult {
             success: false,
             transaction_id,
@@ -558,9 +549,47 @@ fn apply_planned_artifacts(
 
     let surfaces_to_execute = setup_transaction::surfaces_needing_apply(pending);
     let mut applied: Vec<String> = Vec::new();
-    let mut completed_manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
+
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Applying,
+    ) {
+        return SetupResult {
+            success: false,
+            transaction_id,
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Cannot persist applying status: {e}"),
+        };
+    }
 
     for surface in &surfaces_to_execute {
+        setup_transaction::mark_surface_group_in_flight(&mut manifest.operations, *surface);
+        if let Err(e) = persist_setup_manifest(
+            &manifest_path,
+            &mut manifest,
+            setup_transaction::TransactionStatus::Applying,
+        ) {
+            let (rolled_back, rb_errors) =
+                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+            let mut message = format!("Cannot persist in-flight status: {e}");
+            if !rb_errors.is_empty() {
+                message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+            }
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied,
+                failed: vec![e],
+                rolled_back,
+                manual_steps: manual_steps.clone(),
+                message,
+            };
+        }
+
         let surface_op = PlannedOperation {
             surface: *surface,
             kind: OperationKind::Update,
@@ -570,8 +599,18 @@ fn apply_planned_artifacts(
             manual_step: None,
         };
         if let Err(e) = execute_operation_and_validate(&surface_op, &ws_root) {
+            for op in manifest.operations.iter_mut() {
+                if op.surface == *surface {
+                    op.apply_status = setup_transaction::ApplyStatus::Failed;
+                }
+            }
+            let _ = persist_setup_manifest(
+                &manifest_path,
+                &mut manifest,
+                setup_transaction::TransactionStatus::Failed,
+            );
             let (rolled_back, rb_errors) =
-                perform_artifact_rollback(&completed_manifest_ops, &backup_dir, &home);
+                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
             let mut message = format!("Apply failed at {}: {e}", surface.label());
             if !rb_errors.is_empty() {
                 message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
@@ -588,33 +627,86 @@ fn apply_planned_artifacts(
         }
 
         let surface_artifacts: Vec<_> = pending.iter().filter(|p| p.surface == *surface).collect();
+        let mut validation_failed = false;
+        let mut validation_error = String::new();
         for p in &surface_artifacts {
             if let Err(e) =
                 setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
             {
-                let (rolled_back, rb_errors) =
-                    perform_artifact_rollback(&completed_manifest_ops, &backup_dir, &home);
-                let mut message =
-                    format!("Validation failed for {}: {e}", artifact_label(&p.artifact));
-                if !rb_errors.is_empty() {
-                    message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
-                }
-                return SetupResult {
-                    success: false,
-                    transaction_id,
-                    applied,
-                    failed: vec![format!("{}: {e}", artifact_label(&p.artifact))],
-                    rolled_back,
-                    manual_steps: manual_steps.clone(),
-                    message,
-                };
+                validation_failed = true;
+                validation_error = format!("{}: {e}", artifact_label(&p.artifact));
+                break;
             }
             applied.push(artifact_label(&p.artifact));
-            if let Some(op) = manifest_ops.iter().find(|o| o.artifact == p.artifact) {
-                completed_manifest_ops.push(op.clone());
+            if let Some(op) = manifest
+                .operations
+                .iter_mut()
+                .find(|o| o.artifact == p.artifact)
+            {
+                op.apply_status = setup_transaction::ApplyStatus::Applied;
+                op.validation_status = setup_transaction::ValidationStatus::Passed;
             }
         }
+
+        if validation_failed {
+            for op in manifest.operations.iter_mut() {
+                if op.surface == *surface
+                    && op.apply_status == setup_transaction::ApplyStatus::InFlight
+                {
+                    op.apply_status = setup_transaction::ApplyStatus::Failed;
+                    op.validation_status = setup_transaction::ValidationStatus::Failed;
+                }
+            }
+            let _ = persist_setup_manifest(
+                &manifest_path,
+                &mut manifest,
+                setup_transaction::TransactionStatus::Failed,
+            );
+            let (rolled_back, rb_errors) =
+                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+            let mut message = format!("Validation failed: {validation_error}");
+            if !rb_errors.is_empty() {
+                message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+            }
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied,
+                failed: vec![validation_error],
+                rolled_back,
+                manual_steps: manual_steps.clone(),
+                message,
+            };
+        }
+
+        if let Err(e) = persist_setup_manifest(
+            &manifest_path,
+            &mut manifest,
+            setup_transaction::TransactionStatus::Applying,
+        ) {
+            let (rolled_back, rb_errors) =
+                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+            let mut message = format!("Cannot persist apply progress: {e}");
+            if !rb_errors.is_empty() {
+                message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+            }
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied,
+                failed: vec![e],
+                rolled_back,
+                manual_steps: manual_steps.clone(),
+                message,
+            };
+        }
     }
+
+    let _ = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Completed,
+    );
 
     let applied_count = applied.len();
     SetupResult {
@@ -712,6 +804,17 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
 
 // ── Repair ──
 
+/// Read-only repair preview with integrity fingerprint.
+#[derive(Debug, Clone, Serialize)]
+pub struct RepairPreview {
+    pub missing_artifacts: Vec<String>,
+    pub skipped_updates: usize,
+    pub skipped_conflicts: usize,
+    pub skipped_unavailable: usize,
+    pub repair_fingerprint: Option<String>,
+    pub message: String,
+}
+
 /// Result of a repair preflight.
 #[derive(Debug, Clone, Serialize)]
 #[allow(dead_code)]
@@ -721,11 +824,83 @@ pub struct RepairPreflight {
     pub message: String,
 }
 
+fn compute_repair_fingerprint(
+    workspace_root: &Path,
+    home: &Path,
+    create_pending: &[setup_transaction::PlannedArtifact],
+) -> Result<Option<String>, String> {
+    if create_pending.is_empty() {
+        return Ok(None);
+    }
+    let mut surfaces: Vec<SetupSurfaceId> = create_pending.iter().map(|p| p.surface).collect();
+    surfaces.sort_by_key(|s| format!("{s:?}"));
+    surfaces.dedup();
+    Ok(Some(setup_transaction::compute_plan_fingerprint(
+        workspace_root,
+        &surfaces,
+        create_pending,
+        home,
+    )?))
+}
+
+/// Read-only repair preview listing create-only artifacts.
+#[tauri::command]
+pub fn preview_repair_setup() -> Result<RepairPreview, String> {
+    let ws_root = workspace_root()?;
+    let home = user_home()?;
+    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
+        .iter()
+        .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
+        .copied()
+        .collect();
+    let planned = setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)?;
+    let create_pending: Vec<_> = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Create))
+        .cloned()
+        .collect();
+    let skipped_updates = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Update))
+        .count();
+    let skipped_conflicts = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Conflict))
+        .count();
+    let skipped_unavailable = planned
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Unavailable))
+        .count();
+    let missing_artifacts: Vec<String> = create_pending
+        .iter()
+        .map(|p| artifact_label(&p.artifact))
+        .collect();
+    let repair_fingerprint = compute_repair_fingerprint(&ws_root, &home, &create_pending)?;
+    let message = if create_pending.is_empty() {
+        format!(
+            "No missing artifacts ({skipped_updates} updates skipped, {skipped_conflicts} conflicts, {skipped_unavailable} unavailable)"
+        )
+    } else {
+        format!(
+            "{} missing artifact(s) can be repaired",
+            create_pending.len()
+        )
+    };
+    Ok(RepairPreview {
+        missing_artifacts,
+        skipped_updates,
+        skipped_conflicts,
+        skipped_unavailable,
+        repair_fingerprint,
+        message,
+    })
+}
+
 /// Repair managed artifacts — only creates safely absent resources.
 ///
 /// Uses fresh artifact detection. Does not overwrite diverged content, update
 /// configs, or remove unknown user artifacts.
-pub fn repair_setup_artifacts() -> SetupResult {
+pub fn repair_setup_artifacts(repair_fingerprint: Option<&str>) -> SetupResult {
     let ws_root = match workspace_root() {
         Ok(r) => r,
         Err(e) => {
@@ -794,6 +969,58 @@ pub fn repair_setup_artifacts() -> SetupResult {
         .filter(|p| matches!(p.kind, OperationKind::Create))
         .collect();
 
+    if let Some(expected) = repair_fingerprint {
+        if !setup_transaction::validate_fingerprint_format(expected) {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec!["malformed repair fingerprint".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Malformed repair fingerprint".to_string(),
+            };
+        }
+        if setup_transaction::is_fingerprint_consumed(expected) {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec!["stale repair preview".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Repair preview fingerprint already used. Re-run repair preview."
+                    .to_string(),
+            };
+        }
+        let current = compute_repair_fingerprint(&ws_root, &home, &create_pending)
+            .ok()
+            .flatten()
+            .unwrap_or_default();
+        if current != expected {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec!["stale repair preview".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Repair preview mismatch: state changed. Re-run repair preview."
+                    .to_string(),
+            };
+        }
+    } else {
+        return SetupResult {
+            success: false,
+            transaction_id: String::new(),
+            applied: vec![],
+            failed: vec!["repair fingerprint required".to_string()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Repair fingerprint required. Run repair preview before applying.".to_string(),
+        };
+    }
+
     if create_pending.is_empty() {
         return SetupResult {
             success: true,
@@ -810,6 +1037,9 @@ pub fn repair_setup_artifacts() -> SetupResult {
 
     let mut result = apply_planned_artifacts(&create_pending, vec![]);
     if result.success {
+        if let Some(fp) = repair_fingerprint {
+            setup_transaction::mark_fingerprint_consumed(fp);
+        }
         result.message = format!(
             "Repaired {} artifact(s); {synced_count} synced; {conflict_count} conflicts skipped; {unavailable_count} unavailable",
             result.applied.len()
@@ -950,24 +1180,6 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         };
     }
 
-    if dry_run {
-        let would_restore: Vec<String> = manifest
-            .operations
-            .iter()
-            .rev()
-            .map(|op| artifact_label(&op.artifact))
-            .collect();
-        return SetupResult {
-            success: true,
-            transaction_id: transaction_id.to_string(),
-            applied: vec![],
-            failed: vec![],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: format!("Dry run: would restore {} artifact(s)", would_restore.len()),
-        };
-    }
-
     let home = match user_home() {
         Ok(h) => h,
         Err(e) => {
@@ -983,10 +1195,135 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         }
     };
 
-    let (restored, rollback_failures) =
-        perform_artifact_rollback(&manifest.operations, &backup_dir, &home);
+    let eligible: Vec<ArtifactManifestOperation> = manifest
+        .operations
+        .iter()
+        .filter(|op| {
+            setup_transaction::operation_eligible_for_explicit_rollback(
+                op,
+                manifest.transaction_status,
+            )
+        })
+        .cloned()
+        .collect();
+
+    if eligible.is_empty() {
+        return SetupResult {
+            success: true,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "No applied artifacts to roll back".to_string(),
+        };
+    }
+
+    for op in &eligible {
+        if let Some(ref rel) = op.backup_rel {
+            if rel.starts_with('/') || rel.contains("..") {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec!["unsafe backup path in manifest".to_string()],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: "Rollback preflight failed: unsafe backup path".to_string(),
+                };
+            }
+            let backup_path = backup_dir.join(rel);
+            if !backup_path.exists()
+                && !matches!(
+                    op.rollback_action,
+                    setup_transaction::RollbackAction::RemoveCreatedFile
+                        | setup_transaction::RollbackAction::RemoveCreatedSkillDirectory
+                )
+            {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec![format!(
+                        "missing backup for {}",
+                        artifact_label(&op.artifact)
+                    )],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: "Rollback preflight failed: missing backup".to_string(),
+                };
+            }
+        }
+        let dest = match op.artifact.resolve_dest(&home) {
+            Ok(d) => d,
+            Err(e) => {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec![e],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: "Rollback preflight failed: cannot resolve destination".to_string(),
+                };
+            }
+        };
+        if let Err(e) = reject_symlink(&dest, "rollback destination") {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![e],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Rollback preflight failed: symlinked destination".to_string(),
+            };
+        }
+    }
+
+    if dry_run {
+        let would_restore: Vec<String> = eligible
+            .iter()
+            .rev()
+            .map(|op| artifact_label(&op.artifact))
+            .collect();
+        return SetupResult {
+            success: true,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![],
+            rolled_back: would_restore,
+            manual_steps: vec![],
+            message: format!("Dry run: would restore {} artifact(s)", eligible.len()),
+        };
+    }
+
+    let mut manifest_mut = manifest.clone();
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest_mut,
+        setup_transaction::TransactionStatus::RollingBack,
+    ) {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![e],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Cannot persist rolling_back status".to_string(),
+        };
+    }
+
+    let (restored, rollback_failures) = perform_artifact_rollback(&eligible, &backup_dir, &home);
     let restored_count = restored.len();
     let success = rollback_failures.is_empty();
+    let final_status = if success {
+        setup_transaction::TransactionStatus::RolledBack
+    } else {
+        setup_transaction::TransactionStatus::RollbackFailed
+    };
+    let _ = persist_setup_manifest(&manifest_path, &mut manifest_mut, final_status);
     SetupResult {
         success,
         transaction_id: transaction_id.to_string(),
@@ -1606,8 +1943,11 @@ pub fn apply_setup(
 }
 
 #[tauri::command]
-pub fn repair_setup_command(_skip_manual: bool) -> Result<SetupResult, String> {
-    Ok(repair_setup_artifacts())
+pub fn repair_setup_command(
+    _skip_manual: bool,
+    repair_fingerprint: Option<String>,
+) -> Result<SetupResult, String> {
+    Ok(repair_setup_artifacts(repair_fingerprint.as_deref()))
 }
 
 #[tauri::command]
@@ -2071,6 +2411,7 @@ mod tests {
             workspace_key: setup_transaction::workspace_key(&ws).unwrap_or_default(),
             created_at: "1".into(),
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
+            transaction_status: setup_transaction::TransactionStatus::Prepared,
             operations: vec![ArtifactManifestOperation {
                 artifact: ArtifactId::OpenCodeRules,
                 surface: SetupSurfaceId::OpenCodeRules,
