@@ -313,6 +313,8 @@ pub fn discover_skill_catalog(
         )));
     }
 
+    validate_skill_targets(&discovered).map_err(SkillDiscoveryError::InvalidCatalog)?;
+
     Ok(discovered)
 }
 
@@ -334,16 +336,20 @@ pub fn skill_names_for_harness(
         .collect())
 }
 
-/// Require every skill in the catalog to declare exactly the supported harness set.
-pub fn validate_catalog_targets_exact(catalog: &[DiscoveredSkill]) -> Result<(), String> {
-    let expected: HashSet<&str> = VALID_SKILL_AGENTS.iter().copied().collect();
+/// Require every skill to declare at least one known harness target.
+pub fn validate_skill_targets(catalog: &[DiscoveredSkill]) -> Result<(), String> {
+    let allowed: HashSet<&str> = VALID_SKILL_AGENTS.iter().copied().collect();
     for skill in catalog {
-        let actual: HashSet<&str> = skill.targets.iter().map(|s| s.as_str()).collect();
-        if actual != expected {
-            return Err(format!(
-                "skill '{}' targets {:?}; expected exactly {:?}",
-                skill.name, skill.targets, VALID_SKILL_AGENTS
-            ));
+        if skill.targets.is_empty() {
+            return Err(format!("skill '{}' has no targets", skill.name));
+        }
+        for target in &skill.targets {
+            if !allowed.contains(target.as_str()) {
+                return Err(format!(
+                    "skill '{}' has unknown target '{target}'",
+                    skill.name
+                ));
+            }
         }
     }
     Ok(())
@@ -358,25 +364,26 @@ pub fn find_skill_source_dir(workspace_root: &Path, name: &str) -> Option<PathBu
         .map(|s| s.source_dir.clone())
 }
 
-/// Check whether a skill targets a harness using canonical catalog discovery.
-pub fn skill_targets_harness(
-    workspace_root: &Path,
-    skill_name: &str,
-    harness: &str,
-) -> Result<bool, String> {
-    let catalog = discover_skill_catalog(workspace_root).map_err(|e| e.message().to_string())?;
-    Ok(catalog
-        .iter()
-        .find(|s| s.name == skill_name)
-        .map(|s| s.targets.iter().any(|t| t == harness))
-        .unwrap_or(false))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::collections::HashSet;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn validate_bundled_catalog_all_targets(catalog: &[DiscoveredSkill]) -> Result<(), String> {
+        let expected: HashSet<&str> = VALID_SKILL_AGENTS.iter().copied().collect();
+        for skill in catalog {
+            let actual: HashSet<&str> = skill.targets.iter().map(|s| s.as_str()).collect();
+            if actual != expected {
+                return Err(format!(
+                    "skill '{}' targets {:?}; expected exactly {:?}",
+                    skill.name, skill.targets, VALID_SKILL_AGENTS
+                ));
+            }
+        }
+        Ok(())
+    }
 
     fn temp_root(name: &str) -> PathBuf {
         let nonce = SystemTime::now()
@@ -448,7 +455,7 @@ mod tests {
     }
 
     #[test]
-    fn all_four_targets_required_for_exact_validation() {
+    fn all_four_targets_required_for_bundled_catalog() {
         let root = temp_root("four");
         write_skill(
             &root,
@@ -456,12 +463,12 @@ mod tests {
             &skill_body("diagnose", ALL_TARGETS),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
-        validate_catalog_targets_exact(&catalog).expect("exact targets");
+        validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
-    fn missing_target_fails_exact_validation() {
+    fn partial_targets_allowed_in_discovery() {
         let root = temp_root("missing-target");
         write_skill(
             &root,
@@ -469,23 +476,23 @@ mod tests {
             &skill_body("diagnose", "codex, opencode, claude"),
         );
         let catalog = discover_skill_catalog(&root).expect("discover");
-        let err = validate_catalog_targets_exact(&catalog).unwrap_err();
+        let names = skill_names_for_harness(&root, "cursor").expect("cursor filter");
         let _ = fs::remove_dir_all(&root);
-        assert!(err.contains("diagnose"));
+        assert!(catalog.iter().any(|s| s.name == "diagnose"));
+        assert!(!names.iter().any(|n| n == "diagnose"));
     }
 
     #[test]
-    fn unknown_target_fails_exact_validation() {
+    fn unknown_target_fails_discovery() {
         let root = temp_root("unknown-target");
         write_skill(
             &root,
             "skills/diagnose",
             &skill_body("diagnose", "codex, opencode, claude, cursor, gemini"),
         );
-        let catalog = discover_skill_catalog(&root).expect("discover");
-        let err = validate_catalog_targets_exact(&catalog).unwrap_err();
+        let err = discover_skill_catalog(&root).unwrap_err();
         let _ = fs::remove_dir_all(&root);
-        assert!(err.contains("diagnose"));
+        assert!(err.message().contains("unknown target"));
     }
 
     #[test]
@@ -582,7 +589,7 @@ mod tests {
     fn bundled_workspace_has_exactly_21_skills() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let catalog = discover_skill_catalog(&repo).expect("bundled catalog");
-        validate_catalog_targets_exact(&catalog).expect("bundled targets");
+        validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
         assert_eq!(catalog.len(), 21, "expected 21 bundled skills");
     }
 }
