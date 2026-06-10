@@ -45,7 +45,7 @@ pub use skills::{
     rollback_deprecated_skills_removal,
 };
 pub use setup::{
-    apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction, SetupResult,
+    apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction,
 };
 pub use status::get_status;
 pub use workspace::{

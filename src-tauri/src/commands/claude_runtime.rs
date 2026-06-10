@@ -40,16 +40,10 @@ pub struct ClaudeRuntimeHealth {
     pub summary: String,
 }
 
-/// Check whether the `claude` CLI is on PATH.
-#[allow(clippy::unnecessary_literal_unwrap)]
+/// Check whether the `claude` CLI is on PATH using the cross-platform executable resolver.
 fn claude_cli_available() -> bool {
-    std::process::Command::new("which")
-        .arg("claude")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    crate::executable_resolver::resolve_executable("claude", &path_env, None).is_some()
 }
 
 /// Count installed Claude agent files in ~/.claude/agents.
@@ -65,6 +59,25 @@ fn installed_agent_count(home: &Path) -> usize {
                 .filter(|e| {
                     e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
                         && e.file_name().to_string_lossy().ends_with(".md")
+                })
+                .count()
+        })
+        .unwrap_or(0)
+}
+
+/// Count expected Claude agent source files from workspace templates.
+fn expected_agent_count(workspace_root: &Path) -> usize {
+    let source_dir = workspace_root.join("templates/claude/agents");
+    if !source_dir.is_dir() {
+        return 0;
+    }
+    std::fs::read_dir(&source_dir)
+        .map(|entries| {
+            entries
+                .filter_map(|e| e.ok())
+                .filter(|e| {
+                    e.file_type().map(|ft| ft.is_file()).unwrap_or(false)
+                        && e.path().extension().and_then(|e| e.to_str()) == Some("md")
                 })
                 .count()
         })
@@ -119,32 +132,88 @@ fn check_agents_synced(home: &Path, workspace_root: &Path) -> bool {
     true
 }
 
-/// Check whether Claude skills are installed (at least one SKILL.md present).
-fn check_skills_synced(home: &Path) -> bool {
-    let skills_dir = home.join(".claude/skills");
-    if !skills_dir.is_dir() {
+/// Check whether Claude skills are synced by verifying all skills in the workspace
+/// skills directory that have Claude as a target agent are installed in ~/.claude/skills.
+fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
+    let installed_skills_dir = home.join(".claude/skills");
+    if !installed_skills_dir.is_dir() {
         return false;
     }
-    // Check any subdirectory has a SKILL.md
-    std::fs::read_dir(&skills_dir)
-        .map(|entries| {
-            entries.flatten().any(|e| {
-                if !e.file_type().map(|ft| ft.is_dir()).unwrap_or(false) {
-                    return false;
+
+    let source_skills_dir = workspace_root.join("skills");
+    if !source_skills_dir.is_dir() {
+        // No skills source — skills are present but we can't verify sync
+        // Still count as synced if the installed dir has content
+        return std::fs::read_dir(installed_skills_dir)
+            .map(|mut e| e.any(|e| e.is_ok()))
+            .unwrap_or(false);
+    }
+
+    // Find all Claude-eligible skills in the workspace
+    let mut expected_skill_names: Vec<String> = Vec::new();
+
+    let group_entries = match std::fs::read_dir(&source_skills_dir) {
+        Ok(e) => e,
+        Err(_) => return true,
+    };
+
+    for group_entry in group_entries.flatten() {
+        let group_path = group_entry.path();
+        if !group_path.is_dir() {
+            continue;
+        }
+        // Each subdirectory is a skill group
+        let skill_entries = match std::fs::read_dir(&group_path) {
+            Ok(e) => e,
+            Err(_) => continue,
+        };
+        for skill_entry in skill_entries.flatten() {
+            let skill_path = skill_entry.path();
+            if !skill_path.is_dir() {
+                continue;
+            }
+            let skill_md = skill_path.join("SKILL.md");
+            if !skill_md.is_file() {
+                continue;
+            }
+            // Read SKILL.md to check if agent includes "claude"
+            if let Some(skill_name) = skill_path.file_name() {
+                let name_str = skill_name.to_string_lossy();
+                if has_claude_agent(&skill_md) {
+                    expected_skill_names.push(name_str.to_string());
                 }
-                e.path().join("SKILL.md").is_file()
-            })
-        })
-        .unwrap_or(false)
+            }
+        }
+    }
+
+    if expected_skill_names.is_empty() {
+        // No Claude-specific skills — consider synced
+        return true;
+    }
+
+    // Check every expected skill is installed
+    expected_skill_names.iter().all(|name| {
+        let installed = installed_skills_dir.join(name).join("SKILL.md");
+        installed.is_file()
+    })
+}
+
+/// Read SKILL.md frontmatter to check if "claude" appears in the agent field.
+fn has_claude_agent(skill_md: &Path) -> bool {
+    if let Ok(content) = std::fs::read_to_string(skill_md) {
+        content.contains("agent:") && content.contains("claude")
+    } else {
+        false
+    }
 }
 
 /// Compute Claude runtime health from inspected managed surfaces only.
 fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
     let rules_synced = check_rules_synced(home, workspace_root);
     let agents_synced = check_agents_synced(home, workspace_root);
-    let skills_synced = check_skills_synced(home);
+    let skills_synced = check_skills_synced(home, workspace_root);
     let installed_count = installed_agent_count(home);
-    let expected_count = 5; // repo-scout, inspector, sentinel, scribe, verifier
+    let expected_count = expected_agent_count(workspace_root);
 
     let cli_ok = claude_cli_available();
 
@@ -258,8 +327,17 @@ mod tests {
         write_file(&home.join(".claude/agents/scribe.md"), "# scribe\n");
         write_file(&home.join(".claude/agents/verifier.md"), "# verifier\n");
 
-        // Install a skill to show skills are synced
-        write_file(&home.join(".claude/skills/diagnose/SKILL.md"), "skill");
+        // Set up workspace skills source with a Claude-eligible skill
+        write_file(
+            &ws.join("skills/test-group/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+        );
+
+        // Install matching skill in Claude skills dir
+        write_file(
+            &home.join(".claude/skills/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+        );
 
         let health = compute_health(&ws, &home);
         assert!(health.rules_synced);
@@ -349,11 +427,17 @@ mod tests {
     }
 
     #[test]
-    fn health_expected_agent_count_is_5() {
+    fn health_expected_agent_count_derives_from_source() {
         let home = temp_dir("claude-exp-count");
         let ws = temp_dir("claude-exp-count-ws");
+
+        // Set up agent source files so expected count can derive from them
+        write_file(&ws.join("templates/claude/agents/agent-alpha.md"), "# alpha");
+        write_file(&ws.join("templates/claude/agents/agent-beta.md"), "# beta");
+        write_file(&ws.join("templates/claude/agents/agent-gamma.md"), "# gamma");
+
         let health = compute_health(&ws, &home);
-        assert_eq!(health.expected_agent_count, 5);
+        assert_eq!(health.expected_agent_count, 3);
     }
 
     #[test]
@@ -380,13 +464,22 @@ mod tests {
             "# verifier\n",
         );
 
+        // Add a Claude-eligible skill so skills_synced can be verified
+        write_file(
+            &ws.join("skills/group/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+        );
+        write_file(
+            &home.join(".claude/skills/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\nagent: claude\n---\n# Skill\n",
+        );
+
         write_file(&home.join(".claude/CLAUDE.md"), "rules");
         write_file(&home.join(".claude/agents/repo-scout.md"), "# scout\n");
         write_file(&home.join(".claude/agents/inspector.md"), "# inspector\n");
         write_file(&home.join(".claude/agents/sentinel.md"), "# sentinel\n");
         write_file(&home.join(".claude/agents/scribe.md"), "# scribe\n");
         write_file(&home.join(".claude/agents/verifier.md"), "# verifier\n");
-        write_file(&home.join(".claude/skills/diagnose/SKILL.md"), "skill");
 
         let health = compute_health(&ws, &home);
         assert!(health.summary.contains("rules synced"));
