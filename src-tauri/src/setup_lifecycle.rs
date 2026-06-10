@@ -4,7 +4,7 @@
 //! lifecycle for all Agent Workspace managed surfaces.
 //!
 //! Phase ownership:
-//! - detect / compare  → this module's detect_surface_state
+//! - detect / compare  → setup_transaction (artifact aggregation)
 //! - preview            → this planner
 //! - apply / repair     → commands/setup.rs (execute through existing owners)
 //! - rollback           → commands/setup.rs
@@ -207,6 +207,9 @@ pub struct SetupPlan {
     /// fingerprint does not match (stale preview).
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub plan_fingerprint: Option<String>,
+    /// One-time preview token scoped to workspace, pending surfaces, and fingerprint.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub preview_token: Option<String>,
 }
 
 // ── Planner ──
@@ -368,6 +371,7 @@ pub fn plan_setup(
         has_pending_changes,
         is_blocked,
         plan_fingerprint: None,
+        preview_token: None,
     }
 }
 
@@ -595,6 +599,7 @@ mod tests {
             has_pending_changes: true,
             is_blocked: false,
             plan_fingerprint: None,
+            preview_token: None,
         };
         let json = serde_json::to_string(&plan).expect("serialize plan");
         let deserialized: SetupPlan = serde_json::from_str(&json).expect("deserialize plan");

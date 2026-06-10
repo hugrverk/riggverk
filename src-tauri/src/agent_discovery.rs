@@ -138,6 +138,7 @@ pub fn discover_agent_names(
 ///
 /// Unknown extra agents in the target directory are allowed. Fails closed when
 /// the canonical source is missing or unreadable.
+#[allow(dead_code)]
 pub fn compare_agents_for_harness(
     harness: AgentHarness,
     workspace_root: &Path,

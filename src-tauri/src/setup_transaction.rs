@@ -4,7 +4,7 @@
 //! validation/rollback at artifact granularity. Surface owners execute writes;
 //! this module owns transaction evidence and per-artifact state.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -97,6 +97,9 @@ pub struct ArtifactManifestOperation {
     pub validation_status: ValidationStatus,
     #[serde(default)]
     pub rollback_status: RollbackStatus,
+    /// Bounded managed digest recorded after successful apply validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_apply_digest: Option<String>,
 }
 
 impl Default for ArtifactManifestOperation {
@@ -111,6 +114,7 @@ impl Default for ArtifactManifestOperation {
             apply_status: ApplyStatus::Pending,
             validation_status: ValidationStatus::Pending,
             rollback_status: RollbackStatus::Pending,
+            post_apply_digest: None,
         }
     }
 }
@@ -135,29 +139,157 @@ pub struct PlannedArtifact {
     pub rollback_action: RollbackAction,
 }
 
-static CONSUMED_FINGERPRINTS: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+const MAX_PREVIEW_TOKENS: usize = 64;
+const PREVIEW_TOKEN_TTL_SECS: u64 = 600;
 
-fn consumed_fingerprints() -> &'static Mutex<HashSet<String>> {
-    CONSUMED_FINGERPRINTS.get_or_init(|| Mutex::new(HashSet::new()))
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PreviewPurpose {
+    Apply,
+    Repair,
 }
 
-pub fn mark_fingerprint_consumed(fingerprint: &str) {
-    if let Ok(mut set) = consumed_fingerprints().lock() {
-        set.insert(fingerprint.to_string());
+#[derive(Debug, Clone)]
+struct PreviewTokenEntry {
+    workspace_key: String,
+    fingerprint: String,
+    purpose: PreviewPurpose,
+    scope_surfaces: Vec<SetupSurfaceId>,
+    issued_at: SystemTime,
+    consumed: bool,
+}
+
+static PREVIEW_TOKENS: OnceLock<Mutex<HashMap<String, PreviewTokenEntry>>> = OnceLock::new();
+
+fn preview_tokens() -> &'static Mutex<HashMap<String, PreviewTokenEntry>> {
+    PREVIEW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
+}
+
+fn now_secs() -> u64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0)
+}
+
+fn prune_preview_tokens(map: &mut HashMap<String, PreviewTokenEntry>) {
+    let now = now_secs();
+    map.retain(|_, entry| {
+        !entry.consumed
+            && now.saturating_sub(
+                entry
+                    .issued_at
+                    .duration_since(UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0),
+            ) < PREVIEW_TOKEN_TTL_SECS
+    });
+    while map.len() > MAX_PREVIEW_TOKENS {
+        if let Some(key) = map.keys().next().cloned() {
+            map.remove(&key);
+        } else {
+            break;
+        }
     }
 }
 
-pub fn is_fingerprint_consumed(fingerprint: &str) -> bool {
-    consumed_fingerprints()
+fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
+    let mut left: Vec<_> = a.iter().map(|s| format!("{s:?}")).collect();
+    let mut right: Vec<_> = b.iter().map(|s| format!("{s:?}")).collect();
+    left.sort();
+    right.sort();
+    left == right
+}
+
+pub fn issue_preview_token(
+    workspace_root: &Path,
+    fingerprint: &str,
+    purpose: PreviewPurpose,
+    scope_surfaces: &[SetupSurfaceId],
+) -> Result<String, String> {
+    let workspace_key = workspace_key(workspace_root)?;
+    let token = format!("{:016x}", {
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        workspace_key.hash(&mut hasher);
+        fingerprint.hash(&mut hasher);
+        format!("{purpose:?}").hash(&mut hasher);
+        now_secs().hash(&mut hasher);
+        std::process::id().hash(&mut hasher);
+        hasher.finish()
+    });
+    if let Ok(mut map) = preview_tokens().lock() {
+        prune_preview_tokens(&mut map);
+        map.insert(
+            token.clone(),
+            PreviewTokenEntry {
+                workspace_key,
+                fingerprint: fingerprint.to_string(),
+                purpose,
+                scope_surfaces: scope_surfaces.to_vec(),
+                issued_at: SystemTime::now(),
+                consumed: false,
+            },
+        );
+    }
+    Ok(token)
+}
+
+pub fn validate_preview_token(
+    token: &str,
+    workspace_root: &Path,
+    fingerprint: &str,
+    purpose: PreviewPurpose,
+    scope_surfaces: &[SetupSurfaceId],
+) -> Result<(), String> {
+    let workspace_key = workspace_key(workspace_root)?;
+    let map = preview_tokens()
         .lock()
-        .map(|set| set.contains(fingerprint))
-        .unwrap_or(false)
+        .map_err(|_| "preview token registry unavailable".to_string())?;
+    let entry = map
+        .get(token)
+        .ok_or_else(|| "invalid or expired preview token".to_string())?;
+    if entry.consumed {
+        return Err("preview token already used".to_string());
+    }
+    let age = SystemTime::now()
+        .duration_since(entry.issued_at)
+        .map(|d| d.as_secs())
+        .unwrap_or(PREVIEW_TOKEN_TTL_SECS);
+    if age >= PREVIEW_TOKEN_TTL_SECS {
+        return Err("preview token expired".to_string());
+    }
+    if entry.workspace_key != workspace_key {
+        return Err("preview token workspace mismatch".to_string());
+    }
+    if entry.fingerprint != fingerprint {
+        return Err("preview token fingerprint mismatch".to_string());
+    }
+    if entry.purpose != purpose {
+        return Err("preview token purpose mismatch".to_string());
+    }
+    if !surfaces_match(&entry.scope_surfaces, scope_surfaces) {
+        return Err("preview token scope mismatch".to_string());
+    }
+    Ok(())
+}
+
+pub fn consume_preview_token(token: &str) -> Result<(), String> {
+    let mut map = preview_tokens()
+        .lock()
+        .map_err(|_| "preview token registry unavailable".to_string())?;
+    let entry = map
+        .get_mut(token)
+        .ok_or_else(|| "invalid or expired preview token".to_string())?;
+    if entry.consumed {
+        return Err("preview token already used".to_string());
+    }
+    entry.consumed = true;
+    Ok(())
 }
 
 #[cfg(test)]
-pub fn clear_consumed_fingerprints_for_test() {
-    if let Ok(mut set) = consumed_fingerprints().lock() {
-        set.clear();
+pub fn clear_preview_tokens_for_test() {
+    if let Ok(mut map) = preview_tokens().lock() {
+        map.clear();
     }
 }
 
@@ -223,15 +355,84 @@ fn user_home() -> Result<PathBuf, String> {
 }
 
 pub fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
+    crate::path_safety::reject_symlink(path, label)
+}
+
+pub fn reject_symlink_parent_chain(
+    path: &Path,
+    allowlisted_root: &Path,
+    label: &str,
+) -> Result<(), String> {
+    crate::path_safety::reject_symlink_parent_chain(path, allowlisted_root, label)
+}
+
+/// Aggregate artifact operation kinds into a single surface kind (fail-closed precedence).
+pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
+    if kinds.is_empty() {
+        return OperationKind::Unavailable;
     }
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
+    if kinds.iter().any(|k| matches!(k, OperationKind::Conflict)) {
+        return OperationKind::Conflict;
     }
-    Ok(())
+    if kinds
+        .iter()
+        .any(|k| matches!(k, OperationKind::Unavailable))
+    {
+        return OperationKind::Unavailable;
+    }
+    if kinds.iter().any(|k| matches!(k, OperationKind::Update)) {
+        return OperationKind::Update;
+    }
+    if kinds.iter().any(|k| matches!(k, OperationKind::Create)) {
+        return OperationKind::Create;
+    }
+    if kinds.iter().any(|k| matches!(k, OperationKind::Manual)) {
+        return OperationKind::Manual;
+    }
+    OperationKind::NoChange
+}
+
+/// Detect surface state by aggregating artifact-level detection for all owned artifacts.
+pub fn detect_surface_state(
+    surface: SetupSurfaceId,
+    workspace_root: &Path,
+    home: &Path,
+) -> (SetupSurfaceId, OperationKind, String) {
+    if matches!(surface, SetupSurfaceId::DeprecatedSkillCleanup) {
+        let summary = format!("{} requires manual action", surface.label());
+        return (surface, OperationKind::Manual, summary);
+    }
+    let artifacts = match expand_surface_fail_closed(surface, workspace_root) {
+        Ok(artifacts) => artifacts,
+        Err(message) => {
+            return (
+                surface,
+                OperationKind::Unavailable,
+                format!("{} unavailable: {message}", surface.label()),
+            );
+        }
+    };
+    if artifacts.is_empty() {
+        return (
+            surface,
+            OperationKind::Unavailable,
+            format!("{} unavailable", surface.label()),
+        );
+    }
+    let kinds: Vec<OperationKind> = artifacts
+        .iter()
+        .map(|artifact| detect_artifact_state(artifact, workspace_root, home).0)
+        .collect();
+    let kind = aggregate_operation_kind(&kinds);
+    let summary = match kind {
+        OperationKind::NoChange => format!("{} synced", surface.label()),
+        OperationKind::Create => format!("{} not installed", surface.label()),
+        OperationKind::Update => format!("{} differs from source", surface.label()),
+        OperationKind::Conflict => format!("{} has conflicts", surface.label()),
+        OperationKind::Manual => format!("{} requires manual action", surface.label()),
+        OperationKind::Unavailable => format!("{} unavailable", surface.label()),
+    };
+    (surface, kind, summary)
 }
 
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
@@ -450,7 +651,7 @@ pub fn plan_artifacts_for_surfaces(
     Ok(planned)
 }
 
-fn rollback_action_for(
+pub fn rollback_action_for(
     kind: OperationKind,
     previous: PreviousState,
     artifact: &ArtifactId,
@@ -505,25 +706,94 @@ pub fn operation_may_have_been_modified(status: ApplyStatus) -> bool {
     )
 }
 
-pub fn operation_eligible_for_explicit_rollback(
-    op: &ArtifactManifestOperation,
-    txn_status: TransactionStatus,
-) -> bool {
-    if operation_may_have_been_modified(op.apply_status) {
-        return true;
-    }
+pub fn operation_eligible_for_explicit_rollback(op: &ArtifactManifestOperation) -> bool {
     matches!(
-        txn_status,
-        TransactionStatus::Completed
-            | TransactionStatus::Failed
-            | TransactionStatus::RollbackFailed
-    ) && matches!(op.kind, OperationKind::Create | OperationKind::Update)
+        op.apply_status,
+        ApplyStatus::InFlight | ApplyStatus::Applied | ApplyStatus::Failed
+    )
+}
+
+pub fn validate_operation_status_combo(op: &ArtifactManifestOperation) -> Result<(), String> {
+    if matches!(op.apply_status, ApplyStatus::Pending)
+        && matches!(op.validation_status, ValidationStatus::Passed)
+    {
+        return Err("pending artifact cannot have passed validation".into());
+    }
+    if matches!(op.kind, OperationKind::Create)
+        && matches!(op.previous_state, PreviousState::Absent)
+        && matches!(
+            op.rollback_action,
+            RollbackAction::RestoreFile
+                | RollbackAction::RestoreDirectoryArtifact
+                | RollbackAction::RestoreManagedConfigFile
+        )
+    {
+        return Err("create from absent cannot restore from backup".into());
+    }
+    if matches!(op.kind, OperationKind::Update)
+        && matches!(
+            op.rollback_action,
+            RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory
+        )
+    {
+        return Err("update cannot remove created artifact".into());
+    }
+    if matches!(op.previous_state, PreviousState::Absent)
+        && matches!(op.rollback_action, RollbackAction::RestoreDirectoryArtifact)
+    {
+        return Err("absent artifact cannot restore directory".into());
+    }
+    if matches!(op.rollback_status, RollbackStatus::Restored)
+        && matches!(op.apply_status, ApplyStatus::Pending)
+    {
+        return Err("rolled back artifact cannot be pending".into());
+    }
+    if matches!(op.rollback_status, RollbackStatus::Pending)
+        && matches!(op.apply_status, ApplyStatus::Applied)
+        && matches!(op.validation_status, ValidationStatus::Failed)
+    {
+        return Err("applied artifact cannot have failed validation with pending rollback".into());
+    }
+    Ok(())
+}
+
+fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), String> {
+    let expected = rollback_action_for(op.kind, op.previous_state, &op.artifact);
+    if op.rollback_action != expected {
+        return Err(format!(
+            "rollback action {:?} inconsistent with kind {:?} and previous state {:?}",
+            op.rollback_action, op.kind, op.previous_state
+        ));
+    }
+    match (op.kind, op.previous_state) {
+        (OperationKind::Create, PreviousState::Absent) if op.backup_rel.is_some() => {
+            return Err("create from absent must not have backup".into());
+        }
+        (OperationKind::Create, PreviousState::Absent) => {}
+        (OperationKind::Update, PreviousState::ManagedFile)
+        | (OperationKind::Update, PreviousState::ManagedDirectory)
+        | (OperationKind::Update, PreviousState::MergeableConfigFile)
+            if op.backup_rel.is_none() =>
+        {
+            return Err("update requires backup".into());
+        }
+        (OperationKind::Update, PreviousState::ManagedFile)
+        | (OperationKind::Update, PreviousState::ManagedDirectory)
+        | (OperationKind::Update, PreviousState::MergeableConfigFile) => {}
+        (OperationKind::NoChange, _) => {
+            return Err("no_change must not appear in manifest operations".into());
+        }
+        _ => {}
+    }
+    validate_operation_status_combo(op)
 }
 
 pub fn persist_manifest_atomic(
     path: &Path,
     manifest: &ArtifactTransactionManifest,
+    allowlisted_root: &Path,
 ) -> Result<(), String> {
+    reject_symlink_parent_chain(path, allowlisted_root, "manifest path")?;
     reject_symlink(path, "manifest path")?;
     let json =
         serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {e}"))?;
@@ -554,15 +824,6 @@ pub fn mark_surface_group_in_flight(
     }
 }
 
-pub fn rollback_candidates(
-    operations: &[ArtifactManifestOperation],
-) -> Vec<&ArtifactManifestOperation> {
-    operations
-        .iter()
-        .filter(|op| operation_may_have_been_modified(op.apply_status))
-        .collect()
-}
-
 pub fn backup_artifact(
     artifact: &ArtifactId,
     backup_dir: &Path,
@@ -575,6 +836,7 @@ pub fn backup_artifact(
     reject_symlink(&dest, "backup destination")?;
     let rel = format!("artifacts/{}", artifact_backup_rel(artifact));
     let backup_path = backup_dir.join(&rel);
+    reject_path_within_transaction_root(&backup_path, backup_dir)?;
     if let Some(parent) = backup_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
     }
@@ -585,8 +847,80 @@ pub fn backup_artifact(
         fs::copy(&dest, &backup_path)
             .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
     }
-    reject_symlink(&backup_path, "backup copy")?;
+    validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     Ok(Some(rel))
+}
+
+fn reject_path_within_transaction_root(path: &Path, transaction_root: &Path) -> Result<(), String> {
+    crate::path_safety::reject_path_escape(path, transaction_root, "backup path")?;
+    reject_symlink_parent_chain(path, transaction_root, "backup path")
+}
+
+fn validate_backup_copy(
+    artifact: &ArtifactId,
+    original: &Path,
+    backup: &Path,
+    transaction_root: &Path,
+) -> Result<(), String> {
+    reject_symlink(backup, "backup copy")?;
+    reject_path_within_transaction_root(backup, transaction_root)?;
+    if original.is_dir() {
+        if !backup.is_dir() {
+            return Err("backup is not a directory".into());
+        }
+        validate_directory_backup_tree(original, backup)?;
+    } else {
+        if !backup.is_file() {
+            return Err("backup is not a regular file".into());
+        }
+        if !file_eq(original, backup) {
+            return Err("backup content does not match original".into());
+        }
+    }
+    let _ = artifact;
+    Ok(())
+}
+
+fn scan_backup_tree_no_symlinks(backup: &Path) -> Result<(), String> {
+    reject_symlink(backup, "backup tree")?;
+    if !backup.is_dir() {
+        return Ok(());
+    }
+    for entry in fs::read_dir(backup).map_err(|e| format!("read backup dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("read backup entry: {e}"))?;
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            return Err("nested symlink in directory backup".into());
+        }
+        let path = entry.path();
+        if path.is_dir() {
+            scan_backup_tree_no_symlinks(&path)?;
+        }
+    }
+    Ok(())
+}
+
+fn validate_directory_backup_tree(original: &Path, backup: &Path) -> Result<(), String> {
+    reject_symlink(backup, "directory backup")?;
+    for entry in fs::read_dir(backup).map_err(|e| format!("read backup dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("read backup entry: {e}"))?;
+        let path = entry.path();
+        if path.is_symlink() || entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            return Err("nested symlink in directory backup".into());
+        }
+        let rel = entry.file_name();
+        let original_child = original.join(&rel);
+        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+            if !original_child.is_dir() {
+                return Err("partial directory backup".into());
+            }
+            validate_directory_backup_tree(&original_child, &path)?;
+        } else if entry.file_type().map(|t| t.is_file()).unwrap_or(false)
+            && !file_eq(&original_child, &path)
+        {
+            return Err("directory backup content mismatch".into());
+        }
+    }
+    Ok(())
 }
 
 pub fn validate_manifest(
@@ -622,6 +956,82 @@ pub fn validate_manifest(
         if !matches!(op.kind, OperationKind::Create | OperationKind::Update) {
             return Err("invalid manifest operation kind".into());
         }
+        validate_operation_consistency(op)?;
+        validate_operation_status_combo(op)?;
+    }
+    Ok(())
+}
+
+pub fn artifact_unchanged_since_apply(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let expected = op
+        .post_apply_digest
+        .as_deref()
+        .ok_or_else(|| "missing post-apply digest".to_string())?;
+    let current = crate::setup_fingerprint::artifact_installed_managed_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if current != expected {
+        return Err("artifact changed since apply".into());
+    }
+    Ok(())
+}
+
+pub fn validate_create_target_unchanged(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    if !matches!(op.kind, OperationKind::Create) {
+        return Ok(());
+    }
+    artifact_unchanged_since_apply(op, workspace_root, home)
+}
+
+pub fn validate_update_target_unchanged(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    if !matches!(op.kind, OperationKind::Update) {
+        return Ok(());
+    }
+    artifact_unchanged_since_apply(op, workspace_root, home)
+}
+
+pub fn validate_backup_for_rollback(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+) -> Result<(), String> {
+    match op.rollback_action {
+        RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory => {
+            return Ok(());
+        }
+        RollbackAction::NoAction => return Ok(()),
+        _ => {}
+    }
+    let rel = op
+        .backup_rel
+        .as_ref()
+        .ok_or_else(|| "missing backup for restore".to_string())?;
+    if rel.starts_with('/') || rel.contains("..") {
+        return Err("unsafe backup path".into());
+    }
+    let backup_path = backup_dir.join(rel);
+    reject_path_within_transaction_root(&backup_path, backup_dir)?;
+    if !backup_path.exists() {
+        return Err("backup missing".into());
+    }
+    reject_symlink(&backup_path, "rollback backup")?;
+    if backup_path.is_dir() {
+        scan_backup_tree_no_symlinks(&backup_path)?;
+    } else if !backup_path.is_file() {
+        return Err("backup is not a regular file".into());
     }
     Ok(())
 }
@@ -702,7 +1112,10 @@ pub fn restore_artifact_from_backup(
                 .any(|entry| {
                     let name = entry.file_name();
                     let name = name.to_string_lossy();
-                    name != "SKILL.md" && entry.path().is_file()
+                    if name == "SKILL.md" {
+                        return false;
+                    }
+                    entry.path().is_file() || entry.path().is_dir()
                 });
             if unexpected {
                 return Err("refusing remove skill directory with unexpected user files".into());
@@ -760,6 +1173,34 @@ mod tests {
     }
 
     #[test]
+    fn aggregate_surface_precedence_conflict_over_update() {
+        let kinds = vec![OperationKind::Update, OperationKind::Conflict];
+        assert_eq!(aggregate_operation_kind(&kinds), OperationKind::Conflict);
+    }
+
+    #[test]
+    fn aggregate_surface_update_when_any_artifact_differs() {
+        let kinds = vec![OperationKind::NoChange, OperationKind::Create];
+        assert_eq!(aggregate_operation_kind(&kinds), OperationKind::Create);
+        let kinds = vec![OperationKind::NoChange, OperationKind::Update];
+        assert_eq!(aggregate_operation_kind(&kinds), OperationKind::Update);
+    }
+
+    #[test]
+    fn preview_token_rejects_reuse() {
+        clear_preview_tokens_for_test();
+        let ws = temp("token-ws");
+        fs::create_dir_all(&ws).unwrap();
+        let fp = "abc123def4567890";
+        let surfaces = vec![SetupSurfaceId::OpenCodeRules];
+        let token = issue_preview_token(&ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        validate_preview_token(&token, &ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        consume_preview_token(&token).unwrap();
+        assert!(validate_preview_token(&token, &ws, fp, PreviewPurpose::Apply, &surfaces).is_err());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
     fn manifest_rejects_duplicate_artifact_ids() {
         let ws = temp("manifest-dup");
         let manifest = ArtifactTransactionManifest {
@@ -776,9 +1217,7 @@ mod tests {
                     previous_state: PreviousState::ManagedFile,
                     rollback_action: RollbackAction::RestoreFile,
                     backup_rel: Some("artifacts/x".into()),
-                    apply_status: ApplyStatus::Pending,
-                    validation_status: ValidationStatus::Pending,
-                    rollback_status: RollbackStatus::Pending,
+                    ..Default::default()
                 },
                 ArtifactManifestOperation {
                     artifact: ArtifactId::OpenCodeRules,
@@ -787,9 +1226,7 @@ mod tests {
                     previous_state: PreviousState::ManagedFile,
                     rollback_action: RollbackAction::RestoreFile,
                     backup_rel: Some("artifacts/y".into()),
-                    apply_status: ApplyStatus::Pending,
-                    validation_status: ValidationStatus::Pending,
-                    rollback_status: RollbackStatus::Pending,
+                    ..Default::default()
                 },
             ],
         };
