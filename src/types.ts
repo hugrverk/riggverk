@@ -566,6 +566,7 @@ export interface SetupPlan {
   has_pending_changes: boolean;
   is_blocked: boolean;
   plan_fingerprint: string | null;
+  preview_token: string | null;
 }
 
 export interface SetupResult {

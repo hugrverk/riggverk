@@ -8,6 +8,7 @@ interface RepairPreview {
   skipped_conflicts: number;
   skipped_unavailable: number;
   repair_fingerprint: string | null;
+  repair_preview_token: string | null;
   message: string;
 }
 
@@ -75,6 +76,7 @@ function sanitizePreviewError(err: unknown): string {
 // ── Component ──
 
 export interface SetupLifecycleProps {
+  workspacePath: string | null;
   wsRunning: string | null;
   runSetupTask: <T>(opts: {
     label: string;
@@ -85,11 +87,13 @@ export interface SetupLifecycleProps {
   }) => Promise<T | null>;
 }
 
-export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps) {
+export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: SetupLifecycleProps) {
   const [plan, setPlan] = useState<SetupPlan | null>(null);
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [result, setResult] = useState<SetupResult | null>(null);
+  const [applyResult, setApplyResult] = useState<SetupResult | null>(null);
+  const [repairResult, setRepairResult] = useState<SetupResult | null>(null);
+  const [rollbackResult, setRollbackResult] = useState<SetupResult | null>(null);
   const [repairPreview, setRepairPreview] = useState<RepairPreview | null>(null);
   const [repairPreviewLoading, setRepairPreviewLoading] = useState(false);
   const [rollbackDryRun, setRollbackDryRun] = useState<SetupResult | null>(null);
@@ -98,11 +102,23 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
   const rollbackTriggerRef = useRef<HTMLButtonElement | null>(null);
   const confirmDialogRef = useRef<HTMLDivElement | null>(null);
   const [confirmRollback, setConfirmRollback] = useState(false);
-  const lastTransactionRef = useRef<SetupResult | null>(null);
+  const lastCompletedApplyRef = useRef<SetupResult | null>(null);
+  const transactionWorkspaceRef = useRef<string | null>(null);
 
   const globalMutationBusy = wsRunning !== null;
   const mutationLabel = wsRunning ?? "";
-  const activeTransaction = result ?? lastTransactionRef.current;
+  const activeApplyTransaction = lastCompletedApplyRef.current;
+
+  useEffect(() => {
+    if (workspacePath === transactionWorkspaceRef.current) return;
+    transactionWorkspaceRef.current = workspacePath;
+    lastCompletedApplyRef.current = null;
+    setApplyResult(null);
+    setRepairResult(null);
+    setRollbackResult(null);
+    setRollbackDryRun(null);
+    setConfirmRollback(false);
+  }, [workspacePath]);
 
   const refresh = useCallback(async () => {
     const gen = ++previewGenRef.current;
@@ -170,7 +186,7 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
   }, [confirmRollback]);
 
   const applyPlan = useCallback(async () => {
-    if (!plan?.plan_fingerprint) return;
+    if (!plan?.plan_fingerprint || !plan.preview_token) return;
     const surfaces = plan.operations
       .filter(op => op.kind === "create" || op.kind === "update")
       .map(op => op.surface);
@@ -183,41 +199,49 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
         surfaces,
         skipManual: true,
         planFingerprint: plan.plan_fingerprint,
+        previewToken: plan.preview_token,
       }),
       toActionResult: (res) => setupResultToTerminal(res, "apply_setup"),
       refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
     if (r) {
-      setResult(r);
-      lastTransactionRef.current = r;
+      setApplyResult(r);
+      if (r.success) {
+        lastCompletedApplyRef.current = r;
+        setRollbackResult(null);
+      }
     }
   }, [plan, runSetupTask, refresh, loadRepairPreview]);
 
   const repair = useCallback(async () => {
-    if (!repairPreview?.repair_fingerprint) return;
+    if (!repairPreview?.repair_fingerprint || !repairPreview.repair_preview_token) return;
     const r = await runSetupTask({
       label: "setup repair",
       action: "repair_setup_command",
       task: () => invoke<SetupResult>("repair_setup_command", {
         skipManual: true,
         repairFingerprint: repairPreview.repair_fingerprint,
+        repairPreviewToken: repairPreview.repair_preview_token,
       }),
       toActionResult: (res) => setupResultToTerminal(res, "repair_setup_command"),
       refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
     if (r) {
-      setResult(r);
-      lastTransactionRef.current = r;
+      setRepairResult(r);
+      if (r.success) {
+        lastCompletedApplyRef.current = r;
+        setRollbackResult(null);
+      }
     }
   }, [repairPreview, runSetupTask, refresh, loadRepairPreview]);
 
   const openRollbackConfirm = useCallback(async () => {
-    if (!activeTransaction?.transaction_id) return;
+    if (!activeApplyTransaction?.transaction_id) return;
     setConfirmRollback(true);
     setRollbackDryRun(null);
     try {
       const dry = await invoke<SetupResult>("rollback_setup_transaction", {
-        transactionId: activeTransaction.transaction_id,
+        transactionId: activeApplyTransaction.transaction_id,
         dryRun: true,
       });
       setRollbackDryRun(dry);
@@ -225,50 +249,56 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
       setPreviewError(sanitizePreviewError(err));
       setConfirmRollback(false);
     }
-  }, [activeTransaction]);
+  }, [activeApplyTransaction]);
 
   const rollbackTxn = useCallback(async () => {
-    if (!activeTransaction?.transaction_id) return;
+    if (!activeApplyTransaction?.transaction_id) return;
+    const txnId = activeApplyTransaction.transaction_id;
     const r = await runSetupTask({
       label: "setup rollback",
       action: "rollback_setup_transaction",
       task: () => invoke<SetupResult>("rollback_setup_transaction", {
-        transactionId: activeTransaction.transaction_id,
+        transactionId: txnId,
         dryRun: false,
       }),
       toActionResult: (res) => setupResultToTerminal(res, "rollback_setup_transaction"),
       refresh: async () => { await refresh(); await loadRepairPreview(); },
     });
     if (r) {
-      setResult(r);
-      if (r.success) {
-        lastTransactionRef.current = r;
+      setRollbackResult(r);
+      if (!r.success) {
+        // Preserve original apply transaction for retry.
+        lastCompletedApplyRef.current = activeApplyTransaction;
       }
       setConfirmRollback(false);
       setRollbackDryRun(null);
       rollbackTriggerRef.current?.focus();
     }
-  }, [activeTransaction, runSetupTask, refresh, loadRepairPreview]);
+  }, [activeApplyTransaction, runSetupTask, refresh, loadRepairPreview]);
 
   const needsApply = plan?.operations.some(op => op.kind === "create" || op.kind === "update") ?? false;
   const isBlocked = plan?.is_blocked ?? false;
-  const canApply = Boolean(plan?.plan_fingerprint) && needsApply && !isBlocked;
-  const canRepair = Boolean(repairPreview?.repair_fingerprint) && !repairPreviewLoading;
+  const canApply = Boolean(plan?.plan_fingerprint && plan.preview_token) && needsApply && !isBlocked;
+  const canRepair = Boolean(
+    repairPreview?.repair_fingerprint && repairPreview.repair_preview_token
+  ) && !repairPreviewLoading;
   const rollbackSucceeded =
-    activeTransaction?.success === true &&
-    activeTransaction.rolled_back.length > 0 &&
-    activeTransaction.applied.length === 0;
+    rollbackResult?.success === true &&
+    rollbackResult.transaction_id === activeApplyTransaction?.transaction_id &&
+    rollbackResult.rolled_back.length > 0;
   const canRollback =
-    Boolean(activeTransaction?.transaction_id) &&
-    (activeTransaction?.applied?.length ?? 0) > 0 &&
+    Boolean(activeApplyTransaction?.transaction_id) &&
+    (activeApplyTransaction?.applied?.length ?? 0) > 0 &&
     !rollbackSucceeded;
 
   const applyBusy = mutationLabel === "setup apply";
   const repairBusy = mutationLabel === "setup repair";
   const rollbackBusy = mutationLabel === "setup rollback";
 
+  const statusResult = rollbackResult ?? applyResult ?? repairResult;
+
   return (
-    <div className="ws-panel" role="region" aria-label="Unified setup lifecycle">
+    <div className="ws-panel" role="region" aria-label="Unified setup lifecycle" aria-busy={globalMutationBusy}>
       <div className="ws-panel-header">
         <span className="ws-panel-title">SETUP LIFECYCLE</span>
         {previewLoading && (
@@ -363,15 +393,17 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
           aria-busy={rollbackBusy}
           title={
             canRollback
-              ? `Rollback transaction ${activeTransaction?.transaction_id.slice(0, 8)}`
-              : "No rollbackable transaction"
+              ? `Rollback transaction ${activeApplyTransaction?.transaction_id.slice(0, 8)}`
+              : rollbackSucceeded
+                ? "Transaction already rolled back"
+                : "No rollbackable transaction"
           }
         >
           rollback
         </button>
       </div>
 
-      {confirmRollback && activeTransaction && (
+      {confirmRollback && activeApplyTransaction && (
         <div
           ref={confirmDialogRef}
           className="ws-repair-box"
@@ -381,7 +413,7 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
         >
           <div className="ws-repair-title">Rollback transaction?</div>
           <p className="ws-repair-hint">
-            Transaction: {activeTransaction.transaction_id.slice(0, 12)}…
+            Transaction: {activeApplyTransaction.transaction_id.slice(0, 12)}…
           </p>
           {rollbackDryRun && (
             <p className="ws-repair-hint" role="status" aria-live="polite">
@@ -415,25 +447,30 @@ export function SetupLifecycle({ wsRunning, runSetupTask }: SetupLifecycleProps)
         </div>
       )}
 
-      {result && (
+      {statusResult && (
         <div className="ws-repair-box" role="status" aria-live="polite">
           <div className="ws-panel-title-row">
-            <span className={`ws-status-chip ${result.success ? "ws-status-valid" : "ws-status-invalid"}`}>
-              {result.success ? "SUCCESS" : "FAILED"}
+            <span className={`ws-status-chip ${statusResult.success ? "ws-status-valid" : "ws-status-invalid"}`}>
+              {statusResult.success ? "SUCCESS" : "FAILED"}
             </span>
           </div>
-          <p>{result.message}</p>
-          {result.applied.length > 0 && (
-            <p className="ws-repair-hint">Applied: {result.applied.join(", ")}</p>
+          <p>{statusResult.message}</p>
+          {statusResult.applied.length > 0 && (
+            <p className="ws-repair-hint">Applied: {statusResult.applied.join(", ")}</p>
           )}
-          {result.failed.length > 0 && (
-            <p className="ws-repair-hint" role="alert">Failed: {result.failed.join("; ")}</p>
+          {statusResult.failed.length > 0 && (
+            <p className="ws-repair-hint" role="alert">Failed: {statusResult.failed.join("; ")}</p>
           )}
-          {result.rolled_back.length > 0 && (
-            <p className="ws-repair-hint">Rolled back: {result.rolled_back.join(", ")}</p>
+          {statusResult.rolled_back.length > 0 && (
+            <p className="ws-repair-hint">Rolled back: {statusResult.rolled_back.join(", ")}</p>
           )}
-          {result.manual_steps.length > 0 && (
-            <p className="ws-repair-hint">Manual steps: {result.manual_steps.join("; ")}</p>
+          {statusResult.manual_steps.length > 0 && (
+            <p className="ws-repair-hint">Manual steps: {statusResult.manual_steps.join("; ")}</p>
+          )}
+          {rollbackResult && !rollbackResult.success && activeApplyTransaction && (
+            <p className="ws-repair-hint" role="alert">
+              Rollback failed for transaction {activeApplyTransaction.transaction_id.slice(0, 12)}… — retry is available.
+            </p>
           )}
         </div>
       )}

@@ -19,6 +19,7 @@ const previewPlan = {
   has_pending_changes: true,
   is_blocked: false,
   plan_fingerprint: "abc123def4567890",
+  preview_token: "preview-token-1",
 };
 
 describe("SetupLifecycle", () => {
@@ -67,12 +68,12 @@ describe("SetupLifecycle", () => {
   });
 
   it("blocks apply when global workspace mutation is running", () => {
-    render(<SetupLifecycle wsRunning="install skills" runSetupTask={vi.fn()} />);
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning="install skills" runSetupTask={vi.fn()} />);
     expect(screen.getByRole("button", { name: /apply/i })).toBeDisabled();
   });
 
   it("loads preview and enables apply when idle", async () => {
-    render(<SetupLifecycle wsRunning={null} runSetupTask={vi.fn()} />);
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={vi.fn()} />);
     expect(await screen.findByText("OpenCode Rules")).toBeTruthy();
     expect(screen.getByRole("button", { name: /^apply$/i })).not.toBeDisabled();
   });
@@ -83,7 +84,7 @@ describe("SetupLifecycle", () => {
       opts.toActionResult(res);
       return res;
     });
-    render(<SetupLifecycle wsRunning={null} runSetupTask={runSetupTask} />);
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
     await screen.findByText("OpenCode Rules");
     fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
     await waitFor(() => expect(runSetupTask).toHaveBeenCalled());
@@ -96,7 +97,7 @@ describe("SetupLifecycle", () => {
       opts.toActionResult(res);
       return res;
     });
-    render(<SetupLifecycle wsRunning={null} runSetupTask={runSetupTask} />);
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
     await screen.findByText("OpenCode Rules");
     fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
     await screen.findByText("SUCCESS");

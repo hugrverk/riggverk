@@ -294,7 +294,11 @@ export function StartView({
           )}
 
           {workspaceValid && (
-            <SetupLifecycle wsRunning={wsRunning} runSetupTask={runSetupTask} />
+            <SetupLifecycle
+              workspacePath={status?.repo_path ?? null}
+              wsRunning={wsRunning}
+              runSetupTask={runSetupTask}
+            />
           )}
 
           <WorkspaceVerify
