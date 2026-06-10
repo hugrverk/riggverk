@@ -21,7 +21,6 @@ use crate::setup_lifecycle::{
 };
 
 use super::process::run_cmd;
-use super::status::file_eq;
 use super::workspace::workspace_root;
 
 // ── Transaction types ──
@@ -297,19 +296,25 @@ fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
 }
 
 fn perform_artifact_rollback(
-    manifest_ops: &[ArtifactManifestOperation],
+    manifest_ops: &mut [ArtifactManifestOperation],
     backup_dir: &Path,
     home: &Path,
 ) -> (Vec<String>, Vec<String>) {
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
-    for op in manifest_ops.iter().rev() {
-        if !setup_transaction::operation_may_have_been_modified(op.apply_status) {
+    for op in manifest_ops.iter_mut().rev() {
+        if !setup_transaction::operation_eligible_for_explicit_rollback(op) {
             continue;
         }
         match setup_transaction::restore_artifact_from_backup(op, backup_dir, home) {
-            Ok(()) => rolled_back.push(artifact_label(&op.artifact)),
-            Err(e) => errors.push(format!("{}: {e}", artifact_label(&op.artifact))),
+            Ok(()) => {
+                op.rollback_status = setup_transaction::RollbackStatus::Restored;
+                rolled_back.push(artifact_label(&op.artifact));
+            }
+            Err(e) => {
+                op.rollback_status = setup_transaction::RollbackStatus::Failed;
+                errors.push(format!("{}: {e}", artifact_label(&op.artifact)));
+            }
         }
     }
     (rolled_back, errors)
@@ -319,25 +324,88 @@ fn persist_setup_manifest(
     manifest_path: &Path,
     manifest: &mut ArtifactTransactionManifest,
     status: setup_transaction::TransactionStatus,
+    transaction_root: &Path,
 ) -> Result<(), String> {
     manifest.transaction_status = status;
-    setup_transaction::persist_manifest_atomic(manifest_path, manifest)
+    setup_transaction::persist_manifest_atomic(manifest_path, manifest, transaction_root)
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum ApplyExecutionMode {
+    SurfaceScripts,
+    CreateOnlyArtifacts,
+}
+
+fn create_single_artifact(
+    artifact: &crate::artifact_registry::ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let dest = artifact.resolve_dest(home)?;
+    if dest.exists() {
+        return Err(format!(
+            "refusing create: destination already exists: {}",
+            dest.display()
+        ));
+    }
+    let source = artifact
+        .resolve_source(workspace_root)
+        .ok_or_else(|| format!("missing source for {artifact:?}"))?;
+    setup_transaction::reject_symlink(&source, "source")?;
+    setup_transaction::reject_symlink(&dest, "destination")?;
+
+    if source.is_dir() {
+        crate::deprecated_skills::copy_dir_all(&source, &dest)
+            .map_err(|e| format!("create skill dir: {e}"))?;
+        return Ok(());
+    }
+
+    if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
+        let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
+            .map_err(|e| format!("resolve Cursor profile: {e}"))?;
+        let result =
+            crate::cursor_profile_ops::run_global_mcp_only(workspace_root, &cursor_paths, true);
+        if !result.success {
+            return Err(format!("Cursor MCP create failed: {}", result.stderr));
+        }
+        return Ok(());
+    }
+
+    if let Some(parent) = dest.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
+    }
+    fs::copy(&source, &dest).map_err(|e| format!("create {}: {e}", dest.display()))?;
+    Ok(())
 }
 
 fn rollback_surface_groups(
-    manifest_ops: &[ArtifactManifestOperation],
+    manifest_ops: &mut [ArtifactManifestOperation],
     backup_dir: &Path,
     home: &Path,
 ) -> (Vec<String>, Vec<String>) {
-    let candidates: Vec<_> = setup_transaction::rollback_candidates(manifest_ops);
-    perform_artifact_rollback(
-        &candidates
-            .iter()
-            .map(|op| (*op).clone())
-            .collect::<Vec<_>>(),
-        backup_dir,
-        home,
-    )
+    let indices: Vec<usize> = manifest_ops
+        .iter()
+        .enumerate()
+        .filter(|(_, op)| setup_transaction::operation_may_have_been_modified(op.apply_status))
+        .map(|(i, _)| i)
+        .collect();
+    let mut rolled_back = Vec::new();
+    let mut errors = Vec::new();
+    for index in indices.into_iter().rev() {
+        let op = &mut manifest_ops[index];
+        match setup_transaction::restore_artifact_from_backup(op, backup_dir, home) {
+            Ok(()) => {
+                op.rollback_status = setup_transaction::RollbackStatus::Restored;
+                rolled_back.push(artifact_label(&op.artifact));
+            }
+            Err(e) => {
+                op.rollback_status = setup_transaction::RollbackStatus::Failed;
+                errors.push(format!("{}: {e}", artifact_label(&op.artifact)));
+            }
+        }
+    }
+    (rolled_back, errors)
 }
 
 fn user_home() -> Result<PathBuf, String> {
@@ -353,6 +421,7 @@ fn user_home() -> Result<PathBuf, String> {
 fn apply_planned_artifacts(
     pending: &[setup_transaction::PlannedArtifact],
     manual_steps: Vec<String>,
+    execution_mode: ApplyExecutionMode,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
         Ok(id) => id,
@@ -499,9 +568,24 @@ fn apply_planned_artifacts(
         });
     }
 
+    let workspace_key = match setup_transaction::workspace_key(&ws_root) {
+        Ok(key) => key,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
+
     let mut manifest = ArtifactTransactionManifest {
         schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
-        workspace_key: setup_transaction::workspace_key(&ws_root).unwrap_or_default(),
+        workspace_key,
         created_at: transaction_id.clone(),
         surface_ids: surfaces.clone(),
         transaction_status: setup_transaction::TransactionStatus::Prepared,
@@ -524,6 +608,7 @@ fn apply_planned_artifacts(
         &manifest_path,
         &mut manifest,
         setup_transaction::TransactionStatus::Prepared,
+        &backup_dir,
     ) {
         return SetupResult {
             success: false,
@@ -554,6 +639,7 @@ fn apply_planned_artifacts(
         &manifest_path,
         &mut manifest,
         setup_transaction::TransactionStatus::Applying,
+        &backup_dir,
     ) {
         return SetupResult {
             success: false,
@@ -572,9 +658,10 @@ fn apply_planned_artifacts(
             &manifest_path,
             &mut manifest,
             setup_transaction::TransactionStatus::Applying,
+            &backup_dir,
         ) {
             let (rolled_back, rb_errors) =
-                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+                rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
             let mut message = format!("Cannot persist in-flight status: {e}");
             if !rb_errors.is_empty() {
                 message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
@@ -590,28 +677,64 @@ fn apply_planned_artifacts(
             };
         }
 
-        let surface_op = PlannedOperation {
-            surface: *surface,
-            kind: OperationKind::Update,
-            summary: surface.label().to_string(),
-            details: vec![],
-            conflict_description: None,
-            manual_step: None,
+        let apply_error = match execution_mode {
+            ApplyExecutionMode::SurfaceScripts => {
+                let surface_op = PlannedOperation {
+                    surface: *surface,
+                    kind: OperationKind::Update,
+                    summary: surface.label().to_string(),
+                    details: vec![],
+                    conflict_description: None,
+                    manual_step: None,
+                };
+                execute_operation_and_validate(&surface_op, &ws_root)
+                    .err()
+                    .map(|e| format!("{}: {e}", surface.label()))
+            }
+            ApplyExecutionMode::CreateOnlyArtifacts => {
+                let surface_artifacts: Vec<_> =
+                    pending.iter().filter(|p| p.surface == *surface).collect();
+                let mut first_error = None;
+                for p in &surface_artifacts {
+                    if !matches!(p.kind, OperationKind::Create) {
+                        continue;
+                    }
+                    if let Err(e) = create_single_artifact(&p.artifact, &ws_root, &home) {
+                        first_error = Some(format!("{}: {e}", artifact_label(&p.artifact)));
+                        break;
+                    }
+                }
+                first_error
+            }
         };
-        if let Err(e) = execute_operation_and_validate(&surface_op, &ws_root) {
+
+        if let Some(err) = apply_error {
             for op in manifest.operations.iter_mut() {
                 if op.surface == *surface {
                     op.apply_status = setup_transaction::ApplyStatus::Failed;
                 }
             }
-            let _ = persist_setup_manifest(
+            if let Err(persist_err) = persist_setup_manifest(
                 &manifest_path,
                 &mut manifest,
                 setup_transaction::TransactionStatus::Failed,
-            );
+                &backup_dir,
+            ) {
+                let (rolled_back, _rb_errors) =
+                    rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
+                return SetupResult {
+                    success: false,
+                    transaction_id,
+                    applied,
+                    failed: vec![err, persist_err.clone()],
+                    rolled_back,
+                    manual_steps: manual_steps.clone(),
+                    message: format!("Apply failed and manifest persist failed: {persist_err}"),
+                };
+            }
             let (rolled_back, rb_errors) =
-                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
-            let mut message = format!("Apply failed at {}: {e}", surface.label());
+                rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
+            let mut message = format!("Apply failed: {err}");
             if !rb_errors.is_empty() {
                 message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
             }
@@ -619,7 +742,7 @@ fn apply_planned_artifacts(
                 success: false,
                 transaction_id,
                 applied,
-                failed: vec![format!("{}: {e}", surface.label())],
+                failed: vec![err],
                 rolled_back,
                 manual_steps: manual_steps.clone(),
                 message,
@@ -638,6 +761,12 @@ fn apply_planned_artifacts(
                 break;
             }
             applied.push(artifact_label(&p.artifact));
+            let post_apply_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+                &p.artifact,
+                &ws_root,
+                &home,
+            )
+            .ok();
             if let Some(op) = manifest
                 .operations
                 .iter_mut()
@@ -645,6 +774,7 @@ fn apply_planned_artifacts(
             {
                 op.apply_status = setup_transaction::ApplyStatus::Applied;
                 op.validation_status = setup_transaction::ValidationStatus::Passed;
+                op.post_apply_digest = post_apply_digest;
             }
         }
 
@@ -657,13 +787,28 @@ fn apply_planned_artifacts(
                     op.validation_status = setup_transaction::ValidationStatus::Failed;
                 }
             }
-            let _ = persist_setup_manifest(
+            if let Err(persist_err) = persist_setup_manifest(
                 &manifest_path,
                 &mut manifest,
                 setup_transaction::TransactionStatus::Failed,
-            );
+                &backup_dir,
+            ) {
+                let (rolled_back, _rb_errors) =
+                    rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
+                return SetupResult {
+                    success: false,
+                    transaction_id,
+                    applied,
+                    failed: vec![validation_error.clone(), persist_err.clone()],
+                    rolled_back,
+                    manual_steps: manual_steps.clone(),
+                    message: format!(
+                        "Validation failed and manifest persist failed: {persist_err}"
+                    ),
+                };
+            }
             let (rolled_back, rb_errors) =
-                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+                rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
             let mut message = format!("Validation failed: {validation_error}");
             if !rb_errors.is_empty() {
                 message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
@@ -683,9 +828,10 @@ fn apply_planned_artifacts(
             &manifest_path,
             &mut manifest,
             setup_transaction::TransactionStatus::Applying,
+            &backup_dir,
         ) {
             let (rolled_back, rb_errors) =
-                rollback_surface_groups(&manifest.operations, &backup_dir, &home);
+                rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
             let mut message = format!("Cannot persist apply progress: {e}");
             if !rb_errors.is_empty() {
                 message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
@@ -702,11 +848,28 @@ fn apply_planned_artifacts(
         }
     }
 
-    let _ = persist_setup_manifest(
+    if let Err(e) = persist_setup_manifest(
         &manifest_path,
         &mut manifest,
         setup_transaction::TransactionStatus::Completed,
-    );
+        &backup_dir,
+    ) {
+        let (rolled_back, rb_errors) =
+            rollback_surface_groups(&mut manifest.operations, &backup_dir, &home);
+        let mut message = format!("Cannot persist completed status: {e}");
+        if !rb_errors.is_empty() {
+            message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+        }
+        return SetupResult {
+            success: false,
+            transaction_id,
+            applied,
+            failed: vec![e],
+            rolled_back,
+            manual_steps,
+            message,
+        };
+    }
 
     let applied_count = applied.len();
     SetupResult {
@@ -799,7 +962,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
         .into_iter()
         .filter(|p| p.kind.needs_apply())
         .collect();
-    apply_planned_artifacts(&pending, manual_steps)
+    apply_planned_artifacts(&pending, manual_steps, ApplyExecutionMode::SurfaceScripts)
 }
 
 // ── Repair ──
@@ -812,15 +975,7 @@ pub struct RepairPreview {
     pub skipped_conflicts: usize,
     pub skipped_unavailable: usize,
     pub repair_fingerprint: Option<String>,
-    pub message: String,
-}
-
-/// Result of a repair preflight.
-#[derive(Debug, Clone, Serialize)]
-#[allow(dead_code)]
-pub struct RepairPreflight {
-    pub missing: Vec<String>,
-    pub safe: bool,
+    pub repair_preview_token: Option<String>,
     pub message: String,
 }
 
@@ -876,6 +1031,19 @@ pub fn preview_repair_setup() -> Result<RepairPreview, String> {
         .map(|p| artifact_label(&p.artifact))
         .collect();
     let repair_fingerprint = compute_repair_fingerprint(&ws_root, &home, &create_pending)?;
+    let mut repair_surfaces: Vec<SetupSurfaceId> =
+        create_pending.iter().map(|p| p.surface).collect();
+    repair_surfaces.sort_by_key(|s| format!("{s:?}"));
+    repair_surfaces.dedup();
+    let repair_preview_token = match repair_fingerprint.as_deref() {
+        Some(fp) => Some(setup_transaction::issue_preview_token(
+            &ws_root,
+            fp,
+            setup_transaction::PreviewPurpose::Repair,
+            &repair_surfaces,
+        )?),
+        None => None,
+    };
     let message = if create_pending.is_empty() {
         format!(
             "No missing artifacts ({skipped_updates} updates skipped, {skipped_conflicts} conflicts, {skipped_unavailable} unavailable)"
@@ -892,6 +1060,7 @@ pub fn preview_repair_setup() -> Result<RepairPreview, String> {
         skipped_conflicts,
         skipped_unavailable,
         repair_fingerprint,
+        repair_preview_token,
         message,
     })
 }
@@ -900,7 +1069,10 @@ pub fn preview_repair_setup() -> Result<RepairPreview, String> {
 ///
 /// Uses fresh artifact detection. Does not overwrite diverged content, update
 /// configs, or remove unknown user artifacts.
-pub fn repair_setup_artifacts(repair_fingerprint: Option<&str>) -> SetupResult {
+pub fn repair_setup_artifacts(
+    repair_fingerprint: Option<&str>,
+    repair_preview_token: Option<&str>,
+) -> SetupResult {
     let ws_root = match workspace_root() {
         Ok(r) => r,
         Err(e) => {
@@ -969,55 +1141,81 @@ pub fn repair_setup_artifacts(repair_fingerprint: Option<&str>) -> SetupResult {
         .filter(|p| matches!(p.kind, OperationKind::Create))
         .collect();
 
-    if let Some(expected) = repair_fingerprint {
-        if !setup_transaction::validate_fingerprint_format(expected) {
+    let expected = match repair_fingerprint {
+        Some(fp) => fp,
+        None => {
             return SetupResult {
                 success: false,
                 transaction_id: String::new(),
                 applied: vec![],
-                failed: vec!["malformed repair fingerprint".to_string()],
+                failed: vec!["repair fingerprint required".to_string()],
                 rolled_back: vec![],
                 manual_steps: vec![],
-                message: "Malformed repair fingerprint".to_string(),
-            };
-        }
-        if setup_transaction::is_fingerprint_consumed(expected) {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec!["stale repair preview".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: "Repair preview fingerprint already used. Re-run repair preview."
+                message: "Repair fingerprint required. Run repair preview before applying."
                     .to_string(),
             };
         }
-        let current = compute_repair_fingerprint(&ws_root, &home, &create_pending)
-            .ok()
-            .flatten()
-            .unwrap_or_default();
-        if current != expected {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec!["stale repair preview".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: "Repair preview mismatch: state changed. Re-run repair preview."
-                    .to_string(),
-            };
-        }
-    } else {
+    };
+    if !setup_transaction::validate_fingerprint_format(expected) {
         return SetupResult {
             success: false,
             transaction_id: String::new(),
             applied: vec![],
-            failed: vec!["repair fingerprint required".to_string()],
+            failed: vec!["malformed repair fingerprint".to_string()],
             rolled_back: vec![],
             manual_steps: vec![],
-            message: "Repair fingerprint required. Run repair preview before applying.".to_string(),
+            message: "Malformed repair fingerprint".to_string(),
+        };
+    }
+    let token = match repair_preview_token {
+        Some(t) => t,
+        None => {
+            return SetupResult {
+                success: false,
+                transaction_id: String::new(),
+                applied: vec![],
+                failed: vec!["repair preview token required".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Repair preview token required. Run repair preview before applying."
+                    .to_string(),
+            };
+        }
+    };
+    let current = compute_repair_fingerprint(&ws_root, &home, &create_pending)
+        .ok()
+        .flatten()
+        .unwrap_or_default();
+    if current != expected {
+        return SetupResult {
+            success: false,
+            transaction_id: String::new(),
+            applied: vec![],
+            failed: vec!["stale repair preview".to_string()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "Repair preview mismatch: state changed. Re-run repair preview.".to_string(),
+        };
+    }
+    let mut repair_surfaces: Vec<SetupSurfaceId> =
+        create_pending.iter().map(|p| p.surface).collect();
+    repair_surfaces.sort_by_key(|s| format!("{s:?}"));
+    repair_surfaces.dedup();
+    if let Err(e) = setup_transaction::validate_preview_token(
+        token,
+        &ws_root,
+        expected,
+        setup_transaction::PreviewPurpose::Repair,
+        &repair_surfaces,
+    ) {
+        return SetupResult {
+            success: false,
+            transaction_id: String::new(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: e,
         };
     }
 
@@ -1035,42 +1233,30 @@ pub fn repair_setup_artifacts(repair_fingerprint: Option<&str>) -> SetupResult {
         };
     }
 
-    let mut result = apply_planned_artifacts(&create_pending, vec![]);
+    if let Err(e) = setup_transaction::consume_preview_token(token) {
+        return SetupResult {
+            success: false,
+            transaction_id: String::new(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: e,
+        };
+    }
+
+    let mut result = apply_planned_artifacts(
+        &create_pending,
+        vec![],
+        ApplyExecutionMode::CreateOnlyArtifacts,
+    );
     if result.success {
-        if let Some(fp) = repair_fingerprint {
-            setup_transaction::mark_fingerprint_consumed(fp);
-        }
         result.message = format!(
             "Repaired {} artifact(s); {synced_count} synced; {conflict_count} conflicts skipped; {unavailable_count} unavailable",
             result.applied.len()
         );
     }
     result
-}
-
-/// Preflight repair: report what's missing without applying.
-#[allow(dead_code)]
-pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
-    let missing: Vec<String> = plan
-        .operations
-        .iter()
-        .filter(|op| matches!(op.kind, OperationKind::Create))
-        .map(|op| op.surface.label().to_string())
-        .collect();
-
-    if missing.is_empty() {
-        RepairPreflight {
-            missing: vec![],
-            safe: true,
-            message: "No missing resources".to_string(),
-        }
-    } else {
-        RepairPreflight {
-            missing: missing.clone(),
-            safe: true,
-            message: format!("{} missing resource(s) can be repaired", missing.len()),
-        }
-    }
 }
 
 // ── Rollback ──
@@ -1081,8 +1267,19 @@ pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
 /// - The transaction manifest exists
 /// - The backup files are present
 /// - The destination paths are resolvable from the current registry
-#[allow(dead_code)]
 pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult {
+    if !validate_transaction_id_format(transaction_id) {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec!["invalid transaction_id format".to_string()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: "invalid transaction_id: must be a numeric timestamp".to_string(),
+        };
+    }
+
     let backup_root = match backup_root() {
         Ok(r) => r,
         Err(e) => {
@@ -1111,7 +1308,6 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         };
     }
 
-    // Reject symlinked backup directory
     if let Err(e) = reject_symlink(&backup_dir, "backup directory") {
         return SetupResult {
             success: false,
@@ -1123,9 +1319,47 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
             message: format!("Backup directory symlink rejected: {e}"),
         };
     }
+    if let Err(e) = setup_transaction::reject_symlink_parent_chain(
+        &backup_dir,
+        &backup_root,
+        "transaction root",
+    ) {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Transaction root safety failed: {e}"),
+        };
+    }
 
-    // Read manifest
     let manifest_path = backup_dir.join("manifest.json");
+    if let Err(e) = reject_symlink(&manifest_path, "manifest") {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Manifest symlink rejected: {e}"),
+        };
+    }
+    if let Err(e) =
+        setup_transaction::reject_symlink_parent_chain(&manifest_path, &backup_dir, "manifest path")
+    {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: format!("Manifest path safety failed: {e}"),
+        };
+    }
     let manifest_raw = match fs::read_to_string(&manifest_path) {
         Ok(r) => r,
         Err(e) => {
@@ -1195,15 +1429,38 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         }
     };
 
+    match manifest.transaction_status {
+        setup_transaction::TransactionStatus::Completed
+        | setup_transaction::TransactionStatus::Failed
+        | setup_transaction::TransactionStatus::RollbackFailed => {}
+        setup_transaction::TransactionStatus::RolledBack => {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec!["transaction already rolled back".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Transaction already rolled back".to_string(),
+            };
+        }
+        _ => {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec!["transaction not eligible for rollback".to_string()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: "Transaction status does not allow rollback".to_string(),
+            };
+        }
+    }
+
     let eligible: Vec<ArtifactManifestOperation> = manifest
         .operations
         .iter()
-        .filter(|op| {
-            setup_transaction::operation_eligible_for_explicit_rollback(
-                op,
-                manifest.transaction_status,
-            )
-        })
+        .filter(|op| setup_transaction::operation_eligible_for_explicit_rollback(op))
         .cloned()
         .collect();
 
@@ -1220,39 +1477,38 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     }
 
     for op in &eligible {
-        if let Some(ref rel) = op.backup_rel {
-            if rel.starts_with('/') || rel.contains("..") {
-                return SetupResult {
-                    success: false,
-                    transaction_id: transaction_id.to_string(),
-                    applied: vec![],
-                    failed: vec!["unsafe backup path in manifest".to_string()],
-                    rolled_back: vec![],
-                    manual_steps: vec![],
-                    message: "Rollback preflight failed: unsafe backup path".to_string(),
-                };
-            }
-            let backup_path = backup_dir.join(rel);
-            if !backup_path.exists()
-                && !matches!(
-                    op.rollback_action,
-                    setup_transaction::RollbackAction::RemoveCreatedFile
-                        | setup_transaction::RollbackAction::RemoveCreatedSkillDirectory
-                )
-            {
-                return SetupResult {
-                    success: false,
-                    transaction_id: transaction_id.to_string(),
-                    applied: vec![],
-                    failed: vec![format!(
-                        "missing backup for {}",
-                        artifact_label(&op.artifact)
-                    )],
-                    rolled_back: vec![],
-                    manual_steps: vec![],
-                    message: "Rollback preflight failed: missing backup".to_string(),
-                };
-            }
+        if let Err(e) = setup_transaction::validate_backup_for_rollback(op, &backup_dir) {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Rollback preflight failed: {e}"),
+            };
+        }
+        if let Err(e) = setup_transaction::validate_create_target_unchanged(op, &ws_root, &home) {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Rollback preflight failed: artifact changed since apply: {e}"),
+            };
+        }
+        if let Err(e) = setup_transaction::validate_update_target_unchanged(op, &ws_root, &home) {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Rollback preflight failed: artifact changed since apply: {e}"),
+            };
         }
         let dest = match op.artifact.resolve_dest(&home) {
             Ok(d) => d,
@@ -1273,10 +1529,23 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
                 success: false,
                 transaction_id: transaction_id.to_string(),
                 applied: vec![],
-                failed: vec![e],
+                failed: vec![e.clone()],
                 rolled_back: vec![],
                 manual_steps: vec![],
-                message: "Rollback preflight failed: symlinked destination".to_string(),
+                message: format!("Rollback preflight failed: symlinked destination: {e}"),
+            };
+        }
+        if let Err(e) =
+            setup_transaction::reject_symlink_parent_chain(&dest, &home, "rollback destination")
+        {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Rollback preflight failed: unsafe destination path: {e}"),
             };
         }
     }
@@ -1298,11 +1567,12 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         };
     }
 
-    let mut manifest_mut = manifest.clone();
+    let mut manifest_mut = manifest;
     if let Err(e) = persist_setup_manifest(
         &manifest_path,
         &mut manifest_mut,
         setup_transaction::TransactionStatus::RollingBack,
+        &backup_dir,
     ) {
         return SetupResult {
             success: false,
@@ -1315,7 +1585,8 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         };
     }
 
-    let (restored, rollback_failures) = perform_artifact_rollback(&eligible, &backup_dir, &home);
+    let (restored, rollback_failures) =
+        perform_artifact_rollback(&mut manifest_mut.operations, &backup_dir, &home);
     let restored_count = restored.len();
     let success = rollback_failures.is_empty();
     let final_status = if success {
@@ -1323,11 +1594,28 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     } else {
         setup_transaction::TransactionStatus::RollbackFailed
     };
-    let _ = persist_setup_manifest(&manifest_path, &mut manifest_mut, final_status);
+    if let Err(persist_err) =
+        persist_setup_manifest(&manifest_path, &mut manifest_mut, final_status, &backup_dir)
+    {
+        return SetupResult {
+            success: false,
+            transaction_id: transaction_id.to_string(),
+            applied: vec![],
+            failed: vec![persist_err],
+            rolled_back: restored,
+            manual_steps: vec![],
+            message: "Rollback completed but manifest persist failed".to_string(),
+        };
+    }
     SetupResult {
         success,
         transaction_id: transaction_id.to_string(),
-        applied: vec![],
+        applied: manifest_mut
+            .operations
+            .iter()
+            .filter(|op| setup_transaction::operation_eligible_for_explicit_rollback(op))
+            .map(|op| artifact_label(&op.artifact))
+            .collect(),
         failed: rollback_failures,
         rolled_back: restored,
         manual_steps: vec![],
@@ -1341,420 +1629,13 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
 
 // ── Real state detection ──
 
-/// Detect the real state of a setup surface by inspecting actual filesystem state.
-///
-/// Returns (SetupSurfaceId, OperationKind, summary_string).
-/// Uses existing health and comparison functions from the relevant owners.
+/// Detect surface state via artifact-level aggregation (canonical owner in setup_transaction).
 pub fn detect_surface_state(
     surface: SetupSurfaceId,
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
-    let kind = match surface {
-        // Codex config — use managed-field comparison (preserves user TOML)
-        SetupSurfaceId::CodexConfig => {
-            let target = home.join(".codex/config.toml");
-            let source = workspace_root.join("templates/codex/config.toml");
-            if !target.exists() {
-                OperationKind::Create
-            } else if !source.exists() {
-                OperationKind::Unavailable
-            } else {
-                // Use managed-field comparison from Codex runtime owner
-                let installed_str = match std::fs::read_to_string(&target) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Conflict,
-                            "Codex config unreadable".to_string(),
-                        )
-                    }
-                };
-                let source_str = match std::fs::read_to_string(&source) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Unavailable,
-                            "Codex source unreadable".to_string(),
-                        )
-                    }
-                };
-                let installed_toml: toml::Value = match installed_str.parse() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Conflict,
-                            "Codex config invalid TOML".to_string(),
-                        )
-                    }
-                };
-                let source_toml: toml::Value = match source_str.parse() {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Unavailable,
-                            "Codex source invalid TOML".to_string(),
-                        )
-                    }
-                };
-                let managed_installed =
-                    crate::commands::codex_runtime::extract_managed_codex_config(&installed_toml);
-                let managed_source =
-                    crate::commands::codex_runtime::extract_managed_codex_config(&source_toml);
-                if crate::commands::codex_runtime::managed_codex_keys_match(
-                    &installed_toml,
-                    &source_toml,
-                ) {
-                    OperationKind::NoChange
-                } else if managed_installed == managed_source {
-                    // Managed sections match, but full config differs (user-owned fields)
-                    // This is not a setup concern — the managed part is synced
-                    OperationKind::NoChange
-                } else {
-                    OperationKind::Update
-                }
-            }
-        }
-        // Codex agents — harness-native file comparison
-        SetupSurfaceId::CodexAgents => {
-            let target_dir = home.join(".codex/agents");
-            crate::agent_discovery::compare_agents_for_harness(
-                crate::agent_discovery::AgentHarness::Codex,
-                workspace_root,
-                &target_dir,
-            )
-        }
-        // Codex rules
-        SetupSurfaceId::CodexRules => {
-            let target = home.join(".codex/AGENTS.md");
-            let source = workspace_root.join("templates/sync/codex-rules.md");
-            compare_single_file(&target, &source)
-        }
-        // OpenCode config — use managed-key comparison (preserves user provider blocks)
-        SetupSurfaceId::OpenCodeConfig => {
-            let target = home.join(".config/opencode/opencode.json");
-            let source = workspace_root.join("templates/opencode.json");
-            if !target.exists() {
-                OperationKind::Create
-            } else if !source.exists() {
-                OperationKind::Unavailable
-            } else {
-                let installed_str = match std::fs::read_to_string(&target) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Conflict,
-                            "OpenCode config unreadable".to_string(),
-                        )
-                    }
-                };
-                let source_str = match std::fs::read_to_string(&source) {
-                    Ok(s) => s,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Unavailable,
-                            "OpenCode source unreadable".to_string(),
-                        )
-                    }
-                };
-                let installed_json: serde_json::Value = match serde_json::from_str(&installed_str) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Conflict,
-                            "OpenCode config invalid JSON".to_string(),
-                        )
-                    }
-                };
-                let source_json: serde_json::Value = match serde_json::from_str(&source_str) {
-                    Ok(v) => v,
-                    Err(_) => {
-                        return (
-                            surface,
-                            OperationKind::Unavailable,
-                            "OpenCode source invalid JSON".to_string(),
-                        )
-                    }
-                };
-                // Use managed-key comparison from OpenCode runtime owner
-                if crate::commands::opencode_runtime::managed_opencode_keys_match(
-                    &installed_json,
-                    &source_json,
-                ) {
-                    OperationKind::NoChange
-                } else {
-                    OperationKind::Update
-                }
-            }
-        }
-        // OpenCode agents
-        SetupSurfaceId::OpenCodeAgents => {
-            let target_dir = home.join(".config/opencode/agents");
-            crate::agent_discovery::compare_agents_for_harness(
-                crate::agent_discovery::AgentHarness::OpenCode,
-                workspace_root,
-                &target_dir,
-            )
-        }
-        // OpenCode rules
-        SetupSurfaceId::OpenCodeRules => {
-            let target = home.join(".config/opencode/AGENTS.md");
-            let source = workspace_root.join("templates/sync/opencode-rules.md");
-            compare_single_file(&target, &source)
-        }
-        // Claude rules
-        SetupSurfaceId::ClaudeRules => {
-            let target = home.join(".claude/CLAUDE.md");
-            let source = workspace_root.join("templates/sync/claude-rules.md");
-            compare_single_file(&target, &source)
-        }
-        // Claude agents
-        SetupSurfaceId::ClaudeAgents => {
-            let target_dir = home.join(".claude/agents");
-            crate::agent_discovery::compare_agents_for_harness(
-                crate::agent_discovery::AgentHarness::Claude,
-                workspace_root,
-                &target_dir,
-            )
-        }
-        // Skills — compare actual SKILL.md content per skill, not just directory existence
-        SetupSurfaceId::ClaudeSkills => {
-            let target = home.join(".claude/skills");
-            let skills_root = workspace_root.join("skills");
-            if !target.is_dir() {
-                OperationKind::Create
-            } else if !skills_root.is_dir() {
-                OperationKind::Unavailable
-            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "claude") {
-                let mut any_missing = false;
-                let mut any_diverged = false;
-                for skill_name in &expected {
-                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                    if !installed_skill_md.is_file() {
-                        any_missing = true;
-                        continue;
-                    }
-                    let source_dir =
-                        crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
-                    if let Some(src_dir) = source_dir {
-                        let source_skill_md = src_dir.join("SKILL.md");
-                        if source_skill_md.is_file()
-                            && !file_eq(&installed_skill_md, &source_skill_md)
-                        {
-                            any_diverged = true;
-                        }
-                    }
-                }
-                if any_missing || any_diverged {
-                    OperationKind::Update
-                } else {
-                    OperationKind::NoChange
-                }
-            } else {
-                OperationKind::Unavailable
-            }
-        }
-        // Cursor agents — check individual agent files, not whole ~/.cursor
-        SetupSurfaceId::CursorAgents => {
-            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
-                Ok(p) => p,
-                Err(_) => {
-                    let summary = "Cursor profile unavailable".to_string();
-                    return (surface, OperationKind::Unavailable, summary);
-                }
-            };
-            let target_dir = paths.agents;
-            crate::agent_discovery::compare_agents_for_harness(
-                crate::agent_discovery::AgentHarness::Cursor,
-                workspace_root,
-                &target_dir,
-            )
-        }
-        // Cursor skills — check per-skill directories, not just existence
-        SetupSurfaceId::CursorSkills => {
-            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
-                Ok(p) => p,
-                Err(_) => {
-                    let summary = "Cursor profile unavailable".to_string();
-                    return (surface, OperationKind::Unavailable, summary);
-                }
-            };
-            let target_dir = paths.skills;
-            if !target_dir.is_dir() {
-                OperationKind::Create
-            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "cursor") {
-                let mut any_issue = false;
-                for skill_name in &expected {
-                    let installed_skill_md = target_dir.join(skill_name.as_str()).join("SKILL.md");
-                    if !installed_skill_md.is_file() {
-                        any_issue = true;
-                        break;
-                    }
-                    let source_dir =
-                        crate::artifact_registry::ArtifactId::CursorSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
-                    if let Some(src_dir) = source_dir {
-                        let source_skill_md = src_dir.join("SKILL.md");
-                        if source_skill_md.is_file()
-                            && !file_eq(&installed_skill_md, &source_skill_md)
-                        {
-                            any_issue = true;
-                            break;
-                        }
-                    }
-                }
-                if any_issue {
-                    OperationKind::Update
-                } else {
-                    OperationKind::NoChange
-                }
-            } else {
-                OperationKind::Unavailable
-            }
-        }
-        // Cursor MCP — check Playwright MCP merge state
-        SetupSurfaceId::CursorMcp => {
-            let paths = match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
-                Ok(p) => p,
-                Err(_) => {
-                    let summary = "Cursor profile unavailable".to_string();
-                    return (surface, OperationKind::Unavailable, summary);
-                }
-            };
-            let status = crate::cursor_profile_ops::mcp_diff_status(workspace_root, &paths);
-            match status.as_str() {
-                "synced" => OperationKind::NoChange,
-                "missing" => OperationKind::Create,
-                "diverged" => OperationKind::Update,
-                _ => OperationKind::Unavailable,
-            }
-        }
-        // OpenCode skills — compare content
-        SetupSurfaceId::OpenCodeSkills => {
-            let target = home.join(".config/opencode/skills");
-            let skills_root = workspace_root.join("skills");
-            if !target.is_dir() {
-                OperationKind::Create
-            } else if !skills_root.is_dir() {
-                OperationKind::Unavailable
-            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "opencode") {
-                let mut any_issue = false;
-                for skill_name in &expected {
-                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                    if !installed_skill_md.is_file() {
-                        any_issue = true;
-                        break;
-                    }
-                    let source_dir =
-                        crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
-                    if let Some(src_dir) = source_dir {
-                        let source_skill_md = src_dir.join("SKILL.md");
-                        if source_skill_md.is_file()
-                            && !file_eq(&installed_skill_md, &source_skill_md)
-                        {
-                            any_issue = true;
-                            break;
-                        }
-                    }
-                }
-                if any_issue {
-                    OperationKind::Update
-                } else {
-                    OperationKind::NoChange
-                }
-            } else {
-                OperationKind::Unavailable
-            }
-        }
-        // Codex skills — compare content
-        SetupSurfaceId::CodexSkills => {
-            let target = home.join(".agents/skills");
-            let skills_root = workspace_root.join("skills");
-            if !target.is_dir() {
-                OperationKind::Create
-            } else if !skills_root.is_dir() {
-                OperationKind::Unavailable
-            } else if let Some(expected) = expected_skills_for_harness(workspace_root, "codex") {
-                let mut any_issue = false;
-                for skill_name in &expected {
-                    let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
-                    if !installed_skill_md.is_file() {
-                        any_issue = true;
-                        break;
-                    }
-                    let source_dir =
-                        crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
-                            .resolve_source(workspace_root);
-                    if let Some(src_dir) = source_dir {
-                        let source_skill_md = src_dir.join("SKILL.md");
-                        if source_skill_md.is_file()
-                            && !file_eq(&installed_skill_md, &source_skill_md)
-                        {
-                            any_issue = true;
-                            break;
-                        }
-                    }
-                }
-                if any_issue {
-                    OperationKind::Update
-                } else {
-                    OperationKind::NoChange
-                }
-            } else {
-                OperationKind::Unavailable
-            }
-        }
-        // Deprecated cleanup — always manual
-        SetupSurfaceId::DeprecatedSkillCleanup => OperationKind::Manual,
-    };
-
-    let summary = match kind {
-        OperationKind::NoChange => format!("{} synced", surface.label()),
-        OperationKind::Create => format!("{} not installed", surface.label()),
-        OperationKind::Update => format!("{} differs from source", surface.label()),
-        OperationKind::Conflict => format!("{} has conflicts", surface.label()),
-        OperationKind::Manual => format!("{} requires manual action", surface.label()),
-        OperationKind::Unavailable => format!("{} unavailable", surface.label()),
-    };
-
-    (surface, kind, summary)
-}
-
-fn expected_skills_for_harness(
-    workspace_root: &Path,
-    harness: &str,
-) -> Option<Vec<crate::artifact_registry::SkillName>> {
-    crate::artifact_registry::discover_skill_names_for_harness(workspace_root, harness).ok()
-}
-
-/// Compare a single file target with its source.
-fn compare_single_file(target: &Path, source: &Path) -> OperationKind {
-    if !source.exists() {
-        return OperationKind::Unavailable;
-    }
-    if reject_symlink(source, "source").is_err() {
-        return OperationKind::Unavailable;
-    }
-    if !target.exists() {
-        return OperationKind::Create;
-    }
-    if reject_symlink(target, "destination").is_err() {
-        return OperationKind::Conflict;
-    }
-    if file_eq(target, source) {
-        OperationKind::NoChange
-    } else {
-        OperationKind::Update
-    }
+    setup_transaction::detect_surface_state(surface, workspace_root, home)
 }
 
 /// Validate transaction ID format — must be only digits (nanosecond timestamp).
@@ -1774,6 +1655,36 @@ fn compute_plan_fingerprint_for_surfaces(
 ) -> Result<String, String> {
     let planned = setup_transaction::plan_artifacts_for_surfaces(surfaces, workspace_root, home)?;
     setup_transaction::compute_plan_fingerprint(workspace_root, surfaces, &planned, home)
+}
+
+fn attach_plan_preview(
+    plan: &mut SetupPlan,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let mut pending_surfaces: Vec<SetupSurfaceId> = plan
+        .operations
+        .iter()
+        .filter(|op| op.kind.needs_apply())
+        .map(|op| op.surface)
+        .collect();
+    pending_surfaces.sort_by_key(|s| format!("{s:?}"));
+    pending_surfaces.dedup();
+    if pending_surfaces.is_empty() {
+        plan.plan_fingerprint = None;
+        plan.preview_token = None;
+        return Ok(());
+    }
+    let fingerprint =
+        compute_plan_fingerprint_for_surfaces(&pending_surfaces, workspace_root, home)?;
+    plan.plan_fingerprint = Some(fingerprint.clone());
+    plan.preview_token = Some(setup_transaction::issue_preview_token(
+        workspace_root,
+        &fingerprint,
+        setup_transaction::PreviewPurpose::Apply,
+        &pending_surfaces,
+    )?);
+    Ok(())
 }
 
 /// Read-only preview: detect real state for requested surfaces.
@@ -1821,16 +1732,7 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         };
 
         let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        let surface_ids: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
-            .iter()
-            .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
-            .copied()
-            .collect();
-        plan.plan_fingerprint = Some(compute_plan_fingerprint_for_surfaces(
-            &surface_ids,
-            &ws_root,
-            &home,
-        )?);
+        attach_plan_preview(&mut plan, &ws_root, &home)?;
         Ok(plan)
     } else {
         let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
@@ -1845,15 +1747,13 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
 
-        let fingerprint = compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
-
         let request = SetupRequest {
             surfaces: surface_ids,
             skip_manual: true,
         };
 
         let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        plan.plan_fingerprint = Some(fingerprint);
+        attach_plan_preview(&mut plan, &ws_root, &home)?;
         Ok(plan)
     }
 }
@@ -1863,6 +1763,7 @@ pub fn apply_setup(
     surfaces: Vec<String>,
     skip_manual: bool,
     plan_fingerprint: Option<String>,
+    preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
     // Validate all provided surface IDs are known before any processing
     let unknown: Vec<&String> = surfaces
@@ -1909,11 +1810,9 @@ pub fn apply_setup(
     if !setup_transaction::validate_fingerprint_format(expected_fingerprint) {
         return Err("Malformed plan fingerprint".to_string());
     }
-    if setup_transaction::is_fingerprint_consumed(expected_fingerprint) {
-        return Err(
-            "Preview fingerprint already used. Re-run preview before applying.".to_string(),
-        );
-    }
+    let token = preview_token
+        .as_deref()
+        .ok_or_else(|| "Preview token required. Re-run preview before applying.".to_string())?;
     let current_fingerprint = compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
     if current_fingerprint != expected_fingerprint {
         return Err(
@@ -1921,6 +1820,13 @@ pub fn apply_setup(
                 .to_string(),
         );
     }
+    setup_transaction::validate_preview_token(
+        token,
+        &ws_root,
+        expected_fingerprint,
+        setup_transaction::PreviewPurpose::Apply,
+        &surface_ids,
+    )?;
 
     let request = SetupRequest {
         surfaces: surface_ids,
@@ -1935,19 +1841,20 @@ pub fn apply_setup(
         ));
     }
 
-    let result = apply_setup_plan(&plan);
-    if result.success {
-        setup_transaction::mark_fingerprint_consumed(expected_fingerprint);
-    }
-    Ok(result)
+    setup_transaction::consume_preview_token(token)?;
+    Ok(apply_setup_plan(&plan))
 }
 
 #[tauri::command]
 pub fn repair_setup_command(
     _skip_manual: bool,
     repair_fingerprint: Option<String>,
+    repair_preview_token: Option<String>,
 ) -> Result<SetupResult, String> {
-    Ok(repair_setup_artifacts(repair_fingerprint.as_deref()))
+    Ok(repair_setup_artifacts(
+        repair_fingerprint.as_deref(),
+        repair_preview_token.as_deref(),
+    ))
 }
 
 #[tauri::command]
@@ -2030,9 +1937,11 @@ mod tests {
 
     #[test]
     fn rollback_nonexistent_transaction() {
-        let result = rollback_transaction("nonexistent-123", false);
+        let result = rollback_transaction("1234567890123456789", false);
         assert!(!result.success);
-        assert!(result.message.contains("not found"));
+        assert!(
+            result.message.contains("not found") || result.message.contains("Transaction backup")
+        );
     }
 
     #[test]
@@ -2089,54 +1998,6 @@ mod tests {
     }
 
     #[test]
-    fn repair_only_creates_not_updates() {
-        let plan = test_plan(vec![
-            (
-                SetupSurfaceId::OpenCodeConfig,
-                OperationKind::Create,
-                "missing".to_string(),
-            ),
-            (
-                SetupSurfaceId::CodexConfig,
-                OperationKind::Update,
-                "diverged".to_string(),
-            ),
-        ]);
-        // Use preflight to verify repair only picks create operations
-        let preflight = preflight_repair(&plan);
-        assert_eq!(
-            preflight.missing.len(),
-            1,
-            "repair should only detect create (missing) operations, not updates"
-        );
-        assert!(
-            preflight.missing[0].contains("Config"),
-            "missing should be OpenCodeConfig"
-        );
-        assert!(preflight.safe);
-    }
-
-    #[test]
-    fn preflight_repair_reports_missing() {
-        let plan = test_plan(vec![
-            (
-                SetupSurfaceId::OpenCodeConfig,
-                OperationKind::Create,
-                "missing".to_string(),
-            ),
-            (
-                SetupSurfaceId::CodexRules,
-                OperationKind::NoChange,
-                "synced".to_string(),
-            ),
-        ]);
-        let preflight = preflight_repair(&plan);
-        assert_eq!(preflight.missing.len(), 1);
-        assert!(preflight.missing[0].contains("Config"));
-        assert!(preflight.safe);
-    }
-
-    #[test]
     fn transaction_result_is_serializable() {
         let result = SetupResult {
             success: true,
@@ -2160,7 +2021,7 @@ mod tests {
 
     #[test]
     fn apply_setup_command_rejects_unknown_surface() {
-        let result = apply_setup(vec!["totally_fake_surface".to_string()], false, None);
+        let result = apply_setup(vec!["totally_fake_surface".to_string()], false, None, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown surface"), "error: {err}");
@@ -2168,7 +2029,7 @@ mod tests {
 
     #[test]
     fn apply_setup_command_rejects_empty_surfaces() {
-        let result = apply_setup(vec![], false, None);
+        let result = apply_setup(vec![], false, None, None);
         assert!(result.is_err(), "empty surfaces must be rejected");
         let err = result.unwrap_err();
         assert!(err.contains("At least one surface"), "error: {err}");
@@ -2209,6 +2070,11 @@ mod tests {
         let config = r#"{"$schema":"test","model":"test","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
         fs::write(home.join(".config/opencode/opencode.json"), config).unwrap();
         fs::write(ws.join("templates/opencode.json"), config).unwrap();
+        fs::write(home.join(".config/opencode/tui.json"), "{}").unwrap();
+        fs::write(ws.join("templates/tui.json"), "{}").unwrap();
+        fs::create_dir_all(home.join(".config/playwright-mcp")).unwrap();
+        fs::write(home.join(".config/playwright-mcp/config.json"), "{}").unwrap();
+        fs::write(ws.join("templates/playwright-mcp.config.json"), "{}").unwrap();
 
         let (_surface, kind, _summary) =
             detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
@@ -2276,10 +2142,7 @@ mod tests {
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&home).expect("create dir");
 
-        let ws = std::env::temp_dir().join("aw-detect-cl-skills-create-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(&ws).expect("create ws");
-        // No skills directory in home
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
 
         let (_surface, kind, _summary) =
             detect_surface_state(SetupSurfaceId::ClaudeSkills, &ws, &home);
@@ -2365,7 +2228,7 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_is_stable_for_same_surface_set() {
-        setup_transaction::clear_consumed_fingerprints_for_test();
+        setup_transaction::clear_preview_tokens_for_test();
         let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let home = std::env::temp_dir();
         let surfaces = vec![SetupSurfaceId::OpenCodeRules, SetupSurfaceId::CodexRules];
@@ -2388,10 +2251,15 @@ mod tests {
     }
 
     #[test]
-    fn apply_rejects_missing_fingerprint() {
-        let result = apply_setup(vec!["open_code_rules".to_string()], false, None);
+    fn apply_rejects_missing_preview_token() {
+        let result = apply_setup(
+            vec!["open_code_rules".to_string()],
+            false,
+            Some("abc123".to_string()),
+            None,
+        );
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("fingerprint required"));
+        assert!(result.unwrap_err().contains("Preview token required"));
     }
 
     // ── Transaction preflight tests ──
@@ -2432,25 +2300,5 @@ mod tests {
         assert!(result.success);
         assert!(!result.transaction_id.is_empty());
         assert!(result.transaction_id.chars().all(|c| c.is_ascii_digit()));
-    }
-
-    #[test]
-    fn zero_mutations_after_preflight_failure() {
-        let _guard = guard::lock();
-        let home = std::env::temp_dir().join("aw-zero-mutations");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-
-        // Create a plan that requires apply but will fail in preflight
-        let plan = test_plan(vec![(
-            SetupSurfaceId::OpenCodeConfig,
-            OperationKind::Create,
-            "missing".to_string(),
-        )]);
-
-        // preflight_repair should produce a result with zero applied
-        let preflight = preflight_repair(&plan);
-        assert!(preflight.safe);
-        // No mutations should have occurred
     }
 }
