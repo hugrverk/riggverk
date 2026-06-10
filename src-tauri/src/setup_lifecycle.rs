@@ -200,6 +200,13 @@ pub struct SetupPlan {
     pub has_pending_changes: bool,
     /// Whether any conflict blocks apply.
     pub is_blocked: bool,
+    /// Plan integrity fingerprint.
+    ///
+    /// Derived from bounded non-sensitive managed state at preview time.
+    /// The backend re-detects before apply and rejects the request if the
+    /// fingerprint does not match (stale preview).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub plan_fingerprint: Option<String>,
 }
 
 // ── Planner ──
@@ -360,6 +367,7 @@ pub fn plan_setup(
         summary,
         has_pending_changes,
         is_blocked,
+        plan_fingerprint: None,
     }
 }
 
@@ -586,6 +594,7 @@ mod tests {
             summary: "1 surface(s) need update".to_string(),
             has_pending_changes: true,
             is_blocked: false,
+            plan_fingerprint: None,
         };
         let json = serde_json::to_string(&plan).expect("serialize plan");
         let deserialized: SetupPlan = serde_json::from_str(&json).expect("deserialize plan");
@@ -652,3 +661,4 @@ mod tests {
         assert!(!OperationKind::NoChange.is_blocking());
     }
 }
+

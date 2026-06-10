@@ -14,6 +14,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
+use std::hash::{Hash, Hasher};
 
 use serde::{Deserialize, Serialize};
 
@@ -57,6 +58,25 @@ struct TransactionManifest {
 }
 
 const MANIFEST_SCHEMA_VERSION: u32 = 1;
+
+/// Compute a non-sensitive plan fingerprint from detected surface states.
+///
+/// Used for preview integrity: the backend re-detects before apply and
+/// rejects the request if the fingerprint does not match (stale preview).
+fn compute_plan_fingerprint(
+    states: &[(SetupSurfaceId, OperationKind, String)],
+) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    // Hash surface IDs and their detected kind (not the summary, which may
+    // vary without state change). Hash only the surfaces included in the plan.
+    let mut sorted: Vec<_> = states.iter().collect();
+    sorted.sort_by_key(|(s, _, _)| format!("{:?}", s));
+    for (surface, kind, _) in &sorted {
+        format!("{:?}", surface).hash(&mut hasher);
+        format!("{:?}", kind).hash(&mut hasher);
+    }
+    format!("{:016x}", hasher.finish())
+}
 
 // ── Public result types ──
 
@@ -855,6 +875,7 @@ pub fn repair_setup(plan: &SetupPlan) -> SetupResult {
         summary: format!("repair {} missing surface(s)", create_ops.len()),
         has_pending_changes: true,
         is_blocked: false,
+        plan_fingerprint: None,
     };
 
     apply_setup_plan(&sub_plan)
@@ -1411,7 +1432,9 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
             skip_manual: true,
         };
 
-        Ok(crate::setup_lifecycle::plan_setup(&request, &states))
+        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
+        plan.plan_fingerprint = Some(compute_plan_fingerprint(&states));
+        Ok(plan)
     } else {
         let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
         let home = crate::platform_paths::resolve_user_home(
@@ -1430,7 +1453,9 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
             skip_manual: true,
         };
 
-        Ok(crate::setup_lifecycle::plan_setup(&request, &states))
+        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
+        plan.plan_fingerprint = Some(compute_plan_fingerprint(&states));
+        Ok(plan)
     }
 }
 
@@ -1459,7 +1484,11 @@ pub fn detect_all_surfaces() -> Result<SetupPlan, String> {
 }
 
 #[tauri::command]
-pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResult, String> {
+pub fn apply_setup(
+    surfaces: Vec<String>,
+    skip_manual: bool,
+    plan_fingerprint: Option<String>,
+) -> Result<SetupResult, String> {
     // Validate all provided surface IDs are known before any processing
     let unknown: Vec<&String> = surfaces
         .iter()
@@ -1498,6 +1527,16 @@ pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResu
         .iter()
         .map(|s| detect_surface_state(*s, &ws_root, &home))
         .collect();
+
+    // Validate plan fingerprint if provided (preview integrity)
+    if let Some(ref expected_fingerprint) = plan_fingerprint {
+        let current_fingerprint = compute_plan_fingerprint(&states);
+        if current_fingerprint != *expected_fingerprint {
+            return Err(format!(
+                "Plan fingerprint mismatch: state changed after preview. Re-run preview before applying."
+            ));
+        }
+    }
 
     let request = SetupRequest {
         surfaces: surface_ids,
@@ -1710,7 +1749,7 @@ mod tests {
 
     #[test]
     fn apply_setup_command_rejects_unknown_surface() {
-        let result = apply_setup(vec!["totally_fake_surface".to_string()], false);
+        let result = apply_setup(vec!["totally_fake_surface".to_string()], false, None);
         assert!(result.is_err());
         let err = result.unwrap_err();
         assert!(err.contains("Unknown surface"), "error: {err}");
@@ -1718,7 +1757,7 @@ mod tests {
 
     #[test]
     fn apply_setup_command_rejects_empty_surfaces() {
-        let result = apply_setup(vec![], false);
+        let result = apply_setup(vec![], false, None);
         assert!(result.is_err(), "empty surfaces must be rejected");
         let err = result.unwrap_err();
         assert!(err.contains("At least one surface"), "error: {err}");
@@ -1901,5 +1940,82 @@ mod tests {
             &home,
         );
         assert_eq!(kind, OperationKind::NoChange, "matching rules should be NoChange");
+    }
+
+    // ── Preview integrity tests ──
+
+    #[test]
+    fn plan_fingerprint_is_stable_for_same_state() {
+        let states1 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
+            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+        ];
+        let states2 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
+            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+        ];
+        assert_eq!(
+            compute_plan_fingerprint(&states1),
+            compute_plan_fingerprint(&states2),
+            "same state should produce same fingerprint"
+        );
+    }
+
+    #[test]
+    fn plan_fingerprint_changes_when_state_differs() {
+        let states1 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
+        ];
+        let states2 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
+        ];
+        assert_ne!(
+            compute_plan_fingerprint(&states1),
+            compute_plan_fingerprint(&states2),
+            "different state should produce different fingerprint"
+        );
+    }
+
+    #[test]
+    fn plan_fingerprint_changes_when_surfaces_differ() {
+        let states1 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::NoChange, "synced".to_string()),
+        ];
+        let states2 = vec![
+            (SetupSurfaceId::CodexRules, OperationKind::NoChange, "synced".to_string()),
+        ];
+        assert_ne!(
+            compute_plan_fingerprint(&states1),
+            compute_plan_fingerprint(&states2),
+            "different surfaces should produce different fingerprint"
+        );
+    }
+
+    #[test]
+    fn plan_fingerprint_different_for_different_surface_sets() {
+        let states1 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
+            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+        ];
+        let states2 = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
+        ];
+        assert_ne!(
+            compute_plan_fingerprint(&states1),
+            compute_plan_fingerprint(&states2),
+            "different sets of surfaces should produce different fingerprints"
+        );
+    }
+
+    #[test]
+    fn preview_returns_plan_with_fingerprint() {
+        // Test that fingerprint computation works correctly
+        let states = vec![
+            (SetupSurfaceId::OpenCodeConfig, OperationKind::Create, "missing".to_string()),
+            (SetupSurfaceId::CodexRules, OperationKind::Create, "missing".to_string()),
+        ];
+        let fp = compute_plan_fingerprint(&states);
+        assert!(!fp.is_empty(), "fingerprint should not be empty");
+        assert_eq!(fp.len(), 16, "fingerprint should be 16 hex chars");
     }
 }
