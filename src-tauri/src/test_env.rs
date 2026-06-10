@@ -50,6 +50,7 @@ pub mod guard {
         xdg_config_home: Option<String>,
         xdg_data_home: Option<String>,
         agent_workspace_backup_dir: Option<String>,
+        agent_workspace_path: Option<String>,
         cursor_skills_path: Option<String>,
     }
 
@@ -65,6 +66,7 @@ pub mod guard {
                 xdg_config_home: std::env::var("XDG_CONFIG_HOME").ok(),
                 xdg_data_home: std::env::var("XDG_DATA_HOME").ok(),
                 agent_workspace_backup_dir: std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok(),
+                agent_workspace_path: std::env::var("AGENT_WORKSPACE_PATH").ok(),
                 cursor_skills_path: std::env::var("CURSOR_SKILLS_PATH").ok(),
             }
         }
@@ -91,6 +93,7 @@ pub mod guard {
                 "AGENT_WORKSPACE_BACKUP_DIR",
                 self.agent_workspace_backup_dir.as_deref(),
             );
+            set_optional("AGENT_WORKSPACE_PATH", self.agent_workspace_path.as_deref());
             set_optional("CURSOR_SKILLS_PATH", self.cursor_skills_path.as_deref());
         }
     }
