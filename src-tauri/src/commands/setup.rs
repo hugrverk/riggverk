@@ -393,8 +393,7 @@ fn perform_rollback(
             .map(|p| p.surface);
 
         if let Some(surface) = surface {
-            if let Some((_, backup_path)) =
-                backed_up.iter().find(|(label, _)| label == applied_op)
+            if let Some((_, backup_path)) = backed_up.iter().find(|(label, _)| label == applied_op)
             {
                 // Backup exists — restore from backup (Update case)
                 if backup_path.exists() {
@@ -403,10 +402,8 @@ fn perform_rollback(
                             rolled_back.push(applied_op.clone());
                         }
                         Err(restore_err) => {
-                            reverse_errors.push(format!(
-                                "rollback {} failed: {restore_err}",
-                                applied_op
-                            ));
+                            reverse_errors
+                                .push(format!("rollback {} failed: {restore_err}", applied_op));
                         }
                     }
                 }
@@ -417,7 +414,8 @@ fn perform_rollback(
                         if target.is_dir() {
                             // Only remove if it's a managed dir we can safely remove
                             // Check it's not a broad directory (e.g., ~/.cursor)
-                            let parent_is_managed = target.parent()
+                            let parent_is_managed = target
+                                .parent()
                                 .map(|p| {
                                     let p_str = p.to_string_lossy();
                                     p_str.contains(".cursor")
@@ -444,10 +442,8 @@ fn perform_rollback(
                             }
                         } else {
                             if let Err(e) = fs::remove_file(&target) {
-                                reverse_errors.push(format!(
-                                    "remove {} on create rollback: {e}",
-                                    applied_op
-                                ));
+                                reverse_errors
+                                    .push(format!("remove {} on create rollback: {e}", applied_op));
                             } else {
                                 rolled_back.push(applied_op.clone());
                             }
@@ -458,10 +454,8 @@ fn perform_rollback(
                         rolled_back.push(applied_op.clone());
                     }
                     Err(e) => {
-                        reverse_errors.push(format!(
-                            "resolve {} for create rollback: {e}",
-                            applied_op
-                        ));
+                        reverse_errors
+                            .push(format!("resolve {} for create rollback: {e}", applied_op));
                     }
                 }
             }
@@ -706,14 +700,13 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
                     failed.push(format!("{}: {e}", op.surface.label()));
 
                     // ── Phase 5: Rollback completed operations in reverse order ──
-                    let rollback_result = perform_rollback(
-                        &applied, &pending, &backed_up,
-                    );
+                    let rollback_result = perform_rollback(&applied, &pending, &backed_up);
                     let (rolled_back, reverse_errors) = rollback_result;
 
                     let mut message = format!("Apply failed at {}: {e}", op.surface.label());
                     if !reverse_errors.is_empty() {
-                        message.push_str(&format!(". Rollback errors: {}", reverse_errors.join("; ")));
+                        message
+                            .push_str(&format!(". Rollback errors: {}", reverse_errors.join("; ")));
                     }
 
                     return SetupResult {
@@ -735,9 +728,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
                 failed.push(format!("{}: {e}", op.surface.label()));
 
                 // ── Phase 5: Rollback completed operations in reverse order ──
-                let rollback_result = perform_rollback(
-                    &applied, &pending, &backed_up,
-                );
+                let rollback_result = perform_rollback(&applied, &pending, &backed_up);
                 let (rolled_back, reverse_errors) = rollback_result;
 
                 let mut message = format!("Apply failed at {}: {e}", op.surface.label());
@@ -783,6 +774,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
 
 /// Result of a repair preflight.
 #[derive(Debug, Clone, Serialize)]
+#[allow(dead_code)]
 pub struct RepairPreflight {
     pub missing: Vec<String>,
     pub safe: bool,
@@ -833,6 +825,7 @@ pub fn repair_setup(plan: &SetupPlan) -> SetupResult {
 }
 
 /// Preflight repair: report what's missing without applying.
+#[allow(dead_code)]
 pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
     let missing: Vec<String> = plan
         .operations
@@ -851,10 +844,7 @@ pub fn preflight_repair(plan: &SetupPlan) -> RepairPreflight {
         RepairPreflight {
             missing: missing.clone(),
             safe: true,
-            message: format!(
-                "{} missing resource(s) can be repaired",
-                missing.len()
-            ),
+            message: format!("{} missing resource(s) can be repaired", missing.len()),
         }
     }
 }
@@ -1119,9 +1109,7 @@ pub fn detect_surface_state(
             }
         }
         // Deprecated cleanup — always manual
-        SetupSurfaceId::DeprecatedSkillCleanup => {
-            OperationKind::Manual
-        }
+        SetupSurfaceId::DeprecatedSkillCleanup => OperationKind::Manual,
     };
 
     let summary = match kind {
@@ -1216,9 +1204,11 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         let home = crate::platform_paths::resolve_user_home(
             &crate::platform_paths::PlatformEnv::from_process_env(),
             crate::platform_paths::Platform::current(),
-        ).map_err(|e| format!("user home: {e}"))?;
+        )
+        .map_err(|e| format!("user home: {e}"))?;
 
-        let states: Vec<_> = SetupSurfaceId::ALL.iter()
+        let states: Vec<_> = SetupSurfaceId::ALL
+            .iter()
             .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
@@ -1234,9 +1224,11 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         let home = crate::platform_paths::resolve_user_home(
             &crate::platform_paths::PlatformEnv::from_process_env(),
             crate::platform_paths::Platform::current(),
-        ).map_err(|e| format!("user home: {e}"))?;
+        )
+        .map_err(|e| format!("user home: {e}"))?;
 
-        let states: Vec<_> = surface_ids.iter()
+        let states: Vec<_> = surface_ids
+            .iter()
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
 
@@ -1256,9 +1248,11 @@ pub fn detect_all_surfaces() -> Result<SetupPlan, String> {
     let home = crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
-    ).map_err(|e| format!("user home: {e}"))?;
+    )
+    .map_err(|e| format!("user home: {e}"))?;
 
-    let states: Vec<_> = SetupSurfaceId::ALL.iter()
+    let states: Vec<_> = SetupSurfaceId::ALL
+        .iter()
         .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
         .map(|s| detect_surface_state(*s, &ws_root, &home))
         .collect();
@@ -1304,9 +1298,11 @@ pub fn apply_setup(surfaces: Vec<String>, skip_manual: bool) -> Result<SetupResu
     let home = crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
-    ).map_err(|e| format!("user home: {e}"))?;
+    )
+    .map_err(|e| format!("user home: {e}"))?;
 
-    let states: Vec<_> = surface_ids.iter()
+    let states: Vec<_> = surface_ids
+        .iter()
         .map(|s| detect_surface_state(*s, &ws_root, &home))
         .collect();
 

@@ -97,6 +97,7 @@ impl SetupSurfaceId {
     /// Currently no surfaces are fully manual — all have automation paths.
     /// Manual steps are surfaced through the planner's manual_step field
     /// when specific conditions require user intervention.
+    #[allow(dead_code)]
     pub fn is_manual_only(&self) -> bool {
         false
     }
@@ -127,6 +128,7 @@ impl OperationKind {
         matches!(self, OperationKind::Create | OperationKind::Update)
     }
 
+    #[allow(dead_code)]
     pub fn is_blocking(&self) -> bool {
         matches!(self, OperationKind::Conflict | OperationKind::Unavailable)
     }
@@ -156,6 +158,7 @@ pub struct PlannedOperation {
 
 /// Summary of validation results after an apply or repair.
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[allow(dead_code)]
 pub struct ValidationResult {
     pub surface: SetupSurfaceId,
     pub passed: bool,

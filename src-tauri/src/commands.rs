@@ -38,14 +38,12 @@ pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
+pub use setup::{apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction};
 pub use skills::{
     get_skills_sync_health, install_skills, list_skills, migrate_codex_legacy_skills,
     open_install_skills_script, open_skill, preview_codex_legacy_migration,
     preview_remove_deprecated_skills, read_skill, remove_deprecated_skills,
     rollback_deprecated_skills_removal,
-};
-pub use setup::{
-    apply_setup, preview_setup, repair_setup_command, rollback_setup_transaction,
 };
 pub use status::get_status;
 pub use workspace::{

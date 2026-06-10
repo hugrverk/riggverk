@@ -432,9 +432,15 @@ mod tests {
         let ws = temp_dir("claude-exp-count-ws");
 
         // Set up agent source files so expected count can derive from them
-        write_file(&ws.join("templates/claude/agents/agent-alpha.md"), "# alpha");
+        write_file(
+            &ws.join("templates/claude/agents/agent-alpha.md"),
+            "# alpha",
+        );
         write_file(&ws.join("templates/claude/agents/agent-beta.md"), "# beta");
-        write_file(&ws.join("templates/claude/agents/agent-gamma.md"), "# gamma");
+        write_file(
+            &ws.join("templates/claude/agents/agent-gamma.md"),
+            "# gamma",
+        );
 
         let health = compute_health(&ws, &home);
         assert_eq!(health.expected_agent_count, 3);
