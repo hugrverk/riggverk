@@ -186,7 +186,10 @@ pub fn expand_surfaces_to_artifacts(
         }
         let expanded = expand_surface_fail_closed(*surface, workspace_root)?;
         if expanded.is_empty() {
-            return Err(format!("surface {} expanded to zero artifacts", surface.label()));
+            return Err(format!(
+                "surface {} expanded to zero artifacts",
+                surface.label()
+            ));
         }
         for artifact in expanded {
             if !seen.insert(artifact.clone()) {
@@ -238,10 +241,9 @@ fn digest_file(path: &Path) -> Result<String, String> {
 }
 
 fn digest_managed_config_json(installed: &Path, source: &Path) -> Result<String, String> {
-    let installed_str = fs::read_to_string(installed)
-        .map_err(|e| format!("read installed config: {e}"))?;
-    let source_str =
-        fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
+    let installed_str =
+        fs::read_to_string(installed).map_err(|e| format!("read installed config: {e}"))?;
+    let source_str = fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
     let installed_json: serde_json::Value =
         serde_json::from_str(&installed_str).map_err(|e| format!("parse installed json: {e}"))?;
     let source_json: serde_json::Value =
@@ -261,14 +263,15 @@ fn digest_managed_config_json(installed: &Path, source: &Path) -> Result<String,
 }
 
 fn digest_managed_config_toml(installed: &Path, source: &Path) -> Result<String, String> {
-    let installed_str = fs::read_to_string(installed)
-        .map_err(|e| format!("read installed config: {e}"))?;
-    let source_str =
-        fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
-    let installed_toml: toml::Value =
-        installed_str.parse().map_err(|e| format!("parse installed toml: {e}"))?;
-    let source_toml: toml::Value =
-        source_str.parse().map_err(|e| format!("parse source toml: {e}"))?;
+    let installed_str =
+        fs::read_to_string(installed).map_err(|e| format!("read installed config: {e}"))?;
+    let source_str = fs::read_to_string(source).map_err(|e| format!("read source config: {e}"))?;
+    let installed_toml: toml::Value = installed_str
+        .parse()
+        .map_err(|e| format!("parse installed toml: {e}"))?;
+    let source_toml: toml::Value = source_str
+        .parse()
+        .map_err(|e| format!("parse source toml: {e}"))?;
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
     format!(
         "{:?}",
@@ -329,9 +332,9 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
-        ArtifactId::OpenCodeRules
-        | ArtifactId::CodexRules
-        | ArtifactId::ClaudeRules => ArtifactKind::RulesFile,
+        ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules => {
+            ArtifactKind::RulesFile
+        }
         ArtifactId::OpenCodeAgent(_)
         | ArtifactId::CodexAgent(_)
         | ArtifactId::ClaudeAgent(_)
@@ -378,7 +381,9 @@ pub fn compute_plan_fingerprint(
 }
 
 pub fn validate_fingerprint_format(fingerprint: &str) -> bool {
-    !fingerprint.is_empty() && fingerprint.len() <= 64 && fingerprint.chars().all(|c| c.is_ascii_hexdigit())
+    !fingerprint.is_empty()
+        && fingerprint.len() <= 64
+        && fingerprint.chars().all(|c| c.is_ascii_hexdigit())
 }
 
 pub fn detect_artifact_state(
@@ -445,10 +450,13 @@ pub fn detect_artifact_state(
             }
         }
         ArtifactKind::McpConfig => {
-            let status = crate::cursor_profile_ops::mcp_diff_status(workspace_root, &match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
-                Ok(p) => p,
-                Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
-            });
+            let status = crate::cursor_profile_ops::mcp_diff_status(
+                workspace_root,
+                &match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
+                    Ok(p) => p,
+                    Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
+                },
+            );
             match status.as_str() {
                 "synced" => (OperationKind::NoChange, PreviousState::ManagedFile),
                 "missing" => (OperationKind::Create, PreviousState::Absent),
@@ -509,10 +517,7 @@ fn detect_config_artifact(
             Ok(v) => v,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
         };
-        if crate::commands::managed_opencode_keys_match(
-            &installed_json,
-            &source_json,
-        ) {
+        if crate::commands::managed_opencode_keys_match(&installed_json, &source_json) {
             (OperationKind::NoChange, PreviousState::MergeableConfigFile)
         } else {
             (OperationKind::Update, PreviousState::MergeableConfigFile)
@@ -594,7 +599,10 @@ pub fn backup_artifact(
     Ok(Some(rel))
 }
 
-pub fn validate_manifest(manifest: &ArtifactTransactionManifest, workspace_root: &Path) -> Result<(), String> {
+pub fn validate_manifest(
+    manifest: &ArtifactTransactionManifest,
+    workspace_root: &Path,
+) -> Result<(), String> {
     if manifest.schema_version != ARTIFACT_MANIFEST_SCHEMA_VERSION {
         return Err(format!(
             "unsupported manifest schema {}",
@@ -714,7 +722,9 @@ pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId
     surfaces
 }
 
-pub fn group_artifacts_by_surface(planned: &[PlannedArtifact]) -> HashMap<SetupSurfaceId, Vec<&PlannedArtifact>> {
+pub fn group_artifacts_by_surface(
+    planned: &[PlannedArtifact],
+) -> HashMap<SetupSurfaceId, Vec<&PlannedArtifact>> {
     let mut map: HashMap<SetupSurfaceId, Vec<&PlannedArtifact>> = HashMap::new();
     for p in planned {
         map.entry(p.surface).or_default().push(p);
@@ -756,7 +766,8 @@ mod tests {
     #[test]
     fn deprecated_cleanup_expands_none() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let artifacts = expand_surface_fail_closed(SetupSurfaceId::DeprecatedSkillCleanup, &repo).unwrap();
+        let artifacts =
+            expand_surface_fail_closed(SetupSurfaceId::DeprecatedSkillCleanup, &repo).unwrap();
         assert!(artifacts.is_empty());
     }
 

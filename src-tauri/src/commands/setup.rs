@@ -30,8 +30,7 @@ use super::workspace::workspace_root;
 pub type TransactionId = String;
 
 use crate::setup_transaction::{
-    self, ArtifactManifestOperation, ArtifactTransactionManifest,
-    ARTIFACT_MANIFEST_SCHEMA_VERSION,
+    self, ArtifactManifestOperation, ArtifactTransactionManifest, ARTIFACT_MANIFEST_SCHEMA_VERSION,
 };
 
 fn new_transaction_id() -> Result<TransactionId, String> {
@@ -392,8 +391,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
     };
 
     let surfaces: Vec<SetupSurfaceId> = surface_ops.iter().map(|op| op.surface).collect();
-    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)
-    {
+    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
         Ok(p) => p,
         Err(e) => {
             return SetupResult {
@@ -623,10 +621,7 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
             };
         }
 
-        let surface_artifacts: Vec<_> = pending
-            .iter()
-            .filter(|p| p.surface == *surface)
-            .collect();
+        let surface_artifacts: Vec<_> = pending.iter().filter(|p| p.surface == *surface).collect();
         for p in &surface_artifacts {
             if let Err(e) =
                 setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
@@ -868,10 +863,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
             failed: vec![],
             rolled_back: vec![],
             manual_steps: vec![],
-            message: format!(
-                "Dry run: would restore {} artifact(s)",
-                would_restore.len()
-            ),
+            message: format!("Dry run: would restore {} artifact(s)", would_restore.len()),
         };
     }
 
@@ -1151,8 +1143,7 @@ pub fn detect_surface_state(
             } else if let Some(expected) = expected_skills_for_harness(workspace_root, "cursor") {
                 let mut any_issue = false;
                 for skill_name in &expected {
-                    let installed_skill_md =
-                        target_dir.join(skill_name.as_str()).join("SKILL.md");
+                    let installed_skill_md = target_dir.join(skill_name.as_str()).join("SKILL.md");
                     if !installed_skill_md.is_file() {
                         any_issue = true;
                         break;
@@ -1423,11 +1414,7 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
 
-        let fingerprint = compute_plan_fingerprint_for_surfaces(
-            &surface_ids,
-            &ws_root,
-            &home,
-        )?;
+        let fingerprint = compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
 
         let request = SetupRequest {
             surfaces: surface_ids,
@@ -1516,10 +1503,11 @@ pub fn apply_setup(
         return Err("Malformed plan fingerprint".to_string());
     }
     if setup_transaction::is_fingerprint_consumed(expected_fingerprint) {
-        return Err("Preview fingerprint already used. Re-run preview before applying.".to_string());
+        return Err(
+            "Preview fingerprint already used. Re-run preview before applying.".to_string(),
+        );
     }
-    let current_fingerprint =
-        compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
+    let current_fingerprint = compute_plan_fingerprint_for_surfaces(&surface_ids, &ws_root, &home)?;
     if current_fingerprint != expected_fingerprint {
         return Err(
             "Plan fingerprint mismatch: state changed after preview. Re-run preview before applying."
@@ -1949,8 +1937,7 @@ mod tests {
     #[test]
     fn plan_fingerprint_is_stable_for_same_surface_set() {
         setup_transaction::clear_consumed_fingerprints_for_test();
-        let ws =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let home = std::env::temp_dir();
         let surfaces = vec![SetupSurfaceId::OpenCodeRules, SetupSurfaceId::CodexRules];
         let fp1 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp1");
@@ -1961,21 +1948,13 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_surfaces_differ() {
-        let ws =
-            PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let home = std::env::temp_dir();
-        let fp1 = compute_plan_fingerprint_for_surfaces(
-            &[SetupSurfaceId::OpenCodeRules],
-            &ws,
-            &home,
-        )
-        .expect("fp1");
-        let fp2 = compute_plan_fingerprint_for_surfaces(
-            &[SetupSurfaceId::CodexRules],
-            &ws,
-            &home,
-        )
-        .expect("fp2");
+        let fp1 =
+            compute_plan_fingerprint_for_surfaces(&[SetupSurfaceId::OpenCodeRules], &ws, &home)
+                .expect("fp1");
+        let fp2 = compute_plan_fingerprint_for_surfaces(&[SetupSurfaceId::CodexRules], &ws, &home)
+            .expect("fp2");
         assert_ne!(fp1, fp2);
     }
 
@@ -1983,9 +1962,7 @@ mod tests {
     fn apply_rejects_missing_fingerprint() {
         let result = apply_setup(vec!["open_code_rules".to_string()], false, None);
         assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .contains("fingerprint required"));
+        assert!(result.unwrap_err().contains("fingerprint required"));
     }
 
     // ── Transaction preflight tests ──

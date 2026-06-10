@@ -72,9 +72,10 @@ impl AgentName {
             return None;
         }
         // Allow lowercase, digits, hyphens
-        if !name.chars().all(|ch| {
-            ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_'
-        }) {
+        if !name
+            .chars()
+            .all(|ch| ch.is_ascii_lowercase() || ch.is_ascii_digit() || ch == '-' || ch == '_')
+        {
             return None;
         }
         Some(Self(name))
@@ -163,10 +164,9 @@ impl ArtifactId {
             }
             ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
             ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
-            ArtifactId::CodexAgent(name) => Ok(
-                home.join(".codex/agents")
-                    .join(name.file_name_with_extension("toml")),
-            ),
+            ArtifactId::CodexAgent(name) => Ok(home
+                .join(".codex/agents")
+                .join(name.file_name_with_extension("toml"))),
             ArtifactId::CodexSkill(name) => Ok(home.join(".agents/skills").join(name.as_str())),
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
@@ -297,10 +297,12 @@ fn expand_agent_surface(
     harness: crate::agent_discovery::AgentHarness,
     map: impl Fn(AgentName) -> ArtifactId,
 ) -> Result<Vec<ArtifactId>, String> {
-    Ok(crate::agent_discovery::discover_agent_names(harness, workspace_root)?
-        .into_iter()
-        .map(map)
-        .collect())
+    Ok(
+        crate::agent_discovery::discover_agent_names(harness, workspace_root)?
+            .into_iter()
+            .map(map)
+            .collect(),
+    )
 }
 
 /// Expand a surface ID to its constituent artifact IDs.
@@ -311,10 +313,9 @@ pub fn expand_surface(
     workspace_root: &Path,
 ) -> Result<Vec<ArtifactId>, String> {
     match surface {
-        SetupSurfaceId::OpenCodeConfig => Ok(vec![
-            ArtifactId::OpenCodeConfig,
-            ArtifactId::OpenCodeTui,
-        ]),
+        SetupSurfaceId::OpenCodeConfig => {
+            Ok(vec![ArtifactId::OpenCodeConfig, ArtifactId::OpenCodeTui])
+        }
         SetupSurfaceId::OpenCodeAgents => expand_agent_surface(
             workspace_root,
             crate::agent_discovery::AgentHarness::OpenCode,
@@ -490,7 +491,8 @@ mod tests {
     #[test]
     fn deprecated_cleanup_produces_no_artifacts() {
         let ws = temp_dir("dep-cleanup");
-        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
         assert!(
             artifacts.is_empty(),
             "deprecated cleanup must not produce artifacts"
@@ -558,7 +560,8 @@ mod tests {
         // Validating that parse_skill_targets doesn't crash on invalid input
         // This is tested through the expansion which only processes valid surfaces
         let ws = temp_dir("unknown-surface");
-        let artifacts = expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
+        let artifacts =
+            expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
         assert!(artifacts.is_empty());
     }
 
@@ -615,7 +618,12 @@ mod tests {
             &ws.join("templates/cursor/agents/inspector.md"),
             "# inspector",
         );
-        write_skill(&ws, "skills/accessibility-review", "accessibility-review", "cursor");
+        write_skill(
+            &ws,
+            "skills/accessibility-review",
+            "accessibility-review",
+            "cursor",
+        );
 
         let agents = expand_surface(SetupSurfaceId::CursorAgents, &ws).expect("expand");
         let skills = expand_surface(SetupSurfaceId::CursorSkills, &ws).expect("expand");

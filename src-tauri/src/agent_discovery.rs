@@ -61,7 +61,10 @@ fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
 /// Discover agents for a harness from its canonical source directory.
 ///
 /// Fails closed when the source directory is missing or unreadable.
-pub fn discover_agents(harness: AgentHarness, workspace_root: &Path) -> Result<Vec<DiscoveredAgent>, String> {
+pub fn discover_agents(
+    harness: AgentHarness,
+    workspace_root: &Path,
+) -> Result<Vec<DiscoveredAgent>, String> {
     let source_dir = harness.source_dir(workspace_root);
     if !source_dir.is_dir() {
         return Err(format!(
@@ -127,8 +130,12 @@ pub fn discover_agents(harness: AgentHarness, workspace_root: &Path) -> Result<V
 }
 
 /// Discover agent names only (for artifact expansion).
-pub fn discover_agent_names(harness: AgentHarness, workspace_root: &Path) -> Result<Vec<AgentName>, String> {
-    discover_agents(harness, workspace_root).map(|agents| agents.into_iter().map(|a| a.name).collect())
+pub fn discover_agent_names(
+    harness: AgentHarness,
+    workspace_root: &Path,
+) -> Result<Vec<AgentName>, String> {
+    discover_agents(harness, workspace_root)
+        .map(|agents| agents.into_iter().map(|a| a.name).collect())
 }
 
 #[cfg(test)]
@@ -166,8 +173,14 @@ mod tests {
     #[test]
     fn codex_agents_use_toml_extension() {
         let ws = temp_root("codex");
-        write_file(&ws.join("templates/codex/agents/inspector.toml"), "name = \"inspector\"");
-        write_file(&ws.join("templates/codex/agents/verifier.toml"), "name = \"verifier\"");
+        write_file(
+            &ws.join("templates/codex/agents/inspector.toml"),
+            "name = \"inspector\"",
+        );
+        write_file(
+            &ws.join("templates/codex/agents/verifier.toml"),
+            "name = \"verifier\"",
+        );
         let agents = discover_agents(AgentHarness::Codex, &ws).expect("discover");
         let _ = fs::remove_dir_all(&ws);
         for a in &agents {

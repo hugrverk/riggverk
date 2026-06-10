@@ -2,7 +2,6 @@ mod agent_discovery;
 mod agent_skill_targets;
 mod agent_targets;
 mod artifact_registry;
-mod skill_discovery;
 mod codex_legacy_migration;
 mod commands;
 mod cursor_profile_ops;
@@ -15,6 +14,7 @@ mod settings;
 mod setup_lifecycle;
 mod setup_transaction;
 mod shell_runtime;
+mod skill_discovery;
 mod skill_duplicate_audit;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod skills_install;

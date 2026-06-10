@@ -118,10 +118,7 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
     // Also support bracket lists: targets: [codex, opencode]
     let trimmed = raw.trim();
     let inner = if trimmed.starts_with('[') && trimmed.ends_with(']') {
-        trimmed
-            .trim_start_matches('[')
-            .trim_end_matches(']')
-            .trim()
+        trimmed.trim_start_matches('[').trim_end_matches(']').trim()
     } else {
         trimmed
     };
@@ -142,12 +139,14 @@ fn parse_frontmatter_body(content: &str) -> Result<&str, String> {
     Ok(&rest[..end])
 }
 
-fn read_skill_metadata(skill_md: &Path, fallback_name: &str) -> Result<(String, String, Vec<String>), String> {
+fn read_skill_metadata(
+    skill_md: &Path,
+    fallback_name: &str,
+) -> Result<(String, String, Vec<String>), String> {
     let content = fs::read_to_string(skill_md)
         .map_err(|e| format!("cannot read {}: {e}", skill_md.display()))?;
-    parse_frontmatter_body(&content).map_err(|e| {
-        format!("invalid frontmatter in {}: {e}", skill_md.display())
-    })?;
+    parse_frontmatter_body(&content)
+        .map_err(|e| format!("invalid frontmatter in {}: {e}", skill_md.display()))?;
     let name = extract_frontmatter(&content, "name");
     let description = extract_frontmatter(&content, "description");
     let targets = extract_frontmatter_list(&content, "targets");
@@ -157,10 +156,7 @@ fn read_skill_metadata(skill_md: &Path, fallback_name: &str) -> Result<(String, 
         name
     };
     if name.is_empty() {
-        return Err(format!(
-            "skill name is empty in {}",
-            skill_md.display()
-        ));
+        return Err(format!("skill name is empty in {}", skill_md.display()));
     }
     if description.is_empty() {
         return Err(format!(
@@ -209,7 +205,9 @@ fn register_skill(
 ///
 /// Returns `Err` on missing root, unreadable entries, invalid metadata, or
 /// duplicate names. Never returns an empty `Ok` after a parsing failure.
-pub fn discover_skill_catalog(workspace_root: &Path) -> Result<Vec<DiscoveredSkill>, SkillDiscoveryError> {
+pub fn discover_skill_catalog(
+    workspace_root: &Path,
+) -> Result<Vec<DiscoveredSkill>, SkillDiscoveryError> {
     let skills_dir = workspace_root.join("skills");
     if !skills_dir.is_dir() {
         return Err(SkillDiscoveryError::MissingRoot(format!(
@@ -222,12 +220,12 @@ pub fn discover_skill_catalog(workspace_root: &Path) -> Result<Vec<DiscoveredSki
     }
 
     let mut discovered: Vec<DiscoveredSkill> = Vec::new();
-    let entries = fs::read_dir(&skills_dir).map_err(|e| {
-        SkillDiscoveryError::InvalidCatalog(format!("cannot read skills dir: {e}"))
-    })?;
+    let entries = fs::read_dir(&skills_dir)
+        .map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("cannot read skills dir: {e}")))?;
 
     for entry in entries {
-        let entry = entry.map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("read error: {e}")))?;
+        let entry =
+            entry.map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("read error: {e}")))?;
         let file_type = entry
             .file_type()
             .map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("file type error: {e}")))?;
@@ -267,10 +265,11 @@ pub fn discover_skill_catalog(workspace_root: &Path) -> Result<Vec<DiscoveredSki
             SkillDiscoveryError::InvalidCatalog(format!("cannot read skills group dir: {e}"))
         })?;
         for sub in sub_entries {
-            let sub = sub.map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("read error: {e}")))?;
-            let sub_type = sub
-                .file_type()
-                .map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("file type error: {e}")))?;
+            let sub =
+                sub.map_err(|e| SkillDiscoveryError::InvalidCatalog(format!("read error: {e}")))?;
+            let sub_type = sub.file_type().map_err(|e| {
+                SkillDiscoveryError::InvalidCatalog(format!("file type error: {e}"))
+            })?;
             if sub_type.is_symlink() {
                 return Err(SkillDiscoveryError::InvalidCatalog(format!(
                     "refusing symlink skill directory: {}",
@@ -360,7 +359,11 @@ pub fn find_skill_source_dir(workspace_root: &Path, name: &str) -> Option<PathBu
 }
 
 /// Check whether a skill targets a harness using canonical catalog discovery.
-pub fn skill_targets_harness(workspace_root: &Path, skill_name: &str, harness: &str) -> Result<bool, String> {
+pub fn skill_targets_harness(
+    workspace_root: &Path,
+    skill_name: &str,
+    harness: &str,
+) -> Result<bool, String> {
     let catalog = discover_skill_catalog(workspace_root).map_err(|e| e.message().to_string())?;
     Ok(catalog
         .iter()
@@ -394,15 +397,17 @@ mod tests {
     const ALL_TARGETS: &str = "codex, opencode, claude, cursor";
 
     fn skill_body(name: &str, targets: &str) -> String {
-        format!(
-            "---\nname: {name}\ndescription: test skill\ntargets: {targets}\n---\n# {name}\n"
-        )
+        format!("---\nname: {name}\ndescription: test skill\ntargets: {targets}\n---\n# {name}\n")
     }
 
     #[test]
     fn root_level_skill_discovered() {
         let root = temp_root("root");
-        write_skill(&root, "skills/diagnose", &skill_body("diagnose", ALL_TARGETS));
+        write_skill(
+            &root,
+            "skills/diagnose",
+            &skill_body("diagnose", ALL_TARGETS),
+        );
         let catalog = discover_skill_catalog(&root).expect("discover");
         let _ = fs::remove_dir_all(&root);
         assert_eq!(catalog.len(), 1);
@@ -511,7 +516,11 @@ mod tests {
         let root = temp_root("sym-group");
         let real = root.join("skills/real-group/real-skill");
         fs::create_dir_all(real.parent().unwrap()).unwrap();
-        write_skill(&root, "skills/real-group/real-skill", &skill_body("real-skill", ALL_TARGETS));
+        write_skill(
+            &root,
+            "skills/real-group/real-skill",
+            &skill_body("real-skill", ALL_TARGETS),
+        );
         let link = root.join("skills/link-group");
         #[cfg(unix)]
         {
@@ -527,7 +536,11 @@ mod tests {
         let root = temp_root("sym-skill");
         let real = root.join("skills/real-skill");
         fs::create_dir_all(&real).unwrap();
-        write_skill(&root, "skills/real-skill", &skill_body("real-skill", ALL_TARGETS));
+        write_skill(
+            &root,
+            "skills/real-skill",
+            &skill_body("real-skill", ALL_TARGETS),
+        );
         let link = root.join("skills/link-skill");
         #[cfg(unix)]
         {
@@ -559,11 +572,7 @@ mod tests {
     fn harness_filter_returns_matching_names() {
         let root = temp_root("harness");
         write_skill(&root, "skills/a", &skill_body("skill-a", ALL_TARGETS));
-        write_skill(
-            &root,
-            "skills/b",
-            &skill_body("skill-b", "codex, opencode"),
-        );
+        write_skill(&root, "skills/b", &skill_body("skill-b", "codex, opencode"));
         let names = skill_names_for_harness(&root, "claude").expect("filter");
         let _ = fs::remove_dir_all(&root);
         assert_eq!(names, vec!["skill-a"]);
