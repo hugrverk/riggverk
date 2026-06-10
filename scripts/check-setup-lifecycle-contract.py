@@ -131,14 +131,40 @@ def assert_rust_contracts() -> None:
         "fn backup_target",
         "fn restore_from_backup",
         "fn compare_agent_dir",
+        "fn compare_single_file",
+        "struct RepairPreflight",
+        "fn preflight_repair",
+        "CONSUMED_FINGERPRINTS",
+        "mark_fingerprint_consumed",
+        "is_fingerprint_consumed",
     ):
         if forbidden in setup_text:
-            fail(f"setup.rs still defines transitional helper {forbidden}")
+            fail(f"setup.rs still defines or references forbidden pattern {forbidden}")
+    if "setup_transaction::detect_surface_state" not in setup_text:
+        fail("setup.rs must delegate surface detection to setup_transaction")
+    if "let _ = persist_setup_manifest" in setup_text:
+        fail("setup.rs must not ignore manifest persistence results")
     if "remove_dir_all" in setup_text and ".cursor/agents" in setup_text:
         fail("setup.rs must not remove_dir_all on shared Cursor agents root")
     txn_text = read(SETUP_TRANSACTION)
     if "artifact:" not in txn_text and "ArtifactManifestOperation" not in txn_text:
         fail("setup_transaction.rs must define artifact manifest operations")
+    if "aggregate_operation_kind" not in txn_text:
+        fail("setup_transaction.rs must aggregate artifact state for surfaces")
+    if "issue_preview_token" not in txn_text or "consume_preview_token" not in txn_text:
+        fail("setup preview must use bounded preview tokens")
+    if "CONSUMED_FINGERPRINTS" in txn_text:
+        fail("setup_transaction.rs must not use unbounded consumed fingerprint state")
+    if "validate_backup_copy" not in txn_text:
+        fail("setup_transaction.rs must validate backups before mutation")
+    if "reject_symlink_parent_chain" not in txn_text:
+        fail("setup_transaction.rs must reject symlink parent chains")
+    if "post_apply_digest" not in txn_text:
+        fail("manifest must record post-apply digests for rollback safety")
+    if "validate_operation_consistency" not in txn_text:
+        fail("manifest must validate operation and rollback action consistency")
+    if "let _ = persist_manifest_atomic" in txn_text:
+        fail("setup_transaction.rs must not ignore manifest persistence results")
     if "plan_fingerprint" not in setup_text and "fingerprint" not in setup_text:
         fail("setup apply must require preview fingerprint")
     fp_text = read(SETUP_FINGERPRINT)
@@ -150,6 +176,10 @@ def assert_rust_contracts() -> None:
         fail("backup filenames must not derive from JSON serialization")
     if "preview_repair_setup" not in setup_text:
         fail("repair must expose read-only preview command")
+    if "CreateOnlyArtifacts" not in setup_text:
+        fail("repair must use create-only per-artifact execution")
+    if "repair_preview_token" not in setup_text:
+        fail("repair must issue and require preview tokens")
     claude_text = read(CLAUDE_RUNTIME)
     if re.search(r"agent:\s*claude", claude_text):
         fail("Claude health must not parse obsolete agent: claude metadata")
@@ -161,6 +191,12 @@ def assert_frontend_contracts() -> None:
     setup_tsx = read(SETUP_LIFECYCLE_TSX)
     if "runSetupTask" not in setup_tsx and "runWsTask" not in setup_tsx:
         fail("SetupLifecycle must use global workspace mutation lock")
+    if "previewToken" not in setup_tsx:
+        fail("SetupLifecycle apply must forward preview tokens")
+    if "lastCompletedApplyRef" not in setup_tsx:
+        fail("SetupLifecycle must preserve apply transaction across rollback failure")
+    if "rollbackResult" not in setup_tsx:
+        fail("SetupLifecycle must separate rollback result state from apply result")
     start_view = read(START_VIEW)
     if re.search(r"onLog=\{\s*\(\)\s*=>\s*\{\s*\}\s*\}", start_view):
         fail("StartView must not pass empty setup onLog callback")

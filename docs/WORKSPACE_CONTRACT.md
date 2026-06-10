@@ -147,6 +147,14 @@ Writes use allowlisted targets and explicit arguments. Existing managed files ar
 
 The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
 
+## Unified setup lifecycle
+
+Surface status in the app is derived from artifact-level detection. OpenCode Config aggregates `opencode.json`, `tui.json`, and the Playwright MCP artifact; agents and skills surfaces aggregate every managed artifact for that harness.
+
+Preview issues a bounded in-memory preview token scoped to workspace, pending surfaces, fingerprint, and purpose (apply or repair). Apply and repair consume the token only after preflight succeeds and immediately before the first mutation. Tokens expire and are pruned; app restart invalidates stale previews.
+
+Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, record per-artifact apply/validation/rollback state and post-apply digests, and refuse explicit rollback when managed content changed after apply. Repair is create-only per artifact and does not run surface scripts that would update diverged siblings.
+
 ## Repair
 
 Workspace repair and update-resources restore missing bundled source files only. Harness repair installs missing managed resources but does not silently overwrite diverged user files or delete unknown resources.
