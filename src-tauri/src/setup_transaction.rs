@@ -100,6 +100,9 @@ pub struct ArtifactManifestOperation {
     /// Bounded managed digest recorded after successful apply validation.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub post_apply_digest: Option<String>,
+    /// Full-file or full-directory digest recorded after successful apply validation.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub post_apply_full_digest: Option<String>,
 }
 
 impl Default for ArtifactManifestOperation {
@@ -115,6 +118,7 @@ impl Default for ArtifactManifestOperation {
             validation_status: ValidationStatus::Pending,
             rollback_status: RollbackStatus::Pending,
             post_apply_digest: None,
+            post_apply_full_digest: None,
         }
     }
 }
@@ -366,6 +370,28 @@ pub fn reject_symlink_parent_chain(
     crate::path_safety::reject_symlink_parent_chain(path, allowlisted_root, label)
 }
 
+/// Resolve and validate artifact source and destination paths before mutation.
+pub fn validate_artifact_source_dest(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(PathBuf, PathBuf), String> {
+    let ws_root = workspace_root
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize workspace: {e}"))?;
+    let dest = artifact.resolve_dest(home)?;
+    crate::path_safety::reject_path_escape(&dest, home, "destination")?;
+    reject_symlink_parent_chain(&dest, home, "destination")?;
+    reject_symlink(&dest, "destination")?;
+    let source = artifact
+        .resolve_source(&ws_root)
+        .ok_or_else(|| format!("missing source for {artifact:?}"))?;
+    crate::path_safety::reject_path_escape(&source, &ws_root, "source")?;
+    reject_symlink_parent_chain(&source, &ws_root, "source")?;
+    reject_symlink(&source, "source")?;
+    Ok((source, dest))
+}
+
 /// Aggregate artifact operation kinds into a single surface kind (fail-closed precedence).
 pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
     if kinds.is_empty() {
@@ -517,7 +543,7 @@ pub fn detect_artifact_state(
     }
 
     match artifact_kind(artifact) {
-        ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source),
+        ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
         ArtifactKind::TuiConfig | ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             if !dest.exists() {
                 (OperationKind::Create, PreviousState::Absent)
@@ -575,6 +601,7 @@ fn detect_config_artifact(
     artifact: &ArtifactId,
     dest: &Path,
     source: &Path,
+    home: &Path,
 ) -> (OperationKind, PreviousState) {
     if !dest.exists() {
         return (OperationKind::Create, PreviousState::Absent);
@@ -604,7 +631,7 @@ fn detect_config_artifact(
         } else {
             (OperationKind::Update, PreviousState::MergeableConfigFile)
         }
-    } else {
+    } else if artifact == &ArtifactId::OpenCodeConfig {
         let installed_str = match fs::read_to_string(dest) {
             Ok(s) => s,
             Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
@@ -621,11 +648,17 @@ fn detect_config_artifact(
             Ok(v) => v,
             Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
         };
-        if crate::commands::managed_opencode_keys_match(&installed_json, &source_json) {
+        let rendered = match crate::commands::render_expected_opencode_config(&source_json, home) {
+            Some(v) => v,
+            None => return (OperationKind::Unavailable, PreviousState::Unavailable),
+        };
+        if crate::commands::managed_opencode_keys_match(&installed_json, &rendered) {
             (OperationKind::NoChange, PreviousState::MergeableConfigFile)
         } else {
             (OperationKind::Update, PreviousState::MergeableConfigFile)
         }
+    } else {
+        (OperationKind::Unavailable, PreviousState::Unavailable)
     }
 }
 
@@ -900,23 +933,55 @@ fn scan_backup_tree_no_symlinks(backup: &Path) -> Result<(), String> {
 }
 
 fn validate_directory_backup_tree(original: &Path, backup: &Path) -> Result<(), String> {
+    reject_symlink(original, "directory backup original")?;
     reject_symlink(backup, "directory backup")?;
+    if !original.is_dir() {
+        return Err("original is not a directory".into());
+    }
+    if !backup.is_dir() {
+        return Err("backup is not a directory".into());
+    }
+
+    let mut original_entries = std::collections::BTreeMap::new();
+    for entry in fs::read_dir(original).map_err(|e| format!("read original dir: {e}"))? {
+        let entry = entry.map_err(|e| format!("read original entry: {e}"))?;
+        let path = entry.path();
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+            return Err("nested symlink in original directory".into());
+        }
+        original_entries.insert(entry.file_name(), path);
+    }
+
+    let mut backup_entries = std::collections::BTreeMap::new();
     for entry in fs::read_dir(backup).map_err(|e| format!("read backup dir: {e}"))? {
         let entry = entry.map_err(|e| format!("read backup entry: {e}"))?;
         let path = entry.path();
-        if path.is_symlink() || entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
+        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
             return Err("nested symlink in directory backup".into());
         }
-        let rel = entry.file_name();
-        let original_child = original.join(&rel);
-        if entry.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            if !original_child.is_dir() {
-                return Err("partial directory backup".into());
-            }
-            validate_directory_backup_tree(&original_child, &path)?;
-        } else if entry.file_type().map(|t| t.is_file()).unwrap_or(false)
-            && !file_eq(&original_child, &path)
-        {
+        backup_entries.insert(entry.file_name(), (path, entry.file_type().ok()));
+    }
+
+    if original_entries.len() != backup_entries.len() {
+        return Err("directory backup entry count mismatch".into());
+    }
+
+    for (name, original_child) in &original_entries {
+        let (backup_child, backup_type) = backup_entries
+            .get(name)
+            .ok_or_else(|| "missing original entry in backup".to_string())?;
+        let original_is_dir = original_child.is_dir();
+        let backup_is_dir = backup_type
+            .map(|t| t.is_dir())
+            .unwrap_or_else(|| backup_child.is_dir());
+        if original_is_dir != backup_is_dir {
+            return Err("file versus directory mismatch in directory backup".into());
+        }
+        if original_is_dir {
+            validate_directory_backup_tree(original_child, backup_child)?;
+        } else if !original_child.is_file() || !backup_child.is_file() {
+            return Err("unreadable directory backup entry".into());
+        } else if !file_eq(original_child, backup_child) {
             return Err("directory backup content mismatch".into());
         }
     }
@@ -967,19 +1032,49 @@ pub fn artifact_unchanged_since_apply(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<(), String> {
-    let expected = op
+    let expected_managed = op
         .post_apply_digest
         .as_deref()
         .ok_or_else(|| "missing post-apply digest".to_string())?;
-    let current = crate::setup_fingerprint::artifact_installed_managed_digest(
+    let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
         &op.artifact,
         workspace_root,
         home,
     )?;
-    if current != expected {
+    if current_managed != expected_managed {
         return Err("artifact changed since apply".into());
     }
     Ok(())
+}
+
+fn rollback_restore_mode(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<RollbackRestoreMode, String> {
+    artifact_unchanged_since_apply(op, workspace_root, home)?;
+    let expected_full = op
+        .post_apply_full_digest
+        .as_deref()
+        .ok_or_else(|| "missing post-apply full digest".to_string())?;
+    let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if current_full == expected_full {
+        Ok(RollbackRestoreMode::FullBackup)
+    } else if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
+        Ok(RollbackRestoreMode::ManagedProjectionMerge)
+    } else {
+        Err("artifact changed since apply".into())
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum RollbackRestoreMode {
+    FullBackup,
+    ManagedProjectionMerge,
 }
 
 pub fn validate_create_target_unchanged(
@@ -990,7 +1085,19 @@ pub fn validate_create_target_unchanged(
     if !matches!(op.kind, OperationKind::Create) {
         return Ok(());
     }
-    artifact_unchanged_since_apply(op, workspace_root, home)
+    let expected_full = op
+        .post_apply_full_digest
+        .as_deref()
+        .ok_or_else(|| "missing post-apply full digest".to_string())?;
+    let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if current_full != expected_full {
+        return Err("artifact changed since apply".into());
+    }
+    Ok(())
 }
 
 pub fn validate_update_target_unchanged(
@@ -1001,7 +1108,7 @@ pub fn validate_update_target_unchanged(
     if !matches!(op.kind, OperationKind::Update) {
         return Ok(());
     }
-    artifact_unchanged_since_apply(op, workspace_root, home)
+    rollback_restore_mode(op, workspace_root, home).map(|_| ())
 }
 
 pub fn validate_backup_for_rollback(
@@ -1062,12 +1169,29 @@ pub fn restore_artifact_from_backup(
     backup_dir: &Path,
     home: &Path,
 ) -> Result<(), String> {
+    restore_artifact_from_backup_with_mode(op, backup_dir, home, RollbackRestoreMode::FullBackup)
+}
+
+pub fn restore_artifact_from_backup_for_explicit_rollback(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let mode = rollback_restore_mode(op, workspace_root, home)?;
+    restore_artifact_from_backup_with_mode(op, backup_dir, home, mode)
+}
+
+fn restore_artifact_from_backup_with_mode(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    mode: RollbackRestoreMode,
+) -> Result<(), String> {
     let dest = op.artifact.resolve_dest(home)?;
     reject_symlink(&dest, "rollback destination")?;
     match op.rollback_action {
-        RollbackAction::RestoreFile
-        | RollbackAction::RestoreManagedConfigFile
-        | RollbackAction::RestoreDirectoryArtifact => {
+        RollbackAction::RestoreFile | RollbackAction::RestoreDirectoryArtifact => {
             let rel = op
                 .backup_rel
                 .as_ref()
@@ -1092,6 +1216,100 @@ pub fn restore_artifact_from_backup(
                     fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
                 }
                 fs::copy(&backup_path, &dest).map_err(|e| format!("restore file: {e}"))?;
+            }
+            Ok(())
+        }
+        RollbackAction::RestoreManagedConfigFile => {
+            let rel = op
+                .backup_rel
+                .as_ref()
+                .ok_or_else(|| "missing backup for restore".to_string())?;
+            let backup_path = backup_dir.join(rel);
+            if !backup_path.is_file() {
+                return Err("backup missing".into());
+            }
+            reject_symlink(&backup_path, "backup")?;
+            match mode {
+                RollbackRestoreMode::FullBackup => {
+                    if let Some(parent) = dest.parent() {
+                        fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
+                    }
+                    fs::copy(&backup_path, &dest).map_err(|e| format!("restore file: {e}"))?;
+                }
+                RollbackRestoreMode::ManagedProjectionMerge => {
+                    if op.artifact == ArtifactId::OpenCodeConfig {
+                        let installed_str = fs::read_to_string(&dest)
+                            .map_err(|e| format!("read installed opencode config: {e}"))?;
+                        let installed_json: serde_json::Value =
+                            serde_json::from_str(&installed_str)
+                                .map_err(|e| format!("parse installed opencode json: {e}"))?;
+                        let backup_str = fs::read_to_string(&backup_path)
+                            .map_err(|e| format!("read backup opencode config: {e}"))?;
+                        let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
+                            .map_err(|e| format!("parse backup opencode json: {e}"))?;
+                        let merged = crate::commands::merge_managed_opencode_config(
+                            &installed_json,
+                            &crate::commands::extract_managed_opencode_config(&backup_json),
+                        );
+                        fs::write(
+                            &dest,
+                            serde_json::to_string_pretty(&merged)
+                                .map_err(|e| format!("serialize opencode config: {e}"))?
+                                + "\n",
+                        )
+                        .map_err(|e| format!("write opencode config: {e}"))?;
+                    } else if op.artifact == ArtifactId::CodexConfig {
+                        let installed_str = fs::read_to_string(&dest)
+                            .map_err(|e| format!("read installed codex config: {e}"))?;
+                        let installed_toml: toml::Value = installed_str
+                            .parse()
+                            .map_err(|e| format!("parse installed codex toml: {e}"))?;
+                        let backup_str = fs::read_to_string(&backup_path)
+                            .map_err(|e| format!("read backup codex config: {e}"))?;
+                        let backup_toml: toml::Value = backup_str
+                            .parse()
+                            .map_err(|e| format!("parse backup codex toml: {e}"))?;
+                        let merged = crate::commands::merge_managed_codex_config(
+                            &installed_toml,
+                            &crate::commands::extract_managed_codex_config(&backup_toml),
+                        );
+                        fs::write(&dest, merged.to_string())
+                            .map_err(|e| format!("write codex config: {e}"))?;
+                    } else if op.artifact == ArtifactId::CursorMcp {
+                        let installed_str = fs::read_to_string(&dest)
+                            .map_err(|e| format!("read installed cursor mcp: {e}"))?;
+                        let installed_json: serde_json::Value =
+                            serde_json::from_str(&installed_str)
+                                .map_err(|e| format!("parse installed cursor mcp: {e}"))?;
+                        let backup_str = fs::read_to_string(&backup_path)
+                            .map_err(|e| format!("read backup cursor mcp: {e}"))?;
+                        let backup_json: serde_json::Value = serde_json::from_str(&backup_str)
+                            .map_err(|e| format!("parse backup cursor mcp: {e}"))?;
+                        let backup_projection = backup_json
+                            .get("mcpServers")
+                            .and_then(|v| v.get("playwright"))
+                            .cloned()
+                            .ok_or_else(|| {
+                                "backup cursor mcp missing playwright projection".to_string()
+                            })?;
+                        let mut merged = installed_json;
+                        let servers = merged
+                            .as_object_mut()
+                            .and_then(|obj| obj.get_mut("mcpServers"))
+                            .and_then(|v| v.as_object_mut())
+                            .ok_or_else(|| "installed cursor mcp missing mcpServers".to_string())?;
+                        servers.insert("playwright".to_string(), backup_projection);
+                        fs::write(
+                            &dest,
+                            serde_json::to_string_pretty(&merged)
+                                .map_err(|e| format!("serialize cursor mcp: {e}"))?
+                                + "\n",
+                        )
+                        .map_err(|e| format!("write cursor mcp: {e}"))?;
+                    } else {
+                        return Err("unsupported managed config artifact".into());
+                    }
+                }
             }
             Ok(())
         }
@@ -1231,6 +1449,56 @@ mod tests {
             ],
         };
         assert!(validate_manifest(&manifest, &ws).is_err());
+    }
+
+    #[test]
+    fn directory_backup_validation_rejects_missing_original_entry() {
+        let base = temp("dir-backup-missing");
+        let _ = fs::remove_dir_all(&base);
+        let original = base.join("original");
+        let backup = base.join("backup");
+        fs::create_dir_all(original.join("nested")).unwrap();
+        fs::write(original.join("nested/a.txt"), b"a").unwrap();
+        fs::create_dir_all(&backup).unwrap();
+        fs::write(backup.join("extra.txt"), b"x").unwrap();
+        let err = validate_directory_backup_tree(&original, &backup).expect_err("missing");
+        assert!(err.contains("mismatch") || err.contains("missing"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn directory_backup_validation_accepts_exact_copy() {
+        let base = temp("dir-backup-exact");
+        let _ = fs::remove_dir_all(&base);
+        let original = base.join("original");
+        let backup = base.join("backup");
+        fs::create_dir_all(original.join("nested")).unwrap();
+        fs::write(original.join("nested/a.txt"), b"a").unwrap();
+        fs::create_dir_all(backup.join("nested")).unwrap();
+        fs::write(backup.join("nested/a.txt"), b"a").unwrap();
+        assert!(validate_directory_backup_tree(&original, &backup).is_ok());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn validate_artifact_source_dest_rejects_dangling_destination() {
+        #[cfg(unix)]
+        {
+            let base = temp("dangling-dest");
+            let _ = fs::remove_dir_all(&base);
+            let ws = base.join("ws");
+            let home = base.join("home");
+            fs::create_dir_all(ws.join("templates/sync")).unwrap();
+            fs::write(ws.join("templates/sync/codex-rules.md"), "rules").unwrap();
+            fs::create_dir_all(home.join(".codex")).unwrap();
+            let link = home.join(".codex/AGENTS.md");
+            std::os::unix::fs::symlink(home.join("missing-rules"), &link).unwrap();
+            let artifact = ArtifactId::CodexRules;
+            let err =
+                validate_artifact_source_dest(&artifact, &ws, &home).expect_err("dangling dest");
+            assert!(err.contains("symlink"), "{err}");
+            let _ = fs::remove_dir_all(&base);
+        }
     }
 
     #[test]
