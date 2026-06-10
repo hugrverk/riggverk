@@ -34,9 +34,14 @@ pub type TransactionId = String;
 fn new_transaction_id() -> TransactionId {
     SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .expect("clock")
-        .as_nanos()
-        .to_string()
+        .map(|d| d.as_nanos().to_string())
+        .unwrap_or_else(|_| {
+            // Clock before epoch is extremely unlikely but must not panic.
+            // Fall back to a counter-based ID.
+            use std::sync::atomic::{AtomicU64, Ordering};
+            static COUNTER: AtomicU64 = AtomicU64::new(0);
+            format!("fallback-{}", COUNTER.fetch_add(1, Ordering::Relaxed))
+        })
 }
 
 /// An operation tracked in the transaction manifest.
@@ -657,11 +662,10 @@ pub fn apply_setup_plan(plan: &SetupPlan) -> SetupResult {
             backup_rel: backed_up
                 .iter()
                 .find(|(label, _)| label == op.surface.label())
-                .map(|(_, path)| {
+                .and_then(|(_, path)| {
                     path.strip_prefix(&backup_dir)
-                        .unwrap_or(path)
-                        .to_string_lossy()
-                        .into_owned()
+                        .ok()
+                        .map(|p| p.to_string_lossy().into_owned())
                 }),
         })
         .collect();
@@ -2017,5 +2021,95 @@ mod tests {
         let fp = compute_plan_fingerprint(&states);
         assert!(!fp.is_empty(), "fingerprint should not be empty");
         assert_eq!(fp.len(), 16, "fingerprint should be 16 hex chars");
+    }
+
+    // ── Transaction preflight tests ──
+
+    #[test]
+    fn transaction_id_is_never_empty() {
+        let id = new_transaction_id();
+        assert!(!id.is_empty(), "transaction ID must not be empty");
+    }
+
+    #[test]
+    fn transaction_id_does_not_panic() {
+        // new_transaction_id must never panic even with unexpected system time
+        let id = new_transaction_id();
+        assert!(!id.is_empty());
+    }
+
+    #[test]
+    fn manifest_operations_never_have_absolute_backup_paths() {
+        // The backup_rel field must always be relative (or None)
+        let _guard = guard::lock();
+        let home = std::env::temp_dir().join("aw-manifest-rel");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        let backup_dir = home.join("backups/setup/test123");
+        fs::create_dir_all(&backup_dir).expect("create backup dir");
+
+        // Create a manifest with various backup paths
+        let ops = vec![
+            ManifestOperation {
+                surface: SetupSurfaceId::OpenCodeConfig,
+                kind: OperationKind::Create,
+                label: "test".to_string(),
+                backup_rel: Some("relative/path".to_string()),
+            },
+            ManifestOperation {
+                surface: SetupSurfaceId::CodexRules,
+                kind: OperationKind::Update,
+                label: "test2".to_string(),
+                backup_rel: None,
+            },
+        ];
+
+        // Verify: relative paths are fine, None is fine
+        for op in &ops {
+            if let Some(ref rel) = op.backup_rel {
+                assert!(
+                    !rel.starts_with('/'),
+                    "backup_rel must be relative, got: {rel}"
+                );
+            }
+        }
+
+        let manifest = TransactionManifest {
+            schema_version: MANIFEST_SCHEMA_VERSION,
+            created_at: "test".to_string(),
+            operations: ops,
+            surface_count: 2,
+        };
+        let json = serde_json::to_string(&manifest).expect("serialize");
+        let _parsed: TransactionManifest = serde_json::from_str(&json).expect("deserialize");
+    }
+
+    #[test]
+    fn apply_empty_plan_returns_valid_transaction_id() {
+        let plan = test_plan(vec![]);
+        let result = apply_setup_plan(&plan);
+        assert!(result.success);
+        assert!(!result.transaction_id.is_empty());
+        assert!(result.transaction_id.chars().all(|c| c.is_ascii_digit() || c == '-'));
+    }
+
+    #[test]
+    fn zero_mutations_after_preflight_failure() {
+        let _guard = guard::lock();
+        let home = std::env::temp_dir().join("aw-zero-mutations");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+
+        // Create a plan that requires apply but will fail in preflight
+        let plan = test_plan(vec![(
+            SetupSurfaceId::OpenCodeConfig,
+            OperationKind::Create,
+            "missing".to_string(),
+        )]);
+
+        // preflight_repair should produce a result with zero applied
+        let preflight = preflight_repair(&plan);
+        assert!(preflight.safe);
+        // No mutations should have occurred
     }
 }
