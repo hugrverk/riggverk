@@ -209,7 +209,9 @@ def main() -> None:
             fail(f"installed config must be a JSON object: {args.target}")
         raise SystemExit(0 if managed_keys_match(installed_value, managed_value) else 1)
 
-    if args.merge or args.output:
+    if args.merge:
+        if args.output is None:
+            parser.error("--merge requires --output <path> to prevent sensitive config disclosure")
         if args.target.is_file():
             installed_value = load_json(args.target)
             if not isinstance(installed_value, dict):
@@ -218,12 +220,12 @@ def main() -> None:
         else:
             merged = json.loads(json.dumps(managed_value))
         payload = json.dumps(merged, indent=2, ensure_ascii=False) + "\n"
-        if args.output:
-            args.output.parent.mkdir(parents=True, exist_ok=True)
-            args.output.write_text(payload, encoding="utf-8")
-        else:
-            sys.stdout.write(payload)
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        args.output.write_text(payload, encoding="utf-8")
         return
+
+    if args.output:
+        parser.error("--output requires --merge (use --merge --output <path>)")
 
     if args.apply:
         apply_merge(args.target, managed_value, args.backup_dir)
