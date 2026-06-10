@@ -209,7 +209,6 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
     let installed_count = installed_agent_count(home);
     let expected_count = expected_agent_count(workspace_root);
 
-    let source_skills_dir = workspace_root.join("skills");
     let installed_skills_dir = home.join(".claude/skills");
     let expected_skill_count =
         crate::artifact_registry::discover_skill_names_for_harness(workspace_root, "claude")

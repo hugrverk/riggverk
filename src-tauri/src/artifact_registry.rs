@@ -131,24 +131,6 @@ pub enum ArtifactKind {
     McpConfig,
 }
 
-/// Bounded metadata for one artifact definition.
-///
-/// All paths and owners are backend-resolved. No destination paths
-/// are exposed to the frontend.
-#[derive(Debug, Clone)]
-pub struct ArtifactDef {
-    /// Stable artifact ID.
-    pub id: ArtifactId,
-    /// Parent setup surface.
-    pub surface: SetupSurfaceId,
-    /// Artifact kind for routing.
-    pub kind: ArtifactKind,
-    /// Whether unknown sibling content is allowed in the artifact's parent directory.
-    pub allow_unknown_siblings: bool,
-    /// Whether creation of the parent directory is transaction-owned.
-    pub parent_creation_owned: bool,
-}
-
 impl ArtifactId {
     /// Resolve the destination path for this artifact.
     pub fn resolve_dest(&self, home: &Path) -> Result<PathBuf, String> {

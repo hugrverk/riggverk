@@ -4,7 +4,7 @@
 //! validation/rollback at artifact granularity. Surface owners execute writes;
 //! this module owns transaction evidence and per-artifact state.
 
-use std::collections::{HashMap, HashSet};
+use std::collections::HashSet;
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
@@ -15,7 +15,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
-use crate::setup_lifecycle::{OperationKind, PlannedOperation, SetupSurfaceId};
+use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 
 pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 2;
 const MAX_MANIFEST_OPERATIONS: usize = 500;
@@ -42,25 +42,28 @@ pub enum RollbackAction {
     NoAction,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ApplyStatus {
+    #[default]
     Pending,
     Applied,
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum ValidationStatus {
+    #[default]
     Pending,
     Passed,
     Failed,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum RollbackStatus {
+    #[default]
     Pending,
     Restored,
     Failed,
@@ -95,24 +98,6 @@ impl Default for ArtifactManifestOperation {
             validation_status: ValidationStatus::Pending,
             rollback_status: RollbackStatus::Pending,
         }
-    }
-}
-
-impl Default for ApplyStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
-}
-
-impl Default for ValidationStatus {
-    fn default() -> Self {
-        Self::Pending
-    }
-}
-
-impl Default for RollbackStatus {
-    fn default() -> Self {
-        Self::Pending
     }
 }
 
@@ -409,10 +394,10 @@ pub fn detect_artifact_state(
         }
     };
 
-    if let Err(_) = reject_symlink(&dest, "destination") {
+    if reject_symlink(&dest, "destination").is_err() {
         return (OperationKind::Conflict, PreviousState::Conflict);
     }
-    if let Err(_) = reject_symlink(&source, "source") {
+    if reject_symlink(&source, "source").is_err() {
         return (OperationKind::Unavailable, PreviousState::Unavailable);
     }
 
@@ -720,27 +705,6 @@ pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId
     surfaces.sort_by_key(|s| format!("{s:?}"));
     surfaces.dedup();
     surfaces
-}
-
-pub fn group_artifacts_by_surface(
-    planned: &[PlannedArtifact],
-) -> HashMap<SetupSurfaceId, Vec<&PlannedArtifact>> {
-    let mut map: HashMap<SetupSurfaceId, Vec<&PlannedArtifact>> = HashMap::new();
-    for p in planned {
-        map.entry(p.surface).or_default().push(p);
-    }
-    map
-}
-
-pub fn surface_operation(surface: SetupSurfaceId, summary: &str) -> PlannedOperation {
-    PlannedOperation {
-        surface,
-        kind: OperationKind::Update,
-        summary: summary.to_string(),
-        details: vec![],
-        conflict_description: None,
-        manual_step: None,
-    }
 }
 
 #[cfg(test)]
