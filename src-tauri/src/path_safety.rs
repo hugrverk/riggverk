@@ -5,17 +5,18 @@
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
-/// Reject when `path` exists and is a symlink.
+/// Reject when `path` is a symlink, including dangling symlinks.
+///
+/// Missing paths that are not symlinks are allowed so safe descendants can be created.
 pub fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
+    match fs::symlink_metadata(path) {
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(e) => Err(format!("cannot inspect {label} {}: {e}", path.display())),
+        Ok(meta) if meta.file_type().is_symlink() => {
+            Err(format!("refusing symlink {label}: {}", path.display()))
+        }
+        Ok(_) => Ok(()),
     }
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 /// Reject symlink ancestors from `path` up to (but not including) `allowlisted_root`.
@@ -129,6 +130,19 @@ mod tests {
         fs::write(&child, b"x").unwrap();
         assert!(reject_symlink_parent_chain(&child, &root, "child").is_ok());
         let _ = fs::remove_dir_all(&root);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_is_rejected() {
+        let base = temp("dangling");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let link = base.join("broken-link");
+        std::os::unix::fs::symlink(base.join("missing-target"), &link).unwrap();
+        let err = reject_symlink(&link, "dangling").expect_err("dangling symlink");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[cfg(unix)]
