@@ -157,6 +157,17 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 - Repo Dashboard - local-git-first repository and docs insight with optional bounded `gh` enrichment.
 - Settings - appearance, text size, theme tokens, workspace metadata, and enabled target toggles.
 
+### Settings
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `enabled_target_ids` | `["codex_rules", "opencode_rules", "opencode_config"]` | Which sync targets are active. Edit from harness pages. |
+| `app_font_size` | `"medium"` | UI font scale. Values: `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
+
+Sync targets excluded from defaults:
+- `codex_config` — manual review only; not enabled by default.
+- `claude_rules`, `claude_agents`, `codex_agents`, `opencode_agents`, `cursor_setup` — must be toggled on explicitly.
+
 ## Security model
 
 - Frontend actions invoke named backend commands only.
@@ -192,3 +203,5 @@ cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
 UI, dialogs, filesystem actions, and native harness setup also require manual Tauri smoke testing when automated checks cannot prove behavior.
+
+See [NOTICE.md](./NOTICE.md) for third-party license information.
