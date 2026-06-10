@@ -1024,16 +1024,43 @@ pub fn detect_surface_state(
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
     let kind = match surface {
-        // Codex config — check via file comparison
+        // Codex config — use managed-field comparison (preserves user TOML)
         SetupSurfaceId::CodexConfig => {
             let target = home.join(".codex/config.toml");
             let source = workspace_root.join("templates/codex/config.toml");
             if !target.exists() {
                 OperationKind::Create
-            } else if source.exists() && file_eq(&target, &source) {
-                OperationKind::NoChange
+            } else if !source.exists() {
+                OperationKind::Unavailable
             } else {
-                OperationKind::Update
+                // Use managed-field comparison from Codex runtime owner
+                let installed_str = match std::fs::read_to_string(&target) {
+                    Ok(s) => s,
+                    Err(_) => return (surface, OperationKind::Conflict, "Codex config unreadable".to_string()),
+                };
+                let source_str = match std::fs::read_to_string(&source) {
+                    Ok(s) => s,
+                    Err(_) => return (surface, OperationKind::Unavailable, "Codex source unreadable".to_string()),
+                };
+                let installed_toml: toml::Value = match installed_str.parse() {
+                    Ok(v) => v,
+                    Err(_) => return (surface, OperationKind::Conflict, "Codex config invalid TOML".to_string()),
+                };
+                let source_toml: toml::Value = match source_str.parse() {
+                    Ok(v) => v,
+                    Err(_) => return (surface, OperationKind::Unavailable, "Codex source invalid TOML".to_string()),
+                };
+                let managed_installed = crate::commands::codex_runtime::extract_managed_codex_config(&installed_toml);
+                let managed_source = crate::commands::codex_runtime::extract_managed_codex_config(&source_toml);
+                if crate::commands::codex_runtime::managed_codex_keys_match(&installed_toml, &source_toml) {
+                    OperationKind::NoChange
+                } else if managed_installed == managed_source {
+                    // Managed sections match, but full config differs (user-owned fields)
+                    // This is not a setup concern — the managed part is synced
+                    OperationKind::NoChange
+                } else {
+                    OperationKind::Update
+                }
             }
         }
         // Codex agents — compare directory contents
@@ -1048,16 +1075,37 @@ pub fn detect_surface_state(
             let source = workspace_root.join("templates/sync/codex-rules.md");
             compare_single_file(&target, &source)
         }
-        // OpenCode config
+        // OpenCode config — use managed-key comparison (preserves user provider blocks)
         SetupSurfaceId::OpenCodeConfig => {
             let target = home.join(".config/opencode/opencode.json");
             let source = workspace_root.join("templates/opencode.json");
             if !target.exists() {
                 OperationKind::Create
-            } else if source.exists() && file_eq(&target, &source) {
-                OperationKind::NoChange
+            } else if !source.exists() {
+                OperationKind::Unavailable
             } else {
-                OperationKind::Update
+                let installed_str = match std::fs::read_to_string(&target) {
+                    Ok(s) => s,
+                    Err(_) => return (surface, OperationKind::Conflict, "OpenCode config unreadable".to_string()),
+                };
+                let source_str = match std::fs::read_to_string(&source) {
+                    Ok(s) => s,
+                    Err(_) => return (surface, OperationKind::Unavailable, "OpenCode source unreadable".to_string()),
+                };
+                let installed_json: serde_json::Value = match serde_json::from_str(&installed_str) {
+                    Ok(v) => v,
+                    Err(_) => return (surface, OperationKind::Conflict, "OpenCode config invalid JSON".to_string()),
+                };
+                let source_json: serde_json::Value = match serde_json::from_str(&source_str) {
+                    Ok(v) => v,
+                    Err(_) => return (surface, OperationKind::Unavailable, "OpenCode source invalid JSON".to_string()),
+                };
+                // Use managed-key comparison from OpenCode runtime owner
+                if crate::commands::opencode_runtime::managed_opencode_keys_match(&installed_json, &source_json) {
+                    OperationKind::NoChange
+                } else {
+                    OperationKind::Update
+                }
             }
         }
         // OpenCode agents
@@ -1084,13 +1132,45 @@ pub fn detect_surface_state(
             let source_dir = workspace_root.join("templates/claude/agents");
             compare_agent_dir(&source_dir, &target_dir)
         }
-        // Skills — check if any skills are installed
+        // Skills — compare actual SKILL.md content per skill, not just directory existence
         SetupSurfaceId::ClaudeSkills => {
             let target = home.join(".claude/skills");
-            if target.is_dir() {
-                OperationKind::NoChange
-            } else {
+            let skills_root = workspace_root.join("skills");
+            if !target.is_dir() {
                 OperationKind::Create
+            } else if !skills_root.is_dir() {
+                OperationKind::Unavailable
+            } else {
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "claude");
+                if expected.is_empty() {
+                    OperationKind::Unavailable
+                } else {
+                    let mut any_missing = false;
+                    let mut any_diverged = false;
+                    for skill_name in &expected {
+                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                        if !installed_skill_md.is_file() {
+                            any_missing = true;
+                            continue;
+                        }
+                        // Find source
+                        let source_dir = crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                        if let Some(src_dir) = source_dir {
+                            let source_skill_md = src_dir.join("SKILL.md");
+                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                                any_diverged = true;
+                            }
+                        }
+                    }
+                    if any_missing && !any_diverged {
+                        OperationKind::Update
+                    } else if any_diverged {
+                        OperationKind::Update
+                    } else {
+                        OperationKind::NoChange
+                    }
+                }
             }
         }
         // Cursor agents — check individual agent files, not whole ~/.cursor
@@ -1153,22 +1233,72 @@ pub fn detect_surface_state(
                 _ => OperationKind::Unavailable,
             }
         }
-        // OpenCode skills
+        // OpenCode skills — compare content
         SetupSurfaceId::OpenCodeSkills => {
             let target = home.join(".config/opencode/skills");
-            if target.is_dir() {
-                OperationKind::NoChange
-            } else {
+            let skills_root = workspace_root.join("skills");
+            if !target.is_dir() {
                 OperationKind::Create
+            } else if !skills_root.is_dir() {
+                OperationKind::Unavailable
+            } else {
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "opencode");
+                if expected.is_empty() {
+                    OperationKind::Unavailable
+                } else {
+                    let mut any_issue = false;
+                    for skill_name in &expected {
+                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                        if !installed_skill_md.is_file() {
+                            any_issue = true;
+                            break;
+                        }
+                        let source_dir = crate::artifact_registry::ArtifactId::OpenCodeSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                        if let Some(src_dir) = source_dir {
+                            let source_skill_md = src_dir.join("SKILL.md");
+                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                                any_issue = true;
+                                break;
+                            }
+                        }
+                    }
+                    if any_issue { OperationKind::Update } else { OperationKind::NoChange }
+                }
             }
         }
-        // Codex skills
+        // Codex skills — compare content
         SetupSurfaceId::CodexSkills => {
             let target = home.join(".agents/skills");
-            if target.is_dir() {
-                OperationKind::NoChange
-            } else {
+            let skills_root = workspace_root.join("skills");
+            if !target.is_dir() {
                 OperationKind::Create
+            } else if !skills_root.is_dir() {
+                OperationKind::Unavailable
+            } else {
+                let expected = crate::artifact_registry::discover_skill_names_for_harness(&skills_root, "codex");
+                if expected.is_empty() {
+                    OperationKind::Unavailable
+                } else {
+                    let mut any_issue = false;
+                    for skill_name in &expected {
+                        let installed_skill_md = target.join(skill_name.as_str()).join("SKILL.md");
+                        if !installed_skill_md.is_file() {
+                            any_issue = true;
+                            break;
+                        }
+                        let source_dir = crate::artifact_registry::ArtifactId::CodexSkill(skill_name.clone())
+                            .resolve_source(workspace_root);
+                        if let Some(src_dir) = source_dir {
+                            let source_skill_md = src_dir.join("SKILL.md");
+                            if source_skill_md.is_file() && !file_eq(&installed_skill_md, &source_skill_md) {
+                                any_issue = true;
+                                break;
+                            }
+                        }
+                    }
+                    if any_issue { OperationKind::Update } else { OperationKind::NoChange }
+                }
             }
         }
         // Deprecated cleanup — always manual
@@ -1592,5 +1722,184 @@ mod tests {
         assert!(result.is_err(), "empty surfaces must be rejected");
         let err = result.unwrap_err();
         assert!(err.contains("At least one surface"), "error: {err}");
+    }
+
+    // ── Managed detection tests ──
+
+    #[test]
+    fn detect_opencode_config_create_when_missing() {
+        let home = std::env::temp_dir().join("aw-detect-oc-create");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        let ws = std::env::temp_dir().join("aw-detect-oc-create-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).expect("create ws");
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::OpenCodeConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::Create, "missing config should be Create");
+    }
+
+    #[test]
+    fn detect_opencode_config_nochange_when_managed_keys_match() {
+        let home = std::env::temp_dir().join("aw-detect-oc-match");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-oc-match-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
+
+        // Write identical configs with managed keys
+        let config = r#"{"$schema":"test","model":"test","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
+        fs::write(home.join(".config/opencode/opencode.json"), config).unwrap();
+        fs::write(ws.join("templates/opencode.json"), config).unwrap();
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::OpenCodeConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::NoChange, "matching managed keys should be NoChange");
+    }
+
+    #[test]
+    fn detect_opencode_config_update_when_managed_keys_differ() {
+        let home = std::env::temp_dir().join("aw-detect-oc-diff");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-oc-diff-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
+
+        // Different managed key values
+        let installed = r#"{"$schema":"test","model":"old-model","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
+        let source = r#"{"$schema":"test","model":"new-model","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
+        fs::write(home.join(".config/opencode/opencode.json"), installed).unwrap();
+        fs::write(ws.join("templates/opencode.json"), source).unwrap();
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::OpenCodeConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::Update, "diff managed keys should be Update");
+    }
+
+    #[test]
+    fn detect_codex_config_nochange_when_managed_fields_match() {
+        let home = std::env::temp_dir().join("aw-detect-cx-match");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        fs::create_dir_all(home.join(".codex")).expect("create codex dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-cx-match-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).expect("create ws");
+        fs::create_dir_all(ws.join("templates/codex")).expect("create templates");
+
+        let config = "[profile]\n[profile.safe]\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n[profile.workspace-write]\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n";
+        fs::write(home.join(".codex/config.toml"), config).unwrap();
+        fs::write(ws.join("templates/codex/config.toml"), config).unwrap();
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::CodexConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::NoChange, "matching managed fields should be NoChange");
+    }
+
+    #[test]
+    fn detect_claude_skills_create_when_missing() {
+        let home = std::env::temp_dir().join("aw-detect-cl-skills-create");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-cl-skills-create-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).expect("create ws");
+        // No skills directory in home
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::ClaudeSkills,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::Create, "missing skills dir should be Create");
+    }
+
+    #[test]
+    fn detect_codex_config_conflict_when_invalid_toml() {
+        let home = std::env::temp_dir().join("aw-detect-cx-invalid");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        fs::create_dir_all(home.join(".codex")).expect("create codex dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-cx-invalid-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).expect("create ws");
+        fs::create_dir_all(ws.join("templates/codex")).expect("create templates");
+
+        // Write invalid TOML as installed config
+        fs::write(home.join(".codex/config.toml"), "not valid toml {{{").unwrap();
+        fs::write(ws.join("templates/codex/config.toml"), "[profile]\n").unwrap();
+
+        let (_surface, kind, summary) = detect_surface_state(
+            SetupSurfaceId::CodexConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::Conflict, "invalid TOML should be Conflict, got {kind:?}: {summary}");
+    }
+
+    #[test]
+    fn detect_opencode_config_conflict_when_invalid_json() {
+        let home = std::env::temp_dir().join("aw-detect-oc-invalid");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-oc-invalid-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
+
+        // Write invalid JSON as installed config
+        fs::write(home.join(".config/opencode/opencode.json"), "not json {{{").unwrap();
+        fs::write(ws.join("templates/opencode.json"), "{}").unwrap();
+
+        let (_surface, kind, summary) = detect_surface_state(
+            SetupSurfaceId::OpenCodeConfig,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::Conflict, "invalid JSON should be Conflict, got {kind:?}: {summary}");
+    }
+
+    #[test]
+    fn detect_rules_nochange_when_matching() {
+        let home = std::env::temp_dir().join("aw-detect-rules-match");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(home.join(".codex")).expect("create codex dir");
+
+        let ws = std::env::temp_dir().join("aw-detect-rules-match-ws");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(ws.join("templates/sync")).expect("create sync dir");
+
+        fs::write(home.join(".codex/AGENTS.md"), "same rules").unwrap();
+        fs::write(ws.join("templates/sync/codex-rules.md"), "same rules").unwrap();
+
+        let (_surface, kind, _summary) = detect_surface_state(
+            SetupSurfaceId::CodexRules,
+            &ws,
+            &home,
+        );
+        assert_eq!(kind, OperationKind::NoChange, "matching rules should be NoChange");
     }
 }

@@ -89,7 +89,7 @@ fn parse_codex_config(path: &Path) -> Option<toml::Value> {
     toml::from_str(&content).ok()
 }
 
-fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
+pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
     let mut managed = toml::map::Map::new();
     if let Some(table) = config.as_table() {
         for key in MANAGED_TOP_LEVEL_KEYS {
@@ -124,7 +124,7 @@ fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
     toml::Value::Table(managed)
 }
 
-fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::Value) -> bool {
+pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::Value) -> bool {
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
 }
 

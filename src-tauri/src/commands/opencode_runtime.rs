@@ -144,7 +144,7 @@ fn extract_managed_opencode_config(config: &serde_json::Value) -> serde_json::Va
     serde_json::Value::Object(managed)
 }
 
-fn managed_opencode_keys_match(
+pub(crate) fn managed_opencode_keys_match(
     installed: &serde_json::Value,
     rendered: &serde_json::Value,
 ) -> bool {
