@@ -51,10 +51,10 @@ After code changes that affect the app, manually check:
 - Brain Setup displays the copy-paste setup block and does not change enabled sync targets.
 - Copy brain setup writes the full setup block to the clipboard.
 - Settings save/reset works for appearance and theme colors; target changes from harness pages autosave (debounced).
-- Harness Targets panels show profile chips and target toggles per tool.
-- Applying OpenCode profile selects `opencode_rules` + `opencode_config`.
-- Applying All rules selects `codex_rules`, `opencode_rules`, and `claude_rules`.
-- Applying All supported selects all rule targets plus `opencode_config`.
+- Harness Targets panels show target toggles per tool with enable/disable checkboxes.
+- Toggling a rule target enables its diff/sync actions for that tool.
+- Toggling a config target enables its config diff/sync action.
+- Agent targets are enabled independently per tool.
 - Manual checkbox changes show custom target selection.
 - Save persists selected targets; Reset restores defaults.
 - Invalid workspace paths refuse script-backed actions.

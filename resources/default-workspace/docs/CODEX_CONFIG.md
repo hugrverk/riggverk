@@ -1,8 +1,8 @@
 # Codex Config
 
-Versioned Codex config template for manual review.
+Versioned Codex config template with managed-section merge.
 
-This workspace supports Codex rules sync and a config template for diff/manual review. It does not run Codex, start agents, manage project-specific Codex settings, or store project registries.
+This workspace supports Codex rules sync and config sync via managed-section merge. It does not run Codex, start agents, manage project-specific Codex settings, or store project registries.
 
 Files:
 
