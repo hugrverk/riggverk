@@ -187,8 +187,22 @@ def assert_rust_contracts() -> None:
         fail("preview token consumption must occur inside apply_planned_artifacts after preflight")
     if "validate_artifact_source_dest" not in txn_text:
         fail("setup_transaction must validate artifact source and destination paths")
-    if "run_persisted_automatic_rollback" not in setup_text:
-        fail("automatic rollback must persist manifest progress")
+    if "run_persisted_rollback" not in setup_text:
+        fail("rollback must use shared persisted rollback core")
+    if "operation_eligible_for_rollback_mutation" not in txn_text:
+        fail("rollback eligibility must exclude restored artifacts")
+    if "RollingBack" not in setup_text or "rollback_failed" not in read(
+        REPO / "resources/default-workspace/docs/USING_THE_APP.md"
+    ).lower():
+        fail("docs must document rolling_back and rollback_failed resume")
+    if "merged.to_string()" in txn_text and "CodexConfig" in txn_text:
+        fail("Codex managed rollback must not use toml::Value to_string serialization")
+    if "rollback_codex_config_managed_projection" not in read(
+        REPO / "src-tauri/src/commands/codex_runtime.rs"
+    ):
+        fail("Codex managed rollback must use line-preserving Python merge owner")
+    if "acceptMutationTransaction" not in read(SETUP_LIFECYCLE_TSX):
+        fail("SetupLifecycle must retain failed apply and repair transactions")
     if "post_apply_full_digest" not in txn_text:
         fail("manifest must record post-apply full digests for rollback safety")
     if "merge_managed_opencode_config" not in read(REPO / "src-tauri/src/commands/opencode_runtime.rs"):
@@ -203,6 +217,11 @@ def assert_rust_contracts() -> None:
     using_app = read(REPO / "resources/default-workspace/docs/USING_THE_APP.md")
     if "not on Workspace" in using_app and "setup lifecycle" in using_app:
         fail("USING_THE_APP.md must not contradict harness vs Workspace setup paths")
+    if re.search(r"Install from harness pages,\s*not from Workspace", using_app):
+        fail("USING_THE_APP.md must not claim skills install only from harness pages")
+    smoke_doc = read(REPO / "docs/APP_RELEASE_SMOKE.md")
+    if "smoke-tauri-runtime" in smoke_doc and "webview" not in smoke_doc.lower():
+        fail("APP_RELEASE_SMOKE.md must distinguish backend runtime smoke from webview smoke")
     claude_text = read(CLAUDE_RUNTIME)
     if re.search(r"agent:\s*claude", claude_text):
         fail("Claude health must not parse obsolete agent: claude metadata")

@@ -35,7 +35,7 @@ View and edit `templates/global-agent-rules.md`. Synced to agent rule paths from
 
 ### Skills
 
-Browse bundled skills. Install from harness pages, not from Workspace.
+Browse bundled skills in Library. Install or sync from harness pages (per-tool preview and apply) or from the Workspace unified setup lifecycle (apply/repair across harnesses). These paths are complementary.
 
 ### Agents
 
@@ -73,7 +73,9 @@ In-app utilities separate from harness sync:
 
 - **Preview** issues a short-lived token and fingerprint; **apply** and **repair** consume the token only after complete backend preflight and immediately before the first mutation.
 - Failed preflight leaves the token valid for retry.
-- Failed apply with automatic rollback remains visible; use **rollback** to retry when dry-run shows eligible artifacts.
+- Failed apply or repair with a transaction ID remains available for **rollback** when dry-run shows eligible artifacts.
+- Explicit rollback persists per-artifact progress; transactions in `rolling_back` or `rollback_failed` can be resumed; already restored artifacts are skipped.
+- Codex managed rollback preserves comments and unrelated formatting via the line-preserving merge script, or refuses safely on conflict.
 - Symlinked parents and dangling symlinks in managed paths are rejected.
 
 ## Backups
