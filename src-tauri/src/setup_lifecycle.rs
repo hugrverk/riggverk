@@ -96,15 +96,6 @@ impl SetupSurfaceId {
             SetupSurfaceId::DeprecatedSkillCleanup => "Deprecated Skills",
         }
     }
-
-    /// Returns true if this surface requires manual user action.
-    /// Currently no surfaces are fully manual — all have automation paths.
-    /// Manual steps are surfaced through the planner's manual_step field
-    /// when specific conditions require user intervention.
-    #[allow(dead_code)]
-    pub fn is_manual_only(&self) -> bool {
-        false
-    }
 }
 
 // ── Operation state ──
@@ -131,11 +122,6 @@ impl OperationKind {
     pub fn needs_apply(&self) -> bool {
         matches!(self, OperationKind::Create | OperationKind::Update)
     }
-
-    #[allow(dead_code)]
-    pub fn is_blocking(&self) -> bool {
-        matches!(self, OperationKind::Conflict | OperationKind::Unavailable)
-    }
 }
 
 // ── Plan types ──
@@ -158,27 +144,6 @@ pub struct PlannedOperation {
     /// If this is manual, describes what the user must do.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub manual_step: Option<String>,
-}
-
-/// Summary of validation results after an apply or repair.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct ValidationResult {
-    pub surface: SetupSurfaceId,
-    pub passed: bool,
-    pub message: String,
-}
-
-/// Summary of a completed or planned transaction.
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[allow(dead_code)]
-pub struct TransactionSummary {
-    pub transaction_id: String,
-    pub surface_count: usize,
-    pub applied: Vec<String>,
-    pub failed: Vec<String>,
-    pub rolled_back: Vec<String>,
-    pub manual_steps: Vec<String>,
 }
 
 // ── Plan result ──
@@ -563,13 +528,6 @@ mod tests {
     }
 
     #[test]
-    fn no_surface_is_manual_only() {
-        for s in SetupSurfaceId::ALL {
-            assert!(!s.is_manual_only(), "{:?} should not be manual-only", s);
-        }
-    }
-
-    #[test]
     fn frontend_request_is_serializable() {
         let req = SetupRequest {
             surfaces: vec![SetupSurfaceId::OpenCodeConfig],
@@ -658,11 +616,5 @@ mod tests {
         assert!(OperationKind::Update.needs_apply());
         assert!(!OperationKind::NoChange.needs_apply());
         assert!(!OperationKind::Conflict.needs_apply());
-
-        assert!(OperationKind::Conflict.is_blocking());
-        assert!(OperationKind::Unavailable.is_blocking());
-        assert!(!OperationKind::Create.is_blocking());
-        assert!(!OperationKind::Update.is_blocking());
-        assert!(!OperationKind::NoChange.is_blocking());
     }
 }

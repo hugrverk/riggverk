@@ -548,7 +548,7 @@ fn create_single_artifact(
     }
 
     if source.is_dir() {
-        crate::deprecated_skills::copy_dir_all(&source, &dest)
+        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest)
             .map_err(|e| format!("create skill dir: {e}"))?;
         return Ok(());
     }
@@ -633,6 +633,7 @@ struct FailedApplyRollback<'a> {
     manifest: &'a mut ArtifactTransactionManifest,
     backup_dir: &'a Path,
     home: &'a Path,
+    workspace_root: &'a Path,
     transaction_id: String,
     applied: Vec<String>,
     failed: Vec<String>,
@@ -643,13 +644,12 @@ struct FailedApplyRollback<'a> {
 fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResult {
     let mut failed = ctx.failed;
     let mut message = ctx.message;
-    let ws_root = workspace_root().unwrap_or_else(|_| PathBuf::from("."));
     let (rolled_back, rb_errors, persist_err) = run_persisted_automatic_rollback(
         ctx.manifest_path,
         ctx.manifest,
         ctx.backup_dir,
         ctx.home,
-        &ws_root,
+        ctx.workspace_root,
     );
     if !rb_errors.is_empty() {
         message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
@@ -710,6 +710,21 @@ fn apply_planned_artifacts(
             message: "No artifact operations to apply".to_string(),
         };
     }
+
+    let _mutation_guard = match crate::setup_mutation_guard::try_acquire_setup_mutation_guard() {
+        Ok(guard) => guard,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps,
+                message: e,
+            };
+        }
+    };
 
     let ws_root = match workspace_root() {
         Ok(r) => r,
@@ -917,6 +932,7 @@ fn apply_planned_artifacts(
                 manifest: &mut manifest,
                 backup_dir: &backup_dir,
                 home: &home,
+                workspace_root: &ws_root,
                 transaction_id,
                 applied,
                 failed: vec![e],
@@ -976,6 +992,7 @@ fn apply_planned_artifacts(
                 manifest: &mut manifest,
                 backup_dir: &backup_dir,
                 home: &home,
+                workspace_root: &ws_root,
                 transaction_id,
                 applied,
                 failed,
@@ -1043,6 +1060,7 @@ fn apply_planned_artifacts(
                 manifest: &mut manifest,
                 backup_dir: &backup_dir,
                 home: &home,
+                workspace_root: &ws_root,
                 transaction_id,
                 applied,
                 failed,
@@ -1063,6 +1081,7 @@ fn apply_planned_artifacts(
                 manifest: &mut manifest,
                 backup_dir: &backup_dir,
                 home: &home,
+                workspace_root: &ws_root,
                 transaction_id,
                 applied,
                 failed: vec![e],
@@ -1084,6 +1103,7 @@ fn apply_planned_artifacts(
             manifest: &mut manifest,
             backup_dir: &backup_dir,
             home: &home,
+            workspace_root: &ws_root,
             transaction_id,
             applied,
             failed: vec![e],
@@ -1767,6 +1787,21 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
             ),
         };
     }
+
+    let _mutation_guard = match crate::setup_mutation_guard::try_acquire_setup_mutation_guard() {
+        Ok(guard) => guard,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: e,
+            };
+        }
+    };
 
     let mut manifest_mut = manifest;
     let (restored, rollback_failures, persist_err) = run_persisted_rollback(

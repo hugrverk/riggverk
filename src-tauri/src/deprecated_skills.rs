@@ -8,6 +8,10 @@ use crate::agent_skill_targets::{
 };
 use crate::commands::backups::backup_root;
 use crate::commands::{file_eq, ActionResult};
+use crate::path_safety::{ensure_within_root, reject_symlink};
+use crate::safe_filesystem::{
+    copy_dir_no_symlinks, reject_nested_symlinks, remove_dir_no_symlinks,
+};
 
 const MANIFEST_REL: &str = "metadata/deprecated-skills.json";
 const REFERENCE_ROOT_REL: &str = "metadata/deprecated-skills";
@@ -90,43 +94,6 @@ fn reference_skill_md(workspace_root: &Path, name: &str) -> PathBuf {
         .join("SKILL.md")
 }
 
-fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
-}
-
-fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
-    let canonical_child = child
-        .canonicalize()
-        .map_err(|e| format!("cannot resolve {}: {e}", child.display()))?;
-    let canonical_root = root
-        .canonicalize()
-        .map_err(|e| format!("cannot resolve skills root {}: {e}", root.display()))?;
-    if canonical_child == canonical_root || canonical_child.starts_with(&canonical_root) {
-        Ok(())
-    } else {
-        Err(format!(
-            "skill path escapes destination root: {}",
-            child.display()
-        ))
-    }
-}
-
-#[allow(dead_code)]
-fn path_under_root(child: &Path, root: &Path) -> bool {
-    match (child.canonicalize(), root.canonicalize()) {
-        (Ok(c), Ok(r)) => c == r || c.starts_with(&r),
-        _ => false,
-    }
-}
-
 fn classify_deprecated(
     workspace_root: &Path,
     dest_root: &Path,
@@ -134,20 +101,20 @@ fn classify_deprecated(
 ) -> Result<Option<DeprecatedSkillEntry>, String> {
     validate_skill_name(name, "installed skill directory")?;
     let skill_dir = dest_root.join(name);
-    reject_symlink_path(&skill_dir, "installed skill directory")?;
+    reject_symlink(&skill_dir, "installed skill directory")?;
     if !skill_dir.is_dir() {
         return Ok(None);
     }
-    path_within_root(&skill_dir, dest_root)?;
+    ensure_within_root(&skill_dir, dest_root, "installed skill directory")?;
 
     let installed_md = skill_dir.join("SKILL.md");
-    reject_symlink_path(&installed_md, "installed skill file")?;
+    reject_symlink(&installed_md, "installed skill file")?;
     if !installed_md.is_file() {
         return Ok(None);
     }
 
     let reference_md = reference_skill_md(workspace_root, name);
-    reject_symlink_path(&reference_md, "deprecated reference file")?;
+    reject_symlink(&reference_md, "deprecated reference file")?;
     if !reference_md.is_file() {
         return Err(format!(
             "deprecated reference missing for {name}: {}",
@@ -182,7 +149,7 @@ pub fn scan_deprecated_installed(
     current_skill_names: &HashSet<String>,
 ) -> Result<Vec<DeprecatedSkillEntry>, String> {
     validate_skill_dest_root(dest_root)?;
-    reject_symlink_path(dest_root, "skill destination root")?;
+    reject_symlink(dest_root, "skill destination root")?;
 
     let deprecated_names: HashSet<String> =
         load_deprecated_names(workspace_root)?.into_iter().collect();
@@ -247,60 +214,15 @@ fn create_backup_dir(agent: &str) -> Result<PathBuf, String> {
 }
 
 pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
-    reject_symlink_path(src, "backup source")?;
-    fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
-    for entry in fs::read_dir(src).map_err(|e| format!("read dir {}: {e}", src.display()))? {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
-        if file_type.is_symlink() {
-            return Err(format!(
-                "refusing symlink in backup source: {}",
-                entry.path().display()
-            ));
-        }
-        let target = dst.join(entry.file_name());
-        if file_type.is_dir() {
-            copy_dir_all(&entry.path(), &target)?;
-        } else if file_type.is_file() {
-            fs::copy(entry.path(), &target).map_err(|e| {
-                format!(
-                    "copy {} -> {}: {e}",
-                    entry.path().display(),
-                    target.display()
-                )
-            })?;
-        }
-    }
-    Ok(())
+    copy_dir_no_symlinks(src, dst)
 }
 
 fn remove_dir_all(path: &Path) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    reject_symlink_path(path, "removal target")?;
-    for entry in fs::read_dir(path).map_err(|e| format!("read dir {}: {e}", path.display()))? {
-        let entry = entry.map_err(|e| format!("read entry: {e}"))?;
-        let entry_path = entry.path();
-        let file_type = entry.file_type().map_err(|e| format!("file type: {e}"))?;
-        if file_type.is_symlink() {
-            return Err(format!(
-                "refusing symlink during removal: {}",
-                entry_path.display()
-            ));
-        }
-        if file_type.is_dir() {
-            remove_dir_all(&entry_path)?;
-        } else {
-            fs::remove_file(&entry_path)
-                .map_err(|e| format!("remove file {}: {e}", entry_path.display()))?;
-        }
-    }
-    fs::remove_dir(path).map_err(|e| format!("remove dir {}: {e}", path.display()))
+    remove_dir_no_symlinks(path)
 }
 
 fn validate_backup_path(backup_dir: &Path) -> Result<(), String> {
-    reject_symlink_path(backup_dir, "rollback backup")?;
+    reject_symlink(backup_dir, "rollback backup")?;
     if !backup_dir.is_dir() {
         return Err(format!(
             "rollback backup not found: {}",
@@ -426,6 +348,8 @@ pub fn remove_identical_deprecated(
         ));
     }
 
+    let _mutation_guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
+
     let removable: Vec<&DeprecatedRemovalPreviewItem> = preview
         .items
         .iter()
@@ -434,10 +358,10 @@ pub fn remove_identical_deprecated(
 
     // ── Preflight: all destinations within dest_root ──
     validate_skill_dest_root(dest_root)?;
-    reject_symlink_path(dest_root, "skill destination root")?;
+    reject_symlink(dest_root, "skill destination root")?;
     for item in &removable {
         let skill_dir = PathBuf::from(&item.target_path);
-        path_within_root(&skill_dir, dest_root)?;
+        ensure_within_root(&skill_dir, dest_root, "installed skill directory")?;
     }
 
     // ── Preflight: backup path is valid ──
@@ -554,49 +478,6 @@ pub fn remove_identical_deprecated(
     ))
 }
 
-const MAX_SYMLINK_CHECK_DEPTH: usize = 32;
-
-/// Recursively reject symlinks at any depth within a directory tree.
-///
-/// Does not follow symlinks. Bounded by MAX_SYMLINK_CHECK_DEPTH to prevent
-/// stack overflow on deeply nested structures.
-fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
-    fn recurse(dir: &Path, label: &str, depth: usize) -> Result<(), String> {
-        if depth > MAX_SYMLINK_CHECK_DEPTH {
-            return Err(format!(
-                "max symlink check depth exceeded in {}: {}",
-                label,
-                dir.display()
-            ));
-        }
-        if !dir.is_dir() {
-            return Ok(());
-        }
-        let meta = fs::symlink_metadata(dir)
-            .map_err(|e| format!("cannot inspect {}: {e}", dir.display()))?;
-        if meta.file_type().is_symlink() {
-            return Err(format!("refusing symlink in {}: {}", label, dir.display()));
-        }
-        let entries =
-            fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
-        for entry in entries {
-            let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
-            let path = entry.path();
-            let ft = entry
-                .file_type()
-                .map_err(|e| format!("file type error: {e}"))?;
-            if ft.is_symlink() {
-                return Err(format!("nested symlink in {}: {}", label, path.display()));
-            }
-            if ft.is_dir() {
-                recurse(&path, label, depth + 1)?;
-            }
-        }
-        Ok(())
-    }
-    recurse(dir, label, 0)
-}
-
 /// Attempt to restore already-removed skills from backup after a partial removal failure.
 fn attempt_auto_restore(
     backup_dir: &Path,
@@ -631,6 +512,7 @@ fn attempt_auto_restore(
 }
 
 pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
+    let _mutation_guard = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()?;
     let backup_dir = PathBuf::from(backup_path);
     validate_backup_path(&backup_dir)?;
 
@@ -711,7 +593,7 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
                 backup_src.display()
             ));
         }
-        reject_symlink_path(&backup_src, "rollback source")?;
+        reject_symlink(&backup_src, "rollback source")?;
 
         // Reject nested symlinks at any depth inside backup skill directories
         reject_nested_symlinks(&backup_src, &skill.name)?;
@@ -720,7 +602,7 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
     // ── Resolve current harness destination (do NOT trust manifest path) ──
     let dest_root = agent_global_skills_dest(&manifest.harness)?;
     validate_skill_dest_root(&dest_root)?;
-    reject_symlink_path(&dest_root, "rollback destination root")?;
+    reject_symlink(&dest_root, "rollback destination root")?;
 
     // ── Canonicalize resolved destination where it exists ──
     let canonical_dest = if dest_root.exists() {
@@ -1657,7 +1539,7 @@ mod tests {
         fs::create_dir_all(&deep).expect("create deep dir");
 
         // No symlinks — should pass
-        assert!(reject_nested_symlinks(&root, "test").is_ok());
+        assert!(crate::safe_filesystem::reject_nested_symlinks(&root, "test").is_ok());
 
         // Add a symlink at depth 4
         let external = temp_root("deep-external");
@@ -1665,7 +1547,7 @@ mod tests {
         let sym_at_depth = deep.join("evil_link");
         std::os::unix::fs::symlink(&external, &sym_at_depth).expect("create deep symlink");
 
-        let result = reject_nested_symlinks(&root, "test");
+        let result = crate::safe_filesystem::reject_nested_symlinks(&root, "test");
         assert!(result.is_err(), "must reject deeply nested symlink");
         let err = result.unwrap_err();
         assert!(
@@ -1715,6 +1597,42 @@ mod tests {
         assert!(
             err.contains("invalid agent"),
             "error mentions invalid agent: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_skill_directory_is_rejected() {
+        let workspace = temp_root("ws-dangling-dir");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = temp_root("dest-dangling-dir");
+        fs::create_dir_all(&dest).expect("dest");
+        std::os::unix::fs::symlink(dest.join("missing-target"), dest.join("caveman"))
+            .expect("dangling skill dir");
+
+        let current = HashSet::new();
+        let err = scan_deprecated_installed(&workspace, &dest, &current).expect_err("dangling dir");
+        assert!(
+            err.contains("symlink"),
+            "must reject dangling skill dir: {err}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_symlink_skill_md_is_rejected() {
+        let workspace = temp_root("ws-dangling-md");
+        setup_workspace_with_deprecated_refs(&workspace);
+        let dest = temp_root("dest-dangling-md");
+        fs::create_dir_all(dest.join("caveman")).expect("skill dir");
+        std::os::unix::fs::symlink(dest.join("missing-skill.md"), dest.join("caveman/SKILL.md"))
+            .expect("dangling skill md");
+
+        let current = HashSet::new();
+        let err = scan_deprecated_installed(&workspace, &dest, &current).expect_err("dangling md");
+        assert!(
+            err.contains("symlink"),
+            "must reject dangling SKILL.md: {err}"
         );
     }
 }

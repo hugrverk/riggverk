@@ -8,6 +8,7 @@ use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -172,6 +173,7 @@ struct PreviewTokenEntry {
 }
 
 static PREVIEW_TOKENS: OnceLock<Mutex<HashMap<String, PreviewTokenEntry>>> = OnceLock::new();
+static PREVIEW_TOKEN_SEQ: AtomicU64 = AtomicU64::new(0);
 
 fn preview_tokens() -> &'static Mutex<HashMap<String, PreviewTokenEntry>> {
     PREVIEW_TOKENS.get_or_init(|| Mutex::new(HashMap::new()))
@@ -197,11 +199,14 @@ fn prune_preview_tokens(map: &mut HashMap<String, PreviewTokenEntry>) {
             ) < PREVIEW_TOKEN_TTL_SECS
     });
     while map.len() > MAX_PREVIEW_TOKENS {
-        if let Some(key) = map.keys().next().cloned() {
-            map.remove(&key);
-        } else {
+        let Some(oldest_key) = map
+            .iter()
+            .min_by_key(|(_, entry)| entry.issued_at)
+            .map(|(key, _)| key.clone())
+        else {
             break;
-        }
+        };
+        map.remove(&oldest_key);
     }
 }
 
@@ -220,29 +225,36 @@ pub fn issue_preview_token(
     scope_surfaces: &[SetupSurfaceId],
 ) -> Result<String, String> {
     let workspace_key = workspace_key(workspace_root)?;
-    let token = format!("{:016x}", {
-        let mut hasher = std::collections::hash_map::DefaultHasher::new();
-        workspace_key.hash(&mut hasher);
-        fingerprint.hash(&mut hasher);
-        format!("{purpose:?}").hash(&mut hasher);
-        now_secs().hash(&mut hasher);
-        std::process::id().hash(&mut hasher);
-        hasher.finish()
-    });
-    if let Ok(mut map) = preview_tokens().lock() {
-        prune_preview_tokens(&mut map);
-        map.insert(
-            token.clone(),
-            PreviewTokenEntry {
-                workspace_key,
-                fingerprint: fingerprint.to_string(),
-                purpose,
-                scope_surfaces: scope_surfaces.to_vec(),
-                issued_at: SystemTime::now(),
-                consumed: false,
-            },
-        );
-    }
+    let seq = PREVIEW_TOKEN_SEQ.fetch_add(1, Ordering::Relaxed);
+    let token = format!(
+        "{:016x}{:016x}",
+        {
+            let mut hasher = std::collections::hash_map::DefaultHasher::new();
+            workspace_key.hash(&mut hasher);
+            fingerprint.hash(&mut hasher);
+            format!("{purpose:?}").hash(&mut hasher);
+            now_secs().hash(&mut hasher);
+            std::process::id().hash(&mut hasher);
+            seq.hash(&mut hasher);
+            hasher.finish()
+        },
+        seq ^ (now_secs() << 16) ^ u64::from(std::process::id())
+    );
+    let mut map = preview_tokens()
+        .lock()
+        .map_err(|_| "preview token registry unavailable".to_string())?;
+    prune_preview_tokens(&mut map);
+    map.insert(
+        token.clone(),
+        PreviewTokenEntry {
+            workspace_key,
+            fingerprint: fingerprint.to_string(),
+            purpose,
+            scope_surfaces: scope_surfaces.to_vec(),
+            issued_at: SystemTime::now(),
+            consumed: false,
+        },
+    );
     Ok(token)
 }
 
@@ -1079,7 +1091,7 @@ pub fn backup_artifact(
         fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
     }
     if dest.is_dir() {
-        crate::deprecated_skills::copy_dir_all(&dest, &backup_path)
+        crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
     } else {
         fs::copy(&dest, &backup_path)
@@ -1422,7 +1434,7 @@ fn restore_artifact_from_backup_with_mode(
                 }
             }
             if backup_path.is_dir() {
-                crate::deprecated_skills::copy_dir_all(&backup_path, &dest)
+                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest)
                     .map_err(|e| format!("restore dir: {e}"))?;
             } else {
                 if let Some(parent) = dest.parent() {
@@ -1620,6 +1632,43 @@ mod tests {
         validate_preview_token(&token, &ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
         consume_preview_token(&token).unwrap();
         assert!(validate_preview_token(&token, &ws, fp, PreviewPurpose::Apply, &surfaces).is_err());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn rapid_identical_previews_receive_distinct_tokens() {
+        clear_preview_tokens_for_test();
+        let ws = temp("token-rapid");
+        fs::create_dir_all(&ws).unwrap();
+        let fp = "abc123def4567890abcdef1234567890";
+        let surfaces = vec![SetupSurfaceId::OpenCodeRules];
+        let first = issue_preview_token(&ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        let second = issue_preview_token(&ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        assert_ne!(
+            first, second,
+            "rapid duplicate previews must get distinct tokens"
+        );
+        validate_preview_token(&first, &ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        validate_preview_token(&second, &ws, fp, PreviewPurpose::Apply, &surfaces).unwrap();
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn preview_token_rejects_fingerprint_mismatch() {
+        clear_preview_tokens_for_test();
+        let ws = temp("token-fp");
+        fs::create_dir_all(&ws).unwrap();
+        let surfaces = vec![SetupSurfaceId::OpenCodeRules];
+        let token =
+            issue_preview_token(&ws, "aaaaaaaaaaaaaaaa", PreviewPurpose::Apply, &surfaces).unwrap();
+        assert!(validate_preview_token(
+            &token,
+            &ws,
+            "bbbbbbbbbbbbbbbb",
+            PreviewPurpose::Apply,
+            &surfaces
+        )
+        .is_err());
         let _ = fs::remove_dir_all(&ws);
     }
 

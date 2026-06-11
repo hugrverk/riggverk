@@ -108,6 +108,28 @@ fn component_eq(a: Component<'_>, b: &Component<'_>) -> bool {
     }
 }
 
+/// Lexical containment plus symlink rejection; canonical comparison when paths exist.
+pub fn ensure_within_root(child: &Path, root: &Path, label: &str) -> Result<(), String> {
+    reject_symlink(child, label)?;
+    reject_symlink(root, "destination root")?;
+    reject_path_escape(child, root, label)?;
+    if child.exists() {
+        let canonical_child = child
+            .canonicalize()
+            .map_err(|e| format!("cannot resolve {label} {}: {e}", child.display()))?;
+        let canonical_root = root
+            .canonicalize()
+            .map_err(|e| format!("cannot resolve destination root {}: {e}", root.display()))?;
+        if canonical_child != canonical_root && !canonical_child.starts_with(&canonical_root) {
+            return Err(format!(
+                "{label} escapes destination root: {}",
+                child.display()
+            ));
+        }
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
