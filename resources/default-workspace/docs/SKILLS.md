@@ -42,6 +42,20 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `kretsverket-symbol-system` | Symbol Editor sandbox, definitions, instances, imports, nested symbols, anchors, and placed-instance updates. |
 | `kretsverket-electrical-drawing` | Wire semantics, terminal bindings, crossings, references, and drawing-versus-netlist boundaries. |
 
+## Routing boundaries
+
+| Pair | Distinct roles |
+| --- | --- |
+| `diagnose` / `tdd` | Diagnose finds root cause; TDD locks behavior with a narrow test once the contract is clear. |
+| `implementation-plan` / `minimal-implementation` | Plan defines slices; minimal-implementation executes one bounded patch. |
+| `frontend-design` / `screenshot-review` | Screenshot-review diagnoses static images; frontend-design chooses direction and implements. |
+| `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
+| `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
+| `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
+| `security-review` / `sentinel` (agent) | Skill guides implementation-time review; sentinel agent performs read-only specialist security review. |
+| `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
+| Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
+
 ## Common Combinations
 
 - Bugs or regressions: `diagnose`; add `tdd` when a narrow regression test is useful.

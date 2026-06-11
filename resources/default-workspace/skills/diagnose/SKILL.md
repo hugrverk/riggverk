@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Debug bugs, failures, flakes, slowness, or regressions with reproduce -> minimise -> hypothesise -> instrument -> fix -> regression-test.
+description: Debug bugs, failures, flakes, slowness, or regressions with reproduce → minimise → hypothesise → instrument → fix. Use before implementation when root cause is unknown. Pair with `tdd` only for a narrow regression test after the failure is understood—not for test-first feature work unless requested.
 category: diagnosis
 risk: medium
 targets: codex, opencode, claude, cursor

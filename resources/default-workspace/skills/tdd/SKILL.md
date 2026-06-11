@@ -1,6 +1,6 @@
 ---
 name: tdd
-description: Use a narrow red -> green -> refactor loop for test-first features, fixes, regressions, and behavior changes.
+description: Use a narrow red → green → refactor loop for test-first features, fixes, or regressions when behavior is already specified. Not a substitute for `diagnose` when root cause is unknown.
 category: testing
 risk: low
 targets: codex, opencode, claude, cursor

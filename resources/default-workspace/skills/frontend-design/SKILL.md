@@ -1,64 +1,109 @@
 ---
 name: frontend-design
-description: Design or improve frontend UI with a clear aesthetic direction, existing design-system fit, accessibility, verification, and low generic-AI feel.
+description: Choose and implement frontend visual direction for Agent Workspace surfaces. Use when building or improving UI with repository-aware design discipline, accessibility, rendered verification, and clear boundaries from screenshot-review, browser-qa, and accessibility-review.
 category: frontend
 risk: medium
 targets: codex, opencode, claude, cursor
-related: screenshot-review, browser-qa, accessibility-review
+related: screenshot-review, browser-qa, accessibility-review, prototype
 ---
 
 # Frontend Design
 
 ## Mode
 
-Identify your working mode first:
+Identify the working mode before any visual decision:
 
-- **Existing product**: preserve visual language, fit into design tokens and component patterns. Change only what the task requires.
-- **Greenfield**: choose one clear direction before coding. Default to utilitarian, not decorative.
-- **Explicit redesign**: only when asked. State what changes and why, with measurable improvement criteria.
+- **Existing product**: preserve the mature product language. Inspect tokens, components, routes, and screenshots first. Change only what the task requires.
+- **Greenfield**: commit to one coherent direction before coding. Default to utilitarian clarity, not decorative novelty.
+- **Explicit redesign**: only when requested. State what changes, what stays, and how success is measured.
 
-## Intent
+## Routing boundaries
 
-State in one sentence: purpose, audience, tone, information density. Example: *compact operational dashboard for solo developers — calm, dense, technical.*
+- **screenshot-review**: diagnoses static screenshots; does not implement unless asked.
+- **frontend-design** (this skill): chooses visual direction and implements UI when requested.
+- **accessibility-review**: specialist accessibility audit; not a substitute for baseline a11y during implementation.
+- **browser-qa**: supplies runtime evidence after implementation.
+- **prototype**: explores uncertain variants without creating permanent parallel design systems.
 
-## Design direction
+## Inspect first
 
-Pick at most one signature idea: a deliberate color accent, a consistent spacing rhythm, a single motion pattern, or a strong layout hierarchy. Do not layer multiple signature ideas.
+Before proposing a direction, inspect repository reality:
 
-Avoid: purple gradients, glass cards, generic SaaS sections, stock layouts, random animation, equivalent card stacks.
+- design tokens, typography, spacing, color, and component ownership
+- relevant routes, layouts, and content patterns
+- product language (including Swedish user-facing copy where applicable)
+- screenshots or live UI when available
+- existing motion, density, and state handling
+
+Do not override a mature design system or generic-AI styling habits without explicit redesign intent.
+
+## Design thesis
+
+Write one sentence that states purpose, audience, tone, and density. Example: *calm operational workspace for solo developers — dense, legible, low ceremony.*
+
+Then choose one coherent design thesis: the overall character the interface should express (for example restrained industrial, editorial, soft utility, or focused dashboard). Execute that thesis consistently; do not mix unrelated aesthetics in one slice.
+
+Allow one or two reinforcing signature elements when they support the thesis — for example a distinctive type hierarchy, a controlled accent, or a consistent framing device. Avoid stacking unrelated decorative ideas.
 
 ## Typography
 
-Use the existing type system first. Before adding a new font: check the license, verify system fallback coverage, and confirm the performance cost (file size, load strategy). Prefer system font stacks for utility surfaces.
+Treat typography as a primary design tool:
 
-## Color
+- establish hierarchy with scale, weight, and rhythm
+- respect line length and reading comfort for body text
+- prefer the existing type system; add fonts only with license, fallback, and performance justification
+- do not ban system fonts when the product already depends on them
 
-One dominant palette. At most one controlled accent color. Never use color as the only differentiator (add text, icon, or pattern).
+## Layout and composition
 
-## Motion
+Treat layout as composition, not only spacing:
 
-At most one primary motion concept (fade, slide, scale, or spring). Respect `prefers-reduced-motion`. Do not animate loading indicators on every surface.
+- define primary focal points and scan paths
+- use asymmetry, density, whitespace, framing, or controlled overlap when they serve the thesis
+- avoid endless equivalent card stacks and stock SaaS section patterns
+- reuse existing components and ownership before inventing new structures
 
-## States
+## Color, depth, and atmosphere
 
-Consider: loading, empty, error, disabled, validation, focus, overflow, long-label truncation, localization.
+Use color, contrast, depth, texture, borders, and background treatment intentionally:
 
-Test with realistic content length, not placeholder text.
+- one dominant palette with at most one controlled accent when appropriate
+- never rely on color alone for meaning
+- add atmosphere only when it supports the thesis; decorative backgrounds are optional, not required
 
-## Composition
+## Motion and interaction
 
-Strong hierarchy, deliberate whitespace, no endless equivalent card stacks. Reuse components before adding new ones.
+Define interaction purpose before adding animation:
+
+- motion should clarify state, focus, or hierarchy — not decorate by default
+- respect `prefers-reduced-motion`
+- match implementation complexity to the chosen aesthetic; heavy animation requires clear value
+
+## States and content realism
+
+Finish the states users actually encounter:
+
+- hover, focus, active, disabled, loading, empty, error, success
+- long labels, truncation, overflow, localization, and realistic content length
+- responsive behavior across narrow mobile through desktop widths
 
 ## Verification
 
-- Responsive: narrow mobile, wide mobile, tablet, desktop.
-- Keyboard: all interactive elements reachable and operable.
-- Reduced motion: no distracting animation when the user prefers static.
-- Contrast: at least WCAG AA for body text.
-- No generic AI SaaS aesthetic.
+When implementation is performed:
+
+- verify rendered output (browser-qa or equivalent), not only static correctness
+- keyboard reachability and visible focus
+- contrast at least WCAG AA for body text unless the product standard is stricter
+- reduced-motion behavior
+
+## Final coherence check
+
+Before reporting done, confirm the result is recognizable, usable, and intentional — not merely technically correct or generically polished.
 
 ## Guardrails
 
-- Do not optimize only for novelty or visual complexity.
-- Do not override a mature design system.
+- Do not force novelty in mature products.
+- Do not require animation, decorative backgrounds, or non-system fonts by default.
+- Do not add dependencies or heavy animation libraries without clear value.
 - Do not claim visual quality without checking the rendered result.
+- Keep maintenance and solo-developer cost visible in tradeoffs.

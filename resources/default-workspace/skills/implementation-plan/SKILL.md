@@ -1,6 +1,6 @@
 ---
 name: implementation-plan
-description: Create small verifiable implementation slices with exact files, steps, commands, risks, and no placeholders.
+description: Create small verifiable implementation slices with exact files, steps, commands, and risks. Use before multi-step or cross-file work. Does not implement—pair with `minimal-implementation` for the patch.
 category: planning
 risk: low
 targets: codex, opencode, claude, cursor

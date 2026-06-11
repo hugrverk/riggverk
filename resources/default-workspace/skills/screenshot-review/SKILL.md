@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Review UI screenshots before implementation. Use when the user provides screenshots or asks for visual audit, layout critique, responsive review, or screenshot-driven frontend improvements.
+description: Review static UI screenshots for layout, hierarchy, and responsive risks. Diagnose only—does not choose visual direction or implement unless explicitly asked (`frontend-design`).
 category: frontend
 risk: low
 targets: codex, opencode, claude, cursor

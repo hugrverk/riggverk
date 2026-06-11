@@ -1,6 +1,6 @@
 ---
 name: minimal-implementation
-description: Implement the smallest complete change that fits existing ownership without speculative abstraction, duplicate paths, or unrelated cleanup.
+description: Implement the smallest complete change that fits existing ownership. Use after direction is clear; pair with `implementation-plan` when the slice map is not yet defined.
 category: implementation
 risk: low
 targets: codex, opencode, claude, cursor
