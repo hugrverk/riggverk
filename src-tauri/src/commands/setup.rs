@@ -283,24 +283,60 @@ fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
     format!("{artifact:?}")
 }
 
-fn perform_artifact_rollback(
-    manifest_ops: &mut [ArtifactManifestOperation],
+#[derive(Clone, Copy)]
+enum RollbackExecutionMode {
+    Automatic,
+    Explicit,
+}
+
+fn run_persisted_rollback(
+    manifest_path: &Path,
+    manifest: &mut ArtifactTransactionManifest,
     backup_dir: &Path,
     home: &Path,
     workspace_root: &Path,
-) -> (Vec<String>, Vec<String>) {
+    mode: RollbackExecutionMode,
+) -> (Vec<String>, Vec<String>, Option<String>) {
+    let indices = setup_transaction::rollback_eligible_indices(&manifest.operations);
+    if indices.is_empty() {
+        return (vec![], vec![], None);
+    }
+
+    if let Err(e) = persist_setup_manifest(
+        manifest_path,
+        manifest,
+        setup_transaction::TransactionStatus::RollingBack,
+        backup_dir,
+    ) {
+        return (vec![], vec![], Some(e));
+    }
+
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
-    for op in manifest_ops.iter_mut().rev() {
-        if !setup_transaction::operation_eligible_for_explicit_rollback(op) {
-            continue;
-        }
-        match setup_transaction::restore_artifact_from_backup_for_explicit_rollback(
-            op,
+    for index in indices.into_iter().rev() {
+        if let Err(e) = persist_setup_manifest(
+            manifest_path,
+            manifest,
+            setup_transaction::TransactionStatus::RollingBack,
             backup_dir,
-            home,
-            workspace_root,
         ) {
+            return (rolled_back, errors, Some(e));
+        }
+        let op = &mut manifest.operations[index];
+        let restore_result = match mode {
+            RollbackExecutionMode::Automatic => {
+                setup_transaction::restore_artifact_from_backup(op, backup_dir, home)
+            }
+            RollbackExecutionMode::Explicit => {
+                setup_transaction::restore_artifact_from_backup_for_explicit_rollback(
+                    op,
+                    backup_dir,
+                    home,
+                    workspace_root,
+                )
+            }
+        };
+        match restore_result {
             Ok(()) => {
                 op.rollback_status = setup_transaction::RollbackStatus::Restored;
                 rolled_back.push(artifact_label(&op.artifact));
@@ -310,8 +346,25 @@ fn perform_artifact_rollback(
                 errors.push(format!("{}: {e}", artifact_label(&op.artifact)));
             }
         }
+        if let Err(e) = persist_setup_manifest(
+            manifest_path,
+            manifest,
+            setup_transaction::TransactionStatus::RollingBack,
+            backup_dir,
+        ) {
+            return (rolled_back, errors, Some(e));
+        }
     }
-    (rolled_back, errors)
+
+    let final_status = if errors.is_empty() {
+        setup_transaction::TransactionStatus::RolledBack
+    } else {
+        setup_transaction::TransactionStatus::RollbackFailed
+    };
+    if let Err(e) = persist_setup_manifest(manifest_path, manifest, final_status, backup_dir) {
+        return (rolled_back, errors, Some(e));
+    }
+    (rolled_back, errors, None)
 }
 
 fn persist_setup_manifest(
@@ -413,68 +466,16 @@ fn run_persisted_automatic_rollback(
     manifest: &mut ArtifactTransactionManifest,
     backup_dir: &Path,
     home: &Path,
+    workspace_root: &Path,
 ) -> (Vec<String>, Vec<String>, Option<String>) {
-    let indices: Vec<usize> = manifest
-        .operations
-        .iter()
-        .enumerate()
-        .filter(|(_, op)| setup_transaction::operation_may_have_been_modified(op.apply_status))
-        .map(|(i, _)| i)
-        .collect();
-    if indices.is_empty() {
-        return (vec![], vec![], None);
-    }
-
-    if let Err(e) = persist_setup_manifest(
+    run_persisted_rollback(
         manifest_path,
         manifest,
-        setup_transaction::TransactionStatus::RollingBack,
         backup_dir,
-    ) {
-        return (vec![], vec![], Some(e));
-    }
-
-    let mut rolled_back = Vec::new();
-    let mut errors = Vec::new();
-    for index in indices.into_iter().rev() {
-        if let Err(e) = persist_setup_manifest(
-            manifest_path,
-            manifest,
-            setup_transaction::TransactionStatus::RollingBack,
-            backup_dir,
-        ) {
-            return (rolled_back, errors, Some(e));
-        }
-        let op = &mut manifest.operations[index];
-        match setup_transaction::restore_artifact_from_backup(op, backup_dir, home) {
-            Ok(()) => {
-                op.rollback_status = setup_transaction::RollbackStatus::Restored;
-                rolled_back.push(artifact_label(&op.artifact));
-            }
-            Err(e) => {
-                op.rollback_status = setup_transaction::RollbackStatus::Failed;
-                errors.push(format!("{}: {e}", artifact_label(&op.artifact)));
-            }
-        }
-        if let Err(e) = persist_setup_manifest(
-            manifest_path,
-            manifest,
-            setup_transaction::TransactionStatus::RollingBack,
-            backup_dir,
-        ) {
-            return (rolled_back, errors, Some(e));
-        }
-    }
-
-    let final_status = if errors.is_empty() {
-        setup_transaction::TransactionStatus::RolledBack
-    } else {
-        setup_transaction::TransactionStatus::RollbackFailed
-    };
-    if let Err(e) = persist_setup_manifest(manifest_path, manifest, final_status, backup_dir) {
-        return (rolled_back, errors, Some(e));
-    }
-    (rolled_back, errors, None)
+        home,
+        workspace_root,
+        RollbackExecutionMode::Automatic,
+    )
 }
 
 struct FailedApplyRollback<'a> {
@@ -492,8 +493,14 @@ struct FailedApplyRollback<'a> {
 fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResult {
     let mut failed = ctx.failed;
     let mut message = ctx.message;
-    let (rolled_back, rb_errors, persist_err) =
-        run_persisted_automatic_rollback(ctx.manifest_path, ctx.manifest, ctx.backup_dir, ctx.home);
+    let ws_root = workspace_root().unwrap_or_else(|_| PathBuf::from("."));
+    let (rolled_back, rb_errors, persist_err) = run_persisted_automatic_rollback(
+        ctx.manifest_path,
+        ctx.manifest,
+        ctx.backup_dir,
+        ctx.home,
+        &ws_root,
+    );
     if !rb_errors.is_empty() {
         message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
     }
@@ -1403,6 +1410,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     match manifest.transaction_status {
         setup_transaction::TransactionStatus::Completed
         | setup_transaction::TransactionStatus::Failed
+        | setup_transaction::TransactionStatus::RollingBack
         | setup_transaction::TransactionStatus::RollbackFailed => {}
         setup_transaction::TransactionStatus::RolledBack => {
             return SetupResult {
@@ -1431,7 +1439,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     let eligible: Vec<ArtifactManifestOperation> = manifest
         .operations
         .iter()
-        .filter(|op| setup_transaction::operation_eligible_for_explicit_rollback(op))
+        .filter(|op| setup_transaction::operation_eligible_for_rollback_mutation(op))
         .cloned()
         .collect();
 
@@ -1539,35 +1547,17 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     }
 
     let mut manifest_mut = manifest;
-    if let Err(e) = persist_setup_manifest(
+    let (restored, rollback_failures, persist_err) = run_persisted_rollback(
         &manifest_path,
         &mut manifest_mut,
-        setup_transaction::TransactionStatus::RollingBack,
         &backup_dir,
-    ) {
-        return SetupResult {
-            success: false,
-            transaction_id: transaction_id.to_string(),
-            applied: vec![],
-            failed: vec![e],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: "Cannot persist rolling_back status".to_string(),
-        };
-    }
-
-    let (restored, rollback_failures) =
-        perform_artifact_rollback(&mut manifest_mut.operations, &backup_dir, &home, &ws_root);
+        &home,
+        &ws_root,
+        RollbackExecutionMode::Explicit,
+    );
     let restored_count = restored.len();
     let success = rollback_failures.is_empty();
-    let final_status = if success {
-        setup_transaction::TransactionStatus::RolledBack
-    } else {
-        setup_transaction::TransactionStatus::RollbackFailed
-    };
-    if let Err(persist_err) =
-        persist_setup_manifest(&manifest_path, &mut manifest_mut, final_status, &backup_dir)
-    {
+    if let Some(persist_err) = persist_err {
         return SetupResult {
             success: false,
             transaction_id: transaction_id.to_string(),
@@ -1584,7 +1574,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         applied: manifest_mut
             .operations
             .iter()
-            .filter(|op| setup_transaction::operation_eligible_for_explicit_rollback(op))
+            .filter(|op| setup_transaction::operation_eligible_for_rollback_mutation(op))
             .map(|op| artifact_label(&op.artifact))
             .collect(),
         failed: rollback_failures,
@@ -2359,5 +2349,293 @@ mod tests {
         assert!(result.success);
         assert!(!result.transaction_id.is_empty());
         assert!(result.transaction_id.chars().all(|c| c.is_ascii_digit()));
+    }
+
+    // ── Explicit rollback persistence and resume ──
+
+    fn rollback_test_fixture() -> (PathBuf, PathBuf, PathBuf, String) {
+        let n = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let base = std::env::temp_dir().join(format!("aw-rollback-test-{n}"));
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        fs::create_dir_all(&home).unwrap();
+        set_test_user_dirs(&home);
+        let resolved_home = user_home().expect("resolved home for rollback fixture");
+        fs::create_dir_all(resolved_home.join(".codex")).unwrap();
+        fs::create_dir_all(resolved_home.join(".config/opencode")).unwrap();
+        fs::write(resolved_home.join(".codex/AGENTS.md"), "codex-applied").unwrap();
+        fs::write(
+            resolved_home.join(".config/opencode/AGENTS.md"),
+            "opencode-applied",
+        )
+        .unwrap();
+        let backup_root = base.join("backups");
+        fs::create_dir_all(&backup_root).unwrap();
+        let ws_canon = ws.canonicalize().unwrap_or_else(|_| ws.clone());
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_PATH",
+                ws_canon.to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                backup_root.to_string_lossy().as_ref(),
+            );
+        }
+        let txn_id = "9876543210987654321".to_string();
+        (base, resolved_home, ws_canon, txn_id)
+    }
+
+    fn seed_two_artifact_transaction(txn_id: &str) -> PathBuf {
+        let home = user_home().expect("home for rollback seed");
+        let ws_root = workspace_root().expect("workspace for rollback seed");
+        let backup_dir = backup_root().unwrap().join("setup").join(txn_id);
+        fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
+        fs::write(
+            backup_dir.join("artifacts/codex-rules"),
+            "codex-rules-backup",
+        )
+        .unwrap();
+        fs::write(
+            backup_dir.join("artifacts/opencode-rules"),
+            "opencode-rules-backup",
+        )
+        .unwrap();
+        let codex_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            &ArtifactId::CodexRules,
+            &ws_root,
+            &home,
+        )
+        .unwrap();
+        let codex_full = crate::setup_fingerprint::artifact_installed_full_digest(
+            &ArtifactId::CodexRules,
+            &ws_root,
+            &home,
+        )
+        .unwrap();
+        let opencode_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            &ArtifactId::OpenCodeRules,
+            &ws_root,
+            &home,
+        )
+        .unwrap();
+        let opencode_full = crate::setup_fingerprint::artifact_installed_full_digest(
+            &ArtifactId::OpenCodeRules,
+            &ws_root,
+            &home,
+        )
+        .unwrap();
+        let manifest = ArtifactTransactionManifest {
+            schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            workspace_key: setup_transaction::workspace_key(&ws_root).unwrap(),
+            created_at: txn_id.to_string(),
+            surface_ids: vec![SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules],
+            transaction_status: setup_transaction::TransactionStatus::Failed,
+            operations: vec![
+                ArtifactManifestOperation {
+                    artifact: ArtifactId::CodexRules,
+                    surface: SetupSurfaceId::CodexRules,
+                    kind: OperationKind::Update,
+                    previous_state: setup_transaction::PreviousState::ManagedFile,
+                    rollback_action: setup_transaction::RollbackAction::RestoreFile,
+                    backup_rel: Some("artifacts/codex-rules".into()),
+                    apply_status: setup_transaction::ApplyStatus::Applied,
+                    validation_status: setup_transaction::ValidationStatus::Passed,
+                    post_apply_digest: Some(codex_digest),
+                    post_apply_full_digest: Some(codex_full),
+                    ..Default::default()
+                },
+                ArtifactManifestOperation {
+                    artifact: ArtifactId::OpenCodeRules,
+                    surface: SetupSurfaceId::OpenCodeRules,
+                    kind: OperationKind::Update,
+                    previous_state: setup_transaction::PreviousState::ManagedFile,
+                    rollback_action: setup_transaction::RollbackAction::RestoreFile,
+                    backup_rel: Some("artifacts/opencode-rules".into()),
+                    apply_status: setup_transaction::ApplyStatus::Applied,
+                    validation_status: setup_transaction::ValidationStatus::Passed,
+                    post_apply_digest: Some(opencode_digest),
+                    post_apply_full_digest: Some(opencode_full),
+                    ..Default::default()
+                },
+            ],
+        };
+        let manifest_path = backup_dir.join("manifest.json");
+        setup_transaction::persist_manifest_atomic(&manifest_path, &manifest, &backup_dir).unwrap();
+        backup_dir
+    }
+
+    fn read_manifest(txn_id: &str) -> ArtifactTransactionManifest {
+        let backup_dir = backup_root().unwrap().join("setup").join(txn_id);
+        let raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
+        serde_json::from_str(&raw).unwrap()
+    }
+
+    #[test]
+    fn explicit_rollback_persists_each_artifact_and_finishes_rolled_back() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        seed_two_artifact_transaction(&txn_id);
+        let result = rollback_transaction(&txn_id, false);
+        assert!(result.success, "{}", result.message);
+        assert_eq!(result.rolled_back.len(), 2);
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+        let codex_dest = ArtifactId::CodexRules
+            .resolve_dest(&user_home().unwrap())
+            .unwrap();
+        let opencode_dest = ArtifactId::OpenCodeRules
+            .resolve_dest(&user_home().unwrap())
+            .unwrap();
+        assert_eq!(
+            fs::read_to_string(&codex_dest).unwrap(),
+            "codex-rules-backup"
+        );
+        assert_eq!(
+            fs::read_to_string(&opencode_dest).unwrap(),
+            "opencode-rules-backup"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn explicit_rollback_resume_skips_restored_artifact() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let manifest_path = backup_dir.join("manifest.json");
+        let mut manifest = read_manifest(&txn_id);
+        manifest.operations[0].rollback_status = setup_transaction::RollbackStatus::Restored;
+        manifest.transaction_status = setup_transaction::TransactionStatus::RollingBack;
+        setup_transaction::persist_manifest_atomic(&manifest_path, &manifest, &backup_dir).unwrap();
+        fs::write(home.join(".codex/AGENTS.md"), "codex-rules-backup").unwrap(); // home == user_home()
+
+        let dry = rollback_transaction(&txn_id, true);
+        assert!(dry.success);
+        assert_eq!(dry.rolled_back.len(), 1);
+        assert!(dry.rolled_back[0].contains("OpenCodeRules"));
+
+        let result = rollback_transaction(&txn_id, false);
+        assert!(result.success, "{}", result.message);
+        assert_eq!(result.rolled_back.len(), 1);
+        let final_manifest = read_manifest(&txn_id);
+        assert_eq!(
+            final_manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rolling_back_transaction_is_resumable() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let mut manifest = read_manifest(&txn_id);
+        manifest.transaction_status = setup_transaction::TransactionStatus::RollingBack;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+        let result = rollback_transaction(&txn_id, false);
+        assert!(result.success, "{}", result.message);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn rollback_failed_transaction_is_retryable() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let mut manifest = read_manifest(&txn_id);
+        manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
+        manifest.operations[0].rollback_status = setup_transaction::RollbackStatus::Failed;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+
+        let result = rollback_transaction(&txn_id, false);
+        assert!(result.success, "{}", result.message);
+        assert!(result.rolled_back.len() >= 1);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn fully_rolled_back_transaction_is_rejected() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let mut manifest = read_manifest(&txn_id);
+        manifest.transaction_status = setup_transaction::TransactionStatus::RolledBack;
+        for op in manifest.operations.iter_mut() {
+            op.rollback_status = setup_transaction::RollbackStatus::Restored;
+        }
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+        let result = rollback_transaction(&txn_id, false);
+        assert!(!result.success);
+        assert!(result.message.contains("already rolled back"));
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn dry_run_after_partial_rollback_lists_only_remaining() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, _home, _ws, txn_id) = rollback_test_fixture();
+        let backup_dir = seed_two_artifact_transaction(&txn_id);
+        let mut manifest = read_manifest(&txn_id);
+        manifest.operations[0].rollback_status = setup_transaction::RollbackStatus::Restored;
+        manifest.transaction_status = setup_transaction::TransactionStatus::RollingBack;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+        let dry = rollback_transaction(&txn_id, true);
+        assert!(dry.success);
+        assert_eq!(dry.rolled_back.len(), 1);
+        let after = read_manifest(&txn_id);
+        assert_eq!(
+            after.transaction_status,
+            setup_transaction::TransactionStatus::RollingBack
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn restored_artifact_excluded_from_rollback_eligibility() {
+        let op = ArtifactManifestOperation {
+            apply_status: setup_transaction::ApplyStatus::Applied,
+            rollback_status: setup_transaction::RollbackStatus::Restored,
+            ..Default::default()
+        };
+        assert!(!setup_transaction::operation_eligible_for_rollback_mutation(&op));
     }
 }

@@ -739,11 +739,20 @@ pub fn operation_may_have_been_modified(status: ApplyStatus) -> bool {
     )
 }
 
-pub fn operation_eligible_for_explicit_rollback(op: &ArtifactManifestOperation) -> bool {
-    matches!(
-        op.apply_status,
-        ApplyStatus::InFlight | ApplyStatus::Applied | ApplyStatus::Failed
-    )
+/// Artifacts that may still be rolled back: modified during apply and not already restored.
+pub fn operation_eligible_for_rollback_mutation(op: &ArtifactManifestOperation) -> bool {
+    operation_may_have_been_modified(op.apply_status)
+        && !matches!(op.rollback_status, RollbackStatus::Restored)
+}
+
+/// Indices of operations eligible for rollback, in manifest apply order.
+pub fn rollback_eligible_indices(operations: &[ArtifactManifestOperation]) -> Vec<usize> {
+    operations
+        .iter()
+        .enumerate()
+        .filter(|(_, op)| operation_eligible_for_rollback_mutation(op))
+        .map(|(i, _)| i)
+        .collect()
 }
 
 pub fn validate_operation_status_combo(op: &ArtifactManifestOperation) -> Result<(), String> {
@@ -1169,7 +1178,13 @@ pub fn restore_artifact_from_backup(
     backup_dir: &Path,
     home: &Path,
 ) -> Result<(), String> {
-    restore_artifact_from_backup_with_mode(op, backup_dir, home, RollbackRestoreMode::FullBackup)
+    restore_artifact_from_backup_with_mode(
+        op,
+        backup_dir,
+        home,
+        RollbackRestoreMode::FullBackup,
+        None,
+    )
 }
 
 pub fn restore_artifact_from_backup_for_explicit_rollback(
@@ -1179,7 +1194,7 @@ pub fn restore_artifact_from_backup_for_explicit_rollback(
     workspace_root: &Path,
 ) -> Result<(), String> {
     let mode = rollback_restore_mode(op, workspace_root, home)?;
-    restore_artifact_from_backup_with_mode(op, backup_dir, home, mode)
+    restore_artifact_from_backup_with_mode(op, backup_dir, home, mode, Some(workspace_root))
 }
 
 fn restore_artifact_from_backup_with_mode(
@@ -1187,6 +1202,7 @@ fn restore_artifact_from_backup_with_mode(
     backup_dir: &Path,
     home: &Path,
     mode: RollbackRestoreMode,
+    workspace_root: Option<&Path>,
 ) -> Result<(), String> {
     let dest = op.artifact.resolve_dest(home)?;
     reject_symlink(&dest, "rollback destination")?;
@@ -1259,22 +1275,14 @@ fn restore_artifact_from_backup_with_mode(
                         )
                         .map_err(|e| format!("write opencode config: {e}"))?;
                     } else if op.artifact == ArtifactId::CodexConfig {
-                        let installed_str = fs::read_to_string(&dest)
-                            .map_err(|e| format!("read installed codex config: {e}"))?;
-                        let installed_toml: toml::Value = installed_str
-                            .parse()
-                            .map_err(|e| format!("parse installed codex toml: {e}"))?;
-                        let backup_str = fs::read_to_string(&backup_path)
-                            .map_err(|e| format!("read backup codex config: {e}"))?;
-                        let backup_toml: toml::Value = backup_str
-                            .parse()
-                            .map_err(|e| format!("parse backup codex toml: {e}"))?;
-                        let merged = crate::commands::merge_managed_codex_config(
-                            &installed_toml,
-                            &crate::commands::extract_managed_codex_config(&backup_toml),
-                        );
-                        fs::write(&dest, merged.to_string())
-                            .map_err(|e| format!("write codex config: {e}"))?;
+                        let workspace_root = workspace_root.ok_or_else(|| {
+                            "workspace root required for codex managed rollback".to_string()
+                        })?;
+                        crate::commands::rollback_codex_config_managed_projection(
+                            workspace_root,
+                            &dest,
+                            &backup_path,
+                        )?;
                     } else if op.artifact == ArtifactId::CursorMcp {
                         let installed_str = fs::read_to_string(&dest)
                             .map_err(|e| format!("read installed cursor mcp: {e}"))?;

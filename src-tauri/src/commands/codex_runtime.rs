@@ -128,45 +128,41 @@ pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
 }
 
-/// Merge managed sections from `managed` into `installed`, preserving unrelated user-owned fields.
-pub(crate) fn merge_managed_codex_config(
-    installed: &toml::Value,
-    managed: &toml::Value,
-) -> toml::Value {
-    let mut merged = installed.clone();
-    let Some(target) = merged.as_table_mut() else {
-        return merged;
-    };
-    let Some(managed_table) = managed.as_table() else {
-        return merged;
-    };
-    for key in MANAGED_TOP_LEVEL_KEYS {
-        if let Some(value) = managed_table.get(*key) {
-            target.insert(key.to_string(), value.clone());
-        }
+/// Restore managed Codex config fields from backup into the installed file via the
+/// line-preserving Python merge owner. Refuses on malformed TOML or ambiguous structure.
+pub(crate) fn rollback_codex_config_managed_projection(
+    workspace_root: &Path,
+    dest: &Path,
+    backup: &Path,
+) -> Result<(), String> {
+    let script = workspace_root.join("scripts/merge-codex-config.py");
+    if !script.is_file() {
+        return Err(format!(
+            "missing Codex merge script: {}",
+            script.display()
+        ));
     }
-    if let Some(managed_profiles) = managed_table.get("profiles").and_then(|v| v.as_table()) {
-        let profiles = target
-            .entry("profiles")
-            .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-        if let Some(profiles_table) = profiles.as_table_mut() {
-            for (profile_name, managed_profile) in managed_profiles {
-                let profile = profiles_table
-                    .entry(profile_name.clone())
-                    .or_insert_with(|| toml::Value::Table(toml::map::Map::new()));
-                if let (Some(profile_table), Some(managed_profile_table)) =
-                    (profile.as_table_mut(), managed_profile.as_table())
-                {
-                    for field in MANAGED_PROFILE_FIELDS {
-                        if let Some(value) = managed_profile_table.get(*field) {
-                            profile_table.insert(field.to_string(), value.clone());
-                        }
-                    }
-                }
-            }
-        }
+    let script_str = super::workspace::path_arg(&script)?;
+    let dest_str = super::workspace::path_arg(dest)?;
+    let backup_str = super::workspace::path_arg(backup)?;
+    let (ok, _stdout, stderr, code) = super::process::run_cmd(
+        "python3",
+        &[
+            &script_str,
+            &dest_str,
+            &backup_str,
+            "--rollback-managed",
+        ],
+        workspace_root,
+    );
+    if !ok {
+        return Err(format!(
+            "codex managed rollback failed (exit {:?}): {}",
+            code,
+            stderr.trim()
+        ));
     }
-    merged
+    Ok(())
 }
 
 fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {
