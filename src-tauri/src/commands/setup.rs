@@ -976,6 +976,8 @@ fn apply_planned_artifacts(
         {
             op.apply_status = setup_transaction::ApplyStatus::Applied;
             op.validation_status = setup_transaction::ValidationStatus::Passed;
+            op.post_apply_digest = Some(crate::setup_fingerprint::ABSENT_DIGEST.to_string());
+            op.post_apply_full_digest = Some(crate::setup_fingerprint::ABSENT_DIGEST.to_string());
         }
     }
 
@@ -1002,8 +1004,13 @@ fn apply_planned_artifacts(
             });
         }
 
+        let surface_artifacts_for_script: Vec<_> =
+            pending.iter().filter(|p| p.surface == *surface).collect();
+        let needs_surface_script = surface_artifacts_for_script
+            .iter()
+            .any(|p| matches!(p.kind, OperationKind::Create | OperationKind::Update));
         let apply_error = match execution_mode {
-            ApplyExecutionMode::SurfaceScripts => {
+            ApplyExecutionMode::SurfaceScripts if needs_surface_script => {
                 let surface_op = PlannedOperation {
                     surface: *surface,
                     kind: OperationKind::Update,
@@ -1016,6 +1023,7 @@ fn apply_planned_artifacts(
                     .err()
                     .map(|e| format!("{}: {e}", surface.label()))
             }
+            ApplyExecutionMode::SurfaceScripts => None,
             ApplyExecutionMode::CreateOnlyArtifacts => {
                 let surface_artifacts: Vec<_> =
                     pending.iter().filter(|p| p.surface == *surface).collect();
@@ -1066,6 +1074,9 @@ fn apply_planned_artifacts(
         let mut validation_failed = false;
         let mut validation_error = String::new();
         for p in &surface_artifacts {
+            if matches!(p.kind, OperationKind::Remove) {
+                continue;
+            }
             if let Err(e) =
                 setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
             {
@@ -1843,8 +1854,16 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
                 message: format!("Rollback preflight failed: symlinked destination: {e}"),
             };
         }
+        let allowlist = if matches!(
+            op.artifact,
+            crate::artifact_registry::ArtifactId::WorkspaceFile(_)
+        ) {
+            &ws_root
+        } else {
+            &home
+        };
         if let Err(e) =
-            setup_transaction::reject_symlink_parent_chain(&dest, &home, "rollback destination")
+            setup_transaction::reject_symlink_parent_chain(&dest, allowlist, "rollback destination")
         {
             return SetupResult {
                 success: false,

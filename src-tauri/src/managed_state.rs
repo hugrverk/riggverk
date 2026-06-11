@@ -60,7 +60,10 @@ pub fn managed_state_path(workspace_root: &Path) -> PathBuf {
 }
 
 pub fn artifact_identity(artifact: &ArtifactId) -> String {
-    serde_json::to_string(artifact).unwrap_or_else(|_| format!("{artifact:?}"))
+    match artifact {
+        ArtifactId::WorkspaceFile(rel) => workspace_file_identity(rel.as_str()),
+        _ => serde_json::to_string(artifact).unwrap_or_else(|_| format!("{artifact:?}")),
+    }
 }
 
 pub fn workspace_file_identity(rel_path: &str) -> String {

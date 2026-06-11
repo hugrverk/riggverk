@@ -23,6 +23,7 @@ Options:
   --all               Install all available skills
   --core              Install all skills (backward-compatible alias for --all)
   --dry-run           Preview without writing files
+  --apply             Write target files (setup lifecycle apply mode)
   --list              List available skills
   --quiet             Print compact app-friendly output
   --help              Show this help
@@ -282,6 +283,7 @@ while [ $# -gt 0 ]; do
     --list) list_mode=true ;;
     --quiet) quiet=true ;;
     --dry-run) dry_run=true ;;
+    --apply) ;;
     --all|--core) all_skills=true ;;
     --global) scope_global=true ;;
     --project) scope_project=true ;;

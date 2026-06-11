@@ -447,27 +447,24 @@ pub fn detect_surface_state(
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
-    let artifacts = match expand_surface_fail_closed(surface, workspace_root) {
-        Ok(artifacts) => artifacts,
-        Err(message) => {
-            return (
-                surface,
-                OperationKind::Unavailable,
-                format!("{} unavailable: {message}", surface.label()),
-            );
-        }
-    };
-    if artifacts.is_empty() {
-        return (
-            surface,
-            OperationKind::Unavailable,
-            format!("{} unavailable", surface.label()),
-        );
-    }
-    let kinds: Vec<OperationKind> = artifacts
-        .iter()
-        .map(|artifact| detect_artifact_state(artifact, workspace_root, home).0)
-        .collect();
+    let kinds: Vec<OperationKind> =
+        match plan_artifacts_for_surfaces(&[surface], workspace_root, home) {
+            Ok(planned) if !planned.is_empty() => planned.iter().map(|p| p.kind).collect(),
+            Ok(_) => {
+                return (
+                    surface,
+                    OperationKind::Unavailable,
+                    format!("{} unavailable", surface.label()),
+                );
+            }
+            Err(message) => {
+                return (
+                    surface,
+                    OperationKind::Unavailable,
+                    format!("{} unavailable: {message}", surface.label()),
+                );
+            }
+        };
     let kind = aggregate_operation_kind(&kinds);
     let summary = match kind {
         OperationKind::NoChange => format!("{} synced", surface.label()),
@@ -521,8 +518,11 @@ pub fn compute_plan_fingerprint(
     artifacts.sort_by_key(|a| format!("{a:?}"));
     for artifact in &artifacts {
         format!("{artifact:?}").hash(&mut hasher);
-        let source_digest =
-            crate::setup_fingerprint::artifact_source_digest(artifact, workspace_root, home)?;
+        let source_digest = if artifact.resolve_source(workspace_root).is_some() {
+            crate::setup_fingerprint::artifact_source_digest(artifact, workspace_root, home)?
+        } else {
+            crate::setup_fingerprint::ABSENT_DIGEST.to_string()
+        };
         source_digest.hash(&mut hasher);
         let installed_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
             artifact,
@@ -1566,6 +1566,10 @@ fn restore_artifact_from_backup_with_mode(
         workspace_root.ok_or_else(|| "workspace root required for rollback".to_string())?;
     let dest = op.artifact.resolve_dest(home, ws_root)?;
     reject_symlink(&dest, "rollback destination")?;
+    let allowlist_root = match &op.artifact {
+        ArtifactId::WorkspaceFile(_) => ws_root,
+        _ => home,
+    };
     match op.rollback_action {
         RollbackAction::RestoreFile | RollbackAction::RestoreDirectoryArtifact => {
             let rel = op
@@ -1585,7 +1589,7 @@ fn restore_artifact_from_backup_with_mode(
                 }
             }
             if backup_path.is_dir() {
-                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest, home)
+                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest, allowlist_root)
                     .map_err(|e| format!("restore dir: {e}"))?;
             } else {
                 if let Some(parent) = dest.parent() {
@@ -1716,7 +1720,7 @@ fn restore_artifact_from_backup_with_mode(
 pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId> {
     let mut surfaces: Vec<SetupSurfaceId> = planned
         .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Create | OperationKind::Update))
+        .filter(|p| p.kind.needs_apply())
         .map(|p| p.surface)
         .collect();
     surfaces.sort_by_key(|s| format!("{s:?}"));
