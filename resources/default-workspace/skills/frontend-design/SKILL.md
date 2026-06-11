@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Choose and implement frontend visual direction for Agent Workspace surfaces. Use when building or improving UI with repository-aware design discipline, accessibility, rendered verification, and clear boundaries from screenshot-review, browser-qa, and accessibility-review.
+description: Choose and implement frontend visual direction for web and product UI across repositories. Use when building or improving interfaces with repository-aware design discipline, accessibility, rendered verification, and clear boundaries from screenshot-review, browser-qa, and accessibility-review.
 category: frontend
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -35,7 +35,7 @@ Before proposing a direction, inspect repository reality:
 - screenshots or live UI when available
 - existing motion, density, and state handling
 
-Do not override a mature design system or generic-AI styling habits without explicit redesign intent.
+Preserve a mature product design system when one exists. Do not fall back to generic AI SaaS styling (purple gradients, interchangeable card stacks, stock dashboard chrome) unless the task explicitly requests a redesign.
 
 ## Design thesis
 

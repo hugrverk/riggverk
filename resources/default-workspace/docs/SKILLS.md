@@ -14,7 +14,7 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
 | `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a reproduce-to-regression-test loop. |
-| `frontend-design` | Designing or improving frontend UI with coherent aesthetic direction, accessibility, and verification. |
+| `frontend-design` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
