@@ -115,6 +115,7 @@ fn remove_dir_recurse(path: &Path, depth: usize) -> Result<(), String> {
 }
 
 /// Reject symlinks at any depth within a directory tree (does not follow symlinks).
+#[allow(dead_code)]
 pub fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
     reject_nested_symlinks_recurse(dir, label, 0)
 }

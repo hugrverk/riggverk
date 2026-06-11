@@ -52,8 +52,8 @@ pub enum SetupSurfaceId {
     CursorSkills,
     /// Cursor Playwright MCP state (mcp.json merge)
     CursorMcp,
-    /// Bundled deprecated skill removal (separate destructive workflow)
-    DeprecatedSkillCleanup,
+    /// Installed runtime workspace bundled files
+    WorkspaceBundle,
 }
 
 impl SetupSurfaceId {
@@ -73,7 +73,7 @@ impl SetupSurfaceId {
         SetupSurfaceId::CursorAgents,
         SetupSurfaceId::CursorSkills,
         SetupSurfaceId::CursorMcp,
-        SetupSurfaceId::DeprecatedSkillCleanup,
+        SetupSurfaceId::WorkspaceBundle,
     ];
 
     /// Human-readable label.
@@ -93,7 +93,7 @@ impl SetupSurfaceId {
             SetupSurfaceId::CursorAgents => "Cursor Agents",
             SetupSurfaceId::CursorSkills => "Cursor Skills",
             SetupSurfaceId::CursorMcp => "Cursor MCP",
-            SetupSurfaceId::DeprecatedSkillCleanup => "Deprecated Skills",
+            SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
         }
     }
 }
@@ -116,11 +116,16 @@ pub enum OperationKind {
     Manual,
     /// Surface is unavailable (tool not installed or workspace not found).
     Unavailable,
+    /// Retire a stale app-owned artifact that matches the last managed hash.
+    Remove,
 }
 
 impl OperationKind {
     pub fn needs_apply(&self) -> bool {
-        matches!(self, OperationKind::Create | OperationKind::Update)
+        matches!(
+            self,
+            OperationKind::Create | OperationKind::Update | OperationKind::Remove
+        )
     }
 }
 
@@ -255,7 +260,7 @@ pub fn plan_setup(
             OperationKind::NoChange => {
                 synced.push(*surface);
             }
-            OperationKind::Create | OperationKind::Update => {
+            OperationKind::Create | OperationKind::Update | OperationKind::Remove => {
                 has_pending_changes = true;
                 let op = PlannedOperation {
                     surface: *surface,
@@ -312,10 +317,11 @@ pub fn plan_setup(
     operations.sort_by_key(|op| match op.kind {
         OperationKind::Create => 0u8,
         OperationKind::Update => 1,
-        OperationKind::Manual => 2,
-        OperationKind::Conflict => 3,
-        OperationKind::Unavailable => 4,
-        OperationKind::NoChange => 5,
+        OperationKind::Remove => 2,
+        OperationKind::Manual => 3,
+        OperationKind::Conflict => 4,
+        OperationKind::Unavailable => 5,
+        OperationKind::NoChange => 6,
     });
 
     let change_count = operations.iter().filter(|op| op.kind.needs_apply()).count();

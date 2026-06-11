@@ -27,6 +27,11 @@ fn hash_file(path: &Path) -> Result<String, String> {
     Ok(hash_bytes(&bytes))
 }
 
+/// Hash a file path for workspace managed-state records.
+pub fn hash_file_path(path: &Path) -> Result<String, String> {
+    hash_file(path)
+}
+
 fn hash_json_value(value: &serde_json::Value) -> Result<String, String> {
     let canonical = serde_json::to_string(value).map_err(|e| format!("serialize json: {e}"))?;
     Ok(hash_bytes(canonical.as_bytes()))
@@ -38,6 +43,8 @@ fn hash_toml_value(value: &toml::Value) -> String {
 
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
+        ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
+        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillDir,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
@@ -104,6 +111,12 @@ pub fn artifact_source_digest(
     home: &Path,
 ) -> Result<String, String> {
     match artifact_kind(artifact) {
+        ArtifactKind::RulesFile | ArtifactKind::AgentFile
+            if matches!(artifact, ArtifactId::WorkspaceFile(_)) =>
+        {
+            let source = require_source_path(artifact, workspace_root)?;
+            hash_file(&source)
+        }
         ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
             let source = require_source_path(artifact, workspace_root)?;
             hash_file(&source)
@@ -224,10 +237,10 @@ pub fn artifact_installed_managed_digest_from_path(
 /// Hash installed managed content. Missing installed artifact returns [`ABSENT_DIGEST`].
 pub fn artifact_installed_managed_digest(
     artifact: &ArtifactId,
-    _workspace_root: &Path,
+    workspace_root: &Path,
     home: &Path,
 ) -> Result<String, String> {
-    let dest = artifact.resolve_dest(home)?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
     if artifact == &ArtifactId::OpenCodePlaywrightMcp {
         let playwright_dest = opencode_playwright_mcp_dest(home);
         return artifact_installed_managed_digest_from_path(artifact, &playwright_dest);
@@ -295,10 +308,10 @@ fn collect_directory_entries(
 /// Hash installed full-file or full-directory content for rollback safety.
 pub fn artifact_installed_full_digest(
     artifact: &ArtifactId,
-    _workspace_root: &Path,
+    workspace_root: &Path,
     home: &Path,
 ) -> Result<String, String> {
-    let dest = artifact.resolve_dest(home)?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
     match artifact_kind(artifact) {
         ArtifactKind::SkillDir => hash_directory_tree(&dest, "skill directory"),
         ArtifactKind::ConfigFile

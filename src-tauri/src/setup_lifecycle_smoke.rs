@@ -51,12 +51,7 @@ mod tests {
         let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
             &crate::setup_lifecycle::SetupSurfaceId::ALL
                 .iter()
-                .filter(|s| {
-                    !matches!(
-                        s,
-                        crate::setup_lifecycle::SetupSurfaceId::DeprecatedSkillCleanup
-                    )
-                })
+                .filter(|s| !matches!(s, crate::setup_lifecycle::SetupSurfaceId::WorkspaceBundle))
                 .copied()
                 .collect::<Vec<_>>(),
             &ws,

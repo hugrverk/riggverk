@@ -71,7 +71,6 @@ fn surface_agent(surface: SetupSurfaceId) -> Option<&'static str> {
         SetupSurfaceId::CodexSkills => Some("codex"),
         SetupSurfaceId::ClaudeSkills => Some("claude"),
         SetupSurfaceId::CursorSkills => Some("cursor"),
-        SetupSurfaceId::DeprecatedSkillCleanup => Some("codex"),
         _ => None,
     }
 }
@@ -139,11 +138,8 @@ fn execute_operation_and_validate(
         SetupSurfaceId::CodexConfig => {
             let script = workspace_root.join("scripts/install-codex-config.sh");
             let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--quiet", "--apply"],
-                workspace_root,
-            );
+            let (ok, _stdout, stderr, _code) =
+                run_cmd("bash", &[&script_str, "--quiet", "--apply"], workspace_root);
             if !ok {
                 return Err(format!("Codex config apply failed: {stderr}"));
             }
@@ -154,11 +150,8 @@ fn execute_operation_and_validate(
         SetupSurfaceId::CodexAgents => {
             let script = workspace_root.join("scripts/install-codex-agents.sh");
             let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--apply"],
-                workspace_root,
-            );
+            let (ok, _stdout, stderr, _code) =
+                run_cmd("bash", &[&script_str, "--apply"], workspace_root);
             if !ok {
                 return Err(format!("Codex agents apply failed: {stderr}"));
             }
@@ -169,11 +162,8 @@ fn execute_operation_and_validate(
         SetupSurfaceId::CodexRules => {
             let script = workspace_root.join("scripts/install-agent-rules.sh");
             let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--codex", "--apply"],
-                workspace_root,
-            );
+            let (ok, _stdout, stderr, _code) =
+                run_cmd("bash", &[&script_str, "--codex", "--apply"], workspace_root);
             if !ok {
                 return Err(format!("Codex rules apply failed: {stderr}"));
             }
@@ -245,11 +235,8 @@ fn execute_operation_and_validate(
         SetupSurfaceId::CursorMcp => {
             let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
                 .map_err(|e| format!("resolve Cursor profile: {e}"))?;
-            let result = crate::cursor_profile_ops::run_global_mcp_only(
-                workspace_root,
-                &cursor_paths,
-                true,
-            );
+            let result =
+                crate::cursor_profile_ops::run_global_mcp_only(workspace_root, &cursor_paths, true);
             if !result.success {
                 return Err(format!("Cursor MCP apply failed: {}", result.stderr));
             }
@@ -257,7 +244,9 @@ fn execute_operation_and_validate(
         }
 
         // Skills — use install-skills.sh
-        SetupSurfaceId::OpenCodeSkills | SetupSurfaceId::CodexSkills | SetupSurfaceId::ClaudeSkills => {
+        SetupSurfaceId::OpenCodeSkills
+        | SetupSurfaceId::CodexSkills
+        | SetupSurfaceId::ClaudeSkills => {
             let script = workspace_root.join("scripts/install-skills.sh");
             let script_str = super::workspace::path_arg(&script)?;
             let agent = surface_agent(op.surface).unwrap_or("opencode");
@@ -267,14 +256,16 @@ fn execute_operation_and_validate(
                 workspace_root,
             );
             if !ok {
-                return Err(format!("{} skill install failed: {stderr}", op.surface.label()));
+                return Err(format!(
+                    "{} skill install failed: {stderr}",
+                    op.surface.label()
+                ));
             }
             Ok(())
         }
 
-        // Deprecated skill cleanup
-        SetupSurfaceId::DeprecatedSkillCleanup => {
-            Err("deprecated skill cleanup requires explicit command (use preview_remove_deprecated_skills)".to_string())
+        SetupSurfaceId::WorkspaceBundle => {
+            Err("workspace bundle updates run at artifact granularity".to_string())
         }
     }
 }
@@ -533,6 +524,33 @@ enum ApplyExecutionMode {
     CreateOnlyArtifacts,
 }
 
+fn remove_single_artifact(
+    artifact: &crate::artifact_registry::ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let dest = artifact.resolve_dest(home, workspace_root)?;
+    setup_transaction::reject_symlink(&dest, "remove destination")?;
+    if !dest.exists() {
+        return Ok(());
+    }
+    let root = if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
+    ) {
+        workspace_root
+    } else {
+        home
+    };
+    if dest.is_dir() {
+        crate::safe_filesystem::remove_dir_no_symlinks(&dest, root)
+            .map_err(|e| format!("remove {}: {e}", dest.display()))?;
+    } else if dest.is_file() {
+        fs::remove_file(&dest).map_err(|e| format!("remove {}: {e}", dest.display()))?;
+    }
+    Ok(())
+}
+
 fn create_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -760,6 +778,9 @@ fn apply_planned_artifacts(
     surfaces.dedup();
 
     for p in pending {
+        if matches!(p.kind, OperationKind::Remove) {
+            continue;
+        }
         if let Err(e) =
             setup_transaction::validate_artifact_source_dest(&p.artifact, &ws_root, &home)
         {
@@ -792,20 +813,21 @@ fn apply_planned_artifacts(
 
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
     for p in pending {
-        let backup_rel = match setup_transaction::backup_artifact(&p.artifact, &backup_dir, &home) {
-            Ok(rel) => rel,
-            Err(e) => {
-                return SetupResult {
-                    success: false,
-                    transaction_id,
-                    applied: vec![],
-                    failed: vec![format!("backup {}: {e}", artifact_label(&p.artifact))],
-                    rolled_back: vec![],
-                    manual_steps: vec![],
-                    message: format!("Backup failed: {e}"),
-                };
-            }
-        };
+        let backup_rel =
+            match setup_transaction::backup_artifact(&p.artifact, &backup_dir, &home, &ws_root) {
+                Ok(rel) => rel,
+                Err(e) => {
+                    return SetupResult {
+                        success: false,
+                        transaction_id,
+                        applied: vec![],
+                        failed: vec![format!("backup {}: {e}", artifact_label(&p.artifact))],
+                        rolled_back: vec![],
+                        manual_steps: vec![],
+                        message: format!("Backup failed: {e}"),
+                    };
+                }
+            };
         manifest_ops.push(ArtifactManifestOperation {
             artifact: p.artifact.clone(),
             surface: p.surface,
@@ -916,6 +938,45 @@ fn apply_planned_artifacts(
             manual_steps: vec![],
             message: format!("Cannot persist applying status: {e}"),
         };
+    }
+
+    for p in pending
+        .iter()
+        .filter(|p| matches!(p.kind, OperationKind::Remove))
+    {
+        if let Err(e) = remove_single_artifact(&p.artifact, &ws_root, &home) {
+            let err = format!("{}: {e}", artifact_label(&p.artifact));
+            let mut failed = vec![err.clone()];
+            if let Err(persist_err) = persist_setup_manifest(
+                &manifest_path,
+                &mut manifest,
+                setup_transaction::TransactionStatus::Failed,
+                &backup_dir,
+            ) {
+                failed.push(persist_err);
+            }
+            return finish_failed_apply_with_rollback(FailedApplyRollback {
+                manifest_path: &manifest_path,
+                manifest: &mut manifest,
+                backup_dir: &backup_dir,
+                home: &home,
+                workspace_root: &ws_root,
+                transaction_id,
+                applied,
+                failed,
+                manual_steps: manual_steps.clone(),
+                message: format!("Remove failed: {err}"),
+            });
+        }
+        applied.push(format!("removed {}", artifact_label(&p.artifact)));
+        if let Some(op) = manifest
+            .operations
+            .iter_mut()
+            .find(|o| o.artifact == p.artifact)
+        {
+            op.apply_status = setup_transaction::ApplyStatus::Applied;
+            op.validation_status = setup_transaction::ValidationStatus::Passed;
+        }
     }
 
     for surface in &surfaces_to_execute {
@@ -1112,6 +1173,41 @@ fn apply_planned_artifacts(
         });
     }
 
+    match crate::managed_state::build_managed_state_from_installed(&ws_root, &home, &ws_root) {
+        Ok(state) => {
+            if let Err(e) = crate::managed_state::write_managed_state_atomic(&ws_root, &state) {
+                let message = format!("Apply succeeded but managed state was not published: {e}");
+                return finish_failed_apply_with_rollback(FailedApplyRollback {
+                    manifest_path: &manifest_path,
+                    manifest: &mut manifest,
+                    backup_dir: &backup_dir,
+                    home: &home,
+                    workspace_root: &ws_root,
+                    transaction_id,
+                    applied,
+                    failed: vec![e],
+                    manual_steps,
+                    message,
+                });
+            }
+        }
+        Err(e) => {
+            let message = format!("Apply succeeded but managed state build failed: {e}");
+            return finish_failed_apply_with_rollback(FailedApplyRollback {
+                manifest_path: &manifest_path,
+                manifest: &mut manifest,
+                backup_dir: &backup_dir,
+                home: &home,
+                workspace_root: &ws_root,
+                transaction_id,
+                applied,
+                failed: vec![e],
+                manual_steps,
+                message,
+            });
+        }
+    }
+
     let applied_count = applied.len();
     SetupResult {
         success: true,
@@ -1162,11 +1258,7 @@ fn compute_repair_fingerprint(
 pub fn preview_repair_setup() -> Result<RepairPreview, String> {
     let ws_root = workspace_root()?;
     let home = user_home()?;
-    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
-        .iter()
-        .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
-        .copied()
-        .collect();
+    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL.to_vec();
     let planned = setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)?;
     let create_pending: Vec<_> = planned
         .iter()
@@ -1261,11 +1353,7 @@ pub fn repair_setup_artifacts(
         }
     };
 
-    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL
-        .iter()
-        .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
-        .copied()
-        .collect();
+    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL.to_vec();
 
     let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
         Ok(p) => p,
@@ -1730,7 +1818,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
                 };
             }
         }
-        let dest = match op.artifact.resolve_dest(&home) {
+        let dest = match op.artifact.resolve_dest(&home, &ws_root) {
             Ok(d) => d,
             Err(e) => {
                 return SetupResult {
@@ -1905,6 +1993,27 @@ fn attach_plan_preview(
     Ok(())
 }
 
+/// Product-level installation status for workspace or harness surfaces.
+#[tauri::command]
+pub fn get_installation_status(
+    surfaces: Vec<String>,
+) -> Result<crate::installation_status::InstallationStatus, String> {
+    let surface_ids: Vec<SetupSurfaceId> = if surfaces.is_empty() {
+        SetupSurfaceId::ALL.to_vec()
+    } else {
+        surfaces
+            .iter()
+            .filter_map(|s| {
+                serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
+                    .ok()
+            })
+            .collect()
+    };
+    let ws_root = workspace_root()?;
+    let home = user_home()?;
+    crate::installation_status::status_for_surfaces(&surface_ids, &ws_root, &home)
+}
+
 /// Read-only preview: detect real state for requested surfaces.
 #[tauri::command]
 pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
@@ -1940,7 +2049,6 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
 
         let states: Vec<_> = SetupSurfaceId::ALL
             .iter()
-            .filter(|s| !matches!(s, SetupSurfaceId::DeprecatedSkillCleanup))
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
 
@@ -2747,12 +2855,10 @@ mod tests {
             .operations
             .iter()
             .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
-        let codex_dest = ArtifactId::CodexRules
-            .resolve_dest(&user_home().unwrap())
-            .unwrap();
-        let opencode_dest = ArtifactId::OpenCodeRules
-            .resolve_dest(&user_home().unwrap())
-            .unwrap();
+        let home = user_home().unwrap();
+        let ws = workspace_root().unwrap();
+        let codex_dest = ArtifactId::CodexRules.resolve_dest(&home, &ws).unwrap();
+        let opencode_dest = ArtifactId::OpenCodeRules.resolve_dest(&home, &ws).unwrap();
         assert_eq!(
             fs::read_to_string(&codex_dest).unwrap(),
             "codex-rules-backup"

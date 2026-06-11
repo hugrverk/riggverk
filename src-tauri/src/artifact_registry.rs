@@ -61,6 +61,28 @@ pub enum ArtifactId {
     CursorSkill(SkillName),
     /// Named Playwright MCP state (mcp.json)
     CursorMcp,
+    /// Legacy Codex skill directory under ~/.codex/skills (migration source only).
+    CodexLegacySkill(SkillName),
+    /// Installed runtime workspace bundled file (workspace-relative path).
+    WorkspaceFile(WorkspaceRelPath),
+}
+
+/// Workspace-relative path for bundled files. Validated at construction.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+pub struct WorkspaceRelPath(String);
+
+impl WorkspaceRelPath {
+    pub fn new(rel: impl Into<String>) -> Option<Self> {
+        let rel = rel.into();
+        if rel.is_empty() || rel.contains("..") || Path::new(&rel).is_absolute() {
+            return None;
+        }
+        Some(Self(rel))
+    }
+
+    pub fn as_str(&self) -> &str {
+        &self.0
+    }
 }
 
 /// Agent file name without extension. Validated at construction.
@@ -135,7 +157,7 @@ pub enum ArtifactKind {
 
 impl ArtifactId {
     /// Resolve the destination path for this artifact.
-    pub fn resolve_dest(&self, home: &Path) -> Result<PathBuf, String> {
+    pub fn resolve_dest(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
         match self {
             ArtifactId::OpenCodeConfig => Ok(home.join(".config/opencode/opencode.json")),
             ArtifactId::OpenCodeTui => Ok(home.join(".config/opencode/tui.json")),
@@ -170,6 +192,10 @@ impl ArtifactId {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.mcp_config.clone())
             }
+            ArtifactId::CodexLegacySkill(name) => {
+                Ok(crate::agent_skill_targets::codex_legacy_skills_dest(home).join(name.as_str()))
+            }
+            ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
         }
     }
 
@@ -221,6 +247,10 @@ impl ArtifactId {
                 crate::commands::cursor_profile::cursor_root(workspace_root)
                     .join("mcp/playwright.mcp.json"),
             ),
+            ArtifactId::CodexLegacySkill(name) => {
+                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+            }
+            ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
         }
     }
 
@@ -243,6 +273,8 @@ impl ArtifactId {
             ArtifactId::CursorAgent(_) => SetupSurfaceId::CursorAgents,
             ArtifactId::CursorSkill(_) => SetupSurfaceId::CursorSkills,
             ArtifactId::CursorMcp => SetupSurfaceId::CursorMcp,
+            ArtifactId::CodexLegacySkill(_) => SetupSurfaceId::CodexSkills,
+            ArtifactId::WorkspaceFile(_) => SetupSurfaceId::WorkspaceBundle,
         }
     }
 }
@@ -298,8 +330,6 @@ fn expand_agent_surface(
 }
 
 /// Expand a surface ID to its constituent artifact IDs.
-///
-/// Returns an empty vec for DeprecatedSkillCleanup only.
 pub fn expand_surface(
     surface: SetupSurfaceId,
     workspace_root: &Path,
@@ -347,8 +377,27 @@ pub fn expand_surface(
             expand_skill_surface(workspace_root, "cursor", ArtifactId::CursorSkill)
         }
         SetupSurfaceId::CursorMcp => Ok(vec![ArtifactId::CursorMcp]),
-        SetupSurfaceId::DeprecatedSkillCleanup => Ok(vec![]),
+        SetupSurfaceId::WorkspaceBundle => expand_workspace_bundle(workspace_root),
     }
+}
+
+fn expand_workspace_bundle(workspace_root: &Path) -> Result<Vec<ArtifactId>, String> {
+    let bundled: Vec<&str> = crate::commands::default_workspace_files()
+        .into_iter()
+        .flat_map(|(_, paths)| paths.iter().copied())
+        .filter(|rel| !rel.contains("..") && !rel.is_empty() && !Path::new(rel).is_absolute())
+        .collect();
+    let mut artifacts = Vec::new();
+    for rel in bundled {
+        let Some(wrel) = WorkspaceRelPath::new(rel) else {
+            continue;
+        };
+        let src = workspace_root.join(rel);
+        if src.is_file() {
+            artifacts.push(ArtifactId::WorkspaceFile(wrel));
+        }
+    }
+    Ok(artifacts)
 }
 
 /// Check whether a destination path would own a broad harness root.
@@ -486,8 +535,7 @@ mod tests {
     #[test]
     fn deprecated_cleanup_produces_no_artifacts() {
         let ws = temp_dir("dep-cleanup");
-        let artifacts =
-            expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws).expect("expand");
         assert!(
             artifacts.is_empty(),
             "deprecated cleanup must not produce artifacts"
@@ -555,8 +603,7 @@ mod tests {
         // Validating that parse_skill_targets doesn't crash on invalid input
         // This is tested through the expansion which only processes valid surfaces
         let ws = temp_dir("unknown-surface");
-        let artifacts =
-            expand_surface(SetupSurfaceId::DeprecatedSkillCleanup, &ws).expect("expand");
+        let artifacts = expand_surface(SetupSurfaceId::WorkspaceBundle, &ws).expect("expand");
         assert!(artifacts.is_empty());
     }
 

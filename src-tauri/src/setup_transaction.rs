@@ -339,9 +339,6 @@ pub fn expand_surfaces_to_artifacts(
     let mut artifacts: Vec<ArtifactId> = Vec::new();
     let mut seen = HashSet::new();
     for surface in surfaces {
-        if matches!(surface, SetupSurfaceId::DeprecatedSkillCleanup) {
-            continue;
-        }
         let expanded = expand_surface_fail_closed(*surface, workspace_root)?;
         if expanded.is_empty() {
             return Err(format!(
@@ -354,7 +351,7 @@ pub fn expand_surfaces_to_artifacts(
                 return Err(format!("duplicate artifact {:?} across surfaces", artifact));
             }
             crate::artifact_registry::reject_broad_artifact_root(
-                &artifact.resolve_dest(&user_home()?)?,
+                &artifact.resolve_dest(&user_home()?, workspace_root)?,
             )?;
             artifacts.push(artifact);
         }
@@ -366,9 +363,6 @@ pub fn expand_surface_fail_closed(
     surface: SetupSurfaceId,
     workspace_root: &Path,
 ) -> Result<Vec<ArtifactId>, String> {
-    if matches!(surface, SetupSurfaceId::DeprecatedSkillCleanup) {
-        return Ok(vec![]);
-    }
     crate::artifact_registry::expand_surface(surface, workspace_root)
 }
 
@@ -400,9 +394,14 @@ pub fn validate_artifact_source_dest(
     let ws_root = workspace_root
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize workspace: {e}"))?;
-    let dest = artifact.resolve_dest(home)?;
-    crate::path_safety::reject_path_escape(&dest, home, "destination")?;
-    reject_symlink_parent_chain(&dest, home, "destination")?;
+    let dest = artifact.resolve_dest(home, &ws_root)?;
+    let dest_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
+        &ws_root
+    } else {
+        home
+    };
+    crate::path_safety::reject_path_escape(&dest, dest_root, "destination")?;
+    reject_symlink_parent_chain(&dest, dest_root, "destination")?;
     reject_symlink(&dest, "destination")?;
     let source = artifact
         .resolve_source(&ws_root)
@@ -430,6 +429,9 @@ pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
     if kinds.iter().any(|k| matches!(k, OperationKind::Update)) {
         return OperationKind::Update;
     }
+    if kinds.iter().any(|k| matches!(k, OperationKind::Remove)) {
+        return OperationKind::Remove;
+    }
     if kinds.iter().any(|k| matches!(k, OperationKind::Create)) {
         return OperationKind::Create;
     }
@@ -445,10 +447,6 @@ pub fn detect_surface_state(
     workspace_root: &Path,
     home: &Path,
 ) -> (SetupSurfaceId, OperationKind, String) {
-    if matches!(surface, SetupSurfaceId::DeprecatedSkillCleanup) {
-        let summary = format!("{} requires manual action", surface.label());
-        return (surface, OperationKind::Manual, summary);
-    }
     let artifacts = match expand_surface_fail_closed(surface, workspace_root) {
         Ok(artifacts) => artifacts,
         Err(message) => {
@@ -478,12 +476,15 @@ pub fn detect_surface_state(
         OperationKind::Conflict => format!("{} has conflicts", surface.label()),
         OperationKind::Manual => format!("{} requires manual action", surface.label()),
         OperationKind::Unavailable => format!("{} unavailable", surface.label()),
+        OperationKind::Remove => format!("{} has old app files to remove", surface.label()),
     };
     (surface, kind, summary)
 }
 
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
+        ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
+        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillDir,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
@@ -547,7 +548,7 @@ pub fn detect_artifact_state(
     workspace_root: &Path,
     home: &Path,
 ) -> (OperationKind, PreviousState) {
-    let dest = match artifact.resolve_dest(home) {
+    let dest = match artifact.resolve_dest(home, workspace_root) {
         Ok(p) => p,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
@@ -683,16 +684,120 @@ fn detect_config_artifact(
     }
 }
 
+fn managed_hash_for(
+    identity: &str,
+    records: &[crate::managed_state::ManagedArtifactRecord],
+) -> Option<String> {
+    records
+        .iter()
+        .find(|r| r.identity == identity)
+        .map(|r| r.hash.clone())
+}
+
+fn detect_stale_artifact_state(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> (OperationKind, PreviousState) {
+    let dest = match artifact.resolve_dest(home, workspace_root) {
+        Ok(p) => p,
+        Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
+    };
+    if reject_symlink(&dest, "destination").is_err() {
+        return (OperationKind::Conflict, PreviousState::Conflict);
+    }
+    if !dest.exists() {
+        return (OperationKind::NoChange, PreviousState::Absent);
+    }
+    let installed = match crate::setup_fingerprint::artifact_installed_managed_digest(
+        artifact,
+        workspace_root,
+        home,
+    ) {
+        Ok(d) => d,
+        Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+    };
+    let Some(expected) = managed_hash else {
+        return (OperationKind::NoChange, PreviousState::ManagedFile);
+    };
+    if installed == expected {
+        let prev = if artifact_kind(artifact) == ArtifactKind::SkillDir {
+            PreviousState::ManagedDirectory
+        } else {
+            PreviousState::ManagedFile
+        };
+        (OperationKind::Remove, prev)
+    } else {
+        (OperationKind::Conflict, PreviousState::Conflict)
+    }
+}
+
 pub fn plan_artifacts_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
 ) -> Result<Vec<PlannedArtifact>, String> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let bootstrap_records = if managed.is_none() && workspace_root.join("skills").is_dir() {
+        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
+        .as_ref()
+        .map(|s| s.artifacts.clone())
+        .unwrap_or(bootstrap_records);
+
+    let bundled_root = crate::managed_state::resolve_bundled_root(workspace_root);
+    let canonical_identities = crate::managed_state::canonical_artifact_identities(&bundled_root)?;
+
     let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root)?;
     let mut planned = Vec::new();
+    let mut seen = std::collections::HashSet::new();
     for artifact in artifacts {
+        seen.insert(crate::managed_state::artifact_identity(&artifact));
         let surface = artifact.surface();
+        let identity = crate::managed_state::artifact_identity(&artifact);
+        let managed_hash = managed_hash_for(&identity, &records);
         let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
+        let (kind, previous_state) = refine_with_managed_hash(
+            kind,
+            previous_state,
+            &artifact,
+            workspace_root,
+            home,
+            managed_hash.as_deref(),
+        );
+        let rollback_action = rollback_action_for(kind, previous_state, &artifact);
+        planned.push(PlannedArtifact {
+            artifact,
+            surface,
+            kind,
+            previous_state,
+            rollback_action,
+        });
+    }
+
+    let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
+        workspace_root,
+        home,
+        &records,
+        &canonical_identities,
+    )?;
+    for artifact in stale {
+        let identity = crate::managed_state::artifact_identity(&artifact);
+        if seen.contains(&identity) {
+            continue;
+        }
+        seen.insert(identity.clone());
+        let managed_hash = managed_hash_for(&identity, &records);
+        let (kind, previous_state) =
+            detect_stale_artifact_state(&artifact, workspace_root, home, managed_hash.as_deref());
+        if matches!(kind, OperationKind::NoChange | OperationKind::Unavailable) {
+            continue;
+        }
+        let surface = artifact.surface();
         let rollback_action = rollback_action_for(kind, previous_state, &artifact);
         planned.push(PlannedArtifact {
             artifact,
@@ -703,6 +808,30 @@ pub fn plan_artifacts_for_surfaces(
         });
     }
     Ok(planned)
+}
+
+fn refine_with_managed_hash(
+    kind: OperationKind,
+    previous: PreviousState,
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> (OperationKind, PreviousState) {
+    let Some(expected) = managed_hash else {
+        return (kind, previous);
+    };
+    if !matches!(kind, OperationKind::Update) {
+        return (kind, previous);
+    }
+    let installed =
+        crate::setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home)
+            .unwrap_or(crate::setup_fingerprint::ABSENT_DIGEST.into());
+    if installed == expected {
+        (OperationKind::Update, previous)
+    } else {
+        (OperationKind::Conflict, PreviousState::Conflict)
+    }
 }
 
 pub fn rollback_action_for(
@@ -721,6 +850,10 @@ pub fn rollback_action_for(
         }
         (OperationKind::Update, PreviousState::MergeableConfigFile) => {
             RollbackAction::RestoreManagedConfigFile
+        }
+        (OperationKind::Remove, PreviousState::ManagedFile) => RollbackAction::RestoreFile,
+        (OperationKind::Remove, PreviousState::ManagedDirectory) => {
+            RollbackAction::RestoreDirectoryArtifact
         }
         _ => RollbackAction::NoAction,
     }
@@ -745,6 +878,10 @@ pub fn artifact_backup_rel(artifact: &ArtifactId) -> String {
         ArtifactId::CodexSkill(name) => format!("codex-skill-{}", name.as_str()),
         ArtifactId::ClaudeSkill(name) => format!("claude-skill-{}", name.as_str()),
         ArtifactId::CursorSkill(name) => format!("cursor-skill-{}", name.as_str()),
+        ArtifactId::CodexLegacySkill(name) => format!("codex-legacy-skill-{}", name.as_str()),
+        ArtifactId::WorkspaceFile(rel) => {
+            format!("workspace-file-{}", rel.as_str().replace('/', "__"))
+        }
     };
     if id.len() > MAX_LEN {
         id[..MAX_LEN].to_string()
@@ -906,7 +1043,7 @@ pub fn artifact_matches_previous_backup_state(
     home: &Path,
     workspace_root: &Path,
 ) -> Result<bool, String> {
-    let dest = op.artifact.resolve_dest(home)?;
+    let dest = op.artifact.resolve_dest(home, workspace_root)?;
     match op.rollback_action {
         RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory => {
             let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
@@ -1030,6 +1167,14 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
         (OperationKind::Update, PreviousState::ManagedFile)
         | (OperationKind::Update, PreviousState::ManagedDirectory)
         | (OperationKind::Update, PreviousState::MergeableConfigFile) => {}
+        (OperationKind::Remove, PreviousState::ManagedFile)
+        | (OperationKind::Remove, PreviousState::ManagedDirectory)
+            if op.backup_rel.is_none() =>
+        {
+            return Err("remove requires backup".into());
+        }
+        (OperationKind::Remove, PreviousState::ManagedFile)
+        | (OperationKind::Remove, PreviousState::ManagedDirectory) => {}
         (OperationKind::NoChange, _) => {
             return Err("no_change must not appear in manifest operations".into());
         }
@@ -1078,8 +1223,9 @@ pub fn backup_artifact(
     artifact: &ArtifactId,
     backup_dir: &Path,
     home: &Path,
+    workspace_root: &Path,
 ) -> Result<Option<String>, String> {
-    let dest = artifact.resolve_dest(home)?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
     if !dest.exists() {
         return Ok(None);
     }
@@ -1235,7 +1381,10 @@ pub fn validate_manifest(
                 return Err("unsafe backup path".into());
             }
         }
-        if !matches!(op.kind, OperationKind::Create | OperationKind::Update) {
+        if !matches!(
+            op.kind,
+            OperationKind::Create | OperationKind::Update | OperationKind::Remove
+        ) {
             return Err("invalid manifest operation kind".into());
         }
         validate_operation_consistency(op)?;
@@ -1413,7 +1562,9 @@ fn restore_artifact_from_backup_with_mode(
     mode: RollbackRestoreMode,
     workspace_root: Option<&Path>,
 ) -> Result<(), String> {
-    let dest = op.artifact.resolve_dest(home)?;
+    let ws_root =
+        workspace_root.ok_or_else(|| "workspace root required for rollback".to_string())?;
+    let dest = op.artifact.resolve_dest(home, ws_root)?;
     reject_symlink(&dest, "rollback destination")?;
     match op.rollback_action {
         RollbackAction::RestoreFile | RollbackAction::RestoreDirectoryArtifact => {
@@ -1565,7 +1716,7 @@ fn restore_artifact_from_backup_with_mode(
 pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId> {
     let mut surfaces: Vec<SetupSurfaceId> = planned
         .iter()
-        .filter(|p| p.kind.needs_apply())
+        .filter(|p| matches!(p.kind, OperationKind::Create | OperationKind::Update))
         .map(|p| p.surface)
         .collect();
     surfaces.sort_by_key(|s| format!("{s:?}"));
@@ -1594,11 +1745,10 @@ mod tests {
     }
 
     #[test]
-    fn deprecated_cleanup_expands_none() {
+    fn workspace_bundle_expands_from_bundled_repo() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let artifacts =
-            expand_surface_fail_closed(SetupSurfaceId::DeprecatedSkillCleanup, &repo).unwrap();
-        assert!(artifacts.is_empty());
+        let artifacts = expand_surface_fail_closed(SetupSurfaceId::WorkspaceBundle, &repo).unwrap();
+        assert!(!artifacts.is_empty());
     }
 
     #[test]

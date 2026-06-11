@@ -6,6 +6,7 @@ mod content;
 mod contract;
 pub(crate) mod cursor_profile;
 mod defaults;
+pub(crate) use defaults::default_workspace_files;
 mod opencode_runtime;
 mod process;
 pub(crate) mod setup;
@@ -17,7 +18,6 @@ pub(crate) use opencode_runtime::{
     extract_managed_opencode_config, managed_opencode_keys_match, merge_managed_opencode_config,
     render_expected_opencode_config,
 };
-pub(crate) use process::ActionResult;
 pub(crate) use status::file_eq;
 mod repo_dashboard;
 mod repo_dashboard_commands;
@@ -47,14 +47,12 @@ pub use repo_dashboard_commands::{
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{
-    apply_setup, preview_repair_setup, preview_setup, repair_setup_command,
-    rollback_setup_transaction,
+    apply_setup, get_installation_status, preview_repair_setup, preview_setup,
+    repair_setup_command, rollback_setup_transaction,
 };
 pub use skills::{
-    get_skills_sync_health, install_skills, list_skills, migrate_codex_legacy_skills,
-    open_install_skills_script, open_skill, preview_codex_legacy_migration,
-    preview_remove_deprecated_skills, read_skill, remove_deprecated_skills,
-    rollback_deprecated_skills_removal,
+    get_skills_sync_health, install_skills, list_skills, open_install_skills_script, open_skill,
+    read_skill,
 };
 pub use status::get_status;
 pub use workspace::{
