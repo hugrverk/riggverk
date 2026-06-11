@@ -75,7 +75,7 @@ ACTIVE_DOC_SOURCES = [
 MIGRATION_FIXTURE_ALLOWLIST = {
     REPO_ROOT / "src/lib/brainSetup.test.ts",
     REPO_ROOT / "scripts/check-skill-routing.py",
-    REPO_ROOT / "src-tauri/src/deprecated_skills.rs",
+    REPO_ROOT / "src-tauri/src/managed_bootstrap.rs",
     REPO_ROOT / "src-tauri/src/commands/default_workspace_manifest.rs",
     REPO_ROOT / "src-tauri/src/commands/workspace.rs",
 }

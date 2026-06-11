@@ -255,10 +255,12 @@ def assert_frontend_contracts() -> None:
         fail("setup commands must use backend mutation guard")
     if "setup_mutation_guard" not in read(REPO / "src-tauri/src/lib.rs"):
         fail("setup_mutation_guard module must be registered")
-    if "dangling_symlink_skill_directory_is_rejected" not in read(
-        REPO / "src-tauri/src/deprecated_skills.rs"
+    if "MANAGED_STATE_REL" not in read(REPO / "src-tauri/src/managed_state.rs"):
+        fail("managed_state contract must define MANAGED_STATE_REL")
+    if "collect_stale_removal_artifacts" not in read(
+        REPO / "src-tauri/src/managed_bootstrap.rs"
     ):
-        fail("deprecated skills must include dangling symlink regression tests")
+        fail("managed bootstrap must define stale removal collection")
     if "previewToken" not in setup_tsx:
         fail("SetupLifecycle apply must forward preview tokens")
     if "lastCompletedApplyRef" not in setup_tsx:
