@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { SetupPlan, SetupResult, OperationKind, SetupSurfaceId } from "../types";
 
@@ -58,13 +58,31 @@ function surfaceLabel(id: SetupSurfaceId): string {
 }
 
 function setupResultToTerminal(result: SetupResult, action: string) {
+  const stderrParts = [...result.failed];
+  if (!result.success && result.transaction_id && result.rolled_back.length > 0) {
+    stderrParts.push("automatic rollback completed; explicit rollback retry may be available");
+  }
   return {
     success: result.success,
     action,
     stdout: result.message,
-    stderr: result.failed.length > 0 ? result.failed.join("; ") : "",
+    stderr: stderrParts.length > 0 ? stderrParts.join("; ") : "",
     exit_code: result.success ? 0 : 1,
   };
+}
+
+function acceptMutationTransaction(
+  result: SetupResult,
+  transactionRef: MutableRefObject<SetupResult | null>,
+  onSuccess: () => void,
+) {
+  if (!result.transaction_id) return;
+  if (result.success) {
+    transactionRef.current = result;
+    onSuccess();
+    return;
+  }
+  transactionRef.current = result;
 }
 
 function sanitizePreviewError(err: unknown): string {
@@ -237,12 +255,7 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
     });
     if (r) {
       setApplyResult(r);
-      if (r.success) {
-        lastCompletedApplyRef.current = r;
-        setRollbackResult(null);
-      } else if (r.transaction_id) {
-        lastCompletedApplyRef.current = r;
-      }
+      acceptMutationTransaction(r, lastCompletedApplyRef, () => setRollbackResult(null));
     }
   }, [plan, runSetupTask, refresh, loadRepairPreview]);
 
@@ -261,10 +274,7 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
     });
     if (r) {
       setRepairResult(r);
-      if (r.success) {
-        lastCompletedApplyRef.current = r;
-        setRollbackResult(null);
-      }
+      acceptMutationTransaction(r, lastCompletedApplyRef, () => setRollbackResult(null));
     }
   }, [repairPreview, runSetupTask, refresh, loadRepairPreview]);
 
@@ -508,6 +518,11 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
           {applyResult && !applyResult.success && activeApplyTransaction && canRollback && (
             <p className="ws-repair-hint" role="alert">
               Apply failed for transaction {activeApplyTransaction.transaction_id.slice(0, 12)}… — rollback retry is available.
+            </p>
+          )}
+          {repairResult && !repairResult.success && activeApplyTransaction && canRollback && (
+            <p className="ws-repair-hint" role="alert">
+              Repair failed for transaction {activeApplyTransaction.transaction_id.slice(0, 12)}… — rollback retry is available.
             </p>
           )}
         </div>

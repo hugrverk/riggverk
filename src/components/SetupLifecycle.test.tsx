@@ -125,6 +125,144 @@ describe("SetupLifecycle", () => {
     await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).not.toBeDisabled());
   });
 
+  const repairPreviewWithWork = {
+    missing_artifacts: ["OpenCodeRules"],
+    skipped_updates: 0,
+    skipped_conflicts: 0,
+    skipped_unavailable: 0,
+    repair_fingerprint: "repairfp12345678",
+    repair_preview_token: "repair-token-1",
+    message: "1 missing",
+  };
+
+  it("preserves failed repair transaction for rollback retry", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: { dryRun?: boolean }) => {
+      if (cmd === "preview_setup") return previewPlan;
+      if (cmd === "preview_repair_setup") return repairPreviewWithWork;
+      if (cmd === "repair_setup_command") {
+        return {
+          success: false,
+          transaction_id: "777",
+          applied: ["OpenCodeRules"],
+          failed: ["validation failed"],
+          rolled_back: [],
+          manual_steps: [],
+          message: "repair failed",
+        };
+      }
+      if (cmd === "rollback_setup_transaction") {
+        if (args?.dryRun) {
+          return {
+            success: true,
+            transaction_id: "777",
+            applied: [],
+            failed: [],
+            rolled_back: ["OpenCodeRules"],
+            manual_steps: [],
+            message: "dry",
+          };
+        }
+        return {
+          success: true,
+          transaction_id: "777",
+          applied: [],
+          failed: [],
+          rolled_back: ["OpenCodeRules"],
+          manual_steps: [],
+          message: "rolled back",
+        };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const runSetupTask = vi.fn(async (opts) => {
+      const res = await opts.task();
+      opts.toActionResult(res);
+      return res;
+    });
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
+    await screen.findByText("OpenCode Rules");
+    fireEvent.click(screen.getByRole("button", { name: /^repair$/i }));
+    await screen.findByText("FAILED");
+    await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).not.toBeDisabled());
+    expect(screen.getByText(/Repair failed for transaction/)).toBeTruthy();
+  });
+
+  it("hides rollback when failed repair has no eligible artifacts", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string, args?: { dryRun?: boolean }) => {
+      if (cmd === "preview_setup") return previewPlan;
+      if (cmd === "preview_repair_setup") return repairPreviewWithWork;
+      if (cmd === "repair_setup_command") {
+        return {
+          success: false,
+          transaction_id: "777",
+          applied: ["OpenCodeRules"],
+          failed: ["validation failed"],
+          rolled_back: ["OpenCodeRules"],
+          manual_steps: [],
+          message: "repair failed with auto rollback",
+        };
+      }
+      if (cmd === "rollback_setup_transaction" && args?.dryRun) {
+        return {
+          success: true,
+          transaction_id: "777",
+          applied: [],
+          failed: [],
+          rolled_back: [],
+          manual_steps: [],
+          message: "nothing to roll back",
+        };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const runSetupTask = vi.fn(async (opts) => {
+      const res = await opts.task();
+      opts.toActionResult(res);
+      return res;
+    });
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
+    await screen.findByText("OpenCode Rules");
+    fireEvent.click(screen.getByRole("button", { name: /^repair$/i }));
+    await screen.findByText("FAILED");
+    await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).toBeDisabled());
+  });
+
+  it("preview refresh preserves failed apply transaction", async () => {
+    vi.mocked(invoke).mockImplementation(async (cmd: string) => {
+      if (cmd === "preview_setup") return previewPlan;
+      if (cmd === "preview_repair_setup") {
+        return { missing_artifacts: [], skipped_updates: 0, skipped_conflicts: 0, skipped_unavailable: 0, repair_fingerprint: null, message: "none" };
+      }
+      if (cmd === "apply_setup") {
+        return {
+          success: false,
+          transaction_id: "888",
+          applied: [],
+          failed: ["apply failed"],
+          rolled_back: [],
+          manual_steps: [],
+          message: "apply failed",
+        };
+      }
+      if (cmd === "rollback_setup_transaction") {
+        return { success: true, transaction_id: "888", applied: [], failed: [], rolled_back: ["OpenCodeRules"], manual_steps: [], message: "dry" };
+      }
+      throw new Error(`unexpected ${cmd}`);
+    });
+    const runSetupTask = vi.fn(async (opts) => {
+      const res = await opts.task();
+      opts.toActionResult(res);
+      return res;
+    });
+    render(<SetupLifecycle workspacePath="/tmp/ws" wsRunning={null} runSetupTask={runSetupTask} />);
+    await screen.findByText("OpenCode Rules");
+    fireEvent.click(screen.getByRole("button", { name: /^apply$/i }));
+    await screen.findByText("FAILED");
+    fireEvent.click(screen.getByRole("button", { name: /refresh/i }));
+    await screen.findByText("OpenCode Rules");
+    await waitFor(() => expect(screen.getByRole("button", { name: /rollback/i })).not.toBeDisabled());
+  });
+
   it("cancels rollback confirmation on Escape after apply result", async () => {
     const runSetupTask = vi.fn(async (opts) => {
       const res = await opts.task();
