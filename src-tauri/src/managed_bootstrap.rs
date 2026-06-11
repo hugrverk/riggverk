@@ -78,21 +78,44 @@ fn historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
     Ok(manifest)
 }
 
+/// Identity namespace for a skill: removed skills keep their legacy prefix,
+/// still-current skills use the generic skill namespace.
+fn skill_identity(name: &str) -> String {
+    if REMOVED_SKILL_NAMES.contains(&name) {
+        format!("removed-skill:{name}")
+    } else {
+        format!("skill:{name}")
+    }
+}
+
 fn historical_identity_and_path_class(artifact: &ArtifactId) -> Option<(String, &'static str)> {
     match artifact {
         ArtifactId::OpenCodeSkill(name)
         | ArtifactId::CodexSkill(name)
         | ArtifactId::ClaudeSkill(name)
-        | ArtifactId::CursorSkill(name) => {
-            Some((format!("removed-skill:{}", name.as_str()), "harness-skill"))
+        | ArtifactId::CursorSkill(name) => Some((skill_identity(name.as_str()), "harness-skill")),
+        ArtifactId::CodexLegacySkill(name) => {
+            Some((skill_identity(name.as_str()), "codex-legacy-skill"))
         }
-        ArtifactId::CodexLegacySkill(name) => Some((
-            format!("removed-skill:{}", name.as_str()),
-            "codex-legacy-skill",
-        )),
         ArtifactId::OpenCodeAgent(name) if name.as_str() == LEGACY_SCOUT_AGENT => {
             Some(("legacy-agent:scout".to_string(), "opencode-agent"))
         }
+        ArtifactId::OpenCodeAgent(name) => Some((
+            format!("agent:opencode:{}", name.as_str()),
+            "opencode-agent",
+        )),
+        ArtifactId::CodexAgent(name) => {
+            Some((format!("agent:codex:{}", name.as_str()), "codex-agent"))
+        }
+        ArtifactId::ClaudeAgent(name) => {
+            Some((format!("agent:claude:{}", name.as_str()), "claude-agent"))
+        }
+        ArtifactId::CursorAgent(name) => {
+            Some((format!("agent:cursor:{}", name.as_str()), "cursor-agent"))
+        }
+        ArtifactId::OpenCodeRules => Some(("rules:opencode".to_string(), "opencode-rules")),
+        ArtifactId::CodexRules => Some(("rules:codex".to_string(), "codex-rules")),
+        ArtifactId::ClaudeRules => Some(("rules:claude".to_string(), "claude-rules")),
         ArtifactId::WorkspaceFile(path) => path
             .as_str()
             .strip_prefix("metadata/deprecated-skills/")
@@ -114,7 +137,8 @@ fn historical_identity_and_path_class(artifact: &ArtifactId) -> Option<(String, 
             .as_str()
             .strip_prefix("skills/")
             .and_then(|rest| rest.strip_suffix("/SKILL.md"))
-            .map(|name| (format!("removed-skill:{name}"), "runtime-skill")),
+            .and_then(|rest| rest.rsplit('/').next())
+            .map(|name| (skill_identity(name), "runtime-skill")),
         _ => None,
     })
     .or_else(|| match artifact {
@@ -275,13 +299,15 @@ pub fn codex_legacy_migration_artifacts(
     Ok(artifacts)
 }
 
-fn approved_codex_legacy_digest(
+pub(crate) fn approved_codex_legacy_digest(
     artifact: &ArtifactId,
     digest: &str,
     workspace_root: &Path,
     home: &Path,
 ) -> bool {
-    if approved_historical_digest(artifact, "remove", digest) {
+    if approved_historical_digest(artifact, "remove", digest)
+        || approved_historical_digest(artifact, "update", digest)
+    {
         return true;
     }
     let ArtifactId::CodexLegacySkill(name) = artifact else {
@@ -321,27 +347,23 @@ pub fn infer_bootstrap_records(
             }
         }
     }
-    let manifest = historical_manifest()?;
-    for entry in manifest
-        .artifacts
-        .iter()
-        .filter(|entry| entry.action == "update")
-    {
-        let Some(rel) = entry.identity.strip_prefix("workspace:file:") else {
-            continue;
-        };
-        let path = workspace_root.join(rel);
-        if path.is_file() {
-            let hash = setup_fingerprint::hash_file_path(&path)?;
-            if let Some(artifact) = WorkspaceRelPath::new(rel).map(ArtifactId::WorkspaceFile) {
-                if approved_historical_digest(&artifact, "update", &hash) {
-                    records.push(ManagedArtifactRecord {
-                        identity: workspace_file_identity(rel),
-                        hash,
-                        surface: None,
-                    });
-                }
-            }
+    // Adopt every still-current artifact (workspace files, harness skills,
+    // agents, and rules) whose installed copy matches a digest the app
+    // historically shipped. Without a record these copies would be treated
+    // as user divergence and preserved as conflicts forever.
+    let canonical = crate::setup_transaction::expand_surfaces_to_artifacts(
+        crate::setup_lifecycle::SetupSurfaceId::ALL,
+        workspace_root,
+    )?;
+    for artifact in canonical {
+        let hash =
+            setup_fingerprint::artifact_installed_managed_digest(&artifact, workspace_root, home)?;
+        if hash != ABSENT_DIGEST && approved_historical_digest(&artifact, "update", &hash) {
+            records.push(ManagedArtifactRecord {
+                identity: artifact_identity(&artifact),
+                hash,
+                surface: surface_record_label(&artifact),
+            });
         }
     }
     for harness in ["opencode", "codex", "claude", "cursor"] {
@@ -391,7 +413,18 @@ pub fn infer_bootstrap_records(
         }
     }
     records.sort_by(|a, b| a.identity.cmp(&b.identity));
+    records.dedup_by(|a, b| a.identity == b.identity);
     Ok(records)
+}
+
+/// Record label for the owning surface; workspace files carry no surface.
+fn surface_record_label(artifact: &ArtifactId) -> Option<String> {
+    match artifact {
+        ArtifactId::WorkspaceFile(_) => None,
+        _ => serde_json::to_value(artifact.surface())
+            .ok()
+            .and_then(|value| value.as_str().map(str::to_string)),
+    }
 }
 
 /// Collect all stale removal artifact candidates for bootstrap or managed-state reconciliation.

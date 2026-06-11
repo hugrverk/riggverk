@@ -637,10 +637,13 @@ pub fn detect_artifact_state(
                     Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
                 },
             );
+            // The Cursor MCP merge rewrites only the managed playwright
+            // entry and preserves every other server, so divergence is
+            // mergeable rather than whole-file ownership.
             match status.as_str() {
-                "synced" => (OperationKind::NoChange, PreviousState::ManagedFile),
+                "synced" => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
                 "missing" => (OperationKind::Create, PreviousState::Absent),
-                "diverged" => (OperationKind::Update, PreviousState::ManagedFile),
+                "diverged" => (OperationKind::Update, PreviousState::MergeableConfigFile),
                 _ => (OperationKind::Unavailable, PreviousState::Unavailable),
             }
         }
@@ -765,7 +768,17 @@ fn detect_stale_artifact_state(
                 workspace_root,
                 home,
             );
-            if current_digest.as_deref() != Ok(installed.as_str()) {
+            // A legacy copy that duplicates the migrated copy or matches an
+            // app-shipped digest is app-owned; anything else is preserved.
+            let duplicate = current_digest.as_deref() == Ok(installed.as_str());
+            if !duplicate
+                && !crate::managed_bootstrap::approved_codex_legacy_digest(
+                    artifact,
+                    &installed,
+                    workspace_root,
+                    home,
+                )
+            {
                 return (OperationKind::Conflict, PreviousState::Conflict);
             }
         }
@@ -783,15 +796,25 @@ pub fn plan_artifacts_for_surfaces(
     home: &Path,
 ) -> Result<Vec<PlannedArtifact>, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
-    let bootstrap_records = if managed.is_none() && workspace_root.join("skills").is_dir() {
+    let bootstrap_records = if workspace_root.join("skills").is_dir() {
         crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
     } else {
         Vec::new()
     };
-    let records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
+    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
         .as_ref()
         .map(|s| s.artifacts.clone())
-        .unwrap_or(bootstrap_records);
+        .unwrap_or_default();
+    // Pre-manifest copies stay adoptable after the first apply: explicit
+    // managed records win, historical-ownership records fill the gaps for
+    // artifacts an earlier app version installed but no apply has touched.
+    let known: std::collections::HashSet<String> =
+        records.iter().map(|r| r.identity.clone()).collect();
+    records.extend(
+        bootstrap_records
+            .into_iter()
+            .filter(|record| !known.contains(&record.identity)),
+    );
 
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
     let canonical_identities =
@@ -820,12 +843,17 @@ pub fn plan_artifacts_for_surfaces(
             home,
             managed_hash.as_deref(),
         );
-        let (kind, previous_state) =
-            if managed_hash.is_none() && matches!(kind, OperationKind::Update) {
-                (OperationKind::Conflict, PreviousState::Conflict)
-            } else {
-                (kind, previous_state)
-            };
+        // Updates without proven ownership are preserved as conflicts, except
+        // mergeable configs: their merge rewrites only managed keys and
+        // preserves user-owned content by construction.
+        let (kind, previous_state) = if managed_hash.is_none()
+            && matches!(kind, OperationKind::Update)
+            && !matches!(previous_state, PreviousState::MergeableConfigFile)
+        {
+            (OperationKind::Conflict, PreviousState::Conflict)
+        } else {
+            (kind, previous_state)
+        };
         let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
             artifact,
@@ -836,6 +864,8 @@ pub fn plan_artifacts_for_surfaces(
         });
     }
 
+    let requested_surfaces: std::collections::HashSet<SetupSurfaceId> =
+        surfaces.iter().copied().collect();
     let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
         workspace_root,
         home,
@@ -843,6 +873,11 @@ pub fn plan_artifacts_for_surfaces(
         &canonical_identities,
     )?;
     for artifact in stale {
+        // Stale cleanup stays scoped to the surfaces the caller asked for;
+        // a Claude update must not remove Codex or OpenCode files.
+        if !requested_surfaces.contains(&artifact.surface()) {
+            continue;
+        }
         let identity = crate::managed_state::artifact_identity(&artifact);
         if seen.contains(&identity) {
             continue;

@@ -3,13 +3,236 @@
   "source_commit": "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588",
   "artifacts": [
     {
+      "identity": "agent:claude:inspector",
+      "path_classes": [
+        "claude-agent"
+      ],
+      "digests": [
+        "sha256:06b53abbf81f47b20bf20042984c03d695d958d653f58ebc3cc0858bdb260acc",
+        "sha256:19a9332246eb8e3c1022515d692bda0f0e34aaa905599c76a82e79620b2764d7",
+        "sha256:341381b851045aba06a02c9f36112838e5b6d604b7a69eef7134130993005d21",
+        "sha256:49ba5674bc1a981f57f13e22ab1ac60e0125383a000f021e81fdf799d0c9c3a3"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:claude:repo-scout",
+      "path_classes": [
+        "claude-agent"
+      ],
+      "digests": [
+        "sha256:1b956a473c57cd921e9f05da484257ac46b4464767d3618a142a47507fa26f98",
+        "sha256:c9ba5bc0fd96741f9612ba4cbe37e8dde76d8e489d97a9119676a9683f7eb35d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:claude:scribe",
+      "path_classes": [
+        "claude-agent"
+      ],
+      "digests": [
+        "sha256:a9a7370d4a8db8239714f8a14891ffc1fbb83f6828986aa8079606e5ae278e30"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:claude:sentinel",
+      "path_classes": [
+        "claude-agent"
+      ],
+      "digests": [
+        "sha256:c7493b9ecf2222d786d7b8b3c6f6cdc8a4fe29bfb2beef9a38f2bff3cfb8e7e1",
+        "sha256:cfd0ecbe32ae7f57c6f711efc9a02ffdf8a9b82bb8d4db2a74fd1235ac5edbbc"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:claude:verifier",
+      "path_classes": [
+        "claude-agent"
+      ],
+      "digests": [
+        "sha256:a5ffb7e66b896ce056c8e5e9d041eaf317a4ed75292df1cca8a7fa898b93d582",
+        "sha256:f91548ad355121292239b3041093a4dbf31f4cd14223c872237338c422ef8a2b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:codex:inspector",
+      "path_classes": [
+        "codex-agent"
+      ],
+      "digests": [
+        "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:codex:repo_scout",
+      "path_classes": [
+        "codex-agent"
+      ],
+      "digests": [
+        "sha256:1859d79cdc247f4361b0763d3e7664ade8fff5bd9226dcb81196f23bfcdc005f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:codex:verifier",
+      "path_classes": [
+        "codex-agent"
+      ],
+      "digests": [
+        "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:cursor:inspector",
+      "path_classes": [
+        "cursor-agent"
+      ],
+      "digests": [
+        "sha256:36b76592f589b3aac2805ea393497c1f76a48fa5d5ea2da5174780c1905e6951"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:cursor:repo-scout",
+      "path_classes": [
+        "cursor-agent"
+      ],
+      "digests": [
+        "sha256:5ddedc1eb34dc16b32e01b63603e59e0cda7652d8d62ca10528dfd175ca28f4b",
+        "sha256:752f77ace0ab7e5b04da29f6ab22dfe67bf7707c2da1206c427f1f68564bdf3b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:cursor:verifier",
+      "path_classes": [
+        "cursor-agent"
+      ],
+      "digests": [
+        "sha256:11cee6b2a456a3a39e21110685eb94689ac315b8c900c882956894138b2ec8f5",
+        "sha256:47664ba74af3ec73db2148de6cb3a96207b2f62c80903cd187dff8159f188eee",
+        "sha256:cc2b3e79d7e93a956b9679d3d162e5a5d6c4bb356af0d1661b522992c698b7b6"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:architect",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:017bbe23d93aac6cb50d41e42ba662eba2306a1e8596aa5c8e8b78a28156aee5",
+        "sha256:335d2cff78f566598930106de44c09c52238fcb63ef9139b296b09ec4bcec80f",
+        "sha256:4a1dccf1d665e5001506da1881b2cfdbb712a945c081f572d99e482392d469d3",
+        "sha256:89619bae46537fc968ff1b68651db0c9700c96d0b03c50615c6025c1c5a6276e",
+        "sha256:9f9b73d8f7df15bbab2a6e3905d49e391b3be1e2af3da1db923b419aa506ef58",
+        "sha256:ea0ebf3d06c04f96a8b6ddd5dca4adea7a420346698d49282d27360f397c8d8c"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:inspector",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:3e28809c1fae8bdc6be9646d76a260f9112d0f93c33e34e6d2aa3a1a0f807179",
+        "sha256:74a99e23888cf0833afed1d9c9584f1552656bd80b772148dde60d3af41a4af2",
+        "sha256:8d7b87164e8bc026bb9ae5ce040c8d73005ae9180c7d94e6df62dddc3ca93824",
+        "sha256:ac012a5744f0fb671275b2b012b6e57bf92f0845f39f2565429d58bd00320135",
+        "sha256:af0a2cc5fd44b197512aeddba40c36e5cd9161348cf039dd1e85d5c7e7753d0a",
+        "sha256:ceb4289dcaa99afa422788465a6b148b8d3622b6e0116c2d4fad67dd12e47538",
+        "sha256:d1340a2d008c4554045240e81eb064b0ea75f9c6f36999ce42f8eca7fa6c05de",
+        "sha256:e42815b406a68accd931d6ea46deb072c2c873815f8229b097336b4c896cadff",
+        "sha256:ed910e50c3c094b25c0351a3b28cbb6930bf5bdbb6b1898fc964264ac1fc1233"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:repo-scout",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:0ab6760443ebf9f2738b9e4ec278c50bd95c4d878276d6f8f6921f53d5ee3b62",
+        "sha256:5bb9d8cdf0e2ee1f92170ad6fe299b3a6f83863d135275a158a7a96fe7991e0b",
+        "sha256:852b8621678287653ba15001d17bec5a304c7c1bc6c2fb5a3800c854f5aea2ef",
+        "sha256:913c8d939a243ff0416f0bde9082106c986835c2a9292159278082ad463aab6b",
+        "sha256:abe597a3677055df39e2a21f632a9ed6d1234cc5097d1893fdab5f12982600da",
+        "sha256:c611c538665d8c4ca744cb702a131583800913e6079e29cb16b8e6a78e9e9e05"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:scribe",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:0184bab5e15ef71479760b0a87f0f9276f8ed031226241d398bbb69abf409475",
+        "sha256:0b727a8784c8aacc5f66830eafb1b666f59318547ecd302e39b90afa8758fa1c",
+        "sha256:103fa3e6a0413d6ffabffa286843a73002e1c2839d1247aaa81eb5079a73ec39",
+        "sha256:3c69be9ae02ce8983fbf9564c8483555b47e83c3a2c53afb0aaba8f0e1c3bd41",
+        "sha256:5be98a69744e0a660720688c61b70359f3bdb6d88f30b9d2abf1057e6e8f8171",
+        "sha256:61b5b1d4705d131a4f99205f9535263eed3ba401350dcde39eff57aec27d2960",
+        "sha256:79d5bba37d243431aebad0637160926aae51fae03c298ee467d47c62c914f0c4",
+        "sha256:a3c37840456d5984db7abc490541ca0620bfce2a5a73e202876e11c324f7a85c"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:sentinel",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:02d42d4dfef92a530fe61f2d6be1bbb8c1a68dee435a28c05ea30d1d157dfa16",
+        "sha256:4afa5094bfe4309867491a53d20c1edad8da966030bf4e2e9f19861145147829",
+        "sha256:5518ea1070a7d672e534bdc9875fb00edf27bf1a04d35d2e43a705804ae0ae93",
+        "sha256:a0a84c0ea7f9f8698b1b02d8a677dd5eceef12117266e176761eed129640919d",
+        "sha256:aca09beb4b6a085ec6c2b6390ebf24b0b9f3dbd84a3583a2111ba1e0d3084713",
+        "sha256:bb176d2efc7d0fd46dcdc516ff6f8b8b8f141ed9a63d66bf60ca3f5762b14443",
+        "sha256:bff1f2a6d514607696d3880c4e3b6c8141403c2889bb50c867485e820d7307fd",
+        "sha256:e0bd730418b0ff8e788875331008d6ae287bd10e6e20742bd2b975afab035bd2"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "agent:opencode:verifier",
+      "path_classes": [
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:006ab64d6b4cae102a3e859c3fa2e9661ea79e53bee15c87e68f821e4c6311f8",
+        "sha256:1b349380850511e57c0ab182b72af72be0566e4bef3989cdc20638c5baffa8fa",
+        "sha256:2afeeb7f954028b943a4e16e9db401894de648dfbd6d5b68e9c8012908d274bf",
+        "sha256:33540aa32b03d649b6ee37509ab56cbc1bc42ff277ff32a9895ad0289f64d99c",
+        "sha256:7897f87ce9d03194135e116fce198c799ffd18316e1445d07d734c820fde3855",
+        "sha256:7cc8c622cdb13fad41149fa6cb5e11384a6ac801266ce02d8c9cdf1ad184ae56",
+        "sha256:aa9cc2eea388c1e80b66dbd515451f9acaae23b5778e17ddfd6b1d8278afc2c5",
+        "sha256:cb8d3f5c2c39c0e5a14ab05c2b0a656daca5885b0ba9e950ac1c31829687f3a1",
+        "sha256:cf731558d452a4356f112f56489c80b7976fb9e0bdbb8c364b283d73e5158c07"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "legacy-agent:scout",
       "path_classes": [
         "runtime-agent",
         "opencode-agent"
       ],
       "digests": [
-        "sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1"
+        "sha256:00cc1fa1ec47f238666191da79ace0ee87790b768b98bd2ba301ffe8103d24b3",
+        "sha256:884eda50e09a4443ce1c6126029f62858bf575329975c90453824a9eea66d37e",
+        "sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1",
+        "sha256:c4499de0f476f3696d7a7d188ed4302c9b38ff17016c7da9ea007cea1d969bf2",
+        "sha256:ca3c89ef4523448377c991ab93723ffd5190461efd23e52e2cd30179ad6c73f6"
       ],
       "action": "remove"
     },
@@ -32,7 +255,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f"
+        "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f",
+        "sha256:f95b371d66f1e2fb72e69be132443433f0298334ebe13f69d5eae81a40919dff",
+        "sha256:fb44c2a81c431af3137d15044cf4e2c3faa6218754ea4c45863625a4e2a5c071"
       ],
       "action": "remove"
     },
@@ -45,7 +270,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:397f5aedc5904bf0a92b073713a5309a3889cac29ccd5a27ccc1eb712016b872"
+        "sha256:397f5aedc5904bf0a92b073713a5309a3889cac29ccd5a27ccc1eb712016b872",
+        "sha256:8414397511db898da9c2279a3257f6f47a873ea20b9061bdf6f0e843322804e7",
+        "sha256:c247b243d16f61c4417e600707567b823de369e7ecb9d1fe5273c62424516dd9"
       ],
       "action": "remove"
     },
@@ -58,7 +285,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd"
+        "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd",
+        "sha256:6e0d70dbb6be3515ee33d1cfe4b7baf9611414a6c5cf9eec6a64422064fc4b01",
+        "sha256:f6a35db9fd54e7f60ccf1168c694b192e749848f1eface5079abb4fb68f17f9f"
       ],
       "action": "remove"
     },
@@ -71,7 +300,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6"
+        "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6",
+        "sha256:8f21bae9924f67c5f1f11a9b07d20dfd308a8ebde69a20d64229c70a48d970f8",
+        "sha256:9efdea8c83d388540ce840148077d473baef194b72a2be64436d3179d21fdcc8"
       ],
       "action": "remove"
     },
@@ -84,7 +315,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f"
+        "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f",
+        "sha256:e590b5eec943b3736efe30f8e87888b4d600df00448fca1b3b2dece696ec2796",
+        "sha256:f28ddb2f5b8db178413fbb283198b4516402edab58139495bfe72b43eb71ec3e"
       ],
       "action": "remove"
     },
@@ -97,6 +330,8 @@
         "codex-legacy-skill"
       ],
       "digests": [
+        "sha256:139b2f5786f941e336ab6dd51bb27006f8308cb2e7c0a08aceb21d030b19c5db",
+        "sha256:d0c2746be66ae7b05ee64b0e031433af254c494bee4ab7625ae059fb5bc8b1e5",
         "sha256:d3aa635f591840f61cdceb8850d1a6955d5dd11ca79e980f4bd379395b8c9bb3"
       ],
       "action": "remove"
@@ -110,7 +345,8 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c"
+        "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c",
+        "sha256:89f3839942fa5da82a132eaba2fd0de762999e04ba960d2a9760d316846086cb"
       ],
       "action": "remove"
     },
@@ -123,7 +359,8 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:2c5cf08d64ac07b5f5cfc511f78a11bb02a568472f7e5021ace6ad431e8ef7ba"
+        "sha256:2c5cf08d64ac07b5f5cfc511f78a11bb02a568472f7e5021ace6ad431e8ef7ba",
+        "sha256:8288132b6213a8efde379fa30dd467db6d4665b00bf00d09d5611ec7416a4e7b"
       ],
       "action": "remove"
     },
@@ -136,7 +373,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:dd107bcc3110d6c6b7d0c383af9572f3bf8ad18d82b7537c93bbcffc903fe931"
+        "sha256:d64e77f713982f47fd12fcb80a729dab6073ebf5fc098849257e9c0d08813e6b",
+        "sha256:dd107bcc3110d6c6b7d0c383af9572f3bf8ad18d82b7537c93bbcffc903fe931",
+        "sha256:f2835e3a05edfe8b8b37afa759e4b863f3752ad5ed16c924ed8b8a5dfbcfe2d5"
       ],
       "action": "remove"
     },
@@ -149,7 +388,9 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:2d7af14305f319d5496628853fc3c45d96663118e77ae8a0625d2859955e4c1d"
+        "sha256:09c06f736ce5f3d121828d60414dbe59169fc28d3f4be733b4ec369204de7567",
+        "sha256:2d7af14305f319d5496628853fc3c45d96663118e77ae8a0625d2859955e4c1d",
+        "sha256:f7e8735f58ec82fe06831a4dc4c6a57c361dbbd28baa809d15892683f6aa428e"
       ],
       "action": "remove"
     },
@@ -162,7 +403,8 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956"
+        "sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956",
+        "sha256:25c8b99950e91ec1b1631c56e880846302d0355f6b46dbd901a171670db4f4c2"
       ],
       "action": "remove"
     },
@@ -175,9 +417,254 @@
         "codex-legacy-skill"
       ],
       "digests": [
-        "sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0"
+        "sha256:0cde2f4290f2783916638cbacbd7e0e22cd26f9a0226ea3daede17dbf7ee8c82",
+        "sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0",
+        "sha256:5160f93c0215fd46aea044b6dbcf70f87be4aa48b91ea473e50c80ac121ae2dc"
       ],
       "action": "remove"
+    },
+    {
+      "identity": "skill:accessibility-review",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:262eb86b8eec18630076f93f0cf9b8b16d0a0b3f4f62c9b6710e7a0af471c6f7",
+        "sha256:78d69cbf4f91b01865caeffa89cc5616e7d08d7ce9aa0e05de5bb78e32638b5d",
+        "sha256:d35d5b9af76b02ff79f1d06aecf7e5512dda3238e45c432184c3fb8e3c0c62bd"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:browser-qa",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1746af0204c1d398d2a65d1aaff458a479dd457b2687762981f053a5c3cfdcf3",
+        "sha256:65c12ac3aa5de8a2595cf1e5d67ef077992cccbff59977d61918341f0269e605",
+        "sha256:b219395c52aa80026fbd7715ac336e5bcedc3557cecb807a2971f13aa0f670f0"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:context-budget",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:224477c7c6dfe048ef5053df9b6a9c241de44069dd179043cbf0b5f8c30edc4b",
+        "sha256:3c9b82db6e2982993ef19d75bcf0d5d7c7680092c59f1df49e6d698e02f121a3",
+        "sha256:e118b5c4fe65997fa850013c4fdf4602b7b685e63fa4ead644e3a70f865608a5"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:current-docs",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:0f81af64ba50f3f729ea151824b26bd82922e37568a84e155a3a7f9d7c349a6b",
+        "sha256:768183e183181d8db7d58d0efa4fefa5a09a7276e5471b665386a9b589e502d0",
+        "sha256:89229da1b97db99e0364373f830f37fd204090a42e8a187cbc3a71f47f26fcd8",
+        "sha256:c9498f3312bd9b65e362d37772d6071fbc6472b082c64d283b2f6a5195e02b91"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:database-migrations",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:55bd3ec77dc0baac6eb8d8ca3292a96b011c343cf3a5d5956abdfedb6892207c",
+        "sha256:8d09e94d68225d5881ebf37609907bb5de8380bd2fedc96d25c7e3d2bf6f08c2",
+        "sha256:d95a7d2752cde24373379b2367e779ce31c440155c75d858d03ca38587b800d6"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:diagnose",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:47043d5578afcea15cc99f066611dbc63b6d5ac6a1648dc31f934e5b54047bcb",
+        "sha256:4cbafcb8f22cb773ffa88c78c87fc459875defac4f378078a083e918255755e5",
+        "sha256:7a4f38892ceb61ecba002d91a7205f8870c89fbac0bc4d8b6e21846a1b4c968d",
+        "sha256:c43e8d639df666cf01261363b0b100c4ae71ff9284f7477a8e9dd653338b0a8a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:frontend-design",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1fc1b8432bee2695dbdabbfc3ecbe567ba83214fcaf18a72ac6a1b3998f4a9a3",
+        "sha256:339b0a6a6c1c5122807ab5436cd68df8364bcb90f019ca318dfdd7d066bab6ef",
+        "sha256:4d70e96b0fe5f20000a018423636469f14a30bcbdb354556e3fc4c62523a2a9c",
+        "sha256:e25f292a0e5d56ee198f41a1fab3d661085ca6b3548114f5c2e447603f1526fb",
+        "sha256:f06072d3e998d75dcb25e64e08e6d09db323b190197ac3480863a19a4026d7d8",
+        "sha256:f842f1bed01d271bc11d44916b39a7cf44524fd53403c3c1f730bbcf6db1f385"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:handoff",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:5c0984408486d465d90aaaa031b62eaf0efd17ce0250777add749d3d4a73c279",
+        "sha256:e12e29868f567b3ab38a335e659f3a3b2be416ca9c1ae39fd1af1957516001ec"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:implementation-plan",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:33218350c860a2a9aa29192a38ba75b6af5261edb79444813d7a369155b8453b",
+        "sha256:572aae6151e08611eb115d1c2974ecba5cfaf9e325ed7eecc6f8d850d1aa181a",
+        "sha256:6a814d768701cc917ae058fadaf763dbcc3732d9ff88e72dc0b73dbf4e63fddc",
+        "sha256:74b3816b05bc2a22abf38bb4051f284a8fe58425796abc75b7b8e25866abbb0f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:minimal-implementation",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:8ce7a52c34e92327c3e2c008fff29181b1f55ad37e662f5d4b82a92de3114c10"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:prototype",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:44ee9ea4a8301dfe08596db4aed7cacfb674a89227b4b86793ea8b86d2879442",
+        "sha256:50165be506348db1f5a38a3d05a9b3b7c0b577dff0085238e652c5d14e920c5c",
+        "sha256:d61ff77a0ab3c358e3dd8d44ff7a8b0e03dfd118355318a8027aaff84957c4fb"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:release-check",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:0c339a59dd56b95ad6945fef249cef52be48cf462d6ed2ea3edb633af31f0c37",
+        "sha256:4793f3d34f4c1a15603d6c9020a09efbcef727bd21ac8dd7e7667db610190860",
+        "sha256:fcde3a3f23117d2ced4e9bab26b3984ee5f88e3fb3b88b06c28d41379f3399f5"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:screenshot-review",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:01caeed63aa3ab50ab0437b79ad868d810066f07dbcb66f2d5112678209f1dc0",
+        "sha256:83225d8ef4d8a2b4abc43d661ad0e5ac83c3fdb58bf259132fa94d806cce90f9",
+        "sha256:a1d757a29e904771311130792883650429040ed0412064f82787fca482740fed",
+        "sha256:e03331d933da05bf18f991a9030370dfe71cdd518930097d9bddb6e84fdc0dfa"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:security-review",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1ce6808d6a86b8918d8a230dc8f8f4773defbebdba8103e1874818395086c7bc",
+        "sha256:3b01e84d18654d54926a2a9343e93af224ea5848feb31e3f0e21354c0c44e68d",
+        "sha256:d5c9bd97eee73237c5d17aa85e0daee7acdbb85d21c894c82f884863ca6c8654"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:tdd",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:5b155be0cd2fa170f9aa7cde27c1003b18ec424c2e649048a90b1d3f5e5b7961",
+        "sha256:8442d79f5c890cfe8450a8edc7ba8ef2c8ddf4d29f8d23ef28699888e0e14668",
+        "sha256:ca1f1d93127af7da70ecd6d259b18e04628c5f3543e96adf662b08d68c99e9d4",
+        "sha256:f000e31d81e8c0f75bade87dbbb711eb195173b20c95b578be02998069c8bc9f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:wordpress-woocommerce",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:43de24205593092832d5d8da3fea0141da8fdf1ece0d9e15aac3a5895161ff7d",
+        "sha256:a1c2e975330eca69e38c02a87d9d93631bc54bc051b040f37fca3a706fdb6937",
+        "sha256:cdc6ed65fea9d864c186a1d50af391000ff1341321d1e3b6322c369359e223f9"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "skill:zoom-out",
+      "path_classes": [
+        "runtime-skill",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:2c4c7e418595537eaa65206050720ec830ba9ecd49caf6a2f0e6c9121629d0ca",
+        "sha256:b368f5489c0b4c1ebee01586582d1b4c413cea50f37fb077c99da9b8b931ba31",
+        "sha256:c04bd2480e7b4f9baf02f28d7d3e0240a7327e85ed28e7f1d1d6e59f7bd44337"
+      ],
+      "action": "update"
     },
     {
       "identity": "workspace:file:README.md",
@@ -185,7 +672,300 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d"
+        "sha256:0416582841ac6c4c755f00462f2c30750a425d53802315145dc34d084f7ef053",
+        "sha256:0b9a3f553fb52830f15044253c3ad2de779031c7608d43f74b907f85cd5ac09b",
+        "sha256:120a587e1748a91399407f6e67143803c7345a7131620d5d39614e5a1539b877",
+        "sha256:17e8acfd09ed75d267bd43cc1c2e426e38b0da637583f20a6e5bbdb08faa0245",
+        "sha256:2d887d348824313a474b412506dff665363d9f6ff13136953089557ece757c52",
+        "sha256:2dd5027ab9cb22d740a39d3379edf6dfa025763f6cd5be82cb526e565223cfb6",
+        "sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d",
+        "sha256:4bfecfb1dcaadc520a653958131c78bdfb38ce801ff1181b581450250c543851",
+        "sha256:6399b3828421c61abe6e2b2043b5db27ccceb5fdaaa21d9b69ff653151d9a9be",
+        "sha256:66b2882a52370b8c1c5d858280f4fbf612bce471c455a0399184789dad5b1dc3",
+        "sha256:7affc0d7f5796c1aaf78bf1e52cf9a6c0309a03c5239c0a73422624080ee3b8f",
+        "sha256:8af29fef01554b9dc00a850848b52f8321b6a368a95a1419808ac7f80d3ea1d0",
+        "sha256:8f18e3e2d9379eed2e6919f740b8933d2db82238c1f5950d6968643d9637d027",
+        "sha256:8f1c0f8985d36f4c4531b980b6e3767e9154e75de2db03ff2a346495c34f44fe",
+        "sha256:ad6b96e84ec1776324e0b5d7c1f1195890b7248bc0a2743a6c972e2065a77db3",
+        "sha256:bcae2a6b61dd641e45b714c1f5d4513b72da01a305d09765d31d1dfda0f1c4f5",
+        "sha256:cfffe34c40946067bce4f00234f594e97763c1b16047e58f6bb9aa0957bc3105",
+        "sha256:d047979d5abe9a7d9be0b49ed2ad0e0de865ef7d3dc1e4079c31422864f737c8",
+        "sha256:d09f19a56dd59815eb72ace538d32d0ff03c30c72d0a00e27e30353d579f39f8",
+        "sha256:d0ce07a6f33d5785d7d93de2323a2eeacbba6ace0bc9715b7cedfc4eb920e47e",
+        "sha256:d690124626bb6b163a23d8e39e2881dfa58bb2683ba8a838e840256d3d9c66ef",
+        "sha256:d6f42198aab8583a82391f7843d6c308c929958e263692c4d8402ca0230605de",
+        "sha256:e175654b5e11280ec7245cc5d0380208b214a64aeceb801a3bfd502baf09c1bb",
+        "sha256:e5dc7ce9d7619cc9e4a3b1477b33e2be1e6f06aa3669300ab696820244e4dc6c",
+        "sha256:f682eb459ee49e5f87e3c4b7a6b7e929495d68284e7bfdc22d0c93cf8d8210a5"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agent-specs/architect.body.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:593fae424c64725871758751aa7aff38453429485c9fa5de9e188fd973396258"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agent-specs/inspector.body.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:254a473e565972998e65838cf194db2fddbf42a0ecd8c0b4b3aa8ab3339769ff",
+        "sha256:c36e5d315306b2d201545811cdb2061f9514363f6a0bbb3e6b56a96db75c0c14"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agent-specs/repo-scout.body.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:42c7d935514aca029ff37c27baa5c90fcac2a6b16161c40e7215596462ff4c5f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agent-specs/verifier.body.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:7d43a52d606549380b87b40eb9443b65e8ca01f1689ca079e387dfcfd24bb58e"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/architect.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:017bbe23d93aac6cb50d41e42ba662eba2306a1e8596aa5c8e8b78a28156aee5",
+        "sha256:335d2cff78f566598930106de44c09c52238fcb63ef9139b296b09ec4bcec80f",
+        "sha256:4a1dccf1d665e5001506da1881b2cfdbb712a945c081f572d99e482392d469d3",
+        "sha256:89619bae46537fc968ff1b68651db0c9700c96d0b03c50615c6025c1c5a6276e",
+        "sha256:9f9b73d8f7df15bbab2a6e3905d49e391b3be1e2af3da1db923b419aa506ef58",
+        "sha256:ea0ebf3d06c04f96a8b6ddd5dca4adea7a420346698d49282d27360f397c8d8c"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/inspector.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3e28809c1fae8bdc6be9646d76a260f9112d0f93c33e34e6d2aa3a1a0f807179",
+        "sha256:74a99e23888cf0833afed1d9c9584f1552656bd80b772148dde60d3af41a4af2",
+        "sha256:8d7b87164e8bc026bb9ae5ce040c8d73005ae9180c7d94e6df62dddc3ca93824",
+        "sha256:ac012a5744f0fb671275b2b012b6e57bf92f0845f39f2565429d58bd00320135",
+        "sha256:af0a2cc5fd44b197512aeddba40c36e5cd9161348cf039dd1e85d5c7e7753d0a",
+        "sha256:ceb4289dcaa99afa422788465a6b148b8d3622b6e0116c2d4fad67dd12e47538",
+        "sha256:d1340a2d008c4554045240e81eb064b0ea75f9c6f36999ce42f8eca7fa6c05de",
+        "sha256:e42815b406a68accd931d6ea46deb072c2c873815f8229b097336b4c896cadff",
+        "sha256:ed910e50c3c094b25c0351a3b28cbb6930bf5bdbb6b1898fc964264ac1fc1233"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/repo-scout.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0ab6760443ebf9f2738b9e4ec278c50bd95c4d878276d6f8f6921f53d5ee3b62",
+        "sha256:5bb9d8cdf0e2ee1f92170ad6fe299b3a6f83863d135275a158a7a96fe7991e0b",
+        "sha256:852b8621678287653ba15001d17bec5a304c7c1bc6c2fb5a3800c854f5aea2ef",
+        "sha256:913c8d939a243ff0416f0bde9082106c986835c2a9292159278082ad463aab6b",
+        "sha256:abe597a3677055df39e2a21f632a9ed6d1234cc5097d1893fdab5f12982600da",
+        "sha256:c611c538665d8c4ca744cb702a131583800913e6079e29cb16b8e6a78e9e9e05"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/scribe.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0184bab5e15ef71479760b0a87f0f9276f8ed031226241d398bbb69abf409475",
+        "sha256:0b727a8784c8aacc5f66830eafb1b666f59318547ecd302e39b90afa8758fa1c",
+        "sha256:103fa3e6a0413d6ffabffa286843a73002e1c2839d1247aaa81eb5079a73ec39",
+        "sha256:3c69be9ae02ce8983fbf9564c8483555b47e83c3a2c53afb0aaba8f0e1c3bd41",
+        "sha256:5be98a69744e0a660720688c61b70359f3bdb6d88f30b9d2abf1057e6e8f8171",
+        "sha256:61b5b1d4705d131a4f99205f9535263eed3ba401350dcde39eff57aec27d2960",
+        "sha256:79d5bba37d243431aebad0637160926aae51fae03c298ee467d47c62c914f0c4",
+        "sha256:a3c37840456d5984db7abc490541ca0620bfce2a5a73e202876e11c324f7a85c"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/sentinel.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:02d42d4dfef92a530fe61f2d6be1bbb8c1a68dee435a28c05ea30d1d157dfa16",
+        "sha256:4afa5094bfe4309867491a53d20c1edad8da966030bf4e2e9f19861145147829",
+        "sha256:5518ea1070a7d672e534bdc9875fb00edf27bf1a04d35d2e43a705804ae0ae93",
+        "sha256:a0a84c0ea7f9f8698b1b02d8a677dd5eceef12117266e176761eed129640919d",
+        "sha256:aca09beb4b6a085ec6c2b6390ebf24b0b9f3dbd84a3583a2111ba1e0d3084713",
+        "sha256:bb176d2efc7d0fd46dcdc516ff6f8b8b8f141ed9a63d66bf60ca3f5762b14443",
+        "sha256:bff1f2a6d514607696d3880c4e3b6c8141403c2889bb50c867485e820d7307fd",
+        "sha256:e0bd730418b0ff8e788875331008d6ae287bd10e6e20742bd2b975afab035bd2"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:agents/verifier.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:006ab64d6b4cae102a3e859c3fa2e9661ea79e53bee15c87e68f821e4c6311f8",
+        "sha256:1b349380850511e57c0ab182b72af72be0566e4bef3989cdc20638c5baffa8fa",
+        "sha256:2afeeb7f954028b943a4e16e9db401894de648dfbd6d5b68e9c8012908d274bf",
+        "sha256:33540aa32b03d649b6ee37509ab56cbc1bc42ff277ff32a9895ad0289f64d99c",
+        "sha256:7897f87ce9d03194135e116fce198c799ffd18316e1445d07d734c820fde3855",
+        "sha256:7cc8c622cdb13fad41149fa6cb5e11384a6ac801266ce02d8c9cdf1ad184ae56",
+        "sha256:aa9cc2eea388c1e80b66dbd515451f9acaae23b5778e17ddfd6b1d8278afc2c5",
+        "sha256:cb8d3f5c2c39c0e5a14ab05c2b0a656daca5885b0ba9e950ac1c31829687f3a1",
+        "sha256:cf731558d452a4356f112f56489c80b7976fb9e0bdbb8c364b283d73e5158c07"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/AGENT_RULES.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:2013697ef017ae0ad56f4d4244130253348347f1ae632638977488541da6f69e",
+        "sha256:2c142864a656c62a8924860b237f68947aceaa10a560a2eb7cc0bbc60e3c9f45",
+        "sha256:2da8e74fc25887be4fb45df24fe9f9692e90844a78f8e851a06874b89dfb0104",
+        "sha256:307c8323e781e0d52c2365b2d308508e6c7a1c21f412c7eaf50b6acb5ae5ecdd",
+        "sha256:41ccef21e38b711c82f48eb0a06b5e2aa68b475621e78b7586a47699ed05ff80",
+        "sha256:474ff74c3a0f66fec71faea7e3d6b41e4c40a2e0f5525114f09393fffb68d5c4",
+        "sha256:7fae499775e8dc044349ca8015e6f44ad65dfc9158cf3b52e3ec493cc50daae6",
+        "sha256:8e22e17a3211ca282d91500f721b2b2d788d4417be5b196f3f0315037ac05a8d",
+        "sha256:9cce810eb0b735b3a52ecf5157f3a2cafa52871e739000cf41d5e9bcaf0160e4",
+        "sha256:eebfc9c9cb3f00adaf27ab618be1e70b48a22f65c1408ffec8fd18b45214b506",
+        "sha256:f4ec061f5433b06331b82fdb93cbd37afa024da1d46f93ae9ab311356c1f55f2",
+        "sha256:f766f26f303a665edf9e62b0cde7611e86058dfca2a1875c095a82b2958562fb"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/CODEX_CONFIG.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0c72cee424f586c5b3e79220fa72007e006d5793bad10eea916015f08e0fe897",
+        "sha256:7565580eddb8b0068072494a36360431b20ed3c248d2cd13e1b6098ce120f607",
+        "sha256:765079d719d59399bb942fd495b1c1318eda6104f9aebce38bcf2b7b030e8970",
+        "sha256:7fe4816e4fc774230783cfa78b57b44e5739b5902c2e21d9c44ad5b84ce36ab5",
+        "sha256:81efdde859344c133b19abb7ec65db58165b662bf442e6ef9ad35abdf7b51f6a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/CONCEPTS.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:31a6b155ccc0b28367255714e63c798a980b9ef78efed759e52d6522085d8e72",
+        "sha256:35dfaa0aedfea8b9398da540cbc1dcbdec8be3aac95d8b15fa3ecd5a1eaa6630",
+        "sha256:5db2cdd8b49d81d2ad9067950493f87138c69af5b6d209cce1b35610f95fd757",
+        "sha256:750b45aaa2bf17c7a0d24ce73a13223c7a8a766fc48ea898aeb6cc74f9202283",
+        "sha256:8a4ee89c6761e275c301b02569eba321d3c9bc04532eb7b88e0c1644b2e034fb",
+        "sha256:934adf425076a891861910984e6ca3a23cb6908405d0c55645a1c2356a4788af",
+        "sha256:a331afdcce73d17b80b65606c3a9f3e2fc7d302fa64b2fa89e07f8473c640869",
+        "sha256:ac7bc72c1e52900c83b4561c40a4db8ec58ce2f91da599bbb76ef9e680db453b",
+        "sha256:b2b80f905c2ffc91ffb9d20be3fff2b7a8184b62acfe6344e9a57fde838dbfea",
+        "sha256:d267a0d3b9973b1db0b81271ac885d7a0b09ffe53c8310e5e1ffccda2dbfb575",
+        "sha256:f3196384563000a7603fee7720c25f8c486d915c1e1d2f2031ac184e925a70c4",
+        "sha256:f6573e7fd5229959cde40d7b8fbe9d6a6fa5f38ba8703d26d395bb0f5b178c67"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/GIT_VERSIONING.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:697bda6b8028b2531e7fefa733af63129bc0c6d7ed1eaeff0a27456e3a0891be",
+        "sha256:973451edff89e501f921890f4750a84dc5d88f74ba6a97078059876420456599",
+        "sha256:9fca014967bd0546cc1133645b78e6828b72d70195c4560e22bd832aa09c5a6c",
+        "sha256:d7d3e8538d684fa8973fc2c15d390cd7920fb8e23f5cad2d5d0931cabaaab757"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/OPENCODE_CONFIG.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:08ddb58e7dd3c33fba4da447d9efc0c8e665addf7ac93e4bcbec90f1a0eababf",
+        "sha256:1348985028f96760c8fc1905f94681417ea1cacf12371c567a562e67fc0adc5d",
+        "sha256:150c0e4b715514629be3d691edbeb7065066d4dce202e939041e29228e9872f7",
+        "sha256:1f7b785406067e1060beeff8ba2de4fc92b43f53c57611631b5b52435180c941",
+        "sha256:2a1f2f94626e76f4755b139a58e442cb6c918f8252e7c4a290f8a83462f8e28b",
+        "sha256:61548e1b7cb9f017beeb09ee6837df16644b0e2a0af7432716b4bedc57c9aee5",
+        "sha256:6e10e0c6fc726d799db362cd6705f47a63bdcfcdaa0e637f85fcc4d52a2d1298",
+        "sha256:70c8fbbbe15619b2346048e6990911b63bc7881734edfcb4d30d41d0bbc42fb6",
+        "sha256:77c8e06a2566406cb0bc651ca7498a1ab849e2a585a819981b0faaf997c4523a",
+        "sha256:7be3b64608eb374f9548df2e82d3e40a7376421aa6166ecbd515c76e3b3218b7",
+        "sha256:7d674b316bbab7368f28427e14429c29896ad878b86908e22edd6ee1195ae839",
+        "sha256:cbf335fc7d24d9b504520454c9d3b037eabdcb22553b6d986826d3bff3dca081",
+        "sha256:d2264dc51c5ab03f1753fe664658c605385341d101b6b00b8ea3a617549dbd09",
+        "sha256:d9b7057c415cd792465650282b4e49c0de91ca26abd7432bf5042e146d7f65ec",
+        "sha256:f3b547c3ddcda1ecc2238e312a64f7bb6f64b70a5a804df43985deceb4f74c08",
+        "sha256:fe6cb3b5c8b1af4df69a7e7d4e366d03cc40ec4c2bb641856d3a84eeef7babdb"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/SKILLS.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:10bd861915f9cd37c7d51bf1db56735bd0b6e1ddf1148266711b1251ee3b2b10",
+        "sha256:1899cd7be82c50bf23d9ab4afca9a39593e4ec4adf6277f5baabd03ffb719d6b",
+        "sha256:2510d667ab01c21f097404849626710f859d7ca8f667f618a42b44a19a308c8d",
+        "sha256:30597250e0ca399e1c1af47f493d84918291045b537e56ec701b2ad0d304e49f",
+        "sha256:6ae582c708741f61915f3518bcb465d539255c91531091cafab0fd615edcf30a",
+        "sha256:7158a12299e5b55c113f292a0325a6986eb65262c29691b73c3a3b41bd4b1923",
+        "sha256:9b7cb3aea2e19c5c4db20cb2dd662f49075e19bca07bbf00b048a83480c88081",
+        "sha256:a32736d8f2f43b1aae8c9895c4c0277d5de5484c3fa2f529cb5102061feb4552",
+        "sha256:c37987f023aac3a0bbe421de7aae434ac7a9c60ee23189367ea86959b325f5c4",
+        "sha256:f7cd099a34c21e64b070fbaa19e0259b50f7ee5b93b36ebf11f8e18e3ca5fc3f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/START_HERE.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0d00a2fdff5e163da1b824ca601310590ef0b9026ab384d28c2c40f8cdcb7b7c",
+        "sha256:60444d318b52f8ba8817f84fa514db7e993c2026d246e0e8f3c0d65af2f819de",
+        "sha256:6ece495fff6aefe4f1858dc3436c26410fee489fe6fe33c9e2b71efe91cf1c1b",
+        "sha256:7759b2f8e4f2839ed5d8c9bcbea32bd366e4f2b7163261a63b92c6a3fc61a0df",
+        "sha256:9d97ce70e8577b8ea92ba593d31f6f40297333f1f627f5981d215bd472c2915b",
+        "sha256:e1a5fd8831a8eee82d865d978005afba3960d124659f102bc7d686b4b4504a13"
       ],
       "action": "update"
     },
@@ -195,7 +975,13 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:a10be1dce955a7416f24e8becfca8a22c64af20a8e00d30895c2f1dc3e09bcaa"
+        "sha256:220b6b9eefffbfc4174404fc4c4ed620e9ffb9b97207b455be5330506c636f4d",
+        "sha256:37378a3ea30eeb9b2dce86267ccc828bb16f9fbdd2f299973626758e1e071e67",
+        "sha256:7bde60a007fafd59af3e4ee58ff28d57554caa193212b5f84528719e23b8385c",
+        "sha256:97b51910a903a8e25047ac79d1938b270151ca515158c4604ef8dcf02622c583",
+        "sha256:a10be1dce955a7416f24e8becfca8a22c64af20a8e00d30895c2f1dc3e09bcaa",
+        "sha256:a635aa1c5d9abf6bc5f6dfe347b264af0f9b2881350aeba0707ef0b7da27d351",
+        "sha256:e56a55a04e7379336eed1e2677ea24deb2872d9aa978ca16a3b15b39ce81cabd"
       ],
       "action": "update"
     },
@@ -205,7 +991,27 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812"
+        "sha256:15d3f9383b8f79884353606fdb813bac7780eb37d7a143d3c54f2e148b1b2b8f",
+        "sha256:541d72e41289ebe6bd77b3f985a77ac6281561e2bc247225559b1ae446dffb91",
+        "sha256:698534dfcad15cff4fa1fa0787d63371b4decdde55e5d4e7c19a6d36775f7fee",
+        "sha256:77b8014fa170ba7284455b8d18ea00c03e700a42e423fda69db681d5f04a6fb6",
+        "sha256:8d26022b2c3360e550c0aa38f07237c07128b7f192f44ad6120e7f2a94a957d7",
+        "sha256:9ac7bca5d6e7d5183114fd77232e1175910eb8ca48590d765b4de24aecf71432",
+        "sha256:a363ebe13540be0a3448c01c7682619636dc980dcbd48095f098e47665968e04",
+        "sha256:aad8de756e11e797a10269d91c9cd3d607a4d0c7fda23c58df5958591251dd30",
+        "sha256:ab03d114fa7abfba7dd59ae09113552f0cd2f457e19b80e768aba4821fd83018",
+        "sha256:abfa4d359cd4ca98fc8b9c3ae5caff2858a0c5047882548b9ed0249e502b8e71",
+        "sha256:b1116ee1844ec2a8b8289a601ca19f8e7706894dda697e1e95cbd3451b50150b",
+        "sha256:b989a2d39a40a7b3ae41c16ac2038c06d0a04ade716260f34244ca265d8d0eab",
+        "sha256:c60ae65a2d9cec29929ae8b167495681232e8511fb82286217e39fd88e1f9cd0",
+        "sha256:c9aaed384a55f898b6c1f0ccaceab7f9e046cc8d47655a62909dd77b03205358",
+        "sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812",
+        "sha256:d19d24e3077aade7db4e81b63b24744dee5395ca4457051e35f77e16455e199d",
+        "sha256:d7d23cab8c61b29f9cbee578608ca1f9707ffb9ad774ce8c4a5292ddcd1ab684",
+        "sha256:e6a7745f5c8e37f5c361ec8ef6cab1673a52c113c986ade4ad082b5cabcdb8f2",
+        "sha256:e8b2332cb75a857a9504a44017b2e5b958265994c8ea75b23818f1f5b1eab5bd",
+        "sha256:ea2f431c9bdf4284c3b2a6336036c198ae0dc2aa8499ca757e7c7538cc6d1147",
+        "sha256:eafe4a5f533fb0fe412627702d95bb0194dc9b8757279d03cab16f704f15825e"
       ],
       "action": "update"
     },
@@ -215,7 +1021,169 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:c62a2b4204d389f0826e13510bd93df7d59118b2f9a925332268ed35f0b125e6"
+        "sha256:0d2365c3624bbe9f9c84a43dae1cae9a4ee3e2d018c05cb7615e6a8d029f7eeb",
+        "sha256:1cdf148e4557ff745c39bccbfe54ec83c98194b3c09a0166dd24e05e329fa1f8",
+        "sha256:3e5b93e2c612e05a4f45da074548a2d43b8b52a62dc6056f5b22f984f7607423",
+        "sha256:853cbbc9001aa3339d438dd6b744dc99729511717121bfefc4ac315056b18f7c",
+        "sha256:c62a2b4204d389f0826e13510bd93df7d59118b2f9a925332268ed35f0b125e6",
+        "sha256:c9d7ffc3bbb46012104cbb35885f04954388d05e69957100e4dccb84c2ec7b42",
+        "sha256:ef8b365ec0d7b0f7622ebe715784ef74513855be532fc68ea18080d002aeae99",
+        "sha256:fc5622c5c835fa8aa157d614f4c7a74db36bc8b81fd9b2cd9ed7165a0a2da917"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/prompt-templates/masterprompt.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:8b27e4d51c1199a4d6ddb2405803aa36c702dc323b96263377a45fca4042ffe8"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/prompt-templates/standard-prompt.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a98b935126b0d562866abd8bc84514a3e4be4845df5cff90c0b7edd7bd34f4ef"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:metadata/agent-adapters.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1a535fc0f62b2753a5a27ff497f35e218239007488b2edf3382ad913033b9c05",
+        "sha256:78202c1113e5a5c7e6d4c0c827bfeffb9a37e23f70270cda1b1fb0d04127aa61"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:metadata/agents.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1f9c3f4ceb4a9eb66348beb430edd66fd0f74aec80e622de7280c41fcfc66362",
+        "sha256:6ecdc4081ff5496affb6ad27f2efc6490de87ebe9adb57ced07a815a029b2df2",
+        "sha256:74873eada982ab702562493cc7be0a4103f23b57e0c74f5cf3d831cc8832c4a0",
+        "sha256:81b1d80b6e4af09d29d9322b10392f873f09d9bee74a34247e3f11c28fa81702",
+        "sha256:bdc882762aa5a32c21e17b093feb49dac94c471f9177f7a55aef207d41b7f968",
+        "sha256:d510624dbc020ba5513c938a8a84d18925a19cb36a2825a965333ca20e70daa5"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/bootstrap.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:04aa9d6ea279e9549bd62554fbdac3d89c86ff73d6f1bafa9e616227fd21e08f",
+        "sha256:627676cf985a3837cc505fe0ca1ec698e5d1ba9857635ce72c35429d467e46b2",
+        "sha256:ad3ba719e77a6645a57036ab7299704fc66f318974327506a8f674620487e588",
+        "sha256:c8fa2a3a1e47849f3a679f14c12f2e737b87b8851b579dd5c5fe833b871c7b04",
+        "sha256:e1a9a56357c04b6769500a653f32256d3b6f9a9f8c6f4e4a3c144127e4c969bd",
+        "sha256:fa14b67172b59c95d4095c40f8d7e86658d7a8fa905bc5fd4f05bbdeae016527"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/check-cursor-profile.py",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3fb6f464e70b9d68dd2763cf7dae97f6fe1bf29a4391ab7fc970ec6bbc5dda1b",
+        "sha256:4117bd0cc47184cb84de8f969e17ae23fad5eb7643503bff665113241d965530",
+        "sha256:d3649a7adc9110ed8e379ad70dfaa90ab6e35a8a427b62d60ddf727702d366c7"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-agent-rules.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:0c49feac8735a8a65e0366d9071342ad7afd96f4f7fb6911e5bca535af53b930",
+        "sha256:1a02d5d28b2d3cd6f79d21b8089374ba747c56422fb3289bb2ae4d995b415a99",
+        "sha256:72025b583ea5931cd6dbd37477c4a8a141b3685e7cac918a6653b8c2b551e15c",
+        "sha256:74cd1420a1dbf8a25eca017dbc4e6cc160fa2c7e9c542a37c23f85416edfac27",
+        "sha256:855a3231d85b1bc7ff6a9437f74fc0fa90fe9ed3b76e6796bcb8beeb6be0fc82",
+        "sha256:9baea3aae4e3285321512e25ee70f1d5ec77512845b2c02896cf12586b5905bb",
+        "sha256:cdf1382a2a761f0d99aeecd5e874cd8ea6e655115da86aaad36c95fb0b91692d",
+        "sha256:e81cc0b29582e3b30862452b290ec6f5f9a57b04d6600752f5109ccaf513b27a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-codex-config.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:00195f8c83f92c9823a2bfdb82c0084c0a482a17227662b133158a66dd99259a",
+        "sha256:1f991ab8cdced850a537df28dd0257d043999b9a8e159236253238eb3a8bf03b",
+        "sha256:3267fee716da36ede7db4c8ff0e35a56748048037c25e70fb8c8b04ebefe8514",
+        "sha256:5016ab8bf68978c36820f271dc84024cf14d99df01e1c5808361ceb0e28a6c73",
+        "sha256:54fbd7cc6625bbe7ee7664b6e69fbf713625f92e7f202a3fd906c083c49a72c8",
+        "sha256:e0001f17d8e3b9cfe9f91539418be614abb9a6ef476f93cfcac614246d80f75a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-cursor-workspace.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:15db93c25eb55a9e6882a26d8049ad5733de769a6e6a2c2389229b0df397f59a",
+        "sha256:1f0e1e02bb6bb4f091f1e463e2506ba7612c64eae13798ac4996b1767603cd09",
+        "sha256:47b6b7ef6dd9efd14dcbd3ac656b26611504677ae23e357648a194e91e1f5841",
+        "sha256:5d35563585929ea9b86a5c325eececc647bca09bc9436c768bddb2a1f49929ee",
+        "sha256:88d0318f6116774127d46a7d708b0d8e64d1985dce6b20553c9492f8f3b03cd9",
+        "sha256:a02d4c0f007a21f09d53593b9b6f38ff7e0643be7fd672431e20776d35a68cb6",
+        "sha256:e950b8eab21d2fa389e90eb36ba306bd1fd63a52a6acf05256fff10a40aa54cc"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-opencode-config.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:06297bed8c0ff4799003e9b5b63c22ad0b954887d5d1b16438cdec050af9b937",
+        "sha256:117d88e9934c72bdda553fb738f7661a9be80df8899ba3c39dc6418ca5240f5a",
+        "sha256:14b31a3b8687c6ed5b4b11b032225cfc2672982dd3443f368e06a05dc401d2ec",
+        "sha256:337c9f30765405b0f499f513eaae845a5e01d89f23f4d61a4c1ebf360591b84d",
+        "sha256:6bf7d5273dac1ffdf7f866328dd94b8e71bdda409f6371839bd5dc61f9eba806",
+        "sha256:7bb4a7b2c30e7c2ccd405c7cb1371e01f8970f4bbaecc84a379d67cdc1ba5ff6",
+        "sha256:97fcedaf72c26e251ad6e10396b573cc181573e6c2609b5cd2b56e4edf312f16",
+        "sha256:b15c8b2b05178098185cb83a6c0a7fa2078284fbbbcecf98ccb8bc83745698d1",
+        "sha256:c7060496cd507dca4a824101306a83612d30556cf89b22299cfefa8a1455b32d",
+        "sha256:dae98dc71b82eb62e7d8a7c4af691099952de9e415e969134c42d5a7df3e73a7",
+        "sha256:eb642d97344dcf85831b9628b91b9805fb49c895c05cb11748b04f67eafe79a8",
+        "sha256:fabe449639878bff3e8fb5ad9a6e332fb07350f3120756dca0a56be036e6a336"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-runtime-agents.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:5322fbc7486dca704ed4da57d8231364154a590ef42aaa0114e5b7f347df2def",
+        "sha256:d37f04d4a02b301e4e949556455d0f7eb9c7a01e77777fe0cfa8e9bbd76c9d2c",
+        "sha256:e16d3437062b657184d1eccd060c888d43f23edadff65e6830d1660932146aba",
+        "sha256:fc6397a271af8259e51dac2d0c41e0d075d731afbe35824ee61e30dc601445b2"
       ],
       "action": "update"
     },
@@ -225,7 +1193,16 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:609571a65a369e64aeee3ae1ba5542abdab9b37c059fa0617d914f27628271be"
+        "sha256:101d0cb00b80bee1a7fdc9842ad3e4b1957bb5d85c0641edf47e9b778a8c2133",
+        "sha256:21ecddc547754c3c3dd2116d218c8e22174ac6269c73353c14cf7dc234dcd71b",
+        "sha256:2efe88685f5eb703fd4f5f36ef5b74beabd8966c275bb034b5f1a4f40a3fa0b8",
+        "sha256:609571a65a369e64aeee3ae1ba5542abdab9b37c059fa0617d914f27628271be",
+        "sha256:8f90f08d83d454e25395260bce98775d9fbb1d2642d1fad79e23846a3954e9cd",
+        "sha256:a59177b4063e9693dcf07c003a5e828ebf3a747e5924afbc9a9bf8407f2cb4c0",
+        "sha256:ad80a73e5f2dfdc4c86b9b84795dcfca7da95535c99becd991a63d32758e25e0",
+        "sha256:c031153e0511fb3aa2888554cc65de9e5c3f930451b0f03e35452aac5a8ea405",
+        "sha256:f9702f52163abf635c8e350c276811c568f4bb28b3607b250a960dac90222d84",
+        "sha256:ffcabf1d7d69ca0c2d0565db68c916f1a7937c4f4ca8801bea7670b3d632f1f4"
       ],
       "action": "update"
     },
@@ -235,7 +1212,324 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:1ef9e44604e9762c6171788ebbd285cb2871ff887b4bbfe3971c56f8bd2995c9"
+        "sha256:1ef9e44604e9762c6171788ebbd285cb2871ff887b4bbfe3971c56f8bd2995c9",
+        "sha256:4298a39e73a1fe9694231cf19740e518121227b74265de275ca63289178971c6",
+        "sha256:814e527510ff087eac02a48dfc73ec77bd2d581fac7a7e6420ce5eb6b80ec961",
+        "sha256:885fe42cc835f852f27a1006a02ae499172b7aea20c8c67acf55f223b852f989",
+        "sha256:ab7843cacdee1453b2058bfdfd2297fb3213b7624e0b2dbee4546f8e94993228",
+        "sha256:bd7735ad3e421cd34f8678efa8f65facfaae2d75cfb00852cb5df639b923bb75",
+        "sha256:e8a827d80c897e226f7a874244b67a82c06ffd9e5137e44fde56b47a938e8c34"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/merge-opencode-config.py",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:245f7a9a51041dfbb0bcdf8a8c8e3da9b2dd5f30a050251a7039bfcb2da2c060",
+        "sha256:9c8a2e6e9277a0f7c28c73f1f2fc2b699211f682b65653280b7425b2f98c7a99",
+        "sha256:a4c0c019a2b8697fec61bd57b902aa5e324369f70e9576092d76e4b973dd018e",
+        "sha256:f613703341536a26e71748ddfc8cc55fee2b6cb8dbaa056e8c0c3e84e0f775d2"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/playwright-mcp-lib.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:75801d01f867106d253518fde0e3c05922b653ffc3ebba7266f7977571f8afcc",
+        "sha256:8296e42286e33203ded59b400c6f527e938880dc3ea026077d8b42386cee548d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/claude/agents/inspector.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:06b53abbf81f47b20bf20042984c03d695d958d653f58ebc3cc0858bdb260acc",
+        "sha256:19a9332246eb8e3c1022515d692bda0f0e34aaa905599c76a82e79620b2764d7",
+        "sha256:341381b851045aba06a02c9f36112838e5b6d604b7a69eef7134130993005d21",
+        "sha256:49ba5674bc1a981f57f13e22ab1ac60e0125383a000f021e81fdf799d0c9c3a3"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/claude/agents/repo-scout.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1b956a473c57cd921e9f05da484257ac46b4464767d3618a142a47507fa26f98",
+        "sha256:c9ba5bc0fd96741f9612ba4cbe37e8dde76d8e489d97a9119676a9683f7eb35d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/claude/agents/scribe.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a9a7370d4a8db8239714f8a14891ffc1fbb83f6828986aa8079606e5ae278e30"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/claude/agents/sentinel.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:c7493b9ecf2222d786d7b8b3c6f6cdc8a4fe29bfb2beef9a38f2bff3cfb8e7e1",
+        "sha256:cfd0ecbe32ae7f57c6f711efc9a02ffdf8a9b82bb8d4db2a74fd1235ac5edbbc"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/claude/agents/verifier.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a5ffb7e66b896ce056c8e5e9d041eaf317a4ed75292df1cca8a7fa898b93d582",
+        "sha256:f91548ad355121292239b3041093a4dbf31f4cd14223c872237338c422ef8a2b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/README.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1bf5986bb41e41c7b8899f485c2c6c0ff59fcbff703573fc7e0730cb54685566",
+        "sha256:2ce4302137509ef4b0b4d36288e241e883bf2ad8e3e3a7e85e6c0647640995f9",
+        "sha256:8de308b0ba04862b6242cfd5681cb40e8528d5dca21b8321d16aa42f6524c61d",
+        "sha256:bbeff110d5a4e19f9c217193f55bd1977f2f7f986ae1719924bb0815e34b2626"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/agents/inspector.toml",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:35c8dbffcb7ddd04eff131a39b592c08c5b4c88a8d7486a16b1159975f30febd"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/agents/repo_scout.toml",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1859d79cdc247f4361b0763d3e7664ade8fff5bd9226dcb81196f23bfcdc005f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/agents/verifier.toml",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/mcp/playwright.toml",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:6711cbd05e277d2dce3a94d189278247c8b90aa3499f387899d4a6fecb649c46"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/README.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:08897e52ac8fcb9e17b655d85d6486f490bb4a86fe91260f54c018b3a40250b0",
+        "sha256:0ccda17831388b35ecc7b1a7da674d3982ba40c177f39cc3a95b1cb758ca1c7b",
+        "sha256:39653a1dde2f0dcaeabe804163b7cd18063e96e2484a103edb256d8d03733c49",
+        "sha256:6da6cfffc053b229c650c309a1f0b66156c1a37cafd9f446854a0bddba48e2d3",
+        "sha256:a7332f59569ca876144a96c33612b80db23085bec34a6c0e4f8cdeb731f58cdb",
+        "sha256:be1935a8979e60fe2f8ae2404f3c92504627495d5a814d0dfed4ea0ec754b9d4",
+        "sha256:d5a091b35b95d8fc3f2cf8547b5e237d734c073af081c154a4b8259b4770b9ba",
+        "sha256:d78b74beac8dbcc61b72c9992f7f2d6526772a321b595da59df52f34f085bb4b",
+        "sha256:dac036929f0d65a479343968d2ba558e6dfce1ac4de8cdb87b306fa69b681367"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/agents/inspector.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:36b76592f589b3aac2805ea393497c1f76a48fa5d5ea2da5174780c1905e6951"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/agents/repo-scout.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:5ddedc1eb34dc16b32e01b63603e59e0cda7652d8d62ca10528dfd175ca28f4b",
+        "sha256:752f77ace0ab7e5b04da29f6ab22dfe67bf7707c2da1206c427f1f68564bdf3b"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/agents/verifier.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:11cee6b2a456a3a39e21110685eb94689ac315b8c900c882956894138b2ec8f5",
+        "sha256:47664ba74af3ec73db2148de6cb3a96207b2f62c80903cd187dff8159f188eee",
+        "sha256:cc2b3e79d7e93a956b9679d3d162e5a5d6c4bb356af0d1661b522992c698b7b6"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/global-profile.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1d6faed436006d271c901eb81f8a90ce68265d796482b4f379f9d7ab57d6f59f",
+        "sha256:28ca13bb3155f005305e6b3f2a4077e69812ba2a4d20a33930c9bbcfaaf77dae"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/manifest.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1904b97cd1ca964627687e87e4e19fa4f73836d230c0c61c5c4425f98217a509",
+        "sha256:66280056a0fe848168bbd2a878918386d76566c8052ad79aaa66f2f3c69d3838",
+        "sha256:6857c9321967ed4013da0771c64f04eb2968c8ca9ebb2323303756992dac16a8",
+        "sha256:829120748d47fa051d6c2312c44bdfe10485da1355084dec95fa16cbbc666e18",
+        "sha256:e7881a3a8e528b69b7e52d9b405a35981a8459cf517d999c02a778978a750347",
+        "sha256:ec45808f8d786b6ab0a5302cceeab0aac2b11d8c27c2b6b026ed3a94b73a56e3",
+        "sha256:ff1e34f20ecf1a00f4a33b7c52822283e4689fe317d41701f66fcc231152f117"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/mcp/README.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:604b2006d8762be5e451a889b8a4dc8d1e78026b622961dddc86c66c7302752a",
+        "sha256:7f4f6ca7356cb1c95a672272ab3942ef7c99a32a72ff291476be2d8ab1e6894a",
+        "sha256:ad7a1dcf46430cfe70f4c9f16eb5bf65cc5346756d3309b21ed117409367ed01"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/mcp/playwright.mcp.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:baa585f518b7d6ce980b1cf711956c02ea28fec46a4d8f568af2de995c5d8f78"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/rules/prompt-contract.mdc",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a5dc98e9f4760c7b025af35e13c0f8858906f194832e77c410df047300315a60"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/cursor/user-rules.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3dda6c097b0f9925988a994ca864b876e67b2033532ff1c2339084e5d81967d2",
+        "sha256:40fcd58c049e2c6eec416c7919bce16d75352c3b01ccdc3ab6a9b4a3a0d1b8ee",
+        "sha256:43eeb4123aa9016a260a26d810264f20f0b98858f34fa9e3905c19c5ab9aacee",
+        "sha256:5c892211d2de007cff745b434e07a913f03ba1a3bed6a65a7f960e7285feabf3"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/global-agent-rules.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:4253853e1f7e4a3a7a65d14bd5bc057104d472c0ebe93316683a47a6c090669b",
+        "sha256:6e5880a43c97b32698d384dc7cbafc65951cc31014385e4942828d62c2a5a2e4",
+        "sha256:e655e976fb859dc37207fc628f5ad31e551e25920b0bb3c5cc0ec5773083fbe3"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/opencode.base.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:50af6911709fd2b07251556982f706e8bcc8f49c39522120b9407516564ba1d2",
+        "sha256:8c24b867222ba4ca9a395f1e42ca0c04c2b205b71b55546bd8506085a194f44f",
+        "sha256:9ed27d51bb07c96ab3517f430e8976f8c3bf01f6578a6be8b92c75ef5e248064"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/opencode.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:57d9a26b8c01181354f2a2739665a75036894a5aa3e74d036333236201c4b859",
+        "sha256:71ed89777568f780c2800f21804a715953a4368bdddee23f1790964fc853d56c",
+        "sha256:79d4b32f712bf50849bd8ce3fc4f929a084c9ee0e4adf3c18cffc8bc1ff4dbb8",
+        "sha256:7d444e6ae0a52d715411c34466f351e63301d7e00d2e520a505bc1ff9abb959b",
+        "sha256:85883546e1dfd75f47fc52f9c7652fe818fe7e1fab7a021cb57e4eda1210f73e",
+        "sha256:8c68c2aab9eaefd201d4df3a054794e13fef56d72d78e1256ecc1d779203a202",
+        "sha256:ad9ac1c7fa0d05a168a349c241b550881502e0f3f1efbf7f78b60afa3bd432de",
+        "sha256:c46831a1a7a2ecb9e38aeca27fab47c992e457557305c68fc8e8798b9d4ef8c2",
+        "sha256:da714c6213fcb68f72a57fa1d67e169f8fad9105f79e78298c69ce1080ce4e14",
+        "sha256:f68946fca6c28dd7d8e92537f67c68d00c3f925e78505582cb6c088ed529f0a9"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/opencode.policy.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3c58503691ae3c4d2de4b2a6c63ea34a55716a99171586af57c2802235191b3f",
+        "sha256:5bf10ccb96e08fb4a2194b9e989959641c5018fd74f7c05d613f5cb867fd0c63",
+        "sha256:b4692c90f418698ad5f15ff67a40296dc70f8bb80bba966cc74002e678042ad7"
       ],
       "action": "update"
     }

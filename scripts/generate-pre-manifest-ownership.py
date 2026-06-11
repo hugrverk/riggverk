@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-"""Generate and verify exact ownership metadata for the pre-manifest install."""
+"""Generate and verify exact ownership metadata for pre-manifest installs.
+
+Approves every digest the app ever shipped for each managed artifact so a
+pre-manifest installation deployed from ANY historical app version is
+recognized as app-owned and can be updated or removed. User-modified content
+never matches a shipped digest and remains a preserved conflict.
+"""
 
 from __future__ import annotations
 
@@ -32,21 +38,6 @@ def git(*args: str) -> bytes:
     return result.stdout
 
 
-def historical(rel: str) -> bytes:
-    return git("show", f"{SOURCE_COMMIT}:{PREFIX}{rel}")
-
-
-def last_historical_version(rel: str) -> bytes:
-    path = f"{PREFIX}{rel}"
-    commits = git("log", "--format=%H", SOURCE_COMMIT, "--", path).decode().splitlines()
-    for commit in commits:
-        try:
-            return git("show", f"{commit}^:{path}")
-        except RuntimeError:
-            continue
-    raise RuntimeError(f"no historical version found for {rel}")
-
-
 def digest(raw: bytes) -> str:
     return f"sha256:{hashlib.sha256(raw).hexdigest()}"
 
@@ -68,28 +59,120 @@ def current_workspace_paths() -> list[str]:
 
 
 def removed_skill_names() -> list[str]:
-    return rust_string_list(
-        BOOTSTRAP, "pub const REMOVED_SKILL_NAMES", "];"
-    )
+    return rust_string_list(BOOTSTRAP, "pub const REMOVED_SKILL_NAMES", "];")
+
+
+def historical_blobs_by_rel() -> dict[str, set[str]]:
+    """Map default-workspace relative path -> all blob shas across history.
+
+    Matches the bundled workspace at any historical repository location
+    (e.g. apps/ux-workspace-app/resources/default-workspace before the
+    repository was flattened).
+    """
+    rel_to_shas: dict[str, set[str]] = {}
+    for line in git("rev-list", "--all", "--objects").decode().splitlines():
+        sha, _, path = line.partition(" ")
+        if not path:
+            continue
+        index = path.find(PREFIX)
+        if index == -1:
+            continue
+        if index != 0 and not path[:index].endswith("/"):
+            continue
+        rel = path[index + len(PREFIX) :]
+        if rel:
+            rel_to_shas.setdefault(rel, set()).add(sha)
+    return rel_to_shas
+
+
+class HistoricalDigests:
+    def __init__(self) -> None:
+        self._by_rel = historical_blobs_by_rel()
+        self._blob_cache: dict[str, str] = {}
+
+    def for_rel(self, rel: str) -> set[str]:
+        digests: set[str] = set()
+        for sha in sorted(self._by_rel.get(rel, set())):
+            cached = self._blob_cache.get(sha)
+            if cached is None:
+                cached = digest(git("cat-file", "blob", sha))
+                self._blob_cache[sha] = cached
+            digests.add(cached)
+        return digests
+
+    def shipped_for_rels(self, rels: list[str]) -> set[str]:
+        digests: set[str] = set()
+        for rel in rels:
+            digests |= self.for_rel(rel)
+        return digests
+
+
+def current_digest(rel: str) -> str | None:
+    path = ROOT / PREFIX / rel
+    if not path.is_file():
+        return None
+    return digest(path.read_bytes())
 
 
 def entry(
-    identity: str, path_classes: list[str], raw: bytes, action: str
+    identity: str, path_classes: list[str], digests: set[str], action: str
 ) -> dict[str, object]:
     return {
         "identity": identity,
         "path_classes": path_classes,
-        "digests": [digest(raw)],
+        "digests": sorted(digests),
         "action": action,
     }
 
 
+def current_skill_rels() -> dict[str, str]:
+    """Map current skill name -> bundled SKILL.md relative path."""
+    skills_root = ROOT / PREFIX / "skills"
+    rels: dict[str, str] = {}
+    for skill_md in sorted(skills_root.rglob("SKILL.md")):
+        rel = skill_md.relative_to(ROOT / PREFIX).as_posix()
+        rels[skill_md.parent.name] = rel
+    return rels
+
+
+def current_agent_rels() -> dict[str, str]:
+    """Map agent identity -> bundled adapter relative path."""
+    rels: dict[str, str] = {}
+    for path in sorted((ROOT / PREFIX / "agents").glob("*.md")):
+        if path.stem == "scout":
+            continue
+        rels[f"agent:opencode:{path.stem}"] = f"agents/{path.name}"
+    for path in sorted((ROOT / PREFIX / "templates/claude/agents").glob("*.md")):
+        rels[f"agent:claude:{path.stem}"] = f"templates/claude/agents/{path.name}"
+    for path in sorted((ROOT / PREFIX / "templates/codex/agents").glob("*.toml")):
+        rels[f"agent:codex:{path.stem}"] = f"templates/codex/agents/{path.name}"
+    for path in sorted((ROOT / PREFIX / "templates/cursor/agents").glob("*.md")):
+        rels[f"agent:cursor:{path.stem}"] = f"templates/cursor/agents/{path.name}"
+    return rels
+
+
+RULES_RELS = {
+    "rules:opencode": "templates/sync/opencode-rules.md",
+    "rules:codex": "templates/sync/codex-rules.md",
+    "rules:claude": "templates/sync/claude-rules.md",
+}
+
+
 def generate() -> dict[str, object]:
     git("cat-file", "-e", f"{SOURCE_COMMIT}^{{commit}}")
+    history = HistoricalDigests()
     artifacts: list[dict[str, object]] = []
 
-    for name in removed_skill_names():
-        raw = historical(f"metadata/deprecated-skills/{name}/SKILL.md")
+    removed = removed_skill_names()
+    for name in removed:
+        digests = history.shipped_for_rels(
+            [
+                f"skills/{name}/SKILL.md",
+                f"metadata/deprecated-skills/{name}/SKILL.md",
+            ]
+        )
+        if not digests:
+            raise RuntimeError(f"no historical version found for removed skill {name}")
         artifacts.append(
             entry(
                 f"removed-skill:{name}",
@@ -99,12 +182,14 @@ def generate() -> dict[str, object]:
                     "harness-skill",
                     "codex-legacy-skill",
                 ],
-                raw,
+                digests,
                 "remove",
             )
         )
 
-    scout = last_historical_version("agents/scout.md")
+    scout = history.for_rel("agents/scout.md")
+    if not scout:
+        raise RuntimeError("no historical version found for agents/scout.md")
     artifacts.append(
         entry(
             "legacy-agent:scout",
@@ -113,32 +198,69 @@ def generate() -> dict[str, object]:
             "remove",
         )
     )
+    deprecated_meta = history.for_rel("metadata/deprecated-skills.json")
+    if not deprecated_meta:
+        raise RuntimeError("no historical version found for deprecated-skills.json")
     artifacts.append(
         entry(
             "legacy-metadata:deprecated-skills",
             ["runtime-metadata"],
-            historical("metadata/deprecated-skills.json"),
+            deprecated_meta,
             "remove",
         )
     )
 
-    historical_paths = set(
-        git("ls-tree", "-r", "--name-only", SOURCE_COMMIT, PREFIX)
-        .decode()
-        .splitlines()
-    )
-    for rel in current_workspace_paths():
-        source_path = f"{PREFIX}{rel}"
-        current = ROOT / source_path
-        if source_path not in historical_paths or not current.is_file():
+    skill_rels = current_skill_rels()
+    for name, rel in sorted(skill_rels.items()):
+        if name in removed:
             continue
-        old = historical(rel)
-        if old != current.read_bytes():
+        digests = history.for_rel(rel)
+        current = current_digest(rel)
+        if current:
+            digests.discard(current)
+        if digests:
+            artifacts.append(
+                entry(
+                    f"skill:{name}",
+                    ["runtime-skill", "harness-skill", "codex-legacy-skill"],
+                    digests,
+                    "update",
+                )
+            )
+
+    for identity, rel in sorted(current_agent_rels().items()):
+        digests = history.for_rel(rel)
+        current = current_digest(rel)
+        if current:
+            digests.discard(current)
+        if digests:
+            path_class = f"{identity.split(':')[1]}-agent"
+            artifacts.append(entry(identity, [path_class], digests, "update"))
+
+    for identity, rel in sorted(RULES_RELS.items()):
+        digests = history.for_rel(rel)
+        current = current_digest(rel)
+        if current:
+            digests.discard(current)
+        if digests:
+            path_class = f"{identity.split(':')[1]}-rules"
+            artifacts.append(entry(identity, [path_class], digests, "update"))
+
+    skill_rel_values = set(skill_rels.values())
+    for rel in current_workspace_paths():
+        if rel in skill_rel_values:
+            continue
+        digests = history.for_rel(rel)
+        current = current_digest(rel)
+        if current is None:
+            continue
+        digests.discard(current)
+        if digests:
             artifacts.append(
                 entry(
                     f"workspace:file:{rel}",
                     ["workspace-doc"],
-                    old,
+                    digests,
                     "update",
                 )
             )
