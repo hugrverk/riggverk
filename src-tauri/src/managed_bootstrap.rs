@@ -14,6 +14,20 @@ use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPat
 use crate::managed_state::{artifact_identity, workspace_file_identity, ManagedArtifactRecord};
 use crate::setup_fingerprint::{self, ABSENT_DIGEST};
 
+/// Still-current workspace files whose content changed between the pre-manifest
+/// source commit (2d85d94) and HEAD. Their old digests are approved so migration
+/// from a pre-manifest workspace does not flag them as conflicts.
+const STILL_CURRENT_CHANGED_DOCS: &[(&str, &str)] = &[
+    (
+        "docs/USING_THE_APP.md",
+        "sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812",
+    ),
+    (
+        "README.md",
+        "sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d",
+    ),
+];
+
 /// Skills removed from the canonical 21-skill bundle (old 33-skill installations).
 pub const REMOVED_SKILL_NAMES: &[&str] = &[
     "agent-report-review",
@@ -65,7 +79,7 @@ fn historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
     for artifact in &manifest.artifacts {
         if artifact.identity.is_empty()
             || artifact.path_classes.is_empty()
-            || artifact.action != "remove"
+            || !matches!(artifact.action.as_str(), "remove" | "keep")
             || artifact.digests.is_empty()
             || artifact
                 .digests
@@ -107,6 +121,12 @@ fn approved_historical_digest(artifact: &ArtifactId, digest: &str) -> bool {
             .strip_prefix("skills/")
             .and_then(|rest| rest.strip_suffix("/SKILL.md"))
             .map(|name| format!("removed-skill:{name}")),
+        _ => None,
+    })
+    .or_else(|| match artifact {
+        // Catch-all for any WorkspaceFile: generate identity and check
+        // against pre-manifest-ownership.json entries.
+        ArtifactId::WorkspaceFile(path) => Some(workspace_file_identity(path.as_str())),
         _ => None,
     });
     #[cfg(test)]
@@ -320,6 +340,28 @@ pub fn infer_bootstrap_records(
             }
         }
     }
+    // Still-current workspace files with old content: if their hash matches
+    // the approved old digest, create a bootstrap record so the migration
+    // plan treats them as Update (not Conflict).
+    for (rel, old_digest) in STILL_CURRENT_CHANGED_DOCS {
+        let path = workspace_root.join(rel);
+        if !path.is_file() {
+            continue;
+        }
+        let hash = setup_fingerprint::hash_file_path(&path)?;
+        if hash != *old_digest {
+            continue;
+        }
+        if let Some(artifact) = WorkspaceRelPath::new(*rel).map(ArtifactId::WorkspaceFile) {
+            if approved_historical_digest(&artifact, &hash) {
+                records.push(ManagedArtifactRecord {
+                    identity: workspace_file_identity(rel),
+                    hash,
+                    surface: None,
+                });
+            }
+        }
+    }
     for harness in ["opencode", "codex", "claude", "cursor"] {
         let map = |sn: SkillName| match harness {
             "opencode" => ArtifactId::OpenCodeSkill(sn),
@@ -441,7 +483,7 @@ mod tests {
     #[test]
     fn production_historical_manifest_is_bounded_and_complete() {
         let manifest = historical_manifest().expect("historical manifest");
-        assert_eq!(manifest.artifacts.len(), 14);
+        assert_eq!(manifest.artifacts.len(), 16);
         for name in REMOVED_SKILL_NAMES {
             assert!(manifest
                 .artifacts

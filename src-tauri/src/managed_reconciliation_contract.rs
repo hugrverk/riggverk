@@ -123,7 +123,7 @@ mod tests {
             .iter()
             .find(|op| op.artifact == artifact)
             .expect("workspace file operation");
-        assert_eq!(found.kind, OperationKind::Conflict);
+        assert_eq!(found.kind, OperationKind::Update);
         let _ = fs::remove_dir_all(&base);
     }
 

@@ -15,6 +15,8 @@
     {"identity":"removed-skill:woocommerce-pdp-review","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956"],"action":"remove"},
     {"identity":"removed-skill:write-a-skill","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0"],"action":"remove"},
     {"identity":"legacy-agent:scout","path_classes":["runtime-agent","opencode-agent"],"digests":["sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1"],"action":"remove"},
-    {"identity":"legacy-metadata:deprecated-skills","path_classes":["runtime-metadata"],"digests":["sha256:a0ec7532f1d65c23f2954b38c6769b11f696761a7ed0c45e97eb87efb460a570"],"action":"remove"}
+    {"identity":"legacy-metadata:deprecated-skills","path_classes":["runtime-metadata"],"digests":["sha256:a0ec7532f1d65c23f2954b38c6769b11f696761a7ed0c45e97eb87efb460a570"],"action":"remove"},
+    {"identity":"workspace:file:docs/USING_THE_APP.md","path_classes":["workspace-doc"],"digests":["sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812"],"action":"keep"},
+    {"identity":"workspace:file:README.md","path_classes":["workspace-doc"],"digests":["sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d"],"action":"keep"}
   ]
 }
