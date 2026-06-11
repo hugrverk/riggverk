@@ -1965,6 +1965,7 @@ mod tests {
 
     #[test]
     fn configured_workspace_path_ignores_legacy_relative_paths() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let settings = AppSettings {
             appearance: "dark".into(),
@@ -1985,6 +1986,7 @@ mod tests {
 
     #[test]
     fn default_settings_use_installed_workspace_candidate() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let expected = home.join(".config/agent-workspace");
         let candidate = configured_workspace_path(&AppSettings::default())

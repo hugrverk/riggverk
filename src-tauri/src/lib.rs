@@ -24,6 +24,8 @@ mod skill_discovery;
 mod skills_install;
 
 #[cfg(test)]
+mod managed_reconciliation_contract;
+#[cfg(test)]
 mod script_action_smoke;
 #[cfg(test)]
 mod setup_lifecycle_smoke;
