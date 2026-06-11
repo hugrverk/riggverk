@@ -317,6 +317,83 @@ def test_no_stdout_leak_on_apply() -> None:
             assert marker not in result.stderr, f"Marker in stderr: {marker}"
 
 
+def test_rollback_managed_preserves_comments_and_user_content() -> None:
+    """--rollback-managed restores managed fields while preserving formatting."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        backup = write_file(
+            tmp / "backup.toml",
+            """
+profile = "safe"
+
+[profiles.safe]
+approval_policy = "auto"
+sandbox_mode = "none"
+
+[profiles.workspace-write]
+approval_policy = "auto"
+sandbox_mode = "none"
+""".lstrip(),
+        )
+        installed = write_file(
+            tmp / "installed.toml",
+            """# User model
+model = "claude-4-sonnet"
+
+# keep this blank line
+
+profile = "custom"
+
+[profiles.safe]
+# inline comment
+approval_policy = "manual"
+sandbox_mode = "none"
+
+[profiles.workspace-write]
+approval_policy = "manual"
+sandbox_mode = "write"
+
+[mcp.servers]
+custom = { token = "private-mcp-token-codex-777" }
+""",
+        )
+        result = run_script(str(installed), str(backup), "--rollback-managed")
+        assert result.returncode == 0, f"rollback failed: {result.stderr}"
+        check_no_markers(result.stdout, "stdout")
+        check_no_markers(result.stderr, "stderr")
+
+        content = installed.read_text(encoding="utf-8")
+        assert "# User model" in content
+        assert "# keep this blank line" in content
+        assert "# inline comment" in content
+        assert 'model = "claude-4-sonnet"' in content
+        assert "private-mcp-token-codex-777" in content
+        assert 'profile = "safe"' in content
+        assert 'approval_policy = "auto"' in content
+
+
+def test_rollback_managed_malformed_current_zero_mutation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        backup = write_file(tmp / "backup.toml", 'profile = "safe"\n')
+        installed = write_file(tmp / "installed.toml", "<<<NOT TOML>>>")
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(backup), "--rollback-managed")
+        assert result.returncode != 0
+        assert installed.read_text(encoding="utf-8") == before
+
+
+def test_rollback_managed_malformed_backup_zero_mutation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        backup = write_file(tmp / "backup.toml", "<<<NOT TOML>>>")
+        installed = write_file(tmp / "installed.toml", 'profile = "safe"\n')
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(backup), "--rollback-managed")
+        assert result.returncode != 0
+        assert installed.read_text(encoding="utf-8") == before
+
+
 def test_apply_preserves_user_owned_content() -> None:
     """Apply must preserve user model, personality, MCP, dates, arrays, unknown tables."""
     with tempfile.TemporaryDirectory() as td:

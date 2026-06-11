@@ -216,6 +216,72 @@ def validate_backup_dir(backup_dir: Path | None, target: Path) -> None:
         fail(f"backup_dir must not be filesystem root: {backup_dir}")
 
 
+def rollback_managed_projection(target: Path, backup: Path) -> None:
+    """Restore managed fields from backup into target, preserving unrelated formatting."""
+    if not target.is_file():
+        fail(f"rollback target missing: {target}")
+    if not backup.is_file():
+        fail(f"rollback backup missing: {backup}")
+
+    managed = extract_managed(load_toml(backup))
+    installed_dict = load_toml(target)
+    existing_text = target.read_text(encoding="utf-8")
+    top_level, profiles, fields = load_managed_keys()
+    patched = patch_toml_text(existing_text, top_level, managed, profiles, fields)
+    if patched is None:
+        fail(
+            f"cannot safely rollback {target}: ambiguous TOML structure. "
+            "Resolve conflicts manually before retrying rollback."
+        )
+
+    try:
+        parsed = tomllib.loads(patched)
+    except tomllib.TOMLDecodeError as exc:
+        fail(f"rollback patched TOML is invalid: {exc}")
+    if not managed_keys_match(parsed, managed):
+        fail(f"rollback patched {target} does not match backup managed keys")
+    for key in installed_dict:
+        if key not in top_level and key != "profiles":
+            if key not in parsed:
+                fail(f"rollback patched {target} lost user key '{key}'")
+
+    staged = target.with_suffix(target.suffix + ".tmp")
+    try:
+        staged.write_text(patched, encoding="utf-8")
+    except OSError as exc:
+        if staged.exists():
+            staged.unlink()
+        fail(f"rollback staged write failed for {staged}: {exc}")
+
+    try:
+        post_parsed = tomllib.loads(staged.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError:
+        staged.unlink()
+        fail(f"rollback staged validation failed for {target}: invalid TOML")
+    if not managed_keys_match(post_parsed, managed):
+        staged.unlink()
+        fail(f"rollback staged validation failed for {target}: managed keys mismatch")
+    for key in installed_dict:
+        if key not in top_level and key != "profiles":
+            if key not in post_parsed:
+                staged.unlink()
+                fail(
+                    f"rollback staged validation failed for {target}: "
+                    f"lost user key '{key}'"
+                )
+
+    staged.replace(target)
+    if not target.is_file():
+        fail(f"rollback atomic replace failed for {target}")
+
+    try:
+        final_parsed = tomllib.loads(target.read_text(encoding="utf-8"))
+    except tomllib.TOMLDecodeError:
+        fail(f"rollback final validation failed for {target}: invalid TOML")
+    if not managed_keys_match(final_parsed, managed):
+        fail(f"rollback final validation failed for {target}: managed keys mismatch")
+
+
 def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
     top_level, profiles, fields = load_managed_keys()
 
@@ -323,12 +389,23 @@ def main() -> None:
     parser.add_argument("--managed-match", action="store_true", help="Exit 0 when managed sections match")
     parser.add_argument("--merge", action="store_true", help="Print merged TOML to stdout")
     parser.add_argument("--apply", action="store_true", help="Merge managed sections into target")
+    parser.add_argument(
+        "--rollback-managed",
+        action="store_true",
+        help="Restore managed sections from backup into target without rewriting unrelated text",
+    )
     parser.add_argument("--output", type=Path, help="Write merged TOML to this path")
     parser.add_argument("--backup-dir", type=Path, help="Backup directory used with --apply")
     args = parser.parse_args()
 
     if args.target is None or args.managed is None:
         parser.error("target and managed paths are required")
+
+    if args.rollback_managed:
+        if args.managed_match or args.merge or args.apply or args.output or args.backup_dir:
+            parser.error("--rollback-managed cannot be combined with other modes")
+        rollback_managed_projection(args.target, args.managed)
+        return
 
     managed_value = load_toml(args.managed)
 
