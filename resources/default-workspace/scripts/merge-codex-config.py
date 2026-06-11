@@ -92,6 +92,91 @@ def is_scalar_value_line(line: str) -> bool:
     return "=" in stripped
 
 
+def find_inline_comment_start(value_region: str) -> int | None:
+    """Return index of inline comment # outside quoted TOML strings."""
+    in_triple = False
+    in_double = False
+    escape = False
+    i = 0
+    while i < len(value_region):
+        if in_triple:
+            if value_region.startswith('"""', i):
+                in_triple = False
+                i += 3
+                continue
+            i += 1
+            continue
+        if in_double:
+            if escape:
+                escape = False
+            elif value_region[i] == "\\":
+                escape = True
+            elif value_region[i] == '"':
+                in_double = False
+            i += 1
+            continue
+        if value_region.startswith('"""', i):
+            in_triple = True
+            i += 3
+            continue
+        if value_region[i] == '"':
+            in_double = True
+            i += 1
+            continue
+        if value_region[i] == "#":
+            return i
+        i += 1
+    return None
+
+
+def split_managed_scalar_assignment(line: str, key: str) -> tuple[str, str | None] | None:
+    """Split a managed scalar assignment into (indent+key+value, inline_comment_suffix).
+
+    Returns None when the line is ambiguous or not a matching assignment.
+    """
+    if not is_scalar_value_line(line):
+        return None
+    indent_len = len(line) - len(line.lstrip(" "))
+    indent = line[:indent_len]
+    stripped = line[indent_len:]
+    if not (stripped.startswith(f"{key} =") or stripped.startswith(f"{key}=")):
+        return None
+    eq_idx = stripped.find("=")
+    if eq_idx < 0:
+        return None
+    value_region = stripped[eq_idx + 1 :]
+    if '"""' in value_region:
+        opens = value_region.count('"""')
+        if opens % 2 == 1:
+            return None
+    comment_idx = find_inline_comment_start(value_region)
+    if comment_idx is not None:
+        suffix_start = comment_idx
+        while suffix_start > 0 and value_region[suffix_start - 1] in " \t":
+            suffix_start -= 1
+        value_part = value_region[:suffix_start].rstrip()
+        comment_suffix = value_region[suffix_start:]
+        if "#" not in comment_suffix:
+            return None
+    else:
+        value_part = value_region.rstrip()
+        comment_suffix = None
+    if not value_part:
+        return None
+    assignment_prefix = f"{indent}{key} = "
+    return (assignment_prefix, comment_suffix)
+
+
+def patch_managed_scalar_line(line: str, key: str, new_value: str) -> str | None:
+    split = split_managed_scalar_assignment(line, key)
+    if split is None:
+        return None
+    prefix, comment_suffix = split
+    if comment_suffix is None:
+        return f"{prefix}{new_value}"
+    return f"{prefix}{new_value}{comment_suffix}"
+
+
 def format_toml_scalar(value: Any) -> str:
     """Format a scalar value for TOML."""
     if isinstance(value, bool):
@@ -119,7 +204,7 @@ def patch_toml_text(
 
     Returns patched text, or None if the structure is too ambiguous for safe patching.
     """
-    lines = text.split("\n")
+    lines = text.splitlines()
     changed = False
 
     # Patch top-level keys
@@ -138,13 +223,19 @@ def patch_toml_text(
             if inside_table:
                 continue
             if stripped.startswith(f"{key} =") or stripped.startswith(f"{key}="):
-                lines[i] = f"{key} = {str_value}"
+                patched_line = patch_managed_scalar_line(lines[i], key, str_value)
+                if patched_line is None:
+                    return None
+                lines[i] = patched_line
                 found = True
                 changed = True
                 break
         if not found:
-            # Key not found, append at end of file (before any trailing blanks)
-            lines.append(f"{key} = {str_value}")
+            insert_idx = next(
+                (i for i, line in enumerate(lines) if line.strip().startswith("[")),
+                len(lines),
+            )
+            lines.insert(insert_idx, f"{key} = {str_value}")
             changed = True
 
     # Patch managed profile fields
@@ -184,9 +275,10 @@ def patch_toml_text(
             for j in range(section_idx + 1, section_end):
                 stripped = lines[j].strip()
                 if stripped.startswith(f"{field} =") or stripped.startswith(f"{field}="):
-                    # Preserve indent
-                    indent = lines[j][:len(lines[j]) - len(lines[j].lstrip())]
-                    lines[j] = f"{indent}{field} = {str_value}"
+                    patched_line = patch_managed_scalar_line(lines[j], field, str_value)
+                    if patched_line is None:
+                        return None
+                    lines[j] = patched_line
                     field_found = True
                     changed = True
                     break

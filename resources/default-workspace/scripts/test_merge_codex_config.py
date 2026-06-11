@@ -394,6 +394,119 @@ def test_rollback_managed_malformed_backup_zero_mutation() -> None:
         assert installed.read_text(encoding="utf-8") == before
 
 
+def test_top_level_managed_inline_comment_preserved_on_apply() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(
+            tmp / "installed.toml",
+            'profile = "custom"  # keep this comment\n',
+        )
+        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        backup = tmp / "backups"
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode == 0, result.stderr
+        assert installed.read_text(encoding="utf-8") == 'profile = "safe"  # keep this comment\n'
+
+
+def test_profile_field_inline_comment_preserved_on_apply() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(
+            tmp / "installed.toml",
+            """
+[profiles.safe]
+  approval_policy = "manual"  # user note
+  sandbox_mode = "none"
+""".lstrip(),
+        )
+        managed = write_file(
+            tmp / "managed.toml",
+            """
+profile = "safe"
+
+[profiles.safe]
+approval_policy = "auto"
+sandbox_mode = "none"
+""".lstrip(),
+        )
+        backup = tmp / "backups"
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode == 0, result.stderr
+        content = installed.read_text(encoding="utf-8")
+        assert 'approval_policy = "auto"  # user note' in content
+
+
+def test_hash_inside_quoted_string_not_treated_as_comment() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(
+            tmp / "installed.toml",
+            'profile = "safe#not-a-comment"  # real trailing comment\n',
+        )
+        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        backup = tmp / "backups"
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode == 0, result.stderr
+        content = installed.read_text(encoding="utf-8")
+        assert 'profile = "safe"  # real trailing comment' in content
+        assert "safe#not-a-comment" not in content
+
+
+def test_escaped_quote_before_hash_preserved() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(
+            tmp / "installed.toml",
+            'profile = "safe\\"#still-value"  # real comment\n',
+        )
+        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        backup = tmp / "backups"
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode == 0, result.stderr
+        content = installed.read_text(encoding="utf-8")
+        assert 'profile = "safe"  # real comment' in content
+
+
+def test_ambiguous_multiline_scalar_refused_zero_mutation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(
+            tmp / "installed.toml",
+            'profile = """\nopen multiline\n',
+        )
+        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        backup = tmp / "backups"
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode != 0
+        assert installed.read_text(encoding="utf-8") == before
+
+
+def test_malformed_quoted_value_refused_zero_mutation() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_file(tmp / "installed.toml", 'profile = "unterminated\n')
+        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        backup = tmp / "backups"
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
+        assert result.returncode != 0
+        assert installed.read_text(encoding="utf-8") == before
+
+
+def test_rollback_preserves_same_line_inline_comment() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        backup = write_file(tmp / "backup.toml", 'profile = "safe"\n')
+        installed = write_file(
+            tmp / "installed.toml",
+            'profile = "custom"  # keep this comment\n',
+        )
+        result = run_script(str(installed), str(backup), "--rollback-managed")
+        assert result.returncode == 0, result.stderr
+        assert installed.read_text(encoding="utf-8") == 'profile = "safe"  # keep this comment\n'
+
+
 def test_apply_preserves_user_owned_content() -> None:
     """Apply must preserve user model, personality, MCP, dates, arrays, unknown tables."""
     with tempfile.TemporaryDirectory() as td:
