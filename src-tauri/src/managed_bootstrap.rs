@@ -127,27 +127,6 @@ fn historical_identity_and_path_class(artifact: &ArtifactId) -> Option<(String, 
 
 fn approved_historical_digest(artifact: &ArtifactId, action: &str, digest: &str) -> bool {
     let identity = historical_identity_and_path_class(artifact);
-    #[cfg(test)]
-    if let Some(name) = identity
-        .as_ref()
-        .and_then(|(value, _)| value.strip_prefix("removed-skill:"))
-    {
-        let fixture = format!(
-            "---\nname: {name}\ndescription: historical fixture\ntargets: [codex, opencode, claude, cursor]\n---\n"
-        );
-        if crate::stable_digest::bytes(fixture.as_bytes()) == digest {
-            return true;
-        }
-    }
-    #[cfg(test)]
-    if identity
-        .as_ref()
-        .is_some_and(|(value, _)| value == "legacy-agent:scout")
-        && crate::stable_digest::bytes(b"---\nname: placeholder\ndescription: placeholder\n---\n")
-            == digest
-    {
-        return true;
-    }
     historical_manifest().is_ok_and(|manifest| {
         identity.is_some_and(|(identity, path_class)| {
             manifest.artifacts.iter().any(|entry| {
@@ -486,7 +465,6 @@ mod tests {
     #[test]
     fn production_historical_manifest_is_bounded_and_complete() {
         let manifest = historical_manifest().expect("historical manifest");
-        assert_eq!(manifest.artifacts.len(), 16);
         for name in REMOVED_SKILL_NAMES {
             assert!(manifest
                 .artifacts
@@ -496,11 +474,18 @@ mod tests {
     }
 
     #[test]
-    fn synthetic_scout_digest_is_approved_only_for_scout() {
-        let digest =
-            crate::stable_digest::bytes(b"---\nname: placeholder\ndescription: placeholder\n---\n");
+    fn historical_digest_is_scoped_to_identity_path_class_and_action() {
+        let manifest = historical_manifest().expect("historical manifest");
+        let digest = manifest
+            .artifacts
+            .iter()
+            .find(|entry| entry.identity == "legacy-agent:scout")
+            .and_then(|entry| entry.digests.first())
+            .expect("scout digest")
+            .clone();
         let scout = ArtifactId::OpenCodeAgent(AgentName::new("scout").expect("scout"));
         assert!(approved_historical_digest(&scout, "remove", &digest));
+        assert!(!approved_historical_digest(&scout, "update", &digest));
         let other = ArtifactId::OpenCodeAgent(AgentName::new("custom").expect("custom"));
         assert!(!approved_historical_digest(&other, "remove", &digest));
     }

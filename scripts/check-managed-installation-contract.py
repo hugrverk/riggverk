@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -48,6 +49,14 @@ def forbid_in_tree(root: Path, patterns: tuple[str, ...]) -> None:
 
 
 def main() -> None:
+    semantic = subprocess.run(
+        [sys.executable, str(ROOT / "scripts/generate-pre-manifest-ownership.py"), "--check"],
+        cwd=ROOT,
+        check=False,
+    )
+    if semantic.returncode:
+        fail("semantic pre-manifest ownership coverage failed")
+
     generated_python = list(
         (ROOT / "resources/default-workspace").rglob("__pycache__")
     ) + list((ROOT / "resources/default-workspace").rglob("*.pyc"))
@@ -171,18 +180,26 @@ def main() -> None:
     bootstrap = read(TAURI / "managed_bootstrap.rs")
     if "STILL_CURRENT_CHANGED_DOCS" in bootstrap:
         fail("Rust must not duplicate historical ownership digests")
+    if re.search(r"#\[cfg\(test\)\][\s\S]{0,500}approved_historical_digest", bootstrap):
+        fail("historical ownership must not have cfg(test) digest approvals")
+    if "manifest.artifacts.len()" in bootstrap:
+        fail("historical ownership tests must not rely on a fixed entry count")
     codex_merge = read(
         ROOT / "resources/default-workspace/scripts/merge-codex-config.py"
     )
     if "--rollback-managed" in codex_merge:
         fail("Codex merge script must render rollback content without mutating profiles")
-    require(
+    safe_filesystem = require(
         TAURI / "safe_filesystem.rs",
         "write_regular_file_atomic",
         "write_new_regular_file_synced",
         "create_directory_all_no_symlinks",
         "remove_empty_directory_no_symlinks",
     )
+    copy_owner = safe_filesystem.split("pub fn copy_regular_file_no_symlinks", 1)[1]
+    copy_owner = copy_owner.split("pub fn remove_regular_file_no_symlinks", 1)[0]
+    if "fs::copy" in copy_owner:
+        fail("managed regular file copy must publish atomically")
     cursor_profile_ops = read(TAURI / "cursor_profile_ops.rs")
     global_mcp_start = cursor_profile_ops.find("pub fn run_global_mcp_only")
     if global_mcp_start < 0:
@@ -195,6 +212,22 @@ def main() -> None:
         "pre_manifest_upgrade_reconciles_to_canonical_inventory",
         "pre_manifest_upgrade_rollback_restores_removed_stale_workspace_file",
     )
+    smoke = require(
+        ROOT / "scripts/smoke-pre-manifest-upgrade.sh",
+        "git archive",
+        "AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH",
+        "real_source_commit_pre_manifest_upgrade_smoke",
+    )
+    if "bundled_workspace_src" in smoke:
+        fail("historical smoke must not seed from the current bundled workspace")
+
+    release = read(ROOT / "scripts/release-check.sh")
+    for command in (
+        "python3 scripts/generate-pre-manifest-ownership.py --check",
+        "bash scripts/smoke-pre-manifest-upgrade.sh",
+    ):
+        if command not in release:
+            fail(f"release-check missing required gate: {command}")
 
     obsolete_files = (
         FRONTEND / "components/SetupLifecycle.tsx",

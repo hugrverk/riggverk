@@ -6,6 +6,7 @@
 mod tests {
     use std::fs;
     use std::path::{Path, PathBuf};
+    use std::process::Command;
 
     use crate::agent_skill_targets::{
         agent_global_skills_dest, codex_global_skills_dest, codex_legacy_skills_dest,
@@ -65,7 +66,39 @@ mod tests {
         Ok(())
     }
 
-    fn write_minimal_skill(dir: &Path) {
+    const SOURCE_COMMIT: &str = "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588";
+
+    fn historical_bytes(rel: &str) -> Vec<u8> {
+        let output = Command::new("git")
+            .args([
+                "show",
+                &format!("{SOURCE_COMMIT}:resources/default-workspace/{rel}"),
+            ])
+            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
+            .output()
+            .expect("run git show");
+        assert!(
+            output.status.success(),
+            "historical source missing: {rel}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        output.stdout
+    }
+
+    fn historical_scout_bytes() -> Vec<u8> {
+        let output = Command::new("git")
+            .args([
+                "show",
+                "931bfa47e2eadb328a0084f6418099c4ae930377^:resources/default-workspace/agents/scout.md",
+            ])
+            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
+            .output()
+            .expect("run git show");
+        assert!(output.status.success(), "historical scout source missing");
+        output.stdout
+    }
+
+    fn write_historical_removed_skill(dir: &Path) {
         fs::create_dir_all(dir).expect("skill dir");
         let name = dir
             .file_name()
@@ -73,11 +106,9 @@ mod tests {
             .expect("skill name");
         fs::write(
             dir.join("SKILL.md"),
-            format!(
-                "---\nname: {name}\ndescription: historical fixture\ntargets: [codex, opencode, claude, cursor]\n---\n"
-            ),
+            historical_bytes(&format!("metadata/deprecated-skills/{name}/SKILL.md")),
         )
-        .expect("skill md");
+        .expect("historical skill md");
     }
 
     #[test]
@@ -142,7 +173,7 @@ mod tests {
         let dest_root = agent_global_skills_dest(harness).expect("dest");
         fs::create_dir_all(&dest_root).expect("dest root");
         for name in REMOVED_SKILL_NAMES {
-            write_minimal_skill(&dest_root.join(name));
+            write_historical_removed_skill(&dest_root.join(name));
         }
     }
 
@@ -155,11 +186,16 @@ mod tests {
             copy_dir_all(&skill.source_dir, &legacy.join(&skill.name)).expect("legacy copy");
         }
         for name in REMOVED_SKILL_NAMES {
-            write_minimal_skill(&legacy.join(name));
+            write_historical_removed_skill(&legacy.join(name));
         }
         fs::create_dir_all(legacy.join(".system")).expect(".system");
         fs::write(legacy.join(".system/prompt.md"), "keep me").expect(".system file");
-        write_minimal_skill(&legacy.join("user-custom-skill"));
+        fs::create_dir_all(legacy.join("user-custom-skill")).expect("custom skill dir");
+        fs::write(
+            legacy.join("user-custom-skill/SKILL.md"),
+            b"---\nname: user-custom-skill\ndescription: user owned\n---\n",
+        )
+        .expect("custom skill");
     }
 
     fn seed_old_installation_workspace(ws: &Path) {
@@ -170,14 +206,20 @@ mod tests {
         )
         .expect("meta json");
         for name in REMOVED_SKILL_NAMES {
-            write_minimal_skill(&ws.join("metadata/deprecated-skills").join(name));
-            write_minimal_skill(&ws.join("skills").join(name));
+            let raw = historical_bytes(&format!("metadata/deprecated-skills/{name}/SKILL.md"));
+            fs::create_dir_all(ws.join("metadata/deprecated-skills").join(name))
+                .expect("deprecated skill dir");
+            fs::write(
+                ws.join("metadata/deprecated-skills")
+                    .join(name)
+                    .join("SKILL.md"),
+                &raw,
+            )
+            .expect("deprecated skill");
+            fs::create_dir_all(ws.join("skills").join(name)).expect("runtime skill dir");
+            fs::write(ws.join("skills").join(name).join("SKILL.md"), raw).expect("runtime skill");
         }
-        fs::write(
-            ws.join("agents/scout.md"),
-            "---\nname: placeholder\ndescription: placeholder\n---\n",
-        )
-        .expect("runtime scout");
+        fs::write(ws.join("agents/scout.md"), historical_scout_bytes()).expect("runtime scout");
         fs::write(ws.join("user-owned.txt"), "keep runtime file").expect("runtime unknown");
     }
 
@@ -209,7 +251,10 @@ mod tests {
             let home = base.join("home");
             let ws = base.join("workspace");
             fs::create_dir_all(&home).expect("home");
-            copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+            let source = std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
+                .map(PathBuf::from)
+                .unwrap_or_else(bundled_workspace_src);
+            copy_dir_all(&source, &ws).expect("copy workspace");
             seed_old_installation_workspace(&ws);
 
             set_test_user_dirs(&home);
@@ -227,11 +272,8 @@ mod tests {
 
             let oc_agents = resolved_home.join(".config/opencode/agents");
             install_agent_files(&ws.join("agents"), &oc_agents);
-            fs::write(
-                oc_agents.join("scout.md"),
-                "---\nname: placeholder\ndescription: placeholder\n---\n",
-            )
-            .expect("opencode scout");
+            fs::write(oc_agents.join("scout.md"), historical_scout_bytes())
+                .expect("opencode scout");
             fs::write(oc_agents.join("user-agent.md"), "keep harness file")
                 .expect("opencode unknown");
 
@@ -648,7 +690,12 @@ mod tests {
         let _restore = EnvRestore::capture();
         let fixture = OldInstallFixture::build();
         let dest = agent_global_skills_dest("opencode").expect("dest");
-        write_minimal_skill(&dest.join(LEGACY_SCOUT_AGENT));
+        fs::create_dir_all(dest.join(LEGACY_SCOUT_AGENT)).expect("scout skill");
+        fs::write(
+            dest.join(LEGACY_SCOUT_AGENT).join("SKILL.md"),
+            b"user-owned scout skill",
+        )
+        .expect("scout skill file");
         let plan = preview_setup(vec![surface_id_string(SetupSurfaceId::OpenCodeSkills)])
             .expect("preview opencode skills");
         let remove_scout = plan
@@ -658,6 +705,60 @@ mod tests {
         assert!(
             !remove_scout,
             "scout skill dir should not be auto-removed unless in REMOVED_SKILL_NAMES"
+        );
+        fixture.cleanup();
+    }
+
+    #[test]
+    #[ignore = "driven by scripts/smoke-pre-manifest-upgrade.sh"]
+    fn real_source_commit_pre_manifest_upgrade_smoke() {
+        let fixture_path = std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
+            .map(PathBuf::from)
+            .expect("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH is required");
+        assert!(
+            fixture_path
+                .join("metadata/deprecated-skills.json")
+                .is_file(),
+            "fixture must contain source-commit deprecated metadata"
+        );
+        assert_ne!(
+            fs::read(fixture_path.join("docs/WORKFLOWS.md")).expect("historical workflows"),
+            fs::read(bundled_workspace_src().join("docs/WORKFLOWS.md")).expect("current workflows"),
+            "fixture must not be the current bundled workspace"
+        );
+
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let fixture = OldInstallFixture::build();
+        let initial_skills = discover_skill_catalog(&fixture.ws)
+            .expect("historical runtime catalog")
+            .len();
+        let plan = preview_reconciliation();
+        let conflicts = plan
+            .operations
+            .iter()
+            .filter(|operation| operation.kind == OperationKind::Conflict)
+            .count();
+        let applied = apply_surfaces_from_preview(&plan);
+        assert!(applied.success, "historical apply: {}", applied.message);
+        let final_skills = discover_skill_catalog(&fixture.ws)
+            .expect("final runtime catalog")
+            .len();
+        let second = preview_reconciliation();
+        assert!(
+            !second
+                .operations
+                .iter()
+                .any(|operation| operation.kind.needs_apply()),
+            "second preview must be idempotent"
+        );
+        let rolled = rollback_setup_transaction(applied.transaction_id, false).expect("rollback");
+        assert!(rolled.success, "rollback: {}", rolled.message);
+        assert!(!managed_state_path(&fixture.ws).exists());
+        let reapplied = apply_surfaces_from_preview(&preview_reconciliation());
+        assert!(reapplied.success, "reapply: {}", reapplied.message);
+        println!(
+            "historical inventory: initial_skills={initial_skills} conflicts={conflicts} final_skills={final_skills} idempotent=true rollback=true reapply=true"
         );
         fixture.cleanup();
     }

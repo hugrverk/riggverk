@@ -22,13 +22,26 @@ export AGENT_WORKSPACE_PATH="$smoke_root/runtime"
 export AGENT_WORKSPACE_BACKUP_DIR="$smoke_root/backups"
 mkdir -p "$HOME" "$XDG_CONFIG_HOME" "$XDG_DATA_HOME" "$XDG_CACHE_HOME"
 
-echo "==> pre-manifest upgrade contract (isolated profile)"
-for test_name in \
-  pre_manifest_fixture_detects_stale_removals_before_apply \
-  pre_manifest_upgrade_reconciles_to_canonical_inventory \
-  pre_manifest_upgrade_is_idempotent_on_second_apply \
-  pre_manifest_upgrade_rollback_restores_removed_stale_workspace_file; do
-  cargo test --manifest-path src-tauri/Cargo.toml "$test_name" --quiet -- --test-threads=1
-done
+fixture="$smoke_root/source-commit-default-workspace"
+git archive 2d85d94b6f2f1dc06f45f6ec52a22ae97e499588 resources/default-workspace |
+  tar -x -C "$smoke_root"
+mv "$smoke_root/resources/default-workspace" "$fixture"
+rmdir "$smoke_root/resources"
+
+current_workflows="$(shasum -a 256 resources/default-workspace/docs/WORKFLOWS.md | awk '{print $1}')"
+historical_workflows="$(shasum -a 256 "$fixture/docs/WORKFLOWS.md" | awk '{print $1}')"
+if [ "$current_workflows" = "$historical_workflows" ]; then
+  echo "FAIL: historical fixture matches current bundled WORKFLOWS.md" >&2
+  exit 1
+fi
+if [ ! -f "$fixture/metadata/deprecated-skills.json" ]; then
+  echo "FAIL: historical fixture is missing deprecated metadata" >&2
+  exit 1
+fi
+
+export AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH="$fixture"
+echo "==> real source-commit pre-manifest upgrade (isolated profile)"
+cargo test --manifest-path src-tauri/Cargo.toml \
+  real_source_commit_pre_manifest_upgrade_smoke --quiet -- --ignored --test-threads=1 --nocapture
 
 echo "==> pre-manifest upgrade smoke passed"

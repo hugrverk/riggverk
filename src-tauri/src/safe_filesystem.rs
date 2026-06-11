@@ -14,6 +14,41 @@ use crate::path_safety::{ensure_within_root, reject_symlink, reject_symlink_pare
 const MAX_RECURSE_DEPTH: usize = 64;
 static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
+#[cfg(not(windows))]
+fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
+    fs::rename(temp, destination)
+}
+
+#[cfg(windows)]
+fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
+    use std::os::windows::ffi::OsStrExt;
+
+    const MOVEFILE_REPLACE_EXISTING: u32 = 0x1;
+    const MOVEFILE_WRITE_THROUGH: u32 = 0x8;
+    #[link(name = "Kernel32")]
+    extern "system" {
+        fn MoveFileExW(existing: *const u16, destination: *const u16, flags: u32) -> i32;
+    }
+    let existing: Vec<u16> = temp.as_os_str().encode_wide().chain(Some(0)).collect();
+    let destination: Vec<u16> = destination
+        .as_os_str()
+        .encode_wide()
+        .chain(Some(0))
+        .collect();
+    let result = unsafe {
+        MoveFileExW(
+            existing.as_ptr(),
+            destination.as_ptr(),
+            MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH,
+        )
+    };
+    if result == 0 {
+        Err(std::io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
 fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> Result<(), String> {
     if allowlisted_root.parent().is_none() {
         return Err(format!(
@@ -112,7 +147,7 @@ pub fn write_regular_file_atomic(
             .map_err(|e| format!("sync temporary file {}: {e}", temp_path.display()))?;
         validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
         validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
-        fs::rename(&temp_path, path)
+        replace_file_atomic(&temp_path, path)
             .map_err(|e| format!("replace destination {}: {e}", path.display()))
     })();
     if result.is_err() {
@@ -291,8 +326,8 @@ pub fn copy_regular_file_no_symlinks(
         create_directory_all_no_symlinks(parent, allowlisted_root)?;
     }
     validate_mutation_path(dst, allowlisted_root, "regular file copy destination")?;
-    fs::copy(src, dst).map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
-    Ok(())
+    let content = fs::read(src).map_err(|e| format!("read copy source {}: {e}", src.display()))?;
+    write_regular_file_atomic(dst, &content, allowlisted_root)
 }
 
 /// Remove a regular file without following symlinks.

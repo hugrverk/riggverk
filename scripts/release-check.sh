@@ -127,6 +127,9 @@ git status --short
 step "git diff check"
 git diff --check
 
+step "pre-manifest ownership semantic coverage"
+python3 scripts/generate-pre-manifest-ownership.py --check
+
 step "release-check syntax"
 bash -n scripts/release-check.sh
 
@@ -186,7 +189,7 @@ if [ ! -f resources/default-workspace/scripts/generate-opencode-config.py ]; the
   printf 'FAIL: bundled default generator script missing\n' >&2
   exit 1
 fi
-python3 -m py_compile resources/default-workspace/scripts/generate-opencode-config.py
+python3 -c 'import ast, pathlib; ast.parse(pathlib.Path("resources/default-workspace/scripts/generate-opencode-config.py").read_text())'
 printf '  generate-opencode-config.py: exists, valid Python syntax\n'
 
 step "bundled default codex config templates"
@@ -1666,6 +1669,9 @@ printf '  dashboard opencode_config status uses rendered/staged config compariso
 step "app checks"
 bash "$repo_root/scripts/release-check/frontend-gate.sh"
 bash "$repo_root/scripts/release-check/rust-gate.sh"
+
+step "real pre-manifest source-commit upgrade smoke"
+bash scripts/smoke-pre-manifest-upgrade.sh
 
 step "tauri runtime smoke"
 bash "$repo_root/scripts/smoke-tauri-runtime.sh"

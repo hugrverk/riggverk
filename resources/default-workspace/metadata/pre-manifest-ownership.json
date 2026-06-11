@@ -2,21 +2,242 @@
   "migration_id": "pre-managed-state-2d85d94",
   "source_commit": "2d85d94b6f2f1dc06f45f6ec52a22ae97e499588",
   "artifacts": [
-    {"identity":"removed-skill:agent-report-review","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f"],"action":"remove"},
-    {"identity":"removed-skill:caveman","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:397f5aedc5904bf0a92b073713a5309a3889cac29ccd5a27ccc1eb712016b872"],"action":"remove"},
-    {"identity":"removed-skill:dependency-evaluation","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd"],"action":"remove"},
-    {"identity":"removed-skill:grill-me","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6"],"action":"remove"},
-    {"identity":"removed-skill:grill-with-docs","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f"],"action":"remove"},
-    {"identity":"removed-skill:improve-codebase-architecture","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:d3aa635f591840f61cdceb8850d1a6955d5dd11ca79e980f4bd379395b8c9bb3"],"action":"remove"},
-    {"identity":"removed-skill:nextjs-product-slice","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c"],"action":"remove"},
-    {"identity":"removed-skill:supabase-rls-review","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:2c5cf08d64ac07b5f5cfc511f78a11bb02a568472f7e5021ace6ad431e8ef7ba"],"action":"remove"},
-    {"identity":"removed-skill:to-prd","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:dd107bcc3110d6c6b7d0c383af9572f3bf8ad18d82b7537c93bbcffc903fe931"],"action":"remove"},
-    {"identity":"removed-skill:triage","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:2d7af14305f319d5496628853fc3c45d96663118e77ae8a0625d2859955e4c1d"],"action":"remove"},
-    {"identity":"removed-skill:woocommerce-pdp-review","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956"],"action":"remove"},
-    {"identity":"removed-skill:write-a-skill","path_classes":["runtime-skill","runtime-deprecated-copy","harness-skill","codex-legacy-skill"],"digests":["sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0"],"action":"remove"},
-    {"identity":"legacy-agent:scout","path_classes":["runtime-agent","opencode-agent"],"digests":["sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1"],"action":"remove"},
-    {"identity":"legacy-metadata:deprecated-skills","path_classes":["runtime-metadata"],"digests":["sha256:a0ec7532f1d65c23f2954b38c6769b11f696761a7ed0c45e97eb87efb460a570"],"action":"remove"},
-    {"identity":"workspace:file:docs/USING_THE_APP.md","path_classes":["workspace-doc"],"digests":["sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812"],"action":"update"},
-    {"identity":"workspace:file:README.md","path_classes":["workspace-doc"],"digests":["sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d"],"action":"update"}
+    {
+      "identity": "legacy-agent:scout",
+      "path_classes": [
+        "runtime-agent",
+        "opencode-agent"
+      ],
+      "digests": [
+        "sha256:aa97cad13698de2f48a2a94aaee5579590d979473b3ae8e964968321cf1e30b1"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "legacy-metadata:deprecated-skills",
+      "path_classes": [
+        "runtime-metadata"
+      ],
+      "digests": [
+        "sha256:a0ec7532f1d65c23f2954b38c6769b11f696761a7ed0c45e97eb87efb460a570"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:agent-report-review",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:da9b69ed07462bd62f0e38898af6887d0114bf2801a0ab571bc5656add4ed24f"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:caveman",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:397f5aedc5904bf0a92b073713a5309a3889cac29ccd5a27ccc1eb712016b872"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:dependency-evaluation",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:270a48d2edc996abcffd4c81012c61492d0484401810a7324eb46344b48398fd"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:grill-me",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1b88f70e463777a67940b9d1de29857e1b4f0077474b4d6433a3dfa89b99abd6"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:grill-with-docs",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:3a4e568413fb28860d9a8f677600d24ac60b3cdcb02989e434fae76458893b8f"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:improve-codebase-architecture",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:d3aa635f591840f61cdceb8850d1a6955d5dd11ca79e980f4bd379395b8c9bb3"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:nextjs-product-slice",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1f6557d9a8a014e7ed6914e152fc47b30845bbb79462d68ab56cc0ce20a0382c"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:supabase-rls-review",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:2c5cf08d64ac07b5f5cfc511f78a11bb02a568472f7e5021ace6ad431e8ef7ba"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:to-prd",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:dd107bcc3110d6c6b7d0c383af9572f3bf8ad18d82b7537c93bbcffc903fe931"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:triage",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:2d7af14305f319d5496628853fc3c45d96663118e77ae8a0625d2859955e4c1d"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:woocommerce-pdp-review",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:20817f5defe63c7cf94fd86d5e359652891a27dd3774ab104f2dd40dea693956"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "removed-skill:write-a-skill",
+      "path_classes": [
+        "runtime-skill",
+        "runtime-deprecated-copy",
+        "harness-skill",
+        "codex-legacy-skill"
+      ],
+      "digests": [
+        "sha256:1d256fa8068f1c6ae5d0b1c8a095d667e135620397da91bbd7e54c04103977a0"
+      ],
+      "action": "remove"
+    },
+    {
+      "identity": "workspace:file:README.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/TROUBLESHOOTING.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:a10be1dce955a7416f24e8becfca8a22c64af20a8e00d30895c2f1dc3e09bcaa"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/USING_THE_APP.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:docs/WORKFLOWS.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:c62a2b4204d389f0826e13510bd93df7d59118b2f9a925332268ed35f0b125e6"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/install-skills.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:609571a65a369e64aeee3ae1ba5542abdab9b37c059fa0617d914f27628271be"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:scripts/merge-codex-config.py",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:1ef9e44604e9762c6171788ebbd285cb2871ff887b4bbfe3971c56f8bd2995c9"
+      ],
+      "action": "update"
+    }
   ]
 }
