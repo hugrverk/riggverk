@@ -4,8 +4,7 @@ use std::path::Path;
 
 use super::skills::discover_skills;
 use super::status::file_eq;
-use crate::agent_skill_targets::{codex_global_skills_dest, codex_home, codex_legacy_skills_dest};
-use crate::codex_legacy_migration::preview_migration;
+use crate::agent_skill_targets::{codex_global_skills_dest, codex_home};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct CodexRuntimeCheck {
@@ -188,11 +187,9 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     let template_config_path = workspace_root.join("templates/codex/config.toml");
     let installed_config_path = codex_dir.join("config.toml");
     let skills_target_root = codex_global_skills_dest(home_dir);
-    let legacy_skills_path = codex_legacy_skills_dest(home_dir);
 
     let rules_source_path_str = rules_source_path.to_string_lossy().into_owned();
     let rules_installed_path_str = rules_installed_path.to_string_lossy().into_owned();
-    let legacy_skills_path_str = legacy_skills_path.to_string_lossy().into_owned();
     let template_config_path_str = template_config_path.to_string_lossy().into_owned();
     let installed_config_path_str = installed_config_path.to_string_lossy().into_owned();
 
@@ -288,36 +285,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
             skills_synced_count,
             skills_expected_count,
             skills_target_root.to_string_lossy()
-        ),
-    });
-
-    let legacy_preview = preview_migration(home_dir).unwrap_or_else(|error| {
-        warnings.push(error);
-        crate::codex_legacy_migration::CodexLegacyMigrationPreview {
-            legacy_root: legacy_skills_path.to_string_lossy().into_owned(),
-            target_root: skills_target_root.to_string_lossy().into_owned(),
-            migratable_count: 0,
-            already_migrated_count: 0,
-            conflict_count: 0,
-            items: Vec::new(),
-        }
-    });
-    let legacy_skills_migratable_count = legacy_preview.migratable_count;
-    let legacy_skills_conflict_count = legacy_preview.conflict_count;
-    if legacy_skills_migratable_count > 0 || legacy_skills_conflict_count > 0 {
-        has_warn = true;
-    }
-    checks.push(CodexRuntimeCheck {
-        id: "legacy_skills".into(),
-        label: "Legacy ~/.codex/skills".into(),
-        status: if legacy_skills_conflict_count > 0 || legacy_skills_migratable_count > 0 {
-            "warn".into()
-        } else {
-            "pass".into()
-        },
-        detail: format!(
-            "{} migratable, {} conflicts at {}",
-            legacy_skills_migratable_count, legacy_skills_conflict_count, legacy_skills_path_str
         ),
     });
 
@@ -520,9 +487,9 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         skills_expected_count,
         skills_missing_count,
         skills_diverged_count,
-        legacy_skills_path: legacy_skills_path_str,
-        legacy_skills_migratable_count,
-        legacy_skills_conflict_count,
+        legacy_skills_path: String::new(),
+        legacy_skills_migratable_count: 0,
+        legacy_skills_conflict_count: 0,
         agents_status,
         bundled_agent_count,
         installed_bundled_agent_count: installed_bundled_count,
