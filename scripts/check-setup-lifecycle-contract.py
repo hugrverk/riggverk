@@ -191,6 +191,24 @@ def assert_rust_contracts() -> None:
         fail("rollback must use shared persisted rollback core")
     if "operation_eligible_for_rollback_mutation" not in txn_text:
         fail("rollback eligibility must exclude restored artifacts")
+    if "reconcile_in_flight_rollback_artifact" not in txn_text:
+        fail("rollback reconciliation owner required in setup_transaction")
+    if "RollbackStatus::InFlight" not in setup_text:
+        fail("rollback must persist in_flight before artifact mutation")
+    if "compute_finalize_rollback_status" not in txn_text:
+        fail("rolling_back must finalize when no eligible artifacts remain")
+    if "finalize_persisted_rollback" not in setup_text:
+        fail("explicit rollback must finalize completed rollbacks")
+    codex_merge = read(REPO / "resources/default-workspace/scripts/merge-codex-config.py")
+    if "patch_managed_scalar_line" not in codex_merge:
+        fail("Codex patcher must preserve managed scalar inline comments")
+    if "find_inline_comment_start" not in codex_merge:
+        fail("Codex patcher must use bounded inline comment splitter")
+    codex_tests = read(REPO / "resources/default-workspace/scripts/test_merge_codex_config.py")
+    if 'profile = "custom"  # keep this comment' not in codex_tests:
+        fail("Codex tests must cover same-line inline comment preservation")
+    if "in_flight" not in read(REPO / "docs/WORKSPACE_CONTRACT.md").lower():
+        fail("WORKSPACE_CONTRACT.md must document per-artifact in_flight rollback")
     if "RollingBack" not in setup_text or "rollback_failed" not in read(
         REPO / "resources/default-workspace/docs/USING_THE_APP.md"
     ).lower():

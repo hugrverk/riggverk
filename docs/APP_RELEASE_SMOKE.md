@@ -12,7 +12,18 @@ For Tauri IPC-backed status without manual clicking or a live webview:
 
 **Covers:** temp `HOME` + `AGENT_WORKSPACE_PATH`, workspace diagnostics, `get_status` sync fields, OpenCode runtime health, Cursor profile health, Brain Setup seed (no bundled private context).
 
-**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or real `~/.config/agent-workspace` install/repair. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend).
+**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or real `~/.config/agent-workspace` install/repair. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend). Backend runtime smoke is not a substitute for actual Tauri webview smoke below.
+
+## Actual Tauri webview smoke (required before release)
+
+Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and backup paths. Verify in the real webview (not Vite-only):
+
+- [ ] Rollback dry-run after simulated interruption reports correct reconciliation
+- [ ] Rollback retry does not restore already-completed artifacts twice
+- [ ] `rolling_back` transaction with all artifacts restored finalizes without extra filesystem mutations
+- [ ] Codex managed apply preserves same-line inline comments; ambiguous managed lines refuse safely
+- [ ] Rollback confirmation dialog: keyboard open, focus trap, Escape closes, focus returns, `aria-live` errors, `aria-busy` during work
+- [ ] No console errors during rollback and Codex apply flows
 
 Run this checklist before sharing a built app bundle with another user.
 

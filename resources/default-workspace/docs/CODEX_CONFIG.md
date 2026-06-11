@@ -19,7 +19,7 @@ Default target:
 
 - Codex config: `~/.codex/config.toml` or `CODEX_CONFIG_PATH`
 
-`./scripts/install-codex-config.sh --apply` merges only managed sections listed in `metadata/codex-managed-keys.json` (safe profile defaults). User model, personality, MCP, and unknown tables are preserved.
+`./scripts/install-codex-config.sh --apply` merges only managed sections listed in `metadata/codex-managed-keys.json` (safe profile defaults). User model, personality, MCP, and unknown tables are preserved. Same-line inline comments on managed scalar assignments (for example `profile = "custom"  # note`) are preserved; ambiguous lines refuse with zero mutation.
 
 Native Codex agents live in `templates/codex/agents/*.toml` and sync to `~/.codex/agents` via `./scripts/install-codex-agents.sh`.
 

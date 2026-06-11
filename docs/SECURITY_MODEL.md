@@ -29,7 +29,7 @@ The app writes only to these known paths under user home:
 | Cursor skills | `~/.cursor/skills/` |
 | Cursor MCP | `~/.cursor/mcp.json` (Playwright entry only) |
 
-All writes are preceded by backup. Rollback restores exact prior state.
+All writes are preceded by backup. Rollback restores exact prior state using a single shared persisted rollback core: per-artifact `in_flight` status is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed.
 
 ## What the app does NOT access
 

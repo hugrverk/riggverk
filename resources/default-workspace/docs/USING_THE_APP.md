@@ -74,8 +74,10 @@ In-app utilities separate from harness sync:
 - **Preview** issues a short-lived token and fingerprint; **apply** and **repair** consume the token only after complete backend preflight and immediately before the first mutation.
 - Failed preflight leaves the token valid for retry.
 - Failed apply or repair with a transaction ID remains available for **rollback** when dry-run shows eligible artifacts.
-- Explicit rollback persists per-artifact progress; transactions in `rolling_back` or `rollback_failed` can be resumed; already restored artifacts are skipped.
-- Codex managed rollback preserves comments and unrelated formatting via the line-preserving merge script, or refuses safely on conflict.
+- Explicit rollback persists per-artifact `in_flight` before each restore, then `restored` or `failed` after validation; interrupted rollbacks reconcile without double-restoring completed artifacts.
+- Transactions in `rolling_back` or `rollback_failed` can be resumed; already `restored` artifacts are skipped; when none remain eligible the transaction finalizes without further filesystem changes.
+- Rollback dry-run lists already restored, still-required, and conflicted artifacts and performs zero manifest writes.
+- Codex managed apply and rollback preserve same-line inline comments on managed scalar fields via the line-preserving merge script, or refuse safely with zero mutation on conflict.
 - Symlinked parents and dangling symlinks in managed paths are rejected.
 
 ## Backups

@@ -37,6 +37,14 @@ Use **repair** to copy only missing bundled files without overwriting your edits
 - Enable the right targets on the harness page (changes autosave).
 - Read terminal output on Workspace or the harness page for script errors.
 
+## Setup rollback interrupted or stuck
+
+1. Open **Workspace** setup lifecycle and use **rollback dry-run** on the failed transaction.
+2. Artifacts already restored are skipped; `in_flight` artifacts are reconciled against backup and post-apply state before retry.
+3. If dry-run reports conflicts, resolve the listed config or file manually, then retry rollback.
+4. When dry-run shows no remaining artifacts but status is still `rolling_back`, run rollback again to finalize without further file changes.
+5. Codex inline comments on managed fields are preserved during merge; ambiguous lines refuse with zero mutation — fix the line manually if apply or rollback reports a safe-refusal error.
+
 ## Release-check unavailable
 
 The bundled starter may not include `scripts/release-check.sh`. Use the app source checkout workspace or copy the script if you need that check locally.
