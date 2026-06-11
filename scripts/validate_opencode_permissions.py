@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import sys
 from pathlib import Path
@@ -13,6 +14,8 @@ sys.path.insert(0, str(REPO_ROOT / "scripts"))
 from opencode_permission_eval import (  # noqa: E402
     bash_is_allowed,
     edit_is_allowed,
+    effective_bash_action,
+    effective_edit_action,
     winning_rule,
 )
 from opencode_policy_compose import compose_opencode_header, compose_role_permission, load_policy  # noqa: E402
@@ -23,6 +26,7 @@ POLICY_PATH = REPO_ROOT / "resources" / "default-workspace" / "templates" / "ope
 
 READONLY_ROLES = ("repo-scout", "inspector", "sentinel")
 ALL_ROLES = ("architect", "repo-scout", "inspector", "sentinel", "scribe", "verifier")
+RESTRICTIVE_ROLES = READONLY_ROLES + ("scribe", "verifier")
 
 SECRET_READ = ["**/.env*", "**/id_rsa"]
 DESTRUCTIVE_BASH = ["rm -rf*", "sudo*", "git reset --hard*", "git push --force*"]
@@ -39,6 +43,12 @@ READONLY_BASH_DENY = [
     "rm file",
     "find . -delete",
     "find . -exec touch changed.txt ;",
+    "git status & touch changed.txt",
+    "git status\ntouch changed.txt",
+    "git status\rtouch changed.txt",
+    "ls <(touch changed.txt)",
+    "ls >(touch changed.txt)",
+    "git status < changed.txt",
     "git diff > changed.txt",
     "git diff >> changed.txt",
     "git status > changed.txt",
@@ -48,7 +58,15 @@ READONLY_BASH_DENY = [
     "git status && touch changed.txt",
     "git status || touch changed.txt",
     "git status ; touch changed.txt",
+    "echo $(touch changed.txt)",
+    "echo `touch changed.txt`",
+    "tree -o changed.txt",
     "git diff --output=changed.txt",
+    "git diff --ext-diff",
+    "git diff --textconv",
+    "git log --output=changed.txt",
+    "git show --output=changed.txt",
+    "git show --ext-diff",
     "git checkout main",
     "git switch main",
     "git restore .",
@@ -70,12 +88,26 @@ VERIFIER_FORBIDDEN = [
 ] + [
     "cargo fmt",
     "cargo fmt --all",
+    "cargo clippy --fix",
+    "cargo clippy --fix --allow-dirty",
+    "cargo fmt --check -- --emit files",
     "npm run lint -- --fix",
     "pnpm run lint -- --fix",
     "yarn run lint --fix",
     "bun run lint --fix",
     "npm test -- --updateSnapshot",
+    "pnpm test -- --updateSnapshot",
+    "yarn test --updateSnapshot",
+    "bun test --updateSnapshot",
     "npm test -- -u",
+    "pnpm test -- -u",
+    "yarn test -u",
+    "bun test -u",
+    "npm test -- --update",
+    "npm run build -- --outDir src",
+    "npm run typecheck -- --outDir src",
+    "npm run verify -- --fix",
+    "cargo test -- --update",
     "npm run deploy",
     "npm run migrate",
 ]
@@ -89,6 +121,22 @@ VERIFIER_REQUIRED = [
     "cargo clippy",
     "cargo test",
     "cargo fmt --check",
+]
+
+READONLY_BASH_ALLOW = [
+    "pwd",
+    "ls",
+    "ls -la",
+    "tree",
+    "git status",
+    "git status --short",
+    "git status --porcelain",
+    "git diff",
+    "git diff --stat",
+    "git log -1",
+    "git show HEAD",
+    "git rev-parse HEAD",
+    "git ls-files",
 ]
 
 SCRIBE_EDIT_DENY = [
@@ -106,7 +154,29 @@ SCRIBE_EDIT_DENY = [
     "AGENTS.md",
 ]
 
-RESTRICTIVE_BASH_FORBIDDEN_PATTERNS = ("find *", "git branch*", "cargo fmt*")
+RESTRICTIVE_BROAD_ALLOW_PATTERNS = [
+    "tree *",
+    "git status *",
+    "git diff *",
+    "git log *",
+    "git show *",
+    "npm test *",
+    "npm run test *",
+    "npm run lint *",
+    "npm run build *",
+    "npm run typecheck *",
+    "npm run verify *",
+    "cargo fmt *",
+    "cargo clippy *",
+    "cargo test *",
+]
+
+MUTATION_CASES = [
+    ("repo-scout", {"bash": {"*&*": "allow"}}, "bash", "git status & touch changed.txt", "allow"),
+    ("verifier", {"bash": {"cargo clippy *": "allow"}}, "bash", "cargo clippy --fix", "allow"),
+    ("verifier", {"bash": {"npm run build *": "allow"}}, "bash", "npm run build -- --outDir src", "allow"),
+    ("repo-scout", {"bash": {"git diff *": "allow"}}, "bash", "git diff --ext-diff", "allow"),
+]
 
 
 def load_role(name: str) -> dict:
@@ -135,12 +205,23 @@ def _validate_restrictive_profile_quality(role: str, perm: dict, errors: list[st
     bash = _bash_section(perm)
     if bash.get("*") != "deny":
         errors.append(f"{role}: restrictive bash profile must default to deny")
-    for pattern in RESTRICTIVE_BASH_FORBIDDEN_PATTERNS:
-        action = bash.get(pattern)
-        if action == "allow":
-            errors.append(f"{role}: must not allow bash pattern {pattern}")
-    if role == "verifier" and bash.get("cargo fmt*") == "allow":
-        errors.append("verifier: must not allow cargo fmt wildcard")
+    for pattern in RESTRICTIVE_BROAD_ALLOW_PATTERNS:
+        if bash.get(pattern) == "allow":
+            errors.append(f"{role}: must not allow broad bash pattern {pattern!r}")
+
+
+def _apply_mutation(perm: dict, mutation: dict) -> dict:
+    mutated = copy.deepcopy(perm)
+    for key, section in mutation.items():
+        if isinstance(section, dict):
+            target = mutated.setdefault(key, {})
+            if isinstance(target, dict):
+                target.update(section)
+            else:
+                mutated[key] = dict(section)
+        else:
+            mutated[key] = section
+    return mutated
 
 
 def validate() -> list[str]:
@@ -151,6 +232,9 @@ def validate() -> list[str]:
         profile = policy.get("role_profiles", {}).get(profile_name, {})
         if profile.get("default") != "deny":
             errors.append(f"role_profiles.{profile_name}: default must be deny")
+        for shell_deny in ("*&*", "*\n*", "*\r*", "*<(*", "*>(*", "*< *", "tree -*"):
+            if shell_deny not in profile.get("deny", []):
+                errors.append(f"role_profiles.{profile_name}: missing deny {shell_deny!r}")
 
     for role in READONLY_ROLES:
         perm = compose_role_permission(load_role(role))
@@ -163,6 +247,10 @@ def validate() -> list[str]:
             if bash_is_allowed(perm, cmd):
                 pattern, action = winning_rule(perm, "bash", cmd)
                 errors.append(f"{role}: must not allow bash {cmd!r} (matched {pattern!r} -> {action})")
+        for cmd in READONLY_BASH_ALLOW:
+            if not bash_is_allowed(perm, cmd):
+                pattern, action = winning_rule(perm, "bash", cmd)
+                errors.append(f"{role}: must allow bash {cmd!r} (effective {action} via {pattern!r})")
 
     verifier = compose_role_permission(load_role("verifier"))
     if verifier.get("edit") != "deny":
@@ -187,7 +275,8 @@ def validate() -> list[str]:
     _validate_restrictive_profile_quality("scribe", scribe, errors)
     for cmd in READONLY_BASH_DENY:
         if bash_is_allowed(scribe, cmd):
-            errors.append(f"scribe: must not allow bash {cmd!r}")
+            pattern, action = winning_rule(scribe, "bash", cmd)
+            errors.append(f"scribe: must not allow bash {cmd!r} (matched {pattern!r} -> {action})")
 
     architect = compose_role_permission(load_role("architect"))
     if not edit_is_allowed(architect, "src/App.tsx"):
@@ -226,6 +315,32 @@ def validate() -> list[str]:
         actual = agent_path.read_text(encoding="utf-8")
         if not actual.startswith(f"---\n{expected_header}---"):
             errors.append(f"{role}: generated adapter drift (run generate-agent-adapters.py --write)")
+
+    baseline = {role: compose_role_permission(load_role(role)) for role in RESTRICTIVE_ROLES}
+    for role, mutation, perm_key, pattern, expected_action in MUTATION_CASES:
+        base = baseline.get(role) or compose_role_permission(load_role(role))
+        mutated = _apply_mutation(base, mutation)
+        if perm_key == "bash":
+            actual = effective_bash_action(mutated, pattern)
+        else:
+            actual = effective_edit_action(mutated, pattern) if perm_key == "edit" else "ask"
+        if actual != expected_action:
+            errors.append(
+                f"mutation sanity: widening {role} should yield {expected_action} for {pattern!r}, got {actual}"
+            )
+
+    scribe_base = compose_role_permission(load_role("scribe"))
+    scribe_mut = _apply_mutation(scribe_base, {"edit": {"agents/**": "allow"}})
+    if not edit_is_allowed(scribe_mut, "agents/architect.md"):
+        errors.append("mutation sanity: scribe agents/** allow should permit agents/architect.md")
+
+    repo_scout_base = compose_role_permission(load_role("repo-scout"))
+    repo_scout_mut = copy.deepcopy(repo_scout_base)
+    read = repo_scout_mut.setdefault("read", {})
+    if isinstance(read, dict):
+        read.pop("**/.env*", None)
+    if read.get("**/.env*") == "deny":
+        errors.append("mutation sanity: removing credential deny should drop read deny for **/.env*")
 
     return errors
 

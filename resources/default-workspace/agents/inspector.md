@@ -76,34 +76,45 @@ permission:
     "*": deny
     "pwd": allow
     "ls": allow
-    "ls *": allow
+    "ls -la": allow
     "tree": allow
-    "tree *": allow
     "git status": allow
-    "git status *": allow
+    "git status --short": allow
+    "git status --porcelain": allow
     "git diff": allow
-    "git diff *": allow
     "git diff --stat": allow
-    "git diff --stat *": allow
+    "git diff --name-only": allow
+    "git diff --name-status": allow
     "git log": allow
-    "git log *": allow
+    "git log -1": allow
+    "git log --oneline": allow
     "git show": allow
-    "git show *": allow
-    "git rev-parse": allow
-    "git rev-parse *": allow
+    "git show HEAD": allow
+    "git rev-parse HEAD": allow
+    "git rev-parse --show-toplevel": allow
     "git ls-files": allow
-    "git ls-files *": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask
+    "*&*": deny
     "*>*": deny
     "*>>*": deny
+    "*< *": deny
+    "*<(*": deny
+    "*>(*": deny
+    "*\n*": deny
+    "*\r*": deny
     "*|*": deny
     "*&&*": deny
     "*;*": deny
     "*||*": deny
     "*$(*": deny
     "*`*": deny
+    "tree -*": deny
+    "tree --*": deny
+    "git diff*--ext-diff*": deny
+    "git diff*--textconv*": deny
+    "git show*--ext-diff*": deny
     "find *": deny
     "git add*": deny
     "git commit*": deny

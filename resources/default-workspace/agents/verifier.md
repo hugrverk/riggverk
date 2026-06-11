@@ -76,90 +76,73 @@ permission:
     "*": deny
     "pwd": allow
     "ls": allow
-    "ls *": allow
+    "ls -la": allow
     "tree": allow
-    "tree *": allow
     "git status": allow
-    "git status *": allow
+    "git status --short": allow
+    "git status --porcelain": allow
     "git diff": allow
-    "git diff *": allow
     "git diff --stat": allow
-    "git diff --stat *": allow
+    "git diff --name-only": allow
+    "git diff --name-status": allow
     "git log": allow
-    "git log *": allow
+    "git log -1": allow
+    "git log --oneline": allow
     "git show": allow
-    "git show *": allow
-    "git rev-parse": allow
-    "git rev-parse *": allow
+    "git show HEAD": allow
+    "git rev-parse HEAD": allow
+    "git rev-parse --show-toplevel": allow
     "git ls-files": allow
-    "git ls-files *": allow
     "npm test": allow
-    "npm test *": allow
     "npm run test": allow
-    "npm run test *": allow
     "npm run lint": allow
-    "npm run lint *": allow
     "npm run typecheck": allow
-    "npm run typecheck *": allow
     "npm run build": allow
-    "npm run build *": allow
     "npm run verify": allow
-    "npm run verify *": allow
     "pnpm test": allow
-    "pnpm test *": allow
     "pnpm run test": allow
-    "pnpm run test *": allow
     "pnpm run lint": allow
-    "pnpm run lint *": allow
     "pnpm run typecheck": allow
-    "pnpm run typecheck *": allow
     "pnpm run build": allow
-    "pnpm run build *": allow
     "pnpm run verify": allow
-    "pnpm run verify *": allow
     "bun test": allow
-    "bun test *": allow
     "bun run test": allow
-    "bun run test *": allow
     "bun run lint": allow
-    "bun run lint *": allow
     "bun run typecheck": allow
-    "bun run typecheck *": allow
     "bun run build": allow
-    "bun run build *": allow
     "bun run verify": allow
-    "bun run verify *": allow
     "yarn test": allow
-    "yarn test *": allow
     "yarn run test": allow
-    "yarn run test *": allow
     "yarn run lint": allow
-    "yarn run lint *": allow
     "yarn run typecheck": allow
-    "yarn run typecheck *": allow
     "yarn run build": allow
-    "yarn run build *": allow
     "yarn run verify": allow
-    "yarn run verify *": allow
     "cargo fmt --check": allow
-    "cargo fmt --check *": allow
     "cargo check": allow
-    "cargo check *": allow
     "cargo clippy": allow
-    "cargo clippy *": allow
     "cargo test": allow
-    "cargo test *": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask
+    "*&*": deny
     "*>*": deny
     "*>>*": deny
+    "*< *": deny
+    "*<(*": deny
+    "*>(*": deny
+    "*\n*": deny
+    "*\r*": deny
     "*|*": deny
     "*&&*": deny
     "*;*": deny
     "*||*": deny
     "*$(*": deny
     "*`*": deny
+    "tree -*": deny
+    "tree --*": deny
+    "git diff*--ext-diff*": deny
+    "git diff*--textconv*": deny
+    "git show*--ext-diff*": deny
     "find *": deny
     "git add*": deny
     "git commit*": deny
@@ -187,6 +170,23 @@ permission:
     "cargo fmt": deny
     "cargo fmt --all": deny
     "cargo fmt --all *": deny
+    "cargo clippy --fix": deny
+    "cargo clippy --fix *": deny
+    "cargo clippy *--fix*": deny
+    "cargo fmt --check *--emit*": deny
+    "cargo test *--update*": deny
+    "cargo test *-u*": deny
+    "cargo test *-- *": deny
+    "npm run build *--outDir*": deny
+    "npm run typecheck *--outDir*": deny
+    "npm run verify *--fix*": deny
+    "npm test *--update*": deny
+    "pnpm test *-u*": deny
+    "pnpm test *--update*": deny
+    "yarn test *-u*": deny
+    "yarn test *--update*": deny
+    "bun test *-u*": deny
+    "bun test *--update*": deny
     "npm run lint*--fix*": deny
     "npm run lint *--fix*": deny
     "pnpm run lint*--fix*": deny

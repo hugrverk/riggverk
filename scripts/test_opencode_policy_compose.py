@@ -38,6 +38,13 @@ ADVERSARIAL_READONLY_BASH = [
     ("find . -exec touch changed.txt ;", "deny"),
     ("find . -ok rm file ;", "deny"),
     ("find . -fprint changed.txt", "deny"),
+    ("git status & touch changed.txt", "deny"),
+    ("npm test & touch changed.txt", "deny"),
+    ("git status\ntouch changed.txt", "deny"),
+    ("git status\rtouch changed.txt", "deny"),
+    ("ls <(touch changed.txt)", "deny"),
+    ("ls >(touch changed.txt)", "deny"),
+    ("git status < changed.txt", "deny"),
     ("git diff > changed.txt", "deny"),
     ("git diff >> changed.txt", "deny"),
     ("git status > changed.txt", "deny"),
@@ -49,9 +56,13 @@ ADVERSARIAL_READONLY_BASH = [
     ("git status ; touch changed.txt", "deny"),
     ("echo $(touch changed.txt)", "deny"),
     ("echo `touch changed.txt`", "deny"),
+    ("tree -o changed.txt", "deny"),
     ("git diff --output=changed.txt", "deny"),
+    ("git diff --ext-diff", "deny"),
+    ("git diff --textconv", "deny"),
     ("git log --output=changed.txt", "deny"),
     ("git show --output=changed.txt", "deny"),
+    ("git show --ext-diff", "deny"),
     ("git checkout main", "deny"),
     ("git switch main", "deny"),
     ("git restore .", "deny"),
@@ -72,12 +83,21 @@ READONLY_BASH_ALLOW = [
     "pwd",
     "ls",
     "ls -la",
+    "tree",
     "git status",
+    "git status --short",
+    "git status --porcelain",
     "git diff",
     "git diff --stat",
+    "git diff --name-only",
+    "git diff --name-status",
+    "git log",
     "git log -1",
+    "git log --oneline",
+    "git show",
     "git show HEAD",
     "git rev-parse HEAD",
+    "git rev-parse --show-toplevel",
     "git ls-files",
 ]
 
@@ -88,12 +108,26 @@ VERIFIER_FORBIDDEN = [
 ] + [
     ("cargo fmt", "deny"),
     ("cargo fmt --all", "deny"),
+    ("cargo clippy --fix", "deny"),
+    ("cargo clippy --fix --allow-dirty", "deny"),
+    ("cargo fmt --check -- --emit files", "deny"),
     ("npm run lint -- --fix", "deny"),
     ("pnpm run lint -- --fix", "deny"),
     ("yarn run lint --fix", "deny"),
     ("bun run lint --fix", "deny"),
     ("npm test -- --updateSnapshot", "deny"),
+    ("pnpm test -- --updateSnapshot", "deny"),
+    ("yarn test --updateSnapshot", "deny"),
+    ("bun test --updateSnapshot", "deny"),
     ("npm test -- -u", "deny"),
+    ("pnpm test -- -u", "deny"),
+    ("yarn test -u", "deny"),
+    ("bun test -u", "deny"),
+    ("npm test -- --update", "deny"),
+    ("npm run build -- --outDir src", "deny"),
+    ("npm run typecheck -- --outDir src", "deny"),
+    ("npm run verify -- --fix", "deny"),
+    ("cargo test -- --update", "deny"),
     ("npm run deploy", "deny"),
     ("npm run migrate", "deny"),
     ("npm run seed", "deny"),
@@ -102,13 +136,36 @@ VERIFIER_FORBIDDEN = [
 
 VERIFIER_ALLOWED = [
     "npm test",
+    "npm run test",
     "npm run lint",
     "npm run typecheck",
     "npm run build",
+    "npm run verify",
+    "pnpm test",
+    "pnpm run lint",
+    "bun test",
+    "yarn test",
     "cargo check",
     "cargo clippy",
     "cargo test",
     "cargo fmt --check",
+]
+
+RESTRICTIVE_BROAD_ALLOW_PATTERNS = [
+    "tree *",
+    "git status *",
+    "git diff *",
+    "git log *",
+    "git show *",
+    "npm test *",
+    "npm run test *",
+    "npm run lint *",
+    "npm run build *",
+    "npm run typecheck *",
+    "npm run verify *",
+    "cargo fmt *",
+    "cargo clippy *",
+    "cargo test *",
 ]
 
 SCRIBE_EDIT_DENY = [
@@ -149,6 +206,18 @@ class TestWildcardSemantics(unittest.TestCase):
         }
         self.assertEqual(effective_bash_action(perm, "git diff > changed.txt"), "deny")
 
+    def test_newline_deny_pattern(self) -> None:
+        perm = {"bash": {"*": "deny", "*\n*": "deny", "git status": "allow"}}
+        self.assertEqual(effective_bash_action(perm, "git status\ntouch changed.txt"), "deny")
+
+    def test_carriage_return_deny_pattern(self) -> None:
+        perm = {"bash": {"*": "deny", "*\r*": "deny", "git status": "allow"}}
+        self.assertEqual(effective_bash_action(perm, "git status\rtouch changed.txt"), "deny")
+
+    def test_single_ampersand_deny(self) -> None:
+        perm = {"bash": {"*": "deny", "*&*": "deny", "git status": "allow"}}
+        self.assertEqual(effective_bash_action(perm, "git status & touch changed.txt"), "deny")
+
 
 class TestReadOnlyRoles(unittest.TestCase):
     def test_edit_and_task_denied(self) -> None:
@@ -177,6 +246,19 @@ class TestReadOnlyRoles(unittest.TestCase):
             for cmd in READONLY_BASH_ALLOW:
                 with self.subTest(role=role, cmd=cmd):
                     self.assertTrue(bash_is_allowed(perm, cmd), f"{role} must allow {cmd}")
+
+    def test_no_broad_allow_patterns(self) -> None:
+        for role in READONLY_ROLES + ("scribe", "verifier"):
+            perm = compose_role_permission(load_role(role))
+            bash = perm.get("bash", {})
+            self.assertIsInstance(bash, dict)
+            for pattern in RESTRICTIVE_BROAD_ALLOW_PATTERNS:
+                with self.subTest(role=role, pattern=pattern):
+                    self.assertNotEqual(
+                        bash.get(pattern),
+                        "allow",
+                        f"{role} must not broadly allow {pattern!r}",
+                    )
 
 
 class TestVerifier(unittest.TestCase):
@@ -251,6 +333,57 @@ class TestSecretDenials(unittest.TestCase):
                 self.assertIsInstance(bash, dict)
                 for pat in ("rm -rf*", "sudo*", "git reset --hard*", "git push --force*"):
                     self.assertEqual(bash.get(pat), "deny", f"{role} missing deny {pat}")
+
+
+class TestMutationRejection(unittest.TestCase):
+    """Widening restrictive patterns in memory must change effective action."""
+
+    def _mutated_action(self, role: str, bash_patch: dict[str, str], command: str) -> str:
+        perm = compose_role_permission(load_role(role))
+        bash = perm.setdefault("bash", {})
+        assert isinstance(bash, dict)
+        bash.update(bash_patch)
+        return effective_bash_action(perm, command)
+
+    def test_widen_ampersand_allows_bypass(self) -> None:
+        action = self._mutated_action("repo-scout", {"*&*": "allow"}, "git status & touch changed.txt")
+        self.assertEqual(action, "allow")
+
+    def test_widen_tree_allows_bypass_when_flag_deny_removed(self) -> None:
+        perm = compose_role_permission(load_role("repo-scout"))
+        bash = perm.setdefault("bash", {})
+        assert isinstance(bash, dict)
+        bash.pop("tree -*", None)
+        bash["tree *"] = "allow"
+        self.assertEqual(effective_bash_action(perm, "tree -o changed.txt"), "allow")
+
+    def test_widen_cargo_clippy_allows_fix(self) -> None:
+        action = self._mutated_action("verifier", {"cargo clippy *": "allow"}, "cargo clippy --fix")
+        self.assertEqual(action, "allow")
+
+    def test_widen_npm_build_allows_outdir(self) -> None:
+        action = self._mutated_action(
+            "verifier", {"npm run build *": "allow"}, "npm run build -- --outDir src"
+        )
+        self.assertEqual(action, "allow")
+
+    def test_remove_credential_deny(self) -> None:
+        perm = compose_role_permission(load_role("repo-scout"))
+        read = perm.setdefault("read", {})
+        assert isinstance(read, dict)
+        read.pop("**/.env*", None)
+        self.assertNotEqual(read.get("**/.env*"), "deny")
+
+    def test_scribe_agents_edit_would_allow(self) -> None:
+        perm = compose_role_permission(load_role("scribe"))
+        edit = perm.setdefault("edit", {})
+        assert isinstance(edit, dict)
+        edit["agents/**"] = "allow"
+        self.assertTrue(edit_is_allowed(perm, "agents/architect.md"))
+
+    def test_restore_git_diff_wildcard_allows_ext_diff(self) -> None:
+        action = self._mutated_action("repo-scout", {"git diff *": "allow"}, "git diff --ext-diff")
+        self.assertEqual(action, "allow")
 
 
 if __name__ == "__main__":
