@@ -701,6 +701,15 @@ python3 scripts/generate-default-opencode-config.py --check
 
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check
+if search_quiet 'templates/opencode/agents/.*\\.header\\.yaml' resources/default-workspace; then
+  printf 'FAIL: hand-maintained OpenCode agent header.yaml files must not exist; use role.json + policy compose\n' >&2
+  exit 1
+fi
+if ! ls resources/default-workspace/templates/opencode/agents/*.role.json >/dev/null 2>&1; then
+  printf 'FAIL: OpenCode agent role.json override sources missing\n' >&2
+  exit 1
+fi
+printf '  OpenCode permissions sourced from policy + role overrides\n'
 
 step "bundled harness rule adapters are current"
 python3 scripts/generate-agent-rules.py --check

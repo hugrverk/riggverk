@@ -31,6 +31,10 @@ The app writes only to these known paths under user home:
 
 All writes are preceded by backup. Rollback restores exact prior state using a single shared persisted rollback core: per-artifact `in_flight` status is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed.
 
+Setup lifecycle mutations are serialized in the trusted Rust backend. Deprecated skill cleanup rejects dangling symlinks, symlinked backup paths, and traversal outside allowlisted roots using the shared path-safety owner. Preview confirmation tokens are opaque, one-time, in-memory, and must not appear in logs or diagnostics.
+
+OpenCode agent permissions are composed from `templates/opencode.policy.json` plus small `templates/opencode/agents/*.role.json` overrides; generated `agents/*.md` adapters are deterministic outputs—edit sources, not generated headers.
+
 ## What the app does NOT access
 
 - IDE authentication state, tokens, sessions, or trust databases

@@ -251,6 +251,14 @@ def assert_frontend_contracts() -> None:
     setup_tsx = read(SETUP_LIFECYCLE_TSX)
     if "runSetupTask" not in setup_tsx and "runWsTask" not in setup_tsx:
         fail("SetupLifecycle must use global workspace mutation lock")
+    if "try_acquire_setup_mutation_guard" not in read(REPO / "src-tauri/src/commands/setup.rs"):
+        fail("setup commands must use backend mutation guard")
+    if "setup_mutation_guard" not in read(REPO / "src-tauri/src/lib.rs"):
+        fail("setup_mutation_guard module must be registered")
+    if "dangling_symlink_skill_directory_is_rejected" not in read(
+        REPO / "src-tauri/src/deprecated_skills.rs"
+    ):
+        fail("deprecated skills must include dangling symlink regression tests")
     if "previewToken" not in setup_tsx:
         fail("SetupLifecycle apply must forward preview tokens")
     if "lastCompletedApplyRef" not in setup_tsx:
