@@ -23,8 +23,14 @@ mod tests {
     use crate::skill_discovery::discover_skill_catalog;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
-    fn bundled_workspace_src() -> PathBuf {
+    fn current_bundled_workspace_src() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    fn bundled_workspace_src() -> PathBuf {
+        std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
+            .map(PathBuf::from)
+            .unwrap_or_else(current_bundled_workspace_src)
     }
 
     fn temp_base(label: &str) -> PathBuf {
@@ -251,9 +257,7 @@ mod tests {
             let home = base.join("home");
             let ws = base.join("workspace");
             fs::create_dir_all(&home).expect("home");
-            let source = std::env::var_os("AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH")
-                .map(PathBuf::from)
-                .unwrap_or_else(bundled_workspace_src);
+            let source = bundled_workspace_src();
             copy_dir_all(&source, &ws).expect("copy workspace");
             seed_old_installation_workspace(&ws);
 
@@ -723,7 +727,8 @@ mod tests {
         );
         assert_ne!(
             fs::read(fixture_path.join("docs/WORKFLOWS.md")).expect("historical workflows"),
-            fs::read(bundled_workspace_src().join("docs/WORKFLOWS.md")).expect("current workflows"),
+            fs::read(current_bundled_workspace_src().join("docs/WORKFLOWS.md"))
+                .expect("current workflows"),
             "fixture must not be the current bundled workspace"
         );
 
