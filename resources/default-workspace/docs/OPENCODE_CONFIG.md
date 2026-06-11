@@ -81,8 +81,8 @@ OpenCode agent permissions are composed at generation time from `templates/openc
 Role boundaries:
 
 - **architect** — implementation edits, bounded bash, approved subagent delegation
-- **repo-scout**, **inspector**, **sentinel** — strictly read-only (no edit, no task delegation, no mutating bash)
-- **verifier** — non-destructive test/lint/build/cargo commands only; no source edit or git staging/commits
+- **repo-scout**, **inspector**, **sentinel** — strictly read-only (no edit, no task delegation, exact inspection bash only; no shell composition, redirects, or argument wildcards)
+- **verifier** — exact non-destructive test/lint/build/cargo commands only; no source edit, git staging/commits, fix modes, snapshot updates, or arbitrary trailing arguments. Project-owned verification scripts are a deliberate trust boundary: they may create disposable build/test artifacts, but the Verifier profile must not receive arbitrary arguments beyond the reviewed exact command forms.
 - **scribe** — documentation paths only (`README.md`, `docs/**`, and related doc files); no source-code edit or mutating bash
 
 `scripts/validate_opencode_permissions.py` asserts the composed contract. `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters.
