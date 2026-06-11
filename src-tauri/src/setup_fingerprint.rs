@@ -168,6 +168,80 @@ pub fn artifact_source_digest(
     }
 }
 
+/// Hash managed content from an on-disk artifact path (backup or installed).
+pub fn artifact_installed_managed_digest_from_path(
+    artifact: &ArtifactId,
+    path: &Path,
+) -> Result<String, String> {
+    match artifact_kind(artifact) {
+        ArtifactKind::RulesFile | ArtifactKind::AgentFile | ArtifactKind::TuiConfig => {
+            if path.is_file() {
+                hash_file(path)
+            } else {
+                Ok(ABSENT_DIGEST.into())
+            }
+        }
+        ArtifactKind::SkillDir => {
+            let skill_md = path.join("SKILL.md");
+            if skill_md.is_file() {
+                hash_file(&skill_md)
+            } else {
+                Ok(ABSENT_DIGEST.into())
+            }
+        }
+        ArtifactKind::ConfigFile if artifact == &ArtifactId::OpenCodeConfig => {
+            if !path.is_file() {
+                return Ok(ABSENT_DIGEST.into());
+            }
+            let installed_str =
+                fs::read_to_string(path).map_err(|e| format!("read opencode config: {e}"))?;
+            let installed_json: serde_json::Value = serde_json::from_str(&installed_str)
+                .map_err(|e| format!("parse opencode json: {e}"))?;
+            hash_json_value(&extract_managed_opencode_config(&installed_json))
+        }
+        ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
+            if !path.is_file() {
+                return Ok(ABSENT_DIGEST.into());
+            }
+            let installed_str =
+                fs::read_to_string(path).map_err(|e| format!("read codex config: {e}"))?;
+            let installed_toml: toml::Value = installed_str
+                .parse()
+                .map_err(|e| format!("parse codex toml: {e}"))?;
+            Ok(hash_toml_value(&extract_managed_codex_config(
+                &installed_toml,
+            )))
+        }
+        ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
+            if path.is_file() {
+                hash_file(path)
+            } else {
+                Ok(ABSENT_DIGEST.into())
+            }
+        }
+        ArtifactKind::McpConfig if artifact == &ArtifactId::CursorMcp => {
+            if !path.is_file() {
+                return Ok(ABSENT_DIGEST.into());
+            }
+            let content =
+                fs::read_to_string(path).map_err(|e| format!("read cursor mcp config: {e}"))?;
+            let parsed: serde_json::Value =
+                serde_json::from_str(&content).map_err(|e| format!("parse cursor mcp: {e}"))?;
+            match parsed
+                .get("mcpServers")
+                .and_then(|v| v.get("playwright"))
+            {
+                Some(projection) => hash_json_value(projection),
+                None => Ok(ABSENT_DIGEST.into()),
+            }
+        }
+        _ => Err(format!(
+            "unsupported artifact for managed digest from path: {:?}",
+            artifact
+        )),
+    }
+}
+
 /// Hash installed managed content. Missing installed artifact returns [`ABSENT_DIGEST`].
 pub fn artifact_installed_managed_digest(
     artifact: &ArtifactId,
@@ -175,73 +249,11 @@ pub fn artifact_installed_managed_digest(
     home: &Path,
 ) -> Result<String, String> {
     let dest = artifact.resolve_dest(home)?;
-    match artifact_kind(artifact) {
-        ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
-            if dest.is_file() {
-                hash_file(&dest)
-            } else {
-                Ok(ABSENT_DIGEST.into())
-            }
-        }
-        ArtifactKind::SkillDir => {
-            let dest_md = dest.join("SKILL.md");
-            if dest_md.is_file() {
-                hash_file(&dest_md)
-            } else {
-                Ok(ABSENT_DIGEST.into())
-            }
-        }
-        ArtifactKind::ConfigFile if artifact == &ArtifactId::OpenCodeConfig => {
-            if !dest.is_file() {
-                return Ok(ABSENT_DIGEST.into());
-            }
-            let installed_str = fs::read_to_string(&dest)
-                .map_err(|e| format!("read installed opencode config: {e}"))?;
-            let installed_json: serde_json::Value = serde_json::from_str(&installed_str)
-                .map_err(|e| format!("parse installed opencode json: {e}"))?;
-            hash_json_value(&extract_managed_opencode_config(&installed_json))
-        }
-        ArtifactKind::ConfigFile if artifact == &ArtifactId::CodexConfig => {
-            if !dest.is_file() {
-                return Ok(ABSENT_DIGEST.into());
-            }
-            let installed_str = fs::read_to_string(&dest)
-                .map_err(|e| format!("read installed codex config: {e}"))?;
-            let installed_toml: toml::Value = installed_str
-                .parse()
-                .map_err(|e| format!("parse installed codex toml: {e}"))?;
-            Ok(hash_toml_value(&extract_managed_codex_config(
-                &installed_toml,
-            )))
-        }
-        ArtifactKind::TuiConfig => {
-            if dest.is_file() {
-                hash_file(&dest)
-            } else {
-                Ok(ABSENT_DIGEST.into())
-            }
-        }
-        ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
-            let dest = opencode_playwright_mcp_dest(home);
-            if dest.is_file() {
-                hash_file(&dest)
-            } else {
-                Ok(ABSENT_DIGEST.into())
-            }
-        }
-        ArtifactKind::McpConfig if artifact == &ArtifactId::CursorMcp => {
-            let paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
-                .map_err(|e| format!("resolve cursor profile: {e}"))?;
-            match cursor_playwright_projection_from_installed(&paths)? {
-                Some(projection) => hash_json_value(&projection),
-                None => Ok(ABSENT_DIGEST.into()),
-            }
-        }
-        _ => Err(format!(
-            "unsupported artifact for installed digest: {:?}",
-            artifact
-        )),
+    if artifact == &ArtifactId::OpenCodePlaywrightMcp {
+        let playwright_dest = opencode_playwright_mcp_dest(home);
+        return artifact_installed_managed_digest_from_path(artifact, &playwright_dest);
     }
+    artifact_installed_managed_digest_from_path(artifact, &dest)
 }
 
 fn hash_directory_tree(dir: &Path, label: &str) -> Result<String, String> {

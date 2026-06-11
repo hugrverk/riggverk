@@ -79,8 +79,17 @@ pub enum ValidationStatus {
 pub enum RollbackStatus {
     #[default]
     Pending,
+    /// Rollback mutation started or possibly completed before status was persisted.
+    InFlight,
     Restored,
     Failed,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RollbackReconcileOutcome {
+    AlreadyRestored,
+    NeedsRollback,
+    Conflicted,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -796,7 +805,194 @@ pub fn validate_operation_status_combo(op: &ArtifactManifestOperation) -> Result
     {
         return Err("applied artifact cannot have failed validation with pending rollback".into());
     }
+    if matches!(op.rollback_status, RollbackStatus::InFlight)
+        && matches!(op.apply_status, ApplyStatus::Pending)
+    {
+        return Err("in_flight rollback cannot be pending apply".into());
+    }
     Ok(())
+}
+
+pub fn validate_transaction_rollback_status_combo(
+    manifest: &ArtifactTransactionManifest,
+) -> Result<(), String> {
+    let rolling = matches!(
+        manifest.transaction_status,
+        TransactionStatus::RollingBack | TransactionStatus::RollbackFailed
+    );
+    if matches!(manifest.transaction_status, TransactionStatus::RolledBack) {
+        for op in &manifest.operations {
+            if operation_may_have_been_modified(op.apply_status)
+                && !matches!(op.rollback_status, RollbackStatus::Restored)
+            {
+                return Err(
+                    "rolled_back transaction cannot have unresolved rollback artifacts".into(),
+                );
+            }
+            if matches!(op.rollback_status, RollbackStatus::InFlight) {
+                return Err("rolled_back transaction cannot have in_flight rollback".into());
+            }
+        }
+    }
+    for op in &manifest.operations {
+        if matches!(op.rollback_status, RollbackStatus::InFlight) && !rolling {
+            return Err("in_flight rollback requires rolling_back transaction".into());
+        }
+    }
+    Ok(())
+}
+
+pub fn artifact_matches_post_apply_state(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<bool, String> {
+    let expected_full = op
+        .post_apply_full_digest
+        .as_deref()
+        .ok_or_else(|| "missing post-apply full digest".to_string())?;
+    let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if current_full != expected_full {
+        return Ok(false);
+    }
+    if let Some(expected_managed) = op.post_apply_digest.as_deref() {
+        let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
+            &op.artifact,
+            workspace_root,
+            home,
+        )?;
+        if current_managed != expected_managed {
+            return Ok(false);
+        }
+    }
+    Ok(true)
+}
+
+fn backup_path_for_op(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+) -> Result<PathBuf, String> {
+    let rel = op
+        .backup_rel
+        .as_ref()
+        .ok_or_else(|| "missing backup for restore".to_string())?;
+    if rel.starts_with('/') || rel.contains("..") {
+        return Err("unsafe backup path".into());
+    }
+    let backup_path = backup_dir.join(rel);
+    reject_path_within_transaction_root(&backup_path, backup_dir)?;
+    Ok(backup_path)
+}
+
+pub fn artifact_matches_previous_backup_state(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<bool, String> {
+    let dest = op.artifact.resolve_dest(home)?;
+    match op.rollback_action {
+        RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory => {
+            let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
+                &op.artifact,
+                workspace_root,
+                home,
+            )?;
+            Ok(current_full == crate::setup_fingerprint::ABSENT_DIGEST)
+        }
+        RollbackAction::RestoreFile => {
+            let backup_path = backup_path_for_op(op, backup_dir)?;
+            if !backup_path.is_file() {
+                return Err("backup missing".into());
+            }
+            if !dest.is_file() {
+                return Ok(false);
+            }
+            Ok(file_eq(&dest, &backup_path))
+        }
+        RollbackAction::RestoreDirectoryArtifact => {
+            let backup_path = backup_path_for_op(op, backup_dir)?;
+            if !backup_path.is_dir() {
+                return Err("backup missing".into());
+            }
+            if !dest.is_dir() {
+                return Ok(false);
+            }
+            Ok(validate_directory_backup_tree(&backup_path, &dest).is_ok()
+                && validate_directory_backup_tree(&dest, &backup_path).is_ok())
+        }
+        RollbackAction::RestoreManagedConfigFile => {
+            let backup_path = backup_path_for_op(op, backup_dir)?;
+            if !backup_path.is_file() {
+                return Err("backup missing".into());
+            }
+            if !dest.is_file() {
+                return Ok(false);
+            }
+            let backup_managed =
+                crate::setup_fingerprint::artifact_installed_managed_digest_from_path(
+                    &op.artifact,
+                    &backup_path,
+                )?;
+            let current_managed = crate::setup_fingerprint::artifact_installed_managed_digest(
+                &op.artifact,
+                workspace_root,
+                home,
+            )?;
+            Ok(backup_managed == current_managed)
+        }
+        RollbackAction::NoAction => Ok(true),
+    }
+}
+
+pub fn reconcile_in_flight_rollback_artifact(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<RollbackReconcileOutcome, String> {
+    if artifact_matches_previous_backup_state(op, backup_dir, home, workspace_root)? {
+        return Ok(RollbackReconcileOutcome::AlreadyRestored);
+    }
+    if artifact_matches_post_apply_state(op, workspace_root, home)? {
+        return Ok(RollbackReconcileOutcome::NeedsRollback);
+    }
+    Ok(RollbackReconcileOutcome::Conflicted)
+}
+
+pub fn validate_artifact_matches_backup_after_rollback(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    if !artifact_matches_previous_backup_state(op, backup_dir, home, workspace_root)? {
+        return Err("rollback validation failed: artifact does not match backup".into());
+    }
+    Ok(())
+}
+
+pub fn compute_finalize_rollback_status(
+    operations: &[ArtifactManifestOperation],
+) -> TransactionStatus {
+    let modified: Vec<_> = operations
+        .iter()
+        .filter(|op| operation_may_have_been_modified(op.apply_status))
+        .collect();
+    if modified.is_empty() {
+        return TransactionStatus::RolledBack;
+    }
+    if modified
+        .iter()
+        .all(|op| matches!(op.rollback_status, RollbackStatus::Restored))
+    {
+        return TransactionStatus::RolledBack;
+    }
+    TransactionStatus::RollbackFailed
 }
 
 fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), String> {
@@ -1033,6 +1229,7 @@ pub fn validate_manifest(
         validate_operation_consistency(op)?;
         validate_operation_status_combo(op)?;
     }
+    validate_transaction_rollback_status_combo(manifest)?;
     Ok(())
 }
 
@@ -1507,6 +1704,73 @@ mod tests {
             assert!(err.contains("symlink"), "{err}");
             let _ = fs::remove_dir_all(&base);
         }
+    }
+
+    #[test]
+    fn rollback_status_in_flight_serializes_and_deserializes() {
+        let status = RollbackStatus::InFlight;
+        let json = serde_json::to_string(&status).unwrap();
+        assert_eq!(json, "\"in_flight\"");
+        let parsed: RollbackStatus = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed, RollbackStatus::InFlight);
+    }
+
+    #[test]
+    fn validate_transaction_rejects_in_flight_on_rolled_back() {
+        let ws = temp("txn-inflight-rolled");
+        let manifest = ArtifactTransactionManifest {
+            schema_version: ARTIFACT_MANIFEST_SCHEMA_VERSION,
+            workspace_key: workspace_key(&ws).unwrap_or_default(),
+            created_at: "1".into(),
+            surface_ids: vec![SetupSurfaceId::OpenCodeRules],
+            transaction_status: TransactionStatus::RolledBack,
+            operations: vec![ArtifactManifestOperation {
+                artifact: ArtifactId::OpenCodeRules,
+                surface: SetupSurfaceId::OpenCodeRules,
+                kind: OperationKind::Update,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some("artifacts/x".into()),
+                apply_status: ApplyStatus::Applied,
+                rollback_status: RollbackStatus::InFlight,
+                ..Default::default()
+            }],
+        };
+        assert!(validate_transaction_rollback_status_combo(&manifest).is_err());
+        let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn compute_finalize_rollback_status_all_restored() {
+        let ops = vec![
+            ArtifactManifestOperation {
+                apply_status: ApplyStatus::Applied,
+                rollback_status: RollbackStatus::Restored,
+                ..Default::default()
+            },
+            ArtifactManifestOperation {
+                apply_status: ApplyStatus::Applied,
+                rollback_status: RollbackStatus::Restored,
+                ..Default::default()
+            },
+        ];
+        assert_eq!(
+            compute_finalize_rollback_status(&ops),
+            TransactionStatus::RolledBack
+        );
+    }
+
+    #[test]
+    fn compute_finalize_rollback_status_unresolved_failed() {
+        let ops = vec![ArtifactManifestOperation {
+            apply_status: ApplyStatus::Applied,
+            rollback_status: RollbackStatus::Failed,
+            ..Default::default()
+        }];
+        assert_eq!(
+            compute_finalize_rollback_status(&ops),
+            TransactionStatus::RollbackFailed
+        );
     }
 
     #[test]
