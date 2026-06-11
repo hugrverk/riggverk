@@ -699,6 +699,9 @@ bash resources/default-workspace/scripts/check-playwright-mcp.sh
 step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check
 
+step "bundled OpenCode permission composition tests"
+python3 -m unittest scripts/test_opencode_policy_compose.py
+
 step "bundled OpenCode permission contract"
 python3 scripts/validate_opencode_permissions.py
 

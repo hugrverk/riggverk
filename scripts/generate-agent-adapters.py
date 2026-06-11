@@ -370,25 +370,6 @@ def main() -> None:
 
     outputs = generated_outputs()
 
-    if args.write:
-        write_manifest()
-
-    # ── Semantic OpenCode permission contract ──
-    permission_errors = validate_opencode_permissions()
-    if permission_errors:
-        print("FAIL: OpenCode permission contract validation failed:", file=sys.stderr)
-        for err in permission_errors:
-            print(f"  - {err}", file=sys.stderr)
-        sys.exit(1)
-
-    # ── Content validation (runs on both check and write) ──
-    content_errors = validate_generated_content(outputs)
-    if content_errors:
-        print("FAIL: generated content validation failed:", file=sys.stderr)
-        for err in content_errors:
-            print(f"  - {err}", file=sys.stderr)
-        sys.exit(1)
-
     stale: list[str] = []
     for path, expected in sorted(outputs.items()):
         rel = path.relative_to(REPO_ROOT)
@@ -408,6 +389,24 @@ def main() -> None:
         print(f"wrote {len(outputs)} harness adapter files")
         if stale:
             print("updated stale outputs:", ", ".join(stale))
+
+    # ── Semantic OpenCode permission contract ──
+    permission_errors = validate_opencode_permissions()
+    if permission_errors:
+        print("FAIL: OpenCode permission contract validation failed:", file=sys.stderr)
+        for err in permission_errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+
+    # ── Content validation (runs on both check and write) ──
+    content_errors = validate_generated_content(outputs)
+    if content_errors:
+        print("FAIL: generated content validation failed:", file=sys.stderr)
+        for err in content_errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
+
+    if args.write:
         return
 
     if stale:
