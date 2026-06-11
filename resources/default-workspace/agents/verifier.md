@@ -75,56 +75,138 @@ permission:
   bash:
     "*": deny
     "pwd": allow
-    "ls*": allow
-    "tree*": allow
-    "find *": allow
-    "git status*": allow
-    "git diff*": allow
-    "git diff --stat*": allow
-    "git log*": allow
-    "git show*": allow
-    "git branch*": allow
-    "git rev-parse*": allow
-    "git ls-files*": allow
-    "npm test*": allow
-    "npm run test*": allow
-    "npm run lint*": allow
-    "npm run typecheck*": allow
-    "npm run build*": allow
-    "npm run verify*": allow
-    "pnpm test*": allow
-    "pnpm run test*": allow
-    "pnpm run lint*": allow
-    "pnpm run typecheck*": allow
-    "pnpm run build*": allow
-    "pnpm run verify*": allow
-    "bun test*": allow
-    "bun run test*": allow
-    "bun run lint*": allow
-    "bun run typecheck*": allow
-    "bun run build*": allow
-    "bun run verify*": allow
-    "yarn test*": allow
-    "yarn run test*": allow
-    "yarn run lint*": allow
-    "yarn run typecheck*": allow
-    "yarn run build*": allow
-    "yarn run verify*": allow
-    "cargo fmt*": allow
-    "cargo check*": allow
-    "cargo clippy*": allow
-    "cargo test*": allow
+    "ls": allow
+    "ls *": allow
+    "tree": allow
+    "tree *": allow
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git diff --stat": allow
+    "git diff --stat *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "npm test": allow
+    "npm test *": allow
+    "npm run test": allow
+    "npm run test *": allow
+    "npm run lint": allow
+    "npm run lint *": allow
+    "npm run typecheck": allow
+    "npm run typecheck *": allow
+    "npm run build": allow
+    "npm run build *": allow
+    "npm run verify": allow
+    "npm run verify *": allow
+    "pnpm test": allow
+    "pnpm test *": allow
+    "pnpm run test": allow
+    "pnpm run test *": allow
+    "pnpm run lint": allow
+    "pnpm run lint *": allow
+    "pnpm run typecheck": allow
+    "pnpm run typecheck *": allow
+    "pnpm run build": allow
+    "pnpm run build *": allow
+    "pnpm run verify": allow
+    "pnpm run verify *": allow
+    "bun test": allow
+    "bun test *": allow
+    "bun run test": allow
+    "bun run test *": allow
+    "bun run lint": allow
+    "bun run lint *": allow
+    "bun run typecheck": allow
+    "bun run typecheck *": allow
+    "bun run build": allow
+    "bun run build *": allow
+    "bun run verify": allow
+    "bun run verify *": allow
+    "yarn test": allow
+    "yarn test *": allow
+    "yarn run test": allow
+    "yarn run test *": allow
+    "yarn run lint": allow
+    "yarn run lint *": allow
+    "yarn run typecheck": allow
+    "yarn run typecheck *": allow
+    "yarn run build": allow
+    "yarn run build *": allow
+    "yarn run verify": allow
+    "yarn run verify *": allow
+    "cargo fmt --check": allow
+    "cargo fmt --check *": allow
+    "cargo check": allow
+    "cargo check *": allow
+    "cargo clippy": allow
+    "cargo clippy *": allow
+    "cargo test": allow
+    "cargo test *": allow
     "grep *": ask
     "rg *": ask
     "git grep*": ask
+    "*>*": deny
+    "*>>*": deny
+    "*|*": deny
+    "*&&*": deny
+    "*;*": deny
+    "*||*": deny
+    "*$(*": deny
+    "*`*": deny
+    "find *": deny
     "git add*": deny
     "git commit*": deny
+    "git branch*": deny
+    "git checkout*": deny
+    "git switch*": deny
+    "git restore*": deny
+    "git reset*": deny
+    "git clean*": deny
+    "git stash*": deny
+    "git tag*": deny
+    "git fetch*": deny
+    "git pull*": deny
+    "git merge*": deny
+    "git rebase*": deny
+    "git diff*--output*": deny
+    "git log*--output*": deny
+    "git show*--output*": deny
     "mkdir *": deny
     "mkdir -p *": deny
     "touch *": deny
     "cp *": deny
     "mv *": deny
     "rm *": deny
+    "cargo fmt": deny
+    "cargo fmt --all": deny
+    "cargo fmt --all *": deny
+    "npm run lint*--fix*": deny
+    "npm run lint *--fix*": deny
+    "pnpm run lint*--fix*": deny
+    "pnpm run lint *--fix*": deny
+    "yarn run lint*--fix*": deny
+    "yarn run lint *--fix*": deny
+    "bun run lint*--fix*": deny
+    "bun run lint *--fix*": deny
+    "npm test*--updateSnapshot*": deny
+    "npm test *--updateSnapshot*": deny
+    "npm run test*--updateSnapshot*": deny
+    "npm run test *--updateSnapshot*": deny
+    "npm test*-u *": deny
+    "npm run test*-u *": deny
+    "pnpm test*--updateSnapshot*": deny
+    "pnpm run test*--updateSnapshot*": deny
+    "yarn test*--updateSnapshot*": deny
+    "yarn run test*--updateSnapshot*": deny
+    "bun test*--updateSnapshot*": deny
+    "bun run test*--updateSnapshot*": deny
     "npm install*": deny
     "npm update*": deny
     "pnpm install*": deny
