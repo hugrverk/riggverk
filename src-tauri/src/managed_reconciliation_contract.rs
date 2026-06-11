@@ -80,6 +80,53 @@ mod tests {
         .expect("skill md");
     }
 
+    #[test]
+    fn old_current_workspace_file_without_managed_state_is_conflict() {
+        let base = temp_base("historical-conflict");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("base");
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+        fs::write(
+            ws.join("docs/USING_THE_APP.md"),
+            "# Using the App\n\nA practical walkthrough of each app area.\n\n## Workspace page\n\nThe landing page and operations terminal. Shows whether the runtime workspace at `~/.config/agent-workspace` is installed, missing, or needs repair.\n\n- **install** / **repair** / **update resources** — copy bundled defaults into the canonical path (never overwrites existing files). **update resources** appears when the workspace is valid but newer bundled files are missing (for example prompt templates after an app upgrade).\n- **refresh** — reload diagnostics and status\n- **open folder** — open the installed workspace in Finder\n- **VERIFY** — release-check and backup management when the workspace is valid\n\nHarness pages (Codex, OpenCode, Cursor, Claude) provide detailed per-tool diff, sync, and install actions. The Workspace page provides a complementary unified **setup lifecycle** — preview, apply, repair, and rollback across managed surfaces. Use either path; they are not mutually exclusive.\n\n## Harness pages (Codex, OpenCode, Cursor, Claude)\n\nPer-tool diff/sync/install actions and skills install for that tool only. Open the harness from the top navigation after the workspace is installed.\n\n## Library\n\nBrowse and edit workspace content in a three-panel layout:\n\n1. **Source rail** (left) — Docs, Rules, Skills, Agents, Configs, Brain Setup\n2. **Item sidebar** (middle) — browse items by section or filter\n3. **Content pane** (right) — preview or edit selected content\n\n### Docs\n\nCurated docs grouped under Start, Guides, Reference, Prompt Templates, and Context. Prompt Templates ships as `docs/prompt-templates/*.md` after install, repair, or update resources. Use \"open\" for your system editor or edit in-app.\n\n### Rules\n\nView and edit `templates/global-agent-rules.md`. Synced to agent rule paths from harness pages.\n\n### Skills\n\nBrowse bundled skills in Library. Install or sync from harness pages (per-tool preview and apply) or from the Workspace unified setup lifecycle (apply/repair across harnesses). These paths are complementary.\n\n### Agents\n\nView and edit `agents/*.md` prompt definitions.\n\n### Configs\n\nView and edit `templates/opencode.json` and related config sources.\n\n## Brain Setup (Library)\n\nCopy a durable instruction block for external assistants (skill routing, security, verification). Does not run agents or change sync targets.\n\n## Settings\n\nAppearance, global text size, and theme colors. Settings autosave.\n\n## Tools\n\nIn-app utilities separate from harness sync:\n\n- **Prompt Loops** — copy/paste prompt templates with skill-weaving for agent runs.\n- **Repo Dashboard** — local git/gh snapshot of a checkout with three pages: Overview (summary, charts, recent activity, contributors), Work (active and done items from docs/gh), and Docs (searchable Markdown reader).\n\n## Dry-run before sync\n\n| Operation | Preview | Apply |\n|-----------|---------|-------|\n| Rules sync | Diff Rules | Sync Rules |\n| OpenCode config sync | Diff Configs | Sync Configs |\n| Codex config | Preview in setup lifecycle | Apply managed fields |\n| Skills install | Dry-run Skills | Install Skills |\n\n## Setup lifecycle (Workspace)\n\n- **Preview** issues a short-lived token and fingerprint; **apply** and **repair** consume the token only after complete backend preflight and immediately before the first mutation.\n- Failed preflight leaves the token valid for retry.\n- Failed apply or repair with a transaction ID remains available for **rollback** when dry-run shows eligible artifacts.\n- Explicit rollback persists per-artifact `in_flight` before each restore, then `restored` or `failed` after validation; interrupted rollbacks reconcile without double-restoring completed artifacts.\n- Transactions in `rolling_back` or `rollback_failed` can be resumed; already `restored` artifacts are skipped; when none remain eligible the transaction finalizes without further filesystem changes.\n- Rollback dry-run lists already restored, still-required, and conflicted artifacts and performs zero manifest writes.\n- Codex managed apply and rollback preserve same-line inline comments on managed scalar fields via the line-preserving merge script, or refuse safely with zero mutation on conflict.\n- Symlinked parents and dangling symlinks in managed paths are rejected.\n\n## Backups\n\nApplying changes that overwrite diverged target files creates backups under the platform-resolved Agent Workspace backup root (for example `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS).\n\n## Release check\n\nRun **release-check** from Workspace VERIFY when the installed workspace includes `scripts/release-check.sh` (the app repo checkout; bundled starter may not include it).\n\nSee [WORKFLOWS.md](WORKFLOWS.md) for common patterns.\n",
+        )
+        .expect("old workspace doc");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+        unsafe {
+            std::env::set_var(
+                "AGENT_WORKSPACE_PATH",
+                ws.canonicalize().unwrap().to_string_lossy().as_ref(),
+            );
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        let artifact = crate::artifact_registry::ArtifactId::WorkspaceFile(
+            crate::artifact_registry::WorkspaceRelPath::new("docs/USING_THE_APP.md").unwrap(),
+        );
+        let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
+            &[crate::setup_lifecycle::SetupSurfaceId::WorkspaceBundle],
+            &ws,
+            &resolved_home,
+        )
+        .expect("plan");
+        let found = planned
+            .iter()
+            .find(|op| op.artifact == artifact)
+            .expect("workspace file operation");
+        assert_eq!(found.kind, OperationKind::Conflict);
+        let _ = fs::remove_dir_all(&base);
+    }
+
     fn install_current_skills_to_harness(harness: &str, limit: usize) {
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));

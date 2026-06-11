@@ -618,9 +618,9 @@ pub fn detect_artifact_state(
             } else if !source_md.is_file() {
                 (OperationKind::Unavailable, PreviousState::Unavailable)
             } else if file_eq(&dest_md, &source_md) {
-                (OperationKind::NoChange, PreviousState::ManagedDirectory)
+                (OperationKind::NoChange, PreviousState::ManagedFile)
             } else {
-                (OperationKind::Update, PreviousState::ManagedDirectory)
+                (OperationKind::Update, PreviousState::ManagedFile)
             }
         }
         ArtifactKind::McpConfig if artifact == &ArtifactId::OpenCodePlaywrightMcp => {
@@ -776,12 +776,7 @@ fn detect_stale_artifact_state(
         }
     }
     if installed == expected {
-        let prev = if artifact_kind(artifact) == ArtifactKind::SkillDir {
-            PreviousState::ManagedDirectory
-        } else {
-            PreviousState::ManagedFile
-        };
-        (OperationKind::Remove, prev)
+        (OperationKind::Remove, PreviousState::ManagedFile)
     } else {
         (OperationKind::Conflict, PreviousState::Conflict)
     }
@@ -836,7 +831,7 @@ pub fn plan_artifacts_for_surfaces(
             } else {
                 (kind, previous_state)
             };
-        let rollback_action = rollback_action_for(kind, previous_state, &artifact);
+        let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
             artifact,
             surface,
@@ -865,7 +860,7 @@ pub fn plan_artifacts_for_surfaces(
             continue;
         }
         let surface = artifact.surface();
-        let rollback_action = rollback_action_for(kind, previous_state, &artifact);
+        let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
             artifact,
             surface,
@@ -904,13 +899,9 @@ fn refine_with_managed_hash(
 pub fn rollback_action_for(
     kind: OperationKind,
     previous: PreviousState,
-    artifact: &ArtifactId,
 ) -> RollbackAction {
     match (kind, previous) {
-        (OperationKind::Create, PreviousState::Absent) => match artifact_kind(artifact) {
-            ArtifactKind::SkillDir => RollbackAction::RemoveCreatedSkillDirectory,
-            _ => RollbackAction::RemoveCreatedFile,
-        },
+        (OperationKind::Create, PreviousState::Absent) => RollbackAction::RemoveCreatedFile,
         (OperationKind::Update, PreviousState::ManagedFile) => RollbackAction::RestoreFile,
         (OperationKind::Update, PreviousState::ManagedDirectory) => {
             RollbackAction::RestoreDirectoryArtifact
@@ -1212,7 +1203,7 @@ pub fn compute_finalize_rollback_status(
 }
 
 fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), String> {
-    let expected = rollback_action_for(op.kind, op.previous_state, &op.artifact);
+    let expected = rollback_action_for(op.kind, op.previous_state);
     if op.rollback_action != expected {
         return Err(format!(
             "rollback action {:?} inconsistent with kind {:?} and previous state {:?}",
@@ -1275,17 +1266,6 @@ pub fn persist_manifest_atomic(
     Ok(())
 }
 
-pub fn mark_surface_group_in_flight(
-    operations: &mut [ArtifactManifestOperation],
-    surface: SetupSurfaceId,
-) {
-    for op in operations.iter_mut() {
-        if op.surface == surface && op.apply_status == ApplyStatus::Pending {
-            op.apply_status = ApplyStatus::InFlight;
-        }
-    }
-}
-
 pub fn backup_artifact(
     artifact: &ArtifactId,
     backup_dir: &Path,
@@ -1303,14 +1283,41 @@ pub fn backup_artifact(
     if let Some(parent) = backup_path.parent() {
         fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
     }
-    if dest.is_dir() {
+
+    let is_skill = matches!(
+        artifact,
+        ArtifactId::OpenCodeSkill(_)
+            | ArtifactId::CodexSkill(_)
+            | ArtifactId::ClaudeSkill(_)
+            | ArtifactId::CursorSkill(_)
+    );
+
+    // Validate source parent chain against the appropriate root.
+    let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
+        workspace_root
+    } else {
+        home
+    };
+    if is_skill {
+        let skill_md = dest.join("SKILL.md");
+        if skill_md.is_file() {
+            reject_symlink_parent_chain(&skill_md, source_root, "backup source skill")?;
+            crate::safe_filesystem::copy_regular_file_no_symlinks(&skill_md, &backup_path, backup_dir)
+                .map_err(|e| format!("backup skill md {}: {e}", skill_md.display()))?;
+            validate_backup_copy(artifact, &skill_md, &backup_path, backup_dir)?;
+        } else {
+            return Ok(None);
+        }
+    } else if dest.is_dir() {
         crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
+        validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     } else {
-        fs::copy(&dest, &backup_path)
+        reject_symlink_parent_chain(&dest, source_root, "backup source file")?;
+        crate::safe_filesystem::copy_regular_file_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
+        validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     }
-    validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     Ok(Some(rel))
 }
 
@@ -1651,6 +1658,26 @@ fn restore_artifact_from_backup_with_mode(
         ArtifactId::WorkspaceFile(_) => ws_root,
         _ => home,
     };
+
+    // For skills, operations target SKILL.md inside the directory.
+    let is_skill = matches!(
+        &op.artifact,
+        ArtifactId::OpenCodeSkill(_)
+            | ArtifactId::CodexSkill(_)
+            | ArtifactId::ClaudeSkill(_)
+            | ArtifactId::CursorSkill(_)
+    );
+    let restore_dest = if is_skill {
+        match op.rollback_action {
+            RollbackAction::RestoreFile | RollbackAction::RemoveCreatedFile => {
+                dest.join("SKILL.md")
+            }
+            _ => dest.clone(),
+        }
+    } else {
+        dest.clone()
+    };
+
     match op.rollback_action {
         RollbackAction::RestoreFile | RollbackAction::RestoreDirectoryArtifact => {
             let rel = op
@@ -1662,21 +1689,23 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
-            if dest.exists() {
-                if dest.is_dir() {
-                    fs::remove_dir_all(&dest).map_err(|e| format!("remove dest dir: {e}"))?;
+            if restore_dest.exists() {
+                if restore_dest.is_dir() {
+                    fs::remove_dir_all(&restore_dest).map_err(|e| format!("remove restore dest dir: {e}"))?;
                 } else {
-                    fs::remove_file(&dest).map_err(|e| format!("remove dest file: {e}"))?;
+                    crate::safe_filesystem::remove_regular_file_no_symlinks(&restore_dest, allowlist_root)
+                        .map_err(|e| format!("remove restore dest file: {e}"))?;
                 }
             }
             if backup_path.is_dir() {
-                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest, allowlist_root)
+                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &restore_dest, allowlist_root)
                     .map_err(|e| format!("restore dir: {e}"))?;
             } else {
-                if let Some(parent) = dest.parent() {
+                if let Some(parent) = restore_dest.parent() {
                     fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
                 }
-                fs::copy(&backup_path, &dest).map_err(|e| format!("restore file: {e}"))?;
+                crate::safe_filesystem::copy_regular_file_no_symlinks(&backup_path, &restore_dest, allowlist_root)
+                    .map_err(|e| format!("restore file: {e}"))?;
             }
             Ok(())
         }
@@ -1812,6 +1841,7 @@ pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::artifact_registry::ArtifactId;
     use std::fs;
 
     fn temp(label: &str) -> PathBuf {
@@ -1889,6 +1919,56 @@ mod tests {
     }
 
     #[test]
+    fn rollback_does_not_include_untouched_surface_sibling() {
+        let ops = vec![
+            ArtifactManifestOperation {
+                surface: SetupSurfaceId::OpenCodeRules,
+                kind: OperationKind::Update,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some("artifacts/a".into()),
+                apply_status: ApplyStatus::InFlight,
+                ..Default::default()
+            },
+            ArtifactManifestOperation {
+                surface: SetupSurfaceId::OpenCodeRules,
+                kind: OperationKind::Update,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some("artifacts/b".into()),
+                ..Default::default()
+            },
+        ];
+        let eligible = rollback_eligible_indices(&ops);
+        assert_eq!(
+            eligible,
+            vec![0],
+            "only the InFlight artifact must be eligible for rollback"
+        );
+    }
+
+    #[test]
+    fn pending_operations_remain_pending_after_failed_first_artifact() {
+        let ops = vec![
+            ArtifactManifestOperation {
+                apply_status: ApplyStatus::Failed,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some("artifacts/a".into()),
+                ..Default::default()
+            },
+            ArtifactManifestOperation {
+                apply_status: ApplyStatus::Pending,
+                rollback_action: RollbackAction::RestoreFile,
+                backup_rel: Some("artifacts/b".into()),
+                ..Default::default()
+            },
+        ];
+        let eligible = rollback_eligible_indices(&ops);
+        assert_eq!(eligible, vec![0]);
+        assert_eq!(ops[1].apply_status, ApplyStatus::Pending);
+    }
+
+    #[test]
     fn preview_token_rejects_fingerprint_mismatch() {
         clear_preview_tokens_for_test();
         let ws = temp("token-fp");
@@ -1905,6 +1985,18 @@ mod tests {
         )
         .is_err());
         let _ = fs::remove_dir_all(&ws);
+    }
+
+    #[test]
+    fn rollback_action_for_skill_file_uses_file_semantics() {
+        assert_eq!(
+            rollback_action_for(OperationKind::Update, PreviousState::ManagedFile),
+            RollbackAction::RestoreFile
+        );
+        assert_eq!(
+            rollback_action_for(OperationKind::Remove, PreviousState::ManagedFile),
+            RollbackAction::RestoreFile
+        );
     }
 
     #[test]

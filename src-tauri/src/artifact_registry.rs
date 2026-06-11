@@ -608,6 +608,26 @@ mod tests {
     }
 
     #[test]
+    fn skill_artifacts_resolve_to_skill_md_files() {
+        let ws = temp_dir("skill-md");
+        write_skill(&ws, "skills/frontend-design", "frontend-design", "opencode");
+        let home = temp_dir("skill-md-home");
+        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
+        let dest = artifact.resolve_dest(&home, &ws).unwrap();
+        let source = artifact.resolve_source(&ws).unwrap();
+        // Resolved dest is the skill directory, source is the source skill directory;
+        // both should contain a SKILL.md file
+        assert!(source.join("SKILL.md").is_file(), "source SKILL.md should exist");
+        // Dest is a path like home/.config/opencode/skills/frontend-design
+        assert_eq!(
+            dest.file_name().unwrap(),
+            "frontend-design",
+            "dest should be the skill directory"
+        );
+        let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
     fn skill_discovery_supports_root_level() {
         let ws = temp_dir("skill-root");
         write_skill(

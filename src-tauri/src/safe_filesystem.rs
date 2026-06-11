@@ -114,6 +114,67 @@ fn remove_dir_recurse(path: &Path, depth: usize) -> Result<(), String> {
     fs::remove_dir(path).map_err(|e| format!("remove dir {}: {e}", path.display()))
 }
 
+/// Copy a regular file without following symlinks.
+///
+/// Validates source and destination for symlink safety, rejects destination
+/// that exists as a dangling symlink, and ensures the destination parent
+/// chain is safe within `allowlisted_root`.
+pub fn copy_regular_file_no_symlinks(
+    src: &Path,
+    dst: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    // Source: reject direct symlink only. Source comes from a trusted
+    // workspace; parent chain may include system symlinks (macOS /var -> /private/var).
+    reject_symlink(src, "regular file copy source")?;
+    if !src.is_file() {
+        return Err(format!("source is not a regular file: {}", src.display()));
+    }
+
+    // Destination: full safety checks including containment
+    let dst_parent = dst
+        .parent()
+        .ok_or_else(|| format!("destination has no parent: {}", dst.display()))?;
+    reject_symlink(dst, "regular file copy destination")?;
+    ensure_within_root(dst, allowlisted_root, "regular file copy destination")?;
+    reject_symlink_parent_chain(dst, allowlisted_root, "regular file copy destination")?;
+    reject_symlink(dst_parent, "regular file copy destination parent")?;
+    ensure_within_root(dst_parent, allowlisted_root, "regular file copy destination parent")?;
+    reject_symlink_parent_chain(dst_parent, allowlisted_root, "regular file copy destination parent")?;
+
+    if dst.exists() {
+        if dst.is_symlink() || !dst.is_file() {
+            return Err(format!("destination exists as non-regular file: {}", dst.display()));
+        }
+    }
+    if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create destination parent {}: {e}", parent.display()))?;
+    }
+    fs::copy(src, dst)
+        .map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
+    Ok(())
+}
+
+/// Remove a regular file without following symlinks.
+///
+/// Validates the path for symlink safety and ensures it is within
+/// `allowlisted_root`.
+pub fn remove_regular_file_no_symlinks(path: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    if !path.exists() {
+        return Ok(());
+    }
+    reject_symlink(path, "regular file removal")?;
+    ensure_within_root(path, allowlisted_root, "regular file removal")?;
+    reject_symlink_parent_chain(path, allowlisted_root, "regular file removal")?;
+    if !path.is_file() {
+        return Err(format!("path is not a regular file: {}", path.display()));
+    }
+    fs::remove_file(path)
+        .map_err(|e| format!("remove file {}: {e}", path.display()))?;
+    Ok(())
+}
+
 /// Reject symlinks at any depth within a directory tree (does not follow symlinks).
 #[allow(dead_code)]
 pub fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
@@ -226,6 +287,31 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn regular_file_backup_rejects_symlinked_parent() {
+        // backup_artifact rejects when the ACTUAL resolved dest path
+        // has a symlink in its parent chain
+        let base = temp("backup-sym-parent");
+        let _ = fs::remove_dir_all(&base);
+        let real_config = base.join("real-config");
+        fs::create_dir_all(real_config.join("opencode")).unwrap();
+        fs::write(real_config.join("opencode/AGENTS.md"), b"original").unwrap();
+        // Make .config a symlink so dest goes through it
+        let config_link = base.join(".config");
+        std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
+        let backup_dir = base.join("backups");
+        let err = crate::setup_transaction::backup_artifact(
+            &crate::artifact_registry::ArtifactId::OpenCodeRules,
+            &backup_dir,
+            &base,
+            &base,
+        )
+        .expect_err("symlinked parent backup must be rejected");
+        assert!(err.contains("symlink") || err.contains("parent"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn copy_rejects_destination_outside_root() {
         let base = temp("copy-outside");
@@ -237,10 +323,71 @@ mod tests {
         let src = root.join("src");
         fs::create_dir_all(&src).unwrap();
         let err = copy_dir_no_symlinks(&src, &outside, &root).expect_err("outside root");
-        assert!(
-            err.contains("allowlisted root") || err.contains("destination root"),
-            "{err}"
-        );
+        assert!(err.contains("outside"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+    #[test]
+    fn regular_file_copy_roundtrip() {
+        let base = temp("reg-copy");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("src")).unwrap();
+        fs::write(base.join("src/a.txt"), b"a").unwrap();
+        fs::create_dir_all(base.join("dst")).unwrap();
+        copy_regular_file_no_symlinks(&base.join("src/a.txt"), &base.join("dst/a.txt"), &base)
+            .unwrap();
+        assert_eq!(fs::read(base.join("dst/a.txt")).unwrap(), b"a");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_file_copy_rejects_destination_symlink() {
+        let base = temp("reg-copy-sym-dst");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("src")).unwrap();
+        fs::write(base.join("src/a.txt"), b"a").unwrap();
+        fs::create_dir_all(base.join("dst")).unwrap();
+        std::os::unix::fs::symlink(base.join("missing"), base.join("dst/a.txt")).unwrap();
+        let err = copy_regular_file_no_symlinks(
+            &base.join("src/a.txt"),
+            &base.join("dst/a.txt"),
+            &base,
+        )
+        .expect_err("destination symlink must be rejected");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_file_copy_rejects_symlinked_parent() {
+        let base = temp("reg-copy-sym-parent");
+        let _ = fs::remove_dir_all(&base);
+        let real = base.join("real");
+        let linked = base.join("linked");
+        fs::create_dir_all(&real).unwrap();
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+        fs::create_dir_all(real.join("sub")).unwrap();
+        fs::write(real.join("sub/a.txt"), b"a").unwrap();
+        let dst = linked.join("sub/a.txt");
+        let err = copy_regular_file_no_symlinks(
+            &real.join("sub/a.txt"),
+            &dst,
+            &base,
+        )
+        .expect_err("symlinked parent must be rejected");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn regular_file_remove_roundtrip() {
+        let base = temp("reg-remove");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(base.join("dst")).unwrap();
+        fs::write(base.join("dst/a.txt"), b"a").unwrap();
+        remove_regular_file_no_symlinks(&base.join("dst/a.txt"), &base).unwrap();
+        assert!(!base.join("dst/a.txt").exists());
         let _ = fs::remove_dir_all(&base);
     }
 

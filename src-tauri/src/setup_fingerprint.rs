@@ -242,13 +242,6 @@ pub fn artifact_installed_managed_digest(
     artifact_installed_managed_digest_from_path(artifact, &dest)
 }
 
-fn hash_directory_tree(dir: &Path, label: &str) -> Result<String, String> {
-    if !dir.is_dir() {
-        return Ok(ABSENT_DIGEST.into());
-    }
-    crate::stable_digest::directory(dir).map_err(|e| format!("{label}: {e}"))
-}
-
 /// Hash installed full-file or full-directory content for rollback safety.
 pub fn artifact_installed_full_digest(
     artifact: &ArtifactId,
@@ -257,7 +250,14 @@ pub fn artifact_installed_full_digest(
 ) -> Result<String, String> {
     let dest = artifact.resolve_dest(home, workspace_root)?;
     match artifact_kind(artifact) {
-        ArtifactKind::SkillDir => hash_directory_tree(&dest, "skill directory"),
+        ArtifactKind::SkillDir => {
+            let skill_md = dest.join("SKILL.md");
+            if skill_md.is_file() {
+                hash_file(&skill_md)
+            } else {
+                Ok(ABSENT_DIGEST.into())
+            }
+        }
         ArtifactKind::ConfigFile
         | ArtifactKind::TuiConfig
         | ArtifactKind::RulesFile
@@ -275,6 +275,7 @@ pub fn artifact_installed_full_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::artifact_registry::{ArtifactId, SkillName};
     use crate::setup_lifecycle::SetupSurfaceId;
     use crate::setup_transaction;
     use std::fs;
@@ -420,6 +421,31 @@ mod tests {
         )
         .unwrap();
         assert_ne!(fp1, fp2);
+    }
+
+    #[test]
+    fn skill_digest_uses_skill_md_only() {
+        let home = temp("skill-digest-home");
+        let ws = temp("skill-digest-ws");
+        write_skill_dir(&ws, "skills/frontend-design", "frontend-design", "opencode");
+        fs::write(
+            ws.join("skills/frontend-design/user-notes.md"),
+            "unknown sibling",
+        )
+        .unwrap();
+        let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
+        let digest = artifact_source_digest(&artifact, &ws, &home).unwrap();
+        let expected = hash_file(&ws.join("skills/frontend-design/SKILL.md")).unwrap();
+        assert_eq!(digest, expected);
+    }
+
+    fn write_skill_dir(ws: &Path, rel: &str, name: &str, targets: &str) {
+        write(
+            &ws.join(rel).join("SKILL.md"),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: {targets}\n---\n# {name}\n"
+            ),
+        );
     }
 
     #[test]

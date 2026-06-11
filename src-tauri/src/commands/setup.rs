@@ -457,11 +457,39 @@ fn remove_single_artifact(
     } else {
         home
     };
+
+    let is_skill = matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
+            | crate::artifact_registry::ArtifactId::CodexSkill(_)
+            | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
+            | crate::artifact_registry::ArtifactId::CursorSkill(_)
+    );
+
+    if is_skill {
+        let skill_md = dest.join("SKILL.md");
+        if skill_md.is_file() {
+            crate::safe_filesystem::remove_regular_file_no_symlinks(&skill_md, root)
+                .map_err(|e| format!("remove skill SKILL.md: {e}"))?;
+        }
+        // Clean up empty skill directory
+        if dest.is_dir() {
+            let mut entries = fs::read_dir(&dest)
+                .map_err(|e| format!("read skill dir {}: {e}", dest.display()))?;
+            if entries.next().is_none() {
+                fs::remove_dir(&dest)
+                    .map_err(|e| format!("remove empty skill dir {}: {e}", dest.display()))?;
+            }
+        }
+        return Ok(());
+    }
+
     if dest.is_dir() {
         crate::safe_filesystem::remove_dir_no_symlinks(&dest, root)
             .map_err(|e| format!("remove {}: {e}", dest.display()))?;
     } else if dest.is_file() {
-        fs::remove_file(&dest).map_err(|e| format!("remove {}: {e}", dest.display()))?;
+        crate::safe_filesystem::remove_regular_file_no_symlinks(&dest, root)
+            .map_err(|e| format!("remove {}: {e}", dest.display()))?;
     }
     if matches!(
         artifact,
@@ -510,12 +538,42 @@ fn apply_single_artifact(
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
 
     if source.is_dir() {
+        let is_skill = matches!(
+            artifact,
+            crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
+                | crate::artifact_registry::ArtifactId::CodexSkill(_)
+                | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
+                | crate::artifact_registry::ArtifactId::CursorSkill(_)
+                | crate::artifact_registry::ArtifactId::CodexLegacySkill(_)
+        );
+        if is_skill {
+            let skill_md = source.join("SKILL.md");
+            if !skill_md.is_file() {
+                return Err(format!("skill source missing SKILL.md: {}", source.display()));
+            }
+            let dest_md = dest.join("SKILL.md");
+            let allowlist = if matches!(
+                artifact,
+                crate::artifact_registry::ArtifactId::WorkspaceFile(_)
+            ) {
+                workspace_root
+            } else {
+                home
+            };
+            if let Some(parent) = dest_md.parent() {
+                fs::create_dir_all(parent)
+                    .map_err(|e| format!("create skill dir {}: {e}", parent.display()))?;
+            }
+            crate::safe_filesystem::copy_regular_file_no_symlinks(&skill_md, &dest_md, allowlist)
+                .map_err(|e| format!("apply skill SKILL.md: {e}"))?;
+            return Ok(());
+        }
         if dest.exists() {
             crate::safe_filesystem::remove_dir_no_symlinks(&dest, home)
-                .map_err(|e| format!("replace skill dir: {e}"))?;
+                .map_err(|e| format!("replace dir: {e}"))?;
         }
         crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
-            .map_err(|e| format!("apply skill dir: {e}"))?;
+            .map_err(|e| format!("apply dir: {e}"))?;
         return Ok(());
     }
 
@@ -1027,42 +1085,56 @@ fn apply_planned_artifacts(
     }
 
     for surface in &surfaces_to_execute {
-        setup_transaction::mark_surface_group_in_flight(&mut manifest.operations, *surface);
-        if let Err(e) = persist_setup_manifest(
-            &manifest_path,
-            &mut manifest,
-            setup_transaction::TransactionStatus::Applying,
-            &backup_dir,
-        ) {
-            let message = format!("Cannot persist in-flight status: {e}");
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed: vec![e],
-                manual_steps: manual_steps.clone(),
-                message,
-            });
-        }
-
         let surface_artifacts_for_script: Vec<_> =
             pending.iter().filter(|p| p.surface == *surface).collect();
         let mut apply_error = None;
+
+        // Per-artifact InFlight marking: mark each operation as InFlight
+        // just before executing it, then persist.
         for p in &surface_artifacts_for_script {
             if !matches!(p.kind, OperationKind::Create | OperationKind::Update) {
                 continue;
             }
+            if let Some(op) = manifest
+                .operations
+                .iter_mut()
+                .find(|o| o.artifact == p.artifact)
+            {
+                op.apply_status = setup_transaction::ApplyStatus::InFlight;
+            }
+            if let Err(e) = persist_setup_manifest(
+                &manifest_path,
+                &mut manifest,
+                setup_transaction::TransactionStatus::Applying,
+                &backup_dir,
+            ) {
+                let message = format!("Cannot persist in-flight status: {e}");
+                return finish_failed_apply_with_rollback(FailedApplyRollback {
+                    manifest_path: &manifest_path,
+                    manifest: &mut manifest,
+                    backup_dir: &backup_dir,
+                    home: &home,
+                    workspace_root: &ws_root,
+                    transaction_id,
+                    applied,
+                    failed: vec![e],
+                    manual_steps: manual_steps.clone(),
+                    message,
+                });
+            }
             if let Err(e) = apply_single_artifact(&p.artifact, &ws_root, &home) {
                 apply_error = Some(format!("{}: {e}", artifact_label(&p.artifact)));
+                for op in manifest.operations.iter_mut() {
+                    if op.surface == *surface && op.apply_status == setup_transaction::ApplyStatus::InFlight {
+                        op.apply_status = setup_transaction::ApplyStatus::Failed;
+                    }
+                }
                 break;
             }
         }
 
-        if let Some(err) = apply_error {
+        if let Some(err) = &apply_error {
+            // Mark all remaining operations on this surface as Failed
             for op in manifest.operations.iter_mut() {
                 if op.surface == *surface {
                     op.apply_status = setup_transaction::ApplyStatus::Failed;
@@ -2086,9 +2158,158 @@ mod tests {
     }
 
     #[test]
+    fn skill_update_preserves_unknown_sibling_files() {
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-skill-sibling-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("base");
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+        let dest = resolved_home
+            .join(".config/opencode/skills/frontend-design/SKILL.md");
+        fs::create_dir_all(dest.parent().unwrap()).expect("dest parent");
+        fs::write(&dest, "managed old").expect("managed skill");
+        fs::write(
+            resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md"),
+            "keep me",
+        )
+        .expect("unknown sibling");
+        let artifact = ArtifactId::OpenCodeSkill(
+            crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
+        );
+        apply_single_artifact(&artifact, &ws, &resolved_home).expect("apply skill");
+        assert_eq!(
+            fs::read_to_string(
+                resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md")
+            )
+            .unwrap(),
+            "keep me"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    fn copy_dir_all(src: &std::path::Path, dst: &std::path::Path) -> Result<(), String> {
+        if !dst.exists() {
+            fs::create_dir_all(dst).map_err(|e| format!("mkdir {}: {e}", dst.display()))?;
+        }
+        for entry in fs::read_dir(src).map_err(|e| format!("read {}: {e}", src.display()))? {
+            let entry = entry.map_err(|e| format!("entry: {e}"))?;
+            let ft = entry.file_type().map_err(|e| format!("type: {e}"))?;
+            if ft.is_symlink() {
+                return Err(format!("refusing symlink {}", entry.path().display()));
+            }
+            let target = dst.join(entry.file_name());
+            if ft.is_dir() {
+                copy_dir_all(&entry.path(), &target)?;
+            } else if ft.is_file() {
+                if let Some(parent) = target.parent() {
+                    fs::create_dir_all(parent).map_err(|e| format!("mkdir parent: {e}"))?;
+                }
+                fs::copy(entry.path(), &target).map_err(|e| {
+                    format!("copy {}: {e}", entry.path().display())
+                })?;
+            }
+        }
+        Ok(())
+    }
+
+    fn bundled_workspace_src() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    #[test]
     fn rollback_rejects_empty_transaction_id() {
         let result = rollback_transaction("", false);
         assert!(!result.success);
+    }
+
+    #[test]
+    fn regular_file_remove_rejects_symlinked_parent() {
+        // Remove rejects when the destination's parent chain contains a symlink.
+        // Test with a non-workspace artifact (home-based).
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-remove-sym-parent-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("base");
+        let real_config = base.join("real-config");
+        fs::create_dir_all(real_config.join("opencode")).unwrap();
+        fs::write(real_config.join("opencode/AGENTS.md"), "managed").unwrap();
+        // Home/.config is a symlink so the dest path goes through it
+        let config_link = base.join(".config");
+        std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
+        let artifact = ArtifactId::OpenCodeRules;
+        // home = base, so dest = base/.config/opencode/AGENTS.md
+        let err = remove_single_artifact(&artifact, &base, &base)
+            .expect_err("symlinked parent removal must be rejected");
+        assert!(err.contains("symlink") || err.contains("parent"), "{err}");
+        assert!(real_config.join("opencode/AGENTS.md").is_file());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn regular_file_apply_rejects_symlinked_parent() {
+        // Apply rejects when the destination's parent chain contains a symlink.
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-apply-sym-parent-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("base");
+        let real_config = base.join("real-config");
+        fs::create_dir_all(real_config.join("opencode")).unwrap();
+        // Home/.config is a symlink so the dest path goes through it
+        let config_link = base.join(".config");
+        std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
+        // No need to create source - validate_artifact_source_dest will reject first
+        let artifact = ArtifactId::OpenCodeRules;
+        let err = apply_single_artifact(&artifact, &base, &base)
+            .expect_err("symlinked parent apply must be rejected");
+        assert!(err.contains("symlink") || err.contains("parent"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn regular_file_apply_rejects_dangling_destination_symlink() {
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-apply-dangling-dest-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).expect("base");
+        fs::create_dir_all(base.join("templates").join("sync")).unwrap();
+        fs::write(base.join("templates/sync/opencode-rules.md"), "source").unwrap();
+        fs::create_dir_all(base.join(".config").join("opencode")).unwrap();
+        std::os::unix::fs::symlink(base.join("missing"), base.join(".config/opencode/AGENTS.md"))
+            .unwrap();
+        let artifact = ArtifactId::OpenCodeRules;
+        let err = apply_single_artifact(&artifact, &base, &base)
+            .expect_err("dangling destination must be rejected");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
