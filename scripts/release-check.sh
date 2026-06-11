@@ -699,6 +699,9 @@ bash resources/default-workspace/scripts/check-playwright-mcp.sh
 step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check
 
+step "bundled OpenCode permission contract"
+python3 scripts/validate_opencode_permissions.py
+
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check
 if search_quiet 'templates/opencode/agents/.*\\.header\\.yaml' resources/default-workspace; then

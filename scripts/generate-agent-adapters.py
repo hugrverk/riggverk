@@ -15,6 +15,7 @@ import tomllib
 from pathlib import Path
 
 from opencode_policy_compose import compose_opencode_header
+from validate_opencode_permissions import validate as validate_opencode_permissions
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WS_ROOT = REPO_ROOT / "resources" / "default-workspace"
@@ -371,6 +372,14 @@ def main() -> None:
 
     if args.write:
         write_manifest()
+
+    # ── Semantic OpenCode permission contract ──
+    permission_errors = validate_opencode_permissions()
+    if permission_errors:
+        print("FAIL: OpenCode permission contract validation failed:", file=sys.stderr)
+        for err in permission_errors:
+            print(f"  - {err}", file=sys.stderr)
+        sys.exit(1)
 
     # ── Content validation (runs on both check and write) ──
     content_errors = validate_generated_content(outputs)
