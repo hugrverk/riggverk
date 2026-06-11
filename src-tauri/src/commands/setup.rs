@@ -2573,7 +2573,7 @@ mod tests {
 
         let result = rollback_transaction(&txn_id, false);
         assert!(result.success, "{}", result.message);
-        assert!(result.rolled_back.len() >= 1);
+        assert!(!result.rolled_back.is_empty());
         let _ = fs::remove_dir_all(&base);
     }
 
