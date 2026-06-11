@@ -2377,10 +2377,7 @@ mod tests {
         fs::create_dir_all(&backup_root).unwrap();
         let ws_canon = ws.canonicalize().unwrap_or_else(|_| ws.clone());
         unsafe {
-            std::env::set_var(
-                "AGENT_WORKSPACE_PATH",
-                ws_canon.to_string_lossy().as_ref(),
-            );
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws_canon.to_string_lossy().as_ref());
             std::env::set_var(
                 "AGENT_WORKSPACE_BACKUP_DIR",
                 backup_root.to_string_lossy().as_ref(),

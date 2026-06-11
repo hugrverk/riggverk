@@ -137,22 +137,14 @@ pub(crate) fn rollback_codex_config_managed_projection(
 ) -> Result<(), String> {
     let script = workspace_root.join("scripts/merge-codex-config.py");
     if !script.is_file() {
-        return Err(format!(
-            "missing Codex merge script: {}",
-            script.display()
-        ));
+        return Err(format!("missing Codex merge script: {}", script.display()));
     }
     let script_str = super::workspace::path_arg(&script)?;
     let dest_str = super::workspace::path_arg(dest)?;
     let backup_str = super::workspace::path_arg(backup)?;
     let (ok, _stdout, stderr, code) = super::process::run_cmd(
         "python3",
-        &[
-            &script_str,
-            &dest_str,
-            &backup_str,
-            "--rollback-managed",
-        ],
+        &[&script_str, &dest_str, &backup_str, "--rollback-managed"],
         workspace_root,
     );
     if !ok {
