@@ -11,7 +11,7 @@ mod tests {
     use crate::agent_skill_targets::{
         agent_global_skills_dest, codex_global_skills_dest, codex_legacy_skills_dest,
     };
-    use crate::artifact_registry::{ArtifactId, SkillName};
+    use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPath};
     use crate::commands::setup::{
         apply_setup, preview_setup, rollback_setup_transaction, SetupResult,
     };
@@ -117,6 +117,21 @@ mod tests {
         .expect("historical skill md");
     }
 
+    fn assert_planned_kind(
+        planned: &[crate::setup_transaction::PlannedArtifact],
+        artifact: ArtifactId,
+        expected: OperationKind,
+    ) {
+        let found = planned
+            .iter()
+            .find(|operation| operation.artifact == artifact)
+            .unwrap_or_else(|| panic!("missing planned artifact: {artifact:?}"));
+        assert_eq!(
+            found.kind, expected,
+            "unexpected operation for {artifact:?}: {found:?}"
+        );
+    }
+
     #[test]
     fn old_current_workspace_file_without_managed_state_is_conflict() {
         let base = temp_base("historical-conflict");
@@ -164,12 +179,18 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
-    fn install_current_skills_to_harness(harness: &str, limit: usize) {
+    fn source_skill_count() -> usize {
+        discover_skill_catalog(&bundled_workspace_src())
+            .expect("source catalog")
+            .len()
+    }
+
+    fn install_source_skills_to_harness(harness: &str) {
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
         let dest_root = agent_global_skills_dest(harness).expect("dest");
         fs::create_dir_all(&dest_root).expect("dest root");
-        for skill in catalog.iter().take(limit) {
+        for skill in &catalog {
             let target = dest_root.join(&skill.name);
             copy_dir_all(&skill.source_dir, &target).expect("copy skill");
         }
@@ -188,7 +209,7 @@ mod tests {
         fs::create_dir_all(&legacy).expect("legacy root");
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
-        for skill in catalog.iter().take(16) {
+        for skill in &catalog {
             copy_dir_all(&skill.source_dir, &legacy.join(&skill.name)).expect("legacy copy");
         }
         for name in REMOVED_SKILL_NAMES {
@@ -268,10 +289,10 @@ mod tests {
             )
             .expect("home");
 
-            install_current_skills_to_harness("opencode", 16);
-            install_removed_skills_to_harness(&resolved_home, "opencode");
-            install_current_skills_to_harness("cursor", 21);
-            install_removed_skills_to_harness(&resolved_home, "cursor");
+            for harness in ["opencode", "codex", "claude", "cursor"] {
+                install_source_skills_to_harness(harness);
+                install_removed_skills_to_harness(&resolved_home, harness);
+            }
             install_codex_legacy_skills(&resolved_home);
 
             let oc_agents = resolved_home.join(".config/opencode/agents");
@@ -480,9 +501,14 @@ mod tests {
                 .count(),
             7
         );
-        assert_eq!(fixture.harness_skill_count("opencode"), 28);
-        assert_eq!(fixture.harness_skill_count("cursor"), 33);
-        assert_eq!(fixture.harness_skill_count("claude"), 0);
+        let expected_harness_skills = source_skill_count() + REMOVED_SKILL_NAMES.len();
+        for harness in ["opencode", "codex", "claude", "cursor"] {
+            assert_eq!(
+                fixture.harness_skill_count(harness),
+                expected_harness_skills,
+                "{harness} should include the complete source and removed skill inventory"
+            );
+        }
         assert_eq!(
             fs::read_dir(codex_legacy_skills_dest(&fixture.home))
                 .expect("legacy Codex")
@@ -493,7 +519,7 @@ mod tests {
                         && entry.file_name() != "user-custom-skill"
                 })
                 .count(),
-            28
+            expected_harness_skills
         );
         let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
             &reconciliation_surface_ids(),
@@ -506,6 +532,51 @@ mod tests {
             "expected Remove artifacts in plan: {:?}",
             planned
         );
+
+        let coverage_name = REMOVED_SKILL_NAMES[3];
+        let coverage_skill = SkillName::new(coverage_name).expect("coverage skill");
+        for artifact in [
+            ArtifactId::WorkspaceFile(
+                WorkspaceRelPath::new(format!("skills/{coverage_name}/SKILL.md"))
+                    .expect("runtime skill path"),
+            ),
+            ArtifactId::WorkspaceFile(
+                WorkspaceRelPath::new(format!(
+                    "metadata/deprecated-skills/{coverage_name}/SKILL.md"
+                ))
+                .expect("deprecated skill path"),
+            ),
+            ArtifactId::OpenCodeSkill(coverage_skill.clone()),
+            ArtifactId::CodexSkill(coverage_skill.clone()),
+            ArtifactId::ClaudeSkill(coverage_skill.clone()),
+            ArtifactId::CursorSkill(coverage_skill.clone()),
+            ArtifactId::CodexLegacySkill(coverage_skill),
+        ] {
+            assert_planned_kind(&planned, artifact, OperationKind::Remove);
+        }
+        assert_planned_kind(
+            &planned,
+            ArtifactId::WorkspaceFile(
+                WorkspaceRelPath::new("metadata/deprecated-skills.json")
+                    .expect("deprecated metadata path"),
+            ),
+            OperationKind::Remove,
+        );
+        assert_planned_kind(
+            &planned,
+            ArtifactId::WorkspaceFile(
+                WorkspaceRelPath::new("agents/scout.md").expect("runtime scout path"),
+            ),
+            OperationKind::Remove,
+        );
+        assert_planned_kind(
+            &planned,
+            ArtifactId::OpenCodeAgent(
+                AgentName::new(LEGACY_SCOUT_AGENT).expect("opencode scout name"),
+            ),
+            OperationKind::Remove,
+        );
+
         let plan = preview_reconciliation();
         assert!(
             plan.operations
@@ -738,6 +809,28 @@ mod tests {
         let initial_skills = discover_skill_catalog(&fixture.ws)
             .expect("historical runtime catalog")
             .len();
+        let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
+            &reconciliation_surface_ids(),
+            &fixture.ws,
+            &fixture.home,
+        )
+        .expect("historical artifact plan");
+        for rel in [
+            "README.md",
+            "docs/TROUBLESHOOTING.md",
+            "docs/USING_THE_APP.md",
+            "docs/WORKFLOWS.md",
+            "scripts/install-skills.sh",
+            "scripts/merge-codex-config.py",
+        ] {
+            assert_planned_kind(
+                &planned,
+                ArtifactId::WorkspaceFile(
+                    WorkspaceRelPath::new(rel).expect("historical update path"),
+                ),
+                OperationKind::Update,
+            );
+        }
         let plan = preview_reconciliation();
         let conflicts = plan
             .operations
