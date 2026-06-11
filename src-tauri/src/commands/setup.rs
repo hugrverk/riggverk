@@ -313,7 +313,11 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollingBack
                 | setup_transaction::TransactionStatus::RollbackFailed
         ) {
-            return (vec![], vec![], finalize_persisted_rollback(manifest_path, manifest, backup_dir));
+            return (
+                vec![],
+                vec![],
+                finalize_persisted_rollback(manifest_path, manifest, backup_dir),
+            );
         }
         return (vec![], vec![], None);
     }
@@ -391,8 +395,7 @@ fn run_persisted_rollback(
             }
         }
 
-        manifest.operations[index].rollback_status =
-            setup_transaction::RollbackStatus::InFlight;
+        manifest.operations[index].rollback_status = setup_transaction::RollbackStatus::InFlight;
         if let Err(e) = persist_setup_manifest(
             manifest_path,
             manifest,
@@ -488,7 +491,10 @@ fn plan_rollback_dry_run(
             setup_transaction::RollbackStatus::InFlight
         ) {
             match setup_transaction::reconcile_in_flight_rollback_artifact(
-                op, backup_dir, home, workspace_root,
+                op,
+                backup_dir,
+                home,
+                workspace_root,
             ) {
                 Ok(setup_transaction::RollbackReconcileOutcome::AlreadyRestored) => {
                     plan.already_restored.push(label);
@@ -1659,6 +1665,10 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     }
 
     for op in &eligible {
+        let in_flight = matches!(
+            op.rollback_status,
+            setup_transaction::RollbackStatus::InFlight
+        );
         if let Err(e) = setup_transaction::validate_backup_for_rollback(op, &backup_dir) {
             return SetupResult {
                 success: false,
@@ -1670,27 +1680,35 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
                 message: format!("Rollback preflight failed: {e}"),
             };
         }
-        if let Err(e) = setup_transaction::validate_create_target_unchanged(op, &ws_root, &home) {
-            return SetupResult {
-                success: false,
-                transaction_id: transaction_id.to_string(),
-                applied: vec![],
-                failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Rollback preflight failed: artifact changed since apply: {e}"),
-            };
-        }
-        if let Err(e) = setup_transaction::validate_update_target_unchanged(op, &ws_root, &home) {
-            return SetupResult {
-                success: false,
-                transaction_id: transaction_id.to_string(),
-                applied: vec![],
-                failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Rollback preflight failed: artifact changed since apply: {e}"),
-            };
+        if !in_flight {
+            if let Err(e) = setup_transaction::validate_create_target_unchanged(op, &ws_root, &home)
+            {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: format!(
+                        "Rollback preflight failed: artifact changed since apply: {e}"
+                    ),
+                };
+            }
+            if let Err(e) = setup_transaction::validate_update_target_unchanged(op, &ws_root, &home)
+            {
+                return SetupResult {
+                    success: false,
+                    transaction_id: transaction_id.to_string(),
+                    applied: vec![],
+                    failed: vec![format!("{}: {e}", artifact_label(&op.artifact))],
+                    rolled_back: vec![],
+                    manual_steps: vec![],
+                    message: format!(
+                        "Rollback preflight failed: artifact changed since apply: {e}"
+                    ),
+                };
+            }
         }
         let dest = match op.artifact.resolve_dest(&home) {
             Ok(d) => d,
@@ -2955,7 +2973,7 @@ mod tests {
 
         let result = rollback_transaction(&txn_id, false);
         assert!(result.success, "{}", result.message);
-        assert!(result.rolled_back.is_empty());
+        assert_eq!(result.rolled_back.len(), 2);
         let final_manifest = read_manifest(&txn_id);
         assert_eq!(
             final_manifest.transaction_status,
@@ -3008,13 +3026,13 @@ mod tests {
         let mut manifest = read_manifest(&txn_id);
         manifest.operations[0].rollback_status = setup_transaction::RollbackStatus::InFlight;
         manifest.transaction_status = setup_transaction::TransactionStatus::RollingBack;
-        let before_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
         setup_transaction::persist_manifest_atomic(
             &backup_dir.join("manifest.json"),
             &manifest,
             &backup_dir,
         )
         .unwrap();
+        let before_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
 
         let dry = rollback_transaction(&txn_id, true);
         assert!(dry.success);

@@ -14,8 +14,6 @@ use crate::commands::cursor_profile::cursor_root;
 use crate::commands::{
     extract_managed_codex_config, extract_managed_opencode_config, render_expected_opencode_config,
 };
-use crate::cursor_profile_paths::CursorProfilePaths;
-
 pub const ABSENT_DIGEST: &str = "absent";
 
 fn hash_bytes(bytes: &[u8]) -> String {
@@ -97,22 +95,6 @@ fn cursor_playwright_projection_from_template(
             )
         })
         .ok_or_else(|| "cursor mcp template missing playwright entry".into())
-}
-
-fn cursor_playwright_projection_from_installed(
-    paths: &CursorProfilePaths,
-) -> Result<Option<serde_json::Value>, String> {
-    if !paths.mcp_config.is_file() {
-        return Ok(None);
-    }
-    let content = fs::read_to_string(&paths.mcp_config)
-        .map_err(|e| format!("read cursor mcp config: {e}"))?;
-    let parsed: serde_json::Value =
-        serde_json::from_str(&content).map_err(|e| format!("parse cursor mcp config: {e}"))?;
-    Ok(parsed
-        .get("mcpServers")
-        .and_then(|v| v.get("playwright"))
-        .cloned())
 }
 
 /// Hash canonical source content for an artifact. Missing source is an error.
@@ -227,10 +209,7 @@ pub fn artifact_installed_managed_digest_from_path(
                 fs::read_to_string(path).map_err(|e| format!("read cursor mcp config: {e}"))?;
             let parsed: serde_json::Value =
                 serde_json::from_str(&content).map_err(|e| format!("parse cursor mcp: {e}"))?;
-            match parsed
-                .get("mcpServers")
-                .and_then(|v| v.get("playwright"))
-            {
+            match parsed.get("mcpServers").and_then(|v| v.get("playwright")) {
                 Some(projection) => hash_json_value(projection),
                 None => Ok(ABSENT_DIGEST.into()),
             }
