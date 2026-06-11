@@ -213,12 +213,12 @@ fn create_backup_dir(agent: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-pub(crate) fn copy_dir_all(src: &Path, dst: &Path) -> Result<(), String> {
-    copy_dir_no_symlinks(src, dst)
+pub(crate) fn copy_dir_all(src: &Path, dst: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    copy_dir_no_symlinks(src, dst, allowlisted_root)
 }
 
-fn remove_dir_all(path: &Path) -> Result<(), String> {
-    remove_dir_no_symlinks(path)
+fn remove_dir_all(path: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    remove_dir_no_symlinks(path, allowlisted_root)
 }
 
 fn validate_backup_path(backup_dir: &Path) -> Result<(), String> {
@@ -372,7 +372,7 @@ pub fn remove_identical_deprecated(
     for item in &removable {
         let backup_target = backup_dir.join(&item.name);
         let skill_dir = PathBuf::from(&item.target_path);
-        match copy_dir_all(&skill_dir, &backup_target) {
+        match copy_dir_all(&skill_dir, &backup_target, &backup_dir) {
             Ok(()) => {
                 backed_up.push(item.name.clone());
                 lines.push(format!(
@@ -437,7 +437,7 @@ pub fn remove_identical_deprecated(
     let mut removed: Vec<String> = Vec::new();
     for item in &removable {
         let skill_dir = PathBuf::from(&item.target_path);
-        match remove_dir_all(&skill_dir) {
+        match remove_dir_all(&skill_dir, dest_root) {
             Ok(()) => {
                 removed.push(item.name.clone());
                 lines.push(format!(
@@ -497,7 +497,7 @@ fn attempt_auto_restore(
             restore_errors.push(format!("cannot restore {name}: destination already exists"));
             continue;
         }
-        if let Err(e) = copy_dir_all(&backup_src, &dest) {
+        if let Err(e) = copy_dir_all(&backup_src, &dest, dest_root) {
             restore_errors.push(format!("failed to restore {name}: {e}"));
         }
     }
@@ -659,7 +659,7 @@ pub fn rollback_removal(backup_path: &str) -> Result<ActionResult, String> {
         for skill in &manifest.skills {
             let backup_src = backup_dir.join(&skill.relative_backup_dir);
             let stage_target = staging_dir.join(&skill.name);
-            copy_dir_all(&backup_src, &stage_target)?;
+            copy_dir_all(&backup_src, &stage_target, &staging_dir)?;
             staged.push(skill.name.clone());
         }
         Ok(staged.clone())

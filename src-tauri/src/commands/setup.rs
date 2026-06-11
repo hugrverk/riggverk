@@ -548,7 +548,7 @@ fn create_single_artifact(
     }
 
     if source.is_dir() {
-        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest)
+        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
             .map_err(|e| format!("create skill dir: {e}"))?;
         return Ok(());
     }

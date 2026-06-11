@@ -1,20 +1,49 @@
 //! Bounded filesystem helpers for setup and deprecated-skill workflows.
 //!
 //! Copies and removes directory trees without following symlinks. Recursion is
-//! depth-bounded to avoid stack overflow on pathological trees.
+//! depth-bounded to avoid stack overflow on pathological trees. Callers must
+//! supply an explicit allowlisted root for destination containment checks.
 
 use std::fs;
 use std::path::Path;
 
-use crate::path_safety::reject_symlink;
+use crate::path_safety::{ensure_within_root, reject_symlink, reject_symlink_parent_chain};
 
 const MAX_RECURSE_DEPTH: usize = 64;
 
 /// Copy a directory tree without following symlinks.
-pub fn copy_dir_no_symlinks(src: &Path, dst: &Path) -> Result<(), String> {
+///
+/// Rejects symlink or dangling-symlink destinations and unsafe parent chains
+/// up to `allowlisted_root`.
+pub fn copy_dir_no_symlinks(src: &Path, dst: &Path, allowlisted_root: &Path) -> Result<(), String> {
     reject_symlink(src, "copy source")?;
+    validate_copy_destination(dst, allowlisted_root)?;
+    if dst.exists() {
+        reject_symlink(dst, "copy destination")?;
+        if !dst.is_dir() {
+            return Err(format!(
+                "refusing copy into non-directory destination: {}",
+                dst.display()
+            ));
+        }
+    } else if let Some(parent) = dst.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
+    }
     fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
     copy_dir_recurse(src, dst, 0)
+}
+
+fn validate_copy_destination(dst: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    reject_symlink(dst, "copy destination")?;
+    ensure_within_root(dst, allowlisted_root, "copy destination")?;
+    reject_symlink_parent_chain(dst, allowlisted_root, "copy destination")?;
+    if let Some(parent) = dst.parent() {
+        reject_symlink(parent, "copy destination parent")?;
+        ensure_within_root(parent, allowlisted_root, "copy destination parent")?;
+        reject_symlink_parent_chain(parent, allowlisted_root, "copy destination parent")?;
+    }
+    Ok(())
 }
 
 fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> {
@@ -49,11 +78,15 @@ fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> 
 }
 
 /// Remove a directory tree without following symlinks.
-pub fn remove_dir_no_symlinks(path: &Path) -> Result<(), String> {
+///
+/// Rejects dangling symlinks and paths outside `allowlisted_root`.
+pub fn remove_dir_no_symlinks(path: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    reject_symlink(path, "removal target")?;
     if !path.exists() {
         return Ok(());
     }
-    reject_symlink(path, "removal target")?;
+    ensure_within_root(path, allowlisted_root, "removal target")?;
+    reject_symlink_parent_chain(path, allowlisted_root, "removal target")?;
     remove_dir_recurse(path, 0)
 }
 
@@ -135,9 +168,9 @@ mod tests {
         fs::create_dir_all(src.join("nested")).unwrap();
         fs::write(src.join("nested/a.txt"), b"a").unwrap();
         let dst = base.join("dst");
-        copy_dir_no_symlinks(&src, &dst).unwrap();
+        copy_dir_no_symlinks(&src, &dst, &base).unwrap();
         assert!(dst.join("nested/a.txt").is_file());
-        remove_dir_no_symlinks(&dst).unwrap();
+        remove_dir_no_symlinks(&dst, &base).unwrap();
         assert!(!dst.exists());
         let _ = fs::remove_dir_all(&base);
     }
@@ -152,7 +185,73 @@ mod tests {
         fs::create_dir_all(&src).unwrap();
         std::os::unix::fs::symlink(base.join("outside"), src.join("link")).unwrap();
         let dst = base.join("dst");
-        let err = copy_dir_no_symlinks(&src, &dst).expect_err("symlink in source");
+        let err = copy_dir_no_symlinks(&src, &dst, &base).expect_err("symlink in source");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_rejects_dangling_destination_symlink() {
+        let base = temp("copy-dangling-dst");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let src = base.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("a.txt"), b"a").unwrap();
+        let dst = base.join("dst");
+        std::os::unix::fs::symlink(base.join("missing"), &dst).unwrap();
+        let err = copy_dir_no_symlinks(&src, &dst, &base).expect_err("dangling dst");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_rejects_symlinked_destination_parent() {
+        let base = temp("copy-sym-parent");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let real = base.join("real");
+        fs::create_dir_all(&real).unwrap();
+        let link = base.join("linked");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let src = base.join("src");
+        fs::create_dir_all(&src).unwrap();
+        fs::write(src.join("a.txt"), b"a").unwrap();
+        let dst = link.join("dst");
+        let err = copy_dir_no_symlinks(&src, &dst, &base).expect_err("symlink parent");
+        assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn copy_rejects_destination_outside_root() {
+        let base = temp("copy-outside");
+        let _ = fs::remove_dir_all(&base);
+        let root = base.join("root");
+        let outside = base.join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let src = root.join("src");
+        fs::create_dir_all(&src).unwrap();
+        let err = copy_dir_no_symlinks(&src, &outside, &root).expect_err("outside root");
+        assert!(
+            err.contains("allowlisted root") || err.contains("destination root"),
+            "{err}"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_rejects_dangling_target() {
+        let base = temp("remove-dangling");
+        let _ = fs::remove_dir_all(&base);
+        fs::create_dir_all(&base).unwrap();
+        let link = base.join("broken");
+        std::os::unix::fs::symlink(base.join("missing"), &link).unwrap();
+        let err = remove_dir_no_symlinks(&link, &base).expect_err("dangling removal");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }

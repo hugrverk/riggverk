@@ -31,9 +31,9 @@ The app writes only to these known paths under user home:
 
 All writes are preceded by backup. Rollback restores exact prior state using a single shared persisted rollback core: per-artifact `in_flight` status is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed.
 
-Setup lifecycle mutations are serialized in the trusted Rust backend. Deprecated skill cleanup rejects dangling symlinks, symlinked backup paths, and traversal outside allowlisted roots using the shared path-safety owner. Preview confirmation tokens are opaque, one-time, in-memory, and must not appear in logs or diagnostics.
+Setup lifecycle mutations are serialized in the trusted Rust backend. Bounded copy and removal helpers require an explicit allowlisted root, reject dangling destination symlinks, and validate parent chains before creating or removing trees. Deprecated skill cleanup uses the shared path-safety and safe-filesystem owners. Preview confirmation tokens are opaque, one-time, in-memory, and must not appear in logs or diagnostics.
 
-OpenCode agent permissions are composed from `templates/opencode.policy.json` plus small `templates/opencode/agents/*.role.json` overrides; generated `agents/*.md` adapters are deterministic outputs—edit sources, not generated headers.
+OpenCode agent permissions are composed from `templates/opencode.policy.json` plus small `templates/opencode/agents/*.role.json` overrides. Restrictive roles use explicit `composition.replace_sections` so bash/edit profiles replace inherited capability sections instead of shallow-merging them. Shared secret denials remain canonical in the base policy. Generated `agents/*.md` adapters are deterministic outputs—edit sources, not generated headers. `scripts/validate_opencode_permissions.py` enforces the semantic permission contract in release-check.
 
 ## What the app does NOT access
 

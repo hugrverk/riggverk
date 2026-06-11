@@ -1091,7 +1091,7 @@ pub fn backup_artifact(
         fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
     }
     if dest.is_dir() {
-        crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path)
+        crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
     } else {
         fs::copy(&dest, &backup_path)
@@ -1434,7 +1434,7 @@ fn restore_artifact_from_backup_with_mode(
                 }
             }
             if backup_path.is_dir() {
-                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest)
+                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &dest, home)
                     .map_err(|e| format!("restore dir: {e}"))?;
             } else {
                 if let Some(parent) = dest.parent() {
