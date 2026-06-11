@@ -34,8 +34,6 @@ interface ClaudeViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
-  onPreviewRemoveDeprecated?: () => void;
-  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   claudeRuntimeHealth: ClaudeRuntimeHealth | null;
   onRefreshClaudeHealth: () => void;
@@ -50,7 +48,7 @@ export function ClaudeView(props: ClaudeViewProps) {
     agentsTargetsEnabled, agentsStatusLabel, canRunReleaseCheck,
     onDiffRules, onSyncRules, onDiffAgents, onSyncAgents,
     skills, skillsLoaded, skillSearch, onPreviewSyncSkills, onSyncAllSkills,
-    onPreviewRemoveDeprecated, onRemoveDeprecated, onSetSkillSearch,
+    onSetSkillSearch,
     claudeRuntimeHealth, onRefreshClaudeHealth, onOpenInstallScript,
   } = props;
   const busy = wsRunning !== null;
@@ -141,8 +139,6 @@ export function ClaudeView(props: ClaudeViewProps) {
             workspaceValid={workspaceValid}
             onPreviewSync={onPreviewSyncSkills}
             onSyncAll={onSyncAllSkills}
-            onPreviewRemoveDeprecated={onPreviewRemoveDeprecated}
-            onRemoveDeprecated={onRemoveDeprecated}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

@@ -189,8 +189,6 @@ function App() {
     activityCellClass,
     runWsAction,
     runWsInstallForAgents,
-    runRemoveDeprecatedSkills,
-    runCodexLegacyMigration,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
@@ -571,10 +569,6 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["codex"], "preview skills sync (codex)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}
-            onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["codex"], "preview deprecated removal (codex)")}
-            onRemoveDeprecated={() => runRemoveDeprecatedSkills(false, ["codex"], "remove deprecated skills (codex)")}
-            onPreviewCodexLegacyMigration={() => runCodexLegacyMigration(true, "preview codex legacy migration")}
-            onMigrateCodexLegacy={() => runCodexLegacyMigration(false, "migrate codex legacy skills")}
           />
         )}
 
@@ -676,8 +670,6 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["opencode"], "preview skills sync (opencode)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["opencode"], "sync all skills (opencode)")}
-            onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["opencode"], "preview deprecated removal (opencode)")}
-            onRemoveDeprecated={() => runRemoveDeprecatedSkills(false, ["opencode"], "remove deprecated skills (opencode)")}
           />
         )}
 
@@ -707,8 +699,6 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["cursor"], "preview skills sync (cursor)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["cursor"], "sync all skills (cursor)")}
-            onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["cursor"], "preview deprecated removal (cursor)")}
-            onRemoveDeprecated={() => runRemoveDeprecatedSkills(false, ["cursor"], "remove deprecated skills (cursor)")}
           />
         )}
 
@@ -751,8 +741,6 @@ function App() {
             onRefreshClaudeHealth={() => loadClaudeRuntimeHealth()}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["claude"], "preview skills sync (claude)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["claude"], "sync all skills (claude)")}
-            onPreviewRemoveDeprecated={() => runRemoveDeprecatedSkills(true, ["claude"], "preview deprecated removal (claude)")}
-            onRemoveDeprecated={() => runRemoveDeprecatedSkills(false, ["claude"], "remove deprecated skills (claude)")}
           />
         )}
 

@@ -19,6 +19,7 @@ function opLabel(kind: OperationKind): string {
     case "no_change": return "synced";
     case "create": return "create";
     case "update": return "update";
+    case "remove": return "remove";
     case "conflict": return "conflict";
     case "manual": return "manual";
     case "unavailable": return "unavailable";
@@ -30,6 +31,7 @@ function opClass(kind: OperationKind): string {
     case "no_change": return "ws-status-valid";
     case "create": return "";
     case "update": return "btn-warn";
+    case "remove": return "btn-warn";
     case "conflict": return "ws-status-invalid";
     case "manual": return "ws-status-dim";
     case "unavailable": return "ws-status-invalid";
@@ -52,7 +54,7 @@ function surfaceLabel(id: SetupSurfaceId): string {
     codex_skills: "Codex Skills",
     cursor_skills: "Cursor Skills",
     cursor_mcp: "Cursor MCP",
-    deprecated_skill_cleanup: "Deprecated Skills",
+    workspace_bundle: "Workspace Resources",
   };
   return map[id] ?? id;
 }

@@ -77,18 +77,23 @@ export interface SkillSyncHealthEntry {
   supported: boolean; state: string; next_action: string;
 }
 
-export interface DeprecatedSkillHealthEntry {
-  name: string; state: string; target_path: string; removable: boolean; next_action: string;
-}
-
 export interface SkillsSyncHealth {
   expected_count: number; synced_count: number; missing_count: number;
-  diverged_count: number; deprecated_identical_count: number; deprecated_diverged_count: number;
-  codex_legacy_migratable_count: number; codex_legacy_conflict_count: number;
-  duplicate_identical_count: number; duplicate_diverged_count: number;
-  skills: SkillSyncHealthEntry[]; deprecated: DeprecatedSkillHealthEntry[];
-  codex_legacy: { name: string; state: string; legacy_path: string; target_path: string; next_action: string }[];
-  duplicates: { name: string; state: string; locations: { root_id: string; root_path: string }[]; next_action: string }[];
+  diverged_count: number;
+  skills: SkillSyncHealthEntry[];
+}
+
+export type InstallationState = "not_installed" | "update_available" | "current" | "conflict" | "unavailable";
+
+export interface InstallationCounts {
+  create_count: number; update_count: number; remove_count: number; conflict_count: number;
+}
+
+export interface InstallationStatus {
+  state: InstallationState;
+  summary: string;
+  counts: InstallationCounts;
+  conflict_details?: string[];
 }
 
 export interface AgentTargetMeta {
@@ -538,12 +543,13 @@ export type SetupSurfaceId =
   | "cursor_agents"
   | "cursor_skills"
   | "cursor_mcp"
-  | "deprecated_skill_cleanup";
+  | "workspace_bundle";
 
 export type OperationKind =
   | "no_change"
   | "create"
   | "update"
+  | "remove"
   | "conflict"
   | "manual"
   | "unavailable";

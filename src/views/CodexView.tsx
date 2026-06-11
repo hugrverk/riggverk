@@ -54,10 +54,6 @@ interface CodexViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
-  onPreviewRemoveDeprecated?: () => void;
-  onRemoveDeprecated?: () => void;
-  onPreviewCodexLegacyMigration?: () => void;
-  onMigrateCodexLegacy?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -92,10 +88,6 @@ export function CodexView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
-  onPreviewRemoveDeprecated,
-  onRemoveDeprecated,
-  onPreviewCodexLegacyMigration,
-  onMigrateCodexLegacy,
   onSetSkillSearch,
   onOpenInstallScript,
 }: CodexViewProps) {
@@ -268,10 +260,6 @@ export function CodexView({
             workspaceValid={workspaceValid}
             onPreviewSync={onPreviewSyncSkills}
             onSyncAll={onSyncAllSkills}
-            onPreviewRemoveDeprecated={onPreviewRemoveDeprecated}
-            onRemoveDeprecated={onRemoveDeprecated}
-            onPreviewCodexLegacyMigration={onPreviewCodexLegacyMigration}
-            onMigrateCodexLegacy={onMigrateCodexLegacy}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />

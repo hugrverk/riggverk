@@ -28,10 +28,6 @@ interface TargetSkillsPanelProps {
   workspaceValid: boolean;
   onPreviewSync: () => void;
   onSyncAll: () => void;
-  onPreviewRemoveDeprecated?: () => void;
-  onRemoveDeprecated?: () => void;
-  onPreviewCodexLegacyMigration?: () => void;
-  onMigrateCodexLegacy?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -46,10 +42,6 @@ export function TargetSkillsPanel({
   workspaceValid,
   onPreviewSync,
   onSyncAll,
-  onPreviewRemoveDeprecated,
-  onRemoveDeprecated,
-  onPreviewCodexLegacyMigration,
-  onMigrateCodexLegacy,
   onSetSkillSearch,
   onOpenInstallScript,
 }: TargetSkillsPanelProps) {
@@ -103,57 +95,23 @@ export function TargetSkillsPanel({
     ? `${health.synced_count}/${health.expected_count} synced`
     : `${skillsCount} bundled`;
 
-  const deprecatedHint = health && (health.deprecated_identical_count > 0 || health.deprecated_diverged_count > 0)
-    ? `${health.deprecated_identical_count} deprecated removable, ${health.deprecated_diverged_count} deprecated diverged`
-    : null;
-  const legacyHint = health && agent === "codex" && (health.codex_legacy_migratable_count > 0 || health.codex_legacy_conflict_count > 0)
-    ? `${health.codex_legacy_migratable_count} legacy migratable, ${health.codex_legacy_conflict_count} legacy conflicts`
-    : null;
-  const duplicateHint = health && agent === "opencode" && (health.duplicate_identical_count > 0 || health.duplicate_diverged_count > 0)
-    ? `${health.duplicate_identical_count} duplicate identical, ${health.duplicate_diverged_count} duplicate diverged across OpenCode roots`
-    : null;
-
   const statusHint = !skillsLoaded
     ? "Loading skills…"
     : skills.length === 0
       ? "No skills in workspace."
       : health && (health.missing_count > 0 || health.diverged_count > 0)
-        ? `${health.missing_count} missing, ${health.diverged_count} diverged${deprecatedHint ? `; ${deprecatedHint}` : ""}${legacyHint ? `; ${legacyHint}` : ""}${duplicateHint ? `; ${duplicateHint}` : ""}`
-        : legacyHint ?? duplicateHint ?? deprecatedHint ?? "Canonical bundled set installs to every enabled harness.";
-
-  const hasMigratableLegacy = agent === "codex" && (health?.codex_legacy_migratable_count ?? 0) > 0;
-
-  const hasRemovableDeprecated = (health?.deprecated_identical_count ?? 0) > 0;
+        ? `${health.missing_count} missing, ${health.diverged_count} diverged — use Update on this page to sync.`
+        : "Current — bundled skills match this harness.";
 
   return (
     <HarnessActionCard
       title="Skills"
       ariaLabel={`${targetName} skills sync`}
-      description={`Sync all ${skillsCount} bundled workspace skills for ${targetName}. Flat install layout; grouped source paths are visual only.`}
+      description={`${skillsCount} bundled workspace skills for ${targetName}. Use Update to install or refresh.`}
       statusChip={{ label: statusLabel, tone: statusTone }}
       warning={statusHint}
       secondaryActions={[
         { label: "preview sync", onClick: onPreviewSync, disabled: !canSync || wsRunning !== null },
-        ...(onPreviewRemoveDeprecated && hasRemovableDeprecated ? [{
-          label: "preview deprecated removal",
-          onClick: onPreviewRemoveDeprecated,
-          disabled: wsRunning !== null,
-        }] : []),
-        ...(onRemoveDeprecated && hasRemovableDeprecated ? [{
-          label: "remove deprecated",
-          onClick: onRemoveDeprecated,
-          disabled: wsRunning !== null,
-        }] : []),
-        ...(onPreviewCodexLegacyMigration && hasMigratableLegacy ? [{
-          label: "preview legacy migration",
-          onClick: onPreviewCodexLegacyMigration,
-          disabled: wsRunning !== null,
-        }] : []),
-        ...(onMigrateCodexLegacy && hasMigratableLegacy ? [{
-          label: "migrate legacy codex skills",
-          onClick: onMigrateCodexLegacy,
-          disabled: wsRunning !== null,
-        }] : []),
         ...(skillsLoaded && skillsCount > 0 ? [{
           label: showSkillList ? "hide list" : "inspect skills",
           onClick: () => setShowSkillList(prev => !prev),
@@ -162,9 +120,9 @@ export function TargetSkillsPanel({
         { label: "open script", onClick: onOpenInstallScript, disabled: wsRunning !== null },
       ]}
       primaryAction={{
-        label: "sync all skills",
+        label: health && health.missing_count === 0 && health.diverged_count === 0 ? "current" : "sync all skills",
         onClick: onSyncAll,
-        disabled: !canSync || wsRunning !== null,
+        disabled: !canSync || wsRunning !== null || (health?.missing_count === 0 && health?.diverged_count === 0),
       }}
     >
       {showSkillList && (

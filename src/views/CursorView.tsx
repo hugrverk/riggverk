@@ -40,8 +40,6 @@ interface CursorViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
-  onPreviewRemoveDeprecated?: () => void;
-  onRemoveDeprecated?: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -82,8 +80,6 @@ export function CursorView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
-  onPreviewRemoveDeprecated,
-  onRemoveDeprecated,
   onSetSkillSearch,
   onOpenInstallScript,
 }: CursorViewProps) {
@@ -227,8 +223,6 @@ export function CursorView({
             workspaceValid={workspaceValid}
             onPreviewSync={onPreviewSyncSkills}
             onSyncAll={onSyncAllSkills}
-            onPreviewRemoveDeprecated={onPreviewRemoveDeprecated}
-            onRemoveDeprecated={onRemoveDeprecated}
             onSetSkillSearch={onSetSkillSearch}
             onOpenInstallScript={onOpenInstallScript}
           />
