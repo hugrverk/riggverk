@@ -122,13 +122,14 @@ fn backup_file_before_write(path: &Path, label: &str) -> Result<(), String> {
     let root = backup_root()?;
     let ts = utc_backup_timestamp();
     let backup_dir = root.join(&ts).join(label);
-    fs::create_dir_all(&backup_dir)
-        .map_err(|e| format!("create backup dir {}: {e}", backup_dir.display()))?;
+    crate::safe_filesystem::create_directory_all_no_symlinks(&root, &root)?;
+    crate::safe_filesystem::create_directory_all_no_symlinks(&backup_dir, &root)?;
     let dest = backup_dir.join(
         path.file_name()
             .ok_or_else(|| format!("backup path has no filename: {}", path.display()))?,
     );
-    fs::copy(path, &dest).map_err(|e| format!("backup {}: {e}", path.display()))?;
+    crate::safe_filesystem::copy_regular_file_no_symlinks(path, &dest, &root)
+        .map_err(|e| format!("backup {}: {e}", path.display()))?;
     Ok(())
 }
 
@@ -170,6 +171,7 @@ fn ensure_global_write_target(
             paths.profile_root.display()
         ));
     }
+    crate::path_safety::reject_symlink_parent_chain(path, &paths.profile_root, label)?;
     Ok(())
 }
 
@@ -705,18 +707,6 @@ pub fn run_global_mcp_only(
             };
         }
 
-        // Create parent dir
-        if let Some(parent) = paths.mcp_config.parent() {
-            if let Err(e) = fs::create_dir_all(parent) {
-                return ProfileRunOutput {
-                    success: false,
-                    stdout,
-                    stderr: format!("create MCP parent: {e}"),
-                    exit_code: 1,
-                };
-            }
-        }
-
         // Backup existing MCP config
         if let Err(e) = backup_file_before_write(&paths.mcp_config, "cursor-mcp") {
             return ProfileRunOutput {
@@ -728,7 +718,11 @@ pub fn run_global_mcp_only(
         }
 
         // Write merged MCP config
-        if let Err(e) = fs::write(&paths.mcp_config, &mcp_serialized) {
+        if let Err(e) = crate::safe_filesystem::write_regular_file_atomic(
+            &paths.mcp_config,
+            mcp_serialized.as_bytes(),
+            &paths.profile_root,
+        ) {
             return ProfileRunOutput {
                 success: false,
                 stdout,

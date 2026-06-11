@@ -1,4 +1,4 @@
-//! Unified setup apply, repair, and rollback commands.
+//! Unified setup apply and rollback commands.
 //!
 //! Uses the setup_lifecycle planner to determine operations, then executes
 //! them transactionally:
@@ -37,7 +37,7 @@ fn new_transaction_id() -> Result<TransactionId, String> {
 
 // ── Public result types ──
 
-/// Result of an apply or repair execution.
+/// Result of an apply execution.
 #[derive(Debug, Clone, Serialize)]
 pub struct SetupResult {
     pub success: bool,
@@ -58,25 +58,13 @@ fn backup_root() -> Result<PathBuf, String> {
 fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     let root = backup_root()?;
     let dir = root.join("setup").join(transaction_id);
-    fs::create_dir_all(&dir)
-        .map_err(|e| format!("cannot create setup backup dir {}: {e}", dir.display()))?;
+    crate::safe_filesystem::create_directory_all_no_symlinks(&root, &root)?;
+    crate::safe_filesystem::create_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
 
-fn write_synced_backup(path: &Path, raw: &[u8]) -> Result<(), String> {
-    crate::path_safety::reject_symlink(path, "managed-state backup")?;
-    let mut output = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
-        .map_err(|e| format!("create managed-state backup: {e}"))?;
-    use std::io::Write;
-    output
-        .write_all(raw)
-        .map_err(|e| format!("write managed-state backup: {e}"))?;
-    output
-        .sync_all()
-        .map_err(|e| format!("flush managed-state backup: {e}"))
+fn write_synced_backup(path: &Path, raw: &[u8], backup_dir: &Path) -> Result<(), String> {
+    crate::safe_filesystem::write_new_regular_file_synced(path, raw, backup_dir)
 }
 
 fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
@@ -203,9 +191,9 @@ fn restore_previous_managed_state(
         {
             return Err("restored trusted managed state failed validation".to_string());
         }
-    } else if state_path.exists() {
-        crate::path_safety::reject_symlink(&state_path, "managed-state rollback target")?;
-        fs::remove_file(&state_path).map_err(|e| format!("remove managed state: {e}"))?;
+    } else {
+        crate::safe_filesystem::remove_regular_file_no_symlinks(&state_path, workspace_root)
+            .map_err(|e| format!("remove managed state: {e}"))?;
     }
     Ok(())
 }
@@ -458,38 +446,24 @@ fn remove_single_artifact(
         home
     };
 
-    let is_skill = matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
-            | crate::artifact_registry::ArtifactId::CodexSkill(_)
-            | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
-            | crate::artifact_registry::ArtifactId::CursorSkill(_)
-    );
-
-    if is_skill {
-        let skill_md = dest.join("SKILL.md");
-        if skill_md.is_file() {
-            crate::safe_filesystem::remove_regular_file_no_symlinks(&skill_md, root)
-                .map_err(|e| format!("remove skill SKILL.md: {e}"))?;
-        }
-        // Clean up empty skill directory
-        if dest.is_dir() {
-            let mut entries = fs::read_dir(&dest)
-                .map_err(|e| format!("read skill dir {}: {e}", dest.display()))?;
-            if entries.next().is_none() {
-                fs::remove_dir(&dest)
-                    .map_err(|e| format!("remove empty skill dir {}: {e}", dest.display()))?;
-            }
-        }
-        return Ok(());
-    }
-
     if dest.is_dir() {
         crate::safe_filesystem::remove_dir_no_symlinks(&dest, root)
             .map_err(|e| format!("remove {}: {e}", dest.display()))?;
     } else if dest.is_file() {
         crate::safe_filesystem::remove_regular_file_no_symlinks(&dest, root)
             .map_err(|e| format!("remove {}: {e}", dest.display()))?;
+    }
+    if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
+            | crate::artifact_registry::ArtifactId::CodexSkill(_)
+            | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
+            | crate::artifact_registry::ArtifactId::CursorSkill(_)
+            | crate::artifact_registry::ArtifactId::CodexLegacySkill(_)
+    ) {
+        if let Some(parent) = dest.parent() {
+            crate::safe_filesystem::remove_empty_directory_no_symlinks(parent, root)?;
+        }
     }
     if matches!(
         artifact,
@@ -515,14 +489,13 @@ fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<
         {
             break;
         }
-        crate::path_safety::reject_symlink(directory, "migration directory")?;
         let mut entries =
             fs::read_dir(directory).map_err(|e| format!("read {}: {e}", directory.display()))?;
         if entries.next().is_some() {
             break;
         }
         let parent = directory.parent();
-        fs::remove_dir(directory)
+        crate::safe_filesystem::remove_empty_directory_no_symlinks(directory, workspace_root)
             .map_err(|e| format!("remove empty {}: {e}", directory.display()))?;
         current = parent;
     }
@@ -538,36 +511,6 @@ fn apply_single_artifact(
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
 
     if source.is_dir() {
-        let is_skill = matches!(
-            artifact,
-            crate::artifact_registry::ArtifactId::OpenCodeSkill(_)
-                | crate::artifact_registry::ArtifactId::CodexSkill(_)
-                | crate::artifact_registry::ArtifactId::ClaudeSkill(_)
-                | crate::artifact_registry::ArtifactId::CursorSkill(_)
-                | crate::artifact_registry::ArtifactId::CodexLegacySkill(_)
-        );
-        if is_skill {
-            let skill_md = source.join("SKILL.md");
-            if !skill_md.is_file() {
-                return Err(format!("skill source missing SKILL.md: {}", source.display()));
-            }
-            let dest_md = dest.join("SKILL.md");
-            let allowlist = if matches!(
-                artifact,
-                crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-            ) {
-                workspace_root
-            } else {
-                home
-            };
-            if let Some(parent) = dest_md.parent() {
-                fs::create_dir_all(parent)
-                    .map_err(|e| format!("create skill dir {}: {e}", parent.display()))?;
-            }
-            crate::safe_filesystem::copy_regular_file_no_symlinks(&skill_md, &dest_md, allowlist)
-                .map_err(|e| format!("apply skill SKILL.md: {e}"))?;
-            return Ok(());
-        }
         if dest.exists() {
             crate::safe_filesystem::remove_dir_no_symlinks(&dest, home)
                 .map_err(|e| format!("replace dir: {e}"))?;
@@ -610,15 +553,13 @@ fn apply_single_artifact(
             &installed,
             &crate::commands::extract_managed_opencode_config(&rendered),
         );
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
-        }
-        fs::write(
+        crate::safe_filesystem::write_regular_file_atomic(
             &dest,
-            serde_json::to_string_pretty(&merged)
+            (serde_json::to_string_pretty(&merged)
                 .map_err(|e| format!("serialize opencode config: {e}"))?
-                + "\n",
+                + "\n")
+                .as_bytes(),
+            home,
         )
         .map_err(|e| format!("write opencode config {}: {e}", dest.display()))?;
         return Ok(());
@@ -626,32 +567,39 @@ fn apply_single_artifact(
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
         if dest.is_file() {
-            return crate::commands::rollback_codex_config_managed_projection(
+            let rendered = crate::commands::render_codex_config_managed_projection(
                 &crate::setup_roots::bundled_root_for(workspace_root)?,
                 &dest,
                 &source,
+            )?;
+            return crate::safe_filesystem::write_regular_file_atomic(
+                &dest,
+                rendered.as_bytes(),
+                home,
             );
         }
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
-        }
-        fs::copy(&source, &dest)
+        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, home)
             .map_err(|e| format!("write codex config {}: {e}", dest.display()))?;
         return Ok(());
     }
 
-    if let Some(parent) = dest.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
-    }
-    fs::copy(&source, &dest).map_err(|e| format!("create {}: {e}", dest.display()))?;
+    let root = if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
+    ) {
+        workspace_root
+    } else {
+        home
+    };
+    crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, root)
+        .map_err(|e| format!("create {}: {e}", dest.display()))?;
     Ok(())
 }
 
 fn cleanup_preflight_transaction_evidence(backup_dir: &Path) {
     let manifest_path = backup_dir.join("manifest.json");
-    let _ = fs::remove_file(&manifest_path);
-    let _ = fs::remove_dir(backup_dir);
+    let _ = crate::safe_filesystem::remove_regular_file_no_symlinks(&manifest_path, backup_dir);
+    let _ = crate::safe_filesystem::remove_empty_directory_no_symlinks(backup_dir, backup_dir);
 }
 
 fn run_persisted_automatic_rollback(
@@ -890,7 +838,7 @@ fn apply_planned_artifacts(
                 }
             };
             let relative = "managed-state.previous.json".to_string();
-            if let Err(e) = write_synced_backup(&backup_dir.join(&relative), &raw) {
+            if let Err(e) = write_synced_backup(&backup_dir.join(&relative), &raw, &backup_dir) {
                 return SetupResult {
                     success: false,
                     transaction_id,
@@ -1023,7 +971,6 @@ fn apply_planned_artifacts(
         }
     }
 
-    let surfaces_to_execute = setup_transaction::surfaces_needing_apply(&pending);
     let mut applied: Vec<String> = Vec::new();
 
     if let Err(e) = persist_setup_manifest(
@@ -1043,11 +990,48 @@ fn apply_planned_artifacts(
         };
     }
 
-    for p in pending
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Remove))
-    {
-        if let Err(e) = remove_single_artifact(&p.artifact, &ws_root, &home) {
+    for p in &pending {
+        if !matches!(
+            p.kind,
+            OperationKind::Create | OperationKind::Update | OperationKind::Remove
+        ) {
+            continue;
+        }
+        let operation_index = manifest
+            .operations
+            .iter()
+            .position(|operation| operation.artifact == p.artifact)
+            .expect("planned operation must exist in transaction manifest");
+        manifest.operations[operation_index].apply_status =
+            setup_transaction::ApplyStatus::InFlight;
+        if let Err(e) = persist_setup_manifest(
+            &manifest_path,
+            &mut manifest,
+            setup_transaction::TransactionStatus::Applying,
+            &backup_dir,
+        ) {
+            return finish_failed_apply_with_rollback(FailedApplyRollback {
+                manifest_path: &manifest_path,
+                manifest: &mut manifest,
+                backup_dir: &backup_dir,
+                home: &home,
+                workspace_root: &ws_root,
+                transaction_id,
+                applied,
+                failed: vec![e.clone()],
+                manual_steps: manual_steps.clone(),
+                message: format!("Cannot persist in-flight status: {e}"),
+            });
+        }
+
+        let mutation = if matches!(p.kind, OperationKind::Remove) {
+            remove_single_artifact(&p.artifact, &ws_root, &home)
+        } else {
+            apply_single_artifact(&p.artifact, &ws_root, &home)
+        };
+        if let Err(e) = mutation {
+            manifest.operations[operation_index].apply_status =
+                setup_transaction::ApplyStatus::Failed;
             let err = format!("{}: {e}", artifact_label(&p.artifact));
             let mut failed = vec![err.clone()];
             if let Err(persist_err) = persist_setup_manifest(
@@ -1068,78 +1052,28 @@ fn apply_planned_artifacts(
                 applied,
                 failed,
                 manual_steps: manual_steps.clone(),
-                message: format!("Remove failed: {err}"),
+                message: format!("Artifact mutation failed: {err}"),
             });
         }
-        applied.push(format!("removed {}", artifact_label(&p.artifact)));
-        if let Some(op) = manifest
-            .operations
-            .iter_mut()
-            .find(|o| o.artifact == p.artifact)
-        {
-            op.apply_status = setup_transaction::ApplyStatus::Applied;
-            op.validation_status = setup_transaction::ValidationStatus::Passed;
-            op.post_apply_digest = Some(crate::setup_fingerprint::ABSENT_DIGEST.to_string());
-            op.post_apply_full_digest = Some(crate::setup_fingerprint::ABSENT_DIGEST.to_string());
-        }
-    }
 
-    for surface in &surfaces_to_execute {
-        let surface_artifacts_for_script: Vec<_> =
-            pending.iter().filter(|p| p.surface == *surface).collect();
-        let mut apply_error = None;
-
-        // Per-artifact InFlight marking: mark each operation as InFlight
-        // just before executing it, then persist.
-        for p in &surface_artifacts_for_script {
-            if !matches!(p.kind, OperationKind::Create | OperationKind::Update) {
-                continue;
-            }
-            if let Some(op) = manifest
-                .operations
-                .iter_mut()
-                .find(|o| o.artifact == p.artifact)
-            {
-                op.apply_status = setup_transaction::ApplyStatus::InFlight;
-            }
-            if let Err(e) = persist_setup_manifest(
-                &manifest_path,
-                &mut manifest,
-                setup_transaction::TransactionStatus::Applying,
-                &backup_dir,
-            ) {
-                let message = format!("Cannot persist in-flight status: {e}");
-                return finish_failed_apply_with_rollback(FailedApplyRollback {
-                    manifest_path: &manifest_path,
-                    manifest: &mut manifest,
-                    backup_dir: &backup_dir,
-                    home: &home,
-                    workspace_root: &ws_root,
-                    transaction_id,
-                    applied,
-                    failed: vec![e],
-                    manual_steps: manual_steps.clone(),
-                    message,
-                });
-            }
-            if let Err(e) = apply_single_artifact(&p.artifact, &ws_root, &home) {
-                apply_error = Some(format!("{}: {e}", artifact_label(&p.artifact)));
-                for op in manifest.operations.iter_mut() {
-                    if op.surface == *surface && op.apply_status == setup_transaction::ApplyStatus::InFlight {
-                        op.apply_status = setup_transaction::ApplyStatus::Failed;
+        let validation = if matches!(p.kind, OperationKind::Remove) {
+            crate::setup_fingerprint::artifact_installed_full_digest(&p.artifact, &ws_root, &home)
+                .and_then(|digest| {
+                    if digest == crate::setup_fingerprint::ABSENT_DIGEST {
+                        Ok(())
+                    } else {
+                        Err("removed artifact is still present".to_string())
                     }
-                }
-                break;
-            }
-        }
-
-        if let Some(err) = &apply_error {
-            // Mark all remaining operations on this surface as Failed
-            for op in manifest.operations.iter_mut() {
-                if op.surface == *surface {
-                    op.apply_status = setup_transaction::ApplyStatus::Failed;
-                }
-            }
+                })
+        } else {
+            setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
+        };
+        if let Err(e) = validation {
+            manifest.operations[operation_index].apply_status =
+                setup_transaction::ApplyStatus::Failed;
+            manifest.operations[operation_index].validation_status =
+                setup_transaction::ValidationStatus::Failed;
+            let err = format!("{}: {e}", artifact_label(&p.artifact));
             let mut failed = vec![err.clone()];
             if let Err(persist_err) = persist_setup_manifest(
                 &manifest_path,
@@ -1159,88 +1093,30 @@ fn apply_planned_artifacts(
                 applied,
                 failed,
                 manual_steps: manual_steps.clone(),
-                message: format!("Apply failed: {err}"),
+                message: format!("Artifact validation failed: {err}"),
             });
         }
 
-        let surface_artifacts: Vec<_> = pending.iter().filter(|p| p.surface == *surface).collect();
-        let mut validation_failed = false;
-        let mut validation_error = String::new();
-        for p in &surface_artifacts {
-            if matches!(p.kind, OperationKind::Remove) {
-                continue;
-            }
-            if let Err(e) =
-                setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
-            {
-                validation_failed = true;
-                validation_error = format!("{}: {e}", artifact_label(&p.artifact));
-                break;
-            }
-            applied.push(artifact_label(&p.artifact));
-            let post_apply_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
-                &p.artifact,
-                &ws_root,
-                &home,
-            )
-            .ok();
-            let post_apply_full_digest = crate::setup_fingerprint::artifact_installed_full_digest(
-                &p.artifact,
-                &ws_root,
-                &home,
-            )
-            .ok();
-            if let Some(op) = manifest
-                .operations
-                .iter_mut()
-                .find(|o| o.artifact == p.artifact)
-            {
-                op.apply_status = setup_transaction::ApplyStatus::Applied;
-                op.validation_status = setup_transaction::ValidationStatus::Passed;
-                op.post_apply_digest = post_apply_digest;
-                op.post_apply_full_digest = post_apply_full_digest;
-            }
-        }
-
-        if validation_failed {
-            for op in manifest.operations.iter_mut() {
-                if op.surface == *surface
-                    && op.apply_status == setup_transaction::ApplyStatus::InFlight
-                {
-                    op.apply_status = setup_transaction::ApplyStatus::Failed;
-                    op.validation_status = setup_transaction::ValidationStatus::Failed;
-                }
-            }
-            let mut failed = vec![validation_error.clone()];
-            if let Err(persist_err) = persist_setup_manifest(
-                &manifest_path,
-                &mut manifest,
-                setup_transaction::TransactionStatus::Failed,
-                &backup_dir,
-            ) {
-                failed.push(persist_err);
-            }
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed,
-                manual_steps: manual_steps.clone(),
-                message: format!("Validation failed: {validation_error}"),
-            });
-        }
-
+        let post_apply_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+            &p.artifact,
+            &ws_root,
+            &home,
+        )
+        .expect("validated artifact must have a managed digest");
+        let post_apply_full_digest =
+            crate::setup_fingerprint::artifact_installed_full_digest(&p.artifact, &ws_root, &home)
+                .expect("validated artifact must have a full digest");
+        let operation = &mut manifest.operations[operation_index];
+        operation.apply_status = setup_transaction::ApplyStatus::Applied;
+        operation.validation_status = setup_transaction::ValidationStatus::Passed;
+        operation.post_apply_digest = Some(post_apply_digest);
+        operation.post_apply_full_digest = Some(post_apply_full_digest);
         if let Err(e) = persist_setup_manifest(
             &manifest_path,
             &mut manifest,
             setup_transaction::TransactionStatus::Applying,
             &backup_dir,
         ) {
-            let message = format!("Cannot persist apply progress: {e}");
             return finish_failed_apply_with_rollback(FailedApplyRollback {
                 manifest_path: &manifest_path,
                 manifest: &mut manifest,
@@ -1249,11 +1125,16 @@ fn apply_planned_artifacts(
                 workspace_root: &ws_root,
                 transaction_id,
                 applied,
-                failed: vec![e],
+                failed: vec![e.clone()],
                 manual_steps: manual_steps.clone(),
-                message,
+                message: format!("Cannot persist artifact progress: {e}"),
             });
         }
+        applied.push(if matches!(p.kind, OperationKind::Remove) {
+            format!("removed {}", artifact_label(&p.artifact))
+        } else {
+            artifact_label(&p.artifact)
+        });
     }
 
     match crate::managed_state::next_state_from_operations(
@@ -2178,8 +2059,7 @@ mod tests {
             crate::platform_paths::Platform::current(),
         )
         .expect("home");
-        let dest = resolved_home
-            .join(".config/opencode/skills/frontend-design/SKILL.md");
+        let dest = resolved_home.join(".config/opencode/skills/frontend-design/SKILL.md");
         fs::create_dir_all(dest.parent().unwrap()).expect("dest parent");
         fs::write(&dest, "managed old").expect("managed skill");
         fs::write(
@@ -2218,9 +2098,8 @@ mod tests {
                 if let Some(parent) = target.parent() {
                     fs::create_dir_all(parent).map_err(|e| format!("mkdir parent: {e}"))?;
                 }
-                fs::copy(entry.path(), &target).map_err(|e| {
-                    format!("copy {}: {e}", entry.path().display())
-                })?;
+                fs::copy(entry.path(), &target)
+                    .map_err(|e| format!("copy {}: {e}", entry.path().display()))?;
             }
         }
         Ok(())
@@ -2303,8 +2182,11 @@ mod tests {
         fs::create_dir_all(base.join("templates").join("sync")).unwrap();
         fs::write(base.join("templates/sync/opencode-rules.md"), "source").unwrap();
         fs::create_dir_all(base.join(".config").join("opencode")).unwrap();
-        std::os::unix::fs::symlink(base.join("missing"), base.join(".config/opencode/AGENTS.md"))
-            .unwrap();
+        std::os::unix::fs::symlink(
+            base.join("missing"),
+            base.join(".config/opencode/AGENTS.md"),
+        )
+        .unwrap();
         let artifact = ArtifactId::OpenCodeRules;
         let err = apply_single_artifact(&artifact, &base, &base)
             .expect_err("dangling destination must be rejected");

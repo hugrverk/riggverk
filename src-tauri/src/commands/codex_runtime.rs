@@ -129,11 +129,11 @@ pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::
 
 /// Restore managed Codex config fields from backup into the installed file via the
 /// line-preserving Python merge owner. Refuses on malformed TOML or ambiguous structure.
-pub(crate) fn rollback_codex_config_managed_projection(
+pub(crate) fn render_codex_config_managed_projection(
     workspace_root: &Path,
     dest: &Path,
     backup: &Path,
-) -> Result<(), String> {
+) -> Result<String, String> {
     let script = workspace_root.join("scripts/merge-codex-config.py");
     if !script.is_file() {
         return Err(format!("missing Codex merge script: {}", script.display()));
@@ -141,19 +141,27 @@ pub(crate) fn rollback_codex_config_managed_projection(
     let script_str = super::workspace::path_arg(&script)?;
     let dest_str = super::workspace::path_arg(dest)?;
     let backup_str = super::workspace::path_arg(backup)?;
-    let (ok, _stdout, stderr, code) = super::process::run_cmd(
+    let (ok, stdout, stderr, code) = super::process::run_cmd(
         "python3",
-        &[&script_str, &dest_str, &backup_str, "--rollback-managed"],
+        &[
+            &script_str,
+            &dest_str,
+            &backup_str,
+            "--render-rollback-managed",
+        ],
         workspace_root,
     );
     if !ok {
         return Err(format!(
-            "codex managed rollback failed (exit {:?}): {}",
+            "codex managed rollback render failed (exit {:?}): {}",
             code,
             stderr.trim()
         ));
     }
-    Ok(())
+    stdout
+        .parse::<toml::Value>()
+        .map_err(|e| format!("codex managed rollback rendered invalid TOML: {e}"))?;
+    Ok(stdout)
 }
 
 fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {

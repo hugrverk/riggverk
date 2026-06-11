@@ -317,8 +317,8 @@ def test_no_stdout_leak_on_apply() -> None:
             assert marker not in result.stderr, f"Marker in stderr: {marker}"
 
 
-def test_rollback_managed_preserves_comments_and_user_content() -> None:
-    """--rollback-managed restores managed fields while preserving formatting."""
+def test_render_rollback_managed_preserves_comments_and_user_content() -> None:
+    """Render rollback restores managed fields without mutating the installed file."""
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         backup = write_file(
@@ -357,12 +357,13 @@ sandbox_mode = "write"
 custom = { token = "private-mcp-token-codex-777" }
 """,
         )
-        result = run_script(str(installed), str(backup), "--rollback-managed")
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(backup), "--render-rollback-managed")
         assert result.returncode == 0, f"rollback failed: {result.stderr}"
-        check_no_markers(result.stdout, "stdout")
         check_no_markers(result.stderr, "stderr")
 
-        content = installed.read_text(encoding="utf-8")
+        assert installed.read_text(encoding="utf-8") == before
+        content = result.stdout
         assert "# User model" in content
         assert "# keep this blank line" in content
         assert "# inline comment" in content
@@ -372,24 +373,24 @@ custom = { token = "private-mcp-token-codex-777" }
         assert 'approval_policy = "auto"' in content
 
 
-def test_rollback_managed_malformed_current_zero_mutation() -> None:
+def test_render_rollback_managed_malformed_current_zero_mutation() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         backup = write_file(tmp / "backup.toml", 'profile = "safe"\n')
         installed = write_file(tmp / "installed.toml", "<<<NOT TOML>>>")
         before = installed.read_text(encoding="utf-8")
-        result = run_script(str(installed), str(backup), "--rollback-managed")
+        result = run_script(str(installed), str(backup), "--render-rollback-managed")
         assert result.returncode != 0
         assert installed.read_text(encoding="utf-8") == before
 
 
-def test_rollback_managed_malformed_backup_zero_mutation() -> None:
+def test_render_rollback_managed_malformed_backup_zero_mutation() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         backup = write_file(tmp / "backup.toml", "<<<NOT TOML>>>")
         installed = write_file(tmp / "installed.toml", 'profile = "safe"\n')
         before = installed.read_text(encoding="utf-8")
-        result = run_script(str(installed), str(backup), "--rollback-managed")
+        result = run_script(str(installed), str(backup), "--render-rollback-managed")
         assert result.returncode != 0
         assert installed.read_text(encoding="utf-8") == before
 
@@ -494,7 +495,7 @@ def test_malformed_quoted_value_refused_zero_mutation() -> None:
         assert installed.read_text(encoding="utf-8") == before
 
 
-def test_rollback_preserves_same_line_inline_comment() -> None:
+def test_render_rollback_preserves_same_line_inline_comment() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         backup = write_file(tmp / "backup.toml", 'profile = "safe"\n')
@@ -502,9 +503,11 @@ def test_rollback_preserves_same_line_inline_comment() -> None:
             tmp / "installed.toml",
             'profile = "custom"  # keep this comment\n',
         )
-        result = run_script(str(installed), str(backup), "--rollback-managed")
+        before = installed.read_text(encoding="utf-8")
+        result = run_script(str(installed), str(backup), "--render-rollback-managed")
         assert result.returncode == 0, result.stderr
-        assert installed.read_text(encoding="utf-8") == 'profile = "safe"  # keep this comment\n'
+        assert installed.read_text(encoding="utf-8") == before
+        assert result.stdout == 'profile = "safe"  # keep this comment\n'
 
 
 def test_apply_preserves_user_owned_content() -> None:

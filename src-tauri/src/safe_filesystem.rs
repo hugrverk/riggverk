@@ -5,11 +5,144 @@
 //! supply an explicit allowlisted root for destination containment checks.
 
 use std::fs;
+use std::io::Write;
 use std::path::Path;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use crate::path_safety::{ensure_within_root, reject_symlink, reject_symlink_parent_chain};
 
 const MAX_RECURSE_DEPTH: usize = 64;
+static TEMP_FILE_SEQUENCE: AtomicU64 = AtomicU64::new(0);
+
+fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> Result<(), String> {
+    if allowlisted_root.parent().is_none() {
+        return Err(format!(
+            "refusing broad allowlisted root for {label}: {}",
+            allowlisted_root.display()
+        ));
+    }
+    reject_symlink(path, label)?;
+    ensure_within_root(path, allowlisted_root, label)?;
+    reject_symlink_parent_chain(path, allowlisted_root, label)
+}
+
+pub fn create_directory_all_no_symlinks(
+    path: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    validate_mutation_path(path, allowlisted_root, "directory creation")?;
+    if fs::symlink_metadata(path).is_ok() {
+        if !path.is_dir() {
+            return Err(format!(
+                "directory destination is not a directory: {}",
+                path.display()
+            ));
+        }
+        return Ok(());
+    }
+    let relative = path
+        .strip_prefix(allowlisted_root)
+        .map_err(|_| format!("directory escapes allowlisted root: {}", path.display()))?;
+    let mut current = allowlisted_root.to_path_buf();
+    if fs::symlink_metadata(&current).is_err() {
+        fs::create_dir(&current)
+            .map_err(|e| format!("create directory {}: {e}", current.display()))?;
+    }
+    for component in relative.components() {
+        current.push(component);
+        validate_mutation_path(&current, allowlisted_root, "directory creation")?;
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.is_dir() => {}
+            Ok(_) => {
+                return Err(format!(
+                    "directory destination is not a directory: {}",
+                    current.display()
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                validate_mutation_path(&current, allowlisted_root, "directory creation")?;
+                fs::create_dir(&current)
+                    .map_err(|e| format!("create directory {}: {e}", current.display()))?;
+            }
+            Err(error) => {
+                return Err(format!(
+                    "inspect directory destination {}: {error}",
+                    current.display()
+                ));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub fn write_regular_file_atomic(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("write destination has no parent: {}", path.display()))?;
+    create_directory_all_no_symlinks(parent, allowlisted_root)?;
+    validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
+    if fs::symlink_metadata(path).is_ok() && !path.is_file() {
+        return Err(format!(
+            "atomic write destination is not a regular file: {}",
+            path.display()
+        ));
+    }
+    let sequence = TEMP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let file_name = path
+        .file_name()
+        .and_then(|name| name.to_str())
+        .ok_or_else(|| format!("invalid write destination name: {}", path.display()))?;
+    let temp_path = parent.join(format!(".{file_name}.agent-workspace-{sequence}.tmp"));
+    validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
+    let result = (|| {
+        let mut output = fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&temp_path)
+            .map_err(|e| format!("create temporary file {}: {e}", temp_path.display()))?;
+        output
+            .write_all(content)
+            .map_err(|e| format!("write temporary file {}: {e}", temp_path.display()))?;
+        output
+            .sync_all()
+            .map_err(|e| format!("sync temporary file {}: {e}", temp_path.display()))?;
+        validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
+        validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
+        fs::rename(&temp_path, path)
+            .map_err(|e| format!("replace destination {}: {e}", path.display()))
+    })();
+    if result.is_err() {
+        let _ = fs::remove_file(&temp_path);
+    }
+    result
+}
+
+pub fn write_new_regular_file_synced(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    let parent = path
+        .parent()
+        .ok_or_else(|| format!("write destination has no parent: {}", path.display()))?;
+    create_directory_all_no_symlinks(parent, allowlisted_root)?;
+    validate_mutation_path(path, allowlisted_root, "create-new destination")?;
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("create file {}: {e}", path.display()))?;
+    output
+        .write_all(content)
+        .map_err(|e| format!("write file {}: {e}", path.display()))?;
+    output
+        .sync_all()
+        .map_err(|e| format!("sync file {}: {e}", path.display()))
+}
 
 /// Copy a directory tree without following symlinks.
 ///
@@ -27,10 +160,9 @@ pub fn copy_dir_no_symlinks(src: &Path, dst: &Path, allowlisted_root: &Path) -> 
             ));
         }
     } else if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
+        create_directory_all_no_symlinks(parent, allowlisted_root)?;
     }
-    fs::create_dir_all(dst).map_err(|e| format!("create dir {}: {e}", dst.display()))?;
+    create_directory_all_no_symlinks(dst, allowlisted_root)?;
     copy_dir_recurse(src, dst, 0)
 }
 
@@ -61,8 +193,7 @@ fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> 
         }
         let target = dst.join(entry.file_name());
         if file_type.is_dir() {
-            fs::create_dir_all(&target)
-                .map_err(|e| format!("create dir {}: {e}", target.display()))?;
+            create_directory_all_no_symlinks(&target, dst)?;
             copy_dir_recurse(&entry.path(), &target, depth + 1)?;
         } else if file_type.is_file() {
             fs::copy(entry.path(), &target).map_err(|e| {
@@ -139,20 +270,28 @@ pub fn copy_regular_file_no_symlinks(
     ensure_within_root(dst, allowlisted_root, "regular file copy destination")?;
     reject_symlink_parent_chain(dst, allowlisted_root, "regular file copy destination")?;
     reject_symlink(dst_parent, "regular file copy destination parent")?;
-    ensure_within_root(dst_parent, allowlisted_root, "regular file copy destination parent")?;
-    reject_symlink_parent_chain(dst_parent, allowlisted_root, "regular file copy destination parent")?;
+    ensure_within_root(
+        dst_parent,
+        allowlisted_root,
+        "regular file copy destination parent",
+    )?;
+    reject_symlink_parent_chain(
+        dst_parent,
+        allowlisted_root,
+        "regular file copy destination parent",
+    )?;
 
-    if dst.exists() {
-        if dst.is_symlink() || !dst.is_file() {
-            return Err(format!("destination exists as non-regular file: {}", dst.display()));
-        }
+    if dst.exists() && (dst.is_symlink() || !dst.is_file()) {
+        return Err(format!(
+            "destination exists as non-regular file: {}",
+            dst.display()
+        ));
     }
     if let Some(parent) = dst.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create destination parent {}: {e}", parent.display()))?;
+        create_directory_all_no_symlinks(parent, allowlisted_root)?;
     }
-    fs::copy(src, dst)
-        .map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
+    validate_mutation_path(dst, allowlisted_root, "regular file copy destination")?;
+    fs::copy(src, dst).map_err(|e| format!("copy {} -> {}: {e}", src.display(), dst.display()))?;
     Ok(())
 }
 
@@ -161,18 +300,40 @@ pub fn copy_regular_file_no_symlinks(
 /// Validates the path for symlink safety and ensures it is within
 /// `allowlisted_root`.
 pub fn remove_regular_file_no_symlinks(path: &Path, allowlisted_root: &Path) -> Result<(), String> {
-    if !path.exists() {
+    reject_symlink(path, "regular file removal")?;
+    if fs::symlink_metadata(path).is_err() {
         return Ok(());
     }
-    reject_symlink(path, "regular file removal")?;
     ensure_within_root(path, allowlisted_root, "regular file removal")?;
     reject_symlink_parent_chain(path, allowlisted_root, "regular file removal")?;
     if !path.is_file() {
         return Err(format!("path is not a regular file: {}", path.display()));
     }
-    fs::remove_file(path)
-        .map_err(|e| format!("remove file {}: {e}", path.display()))?;
+    fs::remove_file(path).map_err(|e| format!("remove file {}: {e}", path.display()))?;
     Ok(())
+}
+
+pub fn remove_empty_directory_no_symlinks(
+    path: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    reject_symlink(path, "empty directory removal")?;
+    if fs::symlink_metadata(path).is_err() {
+        return Ok(());
+    }
+    ensure_within_root(path, allowlisted_root, "empty directory removal")?;
+    reject_symlink_parent_chain(path, allowlisted_root, "empty directory removal")?;
+    if !path.is_dir() {
+        return Err(format!("path is not a directory: {}", path.display()));
+    }
+    if fs::read_dir(path)
+        .map_err(|e| format!("read directory {}: {e}", path.display()))?
+        .next()
+        .is_some()
+    {
+        return Ok(());
+    }
+    fs::remove_dir(path).map_err(|e| format!("remove empty directory {}: {e}", path.display()))
 }
 
 /// Reject symlinks at any depth within a directory tree (does not follow symlinks).
@@ -339,6 +500,89 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[test]
+    fn atomic_write_creates_and_replaces_regular_file() {
+        let base = temp("atomic-write");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("nested/config.json");
+        write_regular_file_atomic(&path, b"one", &base).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"one");
+        write_regular_file_atomic(&path, b"two", &base).unwrap();
+        assert_eq!(fs::read(&path).unwrap(), b"two");
+        assert_eq!(
+            fs::read_dir(path.parent().unwrap()).unwrap().count(),
+            1,
+            "temporary file must not remain"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_new_synced_refuses_existing_file() {
+        let base = temp("create-new");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("evidence.json");
+        write_new_regular_file_synced(&path, b"one", &base).unwrap();
+        let error =
+            write_new_regular_file_synced(&path, b"two", &base).expect_err("must not replace");
+        assert!(error.contains("create file"), "{error}");
+        assert_eq!(fs::read(&path).unwrap(), b"one");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_rejects_dangling_destination() {
+        let base = temp("atomic-dangling");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("config.json");
+        std::os::unix::fs::symlink(base.join("missing"), &path).unwrap();
+        let error =
+            write_regular_file_atomic(&path, b"content", &base).expect_err("dangling symlink");
+        assert!(error.contains("symlink"), "{error}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_rejects_symlinked_parent() {
+        let base = temp("atomic-parent");
+        fs::create_dir_all(&base).unwrap();
+        let real = base.join("real");
+        fs::create_dir_all(&real).unwrap();
+        let linked = base.join("linked");
+        std::os::unix::fs::symlink(&real, &linked).unwrap();
+        let error = write_regular_file_atomic(&linked.join("config.json"), b"content", &base)
+            .expect_err("symlinked parent");
+        assert!(error.contains("symlink"), "{error}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn atomic_write_rejects_filesystem_root_allowlist() {
+        let base = temp("broad-root");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("config.json");
+        let error = write_regular_file_atomic(&path, b"content", Path::new("/"))
+            .expect_err("filesystem root allowlist must be rejected");
+        assert!(error.contains("broad allowlisted root"), "{error}");
+        assert!(!path.exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn empty_directory_removal_preserves_non_empty_directory() {
+        let base = temp("empty-dir");
+        fs::create_dir_all(base.join("skill")).unwrap();
+        fs::write(base.join("skill/user.txt"), b"user").unwrap();
+        remove_empty_directory_no_symlinks(&base.join("skill"), &base).unwrap();
+        assert!(base.join("skill/user.txt").is_file());
+        fs::remove_file(base.join("skill/user.txt")).unwrap();
+        remove_empty_directory_no_symlinks(&base.join("skill"), &base).unwrap();
+        assert!(!base.join("skill").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[cfg(unix)]
     #[test]
     fn regular_file_copy_rejects_destination_symlink() {
@@ -348,12 +592,9 @@ mod tests {
         fs::write(base.join("src/a.txt"), b"a").unwrap();
         fs::create_dir_all(base.join("dst")).unwrap();
         std::os::unix::fs::symlink(base.join("missing"), base.join("dst/a.txt")).unwrap();
-        let err = copy_regular_file_no_symlinks(
-            &base.join("src/a.txt"),
-            &base.join("dst/a.txt"),
-            &base,
-        )
-        .expect_err("destination symlink must be rejected");
+        let err =
+            copy_regular_file_no_symlinks(&base.join("src/a.txt"), &base.join("dst/a.txt"), &base)
+                .expect_err("destination symlink must be rejected");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }
@@ -370,12 +611,8 @@ mod tests {
         fs::create_dir_all(real.join("sub")).unwrap();
         fs::write(real.join("sub/a.txt"), b"a").unwrap();
         let dst = linked.join("sub/a.txt");
-        let err = copy_regular_file_no_symlinks(
-            &real.join("sub/a.txt"),
-            &dst,
-            &base,
-        )
-        .expect_err("symlinked parent must be rejected");
+        let err = copy_regular_file_no_symlinks(&real.join("sub/a.txt"), &dst, &base)
+            .expect_err("symlinked parent must be rejected");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);
     }

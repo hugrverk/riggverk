@@ -11,8 +11,7 @@ mod opencode_runtime;
 mod process;
 pub(crate) mod setup;
 pub(crate) use codex_runtime::{
-    extract_managed_codex_config, managed_codex_keys_match,
-    rollback_codex_config_managed_projection,
+    extract_managed_codex_config, managed_codex_keys_match, render_codex_config_managed_projection,
 };
 pub(crate) use opencode_runtime::{
     extract_managed_opencode_config, managed_opencode_keys_match, merge_managed_opencode_config,

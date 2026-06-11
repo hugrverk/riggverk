@@ -1,7 +1,7 @@
 //! Narrow artifact registry for setup transactions.
 //!
 //! Each artifact represents one concrete managed destination — a single file,
-//! a single managed skill directory, or a single named agent file.
+//! a single managed skill file, or a single named agent file.
 //! No artifact resolves to a broad harness root (~/.cursor, ~/.claude, etc.).
 //!
 //! The registry maps SetupSurfaceId variants to their constituent artifacts
@@ -33,7 +33,7 @@ pub enum ArtifactId {
     OpenCodeRules,
     /// A managed OpenCode agent file
     OpenCodeAgent(AgentName),
-    /// A managed OpenCode skill directory
+    /// A managed OpenCode SKILL.md file
     OpenCodeSkill(SkillName),
 
     // ── Codex ──
@@ -43,7 +43,7 @@ pub enum ArtifactId {
     CodexRules,
     /// A managed Codex agent file
     CodexAgent(AgentName),
-    /// A managed Codex skill directory
+    /// A managed Codex SKILL.md file
     CodexSkill(SkillName),
 
     // ── Claude ──
@@ -51,17 +51,17 @@ pub enum ArtifactId {
     ClaudeRules,
     /// A managed Claude agent file
     ClaudeAgent(AgentName),
-    /// A managed Claude skill directory
+    /// A managed Claude SKILL.md file
     ClaudeSkill(SkillName),
 
     // ── Cursor ──
     /// A managed Cursor global agent file
     CursorAgent(AgentName),
-    /// A managed Cursor skill directory
+    /// A managed Cursor SKILL.md file
     CursorSkill(SkillName),
     /// Named Playwright MCP state (mcp.json)
     CursorMcp,
-    /// Legacy Codex skill directory under ~/.codex/skills (migration source only).
+    /// Legacy Codex SKILL.md under ~/.codex/skills (migration source only).
     CodexLegacySkill(SkillName),
     /// Installed runtime workspace bundled file (workspace-relative path).
     WorkspaceFile(WorkspaceRelPath),
@@ -151,7 +151,7 @@ pub enum ArtifactKind {
     TuiConfig,
     RulesFile,
     AgentFile,
-    SkillDir,
+    SkillFile,
     McpConfig,
 }
 
@@ -168,32 +168,41 @@ impl ArtifactId {
             ArtifactId::OpenCodeAgent(name) => {
                 Ok(home.join(".config/opencode/agents").join(name.file_name()))
             }
-            ArtifactId::OpenCodeSkill(name) => {
-                Ok(home.join(".config/opencode/skills").join(name.as_str()))
-            }
+            ArtifactId::OpenCodeSkill(name) => Ok(home
+                .join(".config/opencode/skills")
+                .join(name.as_str())
+                .join("SKILL.md")),
             ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
             ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
             ArtifactId::CodexAgent(name) => Ok(home
                 .join(".codex/agents")
                 .join(name.file_name_with_extension("toml"))),
-            ArtifactId::CodexSkill(name) => Ok(home.join(".agents/skills").join(name.as_str())),
+            ArtifactId::CodexSkill(name) => Ok(home
+                .join(".agents/skills")
+                .join(name.as_str())
+                .join("SKILL.md")),
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
-            ArtifactId::ClaudeSkill(name) => Ok(home.join(".claude/skills").join(name.as_str())),
+            ArtifactId::ClaudeSkill(name) => Ok(home
+                .join(".claude/skills")
+                .join(name.as_str())
+                .join("SKILL.md")),
             ArtifactId::CursorAgent(name) => {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.agents.join(name.file_name()))
             }
             ArtifactId::CursorSkill(name) => {
                 let paths = resolve_cursor_paths()?;
-                Ok(paths.skills.join(name.as_str()))
+                Ok(paths.skills.join(name.as_str()).join("SKILL.md"))
             }
             ArtifactId::CursorMcp => {
                 let paths = resolve_cursor_paths()?;
                 Ok(paths.mcp_config.clone())
             }
             ArtifactId::CodexLegacySkill(name) => {
-                Ok(crate::agent_skill_targets::codex_legacy_skills_dest(home).join(name.as_str()))
+                Ok(crate::agent_skill_targets::codex_legacy_skills_dest(home)
+                    .join(name.as_str())
+                    .join("SKILL.md"))
             }
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
         }
@@ -215,6 +224,7 @@ impl ArtifactId {
             }
             ArtifactId::OpenCodeSkill(name) => {
                 crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+                    .map(|path| path.join("SKILL.md"))
             }
             ArtifactId::CodexConfig => Some(workspace_root.join("templates/codex/config.toml")),
             ArtifactId::CodexRules => Some(workspace_root.join("templates/sync/codex-rules.md")),
@@ -225,6 +235,7 @@ impl ArtifactId {
             ),
             ArtifactId::CodexSkill(name) => {
                 crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+                    .map(|path| path.join("SKILL.md"))
             }
             ArtifactId::ClaudeRules => Some(workspace_root.join("templates/sync/claude-rules.md")),
             ArtifactId::ClaudeAgent(name) => Some(
@@ -234,6 +245,7 @@ impl ArtifactId {
             ),
             ArtifactId::ClaudeSkill(name) => {
                 crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+                    .map(|path| path.join("SKILL.md"))
             }
             ArtifactId::CursorAgent(name) => Some(
                 workspace_root
@@ -242,6 +254,7 @@ impl ArtifactId {
             ),
             ArtifactId::CursorSkill(name) => {
                 crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+                    .map(|path| path.join("SKILL.md"))
             }
             ArtifactId::CursorMcp => Some(
                 crate::commands::cursor_profile::cursor_root(workspace_root)
@@ -249,6 +262,7 @@ impl ArtifactId {
             ),
             ArtifactId::CodexLegacySkill(name) => {
                 crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
+                    .map(|path| path.join("SKILL.md"))
             }
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
         }
@@ -615,15 +629,9 @@ mod tests {
         let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let source = artifact.resolve_source(&ws).unwrap();
-        // Resolved dest is the skill directory, source is the source skill directory;
-        // both should contain a SKILL.md file
-        assert!(source.join("SKILL.md").is_file(), "source SKILL.md should exist");
-        // Dest is a path like home/.config/opencode/skills/frontend-design
-        assert_eq!(
-            dest.file_name().unwrap(),
-            "frontend-design",
-            "dest should be the skill directory"
-        );
+        assert!(source.is_file(), "source SKILL.md should exist");
+        assert_eq!(source.file_name().unwrap(), "SKILL.md");
+        assert_eq!(dest.file_name().unwrap(), "SKILL.md");
         let _ = fs::remove_dir_all(&home);
     }
 

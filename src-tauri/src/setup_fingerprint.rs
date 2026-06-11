@@ -38,7 +38,7 @@ fn hash_toml_value(value: &toml::Value) -> String {
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
-        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillDir,
+        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
@@ -52,7 +52,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::OpenCodeSkill(_)
         | ArtifactId::CodexSkill(_)
         | ArtifactId::ClaudeSkill(_)
-        | ArtifactId::CursorSkill(_) => ArtifactKind::SkillDir,
+        | ArtifactId::CursorSkill(_) => ArtifactKind::SkillFile,
         ArtifactId::CursorMcp => ArtifactKind::McpConfig,
     }
 }
@@ -115,9 +115,9 @@ pub fn artifact_source_digest(
             let source = require_source_path(artifact, workspace_root)?;
             hash_file(&source)
         }
-        ArtifactKind::SkillDir => {
+        ArtifactKind::SkillFile => {
             let source = require_source_path(artifact, workspace_root)?;
-            hash_file(&source.join("SKILL.md"))
+            hash_file(&source)
         }
         ArtifactKind::ConfigFile if artifact == &ArtifactId::OpenCodeConfig => {
             let source = require_source_path(artifact, workspace_root)?;
@@ -170,10 +170,9 @@ pub fn artifact_installed_managed_digest_from_path(
                 Ok(ABSENT_DIGEST.into())
             }
         }
-        ArtifactKind::SkillDir => {
-            let skill_md = path.join("SKILL.md");
-            if skill_md.is_file() {
-                hash_file(&skill_md)
+        ArtifactKind::SkillFile => {
+            if path.is_file() {
+                hash_file(path)
             } else {
                 Ok(ABSENT_DIGEST.into())
             }
@@ -250,10 +249,9 @@ pub fn artifact_installed_full_digest(
 ) -> Result<String, String> {
     let dest = artifact.resolve_dest(home, workspace_root)?;
     match artifact_kind(artifact) {
-        ArtifactKind::SkillDir => {
-            let skill_md = dest.join("SKILL.md");
-            if skill_md.is_file() {
-                hash_file(&skill_md)
+        ArtifactKind::SkillFile => {
+            if dest.is_file() {
+                hash_file(&dest)
             } else {
                 Ok(ABSENT_DIGEST.into())
             }

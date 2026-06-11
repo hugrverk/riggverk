@@ -19,7 +19,7 @@ SCRIPT = Path(__file__).resolve().parent / "merge-opencode-config.py"
 
 # Private marker values — must never appear on stdout/stderr
 PRIVATE_MARKERS = frozenset([
-    "sk-private-marker-opencode-abc123",
+    "private-marker-opencode-abc123",
     "private-plugin-key-xyz",
     "user-mcp-secret-opencode-private-key",
     "my-user-secret-value-999",
@@ -36,7 +36,7 @@ def installed_with_markers(tmp: Path) -> Path:
     """Create an installed config with obvious private markers."""
     return write_json(tmp / "installed.json", {
         "model": "old-model",
-        "user_api_key": "sk-private-marker-opencode-abc123",
+        "user_api_key": "private-marker-opencode-abc123",
         "custom_plugin": {"enabled": True, "secret": "private-plugin-key-xyz"},
         "mcp": {
             "user-mcp-server": {
@@ -95,7 +95,7 @@ def test_private_markers_present_in_output_file() -> None:
         run_script(str(installed), str(managed), "--merge", "--output", str(out))
 
         merged = json.loads(out.read_text(encoding="utf-8"))
-        assert merged["user_api_key"] == "sk-private-marker-opencode-abc123"
+        assert merged["user_api_key"] == "private-marker-opencode-abc123"
         assert merged["custom_plugin"]["secret"] == "private-plugin-key-xyz"
         assert (
             merged["mcp"]["user-mcp-server"]["apiKey"]

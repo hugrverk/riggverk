@@ -32,6 +32,10 @@ def require(path: Path, *needles: str) -> str:
     return text
 
 
+def production_rust(path: Path) -> str:
+    return read(path).split("#[cfg(test)]", 1)[0]
+
+
 def forbid_in_tree(root: Path, patterns: tuple[str, ...]) -> None:
     suffixes = {".rs", ".ts", ".tsx", ".py", ".sh"}
     for path in root.rglob("*"):
@@ -44,6 +48,12 @@ def forbid_in_tree(root: Path, patterns: tuple[str, ...]) -> None:
 
 
 def main() -> None:
+    generated_python = list(
+        (ROOT / "resources/default-workspace").rglob("__pycache__")
+    ) + list((ROOT / "resources/default-workspace").rglob("*.pyc"))
+    if generated_python:
+        fail("bundled default workspace contains generated Python cache files")
+
     skills = list((ROOT / "resources/default-workspace/skills").rglob("SKILL.md"))
     if len(skills) != 21:
         fail(f"expected 21 bundled skills, found {len(skills)}")
@@ -56,9 +66,24 @@ def main() -> None:
     if not ownership.get("migration_id") or not ownership.get("source_commit"):
         fail("pre-manifest ownership metadata requires migration provenance")
     entries = ownership.get("artifacts")
-    if not isinstance(entries, list) or len(entries) != 14:
-        fail("pre-manifest ownership metadata must contain 14 exact entries")
+    if not isinstance(entries, list) or not entries:
+        fail("pre-manifest ownership metadata requires artifact entries")
+    seen: set[tuple[str, str, str]] = set()
     for entry in entries:
+        identity = entry.get("identity")
+        action = entry.get("action")
+        path_classes = entry.get("path_classes")
+        if not isinstance(identity, str) or not identity:
+            fail("pre-manifest ownership entries require an identity")
+        if action not in {"update", "remove"}:
+            fail("pre-manifest ownership action must be update or remove")
+        if not isinstance(path_classes, list) or not path_classes:
+            fail("pre-manifest ownership entries require path classes")
+        for path_class in path_classes:
+            key = (identity, path_class, action)
+            if key in seen:
+                fail("duplicate pre-manifest ownership identity/path/action")
+            seen.add(key)
         digests = entry.get("digests", [])
         if not digests or any(
             not re.fullmatch(r"sha256:[0-9a-f]{64}", digest) for digest in digests
@@ -78,7 +103,7 @@ def main() -> None:
     require(
         TAURI / "stable_digest.rs",
         "sha256:",
-        "pub fn directory",
+        "pub fn file",
         "reject_symlink",
     )
     state = require(
@@ -99,6 +124,25 @@ def main() -> None:
         "apply_planned_artifacts",
         "consume_preview_token",
     )
+    if "op.surface ==" in setup or "Mark all remaining operations" in setup:
+        fail("setup apply must not mark or validate artifacts by surface")
+    direct_mutations = (
+        "fs::write",
+        "fs::copy",
+        "fs::remove_file",
+        "fs::remove_dir",
+        "fs::remove_dir_all",
+        "fs::create_dir_all",
+        "fs::rename",
+        "fs::OpenOptions",
+    )
+    for path in (TAURI / "commands/setup.rs", TAURI / "setup_transaction.rs"):
+        production = production_rust(path)
+        for mutation in direct_mutations:
+            if mutation in production:
+                fail(
+                    f"{path.relative_to(ROOT)} bypasses safe_filesystem with {mutation}"
+                )
     if setup.find("consume_preview_token") < setup.find("apply_planned_artifacts"):
         fail("preview token consumption must remain inside the apply owner")
 
@@ -111,6 +155,40 @@ def main() -> None:
         "RollbackStatus::InFlight",
         "compute_finalize_rollback_status",
     )
+    transaction = read(TAURI / "setup_transaction.rs")
+    if any(
+        obsolete in transaction
+        for obsolete in (
+            "ManagedDirectory",
+            "RestoreDirectoryArtifact",
+            "RemoveCreatedSkillDirectory",
+        )
+    ):
+        fail("transaction model retains directory-scoped skill state")
+    registry = read(TAURI / "artifact_registry.rs")
+    if "SkillDir" in registry or "SkillFile" not in registry:
+        fail("skill artifacts must use the SkillFile model")
+    bootstrap = read(TAURI / "managed_bootstrap.rs")
+    if "STILL_CURRENT_CHANGED_DOCS" in bootstrap:
+        fail("Rust must not duplicate historical ownership digests")
+    codex_merge = read(
+        ROOT / "resources/default-workspace/scripts/merge-codex-config.py"
+    )
+    if "--rollback-managed" in codex_merge:
+        fail("Codex merge script must render rollback content without mutating profiles")
+    require(
+        TAURI / "safe_filesystem.rs",
+        "write_regular_file_atomic",
+        "write_new_regular_file_synced",
+        "create_directory_all_no_symlinks",
+        "remove_empty_directory_no_symlinks",
+    )
+    cursor_profile_ops = read(TAURI / "cursor_profile_ops.rs")
+    global_mcp_start = cursor_profile_ops.find("pub fn run_global_mcp_only")
+    if global_mcp_start < 0:
+        fail("Cursor global MCP setup owner is missing")
+    if "write_regular_file_atomic" not in cursor_profile_ops[global_mcp_start:]:
+        fail("Cursor global MCP setup must publish through safe_filesystem")
     require(
         TAURI / "managed_reconciliation_contract.rs",
         "fresh_profile_installs_workspace_through_unified_setup",

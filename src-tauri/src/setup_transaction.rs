@@ -25,7 +25,6 @@ const MAX_MANIFEST_OPERATIONS: usize = 500;
 pub enum PreviousState {
     Absent,
     ManagedFile,
-    ManagedDirectory,
     MergeableConfigFile,
     Conflict,
     Unavailable,
@@ -35,10 +34,8 @@ pub enum PreviousState {
 #[serde(rename_all = "snake_case")]
 pub enum RollbackAction {
     RestoreFile,
-    RestoreDirectoryArtifact,
     RestoreManagedConfigFile,
     RemoveCreatedFile,
-    RemoveCreatedSkillDirectory,
     NoAction,
 }
 
@@ -498,7 +495,7 @@ pub fn detect_surface_state(
 fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
     match artifact {
         ArtifactId::WorkspaceFile(_) => ArtifactKind::RulesFile,
-        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillDir,
+        ArtifactId::CodexLegacySkill(_) => ArtifactKind::SkillFile,
         ArtifactId::OpenCodeConfig | ArtifactId::CodexConfig => ArtifactKind::ConfigFile,
         ArtifactId::OpenCodeTui => ArtifactKind::TuiConfig,
         ArtifactId::OpenCodePlaywrightMcp => ArtifactKind::McpConfig,
@@ -512,7 +509,7 @@ fn artifact_kind(artifact: &ArtifactId) -> ArtifactKind {
         ArtifactId::OpenCodeSkill(_)
         | ArtifactId::CodexSkill(_)
         | ArtifactId::ClaudeSkill(_)
-        | ArtifactId::CursorSkill(_) => ArtifactKind::SkillDir,
+        | ArtifactId::CursorSkill(_) => ArtifactKind::SkillFile,
         ArtifactId::CursorMcp => ArtifactKind::McpConfig,
     }
 }
@@ -610,14 +607,12 @@ pub fn detect_artifact_state(
                 (OperationKind::Update, PreviousState::ManagedFile)
             }
         }
-        ArtifactKind::SkillDir => {
-            let dest_md = dest.join("SKILL.md");
-            let source_md = source.join("SKILL.md");
-            if !dest_md.is_file() {
+        ArtifactKind::SkillFile => {
+            if !dest.is_file() {
                 (OperationKind::Create, PreviousState::Absent)
-            } else if !source_md.is_file() {
+            } else if !source.is_file() {
                 (OperationKind::Unavailable, PreviousState::Unavailable)
-            } else if file_eq(&dest_md, &source_md) {
+            } else if file_eq(&dest, &source) {
                 (OperationKind::NoChange, PreviousState::ManagedFile)
             } else {
                 (OperationKind::Update, PreviousState::ManagedFile)
@@ -896,23 +891,14 @@ fn refine_with_managed_hash(
     }
 }
 
-pub fn rollback_action_for(
-    kind: OperationKind,
-    previous: PreviousState,
-) -> RollbackAction {
+pub fn rollback_action_for(kind: OperationKind, previous: PreviousState) -> RollbackAction {
     match (kind, previous) {
         (OperationKind::Create, PreviousState::Absent) => RollbackAction::RemoveCreatedFile,
         (OperationKind::Update, PreviousState::ManagedFile) => RollbackAction::RestoreFile,
-        (OperationKind::Update, PreviousState::ManagedDirectory) => {
-            RollbackAction::RestoreDirectoryArtifact
-        }
         (OperationKind::Update, PreviousState::MergeableConfigFile) => {
             RollbackAction::RestoreManagedConfigFile
         }
         (OperationKind::Remove, PreviousState::ManagedFile) => RollbackAction::RestoreFile,
-        (OperationKind::Remove, PreviousState::ManagedDirectory) => {
-            RollbackAction::RestoreDirectoryArtifact
-        }
         _ => RollbackAction::NoAction,
     }
 }
@@ -981,25 +967,15 @@ pub fn validate_operation_status_combo(op: &ArtifactManifestOperation) -> Result
         && matches!(op.previous_state, PreviousState::Absent)
         && matches!(
             op.rollback_action,
-            RollbackAction::RestoreFile
-                | RollbackAction::RestoreDirectoryArtifact
-                | RollbackAction::RestoreManagedConfigFile
+            RollbackAction::RestoreFile | RollbackAction::RestoreManagedConfigFile
         )
     {
         return Err("create from absent cannot restore from backup".into());
     }
     if matches!(op.kind, OperationKind::Update)
-        && matches!(
-            op.rollback_action,
-            RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory
-        )
+        && matches!(op.rollback_action, RollbackAction::RemoveCreatedFile)
     {
         return Err("update cannot remove created artifact".into());
-    }
-    if matches!(op.previous_state, PreviousState::Absent)
-        && matches!(op.rollback_action, RollbackAction::RestoreDirectoryArtifact)
-    {
-        return Err("absent artifact cannot restore directory".into());
     }
     if matches!(op.rollback_status, RollbackStatus::Restored)
         && matches!(op.apply_status, ApplyStatus::Pending)
@@ -1103,7 +1079,7 @@ pub fn artifact_matches_previous_backup_state(
 ) -> Result<bool, String> {
     let dest = op.artifact.resolve_dest(home, workspace_root)?;
     match op.rollback_action {
-        RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory => {
+        RollbackAction::RemoveCreatedFile => {
             let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
                 &op.artifact,
                 workspace_root,
@@ -1120,17 +1096,6 @@ pub fn artifact_matches_previous_backup_state(
                 return Ok(false);
             }
             Ok(file_eq(&dest, &backup_path))
-        }
-        RollbackAction::RestoreDirectoryArtifact => {
-            let backup_path = backup_path_for_op(op, backup_dir)?;
-            if !backup_path.is_dir() {
-                return Err("backup missing".into());
-            }
-            if !dest.is_dir() {
-                return Ok(false);
-            }
-            Ok(validate_directory_backup_tree(&backup_path, &dest).is_ok()
-                && validate_directory_backup_tree(&dest, &backup_path).is_ok())
         }
         RollbackAction::RestoreManagedConfigFile => {
             let backup_path = backup_path_for_op(op, backup_dir)?;
@@ -1216,23 +1181,17 @@ fn validate_operation_consistency(op: &ArtifactManifestOperation) -> Result<(), 
         }
         (OperationKind::Create, PreviousState::Absent) => {}
         (OperationKind::Update, PreviousState::ManagedFile)
-        | (OperationKind::Update, PreviousState::ManagedDirectory)
         | (OperationKind::Update, PreviousState::MergeableConfigFile)
             if op.backup_rel.is_none() =>
         {
             return Err("update requires backup".into());
         }
         (OperationKind::Update, PreviousState::ManagedFile)
-        | (OperationKind::Update, PreviousState::ManagedDirectory)
         | (OperationKind::Update, PreviousState::MergeableConfigFile) => {}
-        (OperationKind::Remove, PreviousState::ManagedFile)
-        | (OperationKind::Remove, PreviousState::ManagedDirectory)
-            if op.backup_rel.is_none() =>
-        {
+        (OperationKind::Remove, PreviousState::ManagedFile) if op.backup_rel.is_none() => {
             return Err("remove requires backup".into());
         }
-        (OperationKind::Remove, PreviousState::ManagedFile)
-        | (OperationKind::Remove, PreviousState::ManagedDirectory) => {}
+        (OperationKind::Remove, PreviousState::ManagedFile) => {}
         (OperationKind::NoChange, _) => {
             return Err("no_change must not appear in manifest operations".into());
         }
@@ -1252,9 +1211,7 @@ pub fn persist_manifest_atomic(
         serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {e}"))?;
     let _: ArtifactTransactionManifest =
         serde_json::from_str(&json).map_err(|e| format!("validate manifest json: {e}"))?;
-    let temp_path = path.with_extension("json.tmp");
-    fs::write(&temp_path, &json).map_err(|e| format!("write manifest temp: {e}"))?;
-    fs::rename(&temp_path, path).map_err(|e| format!("replace manifest: {e}"))?;
+    crate::safe_filesystem::write_regular_file_atomic(path, json.as_bytes(), allowlisted_root)?;
     let read_back = fs::read_to_string(path).map_err(|e| format!("re-read manifest: {e}"))?;
     let parsed: ArtifactTransactionManifest =
         serde_json::from_str(&read_back).map_err(|e| format!("parse re-read manifest: {e}"))?;
@@ -1280,35 +1237,13 @@ pub fn backup_artifact(
     let rel = format!("artifacts/{}", artifact_backup_rel(artifact));
     let backup_path = backup_dir.join(&rel);
     reject_path_within_transaction_root(&backup_path, backup_dir)?;
-    if let Some(parent) = backup_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("create backup parent: {e}"))?;
-    }
-
-    let is_skill = matches!(
-        artifact,
-        ArtifactId::OpenCodeSkill(_)
-            | ArtifactId::CodexSkill(_)
-            | ArtifactId::ClaudeSkill(_)
-            | ArtifactId::CursorSkill(_)
-    );
-
     // Validate source parent chain against the appropriate root.
     let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
         workspace_root
     } else {
         home
     };
-    if is_skill {
-        let skill_md = dest.join("SKILL.md");
-        if skill_md.is_file() {
-            reject_symlink_parent_chain(&skill_md, source_root, "backup source skill")?;
-            crate::safe_filesystem::copy_regular_file_no_symlinks(&skill_md, &backup_path, backup_dir)
-                .map_err(|e| format!("backup skill md {}: {e}", skill_md.display()))?;
-            validate_backup_copy(artifact, &skill_md, &backup_path, backup_dir)?;
-        } else {
-            return Ok(None);
-        }
-    } else if dest.is_dir() {
+    if dest.is_dir() {
         crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
@@ -1570,7 +1505,7 @@ pub fn validate_backup_for_rollback(
     backup_dir: &Path,
 ) -> Result<(), String> {
     match op.rollback_action {
-        RollbackAction::RemoveCreatedFile | RollbackAction::RemoveCreatedSkillDirectory => {
+        RollbackAction::RemoveCreatedFile => {
             return Ok(());
         }
         RollbackAction::NoAction => return Ok(()),
@@ -1659,27 +1594,10 @@ fn restore_artifact_from_backup_with_mode(
         _ => home,
     };
 
-    // For skills, operations target SKILL.md inside the directory.
-    let is_skill = matches!(
-        &op.artifact,
-        ArtifactId::OpenCodeSkill(_)
-            | ArtifactId::CodexSkill(_)
-            | ArtifactId::ClaudeSkill(_)
-            | ArtifactId::CursorSkill(_)
-    );
-    let restore_dest = if is_skill {
-        match op.rollback_action {
-            RollbackAction::RestoreFile | RollbackAction::RemoveCreatedFile => {
-                dest.join("SKILL.md")
-            }
-            _ => dest.clone(),
-        }
-    } else {
-        dest.clone()
-    };
+    let restore_dest = dest.clone();
 
     match op.rollback_action {
-        RollbackAction::RestoreFile | RollbackAction::RestoreDirectoryArtifact => {
+        RollbackAction::RestoreFile => {
             let rel = op
                 .backup_rel
                 .as_ref()
@@ -1690,23 +1608,18 @@ fn restore_artifact_from_backup_with_mode(
             }
             reject_symlink(&backup_path, "backup")?;
             if restore_dest.exists() {
-                if restore_dest.is_dir() {
-                    fs::remove_dir_all(&restore_dest).map_err(|e| format!("remove restore dest dir: {e}"))?;
-                } else {
-                    crate::safe_filesystem::remove_regular_file_no_symlinks(&restore_dest, allowlist_root)
-                        .map_err(|e| format!("remove restore dest file: {e}"))?;
-                }
+                crate::safe_filesystem::remove_regular_file_no_symlinks(
+                    &restore_dest,
+                    allowlist_root,
+                )
+                .map_err(|e| format!("remove restore dest file: {e}"))?;
             }
-            if backup_path.is_dir() {
-                crate::safe_filesystem::copy_dir_no_symlinks(&backup_path, &restore_dest, allowlist_root)
-                    .map_err(|e| format!("restore dir: {e}"))?;
-            } else {
-                if let Some(parent) = restore_dest.parent() {
-                    fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
-                }
-                crate::safe_filesystem::copy_regular_file_no_symlinks(&backup_path, &restore_dest, allowlist_root)
-                    .map_err(|e| format!("restore file: {e}"))?;
-            }
+            crate::safe_filesystem::copy_regular_file_no_symlinks(
+                &backup_path,
+                &restore_dest,
+                allowlist_root,
+            )
+            .map_err(|e| format!("restore file: {e}"))?;
             Ok(())
         }
         RollbackAction::RestoreManagedConfigFile => {
@@ -1721,10 +1634,12 @@ fn restore_artifact_from_backup_with_mode(
             reject_symlink(&backup_path, "backup")?;
             match mode {
                 RollbackRestoreMode::FullBackup => {
-                    if let Some(parent) = dest.parent() {
-                        fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
-                    }
-                    fs::copy(&backup_path, &dest).map_err(|e| format!("restore file: {e}"))?;
+                    crate::safe_filesystem::copy_regular_file_no_symlinks(
+                        &backup_path,
+                        &dest,
+                        allowlist_root,
+                    )
+                    .map_err(|e| format!("restore file: {e}"))?;
                 }
                 RollbackRestoreMode::ManagedProjectionMerge => {
                     if op.artifact == ArtifactId::OpenCodeConfig {
@@ -1741,21 +1656,28 @@ fn restore_artifact_from_backup_with_mode(
                             &installed_json,
                             &crate::commands::extract_managed_opencode_config(&backup_json),
                         );
-                        fs::write(
+                        crate::safe_filesystem::write_regular_file_atomic(
                             &dest,
-                            serde_json::to_string_pretty(&merged)
+                            (serde_json::to_string_pretty(&merged)
                                 .map_err(|e| format!("serialize opencode config: {e}"))?
-                                + "\n",
+                                + "\n")
+                                .as_bytes(),
+                            allowlist_root,
                         )
                         .map_err(|e| format!("write opencode config: {e}"))?;
                     } else if op.artifact == ArtifactId::CodexConfig {
                         let workspace_root = workspace_root.ok_or_else(|| {
                             "workspace root required for codex managed rollback".to_string()
                         })?;
-                        crate::commands::rollback_codex_config_managed_projection(
+                        let rendered = crate::commands::render_codex_config_managed_projection(
                             workspace_root,
                             &dest,
                             &backup_path,
+                        )?;
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
                         )?;
                     } else if op.artifact == ArtifactId::CursorMcp {
                         let installed_str = fs::read_to_string(&dest)
@@ -1781,11 +1703,13 @@ fn restore_artifact_from_backup_with_mode(
                             .and_then(|v| v.as_object_mut())
                             .ok_or_else(|| "installed cursor mcp missing mcpServers".to_string())?;
                         servers.insert("playwright".to_string(), backup_projection);
-                        fs::write(
+                        crate::safe_filesystem::write_regular_file_atomic(
                             &dest,
-                            serde_json::to_string_pretty(&merged)
+                            (serde_json::to_string_pretty(&merged)
                                 .map_err(|e| format!("serialize cursor mcp: {e}"))?
-                                + "\n",
+                                + "\n")
+                                .as_bytes(),
+                            allowlist_root,
                         )
                         .map_err(|e| format!("write cursor mcp: {e}"))?;
                     } else {
@@ -1797,45 +1721,28 @@ fn restore_artifact_from_backup_with_mode(
         }
         RollbackAction::RemoveCreatedFile => {
             if dest.is_file() {
-                fs::remove_file(&dest).map_err(|e| format!("remove created file: {e}"))?;
+                crate::safe_filesystem::remove_regular_file_no_symlinks(&dest, allowlist_root)
+                    .map_err(|e| format!("remove created file: {e}"))?;
             }
-            Ok(())
-        }
-        RollbackAction::RemoveCreatedSkillDirectory => {
-            if !dest.is_dir() {
-                return Ok(());
+            if matches!(
+                op.artifact,
+                ArtifactId::OpenCodeSkill(_)
+                    | ArtifactId::CodexSkill(_)
+                    | ArtifactId::ClaudeSkill(_)
+                    | ArtifactId::CursorSkill(_)
+                    | ArtifactId::CodexLegacySkill(_)
+            ) {
+                if let Some(parent) = dest.parent() {
+                    crate::safe_filesystem::remove_empty_directory_no_symlinks(
+                        parent,
+                        allowlist_root,
+                    )?;
+                }
             }
-            reject_symlink(&dest, "created skill directory")?;
-            let unexpected = fs::read_dir(&dest)
-                .map_err(|e| format!("inspect created skill dir: {e}"))?
-                .filter_map(|e| e.ok())
-                .any(|entry| {
-                    let name = entry.file_name();
-                    let name = name.to_string_lossy();
-                    if name == "SKILL.md" {
-                        return false;
-                    }
-                    entry.path().is_file() || entry.path().is_dir()
-                });
-            if unexpected {
-                return Err("refusing remove skill directory with unexpected user files".into());
-            }
-            fs::remove_dir_all(&dest).map_err(|e| format!("remove created skill: {e}"))?;
             Ok(())
         }
         RollbackAction::NoAction => Ok(()),
     }
-}
-
-pub fn surfaces_needing_apply(planned: &[PlannedArtifact]) -> Vec<SetupSurfaceId> {
-    let mut surfaces: Vec<SetupSurfaceId> = planned
-        .iter()
-        .filter(|p| p.kind.needs_apply())
-        .map(|p| p.surface)
-        .collect();
-    surfaces.sort_by_key(|s| format!("{s:?}"));
-    surfaces.dedup();
-    surfaces
 }
 
 #[cfg(test)]

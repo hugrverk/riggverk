@@ -12,4 +12,4 @@ printf '\n==> rust gate\n'
 cargo fmt --check
 cargo check
 cargo clippy --all-targets --all-features -- -D warnings
-env -u AGENT_WORKSPACE_SMOKE -u AGENT_WORKSPACE_PATH cargo test
+env -u AGENT_WORKSPACE_SMOKE -u AGENT_WORKSPACE_PATH cargo test -- --test-threads=1

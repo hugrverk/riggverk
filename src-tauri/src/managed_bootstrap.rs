@@ -14,20 +14,6 @@ use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPat
 use crate::managed_state::{artifact_identity, workspace_file_identity, ManagedArtifactRecord};
 use crate::setup_fingerprint::{self, ABSENT_DIGEST};
 
-/// Still-current workspace files whose content changed between the pre-manifest
-/// source commit (2d85d94) and HEAD. Their old digests are approved so migration
-/// from a pre-manifest workspace does not flag them as conflicts.
-const STILL_CURRENT_CHANGED_DOCS: &[(&str, &str)] = &[
-    (
-        "docs/USING_THE_APP.md",
-        "sha256:cd3af0179fcca727627b4979b53111a1e93f791e10d621fdbc5775f3e1e5f812",
-    ),
-    (
-        "README.md",
-        "sha256:31c5688d7fb7726587f8aa565465868eafe725e2bdeba3b9d5b969a7d7a3250d",
-    ),
-];
-
 /// Skills removed from the canonical 21-skill bundle (old 33-skill installations).
 pub const REMOVED_SKILL_NAMES: &[&str] = &[
     "agent-report-review",
@@ -79,7 +65,7 @@ fn historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
     for artifact in &manifest.artifacts {
         if artifact.identity.is_empty()
             || artifact.path_classes.is_empty()
-            || !matches!(artifact.action.as_str(), "remove" | "keep")
+            || !matches!(artifact.action.as_str(), "remove" | "update")
             || artifact.digests.is_empty()
             || artifact
                 .digests
@@ -92,47 +78,59 @@ fn historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
     Ok(manifest)
 }
 
-fn approved_historical_digest(artifact: &ArtifactId, digest: &str) -> bool {
-    let identity = match artifact {
+fn historical_identity_and_path_class(artifact: &ArtifactId) -> Option<(String, &'static str)> {
+    match artifact {
         ArtifactId::OpenCodeSkill(name)
         | ArtifactId::CodexSkill(name)
         | ArtifactId::ClaudeSkill(name)
-        | ArtifactId::CursorSkill(name)
-        | ArtifactId::CodexLegacySkill(name) => Some(format!("removed-skill:{}", name.as_str())),
+        | ArtifactId::CursorSkill(name) => {
+            Some((format!("removed-skill:{}", name.as_str()), "harness-skill"))
+        }
+        ArtifactId::CodexLegacySkill(name) => Some((
+            format!("removed-skill:{}", name.as_str()),
+            "codex-legacy-skill",
+        )),
         ArtifactId::OpenCodeAgent(name) if name.as_str() == LEGACY_SCOUT_AGENT => {
-            Some("legacy-agent:scout".to_string())
+            Some(("legacy-agent:scout".to_string(), "opencode-agent"))
         }
         ArtifactId::WorkspaceFile(path) => path
             .as_str()
             .strip_prefix("metadata/deprecated-skills/")
             .and_then(|rest| rest.split('/').next())
-            .map(|name| format!("removed-skill:{name}")),
+            .map(|name| (format!("removed-skill:{name}"), "runtime-deprecated-copy")),
         _ => None,
     }
     .or_else(|| match artifact {
         ArtifactId::WorkspaceFile(path) if path.as_str() == "metadata/deprecated-skills.json" => {
-            Some("legacy-metadata:deprecated-skills".to_string())
+            Some((
+                "legacy-metadata:deprecated-skills".to_string(),
+                "runtime-metadata",
+            ))
         }
         ArtifactId::WorkspaceFile(path) if path.as_str() == "agents/scout.md" => {
-            Some("legacy-agent:scout".to_string())
+            Some(("legacy-agent:scout".to_string(), "runtime-agent"))
         }
         ArtifactId::WorkspaceFile(path) => path
             .as_str()
             .strip_prefix("skills/")
             .and_then(|rest| rest.strip_suffix("/SKILL.md"))
-            .map(|name| format!("removed-skill:{name}")),
+            .map(|name| (format!("removed-skill:{name}"), "runtime-skill")),
         _ => None,
     })
     .or_else(|| match artifact {
-        // Catch-all for any WorkspaceFile: generate identity and check
-        // against pre-manifest-ownership.json entries.
-        ArtifactId::WorkspaceFile(path) => Some(workspace_file_identity(path.as_str())),
+        ArtifactId::WorkspaceFile(path) => {
+            Some((workspace_file_identity(path.as_str()), "workspace-doc"))
+        }
         _ => None,
-    });
+    })
+}
+
+fn approved_historical_digest(artifact: &ArtifactId, action: &str, digest: &str) -> bool {
+    let identity = historical_identity_and_path_class(artifact);
     #[cfg(test)]
     if let Some(name) = identity
-        .as_deref()
-        .and_then(|value| value.strip_prefix("removed-skill:"))
+        .as_ref()
+        .and_then(|(value, _)| value.strip_prefix("removed-skill:"))
     {
         let fixture = format!(
             "---\nname: {name}\ndescription: historical fixture\ntargets: [codex, opencode, claude, cursor]\n---\n"
@@ -142,16 +140,20 @@ fn approved_historical_digest(artifact: &ArtifactId, digest: &str) -> bool {
         }
     }
     #[cfg(test)]
-    if identity.as_deref() == Some("legacy-agent:scout")
+    if identity
+        .as_ref()
+        .is_some_and(|(value, _)| value == "legacy-agent:scout")
         && crate::stable_digest::bytes(b"---\nname: placeholder\ndescription: placeholder\n---\n")
             == digest
     {
         return true;
     }
     historical_manifest().is_ok_and(|manifest| {
-        identity.is_some_and(|identity| {
+        identity.is_some_and(|(identity, path_class)| {
             manifest.artifacts.iter().any(|entry| {
                 entry.identity == identity
+                    && entry.path_classes.iter().any(|class| class == path_class)
+                    && entry.action == action
                     && entry.digests.iter().any(|approved| approved == digest)
             })
         })
@@ -300,7 +302,7 @@ fn approved_codex_legacy_digest(
     workspace_root: &Path,
     home: &Path,
 ) -> bool {
-    if approved_historical_digest(artifact, digest) {
+    if approved_historical_digest(artifact, "remove", digest) {
         return true;
     }
     let ArtifactId::CodexLegacySkill(name) = artifact else {
@@ -330,7 +332,7 @@ pub fn infer_bootstrap_records(
             let artifact = WorkspaceRelPath::new(&rel).map(ArtifactId::WorkspaceFile);
             if artifact
                 .as_ref()
-                .is_some_and(|artifact| approved_historical_digest(artifact, &hash))
+                .is_some_and(|artifact| approved_historical_digest(artifact, "remove", &hash))
             {
                 records.push(ManagedArtifactRecord {
                     identity: workspace_file_identity(&rel),
@@ -340,25 +342,26 @@ pub fn infer_bootstrap_records(
             }
         }
     }
-    // Still-current workspace files with old content: if their hash matches
-    // the approved old digest, create a bootstrap record so the migration
-    // plan treats them as Update (not Conflict).
-    for (rel, old_digest) in STILL_CURRENT_CHANGED_DOCS {
+    let manifest = historical_manifest()?;
+    for entry in manifest
+        .artifacts
+        .iter()
+        .filter(|entry| entry.action == "update")
+    {
+        let Some(rel) = entry.identity.strip_prefix("workspace:file:") else {
+            continue;
+        };
         let path = workspace_root.join(rel);
-        if !path.is_file() {
-            continue;
-        }
-        let hash = setup_fingerprint::hash_file_path(&path)?;
-        if hash != *old_digest {
-            continue;
-        }
-        if let Some(artifact) = WorkspaceRelPath::new(*rel).map(ArtifactId::WorkspaceFile) {
-            if approved_historical_digest(&artifact, &hash) {
-                records.push(ManagedArtifactRecord {
-                    identity: workspace_file_identity(rel),
-                    hash,
-                    surface: None,
-                });
+        if path.is_file() {
+            let hash = setup_fingerprint::hash_file_path(&path)?;
+            if let Some(artifact) = WorkspaceRelPath::new(rel).map(ArtifactId::WorkspaceFile) {
+                if approved_historical_digest(&artifact, "update", &hash) {
+                    records.push(ManagedArtifactRecord {
+                        identity: workspace_file_identity(rel),
+                        hash,
+                        surface: None,
+                    });
+                }
             }
         }
     }
@@ -375,7 +378,7 @@ pub fn infer_bootstrap_records(
                 workspace_root,
                 home,
             )?;
-            if hash != ABSENT_DIGEST && approved_historical_digest(&artifact, &hash) {
+            if hash != ABSENT_DIGEST && approved_historical_digest(&artifact, "remove", &hash) {
                 records.push(ManagedArtifactRecord {
                     identity: artifact_identity(&artifact),
                     hash,
@@ -387,7 +390,7 @@ pub fn infer_bootstrap_records(
     if let Some(agent) = stale_opencode_scout_agent(workspace_root, home) {
         let hash =
             setup_fingerprint::artifact_installed_managed_digest(&agent, workspace_root, home)?;
-        if hash != ABSENT_DIGEST && approved_historical_digest(&agent, &hash) {
+        if hash != ABSENT_DIGEST && approved_historical_digest(&agent, "remove", &hash) {
             records.push(ManagedArtifactRecord {
                 identity: artifact_identity(&agent),
                 hash,
@@ -497,8 +500,8 @@ mod tests {
         let digest =
             crate::stable_digest::bytes(b"---\nname: placeholder\ndescription: placeholder\n---\n");
         let scout = ArtifactId::OpenCodeAgent(AgentName::new("scout").expect("scout"));
-        assert!(approved_historical_digest(&scout, &digest));
+        assert!(approved_historical_digest(&scout, "remove", &digest));
         let other = ArtifactId::OpenCodeAgent(AgentName::new("custom").expect("custom"));
-        assert!(!approved_historical_digest(&other, &digest));
+        assert!(!approved_historical_digest(&other, "remove", &digest));
     }
 }
