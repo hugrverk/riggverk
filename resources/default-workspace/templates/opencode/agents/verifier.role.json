@@ -5,11 +5,12 @@
   "temperature": 0.1,
   "steps": 50,
   "hidden": true,
+  "composition": {
+    "replace_sections": ["bash"],
+    "bash_profile": "bash_verifier"
+  },
   "permission": {
     "edit": "deny",
-    "task": "deny",
-    "bash": {
-      "git diff --stat*": "allow"
-    }
+    "task": "deny"
   }
 }

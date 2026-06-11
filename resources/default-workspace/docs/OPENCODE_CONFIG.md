@@ -76,6 +76,17 @@ OpenCode agent definitions live at `agents/*.md` in the workspace. Six bundled a
 
 ## Permission model
 
+OpenCode agent permissions are composed at generation time from `templates/opencode.policy.json` (base policy and shared secret matrix) plus `templates/opencode/agents/*.role.json` (small role overrides). Restrictive roles declare `composition.replace_sections` so bash or edit profiles replace inherited sections instead of shallow-merging them. Shared secret denials stay in the base policy; role files do not duplicate the full matrix.
+
+Role boundaries:
+
+- **architect** — implementation edits, bounded bash, approved subagent delegation
+- **repo-scout**, **inspector**, **sentinel** — strictly read-only (no edit, no task delegation, no mutating bash)
+- **verifier** — non-destructive test/lint/build/cargo commands only; no source edit or git staging/commits
+- **scribe** — documentation paths only (`README.md`, `docs/**`, and related doc files); no source-code edit or mutating bash
+
+`scripts/validate_opencode_permissions.py` asserts the composed contract. `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters.
+
 The default template is conservative:
 
 - Sharing is disabled

@@ -29,7 +29,6 @@ PERMISSION_KEY_ORDER = [
     "edit",
 ]
 
-
 def load_policy() -> dict[str, Any]:
     return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
 
@@ -73,6 +72,37 @@ def build_bash_section(policy: dict[str, Any]) -> dict[str, str]:
     return result
 
 
+def _build_profile_section(
+    policy: dict[str, Any],
+    profile_name: str,
+    base_builder: Any,
+) -> dict[str, str]:
+    profiles = policy.get("role_profiles", {})
+    if profile_name not in profiles:
+        raise KeyError(f"unknown role profile: {profile_name}")
+    profile = profiles[profile_name]
+    result: dict[str, str] = {"*": profile.get("default", "deny")}
+    for pattern in profile.get("allow", []):
+        result[pattern] = "allow"
+    for pattern in profile.get("ask", []):
+        result[pattern] = "ask"
+    for pattern in profile.get("deny", []):
+        result[pattern] = "deny"
+    base = base_builder(policy)
+    for pattern, action in base.items():
+        if action == "deny":
+            result[pattern] = "deny"
+    return result
+
+
+def build_bash_profile(policy: dict[str, Any], profile_name: str) -> dict[str, str]:
+    return _build_profile_section(policy, profile_name, build_bash_section)
+
+
+def build_edit_profile(policy: dict[str, Any], profile_name: str) -> dict[str, str]:
+    return _build_profile_section(policy, profile_name, build_edit_section)
+
+
 def build_base_permission(policy: dict[str, Any]) -> dict[str, Any]:
     perm: dict[str, Any] = {}
     for key in PERMISSION_KEY_ORDER:
@@ -89,10 +119,45 @@ def build_base_permission(policy: dict[str, Any]) -> dict[str, Any]:
     return perm
 
 
-def _merge_permission(base: dict[str, Any], override: dict[str, Any]) -> dict[str, Any]:
+def _merge_dict_section(
+    base_section: dict[str, str],
+    override_section: dict[str, str],
+) -> dict[str, str]:
+    merged = dict(base_section)
+    merged.update(override_section)
+    return merged
+
+
+def _apply_profile_replacements(
+    policy: dict[str, Any],
+    merged: dict[str, Any],
+    composition: dict[str, Any],
+) -> None:
+    replace_sections = composition.get("replace_sections", [])
+    for section in replace_sections:
+        profile_key = f"{section}_profile"
+        profile_name = composition.get(profile_key)
+        if not profile_name:
+            continue
+        if section == "bash":
+            merged["bash"] = build_bash_profile(policy, profile_name)
+        elif section == "edit":
+            merged["edit"] = build_edit_profile(policy, profile_name)
+
+
+def _merge_permission(base: dict[str, Any], override: dict[str, Any], replace_sections: set[str]) -> dict[str, Any]:
     merged = json.loads(json.dumps(base))
     for key, value in override.items():
+        if key in replace_sections and isinstance(value, dict):
+            section = merged.get(key)
+            if isinstance(section, dict):
+                merged[key] = _merge_dict_section(section, value)
+            else:
+                merged[key] = dict(value)
+            continue
         if key in {"read", "bash", "edit", "task", "skill"} and isinstance(value, dict):
+            if key in replace_sections:
+                continue
             section = merged.setdefault(key, {})
             if isinstance(section, str):
                 section = {}
@@ -106,8 +171,12 @@ def _merge_permission(base: dict[str, Any], override: dict[str, Any]) -> dict[st
 def compose_role_permission(role_override: dict[str, Any]) -> dict[str, Any]:
     policy = load_policy()
     base = build_base_permission(policy)
+    composition = role_override.get("composition", {})
+    replace_sections = set(composition.get("replace_sections", []))
+    merged = json.loads(json.dumps(base))
+    _apply_profile_replacements(policy, merged, composition)
     permission_override = role_override.get("permission", {})
-    return _merge_permission(base, permission_override)
+    return _merge_permission(merged, permission_override, replace_sections)
 
 
 def _yaml_quote(value: str) -> str:

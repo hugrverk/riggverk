@@ -30,12 +30,14 @@ OpenCode Markdown agents live under `agents/` and install to `~/.config/opencode
 
 OpenCode includes:
 
-- architect
-- repo-scout
-- inspector
-- sentinel
-- scribe
-- verifier
+- architect — primary implementation orchestrator with bounded bash and approved subagent delegation
+- repo-scout — read-only repository mapping
+- inspector — read-only post-implementation review
+- sentinel — read-only security review
+- scribe — documentation-only edits (`README.md`, `docs/**`, and related doc files)
+- verifier — non-destructive verification commands only
+
+OpenCode permissions are generated from `templates/opencode.policy.json` plus `templates/opencode/agents/*.role.json`. Edit the role sources and policy, not generated `agents/*.md` headers.
 
 ### Claude Code
 

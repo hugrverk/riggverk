@@ -5,13 +5,12 @@
   "temperature": 0.2,
   "steps": 35,
   "hidden": true,
+  "composition": {
+    "replace_sections": ["bash", "edit"],
+    "bash_profile": "bash_readonly",
+    "edit_profile": "edit_documentation"
+  },
   "permission": {
-    "task": "deny",
-    "bash": {
-      "git diff --stat*": "allow"
-    },
-    "edit": {
-      "README.md": "allow"
-    }
+    "task": "deny"
   }
 }
