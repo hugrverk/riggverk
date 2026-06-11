@@ -14,36 +14,38 @@ import sys
 import tomllib
 from pathlib import Path
 
+from opencode_policy_compose import compose_opencode_header
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 WS_ROOT = REPO_ROOT / "resources" / "default-workspace"
 SPECS_DIR = WS_ROOT / "agent-specs"
 MANIFEST_PATH = WS_ROOT / "metadata" / "agent-adapters.json"
 
 ROLES = {
-    "architect": {"spec": "architect.body.md", "harnesses": {"opencode": {"output": "agents/architect.md", "header": "templates/opencode/agents/architect.header.yaml"}}},
+    "architect": {"spec": "architect.body.md", "harnesses": {"opencode": {"output": "agents/architect.md", "role": "templates/opencode/agents/architect.role.json"}}},
     "repo-scout": {"spec": "repo-scout.body.md", "harnesses": {
-        "opencode": {"output": "agents/repo-scout.md", "header": "templates/opencode/agents/repo-scout.header.yaml"},
+        "opencode": {"output": "agents/repo-scout.md", "role": "templates/opencode/agents/repo-scout.role.json"},
         "claude": {"output": "templates/claude/agents/repo-scout.md", "header": "templates/claude/agents/repo-scout.header.yaml"},
         "codex": {"output": "templates/codex/agents/repo_scout.toml", "meta": "templates/codex/agents/repo_scout.meta.json"},
         "cursor": {"output": "templates/cursor/agents/repo-scout.md", "header": "templates/cursor/agents/repo-scout.header.yaml"},
     }},
     "inspector": {"spec": "inspector.body.md", "harnesses": {
-        "opencode": {"output": "agents/inspector.md", "header": "templates/opencode/agents/inspector.header.yaml"},
+        "opencode": {"output": "agents/inspector.md", "role": "templates/opencode/agents/inspector.role.json"},
         "claude": {"output": "templates/claude/agents/inspector.md", "header": "templates/claude/agents/inspector.header.yaml", "line_replacements": {"Review only.": "Review only. Do not edit files or expose sensitive configuration or authentication material."}},
         "codex": {"output": "templates/codex/agents/inspector.toml", "meta": "templates/codex/agents/inspector.meta.json"},
         "cursor": {"output": "templates/cursor/agents/inspector.md", "header": "templates/cursor/agents/inspector.header.yaml"},
     }},
     "sentinel": {"spec": "sentinel.body.md", "harnesses": {
-        "opencode": {"output": "agents/sentinel.md", "header": "templates/opencode/agents/sentinel.header.yaml"},
+        "opencode": {"output": "agents/sentinel.md", "role": "templates/opencode/agents/sentinel.role.json"},
         "claude": {"output": "templates/claude/agents/sentinel.md", "header": "templates/claude/agents/sentinel.header.yaml", "line_replacements": {"- Any path that could": "- Any path that could expose sensitive configuration or authentication material."}},
         "codex": {"output": "templates/codex/agents/security_reviewer.toml", "meta": "templates/codex/agents/security_reviewer.meta.json"},
     }},
     "scribe": {"spec": "scribe.body.md", "harnesses": {
-        "opencode": {"output": "agents/scribe.md", "header": "templates/opencode/agents/scribe.header.yaml"},
+        "opencode": {"output": "agents/scribe.md", "role": "templates/opencode/agents/scribe.role.json"},
         "claude": {"output": "templates/claude/agents/scribe.md", "header": "templates/claude/agents/scribe.header.yaml"},
     }},
     "verifier": {"spec": "verifier.body.md", "harnesses": {
-        "opencode": {"output": "agents/verifier.md", "header": "templates/opencode/agents/verifier.header.yaml"},
+        "opencode": {"output": "agents/verifier.md", "role": "templates/opencode/agents/verifier.role.json"},
         "claude": {"output": "templates/claude/agents/verifier.md", "header": "templates/claude/agents/verifier.header.yaml", "line_replacements": {"- Inspect or print": "- Expose sensitive configuration or authentication material."}},
         "codex": {"output": "templates/codex/agents/verifier.toml", "meta": "templates/codex/agents/verifier.meta.json"},
         "cursor": {"output": "templates/cursor/agents/verifier.md", "header": "templates/cursor/agents/verifier.header.yaml"},
@@ -64,11 +66,16 @@ def load_body(spec_name: str) -> str:
     return text if text.endswith("\n") else text + "\n"
 
 
-def load_header(header_rel: str) -> str:
-    path = WS_ROOT / header_rel
+def load_role(role_rel: str) -> Path:
+    path = WS_ROOT / role_rel
     if not path.is_file():
-        fail(f"missing adapter header: {path}")
-    return path.read_text(encoding="utf-8").strip("\n") + "\n"
+        fail(f"missing adapter role: {path}")
+    return path
+
+
+def compose_opencode_markdown(role_rel: str, body: str) -> str:
+    header = compose_opencode_header(load_role(role_rel))
+    return f"---\n{header}---\n\n{body}"
 
 
 def adapt_body(body: str, replacements: dict[str, str] | None) -> str:
@@ -81,6 +88,13 @@ def adapt_body(body: str, replacements: dict[str, str] | None) -> str:
             fail(f"body replacement prefix {prefix!r} matched {len(matches)} lines")
         lines[matches[0]] = replacement
     return "\n".join(lines) + "\n"
+
+
+def load_header(header_rel: str) -> str:
+    path = WS_ROOT / header_rel
+    if not path.is_file():
+        fail(f"missing adapter header: {path}")
+    return path.read_text(encoding="utf-8").strip("\n") + "\n"
 
 
 def compose_markdown(header_rel: str, body: str) -> str:
@@ -215,6 +229,10 @@ def preflight_check() -> list[str]:
                 header_path = WS_ROOT / harness["header"]
                 if not header_path.is_file():
                     errors.append(f"missing adapter header: {header_path}")
+            if "role" in harness:
+                role_path = WS_ROOT / harness["role"]
+                if not role_path.is_file():
+                    errors.append(f"missing adapter role: {role_path}")
             if "meta" in harness:
                 meta_path = WS_ROOT / harness["meta"]
                 if not meta_path.is_file():
@@ -312,7 +330,13 @@ def generated_outputs() -> dict[Path, str]:
         for harness_name, harness in role["harnesses"].items():
             out = WS_ROOT / harness["output"]
             adapted = adapt_body(body, harness.get("line_replacements"))
-            outputs[out] = compose_codex_toml(harness["meta"], adapted) if harness_name == "codex" else compose_markdown(harness["header"], adapted)
+            if harness_name == "codex":
+                content = compose_codex_toml(harness["meta"], adapted)
+            elif harness_name == "opencode" and "role" in harness:
+                content = compose_opencode_markdown(harness["role"], adapted)
+            else:
+                content = compose_markdown(harness["header"], adapted)
+            outputs[out] = content
     return outputs
 
 
@@ -344,13 +368,9 @@ def main() -> None:
         sys.exit(1)
 
     outputs = generated_outputs()
-    stale: list[str] = []
-    for path, expected in sorted(outputs.items()):
-        rel = path.relative_to(REPO_ROOT)
-        if not path.exists():
-            stale.append(f"missing {rel}")
-        elif path.read_text(encoding="utf-8") != expected:
-            stale.append(f"stale {rel}")
+
+    if args.write:
+        write_manifest()
 
     # ── Content validation (runs on both check and write) ──
     content_errors = validate_generated_content(outputs)
@@ -359,6 +379,14 @@ def main() -> None:
         for err in content_errors:
             print(f"  - {err}", file=sys.stderr)
         sys.exit(1)
+
+    stale: list[str] = []
+    for path, expected in sorted(outputs.items()):
+        rel = path.relative_to(REPO_ROOT)
+        if not path.exists():
+            stale.append(f"missing {rel}")
+        elif path.read_text(encoding="utf-8") != expected:
+            stale.append(f"stale {rel}")
 
     if args.write:
         write_manifest()

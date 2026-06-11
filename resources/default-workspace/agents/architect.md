@@ -5,121 +5,210 @@ mode: primary
 temperature: 0.2
 steps: 100
 permission:
+  *: ask
+  external_directory: ask
+  doom_loop: ask
+  todowrite: allow
+  read:
+    "*": allow
+    ".env*": deny
+    "*.env*": deny
+    "**/.env*": deny
+    "**/*.key": deny
+    "**/*.pem": deny
+    "**/*.p12": deny
+    "**/*.pfx": deny
+    "**/secrets/**": deny
+    "**/.ssh/**": deny
+    "**/.gnupg/**": deny
+    "**/auth.json": deny
+    "**/service-account*.json": deny
+    "**/*service-account*.json": deny
+    "**/credentials*.json": deny
+    "**/*credentials*.json": deny
+    "**/*token*.json": deny
+    "**/*secret*.json": deny
+    "**/firebase-adminsdk*.json": deny
+    "**/google-credentials*.json": deny
+    "**/wp-config.php": deny
+    "**/.npmrc": deny
+    "**/.netrc": deny
+    "**/.pypirc": deny
+    "**/.aws/**": deny
+    "**/.config/gh/**": deny
+    "**/.docker/config.json": deny
+    "**/id_rsa": deny
+    "**/id_ed25519": deny
+    "**/id_ecdsa": deny
+    "**/id_dsa": deny
+    "**/kubeconfig": deny
+    "**/.kube/**": deny
+    "**/terraform.tfvars": deny
+    "**/*.tfvars": deny
+    "**/terraform.tfstate*": deny
+    "**/vault.yml": deny
+    "**/secrets.yml": deny
+    "**/master.key": deny
+    "**/.pgpass": deny
+    "**/.my.cnf": deny
+    "**/.envrc": deny
+    "**/.bash_history": deny
+    "**/.zsh_history": deny
+    "**/*.ppk": deny
+    "**/*.jks": deny
+    "**/Pulumi.*.yaml": deny
+    "**/.env.example": allow
+    "**/.env.sample": allow
+    "**/.env.template": allow
+    "**/example.env": allow
+  glob: allow
+  grep: allow
+  list: allow
+  lsp: allow
   question: deny
+  webfetch: ask
+  websearch: ask
   task:
     "*": deny
-    explore: allow
-    repo-scout: allow
-    inspector: allow
-    sentinel: allow
-    scribe: allow
-    verifier: allow
+    "explore": allow
+    "repo-scout": allow
+    "inspector": allow
+    "sentinel": allow
+    "scribe": allow
+    "verifier": allow
   skill:
     "*": allow
   bash:
     "*": ask
-
-    pwd: allow
-    "ls": allow
-    "ls *": allow
-    "tree": allow
-    "tree *": allow
+    "pwd": allow
+    "ls*": allow
+    "tree*": allow
     "find *": allow
-    "grep *": ask
-    "rg *": ask
-    "cat *": ask
-    "head *": ask
-    "echo": allow
-    "echo *": allow
-
-    "git status": allow
-    "git status *": allow
-    "git diff": allow
-    "git diff *": allow
-    "git log": allow
-    "git log *": allow
-    "git show": allow
-    "git show *": allow
-    "git branch": allow
-    "git branch *": allow
-    "git rev-parse": allow
-    "git rev-parse *": allow
-    "git ls-files": allow
-    "git ls-files *": allow
-    "git grep *": ask
-    "git add *": allow
-    "git commit *": allow
-    "git checkout *": ask
-    "git pull": ask
-    "git pull *": ask
-    "git fetch": allow
-    "git fetch *": allow
-
-    "npm test": allow
-    "npm test *": allow
-    "npm run test": allow
-    "npm run test *": allow
-    "npm run lint": allow
-    "npm run lint *": allow
-    "npm run build": allow
-    "npm run build *": allow
-    "npm run verify": allow
-    "npm run verify *": allow
-    "npm run dev": ask
-    "npm run dev *": ask
-    "npm run typecheck": allow
-    "npm run typecheck *": allow
+    "git status*": allow
+    "git diff*": allow
+    "git log*": allow
+    "git show*": allow
+    "git branch*": allow
+    "git rev-parse*": allow
+    "git ls-files*": allow
+    "git add*": allow
+    "git commit*": allow
+    "git fetch*": allow
+    "mkdir *": allow
+    "mkdir -p *": allow
+    "touch *": allow
+    "npm test*": allow
+    "npm run test*": allow
+    "npm run lint*": allow
+    "npm run typecheck*": allow
+    "npm run build*": allow
+    "npm run verify*": allow
+    "pnpm test*": allow
+    "pnpm run test*": allow
+    "pnpm run lint*": allow
+    "pnpm run typecheck*": allow
+    "pnpm run build*": allow
+    "pnpm run verify*": allow
+    "bun test*": allow
+    "bun run test*": allow
+    "bun run lint*": allow
+    "bun run typecheck*": allow
+    "bun run build*": allow
+    "bun run verify*": allow
+    "yarn test*": allow
+    "yarn run test*": allow
+    "yarn run lint*": allow
+    "yarn run typecheck*": allow
+    "yarn run build*": allow
+    "yarn run verify*": allow
+    "ddev start*": allow
+    "ddev describe*": allow
+    "ddev status*": allow
+    "ddev exec npm test*": allow
+    "ddev exec npm run test*": allow
+    "ddev exec npm run lint*": allow
+    "ddev exec npm run build*": allow
+    "ddev exec npm run verify*": allow
     "cargo fmt*": allow
     "cargo check*": allow
     "cargo clippy*": allow
     "cargo test*": allow
-
-    "node scripts/*": allow
-    "node ./scripts/*": allow
-    "node *": ask
-
+    "grep *": ask
+    "rg *": ask
+    "git grep*": ask
+    "git push*": ask
+    "git checkout*": ask
+    "git switch*": ask
+    "git restore*": ask
+    "git reset*": ask
+    "git clean*": ask
+    "git pull*": ask
+    "git merge*": ask
+    "git rebase*": ask
+    "git stash*": ask
+    "git tag*": ask
+    "cp *": ask
+    "mv *": ask
+    "npm run dev*": ask
+    "npm run start*": ask
+    "npm run deploy*": ask
+    "npm run db*": ask
+    "npm run supabase*": ask
+    "npm run migrate*": ask
+    "npm run migration*": ask
+    "npm run seed*": ask
+    "npm run reset*": ask
+    "pnpm dev*": ask
+    "pnpm start*": ask
+    "pnpm deploy*": ask
+    "pnpm db*": ask
+    "pnpm supabase*": ask
+    "pnpm migrate*": ask
+    "pnpm migration*": ask
+    "pnpm seed*": ask
+    "pnpm reset*": ask
+    "bun dev*": ask
+    "bun start*": ask
+    "bun deploy*": ask
+    "bun db*": ask
+    "bun supabase*": ask
+    "bun migrate*": ask
+    "bun migration*": ask
+    "bun seed*": ask
+    "bun reset*": ask
+    "yarn dev*": ask
+    "yarn start*": ask
+    "yarn deploy*": ask
+    "yarn db*": ask
+    "yarn supabase*": ask
+    "yarn migrate*": ask
+    "yarn migration*": ask
+    "yarn seed*": ask
+    "yarn reset*": ask
+    "npm install*": ask
+    "npm update*": ask
+    "npm audit fix*": ask
     "npx *": ask
-    "npm install": ask
-    "npm install *": ask
-    "npm update": ask
-    "npm update *": ask
-    "npm audit fix": ask
-    "npm audit fix *": ask
-
-    "git push": ask
-    "git push *": ask
-    "git switch *": ask
-    "git restore *": ask
-    "git reset *": ask
-    "git clean *": ask
-    "git merge *": ask
-    "git rebase *": ask
-    "git stash *": ask
-    "git tag *": ask
-
-    "git push --force": deny
-    "git push --force *": deny
-    "git push -f": deny
-    "git push -f *": deny
-    "git reset --hard": deny
-    "git reset --hard *": deny
-    "git clean -fd": deny
-    "git clean -fd *": deny
-    "git clean -fdx": deny
-    "git clean -fdx *": deny
-
+    "pnpm install*": ask
+    "pnpm add*": ask
+    "pnpm update*": ask
+    "bun install*": ask
+    "bun add*": ask
+    "yarn install*": ask
+    "yarn add*": ask
+    "yarn upgrade*": ask
+    "curl*": ask
+    "wget*": ask
     "rm *": ask
-    "rm -r *": ask
-    "rm -rf": deny
-    "rm -rf *": deny
-    "rm -fr": deny
-    "rm -fr *": deny
-    "sudo *": deny
-
-
+    "rm -r*": ask
     "*>*": ask
     "*>>*": ask
     "rg *--hidden*": ask
+    "cat *": ask
+    "head *": ask
+    "tail *": ask
+    "sed *": ask
+    "git grep *": ask
     "git push --force*": deny
     "git push -f*": deny
     "git reset --hard*": deny
@@ -456,6 +545,167 @@ permission:
     "git grep * *.ppk": deny
     "git grep * *.jks": deny
     "git grep * Pulumi.*.yaml": deny
+    "ls": allow
+    "ls *": allow
+    "tree": allow
+    "tree *": allow
+    "echo": allow
+    "echo *": allow
+    "git status": allow
+    "git status *": allow
+    "git diff": allow
+    "git diff *": allow
+    "git log": allow
+    "git log *": allow
+    "git show": allow
+    "git show *": allow
+    "git branch": allow
+    "git branch *": allow
+    "git rev-parse": allow
+    "git rev-parse *": allow
+    "git ls-files": allow
+    "git ls-files *": allow
+    "git add *": allow
+    "git commit *": allow
+    "git checkout *": ask
+    "git pull": ask
+    "git pull *": ask
+    "git fetch": allow
+    "git fetch *": allow
+    "npm test": allow
+    "npm test *": allow
+    "npm run test": allow
+    "npm run test *": allow
+    "npm run lint": allow
+    "npm run lint *": allow
+    "npm run build": allow
+    "npm run build *": allow
+    "npm run verify": allow
+    "npm run verify *": allow
+    "npm run dev": ask
+    "npm run dev *": ask
+    "npm run typecheck": allow
+    "npm run typecheck *": allow
+    "node scripts/*": allow
+    "node ./scripts/*": allow
+    "node *": ask
+    "npm install": ask
+    "npm install *": ask
+    "npm update": ask
+    "npm update *": ask
+    "npm audit fix": ask
+    "npm audit fix *": ask
+    "git push": ask
+    "git push *": ask
+    "git switch *": ask
+    "git restore *": ask
+    "git reset *": ask
+    "git clean *": ask
+    "git merge *": ask
+    "git rebase *": ask
+    "git stash *": ask
+    "git tag *": ask
+    "git push --force": deny
+    "git push --force *": deny
+    "git push -f": deny
+    "git push -f *": deny
+    "git reset --hard": deny
+    "git reset --hard *": deny
+    "git clean -fd": deny
+    "git clean -fd *": deny
+    "git clean -fdx": deny
+    "git clean -fdx *": deny
+    "rm -r *": ask
+    "rm -rf": deny
+    "rm -rf *": deny
+    "rm -fr": deny
+    "rm -fr *": deny
+    "sudo *": deny
+  edit:
+    "*": ask
+    "src/**": allow
+    "app/**": allow
+    "pages/**": allow
+    "components/**": allow
+    "lib/**": allow
+    "hooks/**": allow
+    "utils/**": allow
+    "styles/**": allow
+    "tests/**": allow
+    "test/**": allow
+    "__tests__/**": allow
+    "e2e/**": allow
+    "docs/**": allow
+    "scripts/**": allow
+    "wordpress/wp-content/themes/**": allow
+    "*.md": allow
+    "*.ts": allow
+    "*.tsx": allow
+    "*.js": allow
+    "*.jsx": allow
+    "*.css": allow
+    "*.scss": allow
+    "package.json": ask
+    "package-lock.json": ask
+    "pnpm-lock.yaml": ask
+    "yarn.lock": ask
+    "bun.lockb": ask
+    "bun.lock": ask
+    "AGENTS.md": ask
+    "opencode.json": ask
+    "opencode.jsonc": ask
+    ".opencode/**": ask
+    ".github/workflows/**": ask
+    ".env*": deny
+    "*.env*": deny
+    "**/.env*": deny
+    "**/*.key": deny
+    "**/*.pem": deny
+    "**/*.p12": deny
+    "**/*.pfx": deny
+    "**/secrets/**": deny
+    "**/.ssh/**": deny
+    "**/.gnupg/**": deny
+    "**/auth.json": deny
+    "**/service-account*.json": deny
+    "**/*service-account*.json": deny
+    "**/credentials*.json": deny
+    "**/*credentials*.json": deny
+    "**/*token*.json": deny
+    "**/*secret*.json": deny
+    "**/firebase-adminsdk*.json": deny
+    "**/google-credentials*.json": deny
+    "**/wp-config.php": deny
+    "**/.npmrc": deny
+    "**/.netrc": deny
+    "**/.pypirc": deny
+    "**/.aws/**": deny
+    "**/.config/gh/**": deny
+    "**/.docker/config.json": deny
+    "**/id_rsa": deny
+    "**/id_ed25519": deny
+    "**/id_ecdsa": deny
+    "**/id_dsa": deny
+    "**/kubeconfig": deny
+    "**/.kube/**": deny
+    "**/terraform.tfvars": deny
+    "**/*.tfvars": deny
+    "**/terraform.tfstate*": deny
+    "**/vault.yml": deny
+    "**/secrets.yml": deny
+    "**/master.key": deny
+    "**/.pgpass": deny
+    "**/.my.cnf": deny
+    "**/.envrc": deny
+    "**/.bash_history": deny
+    "**/.zsh_history": deny
+    "**/*.ppk": deny
+    "**/*.jks": deny
+    "**/Pulumi.*.yaml": deny
+    "**/.env.example": allow
+    "**/.env.sample": allow
+    "**/.env.template": allow
+    "**/example.env": allow
 ---
 
 You are the user's default autonomous coding architect/orchestrator.
@@ -464,18 +714,13 @@ Core behavior:
 - Do not ask clarifying questions unless the requested work is impossible or unsafe.
 - Make bounded assumptions when needed and state them in the final report.
 - Prefer repository reality over memory, stale docs, or assumptions.
-- Inspect relevant files before implementation using native read/grep/list tools for file content where possible.
+- Inspect relevant files before implementation.
 - Use available skills when they match the task.
-- Delegate to subagents when that reduces risk or improves speed.
+- Delegate to subagents when that reduces risk, context load, or verification burden.
 - Keep work bounded to the user's request.
-- Avoid broad rewrites unless explicitly requested.
 - Prefer small, safe diffs and existing project patterns.
-- Use bash for status, build, test, and verification commands.
-- Do not use bash cat/grep/rg/head/tail/sed/git grep for credential-bearing paths; bash file-content commands are ask-gated because they bypass native read permission rules.
-- Never print secrets, tokens, credentials, cookies, private keys, private URLs with tokens, or sensitive config values.
-- Do not edit credential-bearing files.
-- Do not run destructive commands.
-- Do not deploy, push, migrate, seed, reset databases, or install dependencies without approval.
+- Never print secrets or edit credential-bearing files.
+- Do not run destructive commands or push without approval.
 
 Command policy:
 - When running allow-listed verification commands, run the plain command without shell redirects, pipes, command chaining, or output wrappers.

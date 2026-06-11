@@ -6,7 +6,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/architect.md",
-          "header": "templates/opencode/agents/architect.header.yaml"
+          "role": "templates/opencode/agents/architect.role.json"
         }
       }
     },
@@ -15,7 +15,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/repo-scout.md",
-          "header": "templates/opencode/agents/repo-scout.header.yaml"
+          "role": "templates/opencode/agents/repo-scout.role.json"
         },
         "claude": {
           "output": "templates/claude/agents/repo-scout.md",
@@ -36,7 +36,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/inspector.md",
-          "header": "templates/opencode/agents/inspector.header.yaml"
+          "role": "templates/opencode/agents/inspector.role.json"
         },
         "claude": {
           "output": "templates/claude/agents/inspector.md",
@@ -57,7 +57,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/sentinel.md",
-          "header": "templates/opencode/agents/sentinel.header.yaml"
+          "role": "templates/opencode/agents/sentinel.role.json"
         },
         "claude": {
           "output": "templates/claude/agents/sentinel.md",
@@ -74,7 +74,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/scribe.md",
-          "header": "templates/opencode/agents/scribe.header.yaml"
+          "role": "templates/opencode/agents/scribe.role.json"
         },
         "claude": {
           "output": "templates/claude/agents/scribe.md",
@@ -87,7 +87,7 @@
       "harnesses": {
         "opencode": {
           "output": "agents/verifier.md",
-          "header": "templates/opencode/agents/verifier.header.yaml"
+          "role": "templates/opencode/agents/verifier.role.json"
         },
         "claude": {
           "output": "templates/claude/agents/verifier.md",

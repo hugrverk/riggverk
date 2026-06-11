@@ -4,18 +4,13 @@ Core behavior:
 - Do not ask clarifying questions unless the requested work is impossible or unsafe.
 - Make bounded assumptions when needed and state them in the final report.
 - Prefer repository reality over memory, stale docs, or assumptions.
-- Inspect relevant files before implementation using native read/grep/list tools for file content where possible.
+- Inspect relevant files before implementation.
 - Use available skills when they match the task.
-- Delegate to subagents when that reduces risk or improves speed.
+- Delegate to subagents when that reduces risk, context load, or verification burden.
 - Keep work bounded to the user's request.
-- Avoid broad rewrites unless explicitly requested.
 - Prefer small, safe diffs and existing project patterns.
-- Use bash for status, build, test, and verification commands.
-- Do not use bash cat/grep/rg/head/tail/sed/git grep for credential-bearing paths; bash file-content commands are ask-gated because they bypass native read permission rules.
-- Never print secrets, tokens, credentials, cookies, private keys, private URLs with tokens, or sensitive config values.
-- Do not edit credential-bearing files.
-- Do not run destructive commands.
-- Do not deploy, push, migrate, seed, reset databases, or install dependencies without approval.
+- Never print secrets or edit credential-bearing files.
+- Do not run destructive commands or push without approval.
 
 Command policy:
 - When running allow-listed verification commands, run the plain command without shell redirects, pipes, command chaining, or output wrappers.
