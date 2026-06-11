@@ -26,10 +26,13 @@ import { OpenCodeView } from "./views/OpenCodeView";
 import { deriveInstallState, StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
+import { surfacesNeedingApply } from "./lib/harnessInstallation";
 import type {
   InitializeWorkspaceResult,
   RepairWorkspaceResult,
   RepoDashboardWorkItem,
+  SetupPlan,
+  SetupResult,
 } from "./types";
 
 type View = AppHeaderView;
@@ -339,6 +342,51 @@ function App() {
     [savedRepos],
   );
 
+  const runHarnessSetupUpdate = useCallback((surfaces: string[], label: string) => {
+    runWsTask({
+      label,
+      action: "apply_setup",
+      task: async () => {
+        const plan = await invoke<SetupPlan>("preview_setup", { surfaces });
+        const applySurfaces = surfacesNeedingApply(plan);
+        if (!plan.plan_fingerprint || !plan.preview_token || applySurfaces.length === 0) {
+          throw new Error("Nothing to apply for harness update");
+        }
+        return invoke<SetupResult>("apply_setup", {
+          surfaces: applySurfaces,
+          skipManual: true,
+          planFingerprint: plan.plan_fingerprint,
+          previewToken: plan.preview_token,
+        });
+      },
+      toActionResult: (r) => ({
+        success: r.success,
+        action: "apply_setup",
+        stdout: r.message,
+        stderr: r.failed.length > 0 ? r.failed.join("; ") : "",
+        exit_code: r.success ? 0 : 1,
+      }),
+      refresh: async () => {
+        const gen = workspaceLoadGenerationRef.current;
+        await Promise.all([
+          fetchStatus(),
+          loadCodexRuntimeHealth(gen),
+          loadOpenCodeRuntimeHealth(gen),
+          loadClaudeRuntimeHealth(gen),
+          loadCursorProfileHealth(gen),
+        ]);
+      },
+    });
+  }, [
+    runWsTask,
+    fetchStatus,
+    loadCodexRuntimeHealth,
+    loadOpenCodeRuntimeHealth,
+    loadClaudeRuntimeHealth,
+    loadCursorProfileHealth,
+    workspaceLoadGenerationRef,
+  ]);
+
   const runCursorProfileAction = useCallback((action: string, label: string) => {
     runWsTask({
       label,
@@ -569,6 +617,7 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["codex"], "preview skills sync (codex)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}
+            onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
 
@@ -670,6 +719,7 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["opencode"], "preview skills sync (opencode)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["opencode"], "sync all skills (opencode)")}
+            onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
 
@@ -699,6 +749,7 @@ function App() {
             {...targetSkillsShared}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["cursor"], "preview skills sync (cursor)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["cursor"], "sync all skills (cursor)")}
+            onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
 
@@ -741,6 +792,7 @@ function App() {
             onRefreshClaudeHealth={() => loadClaudeRuntimeHealth()}
             onPreviewSyncSkills={() => runWsInstallForAgents(true, ["claude"], "preview skills sync (claude)")}
             onSyncAllSkills={() => runWsInstallForAgents(false, ["claude"], "sync all skills (claude)")}
+            onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
 

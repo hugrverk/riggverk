@@ -2,6 +2,7 @@ import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
+import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import {
   CURSOR_STALE_RESOURCES_MESSAGE,
@@ -40,6 +41,7 @@ interface CursorViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -80,6 +82,7 @@ export function CursorView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
+  onHarnessSetupUpdate,
   onSetSkillSearch,
   onOpenInstallScript,
 }: CursorViewProps) {
@@ -112,6 +115,15 @@ export function CursorView({
             agentTargets={agentTargets}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
+          />
+
+          <HarnessInstallationCard
+            harness="cursor"
+            title="Managed installation"
+            description="One update reconciles Cursor agents, skills, and Playwright MCP with the workspace bundle."
+            workspaceValid={workspaceValid}
+            busy={busy}
+            onUpdate={onHarnessSetupUpdate}
           />
 
           {workspaceValid && (

@@ -239,7 +239,7 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
   const applyPlan = useCallback(async () => {
     if (!plan?.plan_fingerprint || !plan.preview_token) return;
     const surfaces = plan.operations
-      .filter(op => op.kind === "create" || op.kind === "update")
+      .filter(op => op.kind === "create" || op.kind === "update" || op.kind === "remove")
       .map(op => op.surface);
     if (surfaces.length === 0) return;
 
@@ -321,7 +321,9 @@ export function SetupLifecycle({ workspacePath, wsRunning, runSetupTask }: Setup
     }
   }, [activeApplyTransaction, runSetupTask, refresh, loadRepairPreview]);
 
-  const needsApply = plan?.operations.some(op => op.kind === "create" || op.kind === "update") ?? false;
+  const needsApply = plan?.operations.some(
+    op => op.kind === "create" || op.kind === "update" || op.kind === "remove",
+  ) ?? false;
   const isBlocked = plan?.is_blocked ?? false;
   const canApply = Boolean(plan?.plan_fingerprint && plan.preview_token) && needsApply && !isBlocked;
   const canRepair = Boolean(

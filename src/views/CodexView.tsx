@@ -2,6 +2,7 @@ import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
+import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import {
   codexAgentsNextAction,
@@ -56,6 +57,7 @@ interface CodexViewProps {
   onSyncAllSkills: () => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
+  onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
 }
 
 export function CodexView({
@@ -90,6 +92,7 @@ export function CodexView({
   onSyncAllSkills,
   onSetSkillSearch,
   onOpenInstallScript,
+  onHarnessSetupUpdate,
 }: CodexViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
@@ -117,6 +120,15 @@ export function CodexView({
             agentTargets={agentTargets}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
+          />
+
+          <HarnessInstallationCard
+            harness="codex"
+            title="Managed installation"
+            description="One update reconciles Codex config, agents, rules, and skills with the workspace bundle."
+            workspaceValid={workspaceValid}
+            busy={busy}
+            onUpdate={onHarnessSetupUpdate}
           />
 
           {workspaceValid && (

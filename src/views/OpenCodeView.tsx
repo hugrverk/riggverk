@@ -2,6 +2,7 @@ import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
+import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import {
   configCheckStatusLabel,
@@ -51,6 +52,7 @@ interface OpenCodeViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
   onSetSkillSearch: (value: string) => void;
   onOpenInstallScript: () => void;
 }
@@ -102,6 +104,7 @@ export function OpenCodeView({
   skillSearch,
   onPreviewSyncSkills,
   onSyncAllSkills,
+  onHarnessSetupUpdate,
   onSetSkillSearch,
   onOpenInstallScript,
 }: OpenCodeViewProps) {
@@ -138,6 +141,15 @@ export function OpenCodeView({
             agentTargets={agentTargets}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
+          />
+
+          <HarnessInstallationCard
+            harness="opencode"
+            title="Managed installation"
+            description="One update reconciles OpenCode config, agents, rules, and skills with the workspace bundle."
+            workspaceValid={workspaceValid}
+            busy={busy}
+            onUpdate={onHarnessSetupUpdate}
           />
 
           {workspaceValid && (

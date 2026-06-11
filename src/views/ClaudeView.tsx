@@ -2,6 +2,7 @@ import { TargetPageHeader } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { TargetSkillsPanel } from "../components/TargetSkillsPanel";
 import { HarnessActionCard } from "../components/HarnessActionCard";
+import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { runtimeChipLabel } from "../lib/runtimeUi";
 import type { ActionResult } from "../components/TerminalOutput";
@@ -34,6 +35,7 @@ interface ClaudeViewProps {
   skillSearch: string;
   onPreviewSyncSkills: () => void;
   onSyncAllSkills: () => void;
+  onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
   onSetSkillSearch: (value: string) => void;
   claudeRuntimeHealth: ClaudeRuntimeHealth | null;
   onRefreshClaudeHealth: () => void;
@@ -47,7 +49,7 @@ export function ClaudeView(props: ClaudeViewProps) {
     status, workspaceValid, gitAvailable, ruleTargetsEnabled,
     agentsTargetsEnabled, agentsStatusLabel, canRunReleaseCheck,
     onDiffRules, onSyncRules, onDiffAgents, onSyncAgents,
-    skills, skillsLoaded, skillSearch, onPreviewSyncSkills, onSyncAllSkills,
+    skills, skillsLoaded, skillSearch, onPreviewSyncSkills, onSyncAllSkills, onHarnessSetupUpdate,
     onSetSkillSearch,
     claudeRuntimeHealth, onRefreshClaudeHealth, onOpenInstallScript,
   } = props;
@@ -72,6 +74,15 @@ export function ClaudeView(props: ClaudeViewProps) {
             agentTargets={agentTargets}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={onToggleTarget}
+          />
+
+          <HarnessInstallationCard
+            harness="claude"
+            title="Managed installation"
+            description="One update reconciles Claude rules, agents, and skills with the workspace bundle."
+            workspaceValid={workspaceValid}
+            busy={wsRunning !== null}
+            onUpdate={onHarnessSetupUpdate}
           />
 
           {workspaceValid && claudeRuntimeHealth && (
