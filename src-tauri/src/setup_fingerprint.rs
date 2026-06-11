@@ -3,10 +3,7 @@
 //! Source and installed managed digests are computed independently so preview
 //! integrity detects divergence on either side.
 
-use std::collections::hash_map::DefaultHasher;
-use std::collections::BTreeMap;
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 
 use crate::artifact_registry::{ArtifactId, ArtifactKind};
@@ -14,17 +11,14 @@ use crate::commands::cursor_profile::cursor_root;
 use crate::commands::{
     extract_managed_codex_config, extract_managed_opencode_config, render_expected_opencode_config,
 };
-pub const ABSENT_DIGEST: &str = "absent";
+pub const ABSENT_DIGEST: &str = crate::stable_digest::ABSENT;
 
 fn hash_bytes(bytes: &[u8]) -> String {
-    let mut hasher = DefaultHasher::new();
-    bytes.hash(&mut hasher);
-    format!("{:016x}", hasher.finish())
+    crate::stable_digest::bytes(bytes)
 }
 
 fn hash_file(path: &Path) -> Result<String, String> {
-    let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    Ok(hash_bytes(&bytes))
+    crate::stable_digest::file(path)
 }
 
 /// Hash a file path for workspace managed-state records.
@@ -252,57 +246,7 @@ fn hash_directory_tree(dir: &Path, label: &str) -> Result<String, String> {
     if !dir.is_dir() {
         return Ok(ABSENT_DIGEST.into());
     }
-    let mut hasher = DefaultHasher::new();
-    let mut entries: BTreeMap<String, PathBuf> = BTreeMap::new();
-    collect_directory_entries(dir, dir, label, &mut entries)?;
-    for (rel, path) in entries {
-        rel.hash(&mut hasher);
-        let meta = fs::symlink_metadata(&path)
-            .map_err(|e| format!("inspect {label} {}: {e}", path.display()))?;
-        if meta.file_type().is_symlink() {
-            return Err(format!("refusing symlink in {label}: {}", path.display()));
-        }
-        if meta.is_dir() {
-            "dir".hash(&mut hasher);
-        } else if meta.is_file() {
-            "file".hash(&mut hasher);
-            hash_file(&path)?.hash(&mut hasher);
-        } else {
-            return Err(format!("unreadable entry in {label}: {}", path.display()));
-        }
-    }
-    Ok(format!("{:016x}", hasher.finish()))
-}
-
-fn collect_directory_entries(
-    root: &Path,
-    current: &Path,
-    label: &str,
-    out: &mut BTreeMap<String, PathBuf>,
-) -> Result<(), String> {
-    for entry in
-        fs::read_dir(current).map_err(|e| format!("read {label} {}: {e}", current.display()))?
-    {
-        let entry = entry.map_err(|e| format!("read {label} entry: {e}"))?;
-        if entry.file_type().map(|t| t.is_symlink()).unwrap_or(false) {
-            return Err(format!(
-                "refusing symlink in {label}: {}",
-                entry.path().display()
-            ));
-        }
-        let path = entry.path();
-        let rel = path
-            .strip_prefix(root)
-            .map_err(|_| format!("path escapes {label} root"))?
-            .to_string_lossy()
-            .into_owned();
-        let is_dir = path.is_dir();
-        out.insert(rel, path.clone());
-        if is_dir {
-            collect_directory_entries(root, &path, label, out)?;
-        }
-    }
-    Ok(())
+    crate::stable_digest::directory(dir).map_err(|e| format!("{label}: {e}"))
 }
 
 /// Hash installed full-file or full-directory content for rollback safety.
@@ -379,7 +323,7 @@ mod tests {
     }
 
     #[test]
-    fn fingerprint_changes_when_source_rule_changes() {
+    fn fingerprint_ignores_runtime_files_that_shadow_bundled_sources() {
         let home = temp("rule-src-home");
         let ws = temp("rule-src-ws");
         write(&ws.join("templates/sync/opencode-rules.md"), "v1");
@@ -387,7 +331,7 @@ mod tests {
         let fp1 = fp_for_rules(&ws, &home);
         write(&ws.join("templates/sync/opencode-rules.md"), "v2");
         let fp2 = fp_for_rules(&ws, &home);
-        assert_ne!(fp1, fp2);
+        assert_eq!(fp1, fp2);
     }
 
     #[test]

@@ -1,18 +1,10 @@
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use std::path::Path;
 
-use super::content::safe_canonical_target;
 use super::content::DocumentContent;
-#[cfg(not(windows))]
-use super::process::run_cmd_owned_env;
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
-use crate::agent_skill_targets::{agent_global_skills_dest, validate_skill_agent};
-#[cfg(not(windows))]
-use crate::shell_runtime::resolve_bash;
 use crate::skills_install::discover_workspace_skills;
-#[cfg(windows)]
-use crate::skills_install::{install_skills_native, InstallSkillsRequest as NativeInstallRequest};
 
 #[derive(Serialize)]
 pub struct SkillSummary {
@@ -291,235 +283,12 @@ fn extract_frontmatter_list(content: &str, key: &str) -> Vec<String> {
         .collect()
 }
 
-fn validate_agent(agent: &str) -> Result<(), String> {
-    validate_skill_agent(agent)
-}
-
-#[allow(dead_code)]
-pub(crate) fn skill_install_backend() -> &'static str {
-    #[cfg(windows)]
-    {
-        "native"
-    }
-    #[cfg(not(windows))]
-    {
-        "script"
-    }
-}
-
-#[cfg(not(windows))]
-fn install_skills_via_script(
-    root: &Path,
-    request: &InstallSkillsRequest,
-) -> Result<ActionResult, String> {
-    let script = workspace_script_arg(root, "scripts/install-skills.sh")?;
-    let bash = resolve_bash()?;
-    let mut args: Vec<String> = vec![script, "--quiet".into()];
-    for agent in &request.agents {
-        args.push("--agent".into());
-        args.push(agent.clone());
-    }
-    args.push("--global".into());
-    for skill in &request.skills {
-        args.push("--skill".into());
-        args.push(skill.clone());
-    }
-    if request.dry_run {
-        args.push("--dry-run".into());
-    }
-    let (ok, out, err, code) = run_cmd_owned_env(&bash, &args, root, &[]);
-    Ok(ActionResult::new(
-        ok,
-        if request.dry_run {
-            "install_skills:dry-run"
-        } else {
-            "install_skills"
-        },
-        out,
-        err,
-        code,
-    ))
-}
-
-fn workspace_script_arg(root: &Path, script_rel: &str) -> Result<String, String> {
-    let script = root.join(script_rel);
-    let canonical = safe_canonical_target(root, &script)?;
-    if !canonical.is_file() {
-        return Err(format!("workspace script not found: {}", script_rel));
-    }
-    path_arg(&canonical)
-}
-
-#[derive(Deserialize)]
-pub struct InstallSkillsRequest {
-    agents: Vec<String>,
-    skills: Vec<String>,
-    dry_run: bool,
-}
-
 pub(crate) fn workspace_skill_names(root: &Path) -> Result<Vec<String>, String> {
     let mut names: Vec<String> = discover_workspace_skills(&root.join("skills"))?
         .into_keys()
         .collect();
     names.sort();
     Ok(names)
-}
-
-#[derive(Serialize)]
-pub struct SkillSyncHealthEntry {
-    pub name: String,
-    pub group: String,
-    pub source_path: String,
-    pub target_path: String,
-    pub supported: bool,
-    pub state: String,
-    pub next_action: String,
-}
-
-#[derive(Serialize)]
-pub struct SkillsSyncHealth {
-    pub expected_count: usize,
-    pub synced_count: usize,
-    pub missing_count: usize,
-    pub diverged_count: usize,
-    pub skills: Vec<SkillSyncHealthEntry>,
-}
-
-fn skill_install_state(source_md: &Path, target_md: &Path) -> (&'static str, &'static str) {
-    if !source_md.is_file() {
-        return ("invalid", "repair workspace source");
-    }
-    if !target_md.is_file() {
-        return ("missing", "sync skill");
-    }
-    if super::status::file_eq(source_md, target_md) {
-        ("synced", "none")
-    } else {
-        ("diverged", "review or repair")
-    }
-}
-
-#[tauri::command]
-pub fn get_skills_sync_health(agent: String) -> Result<SkillsSyncHealth, String> {
-    validate_agent(&agent)?;
-    let root = workspace_root()?;
-    let summaries = discover_skills(&root)?;
-    let dest_root = agent_global_skills_dest(&agent)?;
-    let mut skills = Vec::new();
-    let mut synced_count = 0usize;
-    let mut missing_count = 0usize;
-    let mut diverged_count = 0usize;
-
-    for summary in summaries {
-        let targets = &summary.targets;
-        let supported = targets.is_empty() || targets.iter().any(|target| target.as_str() == agent);
-        let source_md = root.join(&summary.path);
-        let target_md = dest_root.join(&summary.name).join("SKILL.md");
-        let (state, next_action) = if !supported {
-            ("unsupported", "not installed for this harness")
-        } else {
-            skill_install_state(&source_md, &target_md)
-        };
-        match state {
-            "synced" => synced_count += 1,
-            "missing" => missing_count += 1,
-            "diverged" => diverged_count += 1,
-            _ => {}
-        }
-        skills.push(SkillSyncHealthEntry {
-            name: summary.name.clone(),
-            group: summary.group.clone(),
-            source_path: summary.path.clone(),
-            target_path: target_md.to_string_lossy().into_owned(),
-            supported,
-            state: state.into(),
-            next_action: next_action.into(),
-        });
-    }
-
-    Ok(SkillsSyncHealth {
-        expected_count: skills.len(),
-        synced_count,
-        missing_count,
-        diverged_count,
-        skills,
-    })
-}
-
-#[tauri::command]
-pub fn install_skills(request: InstallSkillsRequest) -> Result<ActionResult, String> {
-    if request.agents.is_empty() {
-        return Err("no agents selected".into());
-    }
-    for a in &request.agents {
-        validate_agent(a)?;
-    }
-
-    let available = list_skills()?;
-    let mut skills_to_install = request.skills;
-    if skills_to_install.is_empty() {
-        skills_to_install = available.iter().map(|s| s.name.clone()).collect();
-    }
-    if skills_to_install.is_empty() {
-        return Err("no skills available to install".into());
-    }
-
-    let valid_names: Vec<&str> = available.iter().map(|s| s.name.as_str()).collect();
-    for skill in &skills_to_install {
-        if !valid_names.contains(&skill.as_str()) {
-            return Err(format!("unknown skill: {}", skill));
-        }
-    }
-
-    let root = workspace_root()?;
-    #[cfg(windows)]
-    {
-        let result = install_skills_native(
-            &root,
-            &NativeInstallRequest {
-                agents: request.agents,
-                skills: skills_to_install,
-                dry_run: request.dry_run,
-                agent_dest_overrides: None,
-            },
-        );
-        Ok(ActionResult::new(
-            result.success,
-            if request.dry_run {
-                "install_skills:dry-run"
-            } else {
-                "install_skills"
-            },
-            result.stdout,
-            result.stderr,
-            Some(result.exit_code),
-        ))
-    }
-    #[cfg(not(windows))]
-    {
-        install_skills_via_script(
-            &root,
-            &InstallSkillsRequest {
-                agents: request.agents,
-                skills: skills_to_install,
-                dry_run: request.dry_run,
-            },
-        )
-    }
-}
-
-#[tauri::command]
-pub fn open_install_skills_script() -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let path_str = workspace_script_arg(&root, "scripts/install-skills.sh")?;
-    let (ok, out, err, code) = run_cmd("open", &[&path_str], &root);
-    Ok(ActionResult::new(
-        ok,
-        "open_install_skills_script",
-        out,
-        err,
-        code,
-    ))
 }
 
 #[cfg(test)]
@@ -570,14 +339,6 @@ mod tests {
             ),
         )
         .expect("write skill with metadata");
-    }
-
-    #[test]
-    fn skill_install_backend_is_platform_specific() {
-        #[cfg(windows)]
-        assert_eq!(super::skill_install_backend(), "native");
-        #[cfg(not(windows))]
-        assert_eq!(super::skill_install_backend(), "script");
     }
 
     #[test]
@@ -742,36 +503,6 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
 
         assert!(exists, "flat skill id must resolve to SKILL.md");
-    }
-
-    #[test]
-    fn agent_validation_accepts_all_valid_agents() {
-        for agent in crate::agent_skill_targets::VALID_SKILL_AGENTS {
-            assert!(
-                super::validate_agent(agent).is_ok(),
-                "valid agent '{}' should be accepted",
-                agent
-            );
-        }
-    }
-
-    #[test]
-    fn agent_validation_rejects_unknown_agents() {
-        for invalid in &["unknown", "codex_skill", "CODEX", "CLAUDE", ""] {
-            assert!(
-                super::validate_agent(invalid).is_err(),
-                "invalid agent '{}' should be rejected",
-                invalid
-            );
-        }
-    }
-
-    #[test]
-    fn agent_validation_rejects_typo_agents() {
-        assert!(super::validate_agent("opeencode").is_err());
-        assert!(super::validate_agent("Claude").is_err());
-        assert!(super::validate_agent("gemni").is_err());
-        assert!(super::validate_agent("removed-agent").is_err());
     }
 
     #[test]

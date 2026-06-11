@@ -2,32 +2,32 @@
 
 ## Set up OpenCode only
 
-1. **Workspace** — **install** if not already installed.
-2. Open **OpenCode** — enable rule and config targets in the Targets panel (changes autosave).
-3. **Diff Rules**, then **Sync Rules**; **Diff Configs**, then **Sync Configs**.
+1. Open **Workspace** and run **Install or Update**.
+2. Review conflicts, then apply safe OpenCode artifacts.
+3. Open **OpenCode** to verify runtime health.
 
 ## Add a new skill
 
 1. Create `skills/<slug>/SKILL.md` in the installed workspace.
 2. Refresh — Library lists the new skill.
-3. Open the relevant harness page — preview skill sync, dry-run install, then apply.
+3. Open the relevant harness page and run **Install or Update**.
 
 ## Edit global agent rules safely
 
 1. **Library → Rules** — edit and save.
-2. Harness page — **Diff Rules**, review, **Sync Rules**.
+2. Harness page — preview **Install or Update**, then apply.
 
 ## Sync Codex managed config safely
 
-1. Open **Workspace** setup lifecycle or **Codex** health.
+1. Open **Workspace** or **Codex** installation status.
 2. Preview shows managed-field drift only; unrelated user TOML is preserved.
 3. Apply merges managed profiles and top-level keys from `templates/codex/config.toml`.
 
 ## Install skills to harness targets
 
 1. **Workspace** must be valid.
-2. Open harness page (Codex, OpenCode, etc.) or use unified setup apply/repair.
-3. Skills sync installs the full bundled catalog for each harness (grouped source, flat install layout).
+2. Open a harness page or Workspace and run **Install or Update**.
+3. The managed installation installs the full bundled catalog for each selected harness (grouped source, flat install layout).
 
 ## Version the workspace with Git
 

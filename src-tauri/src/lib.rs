@@ -17,39 +17,36 @@ mod settings;
 mod setup_fingerprint;
 mod setup_lifecycle;
 mod setup_mutation_guard;
+mod setup_roots;
 mod setup_transaction;
 mod shell_runtime;
 mod skill_discovery;
 #[cfg_attr(not(windows), allow(dead_code))]
 mod skills_install;
+mod stable_digest;
 
 #[cfg(test)]
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod script_action_smoke;
 #[cfg(test)]
-mod setup_lifecycle_smoke;
-#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;
 
 use commands::{
-    apply_setup, apply_workspace_repair, create_doc, discover_local_git_repos,
-    generate_opencode_config_snapshot, get_agent_targets, get_backup_details,
-    get_claude_runtime_health, get_codex_runtime_health, get_cursor_profile_health,
-    get_docs_health, get_installation_status, get_opencode_runtime_health,
-    get_repo_dashboard_snapshot, get_repo_prompt_context, get_settings, get_skills_sync_health,
-    get_status, get_workspace_diagnostics, install_default_workspace, install_skills,
-    list_agent_metadata, list_agent_sources, list_backups, list_docs,
-    list_opencode_config_editor_sources, list_skills, open_agent_source, open_agent_template,
-    open_backups_folder, open_config_template, open_default_workspace_folder, open_doc,
-    open_install_skills_script, open_opencode_config_source, open_skill, plan_workspace_repair,
-    preview_repair_setup, preview_setup, read_agent_source, read_agent_template,
-    read_brain_setup_seed, read_config_template, read_doc, read_opencode_config_source, read_skill,
-    repair_default_workspace, repair_setup_command, rollback_setup_transaction, run_action,
-    run_cursor_profile_action, save_agent_source, save_agent_template, save_config_template,
-    save_doc, save_opencode_config_source, try_set_active_workspace_path, update_settings,
+    apply_setup, create_doc, discover_local_git_repos, generate_opencode_config_snapshot,
+    get_agent_targets, get_backup_details, get_claude_runtime_health, get_codex_runtime_health,
+    get_cursor_profile_health, get_docs_health, get_installation_status,
+    get_opencode_runtime_health, get_repo_dashboard_snapshot, get_repo_prompt_context,
+    get_settings, get_status, get_workspace_diagnostics, list_agent_metadata, list_agent_sources,
+    list_backups, list_docs, list_opencode_config_editor_sources, list_skills, open_agent_source,
+    open_agent_template, open_backups_folder, open_config_template, open_default_workspace_folder,
+    open_doc, open_opencode_config_source, open_skill, preview_setup, read_agent_source,
+    read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
+    read_opencode_config_source, read_skill, rollback_setup_transaction, run_action,
+    save_agent_source, save_agent_template, save_config_template, save_doc,
+    save_opencode_config_source, try_set_active_workspace_path, update_settings,
     validate_workspace_contract,
 };
 use tauri::Manager;
@@ -59,6 +56,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
+            let bundled = app
+                .path()
+                .resolve("default-workspace", tauri::path::BaseDirectory::Resource)
+                .map_err(|e| format!("resolve bundled workspace: {e}"))?;
+            setup_roots::initialize(bundled)?;
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.maximize();
             }
@@ -67,17 +69,13 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             get_status,
             get_workspace_diagnostics,
-            install_default_workspace,
-            repair_default_workspace,
             open_default_workspace_folder,
             try_set_active_workspace_path,
             run_action,
             get_claude_runtime_health,
             get_codex_runtime_health,
             get_cursor_profile_health,
-            run_cursor_profile_action,
             list_skills,
-            get_skills_sync_health,
             get_installation_status,
             open_skill,
             read_skill,
@@ -102,8 +100,6 @@ pub fn run() {
             read_agent_source,
             open_agent_source,
             save_agent_source,
-            install_skills,
-            open_install_skills_script,
             get_settings,
             update_settings,
             get_agent_targets,
@@ -113,16 +109,12 @@ pub fn run() {
             validate_workspace_contract,
             get_opencode_runtime_health,
             generate_opencode_config_snapshot,
-            plan_workspace_repair,
-            apply_workspace_repair,
             read_brain_setup_seed,
             get_repo_dashboard_snapshot,
             get_repo_prompt_context,
             discover_local_git_repos,
             preview_setup,
-            preview_repair_setup,
             apply_setup,
-            repair_setup_command,
             rollback_setup_transaction,
         ])
         .run(tauri::generate_context!())

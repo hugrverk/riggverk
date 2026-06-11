@@ -1,4 +1,4 @@
-//! Process-wide guard for filesystem-mutating setup lifecycle operations.
+//! Process-wide guard for filesystem-mutating installation operations.
 //!
 //! Read-only preview, health, diff, discovery, and planning commands must not
 //! acquire this guard.

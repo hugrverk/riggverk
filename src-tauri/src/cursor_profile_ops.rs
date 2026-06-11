@@ -4,9 +4,10 @@ use std::path::{Path, PathBuf};
 use crate::commands::backups::backup_root;
 use crate::commands::cursor_profile::{
     cursor_root, default_playwright_mcp_config_path, json_has_unsafe_literals,
-    manifest_recommended_skills, resolve_playwright_browsers_path, sync_dir_status,
-    sync_skill_dirs_status, transform_playwright_template_value,
+    resolve_playwright_browsers_path, transform_playwright_template_value,
 };
+#[cfg(test)]
+use crate::commands::cursor_profile::{manifest_recommended_skills, sync_skill_dirs_status};
 
 pub(crate) const LEGACY_MCP_ALLOWLIST_ENTRY: &str = "playwright:*";
 
@@ -62,6 +63,7 @@ pub(crate) fn legacy_permission_cleanup_status(path: &Path) -> LegacyPermissionC
     }
 }
 use crate::cursor_profile_paths::{normalized_path_key, CursorProfilePaths};
+#[cfg(test)]
 use crate::skills_install::{
     discover_workspace_skills, install_skills_native, InstallSkillsRequest,
 };
@@ -175,6 +177,7 @@ fn mcp_template_path(workspace_root: &Path) -> PathBuf {
     cursor_root(workspace_root).join("mcp/playwright.mcp.json")
 }
 
+#[cfg(test)]
 fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, String> {
     if !target_path.is_file() {
         return Ok(serde_json::Value::Object(serde_json::Map::new()));
@@ -184,6 +187,7 @@ fn read_permissions_target(target_path: &Path) -> Result<serde_json::Value, Stri
     serde_json::from_str(&content).map_err(|e| format!("permissions target invalid JSON: {e}"))
 }
 
+#[cfg(test)]
 fn prepare_legacy_permission_cleanup(target_path: &Path) -> Result<Option<String>, String> {
     if !target_path.is_file() {
         return Ok(None);
@@ -327,6 +331,7 @@ fn prepare_mcp_merge(
         .map_err(|e| format!("serialize MCP: {e}"))
 }
 
+#[cfg(test)]
 #[derive(Debug, Clone)]
 struct GlobalProfilePlan {
     mcp_serialized: String,
@@ -377,6 +382,7 @@ fn install_agents(
     Ok(())
 }
 
+#[cfg(test)]
 fn install_global_skills(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -424,6 +430,7 @@ fn install_global_skills(
     Ok(())
 }
 
+#[cfg(test)]
 fn apply_global_mcp(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -450,6 +457,7 @@ fn apply_global_mcp(
     Ok(())
 }
 
+#[cfg(test)]
 fn preflight_global_profile(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -536,6 +544,7 @@ fn preflight_global_profile(
     })
 }
 
+#[cfg(test)]
 fn stage_failure(stage: &str, err: String, stdout: String) -> ProfileRunOutput {
     ProfileRunOutput {
         success: false,
@@ -545,6 +554,7 @@ fn stage_failure(stage: &str, err: String, stdout: String) -> ProfileRunOutput {
     }
 }
 
+#[cfg(test)]
 fn apply_legacy_permission_cleanup(
     paths: &CursorProfilePaths,
     apply: bool,
@@ -572,6 +582,7 @@ fn apply_legacy_permission_cleanup(
     Ok(())
 }
 
+#[cfg(test)]
 pub fn run_global_profile(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -606,56 +617,6 @@ pub fn run_global_profile(
         stdout,
         stderr: String::new(),
         exit_code: 0,
-    }
-}
-
-pub fn validate_global_profile(
-    workspace_root: &Path,
-    paths: &CursorProfilePaths,
-) -> ProfileRunOutput {
-    let (agents_status, _, _) = sync_dir_status(
-        &cursor_root(workspace_root).join("agents"),
-        &paths.agents,
-        "md",
-    );
-    let recommended = manifest_recommended_skills(workspace_root);
-    let (skills_status, _, _) =
-        sync_skill_dirs_status(&workspace_root.join("skills"), &paths.skills, &recommended);
-    let mcp_status = mcp_diff_status(workspace_root, paths);
-    let legacy_status = legacy_permission_cleanup_status(&paths.permissions);
-    let legacy_label = legacy_status.label();
-
-    let stdout = format!(
-        "agents {agents_status}\nskills {skills_status}\nmcp {mcp_status}\nlegacy-permissions {legacy_label}\n"
-    );
-
-    let legacy_ok = matches!(
-        legacy_status,
-        LegacyPermissionCleanupStatus::NotNeeded | LegacyPermissionCleanupStatus::Clean
-    );
-    let success = agents_status == "synced"
-        && skills_status == "synced"
-        && mcp_status == "synced"
-        && legacy_ok;
-
-    let stderr = match legacy_status {
-        LegacyPermissionCleanupStatus::Planned => format!(
-            "legacy permissions cleanup pending: remove exact entry {LEGACY_MCP_ALLOWLIST_ENTRY} from mcpAllowlist (run apply setup)"
-        ),
-        LegacyPermissionCleanupStatus::BlockedInvalidJson => {
-            "permissions.json is invalid JSON; fix before applying setup".into()
-        }
-        LegacyPermissionCleanupStatus::BlockedInvalidAllowlist => {
-            "permissions.json mcpAllowlist must be an array".into()
-        }
-        _ => String::new(),
-    };
-
-    ProfileRunOutput {
-        success,
-        stdout,
-        stderr,
-        exit_code: if success { 0 } else { 1 },
     }
 }
 

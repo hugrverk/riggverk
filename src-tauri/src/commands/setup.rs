@@ -20,8 +20,7 @@ use crate::setup_lifecycle::{
     OperationKind, PlannedOperation, SetupPlan, SetupRequest, SetupSurfaceId,
 };
 
-use super::process::run_cmd;
-use super::workspace::workspace_root;
+use super::workspace::setup_workspace_target_path;
 
 // ── Transaction types ──
 
@@ -64,210 +63,20 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     Ok(dir)
 }
 
-/// The agent name used for skill-related operations.
-fn surface_agent(surface: SetupSurfaceId) -> Option<&'static str> {
-    match surface {
-        SetupSurfaceId::OpenCodeSkills => Some("opencode"),
-        SetupSurfaceId::CodexSkills => Some("codex"),
-        SetupSurfaceId::ClaudeSkills => Some("claude"),
-        SetupSurfaceId::CursorSkills => Some("cursor"),
-        _ => None,
-    }
-}
-
-// ── Script-based operation execution ──
-
-/// Execute a named operation on a surface.
-///
-/// Returns Ok(()) on success, Err on failure.
-/// Validates the operation after execution.
-fn execute_operation_and_validate(
-    op: &PlannedOperation,
-    workspace_root: &Path,
-) -> Result<(), String> {
-    let surface = op.surface;
-
-    // Execute the operation
-    match surface {
-        // OpenCode config — use install-opencode-config.sh
-        SetupSurfaceId::OpenCodeConfig => {
-            let script = workspace_root.join("scripts/install-opencode-config.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--quiet", "--config-only", "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("OpenCode config apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // OpenCode agents — use install-opencode-config.sh with --agents-only
-        SetupSurfaceId::OpenCodeAgents => {
-            let script = workspace_root.join("scripts/install-opencode-config.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--quiet", "--agents-only", "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("OpenCode agents apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // OpenCode rules — use install-agent-rules.sh
-        SetupSurfaceId::OpenCodeRules => {
-            let script = workspace_root.join("scripts/install-agent-rules.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--opencode", "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("OpenCode rules apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Codex config — use install-codex-config.sh
-        SetupSurfaceId::CodexConfig => {
-            let script = workspace_root.join("scripts/install-codex-config.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) =
-                run_cmd("bash", &[&script_str, "--quiet", "--apply"], workspace_root);
-            if !ok {
-                return Err(format!("Codex config apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Codex agents — use install-codex-agents.sh
-        SetupSurfaceId::CodexAgents => {
-            let script = workspace_root.join("scripts/install-codex-agents.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) =
-                run_cmd("bash", &[&script_str, "--apply"], workspace_root);
-            if !ok {
-                return Err(format!("Codex agents apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Codex rules — use install-agent-rules.sh
-        SetupSurfaceId::CodexRules => {
-            let script = workspace_root.join("scripts/install-agent-rules.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) =
-                run_cmd("bash", &[&script_str, "--codex", "--apply"], workspace_root);
-            if !ok {
-                return Err(format!("Codex rules apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Claude rules — use install-agent-rules.sh
-        SetupSurfaceId::ClaudeRules => {
-            let script = workspace_root.join("scripts/install-agent-rules.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--claude", "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("Claude rules apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Claude agents — use install-runtime-agents.sh with --claude
-        SetupSurfaceId::ClaudeAgents => {
-            let script = workspace_root.join("scripts/install-runtime-agents.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--claude", "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("Claude agents apply failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Cursor global agents — native Rust only, never install-cursor-workspace.sh
-        SetupSurfaceId::CursorAgents => {
-            let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
-                .map_err(|e| format!("resolve Cursor profile: {e}"))?;
-            let result = crate::cursor_profile_ops::run_global_agents_only(
-                workspace_root,
-                &cursor_paths,
-                true,
-            );
-            if !result.success {
-                return Err(format!("Cursor agents apply failed: {}", result.stderr));
-            }
-            Ok(())
-        }
-
-        // Cursor global skills — use install-skills.sh with --agent cursor
-        SetupSurfaceId::CursorSkills => {
-            let script = workspace_root.join("scripts/install-skills.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let agent = surface_agent(op.surface).unwrap_or("cursor");
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--agent", agent, "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!("Cursor skill install failed: {stderr}"));
-            }
-            Ok(())
-        }
-
-        // Cursor Playwright MCP — native Rust only, never install-cursor-workspace.sh
-        SetupSurfaceId::CursorMcp => {
-            let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
-                .map_err(|e| format!("resolve Cursor profile: {e}"))?;
-            let result =
-                crate::cursor_profile_ops::run_global_mcp_only(workspace_root, &cursor_paths, true);
-            if !result.success {
-                return Err(format!("Cursor MCP apply failed: {}", result.stderr));
-            }
-            Ok(())
-        }
-
-        // Skills — use install-skills.sh
-        SetupSurfaceId::OpenCodeSkills
-        | SetupSurfaceId::CodexSkills
-        | SetupSurfaceId::ClaudeSkills => {
-            let script = workspace_root.join("scripts/install-skills.sh");
-            let script_str = super::workspace::path_arg(&script)?;
-            let agent = surface_agent(op.surface).unwrap_or("opencode");
-            let (ok, _stdout, stderr, _code) = run_cmd(
-                "bash",
-                &[&script_str, "--agent", agent, "--apply"],
-                workspace_root,
-            );
-            if !ok {
-                return Err(format!(
-                    "{} skill install failed: {stderr}",
-                    op.surface.label()
-                ));
-            }
-            Ok(())
-        }
-
-        SetupSurfaceId::WorkspaceBundle => {
-            Err("workspace bundle updates run at artifact granularity".to_string())
-        }
-    }
+fn write_synced_backup(path: &Path, raw: &[u8]) -> Result<(), String> {
+    crate::path_safety::reject_symlink(path, "managed-state backup")?;
+    let mut output = fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|e| format!("create managed-state backup: {e}"))?;
+    use std::io::Write;
+    output
+        .write_all(raw)
+        .map_err(|e| format!("write managed-state backup: {e}"))?;
+    output
+        .sync_all()
+        .map_err(|e| format!("flush managed-state backup: {e}"))
 }
 
 fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
@@ -289,6 +98,118 @@ fn finalize_persisted_rollback(
     persist_setup_manifest(manifest_path, manifest, final_status, backup_dir).err()
 }
 
+fn reconcile_interrupted_setup_transactions(
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let setup_root = backup_root()?.join("setup");
+    if !setup_root.exists() {
+        return Ok(());
+    }
+    crate::path_safety::reject_symlink(&setup_root, "setup transaction root")?;
+    let workspace_key = setup_transaction::workspace_key(workspace_root)?;
+    let mut entries = fs::read_dir(&setup_root)
+        .map_err(|e| format!("read setup transactions: {e}"))?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| format!("read setup transaction entry: {e}"))?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        if !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            continue;
+        }
+        let transaction_id = entry.file_name().to_string_lossy().into_owned();
+        if !validate_transaction_id_format(&transaction_id) {
+            continue;
+        }
+        let backup_dir = entry.path();
+        crate::path_safety::reject_symlink(&backup_dir, "setup transaction")?;
+        let manifest_path = backup_dir.join("manifest.json");
+        if !manifest_path.is_file() {
+            continue;
+        }
+        crate::path_safety::reject_symlink(&manifest_path, "setup manifest")?;
+        let raw = fs::read_to_string(&manifest_path)
+            .map_err(|e| format!("read interrupted setup manifest: {e}"))?;
+        let mut manifest: ArtifactTransactionManifest = serde_json::from_str(&raw)
+            .map_err(|e| format!("parse interrupted setup manifest: {e}"))?;
+        if manifest.workspace_key != workspace_key {
+            continue;
+        }
+        setup_transaction::validate_manifest(&manifest, workspace_root)?;
+        if !matches!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::Prepared
+                | setup_transaction::TransactionStatus::Applying
+                | setup_transaction::TransactionStatus::Failed
+                | setup_transaction::TransactionStatus::RollingBack
+                | setup_transaction::TransactionStatus::RollbackFailed
+        ) {
+            continue;
+        }
+        let (_, errors, persist_error) = run_persisted_rollback(
+            &manifest_path,
+            &mut manifest,
+            &backup_dir,
+            home,
+            workspace_root,
+            RollbackExecutionMode::Automatic,
+        );
+        if let Some(error) = persist_error {
+            return Err(format!(
+                "resume interrupted setup {transaction_id}: {error}"
+            ));
+        }
+        if !errors.is_empty()
+            || manifest.transaction_status != setup_transaction::TransactionStatus::RolledBack
+        {
+            return Err(format!(
+                "interrupted setup {transaction_id} could not be restored: {}",
+                errors.join("; ")
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn restore_previous_managed_state(
+    manifest: &ArtifactTransactionManifest,
+    backup_dir: &Path,
+    workspace_root: &Path,
+) -> Result<(), String> {
+    let state_path = crate::managed_state::managed_state_path(workspace_root);
+    if manifest.previous_managed_state_present {
+        let relative = manifest
+            .previous_managed_state_backup_rel
+            .as_deref()
+            .ok_or_else(|| "managed-state backup is missing from transaction".to_string())?;
+        if relative.contains("..") || Path::new(relative).is_absolute() {
+            return Err("unsafe managed-state backup path".to_string());
+        }
+        let backup = backup_dir.join(relative);
+        crate::path_safety::reject_symlink(&backup, "managed-state backup")?;
+        let raw = fs::read(&backup).map_err(|e| format!("read managed-state backup: {e}"))?;
+        let digest = crate::stable_digest::bytes(&raw);
+        if manifest.previous_managed_state_digest.as_deref() != Some(digest.as_str()) {
+            return Err("managed-state backup digest mismatch".to_string());
+        }
+        crate::managed_state::restore_managed_state_raw_atomic(workspace_root, &raw)?;
+        let restored =
+            fs::read(&state_path).map_err(|e| format!("read restored managed state: {e}"))?;
+        if crate::stable_digest::bytes(&restored) != digest {
+            return Err("restored managed state digest mismatch".to_string());
+        }
+        if manifest.previous_managed_state_trusted
+            && crate::managed_state::read_managed_state(workspace_root).is_none()
+        {
+            return Err("restored trusted managed state failed validation".to_string());
+        }
+    } else if state_path.exists() {
+        crate::path_safety::reject_symlink(&state_path, "managed-state rollback target")?;
+        fs::remove_file(&state_path).map_err(|e| format!("remove managed state: {e}"))?;
+    }
+    Ok(())
+}
+
 fn run_persisted_rollback(
     manifest_path: &Path,
     manifest: &mut ArtifactTransactionManifest,
@@ -298,21 +219,6 @@ fn run_persisted_rollback(
     mode: RollbackExecutionMode,
 ) -> (Vec<String>, Vec<String>, Option<String>) {
     let indices = setup_transaction::rollback_eligible_indices(&manifest.operations);
-    if indices.is_empty() {
-        if matches!(
-            manifest.transaction_status,
-            setup_transaction::TransactionStatus::RollingBack
-                | setup_transaction::TransactionStatus::RollbackFailed
-        ) {
-            return (
-                vec![],
-                vec![],
-                finalize_persisted_rollback(manifest_path, manifest, backup_dir),
-            );
-        }
-        return (vec![], vec![], None);
-    }
-
     if let Err(e) = persist_setup_manifest(
         manifest_path,
         manifest,
@@ -399,9 +305,12 @@ fn run_persisted_rollback(
         let op = &mut manifest.operations[index];
         let artifact = op.artifact.clone();
         let restore_result = match mode {
-            RollbackExecutionMode::Automatic => {
-                setup_transaction::restore_artifact_from_backup(op, backup_dir, home)
-            }
+            RollbackExecutionMode::Automatic => setup_transaction::restore_artifact_from_backup(
+                op,
+                backup_dir,
+                home,
+                workspace_root,
+            ),
             RollbackExecutionMode::Explicit => {
                 setup_transaction::restore_artifact_from_backup_for_explicit_rollback(
                     op,
@@ -439,6 +348,18 @@ fn run_persisted_rollback(
         ) {
             return (rolled_back, errors, Some(e));
         }
+    }
+
+    if let Err(error) = restore_previous_managed_state(manifest, backup_dir, workspace_root) {
+        errors.push(error);
+        manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
+        let _ = persist_setup_manifest(
+            manifest_path,
+            manifest,
+            setup_transaction::TransactionStatus::RollbackFailed,
+            backup_dir,
+        );
+        return (rolled_back, errors, None);
     }
 
     if let Some(e) = finalize_persisted_rollback(manifest_path, manifest, backup_dir) {
@@ -518,12 +439,6 @@ fn persist_setup_manifest(
     setup_transaction::persist_manifest_atomic(manifest_path, manifest, transaction_root)
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum ApplyExecutionMode {
-    SurfaceScripts,
-    CreateOnlyArtifacts,
-}
-
 fn remove_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -548,34 +463,70 @@ fn remove_single_artifact(
     } else if dest.is_file() {
         fs::remove_file(&dest).map_err(|e| format!("remove {}: {e}", dest.display()))?;
     }
+    if matches!(
+        artifact,
+        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
+    ) {
+        remove_empty_migration_parents(&dest, workspace_root)?;
+    }
     Ok(())
 }
 
-fn create_single_artifact(
+fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<(), String> {
+    let mut current = path.parent();
+    while let Some(directory) = current {
+        if directory == workspace_root
+            || !directory.starts_with(workspace_root)
+            || matches!(
+                directory
+                    .strip_prefix(workspace_root)
+                    .ok()
+                    .and_then(|path| path.to_str()),
+                Some("skills") | Some("agents") | Some("metadata")
+            )
+        {
+            break;
+        }
+        crate::path_safety::reject_symlink(directory, "migration directory")?;
+        let mut entries =
+            fs::read_dir(directory).map_err(|e| format!("read {}: {e}", directory.display()))?;
+        if entries.next().is_some() {
+            break;
+        }
+        let parent = directory.parent();
+        fs::remove_dir(directory)
+            .map_err(|e| format!("remove empty {}: {e}", directory.display()))?;
+        current = parent;
+    }
+    Ok(())
+}
+
+fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
     home: &Path,
 ) -> Result<(), String> {
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
-    if dest.exists() {
-        return Err(format!(
-            "refusing create: destination already exists: {}",
-            dest.display()
-        ));
-    }
 
     if source.is_dir() {
+        if dest.exists() {
+            crate::safe_filesystem::remove_dir_no_symlinks(&dest, home)
+                .map_err(|e| format!("replace skill dir: {e}"))?;
+        }
         crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
-            .map_err(|e| format!("create skill dir: {e}"))?;
+            .map_err(|e| format!("apply skill dir: {e}"))?;
         return Ok(());
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
         let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths()
             .map_err(|e| format!("resolve Cursor profile: {e}"))?;
-        let result =
-            crate::cursor_profile_ops::run_global_mcp_only(workspace_root, &cursor_paths, true);
+        let result = crate::cursor_profile_ops::run_global_mcp_only(
+            &crate::setup_roots::bundled_root_for(workspace_root)?,
+            &cursor_paths,
+            true,
+        );
         if !result.success {
             return Err(format!("Cursor MCP create failed: {}", result.stderr));
         }
@@ -589,13 +540,25 @@ fn create_single_artifact(
             .map_err(|e| format!("parse opencode template json: {e}"))?;
         let rendered = crate::commands::render_expected_opencode_config(&template_json, home)
             .ok_or_else(|| "cannot render opencode config".to_string())?;
+        let installed = if dest.is_file() {
+            let content = fs::read_to_string(&dest)
+                .map_err(|e| format!("read opencode config {}: {e}", dest.display()))?;
+            serde_json::from_str(&content)
+                .map_err(|e| format!("parse opencode config json: {e}"))?
+        } else {
+            serde_json::Value::Object(serde_json::Map::new())
+        };
+        let merged = crate::commands::merge_managed_opencode_config(
+            &installed,
+            &crate::commands::extract_managed_opencode_config(&rendered),
+        );
         if let Some(parent) = dest.parent() {
             fs::create_dir_all(parent)
                 .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
         }
         fs::write(
             &dest,
-            serde_json::to_string_pretty(&rendered)
+            serde_json::to_string_pretty(&merged)
                 .map_err(|e| format!("serialize opencode config: {e}"))?
                 + "\n",
         )
@@ -604,13 +567,17 @@ fn create_single_artifact(
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CodexConfig {
-        let source_str = fs::read_to_string(&source)
-            .map_err(|e| format!("read codex template {}: {e}", source.display()))?;
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)
-                .map_err(|e| format!("create parent {}: {e}", parent.display()))?;
+        if dest.is_file() {
+            return crate::commands::rollback_codex_config_managed_projection(
+                &crate::setup_roots::bundled_root_for(workspace_root)?,
+                &dest,
+                &source,
+            );
         }
-        fs::write(&dest, source_str)
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent).map_err(|e| format!("create parent: {e}"))?;
+        }
+        fs::copy(&source, &dest)
             .map_err(|e| format!("write codex config {}: {e}", dest.display()))?;
         return Ok(());
     }
@@ -697,9 +664,8 @@ fn user_home() -> Result<PathBuf, String> {
 
 /// Apply artifact-level operations using artifact-owned transactions.
 fn apply_planned_artifacts(
-    pending: &[setup_transaction::PlannedArtifact],
+    selected: &[setup_transaction::PlannedArtifact],
     manual_steps: Vec<String>,
-    execution_mode: ApplyExecutionMode,
     preview_token: Option<&str>,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
@@ -717,6 +683,11 @@ fn apply_planned_artifacts(
         }
     };
 
+    let pending: Vec<setup_transaction::PlannedArtifact> = selected
+        .iter()
+        .filter(|planned| planned.kind.needs_apply())
+        .cloned()
+        .collect();
     if pending.is_empty() {
         return SetupResult {
             success: true,
@@ -744,7 +715,7 @@ fn apply_planned_artifacts(
         }
     };
 
-    let ws_root = match workspace_root() {
+    let ws_root = match setup_workspace_target_path() {
         Ok(r) => r,
         Err(e) => {
             return SetupResult {
@@ -772,12 +743,23 @@ fn apply_planned_artifacts(
             };
         }
     };
+    if let Err(e) = reconcile_interrupted_setup_transactions(&ws_root, &home) {
+        return SetupResult {
+            success: false,
+            transaction_id,
+            applied: vec![],
+            failed: vec![e.clone()],
+            rolled_back: vec![],
+            manual_steps,
+            message: format!("Cannot reconcile interrupted setup: {e}"),
+        };
+    }
 
     let mut surfaces: Vec<SetupSurfaceId> = pending.iter().map(|p| p.surface).collect();
     surfaces.sort_by_key(|s| format!("{s:?}"));
     surfaces.dedup();
 
-    for p in pending {
+    for p in &pending {
         if matches!(p.kind, OperationKind::Remove) {
             continue;
         }
@@ -810,9 +792,68 @@ fn apply_planned_artifacts(
             };
         }
     };
+    let roots = match crate::setup_roots::SetupRoots::resolve(
+        ws_root.clone(),
+        home.clone(),
+        backup_dir.clone(),
+    ) {
+        Ok(roots) => roots,
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps,
+                message: e,
+            };
+        }
+    };
+    let ws_root = roots.runtime_root.clone();
+    let home = roots.home.clone();
+    let backup_dir = roots.backup_root.clone();
+    let previous_managed_state = crate::managed_state::read_managed_state(&ws_root);
+    let previous_state_path = crate::managed_state::managed_state_path(&ws_root);
+    let (previous_managed_state_present, previous_managed_state_digest, previous_backup_rel) =
+        if previous_state_path.is_file() {
+            let raw = match fs::read(&previous_state_path) {
+                Ok(raw) => raw,
+                Err(e) => {
+                    return SetupResult {
+                        success: false,
+                        transaction_id,
+                        applied: vec![],
+                        failed: vec![format!("read managed state: {e}")],
+                        rolled_back: vec![],
+                        manual_steps,
+                        message: "Cannot back up managed state".to_string(),
+                    };
+                }
+            };
+            let relative = "managed-state.previous.json".to_string();
+            if let Err(e) = write_synced_backup(&backup_dir.join(&relative), &raw) {
+                return SetupResult {
+                    success: false,
+                    transaction_id,
+                    applied: vec![],
+                    failed: vec![format!("backup managed state: {e}")],
+                    rolled_back: vec![],
+                    manual_steps,
+                    message: "Cannot back up managed state".to_string(),
+                };
+            }
+            (
+                true,
+                Some(crate::stable_digest::bytes(&raw)),
+                Some(relative),
+            )
+        } else {
+            (false, None, None)
+        };
 
     let mut manifest_ops: Vec<ArtifactManifestOperation> = Vec::new();
-    for p in pending {
+    for p in &pending {
         let backup_rel =
             match setup_transaction::backup_artifact(&p.artifact, &backup_dir, &home, &ws_root) {
                 Ok(rel) => rel,
@@ -860,6 +901,10 @@ fn apply_planned_artifacts(
         created_at: transaction_id.clone(),
         surface_ids: surfaces.clone(),
         transaction_status: setup_transaction::TransactionStatus::Prepared,
+        previous_managed_state_present,
+        previous_managed_state_trusted: previous_managed_state.is_some(),
+        previous_managed_state_digest,
+        previous_managed_state_backup_rel: previous_backup_rel,
         operations: manifest_ops.clone(),
     };
     if let Err(e) = setup_transaction::validate_manifest(&manifest, &ws_root) {
@@ -920,7 +965,7 @@ fn apply_planned_artifacts(
         }
     }
 
-    let surfaces_to_execute = setup_transaction::surfaces_needing_apply(pending);
+    let surfaces_to_execute = setup_transaction::surfaces_needing_apply(&pending);
     let mut applied: Vec<String> = Vec::new();
 
     if let Err(e) = persist_setup_manifest(
@@ -1006,40 +1051,16 @@ fn apply_planned_artifacts(
 
         let surface_artifacts_for_script: Vec<_> =
             pending.iter().filter(|p| p.surface == *surface).collect();
-        let needs_surface_script = surface_artifacts_for_script
-            .iter()
-            .any(|p| matches!(p.kind, OperationKind::Create | OperationKind::Update));
-        let apply_error = match execution_mode {
-            ApplyExecutionMode::SurfaceScripts if needs_surface_script => {
-                let surface_op = PlannedOperation {
-                    surface: *surface,
-                    kind: OperationKind::Update,
-                    summary: surface.label().to_string(),
-                    details: vec![],
-                    conflict_description: None,
-                    manual_step: None,
-                };
-                execute_operation_and_validate(&surface_op, &ws_root)
-                    .err()
-                    .map(|e| format!("{}: {e}", surface.label()))
+        let mut apply_error = None;
+        for p in &surface_artifacts_for_script {
+            if !matches!(p.kind, OperationKind::Create | OperationKind::Update) {
+                continue;
             }
-            ApplyExecutionMode::SurfaceScripts => None,
-            ApplyExecutionMode::CreateOnlyArtifacts => {
-                let surface_artifacts: Vec<_> =
-                    pending.iter().filter(|p| p.surface == *surface).collect();
-                let mut first_error = None;
-                for p in &surface_artifacts {
-                    if !matches!(p.kind, OperationKind::Create) {
-                        continue;
-                    }
-                    if let Err(e) = create_single_artifact(&p.artifact, &ws_root, &home) {
-                        first_error = Some(format!("{}: {e}", artifact_label(&p.artifact)));
-                        break;
-                    }
-                }
-                first_error
+            if let Err(e) = apply_single_artifact(&p.artifact, &ws_root, &home) {
+                apply_error = Some(format!("{}: {e}", artifact_label(&p.artifact)));
+                break;
             }
-        };
+        }
 
         if let Some(err) = apply_error {
             for op in manifest.operations.iter_mut() {
@@ -1163,28 +1184,14 @@ fn apply_planned_artifacts(
         }
     }
 
-    if let Err(e) = persist_setup_manifest(
-        &manifest_path,
-        &mut manifest,
-        setup_transaction::TransactionStatus::Completed,
-        &backup_dir,
+    match crate::managed_state::next_state_from_operations(
+        previous_managed_state.as_ref(),
+        &roots.bundled_root,
+        &roots.runtime_root,
+        &roots.home,
+        &manifest.operations,
+        selected,
     ) {
-        let message = format!("Cannot persist completed status: {e}");
-        return finish_failed_apply_with_rollback(FailedApplyRollback {
-            manifest_path: &manifest_path,
-            manifest: &mut manifest,
-            backup_dir: &backup_dir,
-            home: &home,
-            workspace_root: &ws_root,
-            transaction_id,
-            applied,
-            failed: vec![e],
-            manual_steps,
-            message,
-        });
-    }
-
-    match crate::managed_state::build_managed_state_from_installed(&ws_root, &home, &ws_root) {
         Ok(state) => {
             if let Err(e) = crate::managed_state::write_managed_state_atomic(&ws_root, &state) {
                 let message = format!("Apply succeeded but managed state was not published: {e}");
@@ -1219,6 +1226,27 @@ fn apply_planned_artifacts(
         }
     }
 
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Completed,
+        &backup_dir,
+    ) {
+        let message = format!("Cannot persist completed status: {e}");
+        return finish_failed_apply_with_rollback(FailedApplyRollback {
+            manifest_path: &manifest_path,
+            manifest: &mut manifest,
+            backup_dir: &backup_dir,
+            home: &home,
+            workspace_root: &ws_root,
+            transaction_id,
+            applied,
+            failed: vec![e],
+            manual_steps,
+            message,
+        });
+    }
+
     let applied_count = applied.len();
     SetupResult {
         success: true,
@@ -1229,281 +1257,6 @@ fn apply_planned_artifacts(
         manual_steps,
         message: format!("Successfully applied {applied_count} artifact(s)"),
     }
-}
-
-// ── Repair ──
-
-/// Read-only repair preview with integrity fingerprint.
-#[derive(Debug, Clone, Serialize)]
-pub struct RepairPreview {
-    pub missing_artifacts: Vec<String>,
-    pub skipped_updates: usize,
-    pub skipped_conflicts: usize,
-    pub skipped_unavailable: usize,
-    pub repair_fingerprint: Option<String>,
-    pub repair_preview_token: Option<String>,
-    pub message: String,
-}
-
-fn compute_repair_fingerprint(
-    workspace_root: &Path,
-    home: &Path,
-    create_pending: &[setup_transaction::PlannedArtifact],
-) -> Result<Option<String>, String> {
-    if create_pending.is_empty() {
-        return Ok(None);
-    }
-    let mut surfaces: Vec<SetupSurfaceId> = create_pending.iter().map(|p| p.surface).collect();
-    surfaces.sort_by_key(|s| format!("{s:?}"));
-    surfaces.dedup();
-    Ok(Some(setup_transaction::compute_plan_fingerprint(
-        workspace_root,
-        &surfaces,
-        create_pending,
-        home,
-    )?))
-}
-
-/// Read-only repair preview listing create-only artifacts.
-#[tauri::command]
-pub fn preview_repair_setup() -> Result<RepairPreview, String> {
-    let ws_root = workspace_root()?;
-    let home = user_home()?;
-    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL.to_vec();
-    let planned = setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home)?;
-    let create_pending: Vec<_> = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Create))
-        .cloned()
-        .collect();
-    let skipped_updates = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Update))
-        .count();
-    let skipped_conflicts = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Conflict))
-        .count();
-    let skipped_unavailable = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Unavailable))
-        .count();
-    let missing_artifacts: Vec<String> = create_pending
-        .iter()
-        .map(|p| artifact_label(&p.artifact))
-        .collect();
-    let repair_fingerprint = compute_repair_fingerprint(&ws_root, &home, &create_pending)?;
-    let mut repair_surfaces: Vec<SetupSurfaceId> =
-        create_pending.iter().map(|p| p.surface).collect();
-    repair_surfaces.sort_by_key(|s| format!("{s:?}"));
-    repair_surfaces.dedup();
-    let repair_preview_token = match repair_fingerprint.as_deref() {
-        Some(fp) => Some(setup_transaction::issue_preview_token(
-            &ws_root,
-            fp,
-            setup_transaction::PreviewPurpose::Repair,
-            &repair_surfaces,
-        )?),
-        None => None,
-    };
-    let message = if create_pending.is_empty() {
-        format!(
-            "No missing artifacts ({skipped_updates} updates skipped, {skipped_conflicts} conflicts, {skipped_unavailable} unavailable)"
-        )
-    } else {
-        format!(
-            "{} missing artifact(s) can be repaired",
-            create_pending.len()
-        )
-    };
-    Ok(RepairPreview {
-        missing_artifacts,
-        skipped_updates,
-        skipped_conflicts,
-        skipped_unavailable,
-        repair_fingerprint,
-        repair_preview_token,
-        message,
-    })
-}
-
-/// Repair managed artifacts — only creates safely absent resources.
-///
-/// Uses fresh artifact detection. Does not overwrite diverged content, update
-/// configs, or remove unknown user artifacts.
-pub fn repair_setup_artifacts(
-    repair_fingerprint: Option<&str>,
-    repair_preview_token: Option<&str>,
-) -> SetupResult {
-    let ws_root = match workspace_root() {
-        Ok(r) => r,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec!["resolve workspace".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: format!("Cannot resolve workspace root: {e}"),
-            };
-        }
-    };
-    let home = match user_home() {
-        Ok(h) => h,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec![e.clone()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: e,
-            };
-        }
-    };
-
-    let surfaces: Vec<SetupSurfaceId> = SetupSurfaceId::ALL.to_vec();
-
-    let planned = match setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws_root, &home) {
-        Ok(p) => p,
-        Err(e) => {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec![e.clone()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: e,
-            };
-        }
-    };
-
-    let synced_count = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::NoChange))
-        .count();
-    let conflict_count = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Update | OperationKind::Conflict))
-        .count();
-    let unavailable_count = planned
-        .iter()
-        .filter(|p| matches!(p.kind, OperationKind::Unavailable))
-        .count();
-
-    let create_pending: Vec<setup_transaction::PlannedArtifact> = planned
-        .into_iter()
-        .filter(|p| matches!(p.kind, OperationKind::Create))
-        .collect();
-
-    let expected = match repair_fingerprint {
-        Some(fp) => fp,
-        None => {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec!["repair fingerprint required".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: "Repair fingerprint required. Run repair preview before applying."
-                    .to_string(),
-            };
-        }
-    };
-    if !setup_transaction::validate_fingerprint_format(expected) {
-        return SetupResult {
-            success: false,
-            transaction_id: String::new(),
-            applied: vec![],
-            failed: vec!["malformed repair fingerprint".to_string()],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: "Malformed repair fingerprint".to_string(),
-        };
-    }
-    let token = match repair_preview_token {
-        Some(t) => t,
-        None => {
-            return SetupResult {
-                success: false,
-                transaction_id: String::new(),
-                applied: vec![],
-                failed: vec!["repair preview token required".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: "Repair preview token required. Run repair preview before applying."
-                    .to_string(),
-            };
-        }
-    };
-    let current = compute_repair_fingerprint(&ws_root, &home, &create_pending)
-        .ok()
-        .flatten()
-        .unwrap_or_default();
-    if current != expected {
-        return SetupResult {
-            success: false,
-            transaction_id: String::new(),
-            applied: vec![],
-            failed: vec!["stale repair preview".to_string()],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: "Repair preview mismatch: state changed. Re-run repair preview.".to_string(),
-        };
-    }
-    let mut repair_surfaces: Vec<SetupSurfaceId> =
-        create_pending.iter().map(|p| p.surface).collect();
-    repair_surfaces.sort_by_key(|s| format!("{s:?}"));
-    repair_surfaces.dedup();
-    if let Err(e) = setup_transaction::validate_preview_token(
-        token,
-        &ws_root,
-        expected,
-        setup_transaction::PreviewPurpose::Repair,
-        &repair_surfaces,
-    ) {
-        return SetupResult {
-            success: false,
-            transaction_id: String::new(),
-            applied: vec![],
-            failed: vec![e.clone()],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: e,
-        };
-    }
-
-    if create_pending.is_empty() {
-        return SetupResult {
-            success: true,
-            transaction_id: new_transaction_id().unwrap_or_default(),
-            applied: vec![],
-            failed: vec![],
-            rolled_back: vec![],
-            manual_steps: vec![],
-            message: format!(
-                "No missing artifacts to repair ({synced_count} synced, {conflict_count} conflicts, {unavailable_count} unavailable)"
-            ),
-        };
-    }
-
-    let mut result = apply_planned_artifacts(
-        &create_pending,
-        vec![],
-        ApplyExecutionMode::CreateOnlyArtifacts,
-        Some(token),
-    );
-    if result.success {
-        result.message = format!(
-            "Repaired {} artifact(s); {synced_count} synced; {conflict_count} conflicts skipped; {unavailable_count} unavailable",
-            result.applied.len()
-        );
-    }
-    result
 }
 
 // ── Rollback ──
@@ -1621,7 +1374,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
             };
         }
     };
-    let ws_root = match workspace_root() {
+    let ws_root = match setup_workspace_target_path() {
         Ok(r) => r,
         Err(e) => {
             return SetupResult {
@@ -1678,6 +1431,8 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
 
     match manifest.transaction_status {
         setup_transaction::TransactionStatus::Completed
+        | setup_transaction::TransactionStatus::Prepared
+        | setup_transaction::TransactionStatus::Applying
         | setup_transaction::TransactionStatus::Failed
         | setup_transaction::TransactionStatus::RollingBack
         | setup_transaction::TransactionStatus::RollbackFailed => {}
@@ -1690,17 +1445,6 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
                 rolled_back: vec![],
                 manual_steps: vec![],
                 message: "Transaction already rolled back".to_string(),
-            };
-        }
-        _ => {
-            return SetupResult {
-                success: false,
-                transaction_id: transaction_id.to_string(),
-                applied: vec![],
-                failed: vec!["transaction not eligible for rollback".to_string()],
-                rolled_back: vec![],
-                manual_steps: vec![],
-                message: "Transaction status does not allow rollback".to_string(),
             };
         }
     }
@@ -2028,7 +1772,7 @@ pub fn get_installation_status(
             })
             .collect()
     };
-    let ws_root = workspace_root()?;
+    let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
     crate::installation_status::status_for_surfaces(&surface_ids, &ws_root, &home)
 }
@@ -2059,7 +1803,7 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
 
     if surface_ids.is_empty() {
         // All surfaces
-        let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
+        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
         let home = crate::platform_paths::resolve_user_home(
             &crate::platform_paths::PlatformEnv::from_process_env(),
             crate::platform_paths::Platform::current(),
@@ -2080,7 +1824,7 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         attach_plan_preview(&mut plan, &ws_root, &home)?;
         Ok(plan)
     } else {
-        let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
+        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
         let home = crate::platform_paths::resolve_user_home(
             &crate::platform_paths::PlatformEnv::from_process_env(),
             crate::platform_paths::Platform::current(),
@@ -2137,7 +1881,7 @@ pub fn apply_setup(
     }
 
     // Use real detection instead of synthetic all-Create states
-    let ws_root = workspace_root().map_err(|e| format!("workspace root: {e}"))?;
+    let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
     let home = crate::platform_paths::resolve_user_home(
         &crate::platform_paths::PlatformEnv::from_process_env(),
         crate::platform_paths::Platform::current(),
@@ -2179,9 +1923,9 @@ pub fn apply_setup(
     };
 
     let plan = crate::setup_lifecycle::plan_setup(&request, &states);
-    if plan.is_blocked {
+    if plan.is_blocked && !plan.has_pending_changes {
         return Err(format!(
-            "Setup blocked: {} conflict(s) must be resolved first",
+            "Setup blocked: {} conflict(s) require review",
             plan.conflicts.len()
         ));
     }
@@ -2218,7 +1962,7 @@ pub(crate) fn apply_setup_plan_with_token(
         };
     }
 
-    let ws_root = match workspace_root() {
+    let ws_root = match setup_workspace_target_path() {
         Ok(r) => r,
         Err(e) => {
             let transaction_id = new_transaction_id().unwrap_or_default();
@@ -2266,28 +2010,7 @@ pub(crate) fn apply_setup_plan_with_token(
         }
     };
 
-    let pending: Vec<setup_transaction::PlannedArtifact> = planned
-        .into_iter()
-        .filter(|p| p.kind.needs_apply())
-        .collect();
-    apply_planned_artifacts(
-        &pending,
-        manual_steps,
-        ApplyExecutionMode::SurfaceScripts,
-        preview_token,
-    )
-}
-
-#[tauri::command]
-pub fn repair_setup_command(
-    _skip_manual: bool,
-    repair_fingerprint: Option<String>,
-    repair_preview_token: Option<String>,
-) -> Result<SetupResult, String> {
-    Ok(repair_setup_artifacts(
-        repair_fingerprint.as_deref(),
-        repair_preview_token.as_deref(),
-    ))
+    apply_planned_artifacts(&planned, manual_steps, preview_token)
 }
 
 #[tauri::command]
@@ -2402,35 +2125,6 @@ mod tests {
     }
 
     #[test]
-    fn repair_only_applies_create_artifacts() {
-        let _guard = guard::lock();
-        let _restore = guard::EnvRestore::capture();
-        let home = std::env::temp_dir().join("aw-repair-filter-home");
-        let ws = std::env::temp_dir().join("aw-repair-filter-ws");
-        let _ = fs::remove_dir_all(&home);
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(&home).expect("create home");
-        set_test_user_dirs(&home);
-        fs::create_dir_all(ws.join("templates/sync")).expect("sync dir");
-        fs::write(ws.join("templates/sync/opencode-rules.md"), "rules").expect("source");
-        fs::create_dir_all(home.join(".config/opencode")).expect("opencode dir");
-        fs::write(home.join(".config/opencode/AGENTS.md"), "rules").expect("installed");
-        unsafe {
-            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
-        }
-
-        let surfaces = vec![SetupSurfaceId::OpenCodeRules];
-        let planned = setup_transaction::plan_artifacts_for_surfaces(&surfaces, &ws, &home)
-            .expect("plan artifacts");
-        assert_eq!(planned.len(), 1);
-        assert!(
-            matches!(planned[0].kind, OperationKind::NoChange),
-            "synced rules artifact should be NoChange, got {:?}",
-            planned[0].kind
-        );
-    }
-
-    #[test]
     fn transaction_result_is_serializable() {
         let result = SetupResult {
             success: true,
@@ -2489,93 +2183,14 @@ mod tests {
     }
 
     #[test]
-    fn detect_opencode_config_nochange_when_managed_keys_match() {
-        let home = std::env::temp_dir().join("aw-detect-oc-match");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-oc-match-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
-
-        // Write identical configs with managed keys
-        let config = r#"{"$schema":"test","model":"test","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
-        fs::write(home.join(".config/opencode/opencode.json"), config).unwrap();
-        fs::write(ws.join("templates/opencode.json"), config).unwrap();
-        fs::write(home.join(".config/opencode/tui.json"), "{}").unwrap();
-        fs::write(ws.join("templates/tui.json"), "{}").unwrap();
-        fs::create_dir_all(home.join(".config/playwright-mcp")).unwrap();
-        fs::write(home.join(".config/playwright-mcp/config.json"), "{}").unwrap();
-        fs::write(ws.join("templates/playwright-mcp.config.json"), "{}").unwrap();
-
-        let (_surface, kind, _summary) =
-            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
-        assert_eq!(
-            kind,
-            OperationKind::NoChange,
-            "matching managed keys should be NoChange"
-        );
-    }
-
-    #[test]
-    fn detect_opencode_config_update_when_managed_keys_differ() {
-        let home = std::env::temp_dir().join("aw-detect-oc-diff");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-oc-diff-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
-
-        // Different managed key values
-        let installed = r#"{"$schema":"test","model":"old-model","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
-        let source = r#"{"$schema":"test","model":"new-model","permissions":{"allow":[]},"plugins":{},"mcpServers":{},"tools":{},"agents":{},"skills":{},"rules":"","environment":{}}"#;
-        fs::write(home.join(".config/opencode/opencode.json"), installed).unwrap();
-        fs::write(ws.join("templates/opencode.json"), source).unwrap();
-
-        let (_surface, kind, _summary) =
-            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
-        assert_eq!(
-            kind,
-            OperationKind::Update,
-            "diff managed keys should be Update"
-        );
-    }
-
-    #[test]
-    fn detect_codex_config_nochange_when_managed_fields_match() {
-        let home = std::env::temp_dir().join("aw-detect-cx-match");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        fs::create_dir_all(home.join(".codex")).expect("create codex dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-cx-match-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(&ws).expect("create ws");
-        fs::create_dir_all(ws.join("templates/codex")).expect("create templates");
-
-        let config = "[profile]\n[profile.safe]\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n[profile.workspace-write]\napproval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n";
-        fs::write(home.join(".codex/config.toml"), config).unwrap();
-        fs::write(ws.join("templates/codex/config.toml"), config).unwrap();
-
-        let (_surface, kind, _summary) =
-            detect_surface_state(SetupSurfaceId::CodexConfig, &ws, &home);
-        assert_eq!(
-            kind,
-            OperationKind::NoChange,
-            "matching managed fields should be NoChange"
-        );
-    }
-
-    #[test]
     fn detect_claude_skills_create_when_missing() {
         let home = std::env::temp_dir().join("aw-detect-cl-skills-create");
         let _ = fs::remove_dir_all(&home);
         fs::create_dir_all(&home).expect("create dir");
 
-        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
+        let ws = std::env::temp_dir().join("aw-detect-cl-skills-runtime");
+        let _ = fs::remove_dir_all(&ws);
+        fs::create_dir_all(&ws).expect("create runtime");
 
         let (_surface, kind, _summary) =
             detect_surface_state(SetupSurfaceId::ClaudeSkills, &ws, &home);
@@ -2611,59 +2226,17 @@ mod tests {
         );
     }
 
-    #[test]
-    fn detect_opencode_config_conflict_when_invalid_json() {
-        let home = std::env::temp_dir().join("aw-detect-oc-invalid");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        fs::create_dir_all(home.join(".config/opencode")).expect("create opencode dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-oc-invalid-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(ws.join("templates")).expect("create templates dir");
-
-        // Write invalid JSON as installed config
-        fs::write(home.join(".config/opencode/opencode.json"), "not json {{{").unwrap();
-        fs::write(ws.join("templates/opencode.json"), "{}").unwrap();
-
-        let (_surface, kind, summary) =
-            detect_surface_state(SetupSurfaceId::OpenCodeConfig, &ws, &home);
-        assert_eq!(
-            kind,
-            OperationKind::Conflict,
-            "invalid JSON should be Conflict, got {kind:?}: {summary}"
-        );
-    }
-
-    #[test]
-    fn detect_rules_nochange_when_matching() {
-        let home = std::env::temp_dir().join("aw-detect-rules-match");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(home.join(".codex")).expect("create codex dir");
-
-        let ws = std::env::temp_dir().join("aw-detect-rules-match-ws");
-        let _ = fs::remove_dir_all(&ws);
-        fs::create_dir_all(ws.join("templates/sync")).expect("create sync dir");
-
-        fs::write(home.join(".codex/AGENTS.md"), "same rules").unwrap();
-        fs::write(ws.join("templates/sync/codex-rules.md"), "same rules").unwrap();
-
-        let (_surface, kind, _summary) =
-            detect_surface_state(SetupSurfaceId::CodexRules, &ws, &home);
-        assert_eq!(
-            kind,
-            OperationKind::NoChange,
-            "matching rules should be NoChange"
-        );
-    }
-
     // ── Preview integrity tests ──
 
     #[test]
     fn plan_fingerprint_is_stable_for_same_surface_set() {
         setup_transaction::clear_preview_tokens_for_test();
-        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let home = std::env::temp_dir();
+        let ws = std::env::temp_dir().join("aw-fingerprint-stable-runtime");
+        let home = std::env::temp_dir().join("aw-fingerprint-stable-home");
+        let _ = fs::remove_dir_all(&ws);
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&ws).expect("runtime");
+        fs::create_dir_all(&home).expect("home");
         let surfaces = vec![SetupSurfaceId::OpenCodeRules, SetupSurfaceId::CodexRules];
         let fp1 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp1");
         let fp2 = compute_plan_fingerprint_for_surfaces(&surfaces, &ws, &home).expect("fp2");
@@ -2673,8 +2246,12 @@ mod tests {
 
     #[test]
     fn plan_fingerprint_changes_when_surfaces_differ() {
-        let ws = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
-        let home = std::env::temp_dir();
+        let ws = std::env::temp_dir().join("aw-fingerprint-different-runtime");
+        let home = std::env::temp_dir().join("aw-fingerprint-different-home");
+        let _ = fs::remove_dir_all(&ws);
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&ws).expect("runtime");
+        fs::create_dir_all(&home).expect("home");
         let fp1 =
             compute_plan_fingerprint_for_surfaces(&[SetupSurfaceId::OpenCodeRules], &ws, &home)
                 .expect("fp1");
@@ -2713,6 +2290,10 @@ mod tests {
             created_at: "1".into(),
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: setup_transaction::TransactionStatus::Prepared,
+            previous_managed_state_present: false,
+            previous_managed_state_trusted: false,
+            previous_managed_state_digest: None,
+            previous_managed_state_backup_rel: None,
             operations: vec![ArtifactManifestOperation {
                 artifact: ArtifactId::OpenCodeRules,
                 surface: SetupSurfaceId::OpenCodeRules,
@@ -2773,7 +2354,7 @@ mod tests {
 
     fn seed_two_artifact_transaction(txn_id: &str) -> PathBuf {
         let home = user_home().expect("home for rollback seed");
-        let ws_root = workspace_root().expect("workspace for rollback seed");
+        let ws_root = setup_workspace_target_path().expect("workspace for rollback seed");
         let backup_dir = backup_root().unwrap().join("setup").join(txn_id);
         fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
         fs::write(
@@ -2816,6 +2397,10 @@ mod tests {
             created_at: txn_id.to_string(),
             surface_ids: vec![SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules],
             transaction_status: setup_transaction::TransactionStatus::Failed,
+            previous_managed_state_present: false,
+            previous_managed_state_trusted: false,
+            previous_managed_state_digest: None,
+            previous_managed_state_backup_rel: None,
             operations: vec![
                 ArtifactManifestOperation {
                     artifact: ArtifactId::CodexRules,
@@ -2875,7 +2460,7 @@ mod tests {
             .iter()
             .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
         let home = user_home().unwrap();
-        let ws = workspace_root().unwrap();
+        let ws = setup_workspace_target_path().unwrap();
         let codex_dest = ArtifactId::CodexRules.resolve_dest(&home, &ws).unwrap();
         let opencode_dest = ArtifactId::OpenCodeRules.resolve_dest(&home, &ws).unwrap();
         assert_eq!(
@@ -2884,6 +2469,35 @@ mod tests {
         );
         assert_eq!(
             fs::read_to_string(&opencode_dest).unwrap(),
+            "opencode-rules-backup"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn interrupted_failed_transaction_is_reconciled_before_next_apply() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, txn_id) = rollback_test_fixture();
+        seed_two_artifact_transaction(&txn_id);
+
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("reconcile transaction");
+
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-rules-backup"
+        );
+        assert_eq!(
+            fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
             "opencode-rules-backup"
         );
         let _ = fs::remove_dir_all(&base);

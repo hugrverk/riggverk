@@ -51,7 +51,7 @@ export function installationPrimaryAction(state: InstallationState): {
     case "not_installed":
       return { label: "install", variant: "primary", disabled: false };
     case "conflict":
-      return { label: "review conflicts", variant: "warn", disabled: true };
+      return { label: "review conflicts", variant: "warn", disabled: false };
     case "unavailable":
       return { label: "unavailable", variant: "default", disabled: true };
   }

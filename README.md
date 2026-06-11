@@ -52,7 +52,7 @@ Agent Workspace distinguishes between:
 3. The installed user-owned runtime workspace.
 4. Harness-native files under each tool's documented home directories.
 
-Install, repair, update, sync, and removal actions are explicit. Bundled workspace repair copies only missing or zero-byte resources and does not overwrite non-empty user edits.
+The app exposes one explicit **Install or Update** workflow. It previews artifact-level creates, updates, removals, and conflicts before mutation. Packaged resources are immutable input; runtime workspace and harness files are user-owned destinations.
 
 See `docs/WORKSPACE_CONTRACT.md` for the complete contract.
 
@@ -82,7 +82,7 @@ Global destinations:
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-All current bundled skills support all four harnesses. Harness pages use the canonical sync-all model. There are no skill profiles or persistent per-harness skill selections.
+All current bundled skills support all four harnesses. There are no skill profiles or persistent per-harness skill selections.
 
 Deprecated Agent Workspace skills are classified against bundled reference snapshots. Identical managed copies may be removed after backup; diverged and unknown copies are preserved.
 
@@ -147,11 +147,11 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 
 ## Application surfaces
 
-- Workspace - install, repair, update resources, status, backups, and release verification.
-- Codex - rules, agents, config, skills, and legacy skill migration.
-- OpenCode - runtime health, rules, agents, config, skills, and duplicate skill audit.
-- Claude - rules, native agents, skills, and explicit manual settings/MCP boundaries.
-- Cursor - native global setup, agents, skills, Playwright MCP, and manual IDE steps.
+- Workspace - canonical path, unified Install or Update status, advanced verification, backups, and release verification.
+- Codex - managed installation status plus rules, agents, config, and skills health.
+- OpenCode - managed installation status plus runtime health.
+- Claude - managed installation status plus explicit manual settings/MCP boundaries.
+- Cursor - managed installation status plus native runtime health and manual IDE steps.
 - Library - docs, rules, skills, agents, configs, and Copy Brain.
 - Prompt Loops - deterministic copy-ready prompt templates and optional repository context.
 - Repo Dashboard - local-git-first repository and docs insight with optional bounded `gh` enrichment.

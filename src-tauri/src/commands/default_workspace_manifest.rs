@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub(super) const MANAGED_REFRESH_PATHS: &[&str] = &[
     "scripts/install-agent-rules.sh",
     "scripts/install-runtime-agents.sh",

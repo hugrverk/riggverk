@@ -1177,22 +1177,19 @@ rm -rf "$tmpdir"
 if ! $runtime_ok; then exit 1; fi
 printf '  install-runtime-agents.sh: claude agents written (5)\n'
 
-step "harness pages use page-scoped agent sync actions"
-for required in \
-  'action: "sync_claude_agents"' \
-  'action: "diff_claude_agents"' \
-  'action: "sync_opencode_agents"' \
-  'action: "diff_opencode_agents"'; do
-  if ! grep -qF "$required" src/App.tsx; then
-    printf 'FAIL: App.tsx missing page-scoped wiring: %s\n' "$required" >&2
+step "harness pages use one managed installation owner"
+for view in ClaudeView CodexView CursorView OpenCodeView; do
+  path="src/views/${view}.tsx"
+  if [ "$(grep -c '<HarnessInstallationCard' "$path")" -ne 1 ]; then
+    printf 'FAIL: %s must render exactly one HarnessInstallationCard\n' "$path" >&2
     exit 1
   fi
 done
-if grep -q 'sync_agent_rules.*sync agents' src/App.tsx; then
-  printf 'FAIL: App.tsx must not wire Agents cards to sync_agent_rules\n' >&2
+if search_has_match 'sync_claude_agents|diff_claude_agents|sync_opencode_agents|diff_opencode_agents' src/App.tsx src/views; then
+  printf 'FAIL: page-scoped agent mutation wiring must not return\n' >&2
   exit 1
 fi
-printf '  page-scoped agent sync actions verified in App.tsx\n'
+printf '  one managed installation owner verified on each harness page\n'
 
 step "regression: no stale config + agents labels in app UI"
 if search_has_match 'config \\+ agents' src/views src/App.tsx; then
@@ -1350,8 +1347,8 @@ printf '  main window startup maximize hook verified\n'
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py
 
-step "setup lifecycle contract guards"
-python3 scripts/check-setup-lifecycle-contract.py
+step "managed installation contract guards"
+python3 scripts/check-managed-installation-contract.py
 
 step "bundled default private context boundary"
 for forbidden_file in \
@@ -1402,16 +1399,8 @@ else
 fi
 printf '  no project-target app surfaces in src/ or src-tauri/\n'
 
-step "regression: Cursor page repair for stale workspace resources"
-if ! search_has_match 'onRepairWorkspace' src/App.tsx; then
-  printf 'FAIL: App.tsx must wire onRepairWorkspace into CursorView\n' >&2
-  exit 1
-fi
-if search_has_match 'Repair or update the workspace on Start' src/views/CursorView.tsx; then
-  printf 'FAIL: CursorView must not direct stale-resource repair to Start\n' >&2
-  exit 1
-fi
-printf '  Cursor stale-resource repair UX verified\n'
+step "regression: Cursor page uses unified installation"
+python3 scripts/check-cursor-action-compat.py
 
 step "forbidden source scans"
 scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
@@ -1438,97 +1427,33 @@ if search_has_match 'RoutingView|view === "routing"|switchView\("routing"\)' src
 fi
 printf '  no RoutingView or routing view switch in src/\n'
 
-step "repair workspace safety simulation"
-python3 - <<'PY'
-import os, tempfile, shutil
-
-# Simulate repair file-selection logic: never overwrite existing, reject broad paths.
-BROAD_PATHS = ["/", os.path.expanduser("~"), "/Users", "/tmp", os.getcwd()]
-with tempfile.TemporaryDirectory() as old_ws:
-    # Create minimal valid workspace markers
-    marker_dir = os.path.join(old_ws, ".agent-workspace")
-    os.makedirs(marker_dir)
-    open(os.path.join(marker_dir, "workspace.json"), "w").close()
-    scripts_dir = os.path.join(old_ws, "scripts")
-    os.makedirs(scripts_dir)
-    for s in ["bootstrap.sh", "install-agent-rules.sh", "install-opencode-config.sh",
-              "install-cursor-workspace.sh", "install-skills.sh"]:
-        open(os.path.join(scripts_dir, s), "w").close()
-    templates_dir = os.path.join(old_ws, "templates")
-    os.makedirs(templates_dir)
-    open(os.path.join(templates_dir, "global-agent-rules.md"), "w").close()
-    open(os.path.join(templates_dir, "opencode.json"), "w").close()
-    open(os.path.join(templates_dir, "tui.json"), "w").close()
-    cursor_rules = os.path.join(templates_dir, "cursor", "rules")
-    os.makedirs(cursor_rules)
-    open(os.path.join(cursor_rules, "workspace.mdc"), "w").close()
-    cursor_agents = os.path.join(templates_dir, "cursor", "agents")
-    os.makedirs(cursor_agents)
-    open(os.path.join(old_ws, "README.md"), "w").close()
-    skills_dir = os.path.join(old_ws, "skills")
-    os.makedirs(skills_dir)
-
-    # Missing files that repair should add
-    assert not os.path.exists(os.path.join(old_ws, "scripts", "generate-opencode-config.py")), \
-        "old workspace must be missing generator"
-    assert not os.path.exists(os.path.join(old_ws, "templates", "opencode.base.json")), \
-        "old workspace must be missing base.json"
-    assert not os.path.exists(os.path.join(old_ws, "templates", "opencode.policy.json")), \
-        "old workspace must be missing policy.json"
-
-    # Pre-existing file that must not be overwritten
-    existing_content = "user-edited-content"
-    open(os.path.join(old_ws, "templates", "tui.json"), "w").write(existing_content)
-
-    # Check that existing content is preserved
-    tui_content = open(os.path.join(old_ws, "templates", "tui.json")).read()
-    assert tui_content == existing_content, \
-        f"existing tui.json must not be modified: {tui_content}"
-
-# Verify broad paths would be rejected
-for bp in BROAD_PATHS:
-    if os.path.isdir(bp):
-        print(f"  broad path check: {bp}")
-        # In actual Rust code, is_unsafe_target returns true for these paths.
-        # Mark as checked — actual enforcement is in Rust tests.
-
-print("  repair safety simulation passed")
-PY
-
-step "repair commands: no arbitrary-target, safe plan/apply only"
-# Verify public commands.rs does NOT export arbitrary-target repair_workspace
-if grep -Eq '^\s*repair_workspace[\s,]' src-tauri/src/commands.rs && ! grep -q 'repair_workspace_impl' <<<''; then
-  # Check for actual public re-export (not internal like repair_workspace_core)
-  if ! grep -q '//' src-tauri/src/commands.rs | grep -qF 'repair_workspace'; then true; fi
-fi
+step "unified installation command surface"
 python3 -c "
 import re, sys
-# commands.rs: 'repair_workspace' must not appear after 'pub use workspace'
-with open('src-tauri/src/commands.rs') as f:
-    content = f.read()
-# Check the pub use workspace block
-ws_block = content[content.index('pub use workspace'):content.index(';', content.index('pub use workspace'))]
-if 'repair_workspace' in ws_block:
-    print('FAIL: commands.rs pub use workspace still exports repair_workspace')
-    sys.exit(1)
-print('  commands.rs: repair_workspace not in public exports')
-
-# Verify plan/apply are still exported
-for safe_cmd in ['plan_workspace_repair', 'apply_workspace_repair']:
-    if safe_cmd not in ws_block:
-        print(f'FAIL: commands.rs missing safe repair command {safe_cmd}')
+sources = [
+    open('src-tauri/src/commands.rs').read(),
+    open('src-tauri/src/lib.rs').read(),
+    open('src/App.tsx').read(),
+]
+for obsolete in [
+    'install_default_workspace',
+    'repair_default_workspace',
+    'plan_workspace_repair',
+    'apply_workspace_repair',
+    'preview_repair_setup',
+    'repair_setup_artifacts',
+]:
+    if any(obsolete in source for source in sources):
+        print(f'FAIL: obsolete installation command remains: {obsolete}')
         sys.exit(1)
-print('  commands.rs: plan_workspace_repair + apply_workspace_repair exported')
-
-# lib.rs: repair_workspace must not be imported or in generate_handler!
-with open('src-tauri/src/lib.rs') as f:
-    lib = f.read()
-if 'repair_workspace' in lib:
-    print('FAIL: lib.rs still references repair_workspace')
-    sys.exit(1)
-print('  lib.rs: no repair_workspace reference')
+lib = sources[1]
+for required in ['preview_setup', 'apply_setup', 'rollback_setup_transaction']:
+    if required not in lib:
+        print(f'FAIL: unified setup command missing: {required}')
+        sys.exit(1)
+print('  one preview/apply/rollback command surface verified')
 "
-printf '  repair command surface is safe (plan/apply only)\n'
+printf '  unified installation command surface verified\n'
 
 step "claude harness page present"
 if [ ! -f "$repo_root/src/views/ClaudeView.tsx" ]; then
@@ -1629,31 +1554,22 @@ if search_has_match 'choose folder|check path|use default|clear active' src/view
   printf 'FAIL: deprecated workspace path chooser controls still in Start UI\n' >&2
   exit 1
 fi
-if ! search_has_match 'install_default_workspace' src-tauri/src/lib.rs src/App.tsx; then
-  printf 'FAIL: install_default_workspace must be wired in backend and frontend\n' >&2
+if ! search_has_match 'runHarnessSetupUpdate' src/App.tsx; then
+  printf 'FAIL: App.tsx must route workspace installation through unified setup\n' >&2
   exit 1
 fi
 printf '  canonical install path model verified\n'
 
-step "Start page bundled resource update"
-if ! search_has_match 'needsBundledResourcesUpdate|update resources|bundled_resources_status' src/views/StartView.tsx src/types.ts; then
-  printf 'FAIL: Start page must expose bundled resource update for valid stale workspaces\n' >&2
+step "Start page unified installation owner"
+if [ "$(grep -c '<HarnessInstallationCard' src/views/StartView.tsx)" -ne 1 ]; then
+  printf 'FAIL: Start page must expose exactly one unified installation card\n' >&2
   exit 1
 fi
-if ! search_has_match 'missing_bundled_count|missing_bundled_file_paths' src-tauri/src/commands/workspace.rs; then
-  printf 'FAIL: workspace diagnostics must report missing bundled default files\n' >&2
+if search_has_match 'repair|update resources|SetupLifecycle|WorkspaceSkillsVerify' src/views/StartView.tsx; then
+  printf 'FAIL: Start page retains obsolete installation owners or terminology\n' >&2
   exit 1
 fi
-if ! search_has_match 'workspace_install_file_missing' src-tauri/src/commands/workspace.rs; then
-  printf 'FAIL: workspace must treat zero-byte bundled install files as missing\n' >&2
-  exit 1
-fi
-if search_has_match 'showRepair = installState === "INSTALLED"' src/views/StartView.tsx; then
-  printf 'FAIL: repair button must not be tied to INSTALLED state\n' >&2
-  exit 1
-fi
-npx --yes tsx scripts/test-start-view-bundled.ts
-printf '  Start bundled resource update guards + self-tests ok\n'
+printf '  Start unified installation owner verified\n'
 
 step "opencode runtime UI status mapping"
 if search_has_match 'runtimeChipLabel\(configCheckTone' src/views/OpenCodeView.tsx src/lib; then
@@ -1668,25 +1584,25 @@ if ! search_has_match 'opencodeAgentsStatus|opencodeConfigStatus|configCheckStat
   printf 'FAIL: scoped OpenCode status helpers missing\n' >&2
   exit 1
 fi
-npx --yes tsx scripts/test-opencode-runtime-ui.ts
+bash scripts/run-ts-check.sh scripts/test-opencode-runtime-ui.ts
 printf '  OpenCode status mapping guards + self-tests ok\n'
 
 step "Prompt Loops template contract"
-npx --yes tsx scripts/check-prompt-loops-templates.ts
+bash scripts/run-ts-check.sh scripts/check-prompt-loops-templates.ts
 printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
 
 step "Prompt Loops context handoff contract"
-npx --yes tsx scripts/check-prompt-context-handoff.ts
+bash scripts/run-ts-check.sh scripts/check-prompt-context-handoff.ts
 printf '  Prompt Loops context handoff formatter/eligibility checks ok\n'
 
 step "Repo Dashboard model and parser contracts"
 npm run check:repo-dashboard-contracts
-npx --yes tsx scripts/check-repo-dashboard-model.ts
-npx --yes tsx scripts/check-repo-dashboard-docs-parser.ts
-npx --yes tsx scripts/check-repo-dashboard-entries.ts
-npx --yes tsx scripts/check-repo-dashboard-markdown.ts
-npx --yes tsx scripts/check-repo-dashboard-docs-workspace.ts
-npx --yes tsx scripts/check-repo-dashboard-navigation.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-model.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-docs-parser.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-entries.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-markdown.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-docs-workspace.ts
+bash scripts/run-ts-check.sh scripts/check-repo-dashboard-navigation.ts
 if ! search_has_match 'MAX_DOC_CONTENT_BYTES' src-tauri/src/commands/repo_dashboard.rs; then
   printf 'FAIL: repo dashboard must cap local doc read size\n' >&2
   exit 1

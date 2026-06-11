@@ -1,19 +1,12 @@
 use serde::Serialize;
 use std::path::{Path, PathBuf};
 
-use super::content::safe_canonical_target;
-use super::process::{run_cmd_owned_env, ActionResult};
 use super::status::file_eq;
 use super::workspace::workspace_root;
-use crate::cursor_profile_ops::{
-    legacy_permission_cleanup_status, run_global_agents_only, run_global_profile,
-    validate_global_profile, LegacyPermissionCleanupStatus,
-};
+use crate::cursor_profile_ops::{legacy_permission_cleanup_status, LegacyPermissionCleanupStatus};
 use crate::cursor_profile_paths::{
-    cursor_profile_env_pairs, cursor_profile_root_display, resolve_cursor_profile_paths,
-    CursorProfilePaths,
+    cursor_profile_root_display, resolve_cursor_profile_paths, CursorProfilePaths,
 };
-use crate::shell_runtime::{path_arg_for_bash, resolve_bash};
 
 #[derive(Serialize)]
 pub struct CursorProfileHealth {
@@ -370,7 +363,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     let script = root.join("scripts/install-cursor-workspace.sh");
     if !script.is_file() {
         warnings.push(
-            "Workspace install-cursor-workspace.sh is missing. Use repair workspace on the Cursor page."
+            "Workspace install-cursor-workspace.sh is missing. Run Install or Update on the Cursor page."
                 .into(),
         );
         return "missing".into();
@@ -384,7 +377,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     };
     if content.contains("cursor-global-profile-lib.sh") {
         warnings.push(
-            "Installed workspace Cursor script is stale (references removed cursor-global-profile-lib.sh). Use repair workspace on the Cursor page."
+            "Installed workspace Cursor script is stale (references removed cursor-global-profile-lib.sh). Run Install or Update on the Cursor page."
                 .into(),
         );
         return "stale".into();
@@ -393,7 +386,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
     let manifest_path = cursor_root(root).join("manifest.json");
     if !manifest_path.is_file() {
         warnings.push(
-            "Workspace Cursor manifest.json is missing. Use repair workspace on the Cursor page."
+            "Workspace Cursor manifest.json is missing. Run Install or Update on the Cursor page."
                 .into(),
         );
         return "stale".into();
@@ -415,7 +408,7 @@ fn workspace_resources_status(root: &Path, warnings: &mut Vec<String>) -> String
         != Some(CURSOR_SETUP_RUNTIME_NATIVE)
     {
         warnings.push(
-            "Installed workspace Cursor manifest is stale (missing native setup_runtime). Use repair workspace on the Cursor page."
+            "Installed workspace Cursor manifest is stale (missing native setup_runtime). Run Install or Update on the Cursor page."
                 .into(),
         );
         return "stale".into();
@@ -522,7 +515,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
 
     let next_action = match status.as_str() {
         "stale" => {
-            "Installed Cursor scripts/templates are behind the app. Repair workspace resources, then apply the global profile."
+            "Installed Cursor resources are behind the app. Run Install or Update."
                 .into()
         }
         "synced" => {
@@ -539,7 +532,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
             "Fix unsafe Cursor setup surfaces before applying setup to {}.",
             profile_root
         ),
-        "diverged" => "Run diff global profile, then apply global profile.".into(),
+        "diverged" => "Review the managed differences, then run Install or Update.".into(),
         _ => "Validate the workspace templates, then apply the global profile.".into(),
     };
 
@@ -563,201 +556,9 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
     })
 }
 
-fn cursor_script_arg(root: &Path) -> Result<String, String> {
-    let script = root.join("scripts/install-cursor-workspace.sh");
-    let canonical = safe_canonical_target(root, &script)?;
-    if !canonical.is_file() {
-        return Err("workspace script not found: scripts/install-cursor-workspace.sh".into());
-    }
-    path_arg_for_bash(&canonical)
-}
-
-fn block_when_workspace_resources_stale(
-    action: &str,
-    health: &CursorProfileHealth,
-) -> Option<ActionResult> {
-    let needs_current = matches!(
-        action,
-        "cursor_diff_global_profile"
-            | "cursor_apply_global_profile"
-            | "cursor_validate_global_profile"
-            | "cursor_diff_global_agents"
-            | "cursor_sync_global_agents"
-    );
-    if !needs_current {
-        return None;
-    }
-    if health.workspace_resources_status == "current" {
-        return None;
-    }
-    Some(ActionResult::new(
-        false,
-        action.to_string(),
-        String::new(),
-        format!(
-            "Workspace Cursor resources are {}. Use repair workspace on the Cursor page before running this action.",
-            health.workspace_resources_status
-        ),
-        Some(1),
-    ))
-}
-
-fn cursor_profile_command_summary(bash: &str, args: &[String], env: &[(String, String)]) -> String {
-    let env_keys: Vec<&str> = env
-        .iter()
-        .map(|(key, _)| key.as_str())
-        .filter(|key| *key != "HOME")
-        .collect();
-    format!(
-        "command: {} {}\nenv keys: {}",
-        bash,
-        args.iter()
-            .map(|arg| {
-                if arg.contains(' ') {
-                    format!("\"{arg}\"")
-                } else {
-                    arg.clone()
-                }
-            })
-            .collect::<Vec<_>>()
-            .join(" "),
-        env_keys.join(", ")
-    )
-}
-
-fn native_profile_result(
-    action: &str,
-    output: crate::cursor_profile_ops::ProfileRunOutput,
-) -> ActionResult {
-    ActionResult::new(
-        output.success,
-        action.to_string(),
-        output.stdout,
-        output.stderr,
-        Some(output.exit_code),
-    )
-}
-
-fn run_global_profile_action_native(
-    root: &Path,
-    action: &str,
-    apply: bool,
-) -> Result<ActionResult, String> {
-    let paths = resolve_cursor_profile_paths()?;
-    Ok(native_profile_result(
-        action,
-        run_global_profile(root, &paths, apply),
-    ))
-}
-
-fn validate_global_profile_action_native(
-    root: &Path,
-    action: &str,
-) -> Result<ActionResult, String> {
-    let paths = resolve_cursor_profile_paths()?;
-    Ok(native_profile_result(
-        action,
-        validate_global_profile(root, &paths),
-    ))
-}
-
-fn run_global_agents_action_native(
-    root: &Path,
-    action: &str,
-    apply: bool,
-) -> Result<ActionResult, String> {
-    let paths = resolve_cursor_profile_paths()?;
-    Ok(native_profile_result(
-        action,
-        run_global_agents_only(root, &paths, apply),
-    ))
-}
-
-pub(crate) fn run_cursor_workspace_script(
-    root: &Path,
-    action: &str,
-    args_tail: &[&str],
-) -> Result<ActionResult, String> {
-    let script = cursor_script_arg(root)?;
-    let bash = resolve_bash()?;
-    let paths = resolve_cursor_profile_paths()?;
-    let env = cursor_profile_env_pairs(&paths, &bash, "python3");
-    let mut args: Vec<String> = vec![script];
-    args.extend(args_tail.iter().map(|arg| (*arg).to_string()));
-    let (ok, out, mut err, code) = run_cmd_owned_env(&bash, &args, root, &env);
-    if !ok {
-        let summary = cursor_profile_command_summary(&bash, &args, &env);
-        err = if err.trim().is_empty() {
-            summary
-        } else {
-            format!("{summary}\n{err}")
-        };
-    }
-    Ok(ActionResult::new(ok, action.to_string(), out, err, code))
-}
-
-#[tauri::command]
-pub fn run_cursor_profile_action(action: String) -> Result<ActionResult, String> {
-    let root = workspace_root()?;
-    let health = get_cursor_profile_health()?;
-    if let Some(blocked) = block_when_workspace_resources_stale(&action, &health) {
-        return Ok(blocked);
-    }
-
-    match action.as_str() {
-        "cursor_diff_global_profile" => {
-            return run_global_profile_action_native(&root, &action, false);
-        }
-        "cursor_apply_global_profile" => {
-            return run_global_profile_action_native(&root, &action, true);
-        }
-        "cursor_validate_global_profile" => {
-            return validate_global_profile_action_native(&root, &action);
-        }
-        "cursor_diff_global_agents" => {
-            return run_global_agents_action_native(&root, &action, false);
-        }
-        "cursor_sync_global_agents" => {
-            return run_global_agents_action_native(&root, &action, true);
-        }
-        "cursor_validate_profile" => {
-            let ok = !matches!(health.status.as_str(), "unsafe" | "partial" | "stale")
-                && health.manifest_status == "valid"
-                && health.workspace_resources_status == "current";
-            return Ok(ActionResult::new(
-                ok,
-                action,
-                format!(
-                    "manifest: {}\nagents: {}/{} {}\nskills: {}/{} {}\nmcp: {}\nlegacy-permissions: {}\n",
-                    health.manifest_status,
-                    health.global_agents_count,
-                    health.expected_global_agents_count,
-                    health.global_agents_status,
-                    health.global_skills_count,
-                    health.expected_global_skills_count,
-                    health.global_skills_status,
-                    health.mcp_status,
-                    health.legacy_permission_cleanup_status,
-                ),
-                health.warnings.join("\n"),
-                if ok { Some(0) } else { Some(1) },
-            ));
-        }
-        _ => {}
-    }
-
-    let args_tail = match action.as_str() {
-        "cursor_open_settings" => vec!["--open-cursor-settings"],
-        "cursor_copy_user_rules" => vec!["--copy-user-rules"],
-        _ => return Err(format!("unknown Cursor action: {action}")),
-    };
-    run_cursor_workspace_script(&root, &action, &args_tail)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::cursor_profile_paths::cursor_profile_env_pairs;
     use crate::shell_runtime::path_arg_for_bash;
 
     #[test]
@@ -822,24 +623,6 @@ mod tests {
     }
 
     #[test]
-    fn command_summary_lists_cursor_target_env_keys() {
-        let paths = crate::cursor_profile_paths::cursor_profile_paths_from_root(
-            PathBuf::from(r"C:\Users\Example"),
-            PathBuf::from(r"D:\AgentWorkspace\cursor-profile"),
-        );
-        let env = cursor_profile_env_pairs(&paths, r"C:\Program Files\Git\bin\bash.exe", "python");
-        let summary = cursor_profile_command_summary(
-            r"C:\Program Files\Git\bin\bash.exe",
-            &["script.sh".into(), "--validate-global-profile".into()],
-            &env,
-        );
-        assert!(summary.contains("CURSOR_PROFILE_ROOT"));
-        assert!(summary.contains("CURSOR_AGENTS_PATH"));
-        assert!(summary.contains("AW_PYTHON"));
-        assert!(summary.contains("AW_BASH"));
-    }
-
-    #[test]
     fn cursor_profile_paths_match_default_script_contract() {
         let user_home = PathBuf::from("/tmp/aw-cursor-route-home");
         let profile_root = user_home.join(".cursor");
@@ -851,33 +634,5 @@ mod tests {
         assert_eq!(paths.skills, profile_root.join("skills"));
         assert_eq!(paths.mcp_config, profile_root.join("mcp.json"));
         assert_eq!(paths.permissions, profile_root.join("permissions.json"));
-    }
-
-    #[test]
-    fn block_apply_when_workspace_resources_stale() {
-        let health = CursorProfileHealth {
-            status: "stale".into(),
-            profile_root: "/tmp/.cursor".into(),
-            profile_root_source: "default".into(),
-            workspace_resources_status: "stale".into(),
-            manifest_status: "partial".into(),
-            user_rules_status: "manual".into(),
-            global_agents_status: "missing".into(),
-            global_agents_count: 0,
-            expected_global_agents_count: 5,
-            global_skills_status: "missing".into(),
-            global_skills_count: 0,
-            expected_global_skills_count: 6,
-            mcp_status: "missing".into(),
-            legacy_permission_cleanup_status: "not-needed".to_string(),
-            warnings: vec!["stale workspace".into()],
-            next_action: "repair".into(),
-        };
-        let blocked = block_when_workspace_resources_stale("cursor_apply_global_profile", &health);
-        assert!(blocked.is_some());
-        let result = blocked.unwrap();
-        assert!(!result.success);
-        assert!(result.stderr.contains("Cursor page"));
-        assert!(!result.stderr.contains("Start"));
     }
 }

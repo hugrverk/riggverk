@@ -6,7 +6,6 @@
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
-use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Mutex, OnceLock};
@@ -18,7 +17,7 @@ use crate::artifact_registry::{ArtifactId, ArtifactKind};
 use crate::commands::file_eq;
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 
-pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 3;
+pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const MAX_MANIFEST_OPERATIONS: usize = 500;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -141,6 +140,14 @@ pub struct ArtifactTransactionManifest {
     pub surface_ids: Vec<SetupSurfaceId>,
     #[serde(default)]
     pub transaction_status: TransactionStatus,
+    #[serde(default)]
+    pub previous_managed_state_present: bool,
+    #[serde(default)]
+    pub previous_managed_state_trusted: bool,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_managed_state_digest: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub previous_managed_state_backup_rel: Option<String>,
     pub operations: Vec<ArtifactManifestOperation>,
 }
 
@@ -159,7 +166,6 @@ const PREVIEW_TOKEN_TTL_SECS: u64 = 600;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum PreviewPurpose {
     Apply,
-    Repair,
 }
 
 #[derive(Debug, Clone)]
@@ -218,6 +224,15 @@ fn surfaces_match(a: &[SetupSurfaceId], b: &[SetupSurfaceId]) -> bool {
     left == right
 }
 
+fn stable_fingerprint(parts: &[String]) -> Result<String, String> {
+    let encoded =
+        serde_json::to_vec(parts).map_err(|e| format!("serialize fingerprint input: {e}"))?;
+    Ok(crate::stable_digest::bytes(&encoded)
+        .strip_prefix("sha256:")
+        .unwrap_or_default()
+        .to_string())
+}
+
 pub fn issue_preview_token(
     workspace_root: &Path,
     fingerprint: &str,
@@ -226,20 +241,14 @@ pub fn issue_preview_token(
 ) -> Result<String, String> {
     let workspace_key = workspace_key(workspace_root)?;
     let seq = PREVIEW_TOKEN_SEQ.fetch_add(1, Ordering::Relaxed);
-    let token = format!(
-        "{:016x}{:016x}",
-        {
-            let mut hasher = std::collections::hash_map::DefaultHasher::new();
-            workspace_key.hash(&mut hasher);
-            fingerprint.hash(&mut hasher);
-            format!("{purpose:?}").hash(&mut hasher);
-            now_secs().hash(&mut hasher);
-            std::process::id().hash(&mut hasher);
-            seq.hash(&mut hasher);
-            hasher.finish()
-        },
-        seq ^ (now_secs() << 16) ^ u64::from(std::process::id())
-    );
+    let token = stable_fingerprint(&[
+        workspace_key.clone(),
+        fingerprint.to_string(),
+        format!("{purpose:?}"),
+        now_secs().to_string(),
+        std::process::id().to_string(),
+        seq.to_string(),
+    ])?;
     let mut map = preview_tokens()
         .lock()
         .map_err(|_| "preview token registry unavailable".to_string())?;
@@ -326,20 +335,24 @@ pub fn new_transaction_id() -> Result<String, String> {
 }
 
 pub fn workspace_key(workspace_root: &Path) -> Result<String, String> {
-    let canonical = workspace_root
-        .canonicalize()
-        .map_err(|e| format!("cannot canonicalize workspace: {e}"))?;
-    Ok(canonical.to_string_lossy().into_owned())
+    if !workspace_root.is_absolute() {
+        return Err(format!(
+            "workspace path must be absolute: {}",
+            workspace_root.display()
+        ));
+    }
+    Ok(workspace_root.to_string_lossy().into_owned())
 }
 
 pub fn expand_surfaces_to_artifacts(
     surfaces: &[SetupSurfaceId],
-    workspace_root: &Path,
+    _workspace_root: &Path,
 ) -> Result<Vec<ArtifactId>, String> {
+    let bundled_root = crate::setup_roots::bundled_root_for(_workspace_root)?;
     let mut artifacts: Vec<ArtifactId> = Vec::new();
     let mut seen = HashSet::new();
     for surface in surfaces {
-        let expanded = expand_surface_fail_closed(*surface, workspace_root)?;
+        let expanded = expand_surface_fail_closed(*surface, &bundled_root)?;
         if expanded.is_empty() {
             return Err(format!(
                 "surface {} expanded to zero artifacts",
@@ -351,7 +364,7 @@ pub fn expand_surfaces_to_artifacts(
                 return Err(format!("duplicate artifact {:?} across surfaces", artifact));
             }
             crate::artifact_registry::reject_broad_artifact_root(
-                &artifact.resolve_dest(&user_home()?, workspace_root)?,
+                &artifact.resolve_dest(&user_home()?, _workspace_root)?,
             )?;
             artifacts.push(artifact);
         }
@@ -391,9 +404,10 @@ pub fn validate_artifact_source_dest(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<(PathBuf, PathBuf), String> {
-    let ws_root = workspace_root
-        .canonicalize()
-        .map_err(|e| format!("cannot canonicalize workspace: {e}"))?;
+    if !workspace_root.is_absolute() {
+        return Err("workspace root must be absolute".to_string());
+    }
+    let ws_root = workspace_root.to_path_buf();
     let dest = artifact.resolve_dest(home, &ws_root)?;
     let dest_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
         &ws_root
@@ -403,27 +417,21 @@ pub fn validate_artifact_source_dest(
     crate::path_safety::reject_path_escape(&dest, dest_root, "destination")?;
     reject_symlink_parent_chain(&dest, dest_root, "destination")?;
     reject_symlink(&dest, "destination")?;
+    let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
+        .canonicalize()
+        .map_err(|e| format!("cannot canonicalize bundled workspace: {e}"))?;
     let source = artifact
-        .resolve_source(&ws_root)
+        .resolve_source(&bundled_root)
         .ok_or_else(|| format!("missing source for {artifact:?}"))?;
-    crate::path_safety::reject_path_escape(&source, &ws_root, "source")?;
-    reject_symlink_parent_chain(&source, &ws_root, "source")?;
+    crate::path_safety::reject_path_escape(&source, &bundled_root, "source")?;
+    reject_symlink_parent_chain(&source, &bundled_root, "source")?;
     reject_symlink(&source, "source")?;
     Ok((source, dest))
 }
 
-/// Aggregate artifact operation kinds into a single surface kind (fail-closed precedence).
+/// Aggregate artifact operation kinds while keeping safe work available beside conflicts.
 pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
     if kinds.is_empty() {
-        return OperationKind::Unavailable;
-    }
-    if kinds.iter().any(|k| matches!(k, OperationKind::Conflict)) {
-        return OperationKind::Conflict;
-    }
-    if kinds
-        .iter()
-        .any(|k| matches!(k, OperationKind::Unavailable))
-    {
         return OperationKind::Unavailable;
     }
     if kinds.iter().any(|k| matches!(k, OperationKind::Update)) {
@@ -434,6 +442,15 @@ pub fn aggregate_operation_kind(kinds: &[OperationKind]) -> OperationKind {
     }
     if kinds.iter().any(|k| matches!(k, OperationKind::Create)) {
         return OperationKind::Create;
+    }
+    if kinds.iter().any(|k| matches!(k, OperationKind::Conflict)) {
+        return OperationKind::Conflict;
+    }
+    if kinds
+        .iter()
+        .any(|k| matches!(k, OperationKind::Unavailable))
+    {
+        return OperationKind::Unavailable;
     }
     if kinds.iter().any(|k| matches!(k, OperationKind::Manual)) {
         return OperationKind::Manual;
@@ -507,34 +524,46 @@ pub fn compute_plan_fingerprint(
     home: &Path,
 ) -> Result<String, String> {
     let ws_key = workspace_key(workspace_root)?;
-    let mut hasher = std::collections::hash_map::DefaultHasher::new();
-    ws_key.hash(&mut hasher);
+    let mut parts = vec![ws_key];
     let mut surface_ids: Vec<_> = surfaces.to_vec();
     surface_ids.sort_by_key(|s| format!("{s:?}"));
     for s in &surface_ids {
-        format!("{s:?}").hash(&mut hasher);
+        parts.push(format!("surface:{s:?}"));
     }
     let mut artifacts: Vec<_> = artifact_ops.iter().map(|a| a.artifact.clone()).collect();
     artifacts.sort_by_key(|a| format!("{a:?}"));
     for artifact in &artifacts {
-        format!("{artifact:?}").hash(&mut hasher);
-        let source_digest = if artifact.resolve_source(workspace_root).is_some() {
-            crate::setup_fingerprint::artifact_source_digest(artifact, workspace_root, home)?
+        parts.push(format!("artifact:{artifact:?}"));
+        let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+        let planned_kind = artifact_ops
+            .iter()
+            .find(|operation| operation.artifact == *artifact)
+            .map(|operation| operation.kind);
+        let source_digest = if matches!(planned_kind, Some(OperationKind::Remove)) {
+            crate::setup_fingerprint::ABSENT_DIGEST.to_string()
+        } else if artifact
+            .resolve_source(&bundled_root)
+            .is_some_and(|source| source.exists())
+        {
+            crate::setup_fingerprint::artifact_source_digest(artifact, &bundled_root, home)
+                .map_err(|error| {
+                    format!("fingerprint source for {artifact:?} ({planned_kind:?}): {error}")
+                })?
         } else {
             crate::setup_fingerprint::ABSENT_DIGEST.to_string()
         };
-        source_digest.hash(&mut hasher);
+        parts.push(format!("source:{source_digest}"));
         let installed_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
             artifact,
             workspace_root,
             home,
         )?;
-        installed_digest.hash(&mut hasher);
+        parts.push(format!("installed:{installed_digest}"));
         if let Some(op) = artifact_ops.iter().find(|o| o.artifact == *artifact) {
-            format!("{:?}", op.kind).hash(&mut hasher);
+            parts.push(format!("operation:{:?}", op.kind));
         }
     }
-    Ok(format!("{:016x}", hasher.finish()))
+    stable_fingerprint(&parts)
 }
 
 pub fn validate_fingerprint_format(fingerprint: &str) -> bool {
@@ -552,7 +581,11 @@ pub fn detect_artifact_state(
         Ok(p) => p,
         Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
-    let source = match artifact.resolve_source(workspace_root) {
+    let bundled_root = match crate::setup_roots::bundled_root_for(workspace_root) {
+        Ok(root) => root,
+        Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
+    };
+    let source = match artifact.resolve_source(&bundled_root) {
         Some(p) => p,
         None => return (OperationKind::Unavailable, PreviousState::Unavailable),
     };
@@ -603,7 +636,7 @@ pub fn detect_artifact_state(
         }
         ArtifactKind::McpConfig => {
             let status = crate::cursor_profile_ops::mcp_diff_status(
-                workspace_root,
+                &bundled_root,
                 &match crate::cursor_profile_paths::resolve_cursor_profile_paths() {
                     Ok(p) => p,
                     Err(_) => return (OperationKind::Unavailable, PreviousState::Unavailable),
@@ -719,8 +752,29 @@ fn detect_stale_artifact_state(
         Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
     };
     let Some(expected) = managed_hash else {
-        return (OperationKind::NoChange, PreviousState::ManagedFile);
+        return (OperationKind::Conflict, PreviousState::Conflict);
     };
+    if let ArtifactId::CodexLegacySkill(name) = artifact {
+        let Some(current) = crate::artifact_registry::SkillName::new(name.as_str().to_string())
+            .map(ArtifactId::CodexSkill)
+        else {
+            return (OperationKind::Conflict, PreviousState::Conflict);
+        };
+        let current_dest = match current.resolve_dest(home, workspace_root) {
+            Ok(path) => path,
+            Err(_) => return (OperationKind::Conflict, PreviousState::Conflict),
+        };
+        if current_dest.exists() {
+            let current_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
+                &current,
+                workspace_root,
+                home,
+            );
+            if current_digest.as_deref() != Ok(installed.as_str()) {
+                return (OperationKind::Conflict, PreviousState::Conflict);
+            }
+        }
+    }
     if installed == expected {
         let prev = if artifact_kind(artifact) == ArtifactKind::SkillDir {
             PreviousState::ManagedDirectory
@@ -749,8 +803,15 @@ pub fn plan_artifacts_for_surfaces(
         .map(|s| s.artifacts.clone())
         .unwrap_or(bootstrap_records);
 
-    let bundled_root = crate::managed_state::resolve_bundled_root(workspace_root);
-    let canonical_identities = crate::managed_state::canonical_artifact_identities(&bundled_root)?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+    let canonical_identities =
+        match crate::managed_state::canonical_artifact_identities(&bundled_root) {
+            Ok(identities) => identities,
+            #[cfg(test)]
+            Err(_) => std::collections::HashSet::new(),
+            #[cfg(not(test))]
+            Err(error) => return Err(error),
+        };
 
     let artifacts = expand_surfaces_to_artifacts(surfaces, workspace_root)?;
     let mut planned = Vec::new();
@@ -769,6 +830,12 @@ pub fn plan_artifacts_for_surfaces(
             home,
             managed_hash.as_deref(),
         );
+        let (kind, previous_state) =
+            if managed_hash.is_none() && matches!(kind, OperationKind::Update) {
+                (OperationKind::Conflict, PreviousState::Conflict)
+            } else {
+                (kind, previous_state)
+            };
         let rollback_action = rollback_action_for(kind, previous_state, &artifact);
         planned.push(PlannedArtifact {
             artifact,
@@ -1368,6 +1435,19 @@ pub fn validate_manifest(
     if manifest.workspace_key != ws_key {
         return Err("manifest workspace mismatch".into());
     }
+    match (
+        manifest.previous_managed_state_present,
+        manifest.previous_managed_state_trusted,
+        manifest.previous_managed_state_digest.as_deref(),
+        manifest.previous_managed_state_backup_rel.as_deref(),
+    ) {
+        (true, _, Some(digest), Some(relative))
+            if crate::stable_digest::valid(digest)
+                && !relative.starts_with('/')
+                && !relative.contains("..") => {}
+        (false, false, None, None) => {}
+        _ => return Err("invalid previous managed-state backup metadata".into()),
+    }
     let mut seen = HashSet::new();
     for op in &manifest.operations {
         if !seen.insert(op.artifact.clone()) {
@@ -1535,13 +1615,14 @@ pub fn restore_artifact_from_backup(
     op: &ArtifactManifestOperation,
     backup_dir: &Path,
     home: &Path,
+    workspace_root: &Path,
 ) -> Result<(), String> {
     restore_artifact_from_backup_with_mode(
         op,
         backup_dir,
         home,
         RollbackRestoreMode::FullBackup,
-        None,
+        Some(workspace_root),
     )
 }
 
@@ -1762,9 +1843,9 @@ mod tests {
     }
 
     #[test]
-    fn aggregate_surface_precedence_conflict_over_update() {
+    fn aggregate_surface_keeps_safe_update_available_beside_conflict() {
         let kinds = vec![OperationKind::Update, OperationKind::Conflict];
-        assert_eq!(aggregate_operation_kind(&kinds), OperationKind::Conflict);
+        assert_eq!(aggregate_operation_kind(&kinds), OperationKind::Update);
     }
 
     #[test]
@@ -1835,6 +1916,10 @@ mod tests {
             created_at: "1".into(),
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: TransactionStatus::Prepared,
+            previous_managed_state_present: false,
+            previous_managed_state_trusted: false,
+            previous_managed_state_digest: None,
+            previous_managed_state_backup_rel: None,
             operations: vec![
                 ArtifactManifestOperation {
                     artifact: ArtifactId::OpenCodeRules,
@@ -1927,6 +2012,10 @@ mod tests {
             created_at: "1".into(),
             surface_ids: vec![SetupSurfaceId::OpenCodeRules],
             transaction_status: TransactionStatus::RolledBack,
+            previous_managed_state_present: false,
+            previous_managed_state_trusted: false,
+            previous_managed_state_digest: None,
+            previous_managed_state_backup_rel: None,
             operations: vec![ArtifactManifestOperation {
                 artifact: ArtifactId::OpenCodeRules,
                 surface: SetupSurfaceId::OpenCodeRules,

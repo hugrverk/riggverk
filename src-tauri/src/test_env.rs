@@ -52,6 +52,10 @@ pub mod guard {
         agent_workspace_backup_dir: Option<String>,
         agent_workspace_path: Option<String>,
         cursor_skills_path: Option<String>,
+        codex_skills_path: Option<String>,
+        codex_home: Option<String>,
+        opencode_skills_path: Option<String>,
+        claude_skills_path: Option<String>,
     }
 
     impl EnvRestore {
@@ -68,6 +72,10 @@ pub mod guard {
                 agent_workspace_backup_dir: std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok(),
                 agent_workspace_path: std::env::var("AGENT_WORKSPACE_PATH").ok(),
                 cursor_skills_path: std::env::var("CURSOR_SKILLS_PATH").ok(),
+                codex_skills_path: std::env::var("CODEX_SKILLS_PATH").ok(),
+                codex_home: std::env::var("CODEX_HOME").ok(),
+                opencode_skills_path: std::env::var("OPENCODE_SKILLS_PATH").ok(),
+                claude_skills_path: std::env::var("CLAUDE_SKILLS_PATH").ok(),
             }
         }
     }
@@ -95,6 +103,10 @@ pub mod guard {
             );
             set_optional("AGENT_WORKSPACE_PATH", self.agent_workspace_path.as_deref());
             set_optional("CURSOR_SKILLS_PATH", self.cursor_skills_path.as_deref());
+            set_optional("CODEX_SKILLS_PATH", self.codex_skills_path.as_deref());
+            set_optional("CODEX_HOME", self.codex_home.as_deref());
+            set_optional("OPENCODE_SKILLS_PATH", self.opencode_skills_path.as_deref());
+            set_optional("CLAUDE_SKILLS_PATH", self.claude_skills_path.as_deref());
         }
     }
 }

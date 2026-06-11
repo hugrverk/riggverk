@@ -743,10 +743,6 @@ export function useLibraryController({
     }
   }, [isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
 
-  const openInstallScript = useCallback(() => {
-    invoke<ActionResult>("open_install_skills_script").catch(e => setError(`Open: ${e}`));
-  }, [setError]);
-
   useEffect(() => {
     if ((view === "library" && librarySourceType === "configs") && activeConfigTargetId) {
       configSourceLoadSeqRef.current += 1;
@@ -806,7 +802,6 @@ export function useLibraryController({
     setSkillSearch,
     openSkill,
     readSkill,
-    openInstallScript,
     docs,
     docsHealth,
     activeDoc,

@@ -28,13 +28,13 @@ Isolated temp `HOME` and workspace path; exercises the same Rust command handler
 
 ## Manual GUI Smoke
 
-For installed-app release smoke (install/repair, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
+For installed-app release smoke (managed installation, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
 
 After code changes that affect the app, manually check:
 
 - App starts and opens the Workspace view.
 - Workspace diagnostics show install state for `~/.config/agent-workspace`.
-- **install** / **repair** copy bundled files only; no path chooser in normal UI.
+- Each normal screen shows one managed installation card; no path chooser or parallel repair UI exists.
 - Diff/sync rules respect saved enabled rule targets.
 - Diff/sync configs respect saved enabled config targets.
 - Skills dry-run works for global targets with a valid selected workspace.
@@ -52,8 +52,7 @@ After code changes that affect the app, manually check:
 - Copy brain setup writes the full setup block to the clipboard.
 - Settings save/reset works for appearance and theme colors; target changes from harness pages autosave (debounced).
 - Harness Targets panels show target toggles per tool with enable/disable checkboxes.
-- Toggling a rule target enables its diff/sync actions for that tool.
-- Toggling a config target enables its config diff/sync action.
+- Toggling a target includes or excludes that managed projection from the unified installation plan.
 - Agent targets are enabled independently per tool.
 - Manual checkbox changes show custom target selection.
 - Save persists selected targets; Reset restores defaults.
@@ -61,6 +60,6 @@ After code changes that affect the app, manually check:
 
 ## Remaining Limits
 
-- Release check does not replace manual GUI smoke for view wiring, install/repair behavior, installed bundles, or native file-open behavior.
+- Release check does not replace real Tauri webview smoke for view wiring, managed installation behavior, installed bundles, or native file-open behavior.
 - `smoke-tauri-runtime.sh` does not drive the Tauri webview; native UI automation is not wired (Vite-only browser tools lack `invoke`).
 - The workspace marker directory `.agent-workspace/` and related env vars (`AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.

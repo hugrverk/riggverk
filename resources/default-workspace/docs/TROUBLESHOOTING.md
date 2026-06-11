@@ -2,8 +2,8 @@
 
 ## Workspace not installed or invalid
 
-1. Open **Workspace** and check the status chip (MISSING / NEEDS REPAIR / INSTALLED).
-2. Click **install** if missing, or **repair** if markers are incomplete.
+1. Open **Workspace** and check the installation status.
+2. Run **Install or Update** and review the artifact preview.
 3. Confirm `.agent-workspace/workspace.json` exists under `~/.config/agent-workspace`.
 4. For dev/test, `AGENT_WORKSPACE_PATH` can point at another valid workspace root.
 
@@ -21,7 +21,7 @@
 | `README.md` | file |
 | `skills/` | directory |
 
-Use **repair** to copy only missing bundled files without overwriting your edits.
+Use **Install or Update**. Unknown or diverged unowned files are preserved and reported as conflicts.
 
 ## Dry-run before apply
 
@@ -37,9 +37,9 @@ Use **repair** to copy only missing bundled files without overwriting your edits
 - Enable the right targets on the harness page (changes autosave).
 - Read terminal output on Workspace or the harness page for script errors.
 
-## Setup rollback interrupted or stuck
+## Installation rollback interrupted or stuck
 
-1. Open **Workspace** setup lifecycle and use **rollback dry-run** on the failed transaction.
+1. Use rollback dry-run on the failed installation transaction.
 2. Artifacts already restored are skipped; `in_flight` artifacts are reconciled against backup and post-apply state before retry.
 3. If dry-run reports conflicts, resolve the listed config or file manually, then retry rollback.
 4. When dry-run shows no remaining artifacts but status is still `rolling_back`, run rollback again to finalize without further file changes.

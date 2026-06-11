@@ -10,6 +10,7 @@ mod tests {
     use crate::agent_skill_targets::{
         agent_global_skills_dest, codex_global_skills_dest, codex_legacy_skills_dest,
     };
+    use crate::artifact_registry::{ArtifactId, SkillName};
     use crate::commands::setup::{
         apply_setup, preview_setup, rollback_setup_transaction, SetupResult,
     };
@@ -66,18 +67,25 @@ mod tests {
 
     fn write_minimal_skill(dir: &Path) {
         fs::create_dir_all(dir).expect("skill dir");
+        let name = dir
+            .file_name()
+            .and_then(|value| value.to_str())
+            .expect("skill name");
         fs::write(
             dir.join("SKILL.md"),
-            "---\nname: placeholder\ndescription: placeholder\n---\n",
+            format!(
+                "---\nname: {name}\ndescription: historical fixture\ntargets: [codex, opencode, claude, cursor]\n---\n"
+            ),
         )
         .expect("skill md");
     }
 
-    fn install_catalog_skills_to_harness(ws: &Path, _home: &Path, harness: &str) {
-        let catalog = discover_skill_catalog(ws).expect("catalog");
+    fn install_current_skills_to_harness(harness: &str, limit: usize) {
+        let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
+        catalog.sort_by(|a, b| a.name.cmp(&b.name));
         let dest_root = agent_global_skills_dest(harness).expect("dest");
         fs::create_dir_all(&dest_root).expect("dest root");
-        for skill in &catalog {
+        for skill in catalog.iter().take(limit) {
             let target = dest_root.join(&skill.name);
             copy_dir_all(&skill.source_dir, &target).expect("copy skill");
         }
@@ -91,29 +99,54 @@ mod tests {
         }
     }
 
-    fn install_codex_legacy_skills(home: &Path, ws: &Path) {
+    fn install_codex_legacy_skills(home: &Path) {
         let legacy = codex_legacy_skills_dest(home);
         fs::create_dir_all(&legacy).expect("legacy root");
-        let catalog = discover_skill_catalog(ws).expect("catalog");
-        for skill in catalog.iter().take(3) {
+        let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
+        catalog.sort_by(|a, b| a.name.cmp(&b.name));
+        for skill in catalog.iter().take(16) {
             copy_dir_all(&skill.source_dir, &legacy.join(&skill.name)).expect("legacy copy");
+        }
+        for name in REMOVED_SKILL_NAMES {
+            write_minimal_skill(&legacy.join(name));
         }
         fs::create_dir_all(legacy.join(".system")).expect(".system");
         fs::write(legacy.join(".system/prompt.md"), "keep me").expect(".system file");
+        write_minimal_skill(&legacy.join("user-custom-skill"));
     }
 
     fn seed_old_installation_workspace(ws: &Path) {
         fs::create_dir_all(ws.join("metadata/deprecated-skills")).expect("meta dir");
         fs::write(
             ws.join("metadata/deprecated-skills.json"),
-            r#"{"deprecated":[]}"#,
+            "{\n  \"version\": 1,\n  \"skills\": [\n    \"agent-report-review\",\n    \"caveman\",\n    \"dependency-evaluation\",\n    \"grill-me\",\n    \"grill-with-docs\",\n    \"improve-codebase-architecture\",\n    \"nextjs-product-slice\",\n    \"supabase-rls-review\",\n    \"to-prd\",\n    \"triage\",\n    \"woocommerce-pdp-review\",\n    \"write-a-skill\"\n  ]\n}\n",
         )
         .expect("meta json");
+        for name in REMOVED_SKILL_NAMES {
+            write_minimal_skill(&ws.join("metadata/deprecated-skills").join(name));
+            write_minimal_skill(&ws.join("skills").join(name));
+        }
         fs::write(
-            ws.join("metadata/deprecated-skills/agent-report-review.md"),
-            "# deprecated copy",
+            ws.join("agents/scout.md"),
+            "---\nname: placeholder\ndescription: placeholder\n---\n",
         )
-        .expect("meta copy");
+        .expect("runtime scout");
+        fs::write(ws.join("user-owned.txt"), "keep runtime file").expect("runtime unknown");
+    }
+
+    fn install_agent_files(source: &Path, destination: &Path) {
+        fs::create_dir_all(destination).expect("agent destination");
+        for entry in fs::read_dir(source).expect("agent source") {
+            let entry = entry.expect("agent entry");
+            if entry
+                .path()
+                .extension()
+                .and_then(|extension| extension.to_str())
+                == Some("md")
+            {
+                fs::copy(entry.path(), destination.join(entry.file_name())).expect("copy agent");
+            }
+        }
     }
 
     struct OldInstallFixture {
@@ -139,25 +172,63 @@ mod tests {
             )
             .expect("home");
 
-            for harness in ["opencode", "cursor", "claude", "codex"] {
-                install_catalog_skills_to_harness(&ws, &resolved_home, harness);
-                install_removed_skills_to_harness(&resolved_home, harness);
-            }
-            install_codex_legacy_skills(&resolved_home, &ws);
+            install_current_skills_to_harness("opencode", 16);
+            install_removed_skills_to_harness(&resolved_home, "opencode");
+            install_current_skills_to_harness("cursor", 21);
+            install_removed_skills_to_harness(&resolved_home, "cursor");
+            install_codex_legacy_skills(&resolved_home);
+
             let oc_agents = resolved_home.join(".config/opencode/agents");
-            fs::create_dir_all(&oc_agents).expect("oc agents");
-            for entry in fs::read_dir(ws.join("agents")).expect("agents dir") {
-                let entry = entry.expect("agent entry");
-                if entry.path().extension().and_then(|e| e.to_str()) != Some("md") {
-                    continue;
-                }
-                let name = entry.file_name();
-                if name == "scout.md" {
-                    fs::write(oc_agents.join("scout.md"), "# legacy scout").expect("oc scout");
-                } else {
-                    fs::copy(entry.path(), oc_agents.join(name)).expect("oc agent copy");
-                }
-            }
+            install_agent_files(&ws.join("agents"), &oc_agents);
+            fs::write(
+                oc_agents.join("scout.md"),
+                "---\nname: placeholder\ndescription: placeholder\n---\n",
+            )
+            .expect("opencode scout");
+            fs::write(oc_agents.join("user-agent.md"), "keep harness file")
+                .expect("opencode unknown");
+
+            let cursor_agents = resolved_home.join(".cursor/agents");
+            install_agent_files(&ws.join("templates/cursor/agents"), &cursor_agents);
+            fs::write(cursor_agents.join("user-agent.md"), "keep cursor agent")
+                .expect("cursor unknown");
+
+            let opencode_skills = agent_global_skills_dest("opencode").expect("opencode skills");
+            fs::write(
+                opencode_skills
+                    .join(REMOVED_SKILL_NAMES[1])
+                    .join("SKILL.md"),
+                "modified stale harness skill",
+            )
+            .expect("modified harness skill");
+            fs::write(
+                ws.join("skills")
+                    .join(REMOVED_SKILL_NAMES[0])
+                    .join("SKILL.md"),
+                format!(
+                    "---\nname: {}\ndescription: user modified stale runtime skill\ntargets: [codex, opencode, claude, cursor]\n---\n",
+                    REMOVED_SKILL_NAMES[0]
+                ),
+            )
+            .expect("modified runtime skill");
+            fs::write(
+                codex_legacy_skills_dest(&resolved_home)
+                    .join(REMOVED_SKILL_NAMES[2])
+                    .join("SKILL.md"),
+                "modified legacy Codex skill",
+            )
+            .expect("modified Codex skill");
+
+            let mut current =
+                discover_skill_catalog(&bundled_workspace_src()).expect("current catalog");
+            current.sort_by(|a, b| a.name.cmp(&b.name));
+            fs::write(
+                opencode_skills
+                    .join(&current.first().expect("current skill").name)
+                    .join("SKILL.md"),
+                "same-name unowned custom skill",
+            )
+            .expect("custom same-name skill");
 
             let ws_canon = ws.canonicalize().unwrap_or_else(|_| ws.clone());
             unsafe {
@@ -167,6 +238,16 @@ mod tests {
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }
+            let bootstrap =
+                crate::managed_bootstrap::infer_bootstrap_records(&ws_canon, &resolved_home)
+                    .expect("bootstrap records");
+            assert!(
+                bootstrap.iter().any(|record| {
+                    record.identity.contains("\"scout\"")
+                        && record.surface.as_deref() == Some("open_code_agents")
+                }),
+                "exact historical scout should be bootstrap-owned: {bootstrap:?}"
+            );
 
             Self {
                 base,
@@ -236,10 +317,91 @@ mod tests {
     }
 
     #[test]
+    fn fresh_profile_installs_workspace_through_unified_setup() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("fresh");
+        let home = base.join("home");
+        let workspace = base.join("runtime");
+        fs::create_dir_all(&home).expect("home");
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        let status = crate::installation_status::status_for_surfaces(
+            &[SetupSurfaceId::WorkspaceBundle],
+            &workspace,
+            &home,
+        )
+        .expect("fresh status");
+        assert_eq!(
+            status.state,
+            crate::installation_status::InstallationState::NotInstalled
+        );
+        let plan = preview_setup(vec![surface_id_string(SetupSurfaceId::WorkspaceBundle)])
+            .expect("fresh preview");
+        let result = apply_surfaces_from_preview(&plan);
+        assert!(result.success, "fresh apply: {}", result.message);
+        assert_eq!(
+            discover_skill_catalog(&workspace)
+                .expect("installed catalog")
+                .len(),
+            21
+        );
+        assert!(read_managed_state(&workspace).is_some());
+        let current = crate::installation_status::status_for_surfaces(
+            &[SetupSurfaceId::WorkspaceBundle],
+            &workspace,
+            &home,
+        )
+        .expect("current status");
+        assert_eq!(
+            current.state,
+            crate::installation_status::InstallationState::Current
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[test]
     fn pre_manifest_fixture_detects_stale_removals_before_apply() {
         let _guard = guard::lock();
         let _restore = EnvRestore::capture();
         let fixture = OldInstallFixture::build();
+        assert_eq!(
+            discover_skill_catalog(&fixture.ws)
+                .expect("runtime catalog")
+                .len(),
+            33
+        );
+        assert_eq!(
+            fs::read_dir(fixture.ws.join("agents"))
+                .expect("runtime agents")
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry.path().extension().and_then(|value| value.to_str()) == Some("md")
+                })
+                .count(),
+            7
+        );
+        assert_eq!(fixture.harness_skill_count("opencode"), 28);
+        assert_eq!(fixture.harness_skill_count("cursor"), 33);
+        assert_eq!(fixture.harness_skill_count("claude"), 0);
+        assert_eq!(
+            fs::read_dir(codex_legacy_skills_dest(&fixture.home))
+                .expect("legacy Codex")
+                .filter_map(Result::ok)
+                .filter(|entry| {
+                    entry.path().is_dir()
+                        && !entry.file_name().to_string_lossy().starts_with('.')
+                        && entry.file_name() != "user-custom-skill"
+                })
+                .count(),
+            28
+        );
         let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
             &reconciliation_surface_ids(),
             &fixture.ws,
@@ -275,15 +437,24 @@ mod tests {
         let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
         assert_eq!(
             catalog.len(),
-            21,
-            "workspace should retain 21 canonical skills"
+            22,
+            "modified stale runtime skill is preserved"
+        );
+        assert!(
+            fixture
+                .ws
+                .join("skills")
+                .join(REMOVED_SKILL_NAMES[0])
+                .join("SKILL.md")
+                .is_file(),
+            "modified runtime skill should be preserved"
         );
 
         assert!(
             !fixture.ws.join("metadata/deprecated-skills.json").exists(),
             "deprecated metadata json should be removed"
         );
-        for harness in ["opencode", "cursor", "claude", "codex"] {
+        for harness in ["cursor", "claude", "codex"] {
             assert_eq!(
                 fixture.harness_skill_count(harness),
                 21,
@@ -297,6 +468,18 @@ mod tests {
                 );
             }
         }
+        assert_eq!(
+            fixture.harness_skill_count("opencode"),
+            22,
+            "modified stale OpenCode skill should remain beside 21 current names"
+        );
+        assert!(
+            agent_global_skills_dest("opencode")
+                .expect("OpenCode skills")
+                .join(REMOVED_SKILL_NAMES[1])
+                .is_dir(),
+            "modified stale OpenCode skill should be preserved"
+        );
 
         assert!(
             !fixture
@@ -311,6 +494,18 @@ mod tests {
             legacy.join(".system/prompt.md").is_file(),
             "codex legacy .system should be preserved"
         );
+        assert!(
+            legacy.join(REMOVED_SKILL_NAMES[2]).is_dir(),
+            "modified legacy Codex skill should be preserved"
+        );
+        assert!(
+            legacy.join("user-custom-skill/SKILL.md").is_file(),
+            "unknown legacy Codex skill should be preserved"
+        );
+        assert!(
+            fixture.ws.join("user-owned.txt").is_file(),
+            "unknown runtime file should be preserved"
+        );
         let global = codex_global_skills_dest(&fixture.home);
         assert!(global.is_dir(), "codex global skills dir should exist");
 
@@ -319,6 +514,28 @@ mod tests {
         assert!(
             managed_state_path(&fixture.ws).is_file(),
             "managed state should be written"
+        );
+        let exact_cursor = ArtifactId::CursorSkill(
+            SkillName::new("accessibility-review").expect("canonical skill"),
+        );
+        assert!(
+            managed
+                .artifacts
+                .iter()
+                .any(|record| record.identity
+                    == crate::managed_state::artifact_identity(&exact_cursor)),
+            "selected exact current artifacts should be adopted"
+        );
+        let conflicted = ArtifactId::OpenCodeSkill(
+            SkillName::new("accessibility-review").expect("canonical skill"),
+        );
+        assert!(
+            managed
+                .artifacts
+                .iter()
+                .all(|record| record.identity
+                    != crate::managed_state::artifact_identity(&conflicted)),
+            "same-name unowned conflict must remain unclaimed"
         );
 
         fixture.cleanup();
@@ -369,6 +586,10 @@ mod tests {
             rolled.success,
             rolled.message,
             rolled.failed
+        );
+        assert!(
+            !managed_state_path(&fixture.ws).exists(),
+            "rollback must restore previous managed-state absence"
         );
 
         fixture.cleanup();

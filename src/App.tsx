@@ -23,17 +23,11 @@ import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { OpenCodeView } from "./views/OpenCodeView";
-import { deriveInstallState, StartView } from "./views/StartView";
+import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { surfacesNeedingApply } from "./lib/harnessInstallation";
-import type {
-  InitializeWorkspaceResult,
-  RepairWorkspaceResult,
-  RepoDashboardWorkItem,
-  SetupPlan,
-  SetupResult,
-} from "./types";
+import type { RepoDashboardWorkItem, SetupPlan, SetupResult } from "./types";
 
 type View = AppHeaderView;
 
@@ -57,16 +51,12 @@ function App() {
   const {
     status,
     workspaceDiagnostics,
-    opencodeRuntimeHealth,
-    codexRuntimeHealth,
-    cursorProfileHealth,
     brainSetupText,
     brainSetupSource,
     fetchStatus,
     loadWorkspaceDiagnostics,
     loadOpenCodeRuntimeHealth,
     loadCodexRuntimeHealth,
-    claudeRuntimeHealth,
     loadCursorProfileHealth,
     loadClaudeRuntimeHealth,
     loadBrainSetupSeed,
@@ -80,14 +70,12 @@ function App() {
 
   const {
     skills,
-    skillsLoaded,
     activeSkillId,
     activeSkillContent,
     skillSearch,
     setSkillSearch,
     openSkill,
     readSkill,
-    openInstallScript,
     docs,
     docsHealth,
     activeDoc,
@@ -170,7 +158,6 @@ function App() {
     view,
   });
 
-  const [workspaceInstallRunning, setWorkspaceInstallRunning] = useState(false);
 
   const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     await Promise.all([
@@ -191,7 +178,6 @@ function App() {
     activityIndex,
     activityCellClass,
     runWsAction,
-    runWsInstallForAgents,
     runWsTask,
     workspaceActionRequestIdRef,
     resetTerminalOutput,
@@ -199,7 +185,6 @@ function App() {
     fetchStatus,
     isInvalidWorkspaceError,
     workspaceDiagnostics,
-    allSkillNames: skills.map(s => s.name),
     setError,
   });
 
@@ -213,14 +198,12 @@ function App() {
   const {
     appSettings,
     settingsMsg,
-    setSettingsMsg,
     agentTargets,
     settingsDirty,
     settingsSaving,
     settingsSaveStatus,
     colorResetKey,
     loadSettings,
-    persistActiveWorkspace,
     retrySaveSettings,
     resetSettings,
     setAppearance,
@@ -266,23 +249,6 @@ function App() {
       setActiveConfigTargetId(fallback?.id ?? "");
     }
   }, [agentTargets, appSettings, activeConfigTargetId]);
-
-  const runInstallDefaultWorkspace = useCallback(async () => {
-    setWorkspaceInstallRunning(true);
-    try {
-      const result = await invoke<InitializeWorkspaceResult>("install_default_workspace");
-      if (result.success) {
-        setSettingsMsg({ ok: true, text: "workspace installed" });
-        await persistActiveWorkspace(result.target_path);
-      } else {
-        setError(`Install workspace: ${result.message}`);
-      }
-    } catch (e) {
-      setError(`Install workspace: ${e}`);
-    } finally {
-      setWorkspaceInstallRunning(false);
-    }
-  }, [persistActiveWorkspace]);
 
   const openDefaultWorkspaceFolder = useCallback(async () => {
     try {
@@ -369,6 +335,8 @@ function App() {
       refresh: async () => {
         const gen = workspaceLoadGenerationRef.current;
         await Promise.all([
+          loadWorkspaceDiagnostics(gen),
+          loadDocs(gen),
           fetchStatus(),
           loadCodexRuntimeHealth(gen),
           loadOpenCodeRuntimeHealth(gen),
@@ -379,6 +347,8 @@ function App() {
     });
   }, [
     runWsTask,
+    loadWorkspaceDiagnostics,
+    loadDocs,
     fetchStatus,
     loadCodexRuntimeHealth,
     loadOpenCodeRuntimeHealth,
@@ -387,119 +357,13 @@ function App() {
     workspaceLoadGenerationRef,
   ]);
 
-  const runCursorProfileAction = useCallback((action: string, label: string) => {
-    runWsTask({
-      label,
-      action,
-      task: async () => {
-        return await invoke<ActionResult>("run_cursor_profile_action", { action });
-      },
-      toActionResult: (r) => r,
-      refresh: async () => {
-        await Promise.all([
-          loadCursorProfileHealth(workspaceLoadGenerationRef.current),
-          fetchStatus(),
-        ]);
-      },
-    });
-  }, [runWsTask, loadCursorProfileHealth, fetchStatus, workspaceLoadGenerationRef]);
-
-  const repairWorkspaceToActionResult = useCallback((r: RepairWorkspaceResult): ActionResult => {
-    const lines = [
-      ...r.copied_files.map((f) => `copy: ${f}`),
-      ...r.refreshed_files.map((f) => `refresh: ${f}`),
-    ];
-    const stdout = lines.length > 0 ? `${lines.join("\n")}\n${r.message}` : r.message;
-    const stderr = [...r.errors, ...r.warnings].filter(Boolean).join("\n");
-    return {
-      success: r.ok,
-      action: "repair_default_workspace",
-      stdout,
-      stderr,
-      exit_code: r.ok ? 0 : 1,
-    };
-  }, []);
-
-  const runCursorWorkspaceRepair = useCallback(() => {
-    runWsTask({
-      label: "repair workspace",
-      action: "repair_default_workspace",
-      task: async () => invoke<RepairWorkspaceResult>("repair_default_workspace"),
-      toActionResult: repairWorkspaceToActionResult,
-      refresh: async () => {
-        const generation = workspaceLoadGenerationRef.current;
-        await Promise.all([
-          loadWorkspaceDiagnostics(generation),
-          loadCursorProfileHealth(generation),
-          loadDocs(generation),
-          fetchStatus(generation),
-        ]);
-      },
-    });
-  }, [
-    runWsTask,
-    repairWorkspaceToActionResult,
-    loadWorkspaceDiagnostics,
-    loadCursorProfileHealth,
-    loadDocs,
-    fetchStatus,
-    workspaceLoadGenerationRef,
-  ]);
-
-  const runDefaultWorkspaceResourceAction = useCallback(
-    (label: "repair workspace" | "update resources") => {
-      runWsTask({
-        label,
-        action: "repair_default_workspace",
-        task: async () => invoke<RepairWorkspaceResult>("repair_default_workspace"),
-        toActionResult: repairWorkspaceToActionResult,
-        refresh: async () => {
-          const generation = workspaceLoadGenerationRef.current;
-          await Promise.all([
-            loadWorkspaceDiagnostics(generation),
-            loadDocs(generation),
-            fetchStatus(generation),
-          ]);
-        },
-      });
-    },
-    [
-      runWsTask,
-      repairWorkspaceToActionResult,
-      loadWorkspaceDiagnostics,
-      loadDocs,
-      fetchStatus,
-      workspaceLoadGenerationRef,
-    ],
-  );
-
-  const workspaceResourceActionRunning =
-    wsRunning === "repair workspace" || wsRunning === "update resources";
-
-  const enabledTargetIds = status?.enabled_target_ids ?? [];
-  const codexConfigEnabled = enabledTargetIds.includes("codex_config");
-  const codexAgentsEnabled = enabledTargetIds.includes("codex_agents") || codexConfigEnabled;
-  const opencodeConfigEnabled = enabledTargetIds.includes("opencode_config");
-  const opencodeAgentsEnabled = enabledTargetIds.includes("opencode_agents") || opencodeConfigEnabled;
-  const codexRulesEnabled = enabledTargetIds.includes("codex_rules");
-  const opencodeRulesEnabled = enabledTargetIds.includes("opencode_rules");
-  const claudeRulesEnabled = enabledTargetIds.includes("claude_rules");
-  const claudeAgentsEnabled = enabledTargetIds.includes("claude_agents");
   const configTargets = useMemo(
     () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
     [agentTargets],
   );
   const workspaceValid = workspaceDiagnostics?.valid === true;
-  const installState = deriveInstallState(workspaceDiagnostics);
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
-  const targetSkillsShared = {
-    skills,
-    skillsLoaded,
-    skillSearch,
-    onSetSkillSearch: setSkillSearch,
-    onOpenInstallScript: openInstallScript,
-  };
 
   return (
       <div className="app-shell">
@@ -523,16 +387,7 @@ function App() {
         {view === "start" && (
           <StartView
             workspaceDiagnostics={workspaceDiagnostics}
-            installState={installState}
-            installRunning={workspaceInstallRunning}
-            repairRunning={workspaceResourceActionRunning}
-            onRefreshDiagnostics={() => {
-              loadWorkspaceDiagnostics();
-              fetchStatus();
-            }}
-            onInstall={runInstallDefaultWorkspace}
-            onRepair={() => runDefaultWorkspaceResourceAction("repair workspace")}
-            onUpdateResources={() => runDefaultWorkspaceResourceAction("update resources")}
+            onManagedUpdate={runHarnessSetupUpdate}
             onOpenFolder={openDefaultWorkspaceFolder}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
@@ -543,12 +398,10 @@ function App() {
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
-            onRefreshStatus={fetchStatus}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
-            runSetupTask={runWsTask}
           />
         )}
 
@@ -566,57 +419,7 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={codexRulesEnabled}
-            codexAgentsEnabled={codexAgentsEnabled}
-            codexConfigEnabled={codexConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
-            codexRuntimeHealth={codexRuntimeHealth}
-            onRefreshCodexRuntimeHealth={loadCodexRuntimeHealth}
-            onDiffRules={() => runWsTask({
-              label: "diff codex rules",
-              action: "diff_codex_rules",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_rules" }),
-              toActionResult: (r) => r,
-              refresh: loadCodexRuntimeHealth,
-            })}
-            onSyncRules={() => runWsTask({
-              label: "sync codex rules",
-              action: "sync_codex_rules",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_rules" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
-            })}
-            onDiffAgents={() => runWsTask({
-              label: "diff codex agents",
-              action: "diff_codex_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_agents" }),
-              toActionResult: (r) => r,
-              refresh: loadCodexRuntimeHealth,
-            })}
-            onSyncAgents={() => runWsTask({
-              label: "sync codex agents",
-              action: "sync_codex_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_agents" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
-            })}
-            onDiffConfigs={() => runWsTask({
-              label: "diff codex config",
-              action: "diff_codex_config",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_codex_config" }),
-              toActionResult: (r) => r,
-              refresh: loadCodexRuntimeHealth,
-            })}
-            onSyncConfigs={() => runWsTask({
-              label: "sync codex config",
-              action: "sync_codex_config",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_codex_config" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadCodexRuntimeHealth(); fetchStatus(); },
-            })}
-            {...targetSkillsShared}
-            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["codex"], "preview skills sync (codex)")}
-            onSyncAllSkills={() => runWsInstallForAgents(false, ["codex"], "sync all skills (codex)")}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
@@ -635,90 +438,7 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={opencodeRulesEnabled}
-            opencodeAgentsEnabled={opencodeAgentsEnabled}
-            opencodeConfigEnabled={opencodeConfigEnabled}
             canRunReleaseCheck={canRunReleaseCheck}
-            opencodeRuntimeHealth={opencodeRuntimeHealth}
-            onDiffRules={() => runWsTask({
-              label: "diff opencode rules",
-              action: "diff_opencode_rules",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_rules" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            onSyncRules={() => runWsTask({
-              label: "sync opencode rules",
-              action: "sync_opencode_rules",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_rules" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            onRefreshOpenCodeRuntimeHealth={loadOpenCodeRuntimeHealth}
-            onGenerateOpenCodeConfig={() => runWsTask({
-              label: "generate opencode config",
-              action: "generate_opencode_config_snapshot",
-              task: async () => invoke<ActionResult>("generate_opencode_config_snapshot"),
-              toActionResult: (r) => r,
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            onPlanWorkspaceRepair={() => runWsTask({
-              label: "plan workspace repair",
-              action: "plan_workspace_repair",
-              task: async () => invoke<RepairWorkspaceResult>("plan_workspace_repair"),
-              toActionResult: (r) => ({
-                success: r.ok,
-                action: "plan_workspace_repair",
-                stdout: r.copied_files.length > 0 ? r.copied_files.join("\n") + "\n" : r.message + "\n",
-                stderr: r.errors.join("\n") + (r.warnings.length > 0 ? r.warnings.join("\n") : ""),
-                exit_code: r.ok ? 0 : 1,
-              }),
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            onApplyWorkspaceRepair={() => runWsTask({
-              label: "apply workspace repair",
-              action: "apply_workspace_repair",
-              task: async () => invoke<RepairWorkspaceResult>("apply_workspace_repair"),
-              toActionResult: (r) => ({
-                success: r.ok,
-                action: "apply_workspace_repair",
-                stdout: r.copied_files.length > 0 ? "Copied:\n" + r.copied_files.join("\n") + "\n" : r.message + "\n",
-                stderr: r.errors.join("\n"),
-                exit_code: r.ok ? 0 : 1,
-              }),
-              refresh: loadOpenCodeRuntimeHealth,
-            })}
-            onDiffOpenCodeAgents={() => runWsTask({
-              label: "diff opencode agents",
-              action: "diff_opencode_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_agents" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
-            })}
-            onSyncOpenCodeAgents={() => runWsTask({
-              label: "sync opencode agents",
-              action: "sync_opencode_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_agents" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
-            })}
-            onDiffOpenCodeConfig={() => runWsTask({
-              label: "diff opencode config",
-              action: "diff_opencode_config",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_opencode_config" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
-            })}
-            onSyncOpenCodeConfig={() => runWsTask({
-              label: "sync opencode config",
-              action: "sync_opencode_config",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_opencode_config" }),
-              toActionResult: (r) => r,
-              refresh: () => { loadOpenCodeRuntimeHealth(); fetchStatus(); },
-            })}
-            {...targetSkillsShared}
-            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["opencode"], "preview skills sync (opencode)")}
-            onSyncAllSkills={() => runWsInstallForAgents(false, ["opencode"], "sync all skills (opencode)")}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
@@ -738,17 +458,6 @@ function App() {
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
-            cursorProfileHealth={cursorProfileHealth}
-            onRefreshCursorProfile={() => loadCursorProfileHealth()}
-            onRepairWorkspace={runCursorWorkspaceRepair}
-            onCursorDiffGlobalProfile={() => runCursorProfileAction("cursor_diff_global_profile", "cursor diff global profile")}
-            onCursorApplyGlobalProfile={() => runCursorProfileAction("cursor_apply_global_profile", "cursor apply global profile")}
-            onCursorValidateGlobalProfile={() => runCursorProfileAction("cursor_validate_global_profile", "cursor validate global profile")}
-            onCursorOpenSettings={() => runCursorProfileAction("cursor_open_settings", "cursor open settings")}
-            onCursorCopyUserRules={() => runCursorProfileAction("cursor_copy_user_rules", "cursor copy user rules")}
-            {...targetSkillsShared}
-            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["cursor"], "preview skills sync (cursor)")}
-            onSyncAllSkills={() => runWsInstallForAgents(false, ["cursor"], "sync all skills (cursor)")}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}
@@ -767,31 +476,7 @@ function App() {
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
-            ruleTargetsEnabled={claudeRulesEnabled}
-            agentsTargetsEnabled={claudeAgentsEnabled}
-            agentsStatusLabel={status?.claude_agents}
             canRunReleaseCheck={canRunReleaseCheck}
-            onDiffRules={() => runWsAction("diff_claude_rules", "diff claude rules")}
-            onSyncRules={() => runWsAction("sync_claude_rules", "sync claude rules")}
-            onDiffAgents={() => runWsTask({
-              label: "diff claude agents",
-              action: "diff_claude_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "diff_claude_agents" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            onSyncAgents={() => runWsTask({
-              label: "sync claude agents",
-              action: "sync_claude_agents",
-              task: async () => invoke<ActionResult>("run_action", { action: "sync_claude_agents" }),
-              toActionResult: (r) => r,
-              refresh: fetchStatus,
-            })}
-            {...targetSkillsShared}
-            claudeRuntimeHealth={claudeRuntimeHealth}
-            onRefreshClaudeHealth={() => loadClaudeRuntimeHealth()}
-            onPreviewSyncSkills={() => runWsInstallForAgents(true, ["claude"], "preview skills sync (claude)")}
-            onSyncAllSkills={() => runWsInstallForAgents(false, ["claude"], "sync all skills (claude)")}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
           />
         )}

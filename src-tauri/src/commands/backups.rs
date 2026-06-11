@@ -529,20 +529,16 @@ mod tests {
 
     #[test]
     fn prepare_backup_root_for_open_creates_missing_root() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
         let root = temp_root("open-create-root");
         let backup_root = root.join("backups");
-        let previous = std::env::var("AGENT_WORKSPACE_BACKUP_DIR").ok();
         std::env::set_var(
             "AGENT_WORKSPACE_BACKUP_DIR",
             backup_root.to_string_lossy().as_ref(),
         );
 
         let result = prepare_backup_root_for_open();
-
-        match previous {
-            Some(value) => std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", value),
-            None => std::env::remove_var("AGENT_WORKSPACE_BACKUP_DIR"),
-        }
 
         assert!(result.is_ok(), "backup root should be created: {result:?}");
         assert!(backup_root.is_dir(), "backup root should exist");

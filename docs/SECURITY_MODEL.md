@@ -3,7 +3,7 @@
 ## Core principles
 
 - **Agent Workspace manages only explicit allowlisted files.** It never reads or writes private configuration, credentials, tokens, environment values, or authentication state.
-- **All writes are opt-in.** Every sync action requires explicit user action (button click or command). Workspace repair copies only missing bundled files and never overwrites user edits.
+- **All writes are opt-in.** Install or Update requires explicit user action after an artifact-level preview.
 - **No secrets in transit or at rest.** The app does not store, encrypt, or transmit credentials. It does not maintain a session or authenticate to external services.
 - **No remote execution.** Scripts run on local files only. The app does not accept remote commands, webhooks, or IPC from external processes.
 - **No credential-bearing surfaces.** The app never inspects `.env*`, private keys, cookies, sessions, auth headers, IDE settings files, MCP credentials, or private URLs.
@@ -31,7 +31,7 @@ The app writes only to these known paths under user home:
 
 All writes are preceded by backup. Rollback restores exact prior state using a single shared persisted rollback core: per-artifact `in_flight` status is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed.
 
-Setup lifecycle mutations are serialized in the trusted Rust backend. Bounded copy and removal helpers require an explicit allowlisted root, reject dangling destination symlinks, and validate parent chains before creating or removing trees. Managed reconciliation (including stale skill removal and workspace bootstrap cleanup) uses the shared path-safety and safe-filesystem owners. Preview confirmation tokens are opaque, one-time, in-memory, and must not appear in logs or diagnostics.
+Installation mutations are serialized in the trusted Rust backend. Packaged resources and runtime destinations are resolved separately and must never be the same root. Bounded copy and removal helpers require an explicit allowlisted root, reject dangling destination symlinks, and validate parent chains before creating or removing trees. Managed reconciliation uses the shared path-safety and safe-filesystem owners. Preview confirmation tokens are opaque, one-time, in-memory, and must not appear in logs or diagnostics.
 
 OpenCode agent permissions are composed from `templates/opencode.policy.json` plus small `templates/opencode/agents/*.role.json` overrides. Restrictive roles use explicit `composition.replace_sections` so bash/edit profiles replace inherited capability sections instead of shallow-merging them. Shared secret denials remain canonical in the base policy. Generated `agents/*.md` adapters are deterministic outputs—edit sources, not generated headers. `scripts/validate_opencode_permissions.py` enforces the semantic permission contract in release-check.
 

@@ -1,4 +1,4 @@
-//! Bounded path safety checks for setup lifecycle mutations.
+//! Bounded path safety checks for managed installation mutations.
 //!
 //! Rejects symlinks on paths and in parent chains up to an allowlisted root.
 

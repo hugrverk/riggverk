@@ -40,23 +40,16 @@ pub use content::{
     save_opencode_config_source,
 };
 pub use contract::validate_workspace_contract;
-pub use cursor_profile::{get_cursor_profile_health, run_cursor_profile_action};
+pub use cursor_profile::get_cursor_profile_health;
 pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
-pub use setup::{
-    apply_setup, get_installation_status, preview_repair_setup, preview_setup,
-    repair_setup_command, rollback_setup_transaction,
-};
-pub use skills::{
-    get_skills_sync_health, install_skills, list_skills, open_install_skills_script, open_skill,
-    read_skill,
-};
+pub use setup::{apply_setup, get_installation_status, preview_setup, rollback_setup_transaction};
+pub use skills::{list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
-    apply_workspace_repair, get_workspace_diagnostics, install_default_workspace,
-    open_default_workspace_folder, plan_workspace_repair, read_brain_setup_seed,
-    repair_default_workspace, try_set_active_workspace_path,
+    get_workspace_diagnostics, open_default_workspace_folder, read_brain_setup_seed,
+    try_set_active_workspace_path,
 };

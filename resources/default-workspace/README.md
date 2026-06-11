@@ -8,7 +8,7 @@ Workspace files are plain text. The app does not encrypt them. Do not store secr
 
 ## What lives here
 
-- **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting. **docs/prompt-templates/** holds Standard, Masterprompt, and Batchprompt templates; they appear in the app under Library → Docs after install or repair copies them into your workspace.
+- **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting. **docs/prompt-templates/** holds Standard, Masterprompt, and Batchprompt templates; they appear in the app under Library → Docs after installation.
 - **skills/** — agent skills (each skill in its own folder with a `SKILL.md`). 21 bundled skills ship with the default workspace.
 - **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), Codex config (`templates/codex/`), and Cursor setup assets (`templates/cursor/`). Cursor global setup is applied from the app via native Rust operations; `install-cursor-workspace.sh` remains a small CLI helper for User Rules and optional project-target installs.
 - **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
@@ -26,7 +26,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-skills.sh`** — installs skills to native agent skill folders. App uses `--global` only.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
-All writes are explicit and allowlisted. Existing diverged target files are backed up before overwrite under `~/Library/Application Support/ai.agentworkspace.app/backups`. The Agent Workspace app syncs global/home config only. Cursor global profile repair/apply never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`. Use dry-run or diff before every apply.
+All writes are explicit, previewed, and allowlisted. Existing managed targets are backed up before replacement under `~/Library/Application Support/ai.agentworkspace.app/backups`. The Agent Workspace app manages global/home config only. Cursor installation never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
 
 ## Separation
 

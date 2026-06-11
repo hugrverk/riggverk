@@ -1,9 +1,12 @@
-use std::path::{Path, PathBuf};
+#[cfg(test)]
+use std::path::Path;
+use std::path::PathBuf;
 
 use crate::platform_paths::{
     default_cursor_profile_root, display_path, resolve_user_home as platform_home, Platform,
     PlatformEnv,
 };
+#[cfg(test)]
 use crate::shell_runtime::env_path_for_bash;
 
 pub use crate::platform_paths::normalized_path_key;
@@ -48,6 +51,7 @@ pub fn cursor_profile_root_display(paths: &CursorProfilePaths) -> String {
     display_path(&paths.profile_root, Platform::current())
 }
 
+#[cfg(test)]
 pub fn cursor_profile_env_pairs(
     paths: &CursorProfilePaths,
     bash: &str,

@@ -79,8 +79,8 @@ def main() -> None:
     if "bundled resource preview" in app_text:
         fail("README.md must not claim bundled resource preview UI on Workspace")
 
-    if "update resources" not in app_text:
-        fail("README.md must document update resources on Workspace page")
+    if "Install or Update" not in app_text:
+        fail("README.md must document the unified Install or Update workflow")
 
     for path in (
         ROOT / "resources/default-workspace/docs/USING_THE_APP.md",
@@ -102,10 +102,10 @@ def main() -> None:
         if stale in contract:
             fail(f"WORKSPACE_CONTRACT.md must not claim stale Workspace UI: {stale}")
 
-    workspace_rs = read(ROOT / "src-tauri/src/commands/workspace.rs")
-    repair_fn = workspace_rs.split("pub fn repair_default_workspace", 1)
-    if len(repair_fn) < 2 or "repair_workspace_target_path" not in repair_fn[1].split("}", 1)[0]:
-        fail("repair_default_workspace must resolve path via repair_workspace_target_path")
+    combined_active_docs = "\n".join(read(path) for path in README_PATHS)
+    for obsolete in ("Setup Lifecycle", "repair workspace", "update resources"):
+        if obsolete.lower() in combined_active_docs.lower():
+            fail(f"README copies retain obsolete installation term: {obsolete}")
 
     sandbox_primary_patterns = [
         "playwright-safe as the primary",

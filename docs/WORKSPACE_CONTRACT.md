@@ -34,11 +34,12 @@ Validation is read-only. It does not run scripts, install files, or inspect cred
 
 The default workspace currently contains 21 bundled skills, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
-Bundled resources are copied only by explicit install, repair, or update-resources actions. These actions:
+Bundled resources are immutable installation input. The explicit **Install or Update** action:
 
 - write only below the resolved workspace root
-- copy missing or zero-byte bundled files
-- never overwrite non-empty user edits
+- previews artifact-level creates, updates, removals, and conflicts
+- updates only allowlisted managed projections
+- preserves unknown and diverged unowned files
 - never execute copied scripts
 - reject unsafe paths and symlink escapes
 
@@ -80,7 +81,6 @@ Installed skill files are user-owned after installation. Agent Workspace may:
 
 - create missing managed copies
 - report synced or diverged copies
-- repair missing copies
 - remove only known deprecated copies that still match an Agent Workspace reference snapshot
 
 Diverged deprecated copies and unknown skills are preserved.
@@ -147,23 +147,23 @@ Writes use allowlisted targets and explicit arguments. Existing managed files ar
 
 The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
 
-## Unified setup lifecycle
+## Managed installation
 
 Surface status in the app is derived from artifact-level detection. OpenCode Config aggregates `opencode.json`, `tui.json`, and the Playwright MCP artifact; agents and skills surfaces aggregate every managed artifact for that harness.
 
-Preview issues a bounded in-memory preview token scoped to workspace, pending surfaces, fingerprint, and purpose (apply or repair). Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply and repair consume the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
+Preview issues a bounded in-memory token scoped to workspace, pending surfaces, and fingerprint. Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply consumes the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
 
-Filesystem-mutating setup commands (apply, repair, explicit rollback execution, managed stale-artifact removal and its rollback) acquire a process-wide non-blocking mutation guard. A second mutation returns `setup operation already in progress` without filesystem changes or misleading transaction evidence. Preview, health, diff, discovery, planning, and rollback dry-run remain available.
+Filesystem-mutating installation and rollback commands acquire a process-wide non-blocking mutation guard. A second mutation returns `setup operation already in progress` without filesystem changes or misleading transaction evidence. Preview, health, discovery, planning, and rollback dry-run remain available.
 
-Path safety is centralized in `path_safety.rs` (symlink and containment checks, including dangling symlinks via `symlink_metadata`). Bounded directory copy/remove without following symlinks lives in `safe_filesystem.rs`; callers pass an explicit allowlisted root, and copy/reject paths validate destination symlinks and parent chains before mutation. Managed reconciliation (stale skill, workspace metadata, and legacy Codex path cleanup) uses both; it does not duplicate weaker local symlink helpers. Ownership is recorded in `.agent-workspace/managed-state.json` after a successful update.
+Packaged source and runtime destination are resolved independently by `SetupRoots`; installation refuses to run if they resolve to the same root. Path safety is centralized in `path_safety.rs` (symlink and containment checks, including dangling symlinks via `symlink_metadata`). Bounded directory copy/remove without following symlinks lives in `safe_filesystem.rs`; callers pass an explicit allowlisted root, and copy/reject paths validate destination symlinks and parent chains before mutation.
+
+Managed ownership is recorded in `.agent-workspace/managed-state.json` schema 2 with stable SHA-256 digests. First-run adoption and stale cleanup require an exact canonical or historical digest. Unknown files and modified historical copies remain conflicts and are never claimed or deleted.
 
 OpenCode agent permissions are composed from `templates/opencode.policy.json` plus `templates/opencode/agents/*.role.json`. Restrictive roles use `composition.replace_sections` so inherited bash/edit capabilities are replaced, not shallow-merged. `scripts/validate_opencode_permissions.py` guards the semantic contract in release-check.
 
-Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, record per-artifact apply/validation/rollback state and post-apply digests, and refuse explicit rollback when managed content changed after apply. Automatic rollback uses the workspace root validated at transaction start—not the process working directory. Explicit rollback sets per-artifact `in_flight` before each filesystem mutation, persists progress after each artifact, and reconciles interrupted `in_flight` artifacts by comparing current state to post-apply and backup digests before retrying. Transactions in `rolling_back` or `rollback_failed` resume; already `restored` artifacts are skipped; when no eligible artifacts remain the transaction finalizes to `rolled_back` or `rollback_failed` without spurious filesystem writes. Rollback dry-run reports already restored, still-required, and conflicted artifacts with zero manifest writes. Codex managed merge and rollback use the line-preserving Python merge owner: same-line inline comments on managed scalar assignments are preserved, or the patch refuses with zero mutation on conflict or malformed TOML. Repair is create-only per artifact and does not run surface scripts that would update diverged siblings. Failed repair with a transaction ID remains eligible for explicit rollback retry when dry-run reports remaining artifacts.
+Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, and record per-artifact apply, validation, rollback, managed digest, and full digest state. The exact prior managed-state bytes or prior absence are part of the transaction and are restored on rollback. Managed state is published atomically before the transaction becomes completed.
 
-## Repair
-
-Workspace repair and update-resources restore missing bundled source files only. Harness repair installs missing managed resources but does not silently overwrite diverged user files or delete unknown resources.
+Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, rolling-back, or rollback-failed transactions for the same workspace are reconciled or the new apply is blocked. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
 
 ## Security boundaries
 

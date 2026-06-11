@@ -349,15 +349,6 @@ export interface WorkspaceSetupEvaluation {
   missing_files_to_add: string[];
 }
 
-export interface InitializeWorkspaceResult {
-  success: boolean;
-  status: string;
-  target_path: string;
-  message: string;
-  copied_files: string[];
-  warnings: string[];
-}
-
 export interface CreateWorkspaceResult {
   success: boolean;
   status: string;
@@ -434,18 +425,6 @@ export interface OpenCodeRuntimeHealth {
   // Explainers
   summary: string;
   next_action: string;
-}
-
-export interface RepairWorkspaceResult {
-  ok: boolean;
-  dry_run: boolean;
-  target_path: string;
-  copied_files: string[];
-  refreshed_files: string[];
-  skipped_files: string[];
-  errors: string[];
-  warnings: string[];
-  message: string;
 }
 
 export interface BrainSetupSeedResult {
@@ -526,7 +505,7 @@ export interface ClaudeRuntimeHealth {
   summary: string;
 }
 
-// ── Unified setup lifecycle types ──
+// Unified managed installation types.
 
 export type SetupSurfaceId =
   | "open_code_config"

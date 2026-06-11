@@ -918,10 +918,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         && generated_snapshot_status == "valid"
         && run_generator_check(workspace_root).is_none()
     {
-        warnings.push(
-            "OpenCode config generator script not found. Use 'Repair workspace' to upgrade."
-                .to_string(),
-        );
+        warnings
+            .push("OpenCode config generator script not found. Run Install or Update.".to_string());
     }
 
     // Bundled agents check

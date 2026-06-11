@@ -1,17 +1,14 @@
 use std::path::Path;
 
-#[cfg(windows)]
-use std::path::PathBuf;
-
-use crate::executable_resolver::resolve_executable;
-
 /// Strip Windows extended-length path prefix (`\\?\` or `//?/`).
+#[cfg(test)]
 pub fn strip_windows_extended_prefix(path: &str) -> &str {
     path.strip_prefix(r"\\?\")
         .or_else(|| path.strip_prefix("//?/"))
         .unwrap_or(path)
 }
 
+#[cfg(test)]
 fn to_bash_path_string(raw: &str) -> String {
     strip_windows_extended_prefix(raw).replace('\\', "/")
 }
@@ -24,6 +21,7 @@ pub fn path_arg_for_native_process(path: &Path) -> Result<String, String> {
 }
 
 /// Bash-safe script argument path: strip `\\?\`, use forward slashes.
+#[cfg(test)]
 pub fn path_arg_for_bash(path: &Path) -> Result<String, String> {
     let raw = path
         .to_str()
@@ -32,26 +30,9 @@ pub fn path_arg_for_bash(path: &Path) -> Result<String, String> {
 }
 
 /// Bash-safe path for environment variables passed to bash scripts.
+#[cfg(test)]
 pub fn env_path_for_bash(path: &Path) -> String {
     path_arg_for_bash(path).unwrap_or_else(|_| to_bash_path_string(&path.to_string_lossy()))
-}
-
-/// Resolve bash for workspace shell scripts. On Windows, checks Git for Windows install paths.
-pub fn resolve_bash() -> Result<String, String> {
-    if program_available("bash") {
-        return Ok("bash".into());
-    }
-
-    #[cfg(windows)]
-    {
-        for candidate in git_bash_candidates() {
-            if candidate.is_file() {
-                return Ok(candidate.to_string_lossy().into_owned());
-            }
-        }
-    }
-
-    Err(bash_missing_message())
 }
 
 pub fn format_spawn_error(program: &str, error: &std::io::Error) -> String {
@@ -74,53 +55,6 @@ pub fn format_spawn_error(program: &str, error: &std::io::Error) -> String {
     }
 
     format!("failed to run {program}: {raw}")
-}
-
-fn path_env_value() -> String {
-    std::env::var("PATH").unwrap_or_default()
-}
-
-fn program_available(program: &str) -> bool {
-    let path_env = path_env_value();
-    let pathext = if cfg!(windows) {
-        std::env::var("PATHEXT").ok()
-    } else {
-        None
-    };
-    resolve_executable(program, &path_env, pathext.as_deref()).is_some()
-}
-
-#[cfg(windows)]
-fn git_bash_candidates() -> Vec<PathBuf> {
-    let mut candidates = Vec::new();
-
-    if let Ok(program_files) = std::env::var("ProgramFiles") {
-        candidates.push(
-            PathBuf::from(program_files)
-                .join("Git")
-                .join("bin")
-                .join("bash.exe"),
-        );
-    }
-    if let Ok(program_files_x86) = std::env::var("ProgramFiles(x86)") {
-        candidates.push(
-            PathBuf::from(program_files_x86)
-                .join("Git")
-                .join("bin")
-                .join("bash.exe"),
-        );
-    }
-    if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
-        candidates.push(
-            PathBuf::from(local_app_data)
-                .join("Programs")
-                .join("Git")
-                .join("bin")
-                .join("bash.exe"),
-        );
-    }
-
-    candidates
 }
 
 fn bash_missing_message() -> String {

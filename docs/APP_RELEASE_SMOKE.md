@@ -12,7 +12,7 @@ For Tauri IPC-backed status without manual clicking or a live webview:
 
 **Covers:** temp `HOME` + `AGENT_WORKSPACE_PATH`, workspace diagnostics, `get_status` sync fields, OpenCode runtime health, Cursor profile health, Brain Setup seed (no bundled private context).
 
-**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or real `~/.config/agent-workspace` install/repair. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend). Backend runtime smoke is not a substitute for actual Tauri webview smoke below.
+**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or a real user profile. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend). Backend runtime smoke is not a substitute for actual isolated Tauri webview smoke below.
 
 ## Actual Tauri webview smoke (required before release)
 
@@ -22,7 +22,7 @@ Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and
 - [ ] Rollback retry does not restore already-completed artifacts twice
 - [ ] `rolling_back` transaction with all artifacts restored finalizes without extra filesystem mutations
 - [ ] Codex managed apply preserves same-line inline comments; ambiguous managed lines refuse safely
-- [ ] Rollback confirmation dialog: keyboard open, focus trap, Escape closes, focus returns, `aria-live` errors, `aria-busy` during work
+- [ ] Conflict review dialog: keyboard open, Escape closes, focus returns, and safe operations remain actionable
 - [ ] No console errors during rollback and Codex apply flows
 
 Run this checklist before sharing a built app bundle with another user.
@@ -40,7 +40,7 @@ Run this checklist before sharing a built app bundle with another user.
 
 - [ ] App bundle built successfully (or dev mode confirmed working)
 - [ ] App launches without generic error banner on first launch
-- [ ] Fresh launch shows Workspace install state (MISSING or INSTALLED), not path-chooser UI
+- [ ] Fresh launch shows Not installed or Current status, not path-chooser UI
 - [ ] Workspace displays canonical path `~/.config/agent-workspace`
 - [ ] Toolbar icons stay on the same compact row as macOS traffic lights
 - [ ] Error/info banner renders below the toolbar
@@ -50,9 +50,10 @@ Run this checklist before sharing a built app bundle with another user.
 
 ## 3. Workspace Install Smoke
 
-- [ ] With no prior install, status is MISSING and **install** is offered
-- [ ] **install** creates `~/.config/agent-workspace` with `.agent-workspace/workspace.json` and bundled files
-- [ ] **repair** adds missing files only; does not overwrite edited files
+- [ ] With no prior install, status is Not installed and **Install** is offered
+- [ ] **Install** creates the isolated runtime workspace with `.agent-workspace/workspace.json` and bundled files
+- [ ] A second run reports Current and performs no mutation
+- [ ] Modified historical and unknown files are preserved as conflicts
 - [ ] **open folder** opens the installed directory
 - [ ] **refresh** updates diagnostics
 - [ ] No choose-folder, check-path, use-default, or clear-active controls
@@ -61,8 +62,8 @@ Run this checklist before sharing a built app bundle with another user.
 ## 4. Harness and Library Smoke
 
 - [ ] Codex, OpenCode, Cursor, Claude nav icons load harness pages
-- [ ] Harness pages show diff/sync actions when workspace is valid
-- [ ] Skills install UI on harness pages (not Workspace)
+- [ ] Workspace and each harness page show exactly one managed installation card
+- [ ] No repair, Setup Lifecycle, duplicate skills install, or per-surface mutation controls appear
 - [ ] Library: Docs, Rules, Skills, Agents, Configs, Brain Setup switch correctly
 - [ ] Library → Docs: document selection, Preview, Edit, modified state, save, reset, open, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
 - [ ] Brain Setup copy block works
@@ -123,7 +124,7 @@ Dry-runs only unless testing your own machine:
 ### Checks Passed
 - [ ] Preflight
 - [ ] Build/install
-- [ ] Workspace install/repair
+- [ ] Managed installation and rollback
 - [ ] Harness + Library + Settings
 - [ ] Sync dry-runs
 - [ ] Verify + terminal

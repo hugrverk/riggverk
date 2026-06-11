@@ -1,18 +1,19 @@
+#[cfg(test)]
 use serde::Serialize;
+#[cfg(test)]
 use std::path::PathBuf;
-use tauri::Manager;
 
 #[path = "default_workspace_manifest.rs"]
 mod manifest;
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceFile {
     path: String,
     exists: bool,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceCategory {
     label: String,
@@ -20,7 +21,7 @@ pub struct DefaultWorkspaceCategory {
     files: Vec<DefaultWorkspaceFile>,
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 #[derive(Serialize)]
 pub struct DefaultWorkspaceSummary {
     root_label: String,
@@ -28,33 +29,13 @@ pub struct DefaultWorkspaceSummary {
     categories: Vec<DefaultWorkspaceCategory>,
 }
 
+#[cfg(test)]
 fn source_tree_default_workspace_root() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
 }
 
-fn bundled_default_workspace_root(app: &tauri::AppHandle) -> Option<PathBuf> {
-    app.path()
-        .resource_dir()
-        .map(|dir| dir.join("default-workspace"))
-        .ok()
-}
-
-pub(crate) fn resolve_default_workspace_root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
-    if let Some(bundled) = bundled_default_workspace_root(app) {
-        if bundled.exists() {
-            return Ok(bundled);
-        }
-    }
-
-    let source = source_tree_default_workspace_root();
-    if source.exists() {
-        return Ok(source);
-    }
-
-    Err("bundled default workspace resources unavailable".to_string())
-}
-
 /// App-owned operational resources that repair may refresh backup-first.
+#[cfg(test)]
 pub(crate) fn cursor_bundle_refresh_paths() -> &'static [&'static str] {
     manifest::MANAGED_REFRESH_PATHS
 }
@@ -63,7 +44,7 @@ pub(crate) fn default_workspace_files() -> Vec<(&'static str, &'static [&'static
     manifest::categories()
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 fn build_summary(root: &std::path::Path) -> DefaultWorkspaceSummary {
     let categories = default_workspace_files()
         .into_iter()

@@ -9,7 +9,6 @@ use crate::setup_transaction;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
-#[allow(dead_code)]
 pub enum InstallationState {
     NotInstalled,
     UpdateAvailable,
@@ -37,6 +36,7 @@ pub struct InstallationStatus {
 
 fn aggregate_state(
     planned: &[setup_transaction::PlannedArtifact],
+    has_trusted_state: bool,
 ) -> (InstallationState, InstallationCounts, Vec<String>) {
     let mut counts = InstallationCounts {
         create_count: 0,
@@ -47,6 +47,7 @@ fn aggregate_state(
     let mut conflicts = Vec::new();
     let mut has_apply = false;
     let mut has_unavailable = false;
+    let mut has_present = false;
 
     for p in planned {
         match p.kind {
@@ -64,19 +65,30 @@ fn aggregate_state(
             }
             OperationKind::Conflict => {
                 counts.conflict_count += 1;
-                conflicts.push(format!("{:?}", p.artifact));
+                conflicts.push(artifact_label(&p.artifact));
             }
             OperationKind::Unavailable => has_unavailable = true,
+            OperationKind::NoChange => has_present = true,
             _ => {}
         }
     }
 
-    let state = if counts.conflict_count > 0 {
+    let state = if has_apply {
+        if !has_trusted_state
+            && counts.create_count > 0
+            && counts.update_count == 0
+            && counts.remove_count == 0
+            && counts.conflict_count == 0
+            && !has_present
+        {
+            InstallationState::NotInstalled
+        } else {
+            InstallationState::UpdateAvailable
+        }
+    } else if counts.conflict_count > 0 {
         InstallationState::Conflict
     } else if has_unavailable && !has_apply {
         InstallationState::Unavailable
-    } else if has_apply {
-        InstallationState::UpdateAvailable
     } else {
         InstallationState::Current
     };
@@ -89,7 +101,10 @@ pub fn status_for_surfaces(
     home: &Path,
 ) -> Result<InstallationStatus, String> {
     let planned = setup_transaction::plan_artifacts_for_surfaces(surfaces, workspace_root, home)?;
-    let (state, counts, conflict_details) = aggregate_state(&planned);
+    let (state, counts, conflict_details) = aggregate_state(
+        &planned,
+        crate::managed_state::read_managed_state(workspace_root).is_some(),
+    );
     let summary = match state {
         InstallationState::NotInstalled => "Not installed".into(),
         InstallationState::UpdateAvailable => {
@@ -110,4 +125,94 @@ pub fn status_for_surfaces(
         counts,
         conflict_details,
     })
+}
+
+fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
+    use crate::artifact_registry::ArtifactId;
+    match artifact {
+        ArtifactId::OpenCodeConfig => "OpenCode configuration".into(),
+        ArtifactId::OpenCodeTui => "OpenCode terminal configuration".into(),
+        ArtifactId::OpenCodePlaywrightMcp => "OpenCode Playwright configuration".into(),
+        ArtifactId::OpenCodeRules => "OpenCode rules".into(),
+        ArtifactId::OpenCodeAgent(name) => format!("OpenCode agent {}", name.as_str()),
+        ArtifactId::OpenCodeSkill(name) => format!("OpenCode skill {}", name.as_str()),
+        ArtifactId::CodexConfig => "Codex configuration".into(),
+        ArtifactId::CodexRules => "Codex rules".into(),
+        ArtifactId::CodexAgent(name) => format!("Codex agent {}", name.as_str()),
+        ArtifactId::CodexSkill(name) => format!("Codex skill {}", name.as_str()),
+        ArtifactId::ClaudeRules => "Claude rules".into(),
+        ArtifactId::ClaudeAgent(name) => format!("Claude agent {}", name.as_str()),
+        ArtifactId::ClaudeSkill(name) => format!("Claude skill {}", name.as_str()),
+        ArtifactId::CursorAgent(name) => format!("Cursor agent {}", name.as_str()),
+        ArtifactId::CursorSkill(name) => format!("Cursor skill {}", name.as_str()),
+        ArtifactId::CursorMcp => "Cursor Playwright configuration".into(),
+        ArtifactId::CodexLegacySkill(name) => format!("Legacy Codex skill {}", name.as_str()),
+        ArtifactId::WorkspaceFile(path) => format!("Workspace file {}", path.as_str()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::artifact_registry::{ArtifactId, SkillName};
+    use crate::setup_transaction::{PlannedArtifact, PreviousState, RollbackAction};
+
+    fn planned(kind: OperationKind, artifact: ArtifactId) -> PlannedArtifact {
+        PlannedArtifact {
+            surface: artifact.surface(),
+            artifact,
+            kind,
+            previous_state: PreviousState::Absent,
+            rollback_action: RollbackAction::NoAction,
+        }
+    }
+
+    #[test]
+    fn empty_unmanaged_profile_is_not_installed() {
+        let artifacts = vec![planned(OperationKind::Create, ArtifactId::OpenCodeRules)];
+        assert_eq!(
+            aggregate_state(&artifacts, false).0,
+            InstallationState::NotInstalled
+        );
+    }
+
+    #[test]
+    fn partial_exact_profile_is_update_available() {
+        let artifacts = vec![
+            planned(OperationKind::NoChange, ArtifactId::OpenCodeRules),
+            planned(
+                OperationKind::Create,
+                ArtifactId::OpenCodeSkill(SkillName::new("browser-qa").unwrap()),
+            ),
+        ];
+        assert_eq!(
+            aggregate_state(&artifacts, false).0,
+            InstallationState::UpdateAvailable
+        );
+    }
+
+    #[test]
+    fn safe_updates_remain_available_beside_conflicts() {
+        let artifacts = vec![
+            planned(OperationKind::Create, ArtifactId::OpenCodeRules),
+            planned(
+                OperationKind::Conflict,
+                ArtifactId::OpenCodeSkill(SkillName::new("browser-qa").unwrap()),
+            ),
+        ];
+        let (state, counts, conflicts) = aggregate_state(&artifacts, false);
+        assert_eq!(state, InstallationState::UpdateAvailable);
+        assert_eq!(counts.create_count, 1);
+        assert_eq!(counts.conflict_count, 1);
+        assert_eq!(conflicts, vec!["OpenCode skill browser-qa"]);
+    }
+
+    #[test]
+    fn conflicts_without_safe_work_require_review() {
+        let artifacts = vec![planned(OperationKind::Conflict, ArtifactId::OpenCodeRules)];
+        assert_eq!(
+            aggregate_state(&artifacts, true).0,
+            InstallationState::Conflict
+        );
+    }
 }
