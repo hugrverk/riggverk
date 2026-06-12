@@ -32,6 +32,17 @@ pub struct InstallationStatus {
     pub counts: InstallationCounts,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub conflict_details: Vec<String>,
+    pub surfaces: Vec<SurfaceInstallationStatus>,
+}
+
+/// Per-surface state so the UI can show what is installed and current
+/// instead of one opaque aggregate.
+#[derive(Debug, Clone, Serialize)]
+pub struct SurfaceInstallationStatus {
+    pub surface: SetupSurfaceId,
+    pub label: String,
+    pub state: InstallationState,
+    pub detail: String,
 }
 
 fn aggregate_state(
@@ -101,10 +112,8 @@ pub fn status_for_surfaces(
     home: &Path,
 ) -> Result<InstallationStatus, String> {
     let planned = setup_transaction::plan_artifacts_for_surfaces(surfaces, workspace_root, home)?;
-    let (state, counts, conflict_details) = aggregate_state(
-        &planned,
-        crate::managed_state::read_managed_state(workspace_root).is_some(),
-    );
+    let has_trusted_state = crate::managed_state::read_managed_state(workspace_root).is_some();
+    let (state, counts, conflict_details) = aggregate_state(&planned, has_trusted_state);
     let summary = match state {
         InstallationState::NotInstalled => "Not installed".into(),
         InstallationState::UpdateAvailable => {
@@ -119,12 +128,71 @@ pub fn status_for_surfaces(
         }
         InstallationState::Unavailable => "Unavailable on this system".into(),
     };
+    let per_surface = surfaces
+        .iter()
+        .map(|surface| surface_status(*surface, &planned, has_trusted_state))
+        .collect();
     Ok(InstallationStatus {
         state,
         summary,
         counts,
         conflict_details,
+        surfaces: per_surface,
     })
+}
+
+fn surface_status(
+    surface: SetupSurfaceId,
+    planned: &[setup_transaction::PlannedArtifact],
+    has_trusted_state: bool,
+) -> SurfaceInstallationStatus {
+    let own: Vec<setup_transaction::PlannedArtifact> = planned
+        .iter()
+        .filter(|p| p.surface == surface)
+        .cloned()
+        .collect();
+    let (state, counts, _) = aggregate_state(&own, has_trusted_state);
+    let current_count = own
+        .iter()
+        .filter(|p| p.kind == OperationKind::NoChange)
+        .count();
+    let detail = match state {
+        InstallationState::Current => {
+            if current_count == 1 {
+                "installed and current".to_string()
+            } else {
+                format!("{current_count} installed and current")
+            }
+        }
+        InstallationState::NotInstalled => format!("{} to install", counts.create_count),
+        InstallationState::UpdateAvailable => {
+            let mut parts: Vec<String> = Vec::new();
+            if current_count > 0 {
+                parts.push(format!("{current_count} current"));
+            }
+            if counts.create_count > 0 {
+                parts.push(format!("{} to create", counts.create_count));
+            }
+            if counts.update_count > 0 {
+                parts.push(format!("{} to update", counts.update_count));
+            }
+            if counts.remove_count > 0 {
+                parts.push(format!("{} old to remove", counts.remove_count));
+            }
+            if counts.conflict_count > 0 {
+                parts.push(format!("{} conflicts", counts.conflict_count));
+            }
+            parts.join(", ")
+        }
+        InstallationState::Conflict => format!("{} conflicts preserved", counts.conflict_count),
+        InstallationState::Unavailable => "unavailable".to_string(),
+    };
+    SurfaceInstallationStatus {
+        surface,
+        label: surface.label().to_string(),
+        state,
+        detail,
+    }
 }
 
 fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {

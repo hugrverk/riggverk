@@ -28,7 +28,6 @@ trap cleanup EXIT
 REAL_HOME="$(python3 -c 'import os, pwd; print(pwd.getpwuid(os.getuid()).pw_dir)')"
 export SMOKE_HOME="$SMOKE_ROOT/home"
 export HOME="$SMOKE_HOME"
-mkdir -p "$HOME/Library/Application Support/ai.agentworkspace.app"
 # Keep rustup/cargo on the real toolchain while harness paths use SMOKE_HOME.
 TOOLCHAIN_HOME="$REAL_HOME"
 export RUSTUP_HOME="$TOOLCHAIN_HOME/.rustup"

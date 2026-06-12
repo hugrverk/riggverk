@@ -89,11 +89,19 @@ export interface InstallationCounts {
   create_count: number; update_count: number; remove_count: number; conflict_count: number;
 }
 
+export interface SurfaceInstallationStatus {
+  surface: SetupSurfaceId;
+  label: string;
+  state: InstallationState;
+  detail: string;
+}
+
 export interface InstallationStatus {
   state: InstallationState;
   summary: string;
   counts: InstallationCounts;
   conflict_details?: string[];
+  surfaces: SurfaceInstallationStatus[];
 }
 
 export interface AgentTargetMeta {
@@ -366,20 +374,6 @@ export interface ActionResult {
   stdout: string;
   stderr: string;
   exit_code: number | null;
-}
-
-export interface ContractCheck {
-  id: string;
-  label: string;
-  status: "pass" | "warn" | "fail";
-  detail: string;
-}
-
-export interface WorkspaceContractResult {
-  valid: boolean;
-  warnings: string[];
-  errors: string[];
-  checks: ContractCheck[];
 }
 
 export interface OpenCodeRuntimeCheck {

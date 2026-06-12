@@ -1,10 +1,11 @@
-import { TargetPageHeader } from "../components/TargetPageHeader";
+import { TargetPageHeader, type TargetPageFact } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
+import { runtimeStatusFact } from "../lib/runtimeUi";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, StatusData } from "../types";
+import type { AgentTargetMeta, AppSettings, CursorProfileHealth, StatusData } from "../types";
 
 interface CursorViewProps {
   appSettings: AppSettings | null;
@@ -21,6 +22,7 @@ interface CursorViewProps {
   gitAvailable: boolean;
   canRunReleaseCheck: boolean;
   onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
+  runtimeHealth: CursorProfileHealth | null;
 }
 
 export function CursorView({
@@ -38,9 +40,12 @@ export function CursorView({
   gitAvailable,
   canRunReleaseCheck,
   onHarnessSetupUpdate,
+  runtimeHealth,
 }: CursorViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
+  const facts: TargetPageFact[] = [{ label: statusText, tone: workspaceValid ? "ok" : "warn" }];
+  if (workspaceValid && runtimeHealth) facts.push(runtimeStatusFact(runtimeHealth.status));
 
   return (
     <section className="ws-layout target-page-layout">
@@ -50,7 +55,7 @@ export function CursorView({
             icon="cursor"
             title="Cursor"
             summary="Sync Cursor agents, canonical bundled skills, and Playwright MCP. Auto Review, sandbox behavior, and general permissions remain IDE-managed in Cursor Settings."
-            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            facts={facts}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Cursor actions." : undefined}
           />
 

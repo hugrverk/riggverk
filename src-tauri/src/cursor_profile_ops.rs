@@ -2,12 +2,12 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::commands::backups::backup_root;
+#[cfg(test)]
+use crate::commands::cursor_profile::manifest_recommended_skills;
 use crate::commands::cursor_profile::{
     cursor_root, default_playwright_mcp_config_path, json_has_unsafe_literals,
     resolve_playwright_browsers_path, transform_playwright_template_value,
 };
-#[cfg(test)]
-use crate::commands::cursor_profile::{manifest_recommended_skills, sync_skill_dirs_status};
 
 pub(crate) const LEGACY_MCP_ALLOWLIST_ENTRY: &str = "playwright:*";
 
@@ -64,9 +64,7 @@ pub(crate) fn legacy_permission_cleanup_status(path: &Path) -> LegacyPermissionC
 }
 use crate::cursor_profile_paths::{normalized_path_key, CursorProfilePaths};
 #[cfg(test)]
-use crate::skills_install::{
-    discover_workspace_skills, install_skills_native, InstallSkillsRequest,
-};
+use crate::skills_install::discover_workspace_skills;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProfileRunOutput {
@@ -385,54 +383,6 @@ fn install_agents(
 }
 
 #[cfg(test)]
-fn install_global_skills(
-    workspace_root: &Path,
-    paths: &CursorProfilePaths,
-    apply: bool,
-    stdout: &mut String,
-) -> Result<(), String> {
-    ensure_global_write_target(paths, &paths.skills, "skills")?;
-    let skills = manifest_recommended_skills(workspace_root);
-    if skills.is_empty() {
-        return Err("no recommended skills in manifest".into());
-    }
-
-    if apply {
-        let mut overrides = std::collections::HashMap::new();
-        overrides.insert("cursor".into(), paths.skills.clone());
-        let result = install_skills_native(
-            workspace_root,
-            &InstallSkillsRequest {
-                agents: vec!["cursor".into()],
-                skills,
-                dry_run: false,
-                agent_dest_overrides: Some(overrides),
-            },
-        );
-        if !result.success {
-            return Err(if result.stderr.is_empty() {
-                result.stdout
-            } else {
-                result.stderr
-            });
-        }
-        let skill_count = manifest_recommended_skills(workspace_root).len();
-        stdout.push_str(&format!("global-skills       written {skill_count}\n"));
-    } else {
-        let (status, _, _) = sync_skill_dirs_status(
-            &workspace_root.join("skills"),
-            &paths.skills,
-            &manifest_recommended_skills(workspace_root),
-        );
-        stdout.push_str(&format!(
-            "global-skills       planned {} ({status})\n",
-            manifest_recommended_skills(workspace_root).len()
-        ));
-    }
-    Ok(())
-}
-
-#[cfg(test)]
 fn apply_global_mcp(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -603,9 +553,6 @@ pub fn run_global_profile(
 
     if let Err(err) = install_agents(workspace_root, paths, apply, "global-agents", &mut stdout) {
         return stage_failure("global-agents", err, stdout);
-    }
-    if let Err(err) = install_global_skills(workspace_root, paths, apply, &mut stdout) {
-        return stage_failure("global-skills", err, stdout);
     }
     if let Err(err) = apply_global_mcp(workspace_root, paths, apply, plan.as_ref(), &mut stdout) {
         return stage_failure("global-mcp", err, stdout);
@@ -1064,7 +1011,6 @@ mod tests {
         let entries: Vec<&str> = allow.iter().filter_map(|v| v.as_str()).collect();
         assert_eq!(entries, vec!["custom:*"]);
         assert!(profile.join("agents/reviewer.md").is_file());
-        assert!(profile.join("skills/diagnose/SKILL.md").is_file());
         assert!(profile.join("mcp.json").is_file());
         assert!(profile.join("permissions.json").is_file());
 
@@ -1294,51 +1240,5 @@ mod tests {
         assert!(!profile.join("backups").exists());
         let _ = fs::remove_dir_all(&workspace);
         let _ = fs::remove_dir_all(&profile);
-    }
-
-    #[test]
-    fn profile_skills_use_resolved_paths_skills_not_env_override() {
-        let workspace = temp_root("profile-skills-root");
-        let profile = temp_root("profile-skills-root-profile");
-        write_minimal_profile_workspace(&workspace);
-        fs::write(
-            profile.join("mcp.json"),
-            r#"{"mcpServers":{"custom":{"command":"node"}}}"#,
-        )
-        .expect("mcp");
-        fs::write(
-            profile.join("permissions.json"),
-            r#"{"mcpAllowlist":["custom:*"]}"#,
-        )
-        .expect("permissions");
-
-        let wrong_skills = temp_root("wrong-skills-redirect");
-        fs::create_dir_all(&wrong_skills).expect("wrong skills");
-
-        let _guard = crate::test_env::guard::lock();
-        let _restore = crate::test_env::guard::EnvRestore::capture();
-        unsafe {
-            std::env::set_var("HOME", profile.parent().unwrap());
-            std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
-                profile.join("backups").to_string_lossy().as_ref(),
-            );
-            std::env::set_var("CURSOR_SKILLS_PATH", &wrong_skills);
-        }
-
-        let paths = test_paths(&profile);
-        let result = run_global_profile(&workspace, &paths, true);
-        assert!(
-            result.success,
-            "stderr={} stdout={}",
-            result.stderr, result.stdout
-        );
-        assert!(profile.join("skills/diagnose/SKILL.md").is_file());
-        assert!(!wrong_skills.join("diagnose").exists());
-        assert!(profile.join("agents/reviewer.md").is_file());
-        assert!(profile.join("mcp.json").is_file());
-        let _ = fs::remove_dir_all(&workspace);
-        let _ = fs::remove_dir_all(&profile);
-        let _ = fs::remove_dir_all(&wrong_skills);
     }
 }

@@ -229,41 +229,37 @@ fn compute_health(workspace_root: &Path, home: &Path) -> ClaudeRuntimeHealth {
 
     let cli_ok = claude_cli_available();
 
+    // Every surface must appear in the summary; omitting an unsynced surface
+    // makes a broken install read as healthy.
     let summary = if !home.join(".claude").exists() {
         "Claude not configured (no ~/.claude directory)".to_string()
     } else {
-        let mut parts: Vec<String> = Vec::new();
-        if rules_synced {
-            parts.push("rules synced".to_string());
-        }
-        if agents_synced {
-            parts.push(format!(
-                "agents synced ({}/{})",
-                expected_count, installed_count
-            ));
-        } else if installed_count > 0 {
-            parts.push(format!(
-                "agents partial ({}/{})",
-                expected_count, installed_count
-            ));
-        }
-        if skills_synced {
-            parts.push(format!(
-                "skills synced ({}/{})",
-                expected_skill_count, installed_skill_count
-            ));
-        } else if installed_skill_count > 0 {
-            parts.push(format!(
-                "skills partial ({}/{})",
-                expected_skill_count, installed_skill_count
-            ));
-        }
-
-        if parts.is_empty() {
-            "Claude surfaces need setup".to_string()
+        let rules_part = if rules_synced {
+            "rules synced".to_string()
         } else {
-            format!("Claude: {}", parts.join(", "))
-        }
+            "rules need sync".to_string()
+        };
+        let agents_part = if agents_synced {
+            format!("agents synced ({}/{})", installed_count, expected_count)
+        } else if installed_count > 0 {
+            format!("agents partial ({}/{})", installed_count, expected_count)
+        } else {
+            "agents missing".to_string()
+        };
+        let skills_part = if skills_synced {
+            format!(
+                "skills synced ({}/{})",
+                installed_skill_count, expected_skill_count
+            )
+        } else if installed_skill_count > 0 {
+            format!(
+                "skills partial ({}/{})",
+                installed_skill_count, expected_skill_count
+            )
+        } else {
+            "skills missing".to_string()
+        };
+        format!("Claude: {rules_part}, {agents_part}, {skills_part}")
     };
 
     ClaudeRuntimeHealth {

@@ -424,6 +424,16 @@
       "action": "remove"
     },
     {
+      "identity": "rules:codex",
+      "path_classes": [
+        "codex-rules"
+      ],
+      "digests": [
+        "sha256:83891759951218efb030d94f9a0d21bbb48c8ab3df8357592cf683d31ac98e8f"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "skill:accessibility-review",
       "path_classes": [
         "runtime-skill",
@@ -869,6 +879,7 @@
       ],
       "digests": [
         "sha256:0c72cee424f586c5b3e79220fa72007e006d5793bad10eea916015f08e0fe897",
+        "sha256:10df4e6bed0d999955e6c254e3a023284f8743e36ef45abd992dc906a05eca34",
         "sha256:7565580eddb8b0068072494a36360431b20ed3c248d2cd13e1b6098ce120f607",
         "sha256:765079d719d59399bb942fd495b1c1318eda6104f9aebce38bcf2b7b030e8970",
         "sha256:7fe4816e4fc774230783cfa78b57b44e5739b5902c2e21d9c44ad5b84ce36ab5",
@@ -1193,6 +1204,7 @@
         "workspace-doc"
       ],
       "digests": [
+        "sha256:0f737d8b75ed792fe4fee054eb584c4b848845a7e88430a824155c6f69663b70",
         "sha256:101d0cb00b80bee1a7fdc9842ad3e4b1957bb5d85c0641edf47e9b778a8c2133",
         "sha256:21ecddc547754c3c3dd2116d218c8e22174ac6269c73353c14cf7dc234dcd71b",
         "sha256:2efe88685f5eb703fd4f5f36ef5b74beabd8966c275bb034b5f1a4f40a3fa0b8",
@@ -1530,6 +1542,26 @@
         "sha256:3c58503691ae3c4d2de4b2a6c63ea34a55716a99171586af57c2802235191b3f",
         "sha256:5bf10ccb96e08fb4a2194b9e989959641c5018fd74f7c05d613f5cb867fd0c63",
         "sha256:b4692c90f418698ad5f15ff67a40296dc70f8bb80bba966cc74002e678042ad7"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/rules/codex.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:678ee227c8b638f5c822bf69fdf9b4c10e89e35c693927e7298559a580d8668a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/sync/codex-rules.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:83891759951218efb030d94f9a0d21bbb48c8ab3df8357592cf683d31ac98e8f"
       ],
       "action": "update"
     }

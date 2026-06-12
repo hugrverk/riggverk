@@ -58,7 +58,18 @@ fn backup_root() -> Result<PathBuf, String> {
 fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     let root = backup_root()?;
     let dir = root.join("setup").join(transaction_id);
-    crate::safe_filesystem::create_directory_all_no_symlinks(&root, &root)?;
+    // The backup root lives under the app-data dir, which may not exist yet
+    // on a fresh install (or after an app identifier change). Create the full
+    // chain like settings saves do, then refuse symlinked roots.
+    std::fs::create_dir_all(&root).map_err(|e| format!("create backup root: {e}"))?;
+    let metadata = std::fs::symlink_metadata(&root)
+        .map_err(|e| format!("inspect backup root {}: {e}", root.display()))?;
+    if metadata.file_type().is_symlink() || !metadata.is_dir() {
+        return Err(format!(
+            "backup root is not a regular directory: {}",
+            root.display()
+        ));
+    }
     crate::safe_filesystem::create_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
@@ -2201,6 +2212,31 @@ mod tests {
         assert!(
             result.message.contains("not found") || result.message.contains("Transaction backup")
         );
+    }
+
+    #[test]
+    fn setup_backup_dir_creates_missing_parent_chain() {
+        let _guard = guard::lock();
+        let home = std::env::temp_dir().join("aw-setup-backup-chain");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("create dir");
+        let _restore = guard::EnvRestore::capture();
+        set_test_user_dirs(&home);
+        unsafe {
+            // Several missing levels below an existing root, like a fresh
+            // install where the app-data dir has never been created.
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                home.join("Library/Application Support/ai.agentworkspace.app/backups")
+                    .to_string_lossy()
+                    .as_ref(),
+            );
+        }
+
+        let dir = setup_backup_dir("txn-chain-test").expect("backup dir despite missing parents");
+        assert!(dir.is_dir(), "transaction backup dir should exist");
+        assert!(dir.ends_with("setup/txn-chain-test"));
+        let _ = fs::remove_dir_all(&home);
     }
 
     #[test]

@@ -21,7 +21,7 @@ The app writes only to these known paths under user home:
 | Codex config | `~/.codex/config.toml` (managed-section merge) |
 | Codex agents | `~/.codex/agents/` |
 | Codex rules | `~/.codex/AGENTS.md` |
-| Codex skills | `~/.agents/skills/` |
+| Codex skills | `$CODEX_HOME/skills/` (typically `~/.codex/skills/`) |
 | Claude rules | `~/.claude/CLAUDE.md` |
 | Claude agents | `~/.claude/agents/` |
 | Claude skills | `~/.claude/skills/` |

@@ -68,7 +68,7 @@ Source grouping never changes harness installation layout. Every supported skill
 
 Global destinations:
 
-- Codex: `~/.agents/skills`
+- Codex: `$CODEX_HOME/skills` (typically `~/.codex/skills`)
 - OpenCode: `~/.config/opencode/skills`
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`

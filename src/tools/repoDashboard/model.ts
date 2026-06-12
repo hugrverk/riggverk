@@ -8,12 +8,7 @@ import type {
   RepoDocsSource,
 } from "../../types";
 import { isOptionalDocPath } from "./docsParser";
-import {
-  classifyDocRole,
-  detectCanonicalWorkCanon,
-  isActiveWorkDocRole,
-  type DocRole,
-} from "./docRoles";
+import { classifyDocRole, detectCanonicalWorkCanon, isActiveWorkDocRole } from "./docRoles";
 
 export type ActivityActor = "primary" | "secondary" | "other";
 
@@ -819,28 +814,6 @@ export function authorLabel(commit: RepoCommitEntry): string {
   return commit.author_name || commit.author_email || "unknown";
 }
 
-export function countByAuthor(commits: RepoCommitEntry[]): [string, number][] {
-  const map = new Map<string, number>();
-  for (const commit of commits) {
-    const label = authorLabel(commit);
-    map.set(label, (map.get(label) ?? 0) + 1);
-  }
-  return [...map.entries()].sort((a, b) => b[1] - a[1]);
-}
-
-export function commitDateRangeLabel(commits: RepoCommitEntry[]): string | null {
-  if (!commits.length) return null;
-  const times = commits
-    .map(c => c.authored_at * 1000)
-    .filter(t => Number.isFinite(t));
-  if (!times.length) return null;
-  const min = Math.min(...times);
-  const max = Math.max(...times);
-  const fmt = (t: number) =>
-    new Date(t).toLocaleDateString(undefined, { year: "2-digit", month: "short", day: "numeric" });
-  return min === max ? fmt(min) : `${fmt(min)} → ${fmt(max)}`;
-}
-
 /** Normalize repo paths for comparing user input to snapshot path. */
 export function normalizeRepoPathForCompare(path: string): string {
   return path.trim().replace(/\/+$/, "");
@@ -1047,10 +1020,6 @@ function topCountLabels(counts: Record<string, number>, limit = 3): string {
 
 export function contributorTopTypes(stat: ContributorStat): string {
   return topCountLabels(stat.typeCounts as Record<string, number>);
-}
-
-export function contributorTopScopes(stat: ContributorStat): string {
-  return topCountLabels(stat.scopeCounts);
 }
 
 export function buildContributorStats(commits: RepoCommitEntry[]): ContributorStat[] {
@@ -1275,10 +1244,6 @@ export function buildCanonicalWorkSummary(
 
 export function activeDocWorkCount(items: RepoDashboardWorkItem[]): number {
   return items.filter(i => i.source === "docs" && i.status !== "done").length;
-}
-
-export function docRoleForPath(path: string, content = ""): DocRole {
-  return classifyDocRole(path, content);
 }
 
 export { docRoleLabel, classifyDocRole, compareDocsByRole } from "./docRoles";

@@ -84,16 +84,11 @@ export function HarnessInstallationCard({
     primary.label = "update safe files";
   }
 
-  const details = status ? [
-    { label: "Create", value: String(status.counts.create_count), tone: "muted" as const },
-    { label: "Update", value: String(status.counts.update_count), tone: "muted" as const },
-    { label: "Remove", value: String(status.counts.remove_count), tone: "muted" as const },
-    ...(status.counts.conflict_count > 0 ? [{
-      label: "Conflicts",
-      value: String(status.counts.conflict_count),
-      tone: "fail" as const,
-    }] : []),
-  ] : undefined;
+  const details = status?.surfaces.map((s) => ({
+    label: s.label.replace(/^(Codex|OpenCode|Claude|Cursor)\s+/, ""),
+    value: s.detail,
+    tone: installationChipTone(s.state),
+  }));
 
   return (
     <>

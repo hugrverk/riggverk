@@ -1,10 +1,11 @@
-import { TargetPageHeader } from "../components/TargetPageHeader";
+import { TargetPageHeader, type TargetPageFact } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
+import { runtimeStatusFact } from "../lib/runtimeUi";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, StatusData } from "../types";
+import type { AgentTargetMeta, AppSettings, CodexRuntimeHealth, StatusData } from "../types";
 
 interface CodexViewProps {
   appSettings: AppSettings | null;
@@ -21,6 +22,7 @@ interface CodexViewProps {
   gitAvailable: boolean;
   canRunReleaseCheck: boolean;
   onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
+  runtimeHealth: CodexRuntimeHealth | null;
 }
 
 export function CodexView({
@@ -38,9 +40,12 @@ export function CodexView({
   gitAvailable,
   canRunReleaseCheck,
   onHarnessSetupUpdate,
+  runtimeHealth,
 }: CodexViewProps) {
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
+  const facts: TargetPageFact[] = [{ label: statusText, tone: workspaceValid ? "ok" : "warn" }];
+  if (workspaceValid && runtimeHealth) facts.push(runtimeStatusFact(runtimeHealth.status));
 
   return (
     <section className="ws-layout target-page-layout">
@@ -50,7 +55,7 @@ export function CodexView({
             icon="codex"
             title="Codex"
             summary="Sync Codex rules, native TOML agents, managed config sections, and global skills."
-            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            facts={facts}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Codex actions." : undefined}
           />
 

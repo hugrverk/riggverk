@@ -3,7 +3,6 @@ pub(crate) mod backups;
 mod claude_runtime;
 mod codex_runtime;
 mod content;
-mod contract;
 pub(crate) mod cursor_profile;
 mod defaults;
 pub(crate) use defaults::default_workspace_files;
@@ -31,16 +30,14 @@ pub use backups::{get_backup_details, list_backups, open_backups_folder};
 pub use claude_runtime::get_claude_runtime_health;
 pub use codex_runtime::get_codex_runtime_health;
 pub use content::{
-    create_doc, get_docs_health, list_agent_metadata, list_agent_sources, list_docs,
+    create_doc, get_docs_health, list_agent_metadata, list_docs,
     list_opencode_config_editor_sources, open_agent_source, open_agent_template,
     open_config_template, open_doc, open_opencode_config_source, read_agent_source,
     read_agent_template, read_config_template, read_doc, read_opencode_config_source,
-    save_agent_source, save_agent_template, save_config_template, save_doc,
-    save_opencode_config_source,
+    save_agent_source, save_agent_template, save_doc, save_opencode_config_source,
 };
-pub use contract::validate_workspace_contract;
 pub use cursor_profile::get_cursor_profile_health;
-pub use opencode_runtime::{generate_opencode_config_snapshot, get_opencode_runtime_health};
+pub use opencode_runtime::get_opencode_runtime_health;
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };

@@ -1,10 +1,11 @@
-import { TargetPageHeader } from "../components/TargetPageHeader";
+import { TargetPageHeader, type TargetPageFact } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import type { ActionResult } from "../components/TerminalOutput";
+import { runtimeStatusFact } from "../lib/runtimeUi";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { AgentTargetMeta, AppSettings, StatusData } from "../types";
+import type { AgentTargetMeta, AppSettings, ClaudeRuntimeHealth, StatusData } from "../types";
 
 interface ClaudeViewProps {
   appSettings: AppSettings | null;
@@ -21,6 +22,7 @@ interface ClaudeViewProps {
   gitAvailable: boolean;
   canRunReleaseCheck: boolean;
   onHarnessSetupUpdate: (surfaces: string[], label: string) => void;
+  runtimeHealth: ClaudeRuntimeHealth | null;
 }
 
 export function ClaudeView(props: ClaudeViewProps) {
@@ -28,9 +30,16 @@ export function ClaudeView(props: ClaudeViewProps) {
     appSettings, agentTargets, settingsSaveStatus, onToggleTarget,
     wsLog, wsLogCompletedAt, wsRunning, activityIndex, activityCellClass,
     status, workspaceValid, gitAvailable, canRunReleaseCheck,
-    onHarnessSetupUpdate,
+    onHarnessSetupUpdate, runtimeHealth,
   } = props;
   const statusText = workspaceValid ? "valid" : "setup needed";
+  const facts: TargetPageFact[] = [{ label: statusText, tone: workspaceValid ? "ok" : "warn" }];
+  if (workspaceValid && runtimeHealth) {
+    const runtimeStatus = runtimeHealth.rules_synced && runtimeHealth.agents_synced && runtimeHealth.skills_synced
+      ? "synced"
+      : "diverged";
+    facts.push(runtimeStatusFact(runtimeStatus));
+  }
 
   return (
     <section className="ws-layout target-page-layout">
@@ -40,7 +49,7 @@ export function ClaudeView(props: ClaudeViewProps) {
             icon="claude"
             title="Claude"
             summary="Sync Claude rules, native subagents, and the canonical global skill catalog."
-            facts={workspaceValid ? [{ label: statusText, tone: "ok" }] : [{ label: statusText, tone: "warn" }]}
+            facts={facts}
             warning={!workspaceValid ? "Select a valid workspace on Start before running Claude actions." : undefined}
           />
 

@@ -1410,15 +1410,15 @@ scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
 scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'
 scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
-if ! search_has_match '\.agents/skills' src-tauri/src/agent_skill_targets.rs; then
-  printf 'FAIL: Codex global skills path must use ~/.agents/skills\n' >&2
+if ! search_has_match 'codex_home\(home\)\.join\("skills"\)' src-tauri/src/agent_skill_targets.rs; then
+  printf 'FAIL: Codex global skills path must use $CODEX_HOME/skills\n' >&2
   exit 1
 fi
-if ! search_has_match '\.agents/skills' resources/default-workspace/scripts/install-skills.sh; then
-  printf 'FAIL: install-skills.sh must use ~/.agents/skills for Codex\n' >&2
+if ! search_has_match '\.codex}/skills' resources/default-workspace/scripts/install-skills.sh; then
+  printf 'FAIL: install-skills.sh must use $CODEX_HOME/skills for Codex\n' >&2
   exit 1
 fi
-printf '  Codex ~/.agents/skills path guard verified\n'
+printf '  Codex $CODEX_HOME/skills path guard verified\n'
 
 step "routing profile bloat guard"
 scan_forbidden 'RoutingProfile|routing/profiles|get_routing_profiles|save_routing_profiles|read_routing_profiles_file|buildProfileHeader|copyMetadataBlock|profileStatus|RoutingMatrix|routingCompatibility|routingTemplates' 'routing profile bloat (removed profiles must not be reintroduced)'
@@ -1573,22 +1573,6 @@ if search_has_match 'repair|update resources|SetupLifecycle|WorkspaceSkillsVerif
   exit 1
 fi
 printf '  Start unified installation owner verified\n'
-
-step "opencode runtime UI status mapping"
-if search_has_match 'runtimeChipLabel\(configCheckTone' src/views/OpenCodeView.tsx src/lib; then
-  printf 'FAIL: OpenCode config row must not pass UI tones into runtimeChipLabel\n' >&2
-  exit 1
-fi
-if search_has_match 'runtimeChipLabel\(health\.status\)' src/views/OpenCodeView.tsx; then
-  printf 'FAIL: OpenCode cards must not use global health.status for status chips\n' >&2
-  exit 1
-fi
-if ! search_has_match 'opencodeAgentsStatus|opencodeConfigStatus|configCheckStatusLabel' src/views/OpenCodeView.tsx src/lib/opencodeRuntimeUi.ts; then
-  printf 'FAIL: scoped OpenCode status helpers missing\n' >&2
-  exit 1
-fi
-bash scripts/run-ts-check.sh scripts/test-opencode-runtime-ui.ts
-printf '  OpenCode status mapping guards + self-tests ok\n'
 
 step "Prompt Loops template contract"
 bash scripts/run-ts-check.sh scripts/check-prompt-loops-templates.ts

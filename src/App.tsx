@@ -51,6 +51,10 @@ function App() {
   const {
     status,
     workspaceDiagnostics,
+    opencodeRuntimeHealth,
+    codexRuntimeHealth,
+    cursorProfileHealth,
+    claudeRuntimeHealth,
     brainSetupText,
     brainSetupSource,
     fetchStatus,
@@ -421,6 +425,7 @@ function App() {
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
+            runtimeHealth={codexRuntimeHealth}
           />
         )}
 
@@ -440,6 +445,7 @@ function App() {
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
+            runtimeHealth={opencodeRuntimeHealth}
           />
         )}
 
@@ -459,6 +465,7 @@ function App() {
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
+            runtimeHealth={cursorProfileHealth}
           />
         )}
 
@@ -478,6 +485,7 @@ function App() {
             gitAvailable={gitAvailable}
             canRunReleaseCheck={canRunReleaseCheck}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
+            runtimeHealth={claudeRuntimeHealth}
           />
         )}
 

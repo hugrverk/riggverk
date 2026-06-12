@@ -4,11 +4,9 @@
 #[cfg(test)]
 mod tests {
     use crate::commands::{
-        get_cursor_profile_health, get_opencode_runtime_health, get_status,
-        get_workspace_diagnostics, read_brain_setup_seed,
+        apply_setup, get_cursor_profile_health, get_opencode_runtime_health, get_status,
+        get_workspace_diagnostics, preview_setup, read_brain_setup_seed,
     };
-    use crate::cursor_profile_ops::run_global_profile;
-    use crate::cursor_profile_paths::cursor_profile_paths_from_root;
     use serde_json::Value;
     use std::path::PathBuf;
 
@@ -80,14 +78,23 @@ mod tests {
             field(&opencode, "summary")
         );
 
-        let home = std::env::var("HOME").expect("HOME for smoke");
-        let profile_root = PathBuf::from(&home).join(".cursor");
-        let paths = cursor_profile_paths_from_root(PathBuf::from(&home), profile_root);
-        let apply = run_global_profile(&workspace, &paths, true);
+        // Apply cursor surfaces through the production setup lifecycle.
+        let cursor_surfaces: Vec<String> = ["cursor_agents", "cursor_skills", "cursor_mcp"]
+            .iter()
+            .map(|s| s.to_string())
+            .collect();
+        let plan = preview_setup(cursor_surfaces.clone()).expect("preview cursor setup");
+        let apply = apply_setup(
+            cursor_surfaces,
+            true,
+            plan.plan_fingerprint.clone(),
+            plan.preview_token.clone(),
+        )
+        .expect("apply cursor setup");
         assert!(
             apply.success,
-            "cursor smoke apply failed: stderr={} stdout={}",
-            apply.stderr, apply.stdout
+            "cursor smoke apply failed: {} failed={:?}",
+            apply.message, apply.failed
         );
 
         let cursor =

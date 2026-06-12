@@ -1,9 +1,7 @@
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::cursor_profile_paths::{
-    normalized_path_key, resolve_cursor_profile_paths, resolve_user_home,
-};
+use crate::cursor_profile_paths::{resolve_cursor_profile_paths, resolve_user_home};
 use crate::platform_paths::{
     is_unc_share_root, is_windows_drive_root, reject_broad_write_root, Platform,
 };
@@ -43,18 +41,24 @@ pub fn codex_home(home: &Path) -> PathBuf {
         .unwrap_or_else(|| home.join(".codex"))
 }
 
-/// Current documented global Codex skill destination (`~/.agents/skills`).
+/// Global Codex skill destination (`$CODEX_HOME/skills`, typically `~/.codex/skills`).
+///
+/// The shipped Codex CLI auto-discovers personal skills from `$CODEX_HOME/skills`
+/// only; `$HOME/.agents/skills` is a newer documented scheme that current
+/// binaries do not read for user-level skills (verified against codex-cli
+/// 0.140.0-alpha, 2026-06). Installing anywhere else makes skills invisible.
 pub fn codex_global_skills_dest(home: &Path) -> PathBuf {
     std::env::var("CODEX_SKILLS_PATH")
         .ok()
         .filter(|value| !value.trim().is_empty())
         .map(PathBuf::from)
-        .unwrap_or_else(|| home.join(".agents").join("skills"))
+        .unwrap_or_else(|| codex_home(home).join("skills"))
 }
 
-/// Legacy Codex global skill destination (`$CODEX_HOME/skills`, typically `~/.codex/skills`).
+/// Previous app-managed Codex skill location (`~/.agents/skills`), kept for
+/// migration cleanup of copies older app versions installed there.
 pub fn codex_legacy_skills_dest(home: &Path) -> PathBuf {
-    codex_home(home).join("skills")
+    home.join(".agents").join("skills")
 }
 
 /// Documented project-local Codex skill destination (`<repo>/.agents/skills`).
@@ -63,15 +67,6 @@ pub fn codex_project_skills_dest(project_root: &Path) -> PathBuf {
     project_root.join(".agents").join("skills")
 }
 
-pub fn validate_skill_agent(agent: &str) -> Result<(), String> {
-    if VALID_SKILL_AGENTS.contains(&agent) {
-        Ok(())
-    } else {
-        Err(format!("invalid agent: {agent}"))
-    }
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
 pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
     if dest.as_os_str().is_empty() {
         return Err("skill destination root is empty".into());
@@ -105,7 +100,6 @@ pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
 }
 
 /// Global skill install destination for an agent target.
-#[cfg_attr(not(windows), allow(dead_code))]
 pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
     let home = resolve_user_home()?;
     let dest = match agent {
@@ -135,44 +129,6 @@ pub fn agent_global_skills_dest(agent: &str) -> Result<PathBuf, String> {
     };
     validate_skill_dest_root(&dest)?;
     Ok(dest)
-}
-
-#[cfg_attr(not(windows), allow(dead_code))]
-pub fn ensure_skill_dest_contained(dest_root: &Path, skill_name: &str) -> Result<PathBuf, String> {
-    validate_skill_name(skill_name, "destination")?;
-    validate_skill_dest_root(dest_root)?;
-    if !dest_root.is_dir() {
-        return Err(format!(
-            "destination root does not exist: {}",
-            dest_root.display()
-        ));
-    }
-
-    let real_root = dest_root
-        .canonicalize()
-        .map_err(|e| format!("cannot resolve destination root: {e}"))?;
-    if fs::symlink_metadata(&real_root)
-        .map(|meta| meta.file_type().is_symlink())
-        .unwrap_or(false)
-    {
-        return Err(format!(
-            "refusing symlinked destination root: {}",
-            real_root.display()
-        ));
-    }
-    let dest_dir = real_root.join(skill_name);
-
-    if dest_dir.as_os_str().is_empty() || dest_dir == real_root || dest_dir == Path::new("/") {
-        return Err(format!("unsafe destination path: {}", dest_dir.display()));
-    }
-
-    let child_key = normalized_path_key(&dest_dir);
-    let root_key = normalized_path_key(&real_root);
-    if child_key != root_key && !child_key.starts_with(&format!("{root_key}/")) {
-        return Err(format!("destination outside root: {}", dest_dir.display()));
-    }
-
-    Ok(dest_dir)
 }
 
 #[cfg(test)]
@@ -227,7 +183,7 @@ mod tests {
     }
 
     #[test]
-    fn codex_default_global_dest_uses_agents_skills() {
+    fn codex_default_global_dest_uses_codex_home_skills() {
         let home = std::env::temp_dir().join("aw-codex-agents-skills-test");
         let _ = fs::create_dir_all(&home);
         let _guard = crate::test_env::guard::lock();
@@ -238,10 +194,10 @@ mod tests {
             std::env::remove_var("CODEX_HOME");
         }
         let dest = agent_global_skills_dest("codex").expect("codex dest");
-        assert_eq!(dest, home.join(".agents").join("skills"));
+        assert_eq!(dest, home.join(".codex").join("skills"));
         assert_eq!(
             codex_legacy_skills_dest(&home),
-            home.join(".codex").join("skills")
+            home.join(".agents").join("skills")
         );
         let _ = fs::remove_dir_all(&home);
     }
@@ -331,14 +287,5 @@ mod tests {
     #[test]
     fn invalid_agent_is_rejected() {
         assert!(agent_global_skills_dest("gemini").is_err());
-    }
-
-    #[test]
-    fn containment_rejects_path_traversal_skill_name() {
-        let root = std::env::temp_dir().join("aw-skill-contain-root");
-        let _ = std::fs::create_dir_all(&root);
-        let err = ensure_skill_dest_contained(&root, "../outside").expect_err("escape");
-        let _ = std::fs::remove_dir_all(&root);
-        assert!(err.contains("path traversal"));
     }
 }

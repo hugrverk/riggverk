@@ -1691,37 +1691,6 @@ mod tests {
     }
 
     #[test]
-    fn agent_source_list_includes_all_known() {
-        let root = temp_root("ag-list-all");
-        write_agent_file(&root, "architect.md", "# architect\n");
-        write_agent_file(&root, "repo-scout.md", "# scout\n");
-
-        let mut results: Vec<AgentSourceSummary> = Vec::new();
-        for filename in KNOWN_AGENT_FILES {
-            let path = root.join("agents").join(filename);
-            let exists = path.is_file();
-            results.push(AgentSourceSummary {
-                id: filename.to_string(),
-                title: agent_title_from_filename(filename),
-                path: format!("agents/{}", filename),
-                exists,
-            });
-        }
-
-        cleanup(&root);
-
-        assert_eq!(results.len(), 6);
-        let architect = results.iter().find(|r| r.id == "architect.md").unwrap();
-        assert!(architect.exists);
-        assert_eq!(architect.title, "Architect");
-        let scout = results.iter().find(|r| r.id == "repo-scout.md").unwrap();
-        assert!(scout.exists);
-        assert_eq!(scout.title, "Repo Scout");
-        let missing = results.iter().find(|r| r.id == "inspector.md").unwrap();
-        assert!(!missing.exists);
-    }
-
-    #[test]
     fn agent_source_read_resolves_content() {
         let root = temp_root("ag-read");
         write_agent_file(&root, "architect.md", "# Architect\n\nSome content.\n");
@@ -1890,77 +1859,6 @@ pub fn open_config_template(target_id: String) -> Result<ActionResult, String> {
     ))
 }
 
-const MAX_CONFIG_SIZE: usize = 512 * 1024;
-
-#[tauri::command]
-pub fn save_config_template(target_id: String, content: String) -> Result<ActionResult, String> {
-    if content.len() > MAX_CONFIG_SIZE {
-        return Err("content exceeds 512 KB limit".to_string());
-    }
-
-    let target = agent_targets::editable_config_targets()
-        .into_iter()
-        .find(|t| t.id == target_id)
-        .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
-
-    if target.source_rel.contains("..") || Path::new(target.source_rel).is_absolute() {
-        return Err("invalid registry path".to_string());
-    }
-
-    let root = workspace_root()?;
-    let target_path = root.join(target.source_rel);
-
-    safe_canonical_target(&root, &target_path)?;
-
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
-    }
-
-    // Validate JSON for opencode_config
-    if target_id == "opencode_config" {
-        serde_json::from_str::<serde_json::Value>(&content)
-            .map_err(|e| format!("invalid JSON: {}", e))?;
-    }
-
-    if target_path.exists() {
-        let existing =
-            std::fs::read_to_string(&target_path).map_err(|e| format!("read error: {}", e))?;
-        if existing == content {
-            return Ok(ActionResult::new(
-                true,
-                "save_config_template",
-                "unchanged".to_string(),
-                String::new(),
-                Some(0),
-            ));
-        }
-
-        let backup_path = doc_backup_path(&target_id, &target_path, None)?;
-        std::fs::write(&backup_path, &existing)
-            .map_err(|e| format!("backup write error: {}", e))?;
-
-        std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
-
-        return Ok(ActionResult::new(
-            true,
-            "save_config_template",
-            "saved with backup".to_string(),
-            String::new(),
-            Some(0),
-        ));
-    }
-
-    std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
-
-    Ok(ActionResult::new(
-        true,
-        "save_config_template",
-        "saved".to_string(),
-        String::new(),
-        Some(0),
-    ))
-}
-
 // ── opencode config editor source commands ──
 
 /// Read an opencode config editor source file (base, policy, or snapshot).
@@ -2085,40 +1983,49 @@ pub fn save_opencode_config_source(
 
         std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
 
-        return Ok(ActionResult::new(
-            true,
-            "save_opencode_config_source",
-            "saved with backup".to_string(),
-            String::new(),
-            Some(0),
+        return Ok(regenerate_opencode_snapshot_result(
+            &root,
+            "saved with backup",
         ));
     }
 
     std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
 
-    Ok(ActionResult::new(
-        true,
-        "save_opencode_config_source",
-        "saved".to_string(),
-        String::new(),
-        Some(0),
-    ))
+    Ok(regenerate_opencode_snapshot_result(&root, "saved"))
+}
+
+/// The generated opencode.json snapshot is composed from the base and policy
+/// sources, so every successful source save must refresh it or installs would
+/// use a stale config.
+fn regenerate_opencode_snapshot_result(root: &Path, saved_note: &str) -> ActionResult {
+    match super::opencode_runtime::run_generator_write(root) {
+        Ok(result) if result.success => ActionResult::new(
+            true,
+            "save_opencode_config_source",
+            format!("{saved_note}; generated snapshot refreshed"),
+            String::new(),
+            Some(0),
+        ),
+        Ok(result) => ActionResult::new(
+            false,
+            "save_opencode_config_source",
+            format!("{saved_note}, but generated snapshot refresh failed"),
+            result.stderr,
+            result.exit_code,
+        ),
+        Err(error) => ActionResult::new(
+            false,
+            "save_opencode_config_source",
+            format!("{saved_note}, but generated snapshot refresh failed"),
+            error,
+            Some(1),
+        ),
+    }
 }
 
 // ── agent source commands ──
 
 const AGENTS_DIR: &str = "agents";
-
-pub(crate) fn known_agent_files() -> &'static [&'static str] {
-    &[
-        "architect.md",
-        "repo-scout.md",
-        "inspector.md",
-        "sentinel.md",
-        "scribe.md",
-        "verifier.md",
-    ]
-}
 
 const KNOWN_AGENT_FILES: &[&str] = &[
     "architect.md",
@@ -2164,43 +2071,6 @@ fn resolve_agent_path(root: &Path, filename: &str) -> Result<PathBuf, String> {
     }
     safe_canonical_target(root, &path)?;
     Ok(path)
-}
-
-#[derive(Serialize)]
-pub struct AgentSourceSummary {
-    pub id: String,
-    pub title: String,
-    pub path: String,
-    pub exists: bool,
-}
-
-#[tauri::command]
-pub fn list_agent_sources() -> Result<Vec<AgentSourceSummary>, String> {
-    let root = workspace_root()?;
-    let agents_dir = root.join(AGENTS_DIR);
-    if !agents_dir.is_dir() {
-        return Ok(KNOWN_AGENT_FILES
-            .iter()
-            .map(|f| AgentSourceSummary {
-                id: f.to_string(),
-                title: agent_title_from_filename(f),
-                path: format!("{}/{}", AGENTS_DIR, f),
-                exists: false,
-            })
-            .collect());
-    }
-    let mut results: Vec<AgentSourceSummary> = Vec::new();
-    for filename in KNOWN_AGENT_FILES {
-        let path = root.join(AGENTS_DIR).join(filename);
-        let exists = path.is_file();
-        results.push(AgentSourceSummary {
-            id: filename.to_string(),
-            title: agent_title_from_filename(filename),
-            path: format!("{}/{}", AGENTS_DIR, filename),
-            exists,
-        });
-    }
-    Ok(results)
 }
 
 fn agent_title_from_filename(filename: &str) -> String {
@@ -2383,7 +2253,7 @@ pub(crate) fn load_agent_metadata(
     };
 
     // Validate keys against known agent files
-    let known = known_agent_files();
+    let known = KNOWN_AGENT_FILES;
     for key in parsed.agents.keys() {
         if !known.contains(&key.as_str()) {
             warnings.push(format!(
@@ -2432,7 +2302,7 @@ pub fn list_agent_metadata() -> Result<AgentMetadataListResponse, String> {
     let skill_warnings = validate_agent_default_skills(&metadata_map, &root);
     warnings.extend(skill_warnings);
 
-    let known = known_agent_files();
+    let known = KNOWN_AGENT_FILES;
     let agents_dir = root.join(AGENTS_DIR);
 
     let mut results: Vec<AgentMetadataResponse> = Vec::new();

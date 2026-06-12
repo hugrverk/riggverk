@@ -1171,14 +1171,6 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
     ))
 }
 
-#[tauri::command]
-pub fn generate_opencode_config_snapshot() -> Result<ActionResult, String> {
-    use crate::commands::workspace::workspace_root;
-
-    let root = workspace_root()?;
-    run_generator_write(&root)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

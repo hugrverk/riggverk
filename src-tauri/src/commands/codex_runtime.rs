@@ -280,7 +280,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     };
     checks.push(CodexRuntimeCheck {
         id: "skills".into(),
-        label: "Global skills (~/.agents/skills)".into(),
+        label: "Global skills ($CODEX_HOME/skills)".into(),
         status: if skills_status == "synced" {
             "pass".into()
         } else if skills_status == "missing" && skills_expected_count == 0 {
@@ -561,7 +561,7 @@ mod tests {
             "---\nname: test\n---\n# skill\n",
         );
         write_file(
-            &home.join(format!(".agents/skills/{name}/SKILL.md")),
+            &home.join(format!(".codex/skills/{name}/SKILL.md")),
             "---\nname: test\n---\n# skill\n",
         );
     }

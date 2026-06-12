@@ -177,10 +177,11 @@ impl ArtifactId {
             ArtifactId::CodexAgent(name) => Ok(home
                 .join(".codex/agents")
                 .join(name.file_name_with_extension("toml"))),
-            ArtifactId::CodexSkill(name) => Ok(home
-                .join(".agents/skills")
-                .join(name.as_str())
-                .join("SKILL.md")),
+            ArtifactId::CodexSkill(name) => {
+                Ok(crate::agent_skill_targets::codex_global_skills_dest(home)
+                    .join(name.as_str())
+                    .join("SKILL.md"))
+            }
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
             ArtifactId::ClaudeSkill(name) => Ok(home

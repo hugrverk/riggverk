@@ -23,6 +23,6 @@ Default target:
 
 Native Codex agents live in `templates/codex/agents/*.toml` and sync to `~/.codex/agents` via `./scripts/install-codex-agents.sh`.
 
-Skills install to `~/.agents/skills`. Legacy `~/.codex/skills` migration is available from the Codex skills panel.
+Skills install to `$CODEX_HOME/skills` (typically `~/.codex/skills`), the location the Codex CLI auto-discovers. Copies under the previous `~/.agents/skills` app location are migrated and cleaned up by the managed update.
 
 The CLI still supports `--apply --force-overwrite` for deliberate full-file replacement after backup. The app uses managed-section merge only.

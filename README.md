@@ -77,7 +77,7 @@ Installed layout remains flat:
 
 Global destinations:
 
-- Codex: `~/.agents/skills`
+- Codex: `$CODEX_HOME/skills` (typically `~/.codex/skills`)
 - OpenCode: `~/.config/opencode/skills`
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
@@ -131,7 +131,7 @@ User provider blocks, unrelated MCP entries, and unknown config keys are preserv
 
 Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and a narrow set of documented config fields.
 
-The legacy `~/.codex/skills` path is detected for migration to `~/.agents/skills`. Diverged copies remain conflicts and are not removed automatically.
+Copies under the previous `~/.agents/skills` app location are detected for migration to `$CODEX_HOME/skills`. Diverged copies remain conflicts and are not removed automatically.
 
 ### Claude Code
 

@@ -185,7 +185,7 @@ STALE_CLAIMS = [
     ("target profile preset", "stale target profile preset claim"),
     ("Manual target selection", "stale manual target selection claim"),
     # Config path claims (outside migration docs)
-    ("~/.codex/skills", "stale old Codex skills path (~/.codex/skills -> ~/.agents/skills)"),
+    ("~/.agents/skills", "stale old Codex skills path (~/.agents/skills -> ~/.codex/skills)"),
     # Skill selection claims
     ("auto-selected skills", "stale auto-selected skills claim"),
     ("per-workspace skill selection", "stale per-workspace skill selection claim"),
@@ -201,13 +201,13 @@ STALE_CLAIMS_ALLOWLIST = {
         "starter skills",  # Cursor profile describes skills surface, not the adapter agents
     },
     "resources/default-workspace/docs/CODEX_CONFIG.md": {
-        "~/.codex/skills",  # Documents legacy migration path alongside current ~/.agents/skills
+        "~/.agents/skills",  # Documents previous app location alongside current $CODEX_HOME/skills
     },
     "resources/default-workspace/README.md": {
         "starter skills",  # Describes Cursor setup with separate agents and skills surfaces
     },
     "README.md": {
-        "~/.codex/skills",  # Documents legacy migration path alongside current ~/.agents/skills
+        "~/.agents/skills",  # Documents previous app location alongside current $CODEX_HOME/skills
     },
 }
 
