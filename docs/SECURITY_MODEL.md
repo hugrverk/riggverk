@@ -2,11 +2,11 @@
 
 ## Core principles
 
-- **Agent Workspace manages only explicit allowlisted files.** It does not read or write private credentials, tokens, environment values, or authentication state. For Codex and OpenCode config, it reads and merges only documented allowlisted keys locally; unrelated user-owned content is preserved or causes a safe refusal.
+- **Agent Workspace manages only explicit allowlisted files.** It may read the complete contents of an allowlisted Codex, OpenCode, Cursor MCP, or backup target locally when required to parse, compare, preserve, validate, merge, or restore it. Only documented keys or named entries are modified; unrelated user-owned values are preserved or cause a safe refusal. Credential-like values present inside such files are not intentionally extracted for use, authenticated with, logged, transmitted, or exposed in command output.
 - **All writes are opt-in.** Install or Update requires explicit user action after an artifact-level preview.
 - **No secrets in transit or at rest.** The app does not store, encrypt, or transmit credentials. It does not maintain a session or authenticate to external services.
 - **No remote execution.** Scripts run on local files only. The app does not accept remote commands, webhooks, or IPC from external processes.
-- **No credential-bearing surfaces.** The app never inspects `.env*`, private keys, cookies, sessions, auth headers, IDE settings files, MCP credentials, or private URLs.
+- **No unrelated credential surfaces.** The app does not inspect unrelated credential stores, `.env` files, private keys, browser profiles, sessions, trust databases, keychains, or arbitrary personal files outside the allowlisted managed surfaces below.
 
 ## Managed surfaces
 
@@ -37,15 +37,13 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 ## What the app does NOT access
 
-- IDE authentication state, tokens, sessions, or trust databases
 - Environment variables or `.env` files
 - Private keys, cookies, or credential stores
-- MCP credentials or MCP server payloads
 - Browser profiles, bookmarks, or saved passwords
 - System keychains, SSH agents, or GPG state
+- IDE authentication state, tokens, sessions, or trust databases
+- Unrelated IDE settings files or MCP server payloads outside the allowlisted Cursor MCP entry
 - Project `.git/` directories (except repo dashboard read-only git commands)
-- IDE authentication state, trust databases, MCP credentials, and unrelated settings files
-- Arbitrary Codex or OpenCode config beyond allowlisted managed keys (rules, agents, and skills paths remain the primary managed surfaces)
 
 ## Scripts
 
@@ -55,7 +53,7 @@ All bundled scripts run locally with fixed allowlisted arguments. No script acce
 
 Backups are stored under `~/Library/Application Support/ai.agentworkspace.app/backups`. Each backup is timestamped and maps to one allowlisted target surface. Backups contain copies of files before modification.
 
-Backup contents are read locally only for validation, comparison, and rollback restoration. The app does not transmit backup data or use backups to inspect credential-bearing config surfaces beyond the allowlisted restore targets involved in a named rollback command.
+Backup contents are read locally only for validation, comparison, and rollback restoration. The app does not transmit backup data. Backup reads are limited to allowlisted restore targets involved in a named rollback command; credential-like values encountered there are not intentionally extracted, authenticated with, logged, transmitted, or exposed in command output.
 
 ## Release verification
 
