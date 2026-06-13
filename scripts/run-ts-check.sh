@@ -6,10 +6,9 @@ entry="${1:?TypeScript entry file required}"
 output="$(mktemp "$root/scripts/.agent-workspace-ts-check.XXXXXX.mjs")"
 trap 'rm -f "$output"' EXIT
 
-"$root/node_modules/.bin/esbuild" "$root/$entry" \
-  --bundle \
+"$root/node_modules/.bin/rolldown" "$root/$entry" \
   --platform=node \
   --format=esm \
-  --log-level=warning \
-  --outfile="$output"
+  --log-level=warn \
+  --file="$output"
 node "$output"
