@@ -125,6 +125,7 @@ interface LibraryViewProps {
 
   // Common
   workspaceValid: boolean;
+  showConfigs: boolean;
 }
 
 // ── sidebar item list components ──
@@ -580,6 +581,7 @@ export function LibraryView(props: LibraryViewProps) {
     brainSetupText,
     brainSetupSource,
     workspaceValid,
+    showConfigs,
   } = props;
 
   const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
@@ -714,11 +716,13 @@ export function LibraryView(props: LibraryViewProps) {
     }
   }
 
-  const sourceTabItems = SOURCE_TYPES.map((st) => ({
+  const sourceTabItems = SOURCE_TYPES
+    .filter(st => st.id !== "configs" || showConfigs)
+    .map((st) => ({
     id: st.id,
     label: st.label,
     count: sourceCount(st.id) ?? undefined,
-  }));
+    }));
 
   if (sourceType === "docs") {
     return (
