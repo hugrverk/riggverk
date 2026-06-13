@@ -7,9 +7,12 @@ A practical walkthrough of each app area.
 The landing page and operations terminal. Shows the managed installation state for the runtime workspace at `~/.config/agent-workspace`.
 
 - **Install or Update** — previews and applies allowlisted workspace and harness artifact changes.
+- **Installed** — Installed State Map summarizing workspace, Codex, OpenCode, Claude, and Cursor surface states. Refreshes after managed actions complete. Read-only status summary, not a second installation control.
 - **refresh** — reload diagnostics and status
 - **open folder** — open the installed workspace in Finder
 - **VERIFY** — release-check and backup management when the workspace is valid
+- **Uninstall** — **preview uninstall** classifies removable app-owned files, preserved modified files, and merge-managed configs left in place; **uninstall everything** applies removal after confirmation and records a rollback-capable transaction.
+- **Recover previous uninstall** — shown for the current app session only after a full uninstall. Run **preview recovery** (read-only dry-run), then **restore workspace** with explicit confirmation. Recovery is not available after app restart.
 
 Harness pages (Codex, OpenCode, Cursor, Claude) show the same installation model scoped to that harness. Each normal screen has one installation card.
 
@@ -51,7 +54,7 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance, global text size, and theme colors. Settings autosave.
+Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt loops, or library). Settings autosave. Changing appearance clears background and foreground overrides.
 
 ## Tools
 

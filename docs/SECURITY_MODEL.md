@@ -2,7 +2,7 @@
 
 ## Core principles
 
-- **Agent Workspace manages only explicit allowlisted files.** It never reads or writes private configuration, credentials, tokens, environment values, or authentication state.
+- **Agent Workspace manages only explicit allowlisted files.** It does not read or write private credentials, tokens, environment values, or authentication state. For Codex and OpenCode config, it reads and merges only documented allowlisted keys locally; unrelated user-owned content is preserved or causes a safe refusal.
 - **All writes are opt-in.** Install or Update requires explicit user action after an artifact-level preview.
 - **No secrets in transit or at rest.** The app does not store, encrypt, or transmit credentials. It does not maintain a session or authenticate to external services.
 - **No remote execution.** Scripts run on local files only. The app does not accept remote commands, webhooks, or IPC from external processes.
@@ -18,7 +18,7 @@ The app writes only to these known paths under user home:
 | OpenCode agents | `~/.config/opencode/agents/` |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` |
 | OpenCode skills | `~/.config/opencode/skills/` |
-| Codex config | `~/.codex/config.toml` (managed-section merge) |
+| Codex config | `~/.codex/config.toml` (allowlisted top-level `approval_policy` and `sandbox_mode` merge only) |
 | Codex agents | `~/.codex/agents/` |
 | Codex rules | `~/.codex/AGENTS.md` |
 | Codex skills | `$CODEX_HOME/skills/` (typically `~/.codex/skills/`) |
@@ -44,7 +44,8 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 - Browser profiles, bookmarks, or saved passwords
 - System keychains, SSH agents, or GPG state
 - Project `.git/` directories (except repo dashboard read-only git commands)
-- Settings files for Claude, Cursor, OpenCode, or Codex (rules/agents/skills only)
+- IDE authentication state, trust databases, MCP credentials, and unrelated settings files
+- Arbitrary Codex or OpenCode config beyond allowlisted managed keys (rules, agents, and skills paths remain the primary managed surfaces)
 
 ## Scripts
 
@@ -52,7 +53,9 @@ All bundled scripts run locally with fixed allowlisted arguments. No script acce
 
 ## Backups
 
-Backups are stored under `~/Library/Application Support/ai.agentworkspace.app/backups`. Each backup is timestamped and maps to one allowlisted target surface. Backups contain copies of files before modification. The app never reads backup file contents.
+Backups are stored under `~/Library/Application Support/ai.agentworkspace.app/backups`. Each backup is timestamped and maps to one allowlisted target surface. Backups contain copies of files before modification.
+
+Backup contents are read locally only for validation, comparison, and rollback restoration. The app does not transmit backup data or use backups to inspect credential-bearing config surfaces beyond the allowlisted restore targets involved in a named rollback command.
 
 ## Release verification
 

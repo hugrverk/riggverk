@@ -129,7 +129,7 @@ User provider blocks, unrelated MCP entries, and unknown config keys are preserv
 
 ### Codex
 
-Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and a narrow set of documented config fields.
+Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and only the allowlisted top-level Codex config fields `approval_policy` and `sandbox_mode`. Legacy app-shaped profile selectors and profile tables are removed during migration only.
 
 Copies under the previous `~/.agents/skills` app location are detected for migration to `$CODEX_HOME/skills`. Diverged copies remain conflicts and are not removed automatically.
 
@@ -147,7 +147,7 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 
 ## Application surfaces
 
-- Workspace - canonical path, unified Install or Update status, advanced verification, backups, and release verification.
+- Workspace - canonical path, unified Install or Update status, Installed State Map, full uninstall with preview, session-scoped **Recover previous uninstall**, advanced verification, backups, and release verification.
 - Codex - managed installation status plus rules, agents, config, and skills health.
 - OpenCode - managed installation status plus runtime health.
 - Claude - managed installation status plus explicit manual settings/MCP boundaries.
@@ -155,7 +155,9 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 - Library - docs, rules, skills, agents, configs, and Copy Brain.
 - Prompt Loops - deterministic copy-ready prompt templates and optional repository context.
 - Repo Dashboard - local-git-first repository and docs insight with optional bounded `gh` enrichment.
-- Settings - appearance, text size, theme tokens, workspace metadata, and enabled target toggles.
+- Settings - appearance, text size, theme tokens, reduce motion, landing page, workspace metadata, and enabled target toggles.
+
+Full uninstall removes proven app-owned files, preserves modified and unknown user files, leaves merge-managed configs in place, and records a rollback-capable transaction. **Recover previous uninstall** is available only for the current app session; restarting the app does not rediscover recovery automatically.
 
 ### Settings
 
@@ -163,6 +165,8 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 | --- | --- | --- |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "opencode_config"]` | Which sync targets are active. Edit from harness pages. |
 | `app_font_size` | `"medium"` | UI font scale. Values: `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
+| `reduce_motion` | `false` | When `true`, disables pulse, scan, and flash animation classes. |
+| `landing_view` | `"start"` | View shown on app start. Values: `"start"`, `"repo-dashboard"`, `"prompts"`, `"library"`. |
 
 Sync targets excluded from defaults:
 - `codex_config` — managed-field merge; user-owned TOML preserved.

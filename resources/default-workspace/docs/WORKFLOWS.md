@@ -21,7 +21,7 @@
 
 1. Open **Workspace** or **Codex** installation status.
 2. Preview shows managed-field drift only; unrelated user TOML is preserved.
-3. Apply merges managed profiles and top-level keys from `templates/codex/config.toml`.
+3. Apply merges only allowlisted top-level `approval_policy` and `sandbox_mode` from `templates/codex/config.toml`; legacy app-shaped profile selectors and tables are removed during migration when still app-shipped.
 
 ## Install skills to harness targets
 

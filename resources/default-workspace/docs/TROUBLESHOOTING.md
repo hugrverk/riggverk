@@ -45,6 +45,10 @@ Use **Install or Update**. Unknown or diverged unowned files are preserved and r
 4. When dry-run shows no remaining artifacts but status is still `rolling_back`, run rollback again to finalize without further file changes.
 5. Codex inline comments on managed fields are preserved during merge; ambiguous lines refuse with zero mutation — fix the line manually if apply or rollback reports a safe-refusal error.
 
+## Uninstall recovery unavailable after restart
+
+**Recover previous uninstall** is session-scoped. If you uninstalled during the current session, use **preview recovery** and **restore workspace** before quitting the app. After restart, the recovery card is not shown automatically even when transaction backups remain on disk. Reinstall from **Install or Update** or restore files manually from the backup folder if needed.
+
 ## Release-check unavailable
 
 The bundled starter may not include `scripts/release-check.sh`. Use the app source checkout workspace or copy the script if you need that check locally.

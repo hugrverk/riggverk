@@ -131,7 +131,9 @@ The editable sources are:
 
 ### Codex
 
-Agent Workspace manages a narrow set of documented top-level and profile fields in `~/.codex/config.toml`. User model selection, unrelated profiles, MCP entries, comments, and unsupported structures are preserved or cause a manual-review refusal.
+Agent Workspace manages only the allowlisted top-level fields `approval_policy` and `sandbox_mode` in `~/.codex/config.toml`. The merge script reads and writes those scalars only; user model, personality, MCP entries, custom profiles, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
+
+App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Agent Workspace does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
 
 ### Claude Code
 
@@ -164,6 +166,18 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, and record per-artifact apply, validation, rollback, managed digest, and full digest state. The exact prior managed-state bytes or prior absence are part of the transaction and are restored on rollback. Managed state is published atomically before the transaction becomes completed.
 
 Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, rolling-back, or rollback-failed transactions for the same workspace are reconciled or the new apply is blocked. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
+
+## Full uninstall
+
+Full uninstall previews removable, preserved, and merge-managed artifacts before any mutation:
+
+- **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, or current bundled source match).
+- **Preserved** — modified or unknown user files that do not match an app-owned proof.
+- **Merge-managed** — user-owned config files where only allowlisted keys were merged; the file is never deleted wholesale.
+
+Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
+
+The frontend retains only the most recent uninstall transaction ID for the current app session. **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
 ## Security boundaries
 

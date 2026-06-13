@@ -18,10 +18,43 @@ For Tauri IPC-backed status without manual clicking or a live webview:
 
 Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and backup paths. Verify in the real webview (not Vite-only):
 
+### Uninstall and recovery
+
+- [ ] Install into isolated `HOME`, workspace root, and backup root overrides
+- [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts
+- [ ] Modified and unknown fixture files remain on disk after uninstall preview/apply
+- [ ] **uninstall everything** removes proven app-owned files and invalidates or removes the workspace
+- [ ] **Recover previous uninstall** remains visible after the workspace becomes invalid or missing
+- [ ] **preview recovery** runs read-only dry-run and reports to restore / already restored / conflicts counts
+- [ ] **restore workspace** opens confirmation; Escape closes and focus returns to the restore button
+- [ ] Cancel confirmation leaves the recovery candidate unchanged
+- [ ] **confirm restore** brings workspace and harness state back; Installed State Map and health refresh
+- [ ] Recovery card disappears only after successful rollback
+- [ ] Create a changed or occupied restore target; dry-run reports conflict and restore stays disabled
+- [ ] No console errors during uninstall, recovery preview, or restore flows
+
+### Codex 0.134+ migration
+
+- [ ] Current top-level managed fields `approval_policy` and `sandbox_mode` apply correctly
+- [ ] App-shaped legacy `profile = "safe"` / `"workspace-write"` selectors and `[profiles.*]` tables are removed when still app-shipped
+- [ ] Custom profiles and unrelated keys remain
+- [ ] Model, personality, MCP entries, and comments remain
+- [ ] Same-line inline comments on managed fields remain
+- [ ] Ambiguous managed lines refuse safely with zero mutation
+
+### Settings and current UI
+
+- [ ] Installed State Map renders workspace, Codex, OpenCode, Claude, and Cursor groups and reflects status changes after managed actions
+- [ ] Reduce Motion disables pulse, scan, and flash animation classes
+- [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens the selected view after app restart
+- [ ] Appearance changes reset background and foreground overrides according to current behavior
+- [ ] All four text sizes remain usable at minimum supported window size
+
+### Installation rollback and dialogs
+
 - [ ] Rollback dry-run after simulated interruption reports correct reconciliation
 - [ ] Rollback retry does not restore already-completed artifacts twice
 - [ ] `rolling_back` transaction with all artifacts restored finalizes without extra filesystem mutations
-- [ ] Codex managed apply preserves same-line inline comments; ambiguous managed lines refuse safely
 - [ ] Conflict review dialog: keyboard open, Escape closes, focus returns, and safe operations remain actionable
 - [ ] No console errors during rollback and Codex apply flows
 
@@ -107,8 +140,9 @@ Dry-runs only unless testing your own machine:
 
 - Workspace marker is `.agent-workspace/workspace.json` inside the install directory
 - Install path is `~/.config/agent-workspace` (not a dot-prefixed `.agent-workspace` config folder)
-- `AGENT_WORKSPACE_PATH` overrides path for dev/test only
+- `AGENT_WORKSPACE_PATH` and backup-root overrides are development/test isolation controls only
 - Import/upgrade from arbitrary folders is not supported in normal UI
+- Uninstall recovery is session-scoped: the **Recover previous uninstall** card is not rediscovered automatically after app restart, even when backend transaction evidence remains on disk
 
 ## 9. Pass / Fail Report Template
 
@@ -121,16 +155,33 @@ Dry-runs only unless testing your own machine:
 - App version: ________
 - App bundle path: ________ (or "dev mode")
 
-### Checks Passed
-- [ ] Preflight
-- [ ] Build/install
-- [ ] Managed installation and rollback
-- [ ] Harness + Library + Settings
-- [ ] Sync dry-runs
-- [ ] Verify + terminal
+### Automated release-check
+- [ ] `./scripts/release-check.sh` passed
+- Notes: ________
 
-### Checks Failed
-- ________
+### Build / install
+- [ ] Preflight and build/install checks passed
+- Notes: ________
+
+### Codex migration
+- [ ] Codex 0.134+ managed-field and legacy migration checks passed
+- Notes: ________
+
+### Uninstall / recovery
+- [ ] Isolated uninstall, recovery preview, confirmation, and conflict checks passed
+- Notes: ________
+
+### Settings / accessibility
+- [ ] Installed State Map, Reduce Motion, landing page, appearance reset, and text-size checks passed
+- Notes: ________
+
+### Harness / library / tools
+- [ ] Harness, Library, Prompt Loops, and Repo Dashboard checks passed
+- Notes: ________
+
+### Skipped checks and residual risk
+- Skipped: ________
+- Residual risk: ________
 
 ### Release Decision
 - [ ] Ready to share
