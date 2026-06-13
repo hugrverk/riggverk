@@ -4,7 +4,7 @@
 
 - **Agent Workspace manages only explicit allowlisted files.** It may read the complete contents of an allowlisted Codex, OpenCode, Cursor MCP, or backup target locally when required to parse, compare, preserve, validate, merge, or restore it. Only documented keys or named entries are modified; unrelated user-owned values are preserved or cause a safe refusal. Credential-like values present inside such files are not intentionally extracted for use, authenticated with, logged, transmitted, or exposed in command output.
 - **All writes are opt-in.** Install or Update requires explicit user action after an artifact-level preview.
-- **No secrets in transit or at rest.** The app does not store, encrypt, or transmit credentials. It does not maintain a session or authenticate to external services.
+- **No credential use or transmission.** Agent Workspace does not authenticate with, intentionally extract, transmit, log, or expose credential-like values. Allowlisted config targets and their backups may contain unrelated user values, including credential-like values, because complete bytes may need to be preserved and restored. That data remains local and is read only for bounded parsing, preservation, validation, comparison, merge, and rollback.
 - **No remote execution.** Scripts run on local files only. The app does not accept remote commands, webhooks, or IPC from external processes.
 - **No unrelated credential surfaces.** The app does not inspect unrelated credential stores, `.env` files, private keys, browser profiles, sessions, trust databases, keychains, or arbitrary personal files outside the allowlisted managed surfaces below.
 
@@ -37,7 +37,7 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 ## What the app does NOT access
 
-- Environment variables or `.env` files
+- `.env` files or arbitrary secret environment values. The app reads documented operational environment variables needed for platform paths, development isolation, test isolation, and tool-home resolution; environment values must not be printed or persisted as user content.
 - Private keys, cookies, or credential stores
 - Browser profiles, bookmarks, or saved passwords
 - System keychains, SSH agents, or GPG state

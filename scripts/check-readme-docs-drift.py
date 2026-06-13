@@ -150,6 +150,15 @@ def main() -> None:
             ROOT / "resources/default-workspace/docs/TROUBLESHOOTING.md",
         )
     )
+    for false_security_claim in (
+        "No secrets in transit or at rest",
+        "Environment variables or `.env` files",
+    ):
+        if false_security_claim in active_docs:
+            fail(
+                "documentation retains false absolute security claim: "
+                f"{false_security_claim}"
+            )
     persistent_recovery_phrases = (
         "recovery persists",
         "persistent recovery",
