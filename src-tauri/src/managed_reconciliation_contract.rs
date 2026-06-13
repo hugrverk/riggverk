@@ -13,7 +13,8 @@ mod tests {
     };
     use crate::artifact_registry::{AgentName, ArtifactId, SkillName, WorkspaceRelPath};
     use crate::commands::setup::{
-        apply_setup, preview_setup, rollback_setup_transaction, SetupResult,
+        apply_setup, apply_uninstall, preview_setup, preview_uninstall, rollback_setup_transaction,
+        SetupResult,
     };
     use crate::managed_bootstrap::{LEGACY_SCOUT_AGENT, REMOVED_SKILL_NAMES};
     use crate::managed_state::{
@@ -859,5 +860,86 @@ mod tests {
             "historical inventory: initial_skills={initial_skills} conflicts={conflicts} final_skills={final_skills} idempotent=true rollback=true reapply=true"
         );
         fixture.cleanup();
+    }
+    #[test]
+    fn full_uninstall_removes_app_owned_files_and_preserves_user_content() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("uninstall");
+        let home = base.join("home");
+        let workspace = base.join("runtime");
+        fs::create_dir_all(&home).expect("home");
+        set_test_user_dirs(&home);
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", workspace.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+
+        // Install everything through the production flow first.
+        let plan = preview_setup(vec![]).expect("preview all");
+        let result = apply_surfaces_from_preview(&plan);
+        assert!(result.success, "install: {}", result.message);
+        assert!(home.join(".claude/skills/diagnose/SKILL.md").is_file());
+        assert!(home.join(".claude/CLAUDE.md").is_file());
+
+        // User-owned content that must survive: a custom skill and a
+        // user-modified installed skill.
+        let custom_skill = home.join(".claude/skills/my-own-skill/SKILL.md");
+        fs::create_dir_all(custom_skill.parent().unwrap()).expect("custom dir");
+        fs::write(&custom_skill, "---\nname: my-own-skill\n---\nmine\n").expect("custom");
+        let modified = home.join(".claude/skills/tdd/SKILL.md");
+        fs::write(&modified, "user modified this skill\n").expect("modify");
+
+        let uninstall_plan = preview_uninstall().expect("uninstall preview");
+        assert!(
+            !uninstall_plan.removable.is_empty(),
+            "expected removable artifacts"
+        );
+        assert!(
+            uninstall_plan
+                .preserved
+                .iter()
+                .any(|item| item.path.ends_with("tdd/SKILL.md")),
+            "modified skill must be preserved: {:?}",
+            uninstall_plan
+                .preserved
+                .iter()
+                .map(|i| i.path.clone())
+                .collect::<Vec<_>>()
+        );
+
+        let result = apply_uninstall(
+            uninstall_plan.plan_fingerprint.clone(),
+            uninstall_plan.preview_token.clone(),
+        )
+        .expect("apply uninstall");
+        assert!(result.success, "uninstall: {}", result.message);
+
+        // App-owned files are gone across harnesses.
+        assert!(!home.join(".claude/skills/diagnose/SKILL.md").is_file());
+        assert!(!home.join(".claude/CLAUDE.md").is_file());
+        assert!(!home.join(".codex/AGENTS.md").is_file());
+        assert!(!home
+            .join(".config/opencode/skills/diagnose/SKILL.md")
+            .is_file());
+
+        // User content survives.
+        assert!(custom_skill.is_file(), "custom skill must survive");
+        assert!(modified.is_file(), "modified skill must survive");
+
+        // Second preview finds nothing else to remove.
+        let again = preview_uninstall().expect("second preview");
+        assert!(
+            again.removable.is_empty(),
+            "uninstall should be exhaustive: {:?}",
+            again
+                .removable
+                .iter()
+                .map(|i| i.path.clone())
+                .collect::<Vec<_>>()
+        );
     }
 }

@@ -195,7 +195,7 @@ fn surface_status(
     }
 }
 
-fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
+pub(crate) fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
     use crate::artifact_registry::ArtifactId;
     match artifact {
         ArtifactId::OpenCodeConfig => "OpenCode configuration".into(),

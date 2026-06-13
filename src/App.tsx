@@ -361,6 +361,42 @@ function App() {
     workspaceLoadGenerationRef,
   ]);
 
+  const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {
+    runWsTask({
+      label: "uninstall",
+      action: "apply_uninstall",
+      task: async () =>
+        invoke<SetupResult>("apply_uninstall", { planFingerprint, previewToken }),
+      toActionResult: (r) => ({
+        success: r.success,
+        action: "apply_uninstall",
+        stdout: r.message,
+        stderr: r.failed.length > 0 ? r.failed.join("; ") : "",
+        exit_code: r.success ? 0 : 1,
+      }),
+      refresh: async () => {
+        const gen = workspaceLoadGenerationRef.current;
+        await Promise.all([
+          loadWorkspaceDiagnostics(gen),
+          fetchStatus(),
+          loadCodexRuntimeHealth(gen),
+          loadOpenCodeRuntimeHealth(gen),
+          loadClaudeRuntimeHealth(gen),
+          loadCursorProfileHealth(gen),
+        ]);
+      },
+    });
+  }, [
+    runWsTask,
+    loadWorkspaceDiagnostics,
+    fetchStatus,
+    loadCodexRuntimeHealth,
+    loadOpenCodeRuntimeHealth,
+    loadClaudeRuntimeHealth,
+    loadCursorProfileHealth,
+    workspaceLoadGenerationRef,
+  ]);
+
   const configTargets = useMemo(
     () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
     [agentTargets],
@@ -392,6 +428,7 @@ function App() {
           <StartView
             workspaceDiagnostics={workspaceDiagnostics}
             onManagedUpdate={runHarnessSetupUpdate}
+            onUninstall={runWorkspaceUninstall}
             onOpenFolder={openDefaultWorkspaceFolder}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}

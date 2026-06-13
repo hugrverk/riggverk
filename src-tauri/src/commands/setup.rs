@@ -59,17 +59,8 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     let root = backup_root()?;
     let dir = root.join("setup").join(transaction_id);
     // The backup root lives under the app-data dir, which may not exist yet
-    // on a fresh install (or after an app identifier change). Create the full
-    // chain like settings saves do, then refuse symlinked roots.
-    std::fs::create_dir_all(&root).map_err(|e| format!("create backup root: {e}"))?;
-    let metadata = std::fs::symlink_metadata(&root)
-        .map_err(|e| format!("inspect backup root {}: {e}", root.display()))?;
-    if metadata.file_type().is_symlink() || !metadata.is_dir() {
-        return Err(format!(
-            "backup root is not a regular directory: {}",
-            root.display()
-        ));
-    }
+    // on a fresh install (or after an app identifier change).
+    crate::safe_filesystem::create_root_directory_all_no_symlinks(&root)?;
     crate::safe_filesystem::create_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
@@ -1975,6 +1966,140 @@ pub(crate) fn apply_setup_plan_with_token(
     };
 
     apply_planned_artifacts(&planned, manual_steps, preview_token)
+}
+
+/// One removable or preserved item in an uninstall plan, for display.
+#[derive(serde::Serialize)]
+pub struct UninstallItem {
+    pub label: String,
+    pub path: String,
+}
+
+/// Read-only uninstall preview across all managed surfaces.
+#[derive(serde::Serialize)]
+pub struct UninstallPlanView {
+    pub removable: Vec<UninstallItem>,
+    pub preserved: Vec<UninstallItem>,
+    pub merged: Vec<UninstallItem>,
+    pub summary: String,
+    pub plan_fingerprint: Option<String>,
+    pub preview_token: Option<String>,
+}
+
+fn uninstall_item(
+    artifact: &crate::artifact_registry::ArtifactId,
+    ws_root: &Path,
+    home: &Path,
+) -> UninstallItem {
+    UninstallItem {
+        label: crate::installation_status::artifact_label(artifact),
+        path: artifact
+            .resolve_dest(home, ws_root)
+            .map(|p| p.display().to_string())
+            .unwrap_or_default(),
+    }
+}
+
+fn uninstall_fingerprint(
+    ws_root: &Path,
+    home: &Path,
+    plan: &setup_transaction::UninstallArtifactPlan,
+) -> Result<String, String> {
+    setup_transaction::compute_plan_fingerprint(ws_root, SetupSurfaceId::ALL, &plan.removals, home)
+}
+
+/// Read-only preview of a full uninstall: which installed files are proven
+/// app-owned (removable), which diverged copies are preserved, and which
+/// merge-managed configs are left in place.
+#[tauri::command]
+pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
+    let ws_root = setup_workspace_target_path()?;
+    let home = user_home()?;
+    let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
+
+    let removable: Vec<UninstallItem> = plan
+        .removals
+        .iter()
+        .map(|p| uninstall_item(&p.artifact, &ws_root, &home))
+        .collect();
+    let preserved: Vec<UninstallItem> = plan
+        .preserved
+        .iter()
+        .map(|a| uninstall_item(a, &ws_root, &home))
+        .collect();
+    let merged: Vec<UninstallItem> = plan
+        .merged
+        .iter()
+        .map(|a| uninstall_item(a, &ws_root, &home))
+        .collect();
+
+    let summary = format!(
+        "{} app-owned file(s) will be removed; {} modified file(s) preserved; {} merged config(s) left in place",
+        removable.len(),
+        preserved.len(),
+        merged.len()
+    );
+
+    let (plan_fingerprint, preview_token) = if plan.removals.is_empty() {
+        (None, None)
+    } else {
+        let fingerprint = uninstall_fingerprint(&ws_root, &home, &plan)?;
+        let token = setup_transaction::issue_preview_token(
+            &ws_root,
+            &fingerprint,
+            setup_transaction::PreviewPurpose::Apply,
+            SetupSurfaceId::ALL,
+        )?;
+        (Some(fingerprint), Some(token))
+    };
+
+    Ok(UninstallPlanView {
+        removable,
+        preserved,
+        merged,
+        summary,
+        plan_fingerprint,
+        preview_token,
+    })
+}
+
+/// Apply a previously previewed uninstall. Every removed file is backed up
+/// in the transaction backup folder and the transaction is rollback-capable.
+#[tauri::command]
+pub fn apply_uninstall(
+    plan_fingerprint: Option<String>,
+    preview_token: Option<String>,
+) -> Result<SetupResult, String> {
+    let ws_root = setup_workspace_target_path()?;
+    let home = user_home()?;
+    let plan = setup_transaction::plan_artifacts_for_uninstall(&ws_root, &home)?;
+    if plan.removals.is_empty() {
+        return Err("nothing to uninstall: no app-owned installed files found".to_string());
+    }
+
+    let expected = uninstall_fingerprint(&ws_root, &home, &plan)?;
+    let provided = plan_fingerprint
+        .ok_or_else(|| "uninstall requires the plan fingerprint from preview".to_string())?;
+    if provided != expected {
+        return Err(
+            "installed files changed since preview; run the uninstall preview again".to_string(),
+        );
+    }
+    let token = preview_token
+        .ok_or_else(|| "uninstall requires the preview token from preview".to_string())?;
+    setup_transaction::validate_preview_token(
+        &token,
+        &ws_root,
+        &expected,
+        setup_transaction::PreviewPurpose::Apply,
+        SetupSurfaceId::ALL,
+    )?;
+
+    Ok(apply_planned_artifacts(
+        &plan.removals,
+        vec![],
+        Some(&token),
+    ))
 }
 
 #[tauri::command]

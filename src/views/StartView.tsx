@@ -1,4 +1,5 @@
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
+import { UninstallCard } from "../components/UninstallCard";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -9,6 +10,7 @@ import type { StatusData, WorkspaceDiagnostics } from "../types";
 interface StartViewProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   onManagedUpdate: (surfaces: string[], label: string) => void;
+  onUninstall: (planFingerprint: string, previewToken: string) => void;
   onOpenFolder: () => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -28,6 +30,7 @@ interface StartViewProps {
 export function StartView({
   workspaceDiagnostics,
   onManagedUpdate,
+  onUninstall,
   onOpenFolder,
   wsLog,
   wsLogCompletedAt,
@@ -86,6 +89,12 @@ export function StartView({
             onReleaseCheck={onReleaseCheck}
             onRefreshBackups={onRefreshBackups}
             onOpenBackupsFolder={onOpenBackupsFolder}
+          />
+
+          <UninstallCard
+            workspaceValid={workspaceValid}
+            busy={busy}
+            onApply={onUninstall}
           />
         </div>
 

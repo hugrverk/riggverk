@@ -61,6 +61,57 @@ fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> 
     reject_symlink_parent_chain(path, allowlisted_root, label)
 }
 
+/// Create an allowlisted root directory and any missing ancestors, rejecting
+/// symlinks at every existing level. Unlike `create_directory_all_no_symlinks`,
+/// the root itself may be missing several levels deep — e.g. the app-data
+/// backup root on a fresh install where `Application Support/<bundle-id>`
+/// has never been created.
+pub fn create_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> {
+    let mut missing: Vec<std::path::PathBuf> = Vec::new();
+    let mut current = root.to_path_buf();
+    loop {
+        match fs::symlink_metadata(&current) {
+            Ok(metadata) if metadata.file_type().is_symlink() => {
+                return Err(format!(
+                    "refusing symlinked ancestor for root creation: {}",
+                    current.display()
+                ));
+            }
+            Ok(metadata) if metadata.is_dir() => break,
+            Ok(_) => {
+                return Err(format!(
+                    "root creation ancestor is not a directory: {}",
+                    current.display()
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                missing.push(current.clone());
+                match current.parent() {
+                    Some(parent) if !parent.as_os_str().is_empty() => {
+                        current = parent.to_path_buf();
+                    }
+                    _ => {
+                        return Err(format!(
+                            "no existing ancestor for root creation: {}",
+                            root.display()
+                        ));
+                    }
+                }
+            }
+            Err(error) => {
+                return Err(format!(
+                    "inspect root creation ancestor {}: {error}",
+                    current.display()
+                ));
+            }
+        }
+    }
+    for dir in missing.iter().rev() {
+        fs::create_dir(dir).map_err(|e| format!("create directory {}: {e}", dir.display()))?;
+    }
+    Ok(())
+}
+
 pub fn create_directory_all_no_symlinks(
     path: &Path,
     allowlisted_root: &Path,

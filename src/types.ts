@@ -548,6 +548,20 @@ export interface SetupPlan {
   preview_token: string | null;
 }
 
+export interface UninstallItem {
+  label: string;
+  path: string;
+}
+
+export interface UninstallPlanView {
+  removable: UninstallItem[];
+  preserved: UninstallItem[];
+  merged: UninstallItem[];
+  summary: string;
+  plan_fingerprint: string | null;
+  preview_token: string | null;
+}
+
 export interface SetupResult {
   success: boolean;
   transaction_id: string;

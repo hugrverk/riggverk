@@ -790,6 +790,143 @@ fn detect_stale_artifact_state(
     }
 }
 
+/// Result of planning a full uninstall.
+pub struct UninstallArtifactPlan {
+    /// Proven app-owned installed artifacts, planned as Remove operations.
+    pub removals: Vec<PlannedArtifact>,
+    /// Installed artifacts whose content diverged from any app-owned proof;
+    /// these are preserved and reported.
+    pub preserved: Vec<ArtifactId>,
+    /// Merge-managed config files (user-owned by contract); never deleted.
+    pub merged: Vec<ArtifactId>,
+}
+
+/// Plan a full uninstall across all surfaces: every installed artifact whose
+/// content matches an app-owned proof (managed state, historical ownership,
+/// or current source) becomes a Remove operation. Diverged copies and
+/// merge-managed configs are preserved.
+pub fn plan_artifacts_for_uninstall(
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<UninstallArtifactPlan, String> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let bootstrap_records = if workspace_root.join("skills").is_dir() {
+        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
+    } else {
+        Vec::new()
+    };
+    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
+        .as_ref()
+        .map(|s| s.artifacts.clone())
+        .unwrap_or_default();
+    let known: std::collections::HashSet<String> =
+        records.iter().map(|r| r.identity.clone()).collect();
+    records.extend(
+        bootstrap_records
+            .into_iter()
+            .filter(|record| !known.contains(&record.identity)),
+    );
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+
+    let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root)?;
+    let mut removals = Vec::new();
+    let mut preserved = Vec::new();
+    let mut merged = Vec::new();
+    let mut seen = std::collections::HashSet::new();
+    for artifact in artifacts {
+        let identity = crate::managed_state::artifact_identity(&artifact);
+        seen.insert(identity.clone());
+        if matches!(
+            artifact_kind(&artifact),
+            ArtifactKind::ConfigFile | ArtifactKind::TuiConfig | ArtifactKind::McpConfig
+        ) {
+            // Managed keys were merged into a user-owned file; deleting the
+            // file would destroy user content.
+            let exists = artifact
+                .resolve_dest(home, workspace_root)
+                .map(|dest| dest.is_file())
+                .unwrap_or(false);
+            if exists {
+                merged.push(artifact);
+            }
+            continue;
+        }
+        let installed = crate::setup_fingerprint::artifact_installed_managed_digest(
+            &artifact,
+            workspace_root,
+            home,
+        )?;
+        if installed == crate::setup_fingerprint::ABSENT_DIGEST {
+            continue;
+        }
+        let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
+            bundled_root.as_path()
+        } else {
+            workspace_root
+        };
+        let source =
+            crate::setup_fingerprint::artifact_source_digest(&artifact, source_root, home).ok();
+        let managed_hash = managed_hash_for(&identity, &records);
+        let owned = managed_hash.as_deref() == Some(installed.as_str())
+            || source.as_deref() == Some(installed.as_str());
+        if owned {
+            let surface = artifact.surface();
+            removals.push(PlannedArtifact {
+                artifact,
+                surface,
+                kind: OperationKind::Remove,
+                previous_state: PreviousState::ManagedFile,
+                rollback_action: rollback_action_for(
+                    OperationKind::Remove,
+                    PreviousState::ManagedFile,
+                ),
+            });
+        } else {
+            preserved.push(artifact);
+        }
+    }
+
+    // Stale app-owned files from older versions are part of the install too.
+    let canonical_identities =
+        crate::managed_state::canonical_artifact_identities(&bundled_root).unwrap_or_default();
+    let stale = crate::managed_bootstrap::collect_stale_removal_artifacts(
+        workspace_root,
+        home,
+        &records,
+        &canonical_identities,
+    )?;
+    for artifact in stale {
+        let identity = crate::managed_state::artifact_identity(&artifact);
+        if !seen.insert(identity.clone()) {
+            continue;
+        }
+        let managed_hash = managed_hash_for(&identity, &records);
+        let (kind, previous_state) =
+            detect_stale_artifact_state(&artifact, workspace_root, home, managed_hash.as_deref());
+        match kind {
+            OperationKind::Remove => {
+                let surface = artifact.surface();
+                let rollback_action = rollback_action_for(kind, previous_state);
+                removals.push(PlannedArtifact {
+                    artifact,
+                    surface,
+                    kind,
+                    previous_state,
+                    rollback_action,
+                });
+            }
+            OperationKind::Conflict => preserved.push(artifact),
+            _ => {}
+        }
+    }
+
+    Ok(UninstallArtifactPlan {
+        removals,
+        preserved,
+        merged,
+    })
+}
+
 pub fn plan_artifacts_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,

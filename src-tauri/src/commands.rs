@@ -42,7 +42,10 @@ pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
-pub use setup::{apply_setup, get_installation_status, preview_setup, rollback_setup_transaction};
+pub use setup::{
+    apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,
+    rollback_setup_transaction,
+};
 pub use skills::{list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
