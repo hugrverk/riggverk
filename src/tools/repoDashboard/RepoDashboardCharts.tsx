@@ -1,103 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
-import type { ActivityLegendEntry, LineChartSeries } from "./model";
 import {
-  ACTIVITY_BLUE,
-  ACTIVITY_GREEN,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
   computeHeatmapCellSizePx,
   HEATMAP_DISPLAY_WEEKS,
   sliceHeatmapCellsToWindow,
 } from "./model";
-
-interface ActivityLineChartProps {
-  data: LineChartSeries;
-  legend?: ActivityLegendEntry[];
-}
-
-export function ActivityLineChart({ data, legend = [] }: ActivityLineChartProps) {
-  const { days, primary, secondary, totals } = data;
-  const w = 820;
-  const h = 180;
-  const L = 38;
-  const R = 36;
-  const T = 14;
-  const B = 36;
-  const max = Math.max(1, ...primary, ...secondary);
-  const x = (i: number) =>
-    days.length === 1 ? L + (w - L - R) / 2 : L + (i * (w - L - R)) / (days.length - 1);
-  const y = (v: number) => T + ((max - v) * (h - T - B)) / max;
-
-  const path = (series: number[]) =>
-    series.map((v, i) => `${i ? "L" : "M"}${x(i).toFixed(1)},${y(v).toFixed(1)}`).join(" ");
-
-  const every = Math.max(1, Math.ceil(days.length / 7));
-  const gridValues = [0, Math.ceil(max / 2), max].filter((v, i, arr) => arr.indexOf(v) === i);
-
-  return (
-    <div className="repo-dashboard-chart">
-      <svg
-        viewBox={`0 0 ${w} ${h}`}
-        preserveAspectRatio="xMidYMid meet"
-        overflow="visible"
-        role="img"
-        aria-label="Cumulative activity chart"
-      >
-        {gridValues.map(v => (
-          <g key={v}>
-            <line className="repo-dashboard-gridline" x1={L} y1={y(v)} x2={w - R} y2={y(v)} />
-            <text className="repo-dashboard-chart-text" x={8} y={y(v) + 3}>
-              {v}
-            </text>
-          </g>
-        ))}
-        <line className="repo-dashboard-axis" x1={L} y1={h - B} x2={w - R} y2={h - B} />
-        <line className="repo-dashboard-axis" x1={L} y1={T} x2={L} y2={h - B} />
-        <path className="repo-dashboard-series-blue" d={path(primary)} />
-        <path className="repo-dashboard-series-green" d={path(secondary)} />
-        {days.map((day, i) =>
-          i % every === 0 || i === days.length - 1 ? (
-            <text
-              key={day}
-              className="repo-dashboard-chart-text"
-              x={x(i)}
-              y={h - 7}
-              textAnchor="middle"
-            >
-              {day.slice(2)}
-            </text>
-          ) : null,
-        )}
-      </svg>
-      <div className="repo-dashboard-legend font-mono">
-        {legend[0] ? (
-          <span className="repo-dashboard-blue">
-            <i /> {legend[0].label} ({legend[0].commits} commits, cumulative {totals.primary})
-          </span>
-        ) : (
-          <span className="repo-dashboard-blue">
-            <i /> Primary author {totals.primary}
-          </span>
-        )}
-        {legend[1] ? (
-          <span className="repo-dashboard-green">
-            <i /> {legend[1].label} ({legend[1].commits} commits, cumulative {totals.secondary})
-          </span>
-        ) : totals.secondary > 0 ? (
-          <span className="repo-dashboard-green">
-            <i /> Second author {totals.secondary}
-          </span>
-        ) : null}
-        {totals.other > 0 ? (
-          <span className="text-muted">other authors {totals.other} commits</span>
-        ) : null}
-        <span className="text-muted">
-          {days[0]} → {days[days.length - 1]}
-        </span>
-      </div>
-    </div>
-  );
-}
 
 export type ActivityHeatmapDensity = "default" | "compact";
 
@@ -246,5 +154,3 @@ export function ActivityHeatmap({
     </div>
   );
 }
-
-export { ACTIVITY_BLUE, ACTIVITY_GREEN };

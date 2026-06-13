@@ -124,6 +124,8 @@ export interface AppSettings {
   accent_color: string | null;
   background_color: string | null;
   foreground_color: string | null;
+  reduce_motion: boolean;
+  landing_view: string;
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
   revision?: number;

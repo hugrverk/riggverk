@@ -36,6 +36,10 @@ pub struct AppSettings {
     #[serde(default)]
     pub foreground_color: Option<String>,
     #[serde(default)]
+    pub reduce_motion: bool,
+    #[serde(default = "default_landing_view")]
+    pub landing_view: String,
+    #[serde(default)]
     pub repo_dashboard_entries: Vec<RepoDashboardEntry>,
     #[serde(default)]
     pub active_repo_dashboard_id: Option<String>,
@@ -53,6 +57,8 @@ impl Default for AppSettings {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            reduce_motion: false,
+            landing_view: default_landing_view(),
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
@@ -85,6 +91,10 @@ fn default_app_font_size() -> String {
     "medium".into()
 }
 
+fn default_landing_view() -> String {
+    "start".into()
+}
+
 fn normalize_app_font_size(value: &str) -> String {
     match value {
         "small" | "medium" | "large" | "extra-large" => value.to_string(),
@@ -114,6 +124,10 @@ fn normalize(settings: &mut AppSettings) {
         _ => settings.appearance = "dark".into(),
     }
     settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
+    match settings.landing_view.as_str() {
+        "start" | "repo-dashboard" | "prompts" | "library" => {}
+        _ => settings.landing_view = default_landing_view(),
+    }
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -431,6 +445,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            reduce_motion: false,
+            landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
@@ -529,6 +545,8 @@ mod tests {
             accent_color: None,
             background_color: None,
             foreground_color: None,
+            reduce_motion: false,
+            landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
@@ -616,6 +634,8 @@ mod tests {
             accent_color: Some("#FFAA00".into()),
             background_color: None,
             foreground_color: None,
+            reduce_motion: false,
+            landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
@@ -634,6 +654,8 @@ mod tests {
             accent_color: Some("bad".into()),
             background_color: None,
             foreground_color: None,
+            reduce_motion: false,
+            landing_view: "start".into(),
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,

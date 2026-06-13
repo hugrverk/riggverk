@@ -1,4 +1,5 @@
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
+import { InstalledStateMap } from "../components/InstalledStateMap";
 import { UninstallCard } from "../components/UninstallCard";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
@@ -89,6 +90,12 @@ export function StartView({
             onReleaseCheck={onReleaseCheck}
             onRefreshBackups={onRefreshBackups}
             onOpenBackupsFolder={onOpenBackupsFolder}
+          />
+
+          <InstalledStateMap
+            workspaceValid={workspaceValid}
+            busy={busy}
+            refreshToken={wsLogCompletedAt}
           />
 
           <UninstallCard

@@ -91,8 +91,6 @@ export const WORK_TYPE_COLORS: Record<RepoDashboardWorkType, string> = {
   note: "#9a9a9a",
 };
 
-export const ACTIVITY_BLUE = "#58a6ff";
-export const ACTIVITY_GREEN = "#56d364";
 
 export function authorIdentity(commit: RepoCommitEntry): string {
   const email = (commit.author_email || "").trim().toLowerCase();

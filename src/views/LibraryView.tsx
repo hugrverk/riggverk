@@ -188,7 +188,7 @@ function DocItemList({
         <span className="visually-hidden">Filter documents</span>
         <input
           type="search"
-          className="repo-dashboard-field lib-docs-search"
+          className="lib-field lib-docs-search"
           value={searchQuery}
           onChange={(e) => onSearchQueryChange(e.target.value)}
           placeholder="Filter by path or title"
@@ -242,7 +242,7 @@ function DocItemList({
                       >
                         <span className="font-mono lib-docs-list-title">{d.title}</span>
                         {d.source === "custom" ? (
-                          <span className="prompt-loops-pill lib-docs-context-pill">context</span>
+                          <span className="lib-pill lib-docs-context-pill">context</span>
                         ) : null}
                         <span className="font-mono lib-docs-list-path text-muted">{d.path}</span>
                       </button>
@@ -484,14 +484,14 @@ function BrainItemList({ brainSetupSource }: { brainSetupSource: string }) {
   );
 }
 
-function sourceTypeLabel(type: LibrarySourceType): string {
+function emptyStateHint(type: LibrarySourceType): string {
   switch (type) {
-    case "docs": return "Docs";
-    case "rules": return "Rules";
-    case "skills": return "Skills";
-    case "agents": return "Runtime agents";
-    case "configs": return "Configs";
-    case "brain": return "Brain Setup";
+    case "docs": return "Select a document to preview";
+    case "rules": return "Rules template is loading";
+    case "skills": return "Select a skill to preview";
+    case "agents": return "Select an agent to preview";
+    case "configs": return "Select a config target to preview";
+    case "brain": return "Brain Setup is loading";
   }
 }
 
@@ -664,8 +664,6 @@ export function LibraryView(props: LibraryViewProps) {
     );
   }
 
-  const sourceTypeTitle = sourceTypeLabel(sourceType);
-
   // Sidebar content per source type
   const sidebarContent = () => {
     switch (sourceType) {
@@ -777,15 +775,18 @@ export function LibraryView(props: LibraryViewProps) {
 
   return (
     <section className="lib-frame">
-      <div className="lib-layout">
-        <aside className="lib-sidebar">
+      <div className="lib-docs-workspace">
+        <div className="lib-docs-toolbar">
           <ToolSectionTabs
-            className="lib-sidebar-source-tabs"
+            className="lib-docs-source-tabs"
             items={sourceTabItems}
             activeId={sourceType}
             onSelect={(id) => onSetSourceType(id as LibrarySourceType)}
             ariaLabel="Library source type"
           />
+        </div>
+        <div className="lib-layout lib-layout-body">
+        <aside className="lib-sidebar">
           <div className="lib-sidebar-panel">
             {sidebarContent()}
           </div>
@@ -797,11 +798,10 @@ export function LibraryView(props: LibraryViewProps) {
           ) : (
             <div className="lib-main-empty">
               <span className="log-prompt">$</span>{" "}
-              {workspaceValid
-                ? `Select a ${sourceTypeTitle.toLowerCase()} source to preview`
-                : "No valid workspace selected"}
+              {workspaceValid ? emptyStateHint(sourceType) : "No valid workspace selected"}
             </div>
           )}
+        </div>
         </div>
       </div>
     </section>

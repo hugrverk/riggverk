@@ -1,4 +1,4 @@
-import { TerminalState, type ActionResult } from "./TerminalOutput";
+import { ActivityLoader, TerminalState, type ActionResult } from "./TerminalOutput";
 import type { StatusData } from "../types";
 
 interface WorkspaceTerminalProps {
@@ -37,14 +37,21 @@ export function WorkspaceTerminal({
       <div className="ws-terminal-panel">
         <div className="ws-terminal-header">
           <span className="ws-terminal-title">Terminal</span>
-          <span className="ws-terminal-status">
-            {wsRunning ? (
-              <>{terminalStatusText}: {wsRunning}</>
-            ) : wsLog ? (
-              <>{terminalStatusText} &middot; {wsLog.action}: {wsLog.success ? "OK" : "FAILED"}</>
-            ) : (
-              <>{terminalStatusText} &middot; {statusText}</>
-            )}
+          <span className="ws-terminal-header-right">
+            <span className="ws-terminal-status">
+              {wsRunning ? (
+                <>{terminalStatusText}: {wsRunning}</>
+              ) : wsLog ? (
+                <>{terminalStatusText} &middot; {wsLog.action}: {wsLog.success ? "OK" : "FAILED"}</>
+              ) : (
+                <>{terminalStatusText} &middot; {statusText}</>
+              )}
+            </span>
+            <ActivityLoader
+              activityIndex={activityIndex}
+              activityCellClass={activityCellClass}
+              idle={!wsRunning}
+            />
           </span>
         </div>
         <div className="ws-terminal-body">
@@ -57,7 +64,10 @@ export function WorkspaceTerminal({
             activityCellClass={activityCellClass}
             idleContent={
               <div className="log-empty">
-                <div><span className="log-prompt">$</span> operations ready</div>
+                <div className="tui-cmdline">
+                  <span className="log-prompt">❯</span>
+                  <span className="tui-cmd">operations ready</span>
+                </div>
                 {status ? (
                   <div className="ws-idle-context">
                     <span>workspace: {workspaceValid ? "valid" : "invalid"}</span>

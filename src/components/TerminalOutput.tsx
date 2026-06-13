@@ -20,13 +20,18 @@ function relativeTime(ts: number): string {
 export function ActivityLoader({
   activityIndex,
   activityCellClass,
+  idle = false,
 }: {
   activityIndex: number;
   activityCellClass: (index: number) => string;
+  idle?: boolean;
 }) {
   void activityIndex;
   return (
-    <div className="terminal-activity" aria-hidden="true">
+    <div
+      className={`terminal-activity${idle ? " terminal-activity-idle" : ""}`}
+      aria-hidden="true"
+    >
       {Array.from({ length: 8 }, (_, i) => <span key={i} className={activityCellClass(i)} />)}
     </div>
   );
@@ -43,14 +48,26 @@ export function RunningState({
 }) {
   return (
     <>
-      <div className="log-running"><span className="log-prompt">$</span> {label}…</div>
-      <ActivityLoader activityIndex={activityIndex} activityCellClass={activityCellClass} />
+      <div className="tui-cmdline tui-running">
+        <span className="log-prompt">❯</span>
+        <span className="tui-cmd">{label}</span>
+        <span className="tui-caret" aria-hidden="true" />
+      </div>
+      <div className="tui-progress" role="status" aria-label={`${label} running`}>
+        <ActivityLoader activityIndex={activityIndex} activityCellClass={activityCellClass} />
+        <span className="tui-progress-label">working…</span>
+      </div>
     </>
   );
 }
 
 export function ReadyState({ label }: { label: string }) {
-  return <div className="log-empty"><span className="log-prompt">$</span> {label}</div>;
+  return (
+    <div className="tui-cmdline log-empty">
+      <span className="log-prompt">❯</span>
+      <span className="tui-cmd">{label}</span>
+    </div>
+  );
 }
 
 export function ActionResultOutput({
@@ -70,25 +87,34 @@ export function ActionResultOutput({
 
   return (
     <>
-      <div className={`log-status ${result.success ? "log-ok" : "log-fail"}`}>
-        <span className="log-prompt">$</span> {result.action}: {result.success ? "OK" : "FAILED"}
-        {result.exit_code !== null && ` (exit ${result.exit_code})`}
+      <div className="tui-cmdline">
+        <span className="log-prompt">❯</span>
+        <span className="tui-cmd">{result.action}</span>
         {completedAt !== undefined && (
-          <span className="log-status-when"> &middot; {relativeTime(completedAt)}</span>
+          <span className="tui-when">{relativeTime(completedAt)}</span>
         )}
-        {redacted && <span className="log-status-when"> &middot; output redacted</span>}
+      </div>
+      <div
+        className={`tui-statusline ${result.success ? "tui-statusline-ok" : "tui-statusline-fail"}`}
+      >
+        <span className="tui-status-mark" aria-hidden="true">{result.success ? "✓" : "✗"}</span>
+        <span className="tui-status-text">
+          {result.success ? "completed" : "failed"}
+          {result.exit_code !== null && ` · exit ${result.exit_code}`}
+          {redacted && " · output redacted"}
+        </span>
       </div>
       {sectioned ? (
         <>
           {result.stdout ? (
-            <div className="log-section">
-              <span className="log-section-label">STDOUT</span>
+            <div className="tui-block">
+              <span className="tui-block-label">stdout</span>
               <pre className="log-output">{safeStdout}</pre>
             </div>
           ) : null}
           {result.stderr ? (
-            <div className="log-section">
-              <span className="log-section-label">STDERR</span>
+            <div className="tui-block tui-block-fail">
+              <span className="tui-block-label">stderr</span>
               <pre className="log-output log-stderr">{safeStderr}</pre>
             </div>
           ) : null}
@@ -100,7 +126,7 @@ export function ActionResultOutput({
         </>
       )}
       {showNoOutput && !result.stdout && !result.stderr && (
-        <div className="log-no-output"><span className="log-prompt">$</span> no output</div>
+        <div className="tui-noout">— no output —</div>
       )}
     </>
   );

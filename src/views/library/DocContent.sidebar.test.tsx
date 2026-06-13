@@ -45,7 +45,7 @@ function DocsListFixture({
                     <span className="font-mono lib-docs-list-title">{d.title}</span>
                     <span className="font-mono lib-docs-list-path text-muted">{d.path}</span>
                     {d.source === "custom" && (
-                      <span className="prompt-loops-pill lib-docs-context-pill">context</span>
+                      <span className="lib-pill lib-docs-context-pill">context</span>
                     )}
                   </button>
                 </li>

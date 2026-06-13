@@ -40,6 +40,8 @@ function isWorkspaceLoadView(view: View): boolean {
 function App() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("start");
+  const viewRef = useRef<View>("start");
+  useEffect(() => { viewRef.current = view; }, [view]);
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
 
   // backup history state
@@ -164,14 +166,19 @@ function App() {
 
 
   const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
-    await Promise.all([
-      loadWorkspaceLibraryResources(generation),
+    const tasks: Promise<unknown>[] = [
       fetchStatus(generation).catch(() => {}),
       loadOpenCodeRuntimeHealth(generation).catch(() => {}),
       loadCodexRuntimeHealth(generation).catch(() => {}),
       loadCursorProfileHealth(generation).catch(() => {}),
       loadClaudeRuntimeHealth(generation).catch(() => {}),
-    ]);
+    ];
+    // Library data is loaded on demand by loadLibraryView when the Library
+    // opens; refresh here only when it is the active view (workspace change).
+    if (viewRef.current === "library") {
+      tasks.push(loadWorkspaceLibraryResources(generation));
+    }
+    await Promise.all(tasks);
   }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, loadClaudeRuntimeHealth, workspaceLoadGenerationRef]);
 
   // workspace action runner (terminal output, activity animation, action wrappers)
@@ -215,6 +222,8 @@ function App() {
     setAccentColor,
     setBackgroundColor,
     setForegroundColor,
+    setReduceMotion,
+    setLandingView,
     toggleTarget,
     clearSettingsMsg,
     mutateAppSettings,
@@ -268,6 +277,24 @@ function App() {
     loadBrainSetupSeed();
   }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
+  // Apply landing_view on first settings load and whenever the user changes it.
+  const prevLandingViewRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!appSettings) return;
+    const landing = appSettings.landing_view as View;
+    const prev = prevLandingViewRef.current;
+    if (prev === null) {
+      prevLandingViewRef.current = landing;
+      if (landing !== "start") setView(landing);
+      return;
+    }
+    if (prev !== landing) {
+      prevLandingViewRef.current = landing;
+      setView(landing);
+    }
+  }, [appSettings?.landing_view, appSettings]);
+
+  const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback((v: View) => {
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
@@ -276,14 +303,22 @@ function App() {
     setView(v);
     if (v !== "settings") clearSettingsMsg();
     if (isWorkspaceLoadView(v)) {
-      loadWorkspaceDiagnostics();
-      loadCursorProfileHealth();
-      loadOpenCodeRuntimeHealth();
-      loadCodexRuntimeHealth();
+      // Diagnostics and health hash many files backend-side; refreshing on
+      // every tab hop makes navigation feel sluggish. Post-apply refreshes
+      // are explicit, so a short staleness window is safe here.
+      const now = Date.now();
+      if (now - lastWorkspaceRefreshRef.current > 10_000) {
+        lastWorkspaceRefreshRef.current = now;
+        loadWorkspaceDiagnostics();
+        loadCursorProfileHealth();
+        loadOpenCodeRuntimeHealth();
+        loadCodexRuntimeHealth();
+        loadClaudeRuntimeHealth();
+      }
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadSettings, clearSettingsMsg]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadClaudeRuntimeHealth, loadSettings, clearSettingsMsg]);
 
   // Shared state for the Prompt Loops + Repo Dashboard tools.
   // Lifted to App so context handoff and saved-repo entry identity stay consistent
@@ -655,6 +690,8 @@ function App() {
             onSetAccentColor={setAccentColor}
             onSetBackgroundColor={setBackgroundColor}
             onSetForegroundColor={setForegroundColor}
+            onSetReduceMotion={setReduceMotion}
+            onSetLandingView={setLandingView}
             onRetrySave={retrySaveSettings}
             onReset={resetSettings}
             colorResetKey={colorResetKey}

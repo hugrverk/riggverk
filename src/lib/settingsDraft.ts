@@ -40,6 +40,8 @@ export function defaultSettings(): AppSettings {
     accent_color: null,
     background_color: null,
     foreground_color: null,
+    reduce_motion: false,
+    landing_view: "start",
     repo_dashboard_entries: [],
     active_repo_dashboard_id: null,
   };
@@ -116,6 +118,7 @@ export function applyThemeSettings(settings: AppSettings): void {
   root.setAttribute("data-app-font-size", appFontSize);
   root.style.setProperty("--app-font-size", appFontSizePx(appFontSize));
   root.style.setProperty("--app-font-scale", "1");
+  root.setAttribute("data-reduce-motion", settings.reduce_motion ? "true" : "false");
 
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
     root.style.setProperty("--accent", settings.accent_color);

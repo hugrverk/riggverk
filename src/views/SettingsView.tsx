@@ -26,6 +26,8 @@ interface SettingsViewProps {
   onSetAccentColor: (value: string | null) => void;
   onSetBackgroundColor: (value: string | null) => void;
   onSetForegroundColor: (value: string | null) => void;
+  onSetReduceMotion: (value: boolean) => void;
+  onSetLandingView: (value: string) => void;
   onRetrySave?: () => void;
   onReset: () => void;
   colorResetKey: number;
@@ -146,6 +148,8 @@ export function SettingsView({
   onSetAccentColor,
   onSetBackgroundColor,
   onSetForegroundColor,
+  onSetReduceMotion,
+  onSetLandingView,
   onRetrySave,
   onReset,
   colorResetKey,
@@ -287,6 +291,51 @@ export function SettingsView({
                       onClick={() => onSetAppFontSize(size)}
                     >
                       {APP_FONT_SIZE_LABELS[size]}
+                    </button>
+                  ))}
+                </div>
+              </HarnessActionCard>
+
+              <HarnessActionCard
+                title="Motion"
+                ariaLabel="Reduce motion"
+                description="Disable pulse, scan, and flash animations."
+              >
+                <div className="settings-options" role="group" aria-label="Reduce motion">
+                  {([false, true] as const).map(v => (
+                    <button
+                      key={String(v)}
+                      type="button"
+                      className={`btn btn-sm ${appSettings.reduce_motion === v ? "btn-active" : ""}`}
+                      aria-pressed={appSettings.reduce_motion === v}
+                      onClick={() => onSetReduceMotion(v)}
+                    >
+                      {v ? "reduced" : "full"}
+                    </button>
+                  ))}
+                </div>
+              </HarnessActionCard>
+
+              <HarnessActionCard
+                title="Landing page"
+                ariaLabel="Landing page"
+                description="View shown when the app starts."
+              >
+                <div className="settings-options" role="group" aria-label="Landing page">
+                  {([
+                    ["start", "workspace"],
+                    ["repo-dashboard", "repo dashboard"],
+                    ["prompts", "prompt loops"],
+                    ["library", "library"],
+                  ] as const).map(([id, label]) => (
+                    <button
+                      key={id}
+                      type="button"
+                      className={`btn btn-sm ${appSettings.landing_view === id ? "btn-active" : ""}`}
+                      aria-pressed={appSettings.landing_view === id}
+                      onClick={() => onSetLandingView(id)}
+                    >
+                      {label}
                     </button>
                   ))}
                 </div>

@@ -293,6 +293,15 @@ export function useAppSettingsController({
     updateThemeField("foreground_color", foregroundColor);
   }, [updateThemeField]);
 
+  const setReduceMotion = useCallback((reduceMotion: boolean) => {
+    updateThemeField("reduce_motion", reduceMotion);
+  }, [updateThemeField]);
+
+  const setLandingView = useCallback((landingView: string) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => (prev ? { ...prev, landing_view: landingView } : prev));
+  }, []);
+
   const toggleTarget = useCallback((id: string) => {
     setSettingsMsg(null);
     setAppSettings(prev => {
@@ -410,6 +419,8 @@ export function useAppSettingsController({
     setAccentColor,
     setBackgroundColor,
     setForegroundColor,
+    setReduceMotion,
+    setLandingView,
     toggleTarget,
     clearSettingsMsg,
     setSettingsMsg,

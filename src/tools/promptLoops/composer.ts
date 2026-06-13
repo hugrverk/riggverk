@@ -151,10 +151,6 @@ export function composePrompt(input: ComposePromptInput): string {
   return sections.join("\n\n");
 }
 
-export function getOptionDef(id: string): PromptOptionDef | undefined {
-  return OPTION_BY_ID.get(id);
-}
-
 /** Toggle selection; deselects conflicting options in the same group. */
 export function togglePromptOption(
   selected: ReadonlySet<string>,

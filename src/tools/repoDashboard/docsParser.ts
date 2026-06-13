@@ -591,20 +591,6 @@ function workItemDedupKey(item: RepoDashboardWorkItem): string {
   return `${item.source}|${item.path}|${item.line ?? 0}|${item.text}`;
 }
 
-export function mergeWorkItems(
-  docs: RepoDocFile[],
-  issues: RepoGhIssue[],
-): RepoDashboardWorkItem[] {
-  const seen = new Set<string>();
-  const merged = [...parseDocWorkItems(docs), ...parseIssueWorkItems(issues)];
-  return merged.filter(item => {
-    const key = workItemDedupKey(item);
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 export function mergeWorkItemsDetailed(
   docs: RepoDocFile[],
   issues: RepoGhIssue[],
