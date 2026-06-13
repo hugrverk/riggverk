@@ -1,5 +1,7 @@
 import { ToolIcon } from "./ToolIcon";
 import { dirtyTabAriaLabel, dirtyTabClass } from "../lib/editorGuards";
+import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { HARNESS_LABELS, HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 
 export type AppHeaderView =
   | "start"
@@ -16,6 +18,7 @@ interface AppHeaderNavProps {
   view: AppHeaderView;
   libraryDirty: boolean;
   settingsErrored: boolean;
+  enabledHarnessIds?: InstallAgent[];
   onSwitchView: (view: AppHeaderView) => void;
 }
 
@@ -44,6 +47,7 @@ export function AppHeaderNav({
   view,
   libraryDirty,
   settingsErrored,
+  enabledHarnessIds = [...INSTALL_AGENTS],
   onSwitchView,
 }: AppHeaderNavProps) {
   return (
@@ -60,38 +64,17 @@ export function AppHeaderNav({
             <path d="M3 9.5L12 3l9 6.5V20a1 1 0 0 1-1 1h-5v-7H9v7H4a1 1 0 0 1-1-1V9.5z" />
           </svg>
         </button>
-        <button
-          className={`nav-icon ${view === "codex" ? "nav-icon-active" : ""}`}
-          onClick={() => onSwitchView("codex")}
-          aria-label="Codex"
-          title="Codex"
-        >
-          <ToolIcon name="codex" />
-        </button>
-        <button
-          className={`nav-icon ${view === "opencode" ? "nav-icon-active" : ""}`}
-          onClick={() => onSwitchView("opencode")}
-          aria-label="OpenCode"
-          title="OpenCode"
-        >
-          <ToolIcon name="opencode" />
-        </button>
-        <button
-          className={`nav-icon ${view === "cursor" ? "nav-icon-active" : ""}`}
-          onClick={() => onSwitchView("cursor")}
-          aria-label="Cursor"
-          title="Cursor"
-        >
-          <ToolIcon name="cursor" />
-        </button>
-        <button
-          className={`nav-icon ${view === "claude" ? "nav-icon-active" : ""}`}
-          onClick={() => onSwitchView("claude")}
-          aria-label="Claude"
-          title="Claude"
-        >
-          <ToolIcon name="claude" />
-        </button>
+        {HARNESS_NAV_ORDER.filter(harness => enabledHarnessIds.includes(harness)).map(harness => (
+          <button
+            key={harness}
+            className={`nav-icon ${view === harness ? "nav-icon-active" : ""}`}
+            onClick={() => onSwitchView(harness)}
+            aria-label={HARNESS_LABELS[harness]}
+            title={HARNESS_LABELS[harness]}
+          >
+            <ToolIcon name={harness} />
+          </button>
+        ))}
         <button
           className={`nav-icon ${view === "repo-dashboard" ? "nav-icon-active" : ""}`}
           onClick={() => onSwitchView("repo-dashboard")}

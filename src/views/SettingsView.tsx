@@ -11,6 +11,9 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { AppSettings } from "../types";
+import { INSTALL_AGENTS, type InstallAgent } from "../types";
+import { ToolIcon } from "../components/ToolIcon";
+import { HARNESS_LABELS } from "../lib/harnessInstallation";
 
 interface SettingsMessage {
   ok: boolean;
@@ -28,6 +31,7 @@ interface SettingsViewProps {
   onSetForegroundColor: (value: string | null) => void;
   onSetReduceMotion: (value: boolean) => void;
   onSetLandingView: (value: string) => void;
+  onToggleHarness: (id: InstallAgent) => void;
   onRetrySave?: () => void;
   onReset: () => void;
   colorResetKey: number;
@@ -150,6 +154,7 @@ export function SettingsView({
   onSetForegroundColor,
   onSetReduceMotion,
   onSetLandingView,
+  onToggleHarness,
   onRetrySave,
   onReset,
   colorResetKey,
@@ -256,6 +261,30 @@ export function SettingsView({
 
         {appSettings && (
           <div className="settings-cards">
+              <HarnessActionCard
+                title="Harnesses"
+                ariaLabel="Enabled harnesses"
+                description="Show and manage only the tools you use. Disabling a harness hides its UI and blocks new managed writes. Existing files stay on disk."
+              >
+                <div className="settings-target-list" role="group" aria-label="Enabled harnesses">
+                  {INSTALL_AGENTS.map(harness => {
+                    const enabled = appSettings.enabled_harness_ids.includes(harness);
+                    return (
+                      <button
+                        key={harness}
+                        type="button"
+                        className={`settings-target-row ${enabled ? "settings-target-on" : ""}`}
+                        onClick={() => onToggleHarness(harness)}
+                        aria-pressed={enabled}
+                      >
+                        <ToolIcon name={harness} />
+                        <span className="cell-value">{HARNESS_LABELS[harness]}</span>
+                        <span className="settings-target-path">{enabled ? "enabled" : "disabled"}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </HarnessActionCard>
               <HarnessActionCard
                 title="Appearance"
                 ariaLabel="Appearance mode"

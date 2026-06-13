@@ -7,6 +7,24 @@ export const HARNESS_SURFACES: Record<InstallAgent, SetupSurfaceId[]> = {
   cursor: ["cursor_agents", "cursor_skills", "cursor_mcp"],
 };
 
+export const HARNESS_LABELS: Record<InstallAgent, string> = {
+  codex: "Codex",
+  opencode: "OpenCode",
+  claude: "Claude",
+  cursor: "Cursor",
+};
+export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude"];
+
+export function isHarnessEnabled(enabled: readonly InstallAgent[], harness: InstallAgent): boolean {
+  return enabled.includes(harness);
+}
+
+export function harnessForView(view: string): InstallAgent | null {
+  return (["codex", "opencode", "claude", "cursor"] as const).includes(view as InstallAgent)
+    ? view as InstallAgent
+    : null;
+}
+
 export const WORKSPACE_SURFACES: SetupSurfaceId[] = ["workspace_bundle"];
 
 export function surfacesNeedingApply(plan: SetupPlan): SetupSurfaceId[] {

@@ -7,7 +7,7 @@ import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
 import { WORKSPACE_SURFACES } from "../lib/harnessInstallation";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
-import type { StatusData, WorkspaceDiagnostics } from "../types";
+import type { InstallAgent, StatusData, WorkspaceDiagnostics } from "../types";
 
 interface StartViewProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
@@ -29,6 +29,7 @@ interface StartViewProps {
   backupCount: number;
   onRefreshBackups: () => void;
   onOpenBackupsFolder: () => void;
+  enabledHarnessIds: InstallAgent[];
 }
 
 export function StartView({
@@ -51,6 +52,7 @@ export function StartView({
   backupCount,
   onRefreshBackups,
   onOpenBackupsFolder,
+  enabledHarnessIds,
 }: StartViewProps) {
   const resolvedPath =
     workspaceDiagnostics?.resolved_path
@@ -101,6 +103,7 @@ export function StartView({
             workspaceValid={workspaceValid}
             busy={busy}
             refreshToken={wsLogCompletedAt}
+            enabledHarnessIds={enabledHarnessIds}
           />
 
           <UninstallCard

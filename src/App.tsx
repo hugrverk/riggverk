@@ -27,8 +27,9 @@ import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import { surfacesNeedingApply } from "./lib/harnessInstallation";
-import type { RepoDashboardWorkItem, SetupPlan, SetupResult } from "./types";
+import { harnessForView, surfacesNeedingApply } from "./lib/harnessInstallation";
+import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
+import type { InstallAgent, RepoDashboardWorkItem, SetupPlan, SetupResult } from "./types";
 
 type View = AppHeaderView;
 
@@ -44,6 +45,7 @@ function App() {
   const viewRef = useRef<View>("start");
   useEffect(() => { viewRef.current = view; }, [view]);
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
+  const enabledHarnessIdsRef = useRef<InstallAgent[]>([]);
 
   // backup history state
   const { backups, loadBackups, openBackupsFolder } = useBackups(setError);
@@ -68,6 +70,7 @@ function App() {
     loadClaudeRuntimeHealth,
     loadBrainSetupSeed,
     resetWorkspaceHealthState,
+    clearHarnessHealth,
     isInvalidWorkspaceError,
   } = useWorkspaceHealthController({
     setError,
@@ -165,14 +168,29 @@ function App() {
     view,
   });
 
+  const loadEnabledHarnessHealth = useCallback(async (
+    generation = workspaceLoadGenerationRef.current,
+    harnesses = enabledHarnessIdsRef.current,
+  ) => {
+    const loaders: Record<InstallAgent, (generation?: number) => Promise<void>> = {
+      codex: loadCodexRuntimeHealth,
+      opencode: loadOpenCodeRuntimeHealth,
+      claude: loadClaudeRuntimeHealth,
+      cursor: loadCursorProfileHealth,
+    };
+    await Promise.all(harnesses.map(harness => loaders[harness](generation).catch(() => {})));
+  }, [
+    loadCodexRuntimeHealth,
+    loadOpenCodeRuntimeHealth,
+    loadClaudeRuntimeHealth,
+    loadCursorProfileHealth,
+    workspaceLoadGenerationRef,
+  ]);
 
   const loadWorkspaceResources = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     const tasks: Promise<unknown>[] = [
       fetchStatus(generation).catch(() => {}),
-      loadOpenCodeRuntimeHealth(generation).catch(() => {}),
-      loadCodexRuntimeHealth(generation).catch(() => {}),
-      loadCursorProfileHealth(generation).catch(() => {}),
-      loadClaudeRuntimeHealth(generation).catch(() => {}),
+      loadEnabledHarnessHealth(generation),
     ];
     // Library data is loaded on demand by loadLibraryView when the Library
     // opens; refresh here only when it is the active view (workspace change).
@@ -180,7 +198,7 @@ function App() {
       tasks.push(loadWorkspaceLibraryResources(generation));
     }
     await Promise.all(tasks);
-  }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, loadClaudeRuntimeHealth, workspaceLoadGenerationRef]);
+  }, [loadWorkspaceLibraryResources, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
   const {
     transactionId: uninstallRecoveryTransactionId,
@@ -233,6 +251,7 @@ function App() {
     setReduceMotion,
     setLandingView,
     toggleTarget,
+    toggleHarness,
     clearSettingsMsg,
     mutateAppSettings,
   } = useAppSettingsController({
@@ -247,9 +266,30 @@ function App() {
     fetchStatus,
   });
 
+  const enabledHarnessIds = appSettings?.enabled_harness_ids ?? [];
+  const enabledHarnessKey = enabledHarnessIds.join(",");
+  enabledHarnessIdsRef.current = enabledHarnessIds;
+
+  useEffect(() => {
+    if (
+      librarySourceType === "configs"
+      && !agentTargets.some(target =>
+        target.kind === "config"
+        && EDITABLE_CONFIG_TARGET_IDS.has(target.id)
+        && enabledHarnessIds.includes(target.harness)
+      )
+    ) {
+      setGuardedLibrarySourceType("docs");
+    }
+  }, [agentTargets, enabledHarnessKey, librarySourceType, setGuardedLibrarySourceType]);
+
   // initialize active config target from first enabled / first available
   useEffect(() => {
-    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
+    const targets = agentTargets.filter(t =>
+      t.kind === "config"
+      && EDITABLE_CONFIG_TARGET_IDS.has(t.id)
+      && (appSettings?.enabled_harness_ids ?? []).includes(t.harness)
+    );
     const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
     const firstEnabled = targets.find(t => enabledSet.has(t.id));
     const selected = firstEnabled ?? (targets.length > 0 ? targets[0] : null);
@@ -261,7 +301,11 @@ function App() {
   // fallback when active config target disappears from registry or settings
   useEffect(() => {
     if (!activeConfigTargetId) return;
-    const targets = agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id));
+    const targets = agentTargets.filter(t =>
+      t.kind === "config"
+      && EDITABLE_CONFIG_TARGET_IDS.has(t.id)
+      && (appSettings?.enabled_harness_ids ?? []).includes(t.harness)
+    );
     const stillExists = targets.some(t => t.id === activeConfigTargetId);
     if (!stillExists) {
       const enabledSet = new Set(appSettings?.enabled_target_ids ?? []);
@@ -279,7 +323,35 @@ function App() {
     }
   }, []);
 
-  useEffect(() => { loadSettings(); loadWorkspaceDiagnostics(); loadWorkspaceResources(); }, [loadSettings, loadWorkspaceDiagnostics, loadWorkspaceResources]);
+  useEffect(() => { void loadSettings(); }, [loadSettings]);
+
+  const previousEnabledHarnessesRef = useRef<InstallAgent[] | null>(null);
+  useEffect(() => {
+    if (!appSettings) return;
+    const previous = previousEnabledHarnessesRef.current;
+    previousEnabledHarnessesRef.current = enabledHarnessIds;
+    if (previous === null) {
+      void Promise.all([loadWorkspaceDiagnostics(), loadWorkspaceResources()]);
+      return;
+    }
+    previous
+      .filter(harness => !enabledHarnessIds.includes(harness))
+      .forEach(clearHarnessHealth);
+    const newlyEnabled = enabledHarnessIds.filter(harness => !previous.includes(harness));
+    if (newlyEnabled.length > 0) {
+      void Promise.all([fetchStatus(), loadEnabledHarnessHealth(undefined, newlyEnabled)]);
+    }
+    const activeHarness = harnessForView(viewRef.current);
+    if (activeHarness && !enabledHarnessIds.includes(activeHarness)) setView("start");
+  }, [
+    appSettings,
+    enabledHarnessKey,
+    clearHarnessHealth,
+    fetchStatus,
+    loadEnabledHarnessHealth,
+    loadWorkspaceDiagnostics,
+    loadWorkspaceResources,
+  ]);
 
   useEffect(() => {
     loadBrainSetupSeed();
@@ -304,6 +376,8 @@ function App() {
 
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback((v: View) => {
+    const requestedHarness = harnessForView(v);
+    if (requestedHarness && !enabledHarnessIds.includes(requestedHarness)) v = "start";
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
       if (isLibraryDirty && !confirmLeaveDirtyEditor()) return;
@@ -318,15 +392,12 @@ function App() {
       if (now - lastWorkspaceRefreshRef.current > 10_000) {
         lastWorkspaceRefreshRef.current = now;
         loadWorkspaceDiagnostics();
-        loadCursorProfileHealth();
-        loadOpenCodeRuntimeHealth();
-        loadCodexRuntimeHealth();
-        loadClaudeRuntimeHealth();
+        loadEnabledHarnessHealth();
       }
     }
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
-  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadCursorProfileHealth, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadClaudeRuntimeHealth, loadSettings, clearSettingsMsg]);
+  }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
   // Shared state for the Prompt Loops + Repo Dashboard tools.
   // Lifted to App so context handoff and saved-repo entry identity stay consistent
@@ -385,10 +456,7 @@ function App() {
           loadWorkspaceDiagnostics(gen),
           loadDocs(gen),
           fetchStatus(),
-          loadCodexRuntimeHealth(gen),
-          loadOpenCodeRuntimeHealth(gen),
-          loadClaudeRuntimeHealth(gen),
-          loadCursorProfileHealth(gen),
+          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then((result) => {
@@ -400,10 +468,7 @@ function App() {
     loadWorkspaceDiagnostics,
     loadDocs,
     fetchStatus,
-    loadCodexRuntimeHealth,
-    loadOpenCodeRuntimeHealth,
-    loadClaudeRuntimeHealth,
-    loadCursorProfileHealth,
+    loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
 
@@ -425,10 +490,7 @@ function App() {
         await Promise.all([
           loadWorkspaceDiagnostics(gen),
           fetchStatus(),
-          loadCodexRuntimeHealth(gen),
-          loadOpenCodeRuntimeHealth(gen),
-          loadClaudeRuntimeHealth(gen),
-          loadCursorProfileHealth(gen),
+          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then(captureFromUninstallResult);
@@ -437,10 +499,7 @@ function App() {
     captureFromUninstallResult,
     loadWorkspaceDiagnostics,
     fetchStatus,
-    loadCodexRuntimeHealth,
-    loadOpenCodeRuntimeHealth,
-    loadClaudeRuntimeHealth,
-    loadCursorProfileHealth,
+    loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
 
@@ -465,10 +524,7 @@ function App() {
           loadWorkspaceDiagnostics(gen),
           loadDocs(gen),
           fetchStatus(),
-          loadCodexRuntimeHealth(gen),
-          loadOpenCodeRuntimeHealth(gen),
-          loadClaudeRuntimeHealth(gen),
-          loadCursorProfileHealth(gen),
+          loadEnabledHarnessHealth(gen),
         ]);
       },
     }).then((result) => {
@@ -482,17 +538,43 @@ function App() {
     loadWorkspaceDiagnostics,
     loadDocs,
     fetchStatus,
-    loadCodexRuntimeHealth,
-    loadOpenCodeRuntimeHealth,
-    loadClaudeRuntimeHealth,
-    loadCursorProfileHealth,
+    loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
 
   const configTargets = useMemo(
-    () => agentTargets.filter(t => t.kind === "config" && EDITABLE_CONFIG_TARGET_IDS.has(t.id)),
-    [agentTargets],
+    () => agentTargets.filter(t =>
+      t.kind === "config"
+      && EDITABLE_CONFIG_TARGET_IDS.has(t.id)
+      && enabledHarnessIds.includes(t.harness)
+    ),
+    [agentTargets, enabledHarnessKey],
   );
+  const visibleAgentTargets = useMemo(
+    () => agentTargets.filter(target => enabledHarnessIds.includes(target.harness)),
+    [agentTargets, enabledHarnessKey],
+  );
+  const visibleSkills = useMemo(
+    () => skills.flatMap(skill => {
+      const targets = filterVisibleMetadataTargets(skill.targets, enabledHarnessIds);
+      return targets === null ? [] : [{ ...skill, targets }];
+    }),
+    [skills, enabledHarnessKey],
+  );
+  const visibleAgentSources = useMemo(
+    () => agentSources.flatMap(agent => {
+      const targets = filterVisibleMetadataTargets(
+        agent.metadata?.targets ?? [],
+        enabledHarnessIds,
+      );
+      return targets === null
+        ? []
+        : [{ ...agent, metadata: agent.metadata ? { ...agent.metadata, targets } : null }];
+    }),
+    [agentSources, enabledHarnessKey],
+  );
+  const visibleSkillIds = useMemo(() => new Set(visibleSkills.map(skill => skill.id)), [visibleSkills]);
+  const visibleAgentIds = useMemo(() => new Set(visibleAgentSources.map(agent => agent.id)), [visibleAgentSources]);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
@@ -503,6 +585,7 @@ function App() {
         view={view}
         libraryDirty={libraryDirty}
         settingsErrored={settingsSaveStatus === "error"}
+        enabledHarnessIds={enabledHarnessIds}
         onSwitchView={switchView}
       />
 
@@ -537,13 +620,14 @@ function App() {
             backupCount={backups.length}
             onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
+            enabledHarnessIds={enabledHarnessIds}
           />
         )}
 
-        {view === "codex" && (
+        {view === "codex" && enabledHarnessIds.includes("codex") && (
           <CodexView
             appSettings={appSettings}
-            agentTargets={agentTargets}
+            agentTargets={visibleAgentTargets}
             settingsSaveStatus={settingsSaveStatus}
             onToggleTarget={toggleTarget}
             wsLog={wsLog}
@@ -560,7 +644,7 @@ function App() {
           />
         )}
 
-        {view === "opencode" && (
+        {view === "opencode" && enabledHarnessIds.includes("opencode") && (
           <OpenCodeView
             appSettings={appSettings}
             agentTargets={agentTargets}
@@ -580,7 +664,7 @@ function App() {
           />
         )}
 
-        {view === "cursor" && (
+        {view === "cursor" && enabledHarnessIds.includes("cursor") && (
           <CursorView
             appSettings={appSettings}
             agentTargets={agentTargets}
@@ -600,7 +684,7 @@ function App() {
           />
         )}
 
-        {view === "claude" && (
+        {view === "claude" && enabledHarnessIds.includes("claude") && (
           <ClaudeView
             appSettings={appSettings}
             agentTargets={agentTargets}
@@ -664,17 +748,17 @@ function App() {
             onResetAgentTemplate={onResetAgentTemplate}
             agentTargets={agentTargets}
             // Skills
-            skills={skills}
-            activeSkillId={activeSkillId}
-            activeSkillContent={activeSkillContent}
+            skills={visibleSkills}
+            activeSkillId={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillId : null}
+            activeSkillContent={activeSkillId && visibleSkillIds.has(activeSkillId) ? activeSkillContent : null}
             skillSearch={skillSearch}
             onSetSkillSearch={setSkillSearch}
             onSelectSkillPreview={readSkill}
             onOpenSkill={openSkill}
             // Agents
-            agentSources={agentSources}
-            activeAgentId={activeAgentId}
-            activeAgentContent={activeAgentContent}
+            agentSources={visibleAgentSources}
+            activeAgentId={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentId : null}
+            activeAgentContent={activeAgentId && visibleAgentIds.has(activeAgentId) ? activeAgentContent : null}
             onSelectAgent={selectAgent}
             onOpenAgent={openAgent}
             agentDraft={agentDraft}
@@ -717,6 +801,7 @@ function App() {
             brainSetupSource={brainSetupSource}
             // Common
             workspaceValid={workspaceValid}
+            showConfigs={configTargets.length > 0}
           />
           </Suspense>
         )}
@@ -751,6 +836,7 @@ function App() {
             onSetForegroundColor={setForegroundColor}
             onSetReduceMotion={setReduceMotion}
             onSetLandingView={setLandingView}
+            onToggleHarness={toggleHarness}
             onRetrySave={retrySaveSettings}
             onReset={resetSettings}
             colorResetKey={colorResetKey}

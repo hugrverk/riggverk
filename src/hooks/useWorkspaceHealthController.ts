@@ -10,6 +10,7 @@ import type {
   OpenCodeRuntimeHealth,
   StatusData,
   WorkspaceDiagnostics,
+  InstallAgent,
 } from "../types";
 
 export interface WorkspaceHealthControllerDeps {
@@ -117,6 +118,15 @@ export function useWorkspaceHealthController({
     setClaudeRuntimeHealth(null);
   }, []);
 
+  const clearHarnessHealth = useCallback((harness: InstallAgent) => {
+    switch (harness) {
+      case "codex": setCodexRuntimeHealth(null); break;
+      case "opencode": setOpencodeRuntimeHealth(null); break;
+      case "claude": setClaudeRuntimeHealth(null); break;
+      case "cursor": setCursorProfileHealth(null); break;
+    }
+  }, []);
+
   const brainSetupText = useMemo(() => {
     if (brainSetupSeed?.status === "found" && brainSetupSeed.content.trim()) {
       return brainSetupSeed.content;
@@ -146,6 +156,7 @@ export function useWorkspaceHealthController({
     loadClaudeRuntimeHealth,
     loadBrainSetupSeed,
     resetWorkspaceHealthState,
+    clearHarnessHealth,
     isInvalidWorkspaceError,
   };
 }

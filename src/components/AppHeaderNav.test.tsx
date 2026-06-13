@@ -45,6 +45,21 @@ describe("AppHeaderNav", () => {
     expect(screen.queryByRole("button", { name: "Tools" })).toBeNull();
   });
 
+  it("hides only disabled harness navigation", () => {
+    render(
+      <AppHeaderNav
+        view="start"
+        libraryDirty={false}
+        settingsErrored={false}
+        enabledHarnessIds={["codex", "opencode", "cursor"]}
+        onSwitchView={vi.fn()}
+      />,
+    );
+    expect(screen.queryByRole("button", { name: "Claude" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Codex" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Library" })).not.toBeNull();
+  });
+
   it("uses exact accessible names 'Prompt Loops' and 'Repo Dashboard'", () => {
     render(
       <AppHeaderNav
