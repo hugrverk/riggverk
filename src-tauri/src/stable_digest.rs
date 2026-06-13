@@ -1,24 +1,9 @@
 use sha2::{Digest, Sha256};
-use std::collections::HashMap;
 use std::fs;
 use std::io::Read;
-use std::path::{Path, PathBuf};
-use std::sync::Mutex;
-use std::time::SystemTime;
+use std::path::Path;
 
 pub const ABSENT: &str = "absent";
-
-struct CachedDigest {
-    mtime: SystemTime,
-    len: u64,
-    digest: String,
-}
-
-/// Memoized file digests keyed by (mtime, len). Status and preview flows hash
-/// the same ~hundred artifact files on every navigation; re-hashing unchanged
-/// files dominates that cost. An entry is reused only when both the modified
-/// time and the length still match, so any write invalidates it.
-static FILE_DIGEST_CACHE: Mutex<Option<HashMap<PathBuf, CachedDigest>>> = Mutex::new(None);
 
 pub fn bytes(input: &[u8]) -> String {
     let mut hash = Sha256::new();
@@ -28,19 +13,6 @@ pub fn bytes(input: &[u8]) -> String {
 
 pub fn file(path: &Path) -> Result<String, String> {
     crate::path_safety::reject_symlink(path, "digest file")?;
-    let stat = fs::metadata(path).map_err(|e| format!("read {}: {e}", path.display()))?;
-    let fingerprint = stat.modified().ok().map(|mtime| (mtime, stat.len()));
-
-    if let Some((mtime, len)) = fingerprint {
-        if let Ok(guard) = FILE_DIGEST_CACHE.lock() {
-            if let Some(cached) = guard.as_ref().and_then(|cache| cache.get(path)) {
-                if cached.mtime == mtime && cached.len == len {
-                    return Ok(cached.digest.clone());
-                }
-            }
-        }
-    }
-
     let mut file = fs::File::open(path).map_err(|e| format!("read {}: {e}", path.display()))?;
     let mut hash = Sha256::new();
     let mut buffer = [0_u8; 32768];
@@ -53,21 +25,7 @@ pub fn file(path: &Path) -> Result<String, String> {
         }
         hash.update(&buffer[..count]);
     }
-    let digest = format!("sha256:{:x}", hash.finalize());
-
-    if let Some((mtime, len)) = fingerprint {
-        if let Ok(mut guard) = FILE_DIGEST_CACHE.lock() {
-            guard.get_or_insert_with(HashMap::new).insert(
-                path.to_path_buf(),
-                CachedDigest {
-                    mtime,
-                    len,
-                    digest: digest.clone(),
-                },
-            );
-        }
-    }
-    Ok(digest)
+    Ok(format!("sha256:{:x}", hash.finalize()))
 }
 
 pub fn valid(value: &str) -> bool {
@@ -80,6 +38,43 @@ pub fn valid(value: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs::{self, OpenOptions};
+    use std::path::PathBuf;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp(label: &str) -> PathBuf {
+        let n = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        std::env::temp_dir().join(format!("aw-digest-{label}-{n}"))
+    }
+
+    fn restore_mtime(path: &Path, mtime: SystemTime) {
+        OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap_or_else(|e| panic!("open {}: {e}", path.display()))
+            .set_modified(mtime)
+            .unwrap_or_else(|e| panic!("set mtime {}: {e}", path.display()));
+    }
+
+    fn overwrite_same_length(path: &Path, content: &[u8]) -> SystemTime {
+        let meta =
+            fs::metadata(path).unwrap_or_else(|e| panic!("metadata {}: {e}", path.display()));
+        let mtime = meta.modified().unwrap();
+        assert_eq!(
+            meta.len(),
+            content.len() as u64,
+            "replacement content must match original length"
+        );
+        fs::write(path, content).unwrap();
+        restore_mtime(path, mtime);
+        let after = fs::metadata(path).unwrap();
+        assert_eq!(after.len(), content.len() as u64);
+        assert_eq!(after.modified().unwrap(), mtime);
+        mtime
+    }
 
     #[test]
     fn sha256_contract_is_stable() {
@@ -88,5 +83,53 @@ mod tests {
             "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
         );
         assert_ne!(bytes(b"abc"), bytes(b"abd"));
+    }
+
+    #[test]
+    fn file_digest_reflects_same_length_same_mtime_content_change() {
+        let path = temp("same-len-mtime");
+        fs::write(&path, b"0123456789").unwrap();
+        let mtime = fs::metadata(&path).unwrap().modified().unwrap();
+        let first = file(&path).unwrap();
+        overwrite_same_length(&path, b"abcdefghij");
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), mtime);
+        let second = file(&path).unwrap();
+        assert_ne!(
+            first, second,
+            "digest must reflect current bytes when length and mtime are unchanged"
+        );
+    }
+
+    #[test]
+    fn file_digest_does_not_reuse_digest_after_same_path_replacement() {
+        let path = temp("replace-same-path");
+        fs::write(&path, b"0123456789").unwrap();
+        let first = file(&path).unwrap();
+        overwrite_same_length(&path, b"abcdefghij");
+        let second = file(&path).unwrap();
+        assert_ne!(
+            first, second,
+            "replacing file content at the same path must produce a new digest"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn file_digest_does_not_reuse_digest_after_atomic_replacement() {
+        let path = temp("atomic-replace");
+        fs::write(&path, b"0123456789").unwrap();
+        let mtime = fs::metadata(&path).unwrap().modified().unwrap();
+        let first = file(&path).unwrap();
+        let tmp = path.with_extension("tmp-replace");
+        fs::write(&tmp, b"abcdefghij").unwrap();
+        fs::rename(&tmp, &path).unwrap();
+        restore_mtime(&path, mtime);
+        assert_eq!(fs::metadata(&path).unwrap().modified().unwrap(), mtime);
+        let second = file(&path).unwrap();
+        assert_ne!(
+            first, second,
+            "atomic replacement at the same path must produce a new digest"
+        );
+        let _ = fs::remove_file(&path);
     }
 }

@@ -294,6 +294,20 @@ mod tests {
         fs::write(path, content).unwrap();
     }
 
+    fn overwrite_same_length(path: &Path, content: &str) {
+        let meta = fs::metadata(path).unwrap();
+        let mtime = meta.modified().unwrap();
+        assert_eq!(meta.len(), content.len() as u64);
+        fs::write(path, content).unwrap();
+        std::fs::OpenOptions::new()
+            .write(true)
+            .open(path)
+            .unwrap()
+            .set_modified(mtime)
+            .unwrap();
+        assert_eq!(fs::metadata(path).unwrap().modified().unwrap(), mtime);
+    }
+
     fn fp_for_rules(ws: &Path, home: &Path) -> String {
         setup_transaction::compute_plan_fingerprint(
             ws,
@@ -343,6 +357,22 @@ mod tests {
         write(&home.join(".config/opencode/AGENTS.md"), "changed");
         let fp2 = fp_for_rules(&ws, &home);
         assert_ne!(fp1, fp2);
+    }
+
+    #[test]
+    fn fingerprint_changes_when_installed_rule_changes_without_mtime_or_length() {
+        let home = temp("rule-stale-home");
+        let ws = temp("rule-stale-ws");
+        let installed = home.join(".config/opencode/AGENTS.md");
+        write(&ws.join("templates/sync/opencode-rules.md"), "0123456789");
+        write(&installed, "0123456789");
+        let fp1 = fp_for_rules(&ws, &home);
+        overwrite_same_length(&installed, "abcdefghij");
+        let fp2 = fp_for_rules(&ws, &home);
+        assert_ne!(
+            fp1, fp2,
+            "preview fingerprint must detect same-length installed changes even when mtime is unchanged"
+        );
     }
 
     fn write_opencode_config_fixture(ws: &Path, home: &Path, opencode_json: &str) {
