@@ -1,6 +1,7 @@
 import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
 import { InstalledStateMap } from "../components/InstalledStateMap";
 import { UninstallCard } from "../components/UninstallCard";
+import { UninstallRecoveryCard } from "../components/UninstallRecoveryCard";
 import { WorkspaceVerify } from "../components/WorkspaceVerify";
 import type { ActionResult } from "../components/TerminalOutput";
 import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
@@ -12,6 +13,8 @@ interface StartViewProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   onManagedUpdate: (surfaces: string[], label: string) => void;
   onUninstall: (planFingerprint: string, previewToken: string) => void;
+  uninstallRecoveryTransactionId: string | null;
+  onUninstallRollback: () => Promise<boolean>;
   onOpenFolder: () => void;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
@@ -32,6 +35,8 @@ export function StartView({
   workspaceDiagnostics,
   onManagedUpdate,
   onUninstall,
+  uninstallRecoveryTransactionId,
+  onUninstallRollback,
   onOpenFolder,
   wsLog,
   wsLogCompletedAt,
@@ -102,6 +107,12 @@ export function StartView({
             workspaceValid={workspaceValid}
             busy={busy}
             onApply={onUninstall}
+          />
+
+          <UninstallRecoveryCard
+            transactionId={uninstallRecoveryTransactionId}
+            busy={busy}
+            onRollback={onUninstallRollback}
           />
         </div>
 

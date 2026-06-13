@@ -4,6 +4,7 @@ import type { ActionResult } from "./components/TerminalOutput";
 import { AppHeaderNav, type AppHeaderView } from "./components/AppHeaderNav";
 import { confirmLeaveDirtyEditor } from "./lib/editorGuards";
 import { useBackups } from "./lib/useBackups";
+import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
@@ -181,6 +182,12 @@ function App() {
     await Promise.all(tasks);
   }, [loadWorkspaceLibraryResources, fetchStatus, loadOpenCodeRuntimeHealth, loadCodexRuntimeHealth, loadCursorProfileHealth, loadClaudeRuntimeHealth, workspaceLoadGenerationRef]);
 
+  const {
+    transactionId: uninstallRecoveryTransactionId,
+    captureFromUninstallResult,
+    clearRecovery: clearUninstallRecovery,
+  } = useUninstallRecovery();
+
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
     wsRunning,
@@ -202,9 +209,10 @@ function App() {
   const resetWorkspaceBoundState = useCallback(() => {
     workspaceActionRequestIdRef.current += 1;
     resetTerminalOutput();
+    clearUninstallRecovery();
     resetWorkspaceHealthState();
     resetLibraryState();
-  }, [workspaceActionRequestIdRef, resetTerminalOutput, resetWorkspaceHealthState, resetLibraryState]);
+  }, [workspaceActionRequestIdRef, resetTerminalOutput, clearUninstallRecovery, resetWorkspaceHealthState, resetLibraryState]);
 
   const {
     appSettings,
@@ -348,7 +356,7 @@ function App() {
   );
 
   const runHarnessSetupUpdate = useCallback((surfaces: string[], label: string) => {
-    runWsTask({
+    void runWsTask({
       label,
       action: "apply_setup",
       task: async () => {
@@ -383,9 +391,12 @@ function App() {
           loadCursorProfileHealth(gen),
         ]);
       },
+    }).then((result) => {
+      if (result?.success) clearUninstallRecovery();
     });
   }, [
     runWsTask,
+    clearUninstallRecovery,
     loadWorkspaceDiagnostics,
     loadDocs,
     fetchStatus,
@@ -397,7 +408,7 @@ function App() {
   ]);
 
   const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {
-    runWsTask({
+    void runWsTask({
       label: "uninstall",
       action: "apply_uninstall",
       task: async () =>
@@ -420,10 +431,56 @@ function App() {
           loadCursorProfileHealth(gen),
         ]);
       },
-    });
+    }).then(captureFromUninstallResult);
   }, [
     runWsTask,
+    captureFromUninstallResult,
     loadWorkspaceDiagnostics,
+    fetchStatus,
+    loadCodexRuntimeHealth,
+    loadOpenCodeRuntimeHealth,
+    loadClaudeRuntimeHealth,
+    loadCursorProfileHealth,
+    workspaceLoadGenerationRef,
+  ]);
+
+  const runUninstallRollback = useCallback(() => {
+    const transactionId = uninstallRecoveryTransactionId;
+    if (!transactionId) return Promise.resolve(false);
+    return runWsTask({
+      label: "rollback",
+      action: "rollback_setup_transaction",
+      task: async () =>
+        invoke<SetupResult>("rollback_setup_transaction", { transactionId, dryRun: false }),
+      toActionResult: (r) => ({
+        success: r.success,
+        action: "rollback_setup_transaction",
+        stdout: r.message,
+        stderr: r.failed.length > 0 ? r.failed.join("; ") : "",
+        exit_code: r.success ? 0 : 1,
+      }),
+      refresh: async () => {
+        const gen = workspaceLoadGenerationRef.current;
+        await Promise.all([
+          loadWorkspaceDiagnostics(gen),
+          loadDocs(gen),
+          fetchStatus(),
+          loadCodexRuntimeHealth(gen),
+          loadOpenCodeRuntimeHealth(gen),
+          loadClaudeRuntimeHealth(gen),
+          loadCursorProfileHealth(gen),
+        ]);
+      },
+    }).then((result) => {
+      if (result?.success) clearUninstallRecovery();
+      return result?.success === true;
+    });
+  }, [
+    uninstallRecoveryTransactionId,
+    runWsTask,
+    clearUninstallRecovery,
+    loadWorkspaceDiagnostics,
+    loadDocs,
     fetchStatus,
     loadCodexRuntimeHealth,
     loadOpenCodeRuntimeHealth,
@@ -464,6 +521,8 @@ function App() {
             workspaceDiagnostics={workspaceDiagnostics}
             onManagedUpdate={runHarnessSetupUpdate}
             onUninstall={runWorkspaceUninstall}
+            uninstallRecoveryTransactionId={uninstallRecoveryTransactionId}
+            onUninstallRollback={runUninstallRollback}
             onOpenFolder={openDefaultWorkspaceFolder}
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
