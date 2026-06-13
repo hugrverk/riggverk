@@ -1158,6 +1158,17 @@ mod tests {
             scoped_runtime_snapshot(&resolved_home, &ws).expect("pre-uninstall scoped snapshot");
         let pre_removable_identities = removal_identities(&uninstall_plan);
         assert!(!pre_removable_identities.is_empty());
+        let mut removal_destinations: Vec<PathBuf> = uninstall_plan
+            .removals
+            .iter()
+            .map(|planned| {
+                planned
+                    .artifact
+                    .resolve_dest(&resolved_home, &ws)
+                    .expect("removal dest before uninstall")
+            })
+            .collect();
+        removal_destinations.sort();
 
         // Phase 4: uninstall through production flow.
         let uninstall_preview = preview_uninstall().expect("uninstall preview");
@@ -1190,20 +1201,28 @@ mod tests {
         assert!(uninstall_result.failed.is_empty());
         let uninstall_transaction_id = uninstall_result.transaction_id.clone();
 
-        for planned in &uninstall_plan.removals {
-            let dest = planned
-                .artifact
-                .resolve_dest(&resolved_home, &ws)
-                .expect("removal dest");
-            if dest.is_file() {
-                assert!(!dest.is_file(), "removed file should be absent");
-            } else if dest.is_dir() {
-                assert!(
-                    collect_regular_files_under(&dest)
-                        .expect("scan removed dir")
-                        .is_empty(),
-                    "removed directory tree should be empty"
-                );
+        for dest in &removal_destinations {
+            match fs::symlink_metadata(dest) {
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                Ok(metadata) => {
+                    let kind = if metadata.is_symlink() {
+                        "symlink"
+                    } else if metadata.file_type().is_file() {
+                        "file"
+                    } else if metadata.file_type().is_dir() {
+                        "directory"
+                    } else {
+                        "other"
+                    };
+                    panic!(
+                        "removal destination should be absent after uninstall: {} ({kind})",
+                        dest.display()
+                    );
+                }
+                Err(error) => panic!(
+                    "failed to check removal destination {}: {error}",
+                    dest.display()
+                ),
             }
         }
         assert_eq!(
