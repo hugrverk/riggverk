@@ -6,7 +6,7 @@ This workspace supports Codex rules sync and config sync via managed-section mer
 
 Files:
 
-- `config.toml` is the canonical global config template. Profiles are defined under `[profiles.<name>]` in this file; Codex does not load separate profile files from `~/.codex/profiles`.
+- `config.toml` is the canonical global config template. It manages plain top-level `approval_policy` and `sandbox_mode` defaults. Codex 0.134+ removed the legacy top-level `profile = "..."` selector and `[profiles.*]` tables; profiles now live in separate `~/.codex/<name>.config.toml` overlays selected with `--profile`.
 - `mcp/` contains optional MCP snippets. Review before use.
 
 Preview differences:
@@ -19,7 +19,7 @@ Default target:
 
 - Codex config: `~/.codex/config.toml` or `CODEX_CONFIG_PATH`
 
-`./scripts/install-codex-config.sh --apply` merges only managed sections listed in `metadata/codex-managed-keys.json` (safe profile defaults). User model, personality, MCP, and unknown tables are preserved. Same-line inline comments on managed scalar assignments (for example `profile = "custom"  # note`) are preserved; ambiguous lines refuse with zero mutation.
+`./scripts/install-codex-config.sh --apply` merges only managed sections listed in `metadata/codex-managed-keys.json` (top-level approval and sandbox defaults). User model, personality, MCP, and unknown tables are preserved, and app-shipped legacy `profile = "safe"` selectors plus `[profiles.safe]`/`[profiles.workspace-write]` tables are removed. Same-line inline comments on managed scalar assignments are preserved; ambiguous lines refuse with zero mutation.
 
 Native Codex agents live in `templates/codex/agents/*.toml` and sync to `~/.codex/agents` via `./scripts/install-codex-agents.sh`.
 

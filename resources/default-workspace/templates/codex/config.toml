@@ -1,13 +1,11 @@
 # Codex global config template.
 # Review against your installed Codex version before applying.
+#
+# Codex 0.134+ removed the legacy top-level `profile = "..."` selector and
+# `[profiles.*]` tables; profiles now live in separate `<name>.config.toml`
+# overlays selected with `--profile`. The managed defaults are plain
+# top-level keys.
 
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[profiles.workspace-write]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 

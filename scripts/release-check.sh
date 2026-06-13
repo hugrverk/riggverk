@@ -215,15 +215,16 @@ for path in required:
     if path.suffix == ".toml":
         tomllib.loads(text)
 config = tomllib.loads((root / "config.toml").read_text())
-if config.get("profile") != "safe":
-    raise SystemExit("FAIL: Codex config must default to safe profile")
-profiles = config.get("profiles")
-if not isinstance(profiles, dict):
-    raise SystemExit("FAIL: Codex config must define [profiles.*] sections")
-for name in ("safe", "workspace-write"):
-    profile = profiles.get(name)
-    if not isinstance(profile, dict):
-        raise SystemExit(f"FAIL: Codex config missing [profiles.{name}]")
+if config.get("approval_policy") != "on-request":
+    raise SystemExit("FAIL: Codex config must default approval_policy to on-request")
+if config.get("sandbox_mode") != "workspace-write":
+    raise SystemExit("FAIL: Codex config must default sandbox_mode to workspace-write")
+# Codex 0.134+ rejects the legacy top-level profile selector and ignores
+# [profiles.*] tables; the template must not reintroduce them.
+if "profile" in config:
+    raise SystemExit("FAIL: Codex config template must not use the legacy profile selector")
+if "profiles" in config:
+    raise SystemExit("FAIL: Codex config template must not define legacy [profiles.*] tables")
 PY
 printf '  Codex config template valid\n'
 release_tmp_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-release-check.XXXXXX")"
@@ -241,9 +242,13 @@ if ! python3 -c "import tomllib; tomllib.load(open('$tmp_home/.codex/config.toml
   printf 'FAIL: --apply produced invalid TOML\n' >&2
   exit 1
 fi
-# Verify config has the safe profile
-if ! grep -q 'profile.*safe' "$codex_apply_log" && ! grep -q 'profile.*safe' "$tmp_home/.codex/config.toml"; then
-  printf 'FAIL: generated Codex config must default to safe profile\n' >&2
+# Verify managed defaults present and legacy profile scheme absent
+if ! grep -q 'approval_policy = "on-request"' "$tmp_home/.codex/config.toml"; then
+  printf 'FAIL: generated Codex config must set approval_policy\n' >&2
+  exit 1
+fi
+if grep -qE '^profile *=' "$tmp_home/.codex/config.toml"; then
+  printf 'FAIL: generated Codex config must not use the legacy profile selector\n' >&2
   exit 1
 fi
 # Verify diff output is managed-only (no full config)

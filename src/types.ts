@@ -461,7 +461,6 @@ export interface CodexRuntimeHealth {
   config_status: string;
   template_config_path: string;
   installed_config_path: string;
-  profile: string | null;
   approval_policy: string | null;
   sandbox_mode: string | null;
   checks: CodexRuntimeCheck[];

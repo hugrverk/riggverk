@@ -880,6 +880,7 @@
       "digests": [
         "sha256:0c72cee424f586c5b3e79220fa72007e006d5793bad10eea916015f08e0fe897",
         "sha256:10df4e6bed0d999955e6c254e3a023284f8743e36ef45abd992dc906a05eca34",
+        "sha256:3ce74d88abdf0253be4ee056a09b9c03ae83f812e81445eb480a15d936c7aa99",
         "sha256:7565580eddb8b0068072494a36360431b20ed3c248d2cd13e1b6098ce120f607",
         "sha256:765079d719d59399bb942fd495b1c1318eda6104f9aebce38bcf2b7b030e8970",
         "sha256:7fe4816e4fc774230783cfa78b57b44e5739b5902c2e21d9c44ad5b84ce36ab5",
@@ -1090,6 +1091,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:metadata/codex-managed-keys.json",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3628aafe8a1c427d5bad501aa544238aed78ce744ff8227ed0c59691faff0fca"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:scripts/bootstrap.sh",
       "path_classes": [
         "workspace-doc"
@@ -1224,6 +1235,7 @@
         "workspace-doc"
       ],
       "digests": [
+        "sha256:195a5d0a4cd95ac407f5a13dba3a365300fda6b9c8ffbe1001a7b9301b8a69a7",
         "sha256:1ef9e44604e9762c6171788ebbd285cb2871ff887b4bbfe3971c56f8bd2995c9",
         "sha256:4298a39e73a1fe9694231cf19740e518121227b74265de275ca63289178971c6",
         "sha256:814e527510ff087eac02a48dfc73ec77bd2d581fac7a7e6420ce5eb6b80ec961",
@@ -1354,6 +1366,16 @@
       ],
       "digests": [
         "sha256:aaaf528cb90df12a9fb991869cf456336132a0f8df4ef1287adcb695d8a7864a"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/codex/config.toml",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:496dd10ea61de6b89ade1f9d4fd41d3aa8d97b01d43c91899541aba1c45b9ba7"
       ],
       "action": "update"
     },

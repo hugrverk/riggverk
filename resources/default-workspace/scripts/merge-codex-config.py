@@ -29,16 +29,22 @@ def fail(message: str) -> None:
     raise SystemExit(1)
 
 
-def load_managed_keys() -> tuple[list[str], list[str], list[str]]:
+def load_managed_keys() -> tuple[list[str], list[str], list[str], list[str]]:
+    """Return (top_level, legacy_profile_values, legacy_profiles, legacy_fields).
+
+    Legacy entries describe the pre-0.134 profile scheme this app used to
+    write; they are removed on update when still in app-shipped shape.
+    """
     if not MANAGED_KEYS_PATH.is_file():
         fail(f"managed keys metadata not found: {MANAGED_KEYS_PATH}")
     data = json.loads(MANAGED_KEYS_PATH.read_text(encoding="utf-8"))
     top_level = list(data.get("top_level_keys") or [])
-    profiles = list(data.get("managed_profiles") or [])
-    fields = list(data.get("managed_profile_fields") or [])
-    if not top_level or not profiles or not fields:
+    legacy_values = list(data.get("legacy_top_level_profile_values") or [])
+    legacy_profiles = list(data.get("legacy_profiles") or [])
+    legacy_fields = list(data.get("legacy_profile_fields") or [])
+    if not top_level or not legacy_values or not legacy_profiles or not legacy_fields:
         fail("managed keys metadata incomplete")
-    return top_level, profiles, fields
+    return top_level, legacy_values, legacy_profiles, legacy_fields
 
 
 def load_toml(path: Path) -> dict[str, Any]:
@@ -50,24 +56,33 @@ def load_toml(path: Path) -> dict[str, Any]:
         fail(f"unable to read {path}: {exc}")
 
 
+def is_app_shaped_legacy_profile(profile: Any, legacy_fields: list[str]) -> bool:
+    """True when a [profiles.X] table only carries app-shipped field names."""
+    if not isinstance(profile, dict) or not profile:
+        return False
+    return all(key in legacy_fields for key in profile)
+
+
 def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
-    top_level, profiles, fields = load_managed_keys()
+    top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
     extracted: dict[str, Any] = {}
     for key in top_level:
         if key in config:
             extracted[key] = config[key]
+    # Legacy markers: their presence means an update is needed (the template
+    # carries none of them), and the patcher removes them.
+    legacy_selector = config.get("profile")
+    if isinstance(legacy_selector, str) and legacy_selector in legacy_values:
+        extracted["profile"] = legacy_selector
     source_profiles = config.get("profiles")
     if isinstance(source_profiles, dict):
-        managed_profiles: dict[str, Any] = {}
-        for name in profiles:
+        markers: dict[str, Any] = {}
+        for name in legacy_profiles:
             profile = source_profiles.get(name)
-            if not isinstance(profile, dict):
-                continue
-            managed_profiles[name] = {
-                field: profile[field] for field in fields if field in profile
-            }
-        if managed_profiles:
-            extracted["profiles"] = managed_profiles
+            if is_app_shaped_legacy_profile(profile, legacy_fields):
+                markers[name] = dict(profile)
+        if markers:
+            extracted["profiles"] = markers
     return extracted
 
 
@@ -197,8 +212,9 @@ def patch_toml_text(
     text: str,
     top_level_keys: list[str],
     managed_values: dict[str, Any],
-    profiles: list[str],
-    profile_fields: list[str],
+    legacy_values: list[str],
+    legacy_profiles: list[str],
+    legacy_fields: list[str],
 ) -> str | None:
     """Patch a TOML file text, preserving comments and formatting.
 
@@ -238,54 +254,48 @@ def patch_toml_text(
             lines.insert(insert_idx, f"{key} = {str_value}")
             changed = True
 
-    # Patch managed profile fields
-    for profile_name in profiles:
-        profile_value = managed_values.get("profiles", {}).get(profile_name)
-        if not isinstance(profile_value, dict):
-            continue
+    # Remove the legacy pre-0.134 profile scheme this app used to write.
+    # Only app-shipped content is removed: the `profile = "safe"` selector
+    # (fatal to current Codex) and [profiles.X] tables whose fields are all
+    # app-shipped names. User-customized tables are preserved.
+    pruned: list[str] = []
+    inside_table: str | None = None
+    section_buffer: list[str] = []
 
-        # Find the [profiles.X] section
-        section_header = f"profiles.{profile_name}"
-        section_idx = find_existing_table_line(lines, section_header)
-        if section_idx is None:
-            # Section doesn't exist, create it
-            lines.append("")
-            lines.append(f"[{section_header}]")
-            for field in profile_fields:
-                if field in profile_value:
-                    lines.append(f"{field} = {format_toml_scalar(profile_value[field])}")
+    def flush_section() -> None:
+        nonlocal changed
+        if inside_table in legacy_profiles:
+            fields_in_section = [
+                line.strip().split("=", 1)[0].strip()
+                for line in section_buffer[1:]
+                if is_scalar_value_line(line)
+            ]
+            has_fields = bool(fields_in_section)
+            if has_fields and all(f in legacy_fields for f in fields_in_section):
+                changed = True
+                return
+        pruned.extend(section_buffer)
+
+    for line in lines:
+        stripped = line.strip()
+        header = re.match(r"^\[\s*profiles\.([A-Za-z0-9_-]+)\s*\]$", stripped)
+        if stripped.startswith("["):
+            if inside_table is not None:
+                flush_section()
+            inside_table = header.group(1) if header else ""
+            section_buffer = [line]
+            continue
+        if inside_table is not None:
+            section_buffer.append(line)
+            continue
+        selector = re.match(r"^profile\s*=\s*\"([^\"]*)\"\s*(#.*)?$", stripped)
+        if selector and selector.group(1) in legacy_values:
             changed = True
             continue
-
-        # Patch fields within existing section
-        section_end = len(lines)
-        for j in range(section_idx + 1, len(lines)):
-            stripped = lines[j].strip()
-            if stripped.startswith("["):
-                section_end = j
-                break
-            if not stripped:
-                continue
-
-        for field in profile_fields:
-            if field not in profile_value:
-                continue
-            str_value = format_toml_scalar(profile_value[field])
-            field_found = False
-            for j in range(section_idx + 1, section_end):
-                stripped = lines[j].strip()
-                if stripped.startswith(f"{field} =") or stripped.startswith(f"{field}="):
-                    patched_line = patch_managed_scalar_line(lines[j], field, str_value)
-                    if patched_line is None:
-                        return None
-                    lines[j] = patched_line
-                    field_found = True
-                    changed = True
-                    break
-            if not field_found:
-                lines.insert(section_end, f"{field} = {str_value}")
-                section_end += 1
-                changed = True
+        pruned.append(line)
+    if inside_table is not None:
+        flush_section()
+    lines = pruned
 
     if not changed:
         return text  # No changes needed
@@ -318,8 +328,10 @@ def render_rollback_managed_projection(target: Path, backup: Path) -> str:
     managed = extract_managed(load_toml(backup))
     installed_dict = load_toml(target)
     existing_text = target.read_text(encoding="utf-8")
-    top_level, profiles, fields = load_managed_keys()
-    patched = patch_toml_text(existing_text, top_level, managed, profiles, fields)
+    top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
+    patched = patch_toml_text(
+        existing_text, top_level, managed, legacy_values, legacy_profiles, legacy_fields
+    )
     if patched is None:
         fail(
             f"cannot safely rollback {target}: ambiguous TOML structure. "
@@ -333,7 +345,7 @@ def render_rollback_managed_projection(target: Path, backup: Path) -> str:
     if not managed_keys_match(parsed, managed):
         fail(f"rollback patched {target} does not match backup managed keys")
     for key in installed_dict:
-        if key not in top_level and key != "profiles":
+        if key not in top_level and key not in ("profiles", "profile"):
             if key not in parsed:
                 fail(f"rollback patched {target} lost user key '{key}'")
 
@@ -341,7 +353,7 @@ def render_rollback_managed_projection(target: Path, backup: Path) -> str:
 
 
 def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) -> None:
-    top_level, profiles, fields = load_managed_keys()
+    top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
 
     if not target.is_file():
         # New file: write managed config
@@ -350,15 +362,6 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
         for key in top_level:
             if key in managed:
                 new_lines.append(f"{key} = {format_toml_scalar(managed[key])}")
-        mp = managed.get("profiles", {})
-        for name in profiles:
-            p = mp.get(name, {})
-            if p:
-                new_lines.append("")
-                new_lines.append(f"[profiles.{name}]")
-                for fld in fields:
-                    if fld in p:
-                        new_lines.append(f"{fld} = {format_toml_scalar(p[fld])}")
         new_lines.append("")
         target.write_text("\n".join(new_lines), encoding="utf-8")
         return
@@ -371,7 +374,9 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
         return
 
     existing_text = target.read_text(encoding="utf-8")
-    patched = patch_toml_text(existing_text, top_level, managed, profiles, fields)
+    patched = patch_toml_text(
+        existing_text, top_level, managed, legacy_values, legacy_profiles, legacy_fields
+    )
     if patched is None:
         fail(
             f"cannot safely patch {target}: ambiguous TOML structure. "
@@ -386,7 +391,7 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
     if not managed_keys_match(parsed, managed):
         fail(f"patched {target} does not match expected managed keys")
     for key in installed_dict:
-        if key not in top_level and key != "profiles":
+        if key not in top_level and key not in ("profiles", "profile"):
             if key not in parsed:
                 fail(f"patched {target} lost user key '{key}'")
 
@@ -417,7 +422,7 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
         shutil.copy2(backup_path, target)
         fail(f"staged validation failed for {target}: managed keys mismatch, restored from backup")
     for key in installed_dict:
-        if key not in top_level and key != "profiles":
+        if key not in top_level and key not in ("profiles", "profile"):
             if key not in post_parsed:
                 staged.unlink()
                 shutil.copy2(backup_path, target)
@@ -481,19 +486,19 @@ def main() -> None:
         if args.target.is_file():
             installed_value = load_toml(args.target)
             merged = json.loads(json.dumps(installed_value))
-            for key in load_managed_keys()[0]:
+            top_level, legacy_values, legacy_profiles, legacy_fields = load_managed_keys()
+            for key in top_level:
                 if key in managed_value:
                     merged[key] = json.loads(json.dumps(managed_value[key]))
-            mp = managed_value.get("profiles", {})
-            if isinstance(mp, dict):
-                tp = merged.setdefault("profiles", {})
-                for name in load_managed_keys()[1]:
-                    managed_profile = mp.get(name)
-                    if isinstance(managed_profile, dict):
-                        target_profile = tp.setdefault(name, {})
-                        for field in load_managed_keys()[2]:
-                            if field in managed_profile:
-                                target_profile[field] = managed_profile[field]
+            if isinstance(merged.get("profile"), str) and merged["profile"] in legacy_values:
+                del merged["profile"]
+            tp = merged.get("profiles")
+            if isinstance(tp, dict):
+                for name in legacy_profiles:
+                    if is_app_shaped_legacy_profile(tp.get(name), legacy_fields):
+                        del tp[name]
+                if not tp:
+                    del merged["profiles"]
         else:
             merged = json.loads(json.dumps(managed_value))
         args.output.parent.mkdir(parents=True, exist_ok=True)

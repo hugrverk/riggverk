@@ -43,7 +43,6 @@ pub struct CodexRuntimeHealth {
     pub config_status: String,
     pub template_config_path: String,
     pub installed_config_path: String,
-    pub profile: Option<String>,
     pub approval_policy: Option<String>,
     pub sandbox_mode: Option<String>,
     pub checks: Vec<CodexRuntimeCheck>,
@@ -52,9 +51,13 @@ pub struct CodexRuntimeHealth {
     pub next_action: String,
 }
 
-const MANAGED_TOP_LEVEL_KEYS: &[&str] = &["profile"];
-const MANAGED_PROFILES: &[&str] = &["safe", "workspace-write"];
-const MANAGED_PROFILE_FIELDS: &[&str] = &["approval_policy", "sandbox_mode"];
+const MANAGED_TOP_LEVEL_KEYS: &[&str] = &["approval_policy", "sandbox_mode"];
+// Pre-0.134 profile scheme this app used to write. Codex now rejects the
+// top-level `profile` selector and ignores `[profiles.*]` tables, so
+// app-shipped remnants count as divergence and are removed on update.
+const LEGACY_TOP_LEVEL_PROFILE_VALUES: &[&str] = &["safe", "workspace-write"];
+const LEGACY_PROFILES: &[&str] = &["safe", "workspace-write"];
+const LEGACY_PROFILE_FIELDS: &[&str] = &["approval_policy", "sandbox_mode"];
 
 fn list_bundled_codex_agents(agents_dir: &Path) -> Vec<String> {
     let mut names = Vec::new();
@@ -88,6 +91,13 @@ fn parse_codex_config(path: &Path) -> Option<toml::Value> {
     toml::from_str(&content).ok()
 }
 
+fn is_app_shaped_legacy_profile(profile: &toml::map::Map<String, toml::Value>) -> bool {
+    !profile.is_empty()
+        && profile
+            .keys()
+            .all(|key| LEGACY_PROFILE_FIELDS.contains(&key.as_str()))
+}
+
 pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
     let mut managed = toml::map::Map::new();
     if let Some(table) = config.as_table() {
@@ -96,27 +106,27 @@ pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value 
                 managed.insert(key.to_string(), value.clone());
             }
         }
+        // Legacy markers: the template carries none, so any app-shipped
+        // remnant makes the config read as diverged until cleaned up.
+        if let Some(selector) = table.get("profile").and_then(|v| v.as_str()) {
+            if LEGACY_TOP_LEVEL_PROFILE_VALUES.contains(&selector) {
+                managed.insert("profile".to_string(), toml::Value::String(selector.into()));
+            }
+        }
         if let Some(profiles) = table.get("profiles").and_then(|v| v.as_table()) {
-            let mut managed_profiles = toml::map::Map::new();
-            for profile_name in MANAGED_PROFILES {
-                let Some(profile) = profiles.get(*profile_name).and_then(|v| v.as_table()) else {
-                    continue;
-                };
-                let mut managed_profile = toml::map::Map::new();
-                for field in MANAGED_PROFILE_FIELDS {
-                    if let Some(value) = profile.get(*field) {
-                        managed_profile.insert(field.to_string(), value.clone());
+            let mut markers = toml::map::Map::new();
+            for profile_name in LEGACY_PROFILES {
+                if let Some(profile) = profiles.get(*profile_name).and_then(|v| v.as_table()) {
+                    if is_app_shaped_legacy_profile(profile) {
+                        markers.insert(
+                            profile_name.to_string(),
+                            toml::Value::Table(profile.clone()),
+                        );
                     }
                 }
-                if !managed_profile.is_empty() {
-                    managed_profiles.insert(
-                        profile_name.to_string(),
-                        toml::Value::Table(managed_profile),
-                    );
-                }
             }
-            if !managed_profiles.is_empty() {
-                managed.insert("profiles".to_string(), toml::Value::Table(managed_profiles));
+            if !markers.is_empty() {
+                managed.insert("profiles".to_string(), toml::Value::Table(markers));
             }
         }
     }
@@ -376,7 +386,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         ),
     });
 
-    let mut profile = None;
     let mut approval_policy = None;
     let mut sandbox_mode = None;
     let template_config = parse_codex_config(&template_config_path);
@@ -404,9 +413,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     };
 
     if let Some(installed) = &installed_config {
-        profile = extract_string_field(installed, &["profile"]);
-        approval_policy = extract_string_field(installed, &["profiles", "safe", "approval_policy"]);
-        sandbox_mode = extract_string_field(installed, &["profiles", "safe", "sandbox_mode"]);
+        approval_policy = extract_string_field(installed, &["approval_policy"]);
+        sandbox_mode = extract_string_field(installed, &["sandbox_mode"]);
         checks.push(CodexRuntimeCheck {
             id: "installed_config_valid".into(),
             label: "Installed config is valid TOML".into(),
@@ -506,7 +514,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         config_status,
         template_config_path: template_config_path_str,
         installed_config_path: installed_config_path_str,
-        profile,
         approval_policy,
         sandbox_mode,
         checks,
@@ -570,13 +577,6 @@ mod tests {
         write_file(
             &ws.join("templates/codex/config.toml"),
             r#"
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[profiles.workspace-write]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 "#,
@@ -585,13 +585,6 @@ sandbox_mode = "workspace-write"
             &home.join(".codex/config.toml"),
             &format!(
                 r#"
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-
-[profiles.workspace-write]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 {installed_extra}
@@ -635,16 +628,13 @@ command = "echo"
     }
 
     #[test]
-    fn test_diverged_when_managed_profile_differs() {
+    fn test_diverged_when_managed_field_differs() {
         let ws = temp_root("cfg-div");
         let home = temp_root("cfg-div-home");
         add_rules(&ws, &home);
         write_file(
             &ws.join("templates/codex/config.toml"),
             r#"
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 "#,
@@ -652,9 +642,6 @@ sandbox_mode = "workspace-write"
         write_file(
             &home.join(".codex/config.toml"),
             r#"
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "never"
 sandbox_mode = "workspace-write"
 "#,
@@ -668,5 +655,53 @@ sandbox_mode = "workspace-write"
 
         assert_eq!(health.config_status, "diverged");
         assert_eq!(health.status, "diverged");
+    }
+
+    #[test]
+    fn test_diverged_when_legacy_profile_scheme_remains() {
+        let ws = temp_root("cfg-legacy");
+        let home = temp_root("cfg-legacy-home");
+        add_rules(&ws, &home);
+        write_file(
+            &ws.join("templates/codex/config.toml"),
+            r#"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+"#,
+        );
+        // Managed fields match, but the fatal pre-0.134 selector and an
+        // app-shipped profile table remain — must read as diverged so the
+        // update offers the cleanup.
+        write_file(
+            &home.join(".codex/config.toml"),
+            r#"
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+profile = "safe"
+
+[profiles.safe]
+approval_policy = "on-request"
+sandbox_mode = "workspace-write"
+"#,
+        );
+        add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
+        add_skill(&ws, &home, "diagnose");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.config_status, "diverged");
+
+        // A user-customized profile table alone is preserved and not flagged.
+        let installed = toml::from_str::<toml::Value>(
+            "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n[profiles.custom]\nmy_key = true\n",
+        )
+        .expect("installed");
+        let template = toml::from_str::<toml::Value>(
+            "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n",
+        )
+        .expect("template");
+        assert!(managed_codex_keys_match(&installed, &template));
     }
 }
