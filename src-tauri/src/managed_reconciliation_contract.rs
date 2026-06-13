@@ -4,6 +4,7 @@
 
 #[cfg(test)]
 mod tests {
+    use std::collections::{BTreeMap, BTreeSet};
     use std::fs;
     use std::path::{Path, PathBuf};
     use std::process::Command;
@@ -18,9 +19,12 @@ mod tests {
     };
     use crate::managed_bootstrap::{LEGACY_SCOUT_AGENT, REMOVED_SKILL_NAMES};
     use crate::managed_state::{
-        managed_state_path, read_managed_state, MANAGED_STATE_SCHEMA_VERSION,
+        artifact_identity, managed_state_path, read_managed_state, MANAGED_STATE_SCHEMA_VERSION,
     };
     use crate::setup_lifecycle::{OperationKind, SetupPlan, SetupSurfaceId};
+    use crate::setup_transaction::{
+        self, ArtifactTransactionManifest, TransactionStatus, UninstallArtifactPlan,
+    };
     use crate::skill_discovery::discover_skill_catalog;
     use crate::test_env::{guard, guard::EnvRestore, set_test_user_dirs};
 
@@ -429,6 +433,127 @@ mod tests {
             plan.preview_token.clone(),
         )
         .expect("apply_setup")
+    }
+
+    fn collect_regular_files_under(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
+        let mut files = BTreeMap::new();
+        if !root.exists() {
+            return Ok(files);
+        }
+        let mut stack = vec![root.to_path_buf()];
+        while let Some(current) = stack.pop() {
+            let entries = fs::read_dir(&current).map_err(|e| format!("read_dir: {e}"))?;
+            for entry in entries {
+                let entry = entry.map_err(|e| format!("entry: {e}"))?;
+                let ft = entry.file_type().map_err(|e| format!("file_type: {e}"))?;
+                let path = entry.path();
+                if ft.is_symlink() {
+                    return Err("refusing symlink in snapshot".to_string());
+                }
+                if ft.is_dir() {
+                    stack.push(path);
+                } else if ft.is_file() {
+                    let bytes = fs::read(&path).map_err(|e| format!("read: {e}"))?;
+                    files.insert(path, bytes);
+                }
+            }
+        }
+        Ok(files)
+    }
+
+    fn relativize_snapshot(
+        base: &Path,
+        snapshot: BTreeMap<PathBuf, Vec<u8>>,
+    ) -> BTreeMap<PathBuf, Vec<u8>> {
+        snapshot
+            .into_iter()
+            .map(|(path, bytes)| {
+                let rel = path.strip_prefix(base).unwrap_or(&path).to_path_buf();
+                (rel, bytes)
+            })
+            .collect()
+    }
+
+    fn snapshot_artifact_dest(
+        dest: &Path,
+        into: &mut BTreeMap<PathBuf, Vec<u8>>,
+    ) -> Result<(), String> {
+        if dest.is_file() {
+            let bytes = fs::read(dest).map_err(|e| format!("read: {e}"))?;
+            into.insert(dest.to_path_buf(), bytes);
+        } else if dest.is_dir() {
+            for (path, bytes) in collect_regular_files_under(dest)? {
+                into.insert(path, bytes);
+            }
+        }
+        Ok(())
+    }
+
+    fn build_pre_uninstall_snapshot(
+        ws: &Path,
+        home: &Path,
+        plan: &UninstallArtifactPlan,
+        fixtures: &[(PathBuf, Vec<u8>)],
+    ) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
+        let mut snap = BTreeMap::new();
+        for planned in &plan.removals {
+            let dest = planned
+                .artifact
+                .resolve_dest(home, ws)
+                .map_err(|e| format!("resolve removable: {e}"))?;
+            snapshot_artifact_dest(&dest, &mut snap)?;
+        }
+        for artifact in &plan.merged {
+            let dest = artifact
+                .resolve_dest(home, ws)
+                .map_err(|e| format!("resolve merged: {e}"))?;
+            snapshot_artifact_dest(&dest, &mut snap)?;
+        }
+        let state_path = managed_state_path(ws);
+        if state_path.is_file() {
+            let bytes = fs::read(&state_path).map_err(|e| format!("read managed state: {e}"))?;
+            snap.insert(state_path, bytes);
+        }
+        for (path, expected) in fixtures {
+            let actual = fs::read(path).map_err(|e| format!("read fixture: {e}"))?;
+            assert_eq!(actual, *expected, "fixture bytes changed before snapshot");
+            snap.insert(path.clone(), expected.clone());
+        }
+        Ok(snap)
+    }
+
+    fn scoped_runtime_snapshot(
+        home: &Path,
+        ws: &Path,
+    ) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
+        let mut snap = collect_regular_files_under(ws)?;
+        for (path, bytes) in collect_regular_files_under(home)? {
+            snap.insert(path, bytes);
+        }
+        Ok(snap)
+    }
+
+    fn removal_identities(plan: &UninstallArtifactPlan) -> BTreeSet<String> {
+        plan.removals
+            .iter()
+            .map(|planned| artifact_identity(&planned.artifact))
+            .collect()
+    }
+
+    fn read_transaction_manifest(
+        backup_root: &Path,
+        transaction_id: &str,
+        ws: &Path,
+    ) -> ArtifactTransactionManifest {
+        let manifest_path = backup_root
+            .join("setup")
+            .join(transaction_id)
+            .join("manifest.json");
+        let raw = fs::read_to_string(&manifest_path).expect("read manifest");
+        let manifest: ArtifactTransactionManifest =
+            serde_json::from_str(&raw).expect("parse manifest");
+        setup_transaction::validate_manifest(&manifest, ws).expect("valid manifest");
+        manifest
     }
 
     #[test]
@@ -941,5 +1066,318 @@ mod tests {
                 .map(|i| i.path.clone())
                 .collect::<Vec<_>>()
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn full_uninstall_rollback_restores_pre_uninstall_state_exactly() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("uninstall-rollback");
+        let home = base.join("home");
+        let workspace = base.join("runtime");
+        let backup_root = base.join("backups");
+        fs::create_dir_all(&home).expect("home");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("resolved home");
+        let ws = workspace
+            .canonicalize()
+            .unwrap_or_else(|_| workspace.clone());
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                backup_root.to_string_lossy().as_ref(),
+            );
+        }
+
+        // Phase 2: install through production flow.
+        let install_plan = preview_setup(vec![]).expect("preview all surfaces");
+        let install_result = apply_surfaces_from_preview(&install_plan);
+        assert!(
+            install_result.success,
+            "install: {}",
+            install_result.message
+        );
+        assert!(
+            !install_result.transaction_id.is_empty(),
+            "install transaction id required"
+        );
+        assert!(ws.join("skills/diagnose/SKILL.md").is_file());
+        assert!(resolved_home.join(".codex/AGENTS.md").is_file());
+        assert!(resolved_home
+            .join(".config/opencode/skills/diagnose/SKILL.md")
+            .is_file());
+        assert!(resolved_home
+            .join(".claude/skills/diagnose/SKILL.md")
+            .is_file());
+        assert!(resolved_home
+            .join(".cursor/skills/diagnose/SKILL.md")
+            .is_file());
+        assert!(read_managed_state(&ws).is_some());
+
+        // User-owned fixtures before pre-uninstall snapshot.
+        let custom_skill = resolved_home.join(".claude/skills/my-own-skill/SKILL.md");
+        let custom_bytes = b"---\nname: my-own-skill\n---\nmine\n".to_vec();
+        fs::create_dir_all(custom_skill.parent().unwrap()).expect("custom dir");
+        fs::write(&custom_skill, &custom_bytes).expect("custom skill");
+        let modified_skill = resolved_home.join(".claude/skills/tdd/SKILL.md");
+        let modified_bytes = b"user modified this skill\n".to_vec();
+        fs::write(&modified_skill, &modified_bytes).expect("modified skill");
+
+        let uninstall_plan =
+            setup_transaction::plan_artifacts_for_uninstall(&ws, &resolved_home).expect("plan");
+        assert!(
+            uninstall_plan
+                .preserved
+                .iter()
+                .any(|artifact| artifact_identity(artifact).contains("tdd")),
+            "modified fixture must be classified as preserved"
+        );
+        assert!(
+            !uninstall_plan.removals.iter().any(|planned| planned
+                .artifact
+                .resolve_dest(&resolved_home, &ws)
+                .map(|dest| dest == custom_skill)
+                .unwrap_or(false)),
+            "unknown custom fixture must never be scheduled for removal"
+        );
+
+        let fixtures = [
+            (custom_skill.clone(), custom_bytes.clone()),
+            (modified_skill.clone(), modified_bytes.clone()),
+        ];
+        let pre_uninstall =
+            build_pre_uninstall_snapshot(&ws, &resolved_home, &uninstall_plan, &fixtures)
+                .expect("pre-uninstall snapshot");
+        let pre_uninstall_scoped =
+            scoped_runtime_snapshot(&resolved_home, &ws).expect("pre-uninstall scoped snapshot");
+        let pre_removable_identities = removal_identities(&uninstall_plan);
+        assert!(!pre_removable_identities.is_empty());
+
+        // Phase 4: uninstall through production flow.
+        let uninstall_preview = preview_uninstall().expect("uninstall preview");
+        assert!(!uninstall_preview.removable.is_empty());
+        assert!(
+            uninstall_preview
+                .preserved
+                .iter()
+                .any(|item| item.path.ends_with("tdd/SKILL.md")),
+            "modified skill must appear in preserved preview"
+        );
+        assert!(
+            !uninstall_preview.merged.is_empty(),
+            "merge-managed configs should be reported when present"
+        );
+        assert!(uninstall_preview.plan_fingerprint.is_some());
+        assert!(uninstall_preview.preview_token.is_some());
+
+        let uninstall_result = apply_uninstall(
+            uninstall_preview.plan_fingerprint.clone(),
+            uninstall_preview.preview_token.clone(),
+        )
+        .expect("apply uninstall");
+        assert!(
+            uninstall_result.success,
+            "uninstall: {}",
+            uninstall_result.message
+        );
+        assert!(!uninstall_result.transaction_id.is_empty());
+        assert!(uninstall_result.failed.is_empty());
+        let uninstall_transaction_id = uninstall_result.transaction_id.clone();
+
+        for planned in &uninstall_plan.removals {
+            let dest = planned
+                .artifact
+                .resolve_dest(&resolved_home, &ws)
+                .expect("removal dest");
+            if dest.is_file() {
+                assert!(!dest.is_file(), "removed file should be absent");
+            } else if dest.is_dir() {
+                assert!(
+                    collect_regular_files_under(&dest)
+                        .expect("scan removed dir")
+                        .is_empty(),
+                    "removed directory tree should be empty"
+                );
+            }
+        }
+        assert_eq!(
+            fs::read(&modified_skill).expect("modified skill"),
+            modified_bytes
+        );
+        assert_eq!(fs::read(&custom_skill).expect("custom skill"), custom_bytes);
+        for artifact in &uninstall_plan.merged {
+            let dest = artifact
+                .resolve_dest(&resolved_home, &ws)
+                .expect("merged dest");
+            if let Some(expected) = pre_uninstall.get(&dest) {
+                assert_eq!(
+                    fs::read(&dest).expect("merged config").as_slice(),
+                    expected.as_slice()
+                );
+            }
+        }
+        assert!(
+            !resolved_home
+                .join(".claude/skills/diagnose/SKILL.md")
+                .is_file(),
+            "representative app-owned harness file should be removed"
+        );
+        let managed_state_after_uninstall = fs::read(managed_state_path(&ws))
+            .expect("managed state file should still exist after uninstall");
+        assert_ne!(
+            managed_state_after_uninstall.as_slice(),
+            pre_uninstall
+                .get(&managed_state_path(&ws))
+                .expect("pre-uninstall managed state")
+                .as_slice(),
+            "managed state must reflect uninstall rather than silently staying pre-uninstall"
+        );
+
+        // Phase 5: rollback dry-run is read-only across the isolated base.
+        let pre_dry_run = relativize_snapshot(
+            &base,
+            collect_regular_files_under(&base).expect("base snapshot before dry-run"),
+        );
+        let dry_run = rollback_setup_transaction(uninstall_transaction_id.clone(), true)
+            .expect("rollback dry-run");
+        assert!(dry_run.success, "dry-run: {}", dry_run.message);
+        assert!(dry_run.failed.is_empty());
+        assert!(
+            !dry_run.applied.is_empty(),
+            "dry-run should list artifacts requiring restoration"
+        );
+        assert!(
+            dry_run.rolled_back.is_empty(),
+            "first dry-run must not report restored artifacts"
+        );
+        assert_eq!(
+            dry_run.applied.len(),
+            uninstall_plan.removals.len(),
+            "dry-run restore count should match uninstall removal inventory"
+        );
+        let post_dry_run = relativize_snapshot(
+            &base,
+            collect_regular_files_under(&base).expect("base snapshot after dry-run"),
+        );
+        assert_eq!(
+            post_dry_run, pre_dry_run,
+            "dry-run must not mutate any regular file under the isolated base"
+        );
+
+        // Phase 6: explicit rollback restores exact pre-uninstall runtime bytes.
+        let rollback = rollback_setup_transaction(uninstall_transaction_id.clone(), false)
+            .expect("explicit rollback");
+        assert!(rollback.success, "rollback: {}", rollback.message);
+        assert!(rollback.failed.is_empty());
+        assert!(
+            !rollback.rolled_back.is_empty(),
+            "rollback must report restored inventory"
+        );
+        assert_eq!(rollback.transaction_id, uninstall_transaction_id);
+
+        for (path, expected) in &pre_uninstall {
+            assert!(
+                path.is_file(),
+                "restored destination must exist after rollback"
+            );
+            assert_eq!(
+                fs::read(path).expect("restored bytes").as_slice(),
+                expected.as_slice()
+            );
+        }
+        assert_eq!(
+            fs::read(&modified_skill).expect("modified after rollback"),
+            modified_bytes
+        );
+        assert_eq!(
+            fs::read(&custom_skill).expect("custom after rollback"),
+            custom_bytes
+        );
+
+        let post_rollback_scoped =
+            scoped_runtime_snapshot(&resolved_home, &ws).expect("post-rollback scoped snapshot");
+        assert_eq!(
+            post_rollback_scoped, pre_uninstall_scoped,
+            "rollback must restore scoped runtime bytes exactly"
+        );
+
+        // Phase 7: restored ownership and idempotency.
+        let setup_after = preview_setup(vec![]).expect("preview after rollback");
+        let pending: Vec<_> = setup_after
+            .operations
+            .iter()
+            .filter(|op| op.kind.needs_apply())
+            .collect();
+        assert!(
+            pending.iter().all(|op| {
+                op.kind == OperationKind::Conflict
+                    && (op.summary.contains("tdd") || op.summary.contains("Tdd"))
+            }),
+            "only the deliberate user-modified fixture may remain pending: {:?}",
+            pending
+        );
+
+        let uninstall_after = preview_uninstall().expect("uninstall preview after rollback");
+        let after_plan =
+            setup_transaction::plan_artifacts_for_uninstall(&ws, &resolved_home).expect("plan");
+        assert_eq!(removal_identities(&after_plan), pre_removable_identities);
+        assert!(
+            after_plan
+                .preserved
+                .iter()
+                .any(|artifact| artifact_identity(artifact).contains("tdd")),
+            "user-modified fixture should remain preserved after rollback"
+        );
+        assert!(
+            uninstall_after
+                .removable
+                .iter()
+                .map(|item| item.path.clone())
+                .collect::<BTreeSet<_>>()
+                == uninstall_preview
+                    .removable
+                    .iter()
+                    .map(|item| item.path.clone())
+                    .collect::<BTreeSet<_>>(),
+            "restored app-owned inventory should be removable again by canonical destination"
+        );
+
+        let manifest = read_transaction_manifest(&backup_root, &uninstall_transaction_id, &ws);
+        assert_eq!(manifest.transaction_status, TransactionStatus::RolledBack);
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+
+        let scoped_before_second =
+            scoped_runtime_snapshot(&resolved_home, &ws).expect("before second");
+        let second_rollback =
+            rollback_setup_transaction(uninstall_transaction_id.clone(), false).expect("second");
+        assert!(
+            !second_rollback.success,
+            "second rollback must refuse an already rolled-back transaction"
+        );
+        assert!(
+            second_rollback.message.contains("already rolled back")
+                || second_rollback
+                    .failed
+                    .iter()
+                    .any(|item| item.contains("already rolled back")),
+            "second rollback should report already rolled back"
+        );
+        let scoped_after_second =
+            scoped_runtime_snapshot(&resolved_home, &ws).expect("after second");
+        assert_eq!(
+            scoped_after_second, scoped_before_second,
+            "second rollback attempt must not mutate scoped runtime state"
+        );
+
+        let _ = fs::remove_dir_all(&base);
     }
 }
