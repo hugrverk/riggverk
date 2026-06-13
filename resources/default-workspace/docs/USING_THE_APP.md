@@ -54,7 +54,9 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 ## Settings
 
-Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt loops, or library). Settings autosave. Changing appearance clears background and foreground overrides.
+**Harnesses** controls which tools appear and may receive new managed writes: Codex, OpenCode, Claude, and Cursor are enabled by default. Disabling a harness hides its navigation, status, and harness-specific Library content while preserving existing files and fine-grained target selections. Re-enabling restores the UI but does not install automatically. This is an explicit preference, not automatic tool detection.
+
+Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt loops, or library). Settings autosave. Changing appearance clears background and foreground overrides. Full uninstall still covers proven app-owned files from disabled harnesses, and rollback follows the recorded transaction independently of current harness visibility.
 
 ## Tools
 

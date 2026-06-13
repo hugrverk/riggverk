@@ -155,7 +155,7 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 - Library - docs, rules, skills, agents, configs, and Copy Brain.
 - Prompt Loops - deterministic copy-ready prompt templates and optional repository context.
 - Repo Dashboard - local-git-first repository and docs insight with optional bounded `gh` enrichment.
-- Settings - appearance, text size, theme tokens, reduce motion, landing page, workspace metadata, and enabled target toggles.
+- Settings - enabled harnesses, appearance, text size, theme tokens, reduce motion, landing page, workspace metadata, and enabled target toggles.
 
 Full uninstall removes proven app-owned files, preserves modified and unknown user files, leaves merge-managed configs in place, and records a rollback-capable transaction. **Recover previous uninstall** is available only for the current app session; restarting the app does not rediscover recovery automatically.
 
@@ -163,6 +163,7 @@ Full uninstall removes proven app-owned files, preserves modified and unknown us
 
 | Setting | Default | Description |
 | --- | --- | --- |
+| `enabled_harness_ids` | `["codex", "opencode", "claude", "cursor"]` | Positive allowlist for visible and writable harnesses. Disabling hides harness UI and blocks new managed writes without deleting existing files or target preferences. |
 | `enabled_target_ids` | `["codex_rules", "opencode_rules", "opencode_config"]` | Which sync targets are active. Edit from harness pages. |
 | `app_font_size` | `"medium"` | UI font scale. Values: `"small"`, `"medium"`, `"large"`, `"extra-large"`. |
 | `reduce_motion` | `false` | When `true`, disables pulse, scan, and flash animation classes. |
@@ -171,6 +172,8 @@ Full uninstall removes proven app-owned files, preserves modified and unknown us
 Sync targets excluded from defaults:
 - `codex_config` — managed-field merge; user-owned TOML preserved.
 - `claude_rules`, `claude_agents`, `codex_agents`, `opencode_agents`, `cursor_setup` — must be toggled on explicitly.
+
+Harness enablement is an explicit preference, not automatic tool detection. Re-enabling restores UI, health checks, and prior target selections but does not install automatically. Full uninstall still considers proven app-owned artifacts from disabled harnesses, and rollback remains transaction-based regardless of current visibility.
 
 ## Security model
 

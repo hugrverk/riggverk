@@ -44,6 +44,14 @@ Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and
 
 ### Settings and current UI
 
+- [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
+- [ ] Disable one harness: its nav icon, page, Installed row, health calls, and harness-specific Library entries disappear
+- [ ] Existing isolated harness files remain byte-identical after disable
+- [ ] Restart preserves the disabled state and prior fine-grained target selections
+- [ ] Re-enable restores UI and health without automatic installation
+- [ ] Disable every harness: Workspace, Repo Dashboard, Prompt Loops, generic Library content, and Settings remain usable
+- [ ] Explicit stale setup for a disabled harness fails without mutation
+- [ ] Full uninstall preview still includes proven app-owned artifacts from disabled harnesses; rollback remains complete
 - [ ] Installed State Map renders workspace, Codex, OpenCode, Claude, and Cursor groups and reflects status changes after managed actions
 - [ ] Reduce Motion disables pulse, scan, and flash animation classes
 - [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens the selected view after app restart

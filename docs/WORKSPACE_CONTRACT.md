@@ -179,6 +179,14 @@ Uninstall creates a rollback-capable backend transaction with per-file backups. 
 
 The frontend retains only the most recent uninstall transaction ID for the current app session. **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
+## Harness enablement
+
+`AppSettings.enabled_harness_ids` is a persisted positive allowlist containing `codex`, `opencode`, `claude`, and `cursor`. New settings and older settings without the field enable all four. Unknown values are ignored, duplicates are removed, canonical order is preserved, and an empty list is valid.
+
+Harness enablement is separate from `enabled_target_ids`. Disabling a harness hides its application surfaces, skips normal health and status path reads, and rejects new managed writes at backend command boundaries. It does not alter target preferences, existing harness files, managed ownership state, backups, or recovery transactions. Re-enabling restores UI and status checks but never installs automatically.
+
+Workspace installation remains available with every harness disabled. Full uninstall remains global across proven app-owned artifacts, including disabled harnesses. Rollback restores the recorded transaction independently of current harness visibility.
+
 ## Security boundaries
 
 The workspace must not contain credentials or private runtime state. Agent Workspace does not inspect `.env` files, private keys, auth stores, OAuth state, shell history, Claude trust state, or unrelated personal files.
