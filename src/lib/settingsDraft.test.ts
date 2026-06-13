@@ -8,6 +8,15 @@ import {
 } from "./settingsDraft";
 
 describe("normalizeAppFontSize", () => {
+  it("enables every harness by default", () => {
+    expect(defaultSettings().enabled_harness_ids).toEqual([
+      "codex",
+      "opencode",
+      "claude",
+      "cursor",
+    ]);
+  });
+
   it("accepts all four persisted values", () => {
     for (const size of APP_FONT_SIZE_VALUES) {
       expect(normalizeAppFontSize(size)).toBe(size);

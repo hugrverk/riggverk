@@ -1,5 +1,32 @@
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum HarnessId {
+    Codex,
+    OpenCode,
+    Claude,
+    Cursor,
+}
+
+impl HarnessId {
+    pub const ALL: &'static [HarnessId] = &[
+        HarnessId::Codex,
+        HarnessId::OpenCode,
+        HarnessId::Claude,
+        HarnessId::Cursor,
+    ];
+
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HarnessId::Codex => "codex",
+            HarnessId::OpenCode => "opencode",
+            HarnessId::Claude => "claude",
+            HarnessId::Cursor => "cursor",
+        }
+    }
+}
 
 #[derive(Serialize, Clone, Copy, PartialEq)]
 pub enum TargetKind {
@@ -14,6 +41,7 @@ pub enum TargetKind {
 pub struct AgentSyncTarget {
     pub id: &'static str,
     pub label: &'static str,
+    pub harness: HarnessId,
     pub kind: TargetKind,
     pub target_rel: &'static str,
     pub source_rel: &'static str,
@@ -34,6 +62,7 @@ impl AgentSyncTarget {
 pub struct AgentTargetMeta {
     pub id: String,
     pub label: String,
+    pub harness: HarnessId,
     pub kind: TargetKind,
     pub target_rel: String,
     pub source_rel: String,
@@ -44,6 +73,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "codex_rules",
             label: "codex rules",
+            harness: HarnessId::Codex,
             kind: TargetKind::Rules,
             target_rel: ".codex/AGENTS.md",
             source_rel: "templates/sync/codex-rules.md",
@@ -51,6 +81,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "opencode_rules",
             label: "opencode rules",
+            harness: HarnessId::OpenCode,
             kind: TargetKind::Rules,
             target_rel: ".config/opencode/AGENTS.md",
             source_rel: "templates/sync/opencode-rules.md",
@@ -58,6 +89,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "claude_rules",
             label: "claude rules",
+            harness: HarnessId::Claude,
             kind: TargetKind::Rules,
             target_rel: ".claude/CLAUDE.md",
             source_rel: "templates/sync/claude-rules.md",
@@ -65,6 +97,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "opencode_agents",
             label: "opencode agents",
+            harness: HarnessId::OpenCode,
             kind: TargetKind::Agents,
             target_rel: ".config/opencode/agents",
             source_rel: "agents",
@@ -72,6 +105,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "claude_agents",
             label: "claude agents",
+            harness: HarnessId::Claude,
             kind: TargetKind::Agents,
             target_rel: ".claude/agents",
             source_rel: "templates/claude/agents",
@@ -79,6 +113,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "codex_agents",
             label: "codex agents",
+            harness: HarnessId::Codex,
             kind: TargetKind::Agents,
             target_rel: ".codex/agents",
             source_rel: "templates/codex/agents",
@@ -86,6 +121,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "opencode_config",
             label: "opencode config",
+            harness: HarnessId::OpenCode,
             kind: TargetKind::Config,
             target_rel: ".config/opencode/opencode.json",
             source_rel: "templates/opencode.json",
@@ -93,6 +129,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "codex_config",
             label: "codex config",
+            harness: HarnessId::Codex,
             kind: TargetKind::Config,
             target_rel: ".codex/config.toml",
             source_rel: "templates/codex/config.toml",
@@ -100,6 +137,7 @@ pub fn targets() -> Vec<AgentSyncTarget> {
         AgentSyncTarget {
             id: "cursor_setup",
             label: "cursor global agents",
+            harness: HarnessId::Cursor,
             kind: TargetKind::Agents,
             target_rel: ".cursor/agents",
             source_rel: "templates/cursor/agents",
@@ -161,6 +199,25 @@ pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
         }
     }
     result
+}
+
+pub fn default_enabled_harness_ids() -> Vec<HarnessId> {
+    HarnessId::ALL.to_vec()
+}
+
+pub fn normalize_enabled_harness_ids(raw: &[HarnessId]) -> Vec<HarnessId> {
+    HarnessId::ALL
+        .iter()
+        .copied()
+        .filter(|id| raw.contains(id))
+        .collect()
+}
+
+pub fn target_harness(target_id: &str) -> Option<HarnessId> {
+    targets()
+        .into_iter()
+        .find(|target| target.id == target_id)
+        .map(|target| target.harness)
 }
 
 pub fn home_dir() -> Result<PathBuf, String> {

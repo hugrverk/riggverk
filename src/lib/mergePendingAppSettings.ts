@@ -1,5 +1,6 @@
 import { serializeSettingsForCompare } from "./settingsDraft";
 import type { AppSettings } from "../types";
+import { INSTALL_AGENTS } from "../types";
 
 /** Overlay locally edited theme/target/workspace fields onto an acknowledged backend snapshot. */
 export function mergePendingLocalOntoAcknowledged(
@@ -16,6 +17,7 @@ export function mergePendingLocalOntoAcknowledged(
     app_font_size: local.app_font_size,
     workspace_path: local.workspace_path,
     enabled_target_ids: [...local.enabled_target_ids],
+    enabled_harness_ids: [...(local.enabled_harness_ids ?? INSTALL_AGENTS)],
     accent_color: local.accent_color,
     background_color: local.background_color,
     foreground_color: local.foreground_color,
@@ -40,6 +42,7 @@ export function applyMutationPreservingPendingLocal(
     app_font_size: local.app_font_size,
     workspace_path: local.workspace_path,
     enabled_target_ids: [...local.enabled_target_ids],
+    enabled_harness_ids: [...(local.enabled_harness_ids ?? INSTALL_AGENTS)],
     accent_color: local.accent_color,
     background_color: local.background_color,
     foreground_color: local.foreground_color,

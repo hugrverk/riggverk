@@ -1716,20 +1716,51 @@ fn attach_plan_preview(
 pub fn get_installation_status(
     surfaces: Vec<String>,
 ) -> Result<crate::installation_status::InstallationStatus, String> {
+    let settings = crate::settings::load();
     let surface_ids: Vec<SetupSurfaceId> = if surfaces.is_empty() {
-        SetupSurfaceId::ALL.to_vec()
+        crate::settings::enabled_setup_surfaces(&settings)
     } else {
-        surfaces
+        let parsed: Vec<SetupSurfaceId> = surfaces
             .iter()
-            .filter_map(|s| {
+            .map(|s| {
                 serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string()))
-                    .ok()
+                    .map_err(|_| format!("Unknown surface ID: {s}"))
             })
-            .collect()
+            .collect::<Result<_, _>>()?;
+        reject_disabled_surfaces(&parsed, &settings)?;
+        parsed
     };
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
     crate::installation_status::status_for_surfaces(&surface_ids, &ws_root, &home)
+}
+
+fn reject_disabled_surfaces(
+    surfaces: &[SetupSurfaceId],
+    settings: &crate::settings::AppSettings,
+) -> Result<(), String> {
+    let disabled: Vec<&'static str> = surfaces
+        .iter()
+        .filter_map(|surface| {
+            surface
+                .harness()
+                .filter(|harness| !crate::settings::harness_enabled(settings, *harness))
+                .map(|harness| harness.as_str())
+        })
+        .collect();
+    if disabled.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "Harness disabled: {}",
+            disabled
+                .into_iter()
+                .collect::<std::collections::BTreeSet<_>>()
+                .into_iter()
+                .collect::<Vec<_>>()
+                .join(", ")
+        ))
+    }
 }
 
 /// Read-only preview: detect real state for requested surfaces.
@@ -1749,15 +1780,21 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         return Err(format!("Unknown surface ID(s): {}", ids.join(", ")));
     }
 
-    let surface_ids: Vec<SetupSurfaceId> = surfaces
+    let requested_surface_ids: Vec<SetupSurfaceId> = surfaces
         .iter()
         .filter_map(|s| {
             serde_json::from_value::<SetupSurfaceId>(serde_json::Value::String(s.to_string())).ok()
         })
         .collect();
+    let settings = crate::settings::load();
+    reject_disabled_surfaces(&requested_surface_ids, &settings)?;
+    let surface_ids = if requested_surface_ids.is_empty() {
+        crate::settings::enabled_setup_surfaces(&settings)
+    } else {
+        requested_surface_ids
+    };
 
-    if surface_ids.is_empty() {
-        // All surfaces
+    if surfaces.is_empty() {
         let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
         let home = crate::platform_paths::resolve_user_home(
             &crate::platform_paths::PlatformEnv::from_process_env(),
@@ -1765,13 +1802,13 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         )
         .map_err(|e| format!("user home: {e}"))?;
 
-        let states: Vec<_> = SetupSurfaceId::ALL
+        let states: Vec<_> = surface_ids
             .iter()
             .map(|s| detect_surface_state(*s, &ws_root, &home))
             .collect();
 
         let request = SetupRequest {
-            surfaces: vec![],
+            surfaces: surface_ids,
             skip_manual: true,
         };
 
@@ -1834,6 +1871,8 @@ pub fn apply_setup(
     if surface_ids.is_empty() {
         return Err("At least one surface ID is required".to_string());
     }
+    let settings = crate::settings::load();
+    reject_disabled_surfaces(&surface_ids, &settings)?;
 
     // Use real detection instead of synthetic all-Create states
     let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;

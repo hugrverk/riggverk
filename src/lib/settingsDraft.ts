@@ -1,4 +1,4 @@
-import type { AppSettings } from "../types";
+import { INSTALL_AGENTS, type AppSettings } from "../types";
 
 /** AppSettings persistence state for autosave UI. */
 export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
@@ -6,6 +6,7 @@ export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
 export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
 
 export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "opencode_config"];
+export const DEFAULT_HARNESS_IDS = [...INSTALL_AGENTS];
 export const APP_FONT_SIZE_VALUES = ["small", "medium", "large", "extra-large"] as const;
 
 export const APP_FONT_SIZE_LABELS: Record<AppSettings["app_font_size"], string> = {
@@ -37,6 +38,7 @@ export function defaultSettings(): AppSettings {
     app_font_size: "medium",
     workspace_path: null,
     enabled_target_ids: DEFAULT_TARGET_IDS,
+    enabled_harness_ids: DEFAULT_HARNESS_IDS,
     accent_color: null,
     background_color: null,
     foreground_color: null,

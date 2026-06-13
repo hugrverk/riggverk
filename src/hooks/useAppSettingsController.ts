@@ -13,7 +13,7 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
-import type { AgentTargetMeta, AppSettings, GetSettingsResponse } from "../types";
+import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
 
 export interface AppSettingsControllerDeps {
   setError: (message: string | null) => void;
@@ -313,6 +313,18 @@ export function useAppSettingsController({
     });
   }, []);
 
+  const toggleHarness = useCallback((id: InstallAgent) => {
+    setSettingsMsg(null);
+    setAppSettings(prev => {
+      if (!prev) return prev;
+      const current = prev.enabled_harness_ids ?? [];
+      const ids = current.includes(id)
+        ? current.filter(harnessId => harnessId !== id)
+        : [...current, id];
+      return { ...prev, enabled_harness_ids: ids };
+    });
+  }, []);
+
   const persistActiveWorkspace = useCallback(async (path: string) => {
     if (!appSettings) return;
     const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
@@ -422,6 +434,7 @@ export function useAppSettingsController({
     setReduceMotion,
     setLandingView,
     toggleTarget,
+    toggleHarness,
     clearSettingsMsg,
     setSettingsMsg,
     mutateAppSettings,

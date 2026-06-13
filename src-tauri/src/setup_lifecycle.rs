@@ -12,6 +12,7 @@
 //! This module defines narrow serializable types, the preview planner,
 //! and real detection helpers. No write execution is included.
 
+use crate::agent_targets::HarnessId;
 use serde::{Deserialize, Serialize};
 
 // ── Surface identity ──
@@ -94,6 +95,26 @@ impl SetupSurfaceId {
             SetupSurfaceId::CursorSkills => "Cursor Skills",
             SetupSurfaceId::CursorMcp => "Cursor MCP",
             SetupSurfaceId::WorkspaceBundle => "Workspace Resources",
+        }
+    }
+
+    pub fn harness(self) -> Option<HarnessId> {
+        match self {
+            SetupSurfaceId::OpenCodeConfig
+            | SetupSurfaceId::OpenCodeAgents
+            | SetupSurfaceId::OpenCodeRules
+            | SetupSurfaceId::OpenCodeSkills => Some(HarnessId::OpenCode),
+            SetupSurfaceId::CodexConfig
+            | SetupSurfaceId::CodexAgents
+            | SetupSurfaceId::CodexRules
+            | SetupSurfaceId::CodexSkills => Some(HarnessId::Codex),
+            SetupSurfaceId::ClaudeRules
+            | SetupSurfaceId::ClaudeAgents
+            | SetupSurfaceId::ClaudeSkills => Some(HarnessId::Claude),
+            SetupSurfaceId::CursorAgents
+            | SetupSurfaceId::CursorSkills
+            | SetupSurfaceId::CursorMcp => Some(HarnessId::Cursor),
+            SetupSurfaceId::WorkspaceBundle => None,
         }
     }
 }

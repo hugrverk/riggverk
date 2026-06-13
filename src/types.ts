@@ -105,7 +105,7 @@ export interface InstallationStatus {
 }
 
 export interface AgentTargetMeta {
-  id: string; label: string; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
+  id: string; label: string; harness: InstallAgent; kind: "rules" | "agents" | "config"; target_rel: string; source_rel: string;
 }
 
 export interface ConfigEditorSourceMeta {
@@ -121,6 +121,7 @@ export interface AppSettings {
   app_font_size: "small" | "medium" | "large" | "extra-large";
   workspace_path: string | null;
   enabled_target_ids: string[];
+  enabled_harness_ids: InstallAgent[];
   accent_color: string | null;
   background_color: string | null;
   foreground_color: string | null;

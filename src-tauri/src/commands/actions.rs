@@ -16,7 +16,7 @@ struct ConfigRun {
 }
 
 fn enabled_config_runs(mode: agent_targets::ConfigScriptMode) -> Vec<ConfigRun> {
-    let enabled = settings::load().enabled_target_ids;
+    let enabled = settings::effective_enabled_target_ids(&settings::load());
     agent_targets::config_sync_targets()
         .into_iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
@@ -55,15 +55,12 @@ fn no_enabled_agent_targets(action: &str) -> ActionResult {
 }
 
 fn opencode_config_enabled() -> bool {
-    settings::load()
-        .enabled_target_ids
+    settings::effective_enabled_target_ids(&settings::load())
         .contains(&"opencode_config".to_string())
 }
 
 fn codex_config_enabled() -> bool {
-    settings::load()
-        .enabled_target_ids
-        .contains(&"codex_config".to_string())
+    settings::effective_enabled_target_ids(&settings::load()).contains(&"codex_config".to_string())
 }
 
 fn run_codex_config_install(
@@ -89,21 +86,17 @@ fn run_codex_config_install(
 }
 
 fn opencode_agents_enabled() -> bool {
-    let enabled = settings::load().enabled_target_ids;
+    let enabled = settings::effective_enabled_target_ids(&settings::load());
     enabled.contains(&"opencode_agents".to_string())
         || enabled.contains(&"opencode_config".to_string())
 }
 
 fn runtime_agent_target_enabled(target_id: &str) -> bool {
-    settings::load()
-        .enabled_target_ids
-        .contains(&target_id.to_string())
+    settings::effective_enabled_target_ids(&settings::load()).contains(&target_id.to_string())
 }
 
 fn target_enabled(target_id: &str) -> bool {
-    settings::load()
-        .enabled_target_ids
-        .contains(&target_id.to_string())
+    settings::effective_enabled_target_ids(&settings::load()).contains(&target_id.to_string())
 }
 
 fn run_codex_agents_install(
@@ -189,12 +182,12 @@ fn run_opencode_install(
 }
 
 fn cursor_is_selected() -> bool {
-    let enabled = settings::load().enabled_target_ids;
+    let enabled = settings::effective_enabled_target_ids(&settings::load());
     enabled.contains(&"cursor_setup".to_string())
 }
 
 fn enabled_rule_flags() -> Vec<&'static str> {
-    let enabled = settings::load().enabled_target_ids;
+    let enabled = settings::effective_enabled_target_ids(&settings::load());
     agent_targets::targets()
         .iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
@@ -204,7 +197,7 @@ fn enabled_rule_flags() -> Vec<&'static str> {
 }
 
 fn enabled_rule_targets() -> Vec<agent_targets::AgentSyncTarget> {
-    let enabled = settings::load().enabled_target_ids;
+    let enabled = settings::effective_enabled_target_ids(&settings::load());
     agent_targets::rule_targets()
         .into_iter()
         .filter(|t| enabled.contains(&t.id.to_string()))

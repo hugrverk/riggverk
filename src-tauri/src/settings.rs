@@ -6,7 +6,7 @@ use std::sync::Mutex;
 
 static SETTINGS_WRITE_MUTEX: Mutex<()> = Mutex::new(());
 
-use super::agent_targets;
+use super::agent_targets::{self, HarnessId};
 use crate::path_utils::{
     is_legacy_default_workspace_path, normalize_user_workspace_path,
     normalize_user_workspace_path_for_save,
@@ -29,6 +29,11 @@ pub struct AppSettings {
     pub workspace_path: Option<String>,
     #[serde(default = "agent_targets::default_enabled_ids")]
     pub enabled_target_ids: Vec<String>,
+    #[serde(
+        default = "agent_targets::default_enabled_harness_ids",
+        deserialize_with = "deserialize_harness_ids"
+    )]
+    pub enabled_harness_ids: Vec<HarnessId>,
     #[serde(default)]
     pub accent_color: Option<String>,
     #[serde(default)]
@@ -54,6 +59,7 @@ impl Default for AppSettings {
             app_font_size: default_app_font_size(),
             workspace_path: None,
             enabled_target_ids: agent_targets::default_enabled_ids(),
+            enabled_harness_ids: agent_targets::default_enabled_harness_ids(),
             accent_color: None,
             background_color: None,
             foreground_color: None,
@@ -93,6 +99,18 @@ fn default_app_font_size() -> String {
 
 fn default_landing_view() -> String {
     "start".into()
+}
+
+fn deserialize_harness_ids<'de, D>(deserializer: D) -> Result<Vec<HarnessId>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Vec::<String>::deserialize(deserializer)?;
+    Ok(HarnessId::ALL
+        .iter()
+        .copied()
+        .filter(|harness| raw.iter().any(|value| value == harness.as_str()))
+        .collect())
 }
 
 fn normalize_app_font_size(value: &str) -> String {
@@ -139,6 +157,8 @@ fn normalize(settings: &mut AppSettings) {
 
     settings.enabled_target_ids =
         agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+    settings.enabled_harness_ids =
+        agent_targets::normalize_enabled_harness_ids(&settings.enabled_harness_ids);
 
     settings.accent_color = settings
         .accent_color
@@ -180,6 +200,8 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
 
     settings.enabled_target_ids =
         agent_targets::normalize_enabled_ids(&settings.enabled_target_ids);
+    settings.enabled_harness_ids =
+        agent_targets::normalize_enabled_harness_ids(&settings.enabled_harness_ids);
 
     settings.accent_color = settings
         .accent_color
@@ -203,6 +225,36 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .filter(|id| !id.is_empty());
 
     Ok(())
+}
+
+pub fn harness_enabled(settings: &AppSettings, harness: HarnessId) -> bool {
+    settings.enabled_harness_ids.contains(&harness)
+}
+
+pub fn effective_enabled_target_ids(settings: &AppSettings) -> Vec<String> {
+    settings
+        .enabled_target_ids
+        .iter()
+        .filter(|id| {
+            agent_targets::target_harness(id)
+                .is_some_and(|harness| harness_enabled(settings, harness))
+        })
+        .cloned()
+        .collect()
+}
+
+pub fn enabled_setup_surfaces(
+    settings: &AppSettings,
+) -> Vec<crate::setup_lifecycle::SetupSurfaceId> {
+    crate::setup_lifecycle::SetupSurfaceId::ALL
+        .iter()
+        .copied()
+        .filter(|surface| {
+            surface
+                .harness()
+                .is_none_or(|harness| harness_enabled(settings, harness))
+        })
+        .collect()
 }
 
 fn settings_file() -> Result<PathBuf, String> {
@@ -425,10 +477,12 @@ fn normalize_repo_dashboard_entries(entries: &mut [RepoDashboardEntry]) -> Resul
 #[cfg(test)]
 mod tests {
     use super::{
-        get_settings_snapshot, get_settings_snapshot_with_mutate, load, mutate_settings, normalize,
-        normalize_for_save, save, save_with_revision_check, validate_hex_color, AppSettings,
-        MutationOutcome, SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
+        effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
+        get_settings_snapshot_with_mutate, load, mutate_settings, normalize, normalize_for_save,
+        save, save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
+        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
     };
+    use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
     use std::fs;
     use std::path::PathBuf;
@@ -442,6 +496,7 @@ mod tests {
             app_font_size: "medium".into(),
             workspace_path: path.map(|s| s.to_string()),
             enabled_target_ids: vec![],
+            enabled_harness_ids: agent_targets::default_enabled_harness_ids(),
             accent_color: None,
             background_color: None,
             foreground_color: None,
@@ -542,6 +597,7 @@ mod tests {
                 "opencode_config".into(),
                 "unknown".into(),
             ],
+            enabled_harness_ids: agent_targets::default_enabled_harness_ids(),
             accent_color: None,
             background_color: None,
             foreground_color: None,
@@ -557,6 +613,53 @@ mod tests {
         assert_eq!(
             settings.enabled_target_ids,
             vec!["codex_rules".to_string(), "opencode_config".to_string()]
+        );
+    }
+
+    #[test]
+    fn missing_enabled_harness_ids_loads_all_defaults() {
+        let json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        let mut object = json.as_object().cloned().expect("settings object");
+        object.remove("enabled_harness_ids");
+        let loaded: AppSettings = serde_json::from_value(serde_json::Value::Object(object))
+            .expect("load legacy settings");
+        assert_eq!(
+            loaded.enabled_harness_ids,
+            agent_targets::default_enabled_harness_ids()
+        );
+    }
+
+    #[test]
+    fn enabled_harness_ids_ignore_unknowns_deduplicate_and_keep_canonical_order() {
+        let mut json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        json["enabled_harness_ids"] = serde_json::json!(["claude", "unknown", "codex", "claude"]);
+        let loaded: AppSettings = serde_json::from_value(json).expect("load settings");
+        assert_eq!(
+            loaded.enabled_harness_ids,
+            vec![
+                agent_targets::HarnessId::Codex,
+                agent_targets::HarnessId::Claude
+            ]
+        );
+    }
+
+    #[test]
+    fn empty_enabled_harness_ids_remains_empty_and_preserves_raw_targets() {
+        let mut settings = AppSettings {
+            enabled_harness_ids: vec![],
+            enabled_target_ids: vec!["codex_rules".into(), "opencode_config".into()],
+            ..AppSettings::default()
+        };
+        normalize(&mut settings);
+        assert!(settings.enabled_harness_ids.is_empty());
+        assert_eq!(
+            settings.enabled_target_ids,
+            vec!["codex_rules".to_string(), "opencode_config".to_string()]
+        );
+        assert!(effective_enabled_target_ids(&settings).is_empty());
+        assert_eq!(
+            enabled_setup_surfaces(&settings),
+            vec![crate::setup_lifecycle::SetupSurfaceId::WorkspaceBundle]
         );
     }
 
@@ -631,6 +734,7 @@ mod tests {
             app_font_size: "medium".into(),
             workspace_path: None,
             enabled_target_ids: vec![],
+            enabled_harness_ids: agent_targets::default_enabled_harness_ids(),
             accent_color: Some("#FFAA00".into()),
             background_color: None,
             foreground_color: None,
@@ -651,6 +755,7 @@ mod tests {
             app_font_size: "medium".into(),
             workspace_path: None,
             enabled_target_ids: vec![],
+            enabled_harness_ids: agent_targets::default_enabled_harness_ids(),
             accent_color: Some("bad".into()),
             background_color: None,
             foreground_color: None,

@@ -263,13 +263,19 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;
-    let cursor_paths = crate::cursor_profile_paths::resolve_cursor_profile_paths().ok();
     let targets = agent_targets::targets();
     let config_targets = agent_targets::config_targets();
 
     let (git_available, branch, dirty, latest_commit) = git_status(&root);
 
+    let settings = settings::load();
+    let enabled = settings::effective_enabled_target_ids(&settings);
     let sync = |id: &str| -> String {
+        if agent_targets::target_harness(id)
+            .is_some_and(|harness| !settings::harness_enabled(&settings, harness))
+        {
+            return "disabled".into();
+        }
         targets
             .iter()
             .find(|t| t.id == id)
@@ -278,8 +284,6 @@ pub fn get_status() -> Result<StatusData, String> {
     };
 
     let host = host_name();
-    let enabled = settings::load().enabled_target_ids;
-
     let rule_ids: Vec<String> = agent_targets::rule_targets()
         .iter()
         .filter(|t| enabled.contains(&t.id.to_string()))
@@ -304,7 +308,10 @@ pub fn get_status() -> Result<StatusData, String> {
         .collect();
 
     let mut config_statuses = std::collections::HashMap::new();
-    for t in &config_targets {
+    for t in config_targets
+        .iter()
+        .filter(|target| settings::harness_enabled(&settings, target.harness))
+    {
         let status = if t.id == "opencode_config" {
             opencode_config_status(&root, &home)
         } else {
@@ -317,9 +324,11 @@ pub fn get_status() -> Result<StatusData, String> {
     for t in agent_targets::targets()
         .iter()
         .filter(|t| matches!(t.kind, agent_targets::TargetKind::Agents))
+        .filter(|target| settings::harness_enabled(&settings, target.harness))
     {
         let status = if t.id == "cursor_setup" {
-            cursor_paths
+            crate::cursor_profile_paths::resolve_cursor_profile_paths()
+                .ok()
                 .as_ref()
                 .map(|paths| cursor_setup_status(&root, &paths.agents))
                 .unwrap_or_else(|| "unknown".into())
