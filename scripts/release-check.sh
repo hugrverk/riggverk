@@ -668,9 +668,9 @@ done
 printf '  bundled docs verified non-empty\n'
 
 for doc in \
-  resources/default-workspace/docs/prompt-templates/standard-prompt.md \
-  resources/default-workspace/docs/prompt-templates/masterprompt.md \
-  resources/default-workspace/docs/prompt-templates/batchprompt.md; do
+  resources/default-workspace/docs/prompt-templates/prompt.md \
+  resources/default-workspace/docs/prompt-templates/goal-prompt.md \
+  resources/default-workspace/docs/prompt-templates/batch-prompt.md; do
   if [ ! -s "$doc" ]; then
     printf 'FAIL: prompt template doc missing or empty: %s\n' "$doc" >&2
     exit 1

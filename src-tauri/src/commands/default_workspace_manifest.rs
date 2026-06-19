@@ -27,9 +27,9 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "docs/OPENCODE_CONFIG.md",
                 "docs/CODEX_CONFIG.md",
                 "docs/TROUBLESHOOTING.md",
-                "docs/prompt-templates/standard-prompt.md",
-                "docs/prompt-templates/masterprompt.md",
-                "docs/prompt-templates/batchprompt.md",
+                "docs/prompt-templates/prompt.md",
+                "docs/prompt-templates/goal-prompt.md",
+                "docs/prompt-templates/batch-prompt.md",
             ],
         ),
         (
@@ -73,8 +73,8 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "templates/cursor/agents/browser-qa.md",
                 "templates/cursor/agents/repo-scout.md",
                 "templates/cursor/agents/inspector.md",
-                "templates/prompts/standard-prompt.md",
-                "templates/prompts/masterprompt.md",
+                "templates/prompts/prompt.md",
+                "templates/prompts/goal-prompt.md",
             ],
         ),
         (

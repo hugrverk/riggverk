@@ -77,9 +77,9 @@ def main() -> None:
         "templates/playwright-mcp.config.json",
     }
     required_docs = {
-        "docs/prompt-templates/standard-prompt.md",
-        "docs/prompt-templates/masterprompt.md",
-        "docs/prompt-templates/batchprompt.md",
+        "docs/prompt-templates/prompt.md",
+        "docs/prompt-templates/goal-prompt.md",
+        "docs/prompt-templates/batch-prompt.md",
     }
     required_refresh = {
         "scripts/install-agent-rules.sh",

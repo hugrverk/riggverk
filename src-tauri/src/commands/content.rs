@@ -84,22 +84,22 @@ fn curated_doc_registry() -> &'static [DocEntry] {
             rel_path: "docs/TROUBLESHOOTING.md",
         },
         DocEntry {
-            id: "docs/prompt-templates/standard-prompt.md",
+            id: "docs/prompt-templates/prompt.md",
             section: "Prompt Templates",
-            title: "Standard Prompt Template",
-            rel_path: "docs/prompt-templates/standard-prompt.md",
+            title: "Prompt Template",
+            rel_path: "docs/prompt-templates/prompt.md",
         },
         DocEntry {
-            id: "docs/prompt-templates/masterprompt.md",
+            id: "docs/prompt-templates/goal-prompt.md",
             section: "Prompt Templates",
-            title: "Masterprompt Template",
-            rel_path: "docs/prompt-templates/masterprompt.md",
+            title: "Goal Prompt Template",
+            rel_path: "docs/prompt-templates/goal-prompt.md",
         },
         DocEntry {
-            id: "docs/prompt-templates/batchprompt.md",
+            id: "docs/prompt-templates/batch-prompt.md",
             section: "Prompt Templates",
-            title: "Batchprompt Template",
-            rel_path: "docs/prompt-templates/batchprompt.md",
+            title: "Batch Prompt Template",
+            rel_path: "docs/prompt-templates/batch-prompt.md",
         },
         DocEntry {
             id: "templates/cursor/README.md",
@@ -145,9 +145,9 @@ pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
 ];
 
 const PROMPT_TEMPLATE_DOC_REL_PATHS: &[&str] = &[
-    "docs/prompt-templates/standard-prompt.md",
-    "docs/prompt-templates/masterprompt.md",
-    "docs/prompt-templates/batchprompt.md",
+    "docs/prompt-templates/prompt.md",
+    "docs/prompt-templates/goal-prompt.md",
+    "docs/prompt-templates/batch-prompt.md",
 ];
 
 pub(crate) fn missing_curated_doc_rel_paths(root: &Path) -> Vec<&'static str> {
@@ -767,7 +767,7 @@ mod tests {
         write_file(&root, "docs/AGENT_RULES.md", "# rules\n");
         write_file(
             &root,
-            "docs/prompt-templates/batchprompt.md",
+            "docs/prompt-templates/batch-prompt.md",
             "# batch prompt\n",
         );
 
@@ -784,7 +784,7 @@ mod tests {
         assert_eq!(by_id.get("docs/GIT_VERSIONING.md"), Some(&"Guides"));
         assert_eq!(by_id.get("docs/AGENT_RULES.md"), Some(&"Reference"));
         assert_eq!(
-            by_id.get("docs/prompt-templates/batchprompt.md"),
+            by_id.get("docs/prompt-templates/batch-prompt.md"),
             Some(&"Prompt Templates")
         );
     }
