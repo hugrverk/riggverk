@@ -1,5 +1,9 @@
 # Prompt Taxonomy Alignment Plan
 
+## Completion Status
+
+Completed in `5e6706dc..4b8d0bf8` (`fix(prompt-builder): align prompt taxonomy`, `fix(prompt-templates): align bundled taxonomy`, `fix(prompt-builder): update visible copy`). Local verification passed for prompt-loop tests/template checks, default-workspace copy and curated-doc checks, TypeScript typecheck, focused Rust content/reconciliation tests, README drift, UI regression, Repo Dashboard contracts, and prompt-context handoff.
+
 ## Objective
 
 Align Agent Workspace prompt generation, bundled prompt templates, docs, registry entries, and guards with the current ux-context prompt contract:

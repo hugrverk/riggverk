@@ -247,6 +247,6 @@ export function runPromptLoopTemplateChecks(): void {
   const errors = [...validatePromptLoopTemplates(), ...validatePromptComposer()];
   if (errors.length > 0) {
     for (const err of errors) console.error(`FAIL: ${err}`);
-    throw new Error(`Prompt Loops template check failed (${errors.length} issue(s))`);
+    throw new Error(`Prompt Builder template check failed (${errors.length} issue(s))`);
   }
 }
