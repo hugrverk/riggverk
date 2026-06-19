@@ -1579,13 +1579,13 @@ if search_has_match 'repair|update resources|SetupLifecycle|WorkspaceSkillsVerif
 fi
 printf '  Start unified installation owner verified\n'
 
-step "Prompt Loops template contract"
+step "Prompt Builder template contract"
 bash scripts/run-ts-check.sh scripts/check-prompt-loops-templates.ts
-printf '  Prompt Loops skill-weave + metadata separation checks ok\n'
+printf '  Prompt Builder skill-weave + clean prompt-block checks ok\n'
 
-step "Prompt Loops context handoff contract"
+step "Prompt Builder context handoff contract"
 bash scripts/run-ts-check.sh scripts/check-prompt-context-handoff.ts
-printf '  Prompt Loops context handoff formatter/eligibility checks ok\n'
+printf '  Prompt Builder context handoff formatter/eligibility checks ok\n'
 
 step "Repo Dashboard model and parser contracts"
 npm run check:repo-dashboard-contracts

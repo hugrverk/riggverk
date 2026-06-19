@@ -158,7 +158,7 @@ export interface DiscoverLocalGitReposResult {
   warnings?: string[];
 }
 
-/** Safe git-derived metadata for Prompt Loops (no local paths or raw remotes). */
+/** Safe git-derived metadata for Prompt Builder (no local paths or raw remotes). */
 export interface RepoPromptContext {
   repo_slug: string | null;
   current_branch: string | null;

@@ -103,7 +103,7 @@ assert.match(promptLoops, /tool-field prompt-loops-composer-select/);
 assert.doesNotMatch(promptLoops, /repo-dashboard-field prompt-loops/);
 
 const repoDashboardStyles = styles.slice(styles.indexOf("/* ── Repo Dashboard tool ── */"));
-const promptStyles = styles.slice(styles.indexOf("/* ── Prompt Loops tool ── */"));
+const promptStyles = styles.slice(styles.indexOf("/* ── Prompt Builder tool ── */"));
 for (const chunk of [repoDashboardStyles, promptStyles]) {
   assert.doesNotMatch(chunk, /background:\s*#1a1a1a/);
   assert.doesNotMatch(chunk, /background:\s*#212121/);

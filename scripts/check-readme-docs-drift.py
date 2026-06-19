@@ -84,14 +84,14 @@ def main() -> None:
     if "landing_view" not in app_text:
         fail("README.md must document landing_view setting")
 
-    if re.search(r"\*\*Tools\*\*.*Prompt Loops", app_text):
+    if re.search(r"\*\*Tools\*\*.*Prompt Builder", app_text):
         fail("README.md must not describe a shared Tools navigation destination")
     if "Tool switching lives in the left sidebar" in app_text:
         fail("README.md must not describe obsolete tool sidebar switching")
     if "up to 500 recent commits" in app_text or "500 recent commits" in app_text:
         fail("README.md must not claim a hard 500-commit Repo Dashboard history cap")
-    if "Prompt Loops" not in app_text or "Repo Dashboard" not in app_text:
-        fail("README.md must document Prompt Loops and Repo Dashboard surfaces")
+    if "Prompt Builder" not in app_text or "Repo Dashboard" not in app_text:
+        fail("README.md must document Prompt Builder and Repo Dashboard surfaces")
 
     if "Save in Settings" in app_text or "Save** in Settings" in app_text:
         fail("README.md must not say target toggles require Save in Settings")

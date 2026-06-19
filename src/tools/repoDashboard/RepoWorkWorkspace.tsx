@@ -67,7 +67,7 @@ function CanonicalWorkCard({
             type="button"
             className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
             onClick={() => onUsePromptContext(item)}
-            aria-label={`Use ${item.workId ?? "item"} as Prompt Loops context`}
+            aria-label={`Use ${item.workId ?? "item"} as Prompt Builder context`}
           >
             Use as context
           </button>
@@ -104,7 +104,7 @@ function GenericWorkCard({
             type="button"
             className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-use-context-btn"
             onClick={() => onUsePromptContext(item)}
-            aria-label={`Use this ${item.type} item as Prompt Loops context`}
+            aria-label={`Use this ${item.type} item as Prompt Builder context`}
           >
             Use as context
           </button>

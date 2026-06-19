@@ -7,7 +7,7 @@ describe("AppHeaderNav", () => {
     cleanup();
   });
 
-  it("renders Repo Dashboard, Prompt Loops, and Library after Claude and before Settings", () => {
+  it("renders Repo Dashboard, Prompt Builder, and Library after Claude and before Settings", () => {
     const onSwitchView = vi.fn();
     const { container } = render(
       <AppHeaderNav
@@ -27,7 +27,7 @@ describe("AppHeaderNav", () => {
       "Cursor",
       "Claude",
       "Repo Dashboard",
-      "Prompt Loops",
+      "Prompt Builder",
       "Library",
       "Settings",
     ]);
@@ -60,7 +60,7 @@ describe("AppHeaderNav", () => {
     expect(screen.getByRole("button", { name: "Library" })).not.toBeNull();
   });
 
-  it("uses exact accessible names 'Prompt Loops' and 'Repo Dashboard'", () => {
+  it("uses exact accessible names 'Prompt Builder' and 'Repo Dashboard'", () => {
     render(
       <AppHeaderNav
         view="start"
@@ -69,7 +69,7 @@ describe("AppHeaderNav", () => {
         onSwitchView={vi.fn()}
       />,
     );
-    expect(screen.getByRole("button", { name: "Prompt Loops" })).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Prompt Builder" })).not.toBeNull();
     expect(screen.getByRole("button", { name: "Repo Dashboard" })).not.toBeNull();
   });
 
@@ -83,7 +83,7 @@ describe("AppHeaderNav", () => {
         onSwitchView={onSwitchView}
       />,
     );
-    fireEvent.click(screen.getByRole("button", { name: "Prompt Loops" }));
+    fireEvent.click(screen.getByRole("button", { name: "Prompt Builder" }));
     expect(onSwitchView).toHaveBeenLastCalledWith("prompts");
     fireEvent.click(screen.getByRole("button", { name: "Repo Dashboard" }));
     expect(onSwitchView).toHaveBeenLastCalledWith("repo-dashboard");
@@ -99,7 +99,7 @@ describe("AppHeaderNav", () => {
         onSwitchView={onSwitchView}
       />,
     );
-    expect(screen.getByRole("button", { name: "Prompt Loops" }).className).toContain("nav-icon-active");
+    expect(screen.getByRole("button", { name: "Prompt Builder" }).className).toContain("nav-icon-active");
     expect(screen.getByRole("button", { name: "Repo Dashboard" }).className).not.toContain("nav-icon-active");
 
     rerender(
@@ -110,7 +110,7 @@ describe("AppHeaderNav", () => {
         onSwitchView={onSwitchView}
       />,
     );
-    expect(screen.getByRole("button", { name: "Prompt Loops" }).className).not.toContain("nav-icon-active");
+    expect(screen.getByRole("button", { name: "Prompt Builder" }).className).not.toContain("nav-icon-active");
     expect(screen.getByRole("button", { name: "Repo Dashboard" }).className).toContain("nav-icon-active");
   });
 
@@ -123,7 +123,7 @@ describe("AppHeaderNav", () => {
         onSwitchView={vi.fn()}
       />,
     );
-    for (const label of ["Prompt Loops", "Repo Dashboard"]) {
+    for (const label of ["Prompt Builder", "Repo Dashboard"]) {
       const button = screen.getByRole("button", { name: label });
       expect(button.tabIndex).toBeGreaterThanOrEqual(0);
       expect(button.tagName).toBe("BUTTON");

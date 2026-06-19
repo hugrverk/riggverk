@@ -607,7 +607,7 @@ export function RepoDashboardTool({
                 <h2 className="font-mono repo-dashboard-discover-title">Discover local repos</h2>
                 <p className="text-muted small repo-dashboard-discover-desc">
                   Shallow scan of one folder you choose (immediate children and one nested level).
-                  Imports add to saved Repo Dashboard entries for Prompt Loops.
+                  Imports add to saved Repo Dashboard entries for Prompt Builder.
                 </p>
               </div>
               {discoverParentPath ? (

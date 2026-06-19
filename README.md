@@ -153,7 +153,7 @@ Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*
 - Claude - managed installation status plus explicit manual settings/MCP boundaries.
 - Cursor - managed installation status plus native runtime health and manual IDE steps.
 - Library - docs, rules, skills, agents, configs, and Copy Brain.
-- Prompt Loops - deterministic copy-ready prompt templates and optional repository context.
+- Prompt Builder - deterministic copy-ready prompt templates and optional repository context.
 - Repo Dashboard - local-git-first repository and docs insight with optional bounded `gh` enrichment.
 - Settings - enabled harnesses, appearance, text size, theme tokens, reduce motion, landing page, workspace metadata, and enabled target toggles.
 

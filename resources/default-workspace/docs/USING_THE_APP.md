@@ -56,13 +56,13 @@ Copy a durable instruction block for external assistants (skill routing, securit
 
 **Harnesses** controls which tools appear and may receive new managed writes: Codex, OpenCode, Claude, and Cursor are enabled by default. Disabling a harness hides its navigation, status, and harness-specific Library content while preserving existing files and fine-grained target selections. Re-enabling restores the UI but does not install automatically. This is an explicit preference, not automatic tool detection.
 
-Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt loops, or library). Settings autosave. Changing appearance clears background and foreground overrides. Full uninstall still covers proven app-owned files from disabled harnesses, and rollback follows the recorded transaction independently of current harness visibility.
+Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt builder, or library). Settings autosave. Changing appearance clears background and foreground overrides. Full uninstall still covers proven app-owned files from disabled harnesses, and rollback follows the recorded transaction independently of current harness visibility.
 
 ## Tools
 
 In-app utilities separate from harness sync:
 
-- **Prompt Loops** — copy/paste prompt templates with skill-weaving for agent runs.
+- **Prompt Builder** — copy/paste prompt templates with skill-weaving for agent runs.
 - **Repo Dashboard** — local git/gh snapshot of a checkout with three pages: Overview (summary, charts, recent activity, contributors), Work (active and done items from docs/gh), and Docs (searchable Markdown reader).
 
 ## Install or Update

@@ -222,7 +222,7 @@ assert.ok(
   assert.ok(ghItems.some(i => i.classification === "enhancement"));
 }
 
-// Prompt Loops eligibility and formatted context
+// Prompt Builder eligibility and formatted context
 {
   const sample = verifyItems[0];
   assert.ok(isPromptContextEligibleWorkItem(sample), "canonical verify item eligible");

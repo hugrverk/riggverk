@@ -1,6 +1,6 @@
 import type { RepoDashboardWorkItem } from "../../types";
 
-/** Session-only seed for Repo Dashboard → Prompt Loops context handoff. */
+/** Session-only seed for Repo Dashboard -> Prompt Builder context handoff. */
 export interface PromptLoopContextSeed {
   id: string;
   taskContext: string;

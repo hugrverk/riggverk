@@ -2225,7 +2225,7 @@ textarea {
   color: var(--text-muted);
 }
 
-/* ── Prompt Loops tool ── */
+/* ── Prompt Builder tool ── */
 
 .prompt-loops-tool {
   display: flex;

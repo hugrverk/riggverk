@@ -207,14 +207,14 @@ if ! rg -n 'label: "Docs"' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_t
   fail "Repo Dashboard docs section label must exist"
 fi
 if ! rg -n 'prompt-loops-group-select' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
-  fail "Prompt Loops group select must exist"
+  fail "Prompt Builder group select must exist"
 fi
 if rg -n 'prompt-loops-sidebar|repo-dashboard-sidebar' src/tools --glob '!**/*.test.*' >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "legacy tool sidebars must not return"
 fi
 if ! rg -n 'ToolSectionTabs|tool-section-tabs' src/tools/promptLoops/PromptLoopsTool.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
-  fail "tool section tabs must exist in Prompt Loops and Repo Dashboard"
+  fail "tool section tabs must exist in Prompt Builder and Repo Dashboard"
 fi
 if ! rg -n 'repo-dashboard-field-branch|Default branch override' src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
   fail "Repo Dashboard default branch override must exist"
@@ -244,7 +244,7 @@ fi
 
 if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/PromptLoopsTool.tsx >"$ui_tmp"; then
   cat "$ui_tmp" >&2
-  fail "Prompt Loops shortcut hint block must not return"
+  fail "Prompt Builder shortcut hint block must not return"
 fi
 
 if ! rg -n 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
@@ -255,7 +255,7 @@ if rg -n 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/compone
   fail "obsolete Tools view must not return in navigation"
 fi
 if ! rg -n '"prompts"|"repo-dashboard"' src/components/AppHeaderNav.tsx src/App.tsx >"$ui_tmp"; then
-  fail "direct Prompt Loops and Repo Dashboard views must exist"
+  fail "direct Prompt Builder and Repo Dashboard views must exist"
 fi
 
 printf 'UI regression checks passed\n'

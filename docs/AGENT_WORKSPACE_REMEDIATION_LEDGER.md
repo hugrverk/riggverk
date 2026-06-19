@@ -92,7 +92,7 @@ Operator must run before sharing builds:
 - [ ] Library document, agent, and OpenCode config source switching
 - [ ] Save and dirty-state behavior after fast selection changes
 - [ ] Repo Dashboard repository save/import then immediate theme or target change
-- [ ] Prompt Loops repository list refresh
+- [ ] Prompt Builder repository list refresh
 - [ ] Fenced code blocks and copy controls
 - [ ] Small, medium, and large font settings
 - [ ] Repo Dashboard refresh loads the complete locally available commit history, including repositories with more than 500 commits

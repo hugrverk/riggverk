@@ -399,7 +399,7 @@ function App() {
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
   }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
 
-  // Shared state for the Prompt Loops + Repo Dashboard tools.
+  // Shared state for the Prompt Builder + Repo Dashboard tools.
   // Lifted to App so context handoff and saved-repo entry identity stay consistent
   // regardless of which view the user is currently on.
   const savedRepoView = useMemo(

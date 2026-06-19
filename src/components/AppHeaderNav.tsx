@@ -86,8 +86,8 @@ export function AppHeaderNav({
         <button
           className={`nav-icon ${view === "prompts" ? "nav-icon-active" : ""}`}
           onClick={() => onSwitchView("prompts")}
-          aria-label="Prompt Loops"
-          title="Prompt Loops"
+          aria-label="Prompt Builder"
+          title="Prompt Builder"
         >
           <PromptLoopsIcon />
         </button>

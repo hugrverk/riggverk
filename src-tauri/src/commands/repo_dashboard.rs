@@ -929,7 +929,7 @@ pub struct RepoPromptContext {
     pub warnings: Vec<String>,
 }
 
-/// Lightweight git metadata for Prompt Loops (no gh, docs, commits, or history).
+/// Lightweight git metadata for Prompt Builder (no gh, docs, commits, or history).
 pub fn inspect_repo_prompt_context(
     repo_path: &str,
     configured_default_branch: Option<&str>,

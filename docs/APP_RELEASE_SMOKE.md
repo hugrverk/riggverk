@@ -49,7 +49,7 @@ Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and
 - [ ] Existing isolated harness files remain byte-identical after disable
 - [ ] Restart preserves the disabled state and prior fine-grained target selections
 - [ ] Re-enable restores UI and health without automatic installation
-- [ ] Disable every harness: Workspace, Repo Dashboard, Prompt Loops, generic Library content, and Settings remain usable
+- [ ] Disable every harness: Workspace, Repo Dashboard, Prompt Builder, generic Library content, and Settings remain usable
 - [ ] Explicit stale setup for a disabled harness fails without mutation
 - [ ] Full uninstall preview still includes proven app-owned artifacts from disabled harnesses; rollback remains complete
 - [ ] Installed State Map renders workspace, Codex, OpenCode, Claude, and Cursor groups and reflects status changes after managed actions
@@ -111,15 +111,15 @@ Run this checklist before sharing a built app bundle with another user.
 - [ ] Settings: appearance, all four text sizes (`small`, `medium`, `large`, `extra large`), and theme colors save and reset
 - [ ] Extra-large text size at minimum supported window width
 
-## 4b. Prompt Loops and Repo Dashboard Smoke
+## 4b. Prompt Builder and Repo Dashboard Smoke
 
-- [ ] Header exposes dedicated **Prompt Loops** and **Repo Dashboard** icons after Library and before Settings
+- [ ] Header exposes dedicated **Prompt Builder** and **Repo Dashboard** icons after Library and before Settings
 - [ ] No **Tools** icon or intermediate Tools page exists
-- [ ] Prompt Loops and Repo Dashboard sidebars have no tool switcher buttons
-- [ ] No Prompt Loops shortcut hint block (1–4 / / / ↑↓) in the sidebar
+- [ ] Prompt Builder and Repo Dashboard sidebars have no tool switcher buttons
+- [ ] No Prompt Builder shortcut hint block (1–4 / / / ↑↓) in the sidebar
 - [ ] No Repo Dashboard sidebar `gh: enhanced` or `gh: local-only` status line
-- [ ] Prompt Loops keyboard shortcuts still work outside editable controls
-- [ ] **Use as context** from an eligible Repo Dashboard item switches to Prompt Loops with safe task context
+- [ ] Prompt Builder keyboard shortcuts still work outside editable controls
+- [ ] **Use as context** from an eligible Repo Dashboard item switches to Prompt Builder with safe task context
 - [ ] Repo Dashboard refresh on a repository with more than 500 locally available commits loads complete reachable history (not a hard 500-cap)
 
 ## 5. Sync / Install Smoke (Caution)
@@ -184,7 +184,7 @@ Dry-runs only unless testing your own machine:
 - Notes: ________
 
 ### Harness / library / tools
-- [ ] Harness, Library, Prompt Loops, and Repo Dashboard checks passed
+- [ ] Harness, Library, Prompt Builder, and Repo Dashboard checks passed
 - Notes: ________
 
 ### Skipped checks and residual risk
