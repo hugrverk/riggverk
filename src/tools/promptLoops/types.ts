@@ -1,4 +1,4 @@
-export type PromptLoopGroupKey = "standard" | "masterprompt" | "batchprompt" | "rewrite";
+export type PromptLoopGroupKey = "prompt" | "goal-prompt" | "batch-prompt" | "rewrite";
 
 export interface PromptLoopItem {
   id: string;

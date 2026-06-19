@@ -1,6 +1,8 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { PromptLoopsTool } from "./PromptLoopsTool";
+import { PROMPT_LOOP_GROUPS } from "./data";
+import { validatePromptLoopTemplates } from "./validateTemplates";
 
 describe("PromptLoopsTool", () => {
   afterEach(() => {
@@ -45,6 +47,27 @@ describe("PromptLoopsTool", () => {
     expect(tabs.length).toBeGreaterThan(1);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
     expect(screen.getByRole("combobox", { name: "Prompt group" })).not.toBeNull();
+  });
+
+  it("uses the current Prompt, Goal Prompt, Batch Prompt taxonomy", () => {
+    expect(PROMPT_LOOP_GROUPS.map(group => [group.group, group.key])).toEqual([
+      ["Prompt", "prompt"],
+      ["Goal Prompt", "goal-prompt"],
+      ["Batch Prompt", "batch-prompt"],
+      ["Rewrite", "rewrite"],
+    ]);
+    render(<PromptLoopsTool />);
+    expect(screen.getByRole("tab", { name: /^Prompt, 3$/ })).not.toBeNull();
+    expect(screen.getByRole("tab", { name: /^Goal Prompt, 3$/ })).not.toBeNull();
+    expect(screen.getByRole("tab", { name: /^Batch Prompt, 3$/ })).not.toBeNull();
+    expect(screen.queryByRole("tab", { name: /Masterprompt/i })).toBeNull();
+  });
+
+  it("keeps prompt templates on the modern contract", () => {
+    expect(validatePromptLoopTemplates()).toEqual([]);
+    const serialized = JSON.stringify(PROMPT_LOOP_GROUPS);
+    expect(serialized).toContain("4000 characters");
+    expect(serialized).not.toMatch(/Operator metadata:|Recommended executor:|Recommended target:|masterprompt/i);
   });
 
   it("does not render legacy sidebar chrome", () => {

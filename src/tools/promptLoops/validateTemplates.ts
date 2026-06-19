@@ -1,34 +1,51 @@
 import { PROMPT_LOOP_GROUPS } from "./data";
 import { composePrompt, PROMPT_OPTION_DEFS, togglePromptOption } from "./composer";
 
-/** Templates that ask ChatGPT to emit operator metadata + a copy/paste prompt body. */
 const PROMPT_GENERATOR_IDS = new Set([
-  "standard-start",
-  "master-start",
+  "prompt-start",
+  "goal-start",
   "batch-start",
   "rewrite-existing",
 ]);
 
-/** Templates that may propose a follow-up prompt in standard format. */
 const PROMPT_FORMAT_IDS = new Set([
   ...PROMPT_GENERATOR_IDS,
-  "standard-verify",
-  "standard-merge",
-  "master-verify",
-  "master-merge",
+  "prompt-verify",
+  "prompt-merge",
+  "goal-verify",
+  "goal-merge",
   "batch-verify",
   "batch-merge",
 ]);
 
-const OPERATOR_METADATA_FIELDS = [
+const EXPECTED_GROUPS = [
+  ["Prompt", "prompt"],
+  ["Goal Prompt", "goal-prompt"],
+  ["Batch Prompt", "batch-prompt"],
+  ["Rewrite", "rewrite"],
+] as const;
+
+const STALE_CONTRACT_PATTERNS = [
+  /Operator metadata:/i,
+  /Recommended executor:/i,
+  /Recommended target:/i,
+  /DB push:/i,
+  /Risk\/cost notes:/i,
+  /\bstandardprompt\b/i,
+  /\bmasterprompt\b/i,
+  /\bbatchprompt\b/i,
+  /standard-prompt-kontrakt/i,
+  /masterprompt-kontrakt/i,
+  /batchprompt-kontrakt/i,
+  /metadata ska bara ligga ovanför promptblocket/i,
+] as const;
+
+const STALE_CONTRACT_LABELS = [
   "Operator metadata:",
   "Recommended executor:",
-  "Relevant skills:",
+  "Recommended target:",
   "DB push:",
-  "Migration:",
-  "Branch:",
   "Risk/cost notes:",
-  "Copy/paste prompt:",
 ] as const;
 
 /** Legacy wording that wrongly forbade executable skill-use lines in the prompt body. */
@@ -40,21 +57,23 @@ const FORBIDS_SKILLS_OUTSIDE_METADATA = [
 ];
 
 const REQUIRES_SKILL_WEAVE = [
-  /väva in exakta skill-namn/i,
+  /exact relevant skill names/i,
   /use diagnose\.\.\./i,
 ];
 
-const REQUIRES_EXECUTABLE_BLOCK = /copy\/paste prompt-blocket ska vara exekverbara/i;
-
-const REQUIRES_METADATA_SEPARATION =
-  /lägg aldrig operator metadata-etiketter/i;
+const REQUIRES_EXECUTABLE_BLOCK = /executable agent instructions only/i;
+const REQUIRES_CLEAN_COPY_BLOCK = /one clean copy\/paste prompt block/i;
+const REQUIRES_GOAL_CAP = /4000 characters/i;
+const REQUIRES_GOAL_DEFAULT_LOOP = /maximum of 5 iterations by default/i;
+const REQUIRES_GOAL_HARD_CAP = /never exceed 7 iterations/i;
+const REQUIRES_GOAL_STOP_CONDITIONS =
+  /failing baseline.*unavailable verification.*no high-confidence next issue/is;
 
 function proposesPrompt(prompt: string): boolean {
   const lower = prompt.toLowerCase();
-  if (prompt.includes("Copy/paste prompt:")) return true;
   if (/föreslå/.test(lower) && /prompt/.test(lower)) return true;
   if (/skriv/.test(lower) && /prompt/.test(lower)) return true;
-  if (/standardprompt|masterprompt|batchprompt/.test(lower)) return true;
+  if (/prompt|goal prompt|batch prompt/.test(lower)) return true;
   if (/nästa prompt|nästa rimliga/.test(lower)) return true;
   return false;
 }
@@ -62,9 +81,27 @@ function proposesPrompt(prompt: string): boolean {
 export function validatePromptLoopTemplates(): string[] {
   const errors: string[] = [];
 
+  const actualGroups = PROMPT_LOOP_GROUPS.map(group => [group.group, group.key]);
+  if (JSON.stringify(actualGroups) !== JSON.stringify(EXPECTED_GROUPS)) {
+    errors.push("groups: must be Prompt, Goal Prompt, Batch Prompt, Rewrite with modern keys");
+  }
+
   for (const group of PROMPT_LOOP_GROUPS) {
+    for (const [label, key] of EXPECTED_GROUPS) {
+      if (group.group === label && group.key !== key) {
+        errors.push(`${group.group}: key must be "${key}"`);
+      }
+    }
+
     for (const item of group.items) {
       const prompt = item.prompt;
+
+      for (const pattern of STALE_CONTRACT_PATTERNS) {
+        if (pattern.test(prompt) || pattern.test(item.title) || pattern.test(item.meta) || pattern.test(group.group)) {
+          errors.push(`${item.id}: contains stale prompt contract wording`);
+          break;
+        }
+      }
 
       for (const pattern of FORBIDS_SKILLS_OUTSIDE_METADATA) {
         if (pattern.test(prompt)) {
@@ -82,19 +119,35 @@ export function validatePromptLoopTemplates(): string[] {
       }
 
       if (PROMPT_GENERATOR_IDS.has(item.id)) {
-        for (const field of OPERATOR_METADATA_FIELDS) {
+        for (const field of STALE_CONTRACT_LABELS) {
           if (!prompt.includes(field)) {
-            errors.push(`${item.id}: missing operator metadata field "${field}"`);
+            continue;
           }
+          errors.push(`${item.id}: must not include stale operator metadata field "${field}"`);
         }
         if (!REQUIRES_EXECUTABLE_BLOCK.test(prompt)) {
-          errors.push(`${item.id}: must require executable English copy/paste prompt block`);
+          errors.push(`${item.id}: must require executable agent instructions only`);
         }
-        if (!REQUIRES_METADATA_SEPARATION.test(prompt)) {
-          errors.push(`${item.id}: must forbid operator metadata labels inside prompt block`);
+        if (!REQUIRES_CLEAN_COPY_BLOCK.test(prompt)) {
+          errors.push(`${item.id}: must require one clean copy/paste prompt block`);
         }
         if (/lägg aldrig target tool\/model, skills/i.test(prompt)) {
           errors.push(`${item.id}: bundled forbidden list still excludes skills from prompt block`);
+        }
+      }
+
+      if (item.id === "goal-start") {
+        if (!REQUIRES_GOAL_CAP.test(prompt)) {
+          errors.push("goal-start: must cap copy/paste prompt block at 4000 characters");
+        }
+        if (!REQUIRES_GOAL_DEFAULT_LOOP.test(prompt)) {
+          errors.push("goal-start: must require default max 5 iterations");
+        }
+        if (!REQUIRES_GOAL_HARD_CAP.test(prompt)) {
+          errors.push("goal-start: must require hard cap 7 unless overridden");
+        }
+        if (!REQUIRES_GOAL_STOP_CONDITIONS.test(prompt)) {
+          errors.push("goal-start: must include modern stop conditions");
         }
       }
     }
