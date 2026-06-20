@@ -47,7 +47,6 @@
     ],
     "macOS": {
       "files": {
-        "Resources/AppIcon.icns": "macos/AppIcon.icns",
         "Resources/Assets.car": "macos/Assets.car"
       },
       "infoPlist": "Info.plist",
