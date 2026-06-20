@@ -145,7 +145,10 @@ SWIFT
 swift_bin="$(xcrun --find swift)"
 "$swift_bin" "$resize_swift" "$light_source" "$dark_source" "$appicon_dir"
 
-rm -f src-tauri/macos/Assets.car src-tauri/macos/assetcatalog_generated_info.plist
+rm -f \
+  src-tauri/macos/AppIcon.icns \
+  src-tauri/macos/Assets.car \
+  src-tauri/macos/assetcatalog_generated_info.plist
 
 xcrun actool \
   --compile src-tauri/macos \
@@ -155,8 +158,18 @@ xcrun actool \
   --output-partial-info-plist src-tauri/macos/assetcatalog_generated_info.plist \
   src-tauri/macos/Assets.xcassets
 
+if [ ! -f src-tauri/macos/AppIcon.icns ]; then
+  printf 'FAIL: actool did not produce src-tauri/macos/AppIcon.icns\n' >&2
+  exit 1
+fi
+
 if [ ! -f src-tauri/macos/Assets.car ]; then
   printf 'FAIL: actool did not produce src-tauri/macos/Assets.car\n' >&2
+  exit 1
+fi
+
+if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist | grep -Fxq 'AppIcon'; then
+  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconFile to AppIcon\n' >&2
   exit 1
 fi
 
