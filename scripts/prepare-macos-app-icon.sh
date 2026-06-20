@@ -78,7 +78,11 @@ for url in [lightSource, darkSource] {
   }
 }
 
-try fileManager.createDirectory(at: appIconDir, withIntermediateDirectories: true)
+do {
+  try fileManager.createDirectory(at: appIconDir, withIntermediateDirectories: true)
+} catch {
+  fail("could not create app icon directory: \(error)")
+}
 
 func loadImage(_ url: URL) throws -> NSImage {
   guard let image = NSImage(contentsOf: url), image.isValid else {
