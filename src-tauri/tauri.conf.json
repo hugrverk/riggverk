@@ -7,7 +7,8 @@
     "frontendDist": "../dist",
     "devUrl": "http://localhost:1420",
     "beforeDevCommand": "npm run dev",
-    "beforeBuildCommand": "npm run build"
+    "beforeBuildCommand": "npm run build",
+    "beforeBundleCommand": "bash scripts/prepare-macos-app-icon.sh"
   },
   "app": {
     "windows": [
@@ -22,7 +23,10 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 12, "y": 24 }
+        "trafficLightPosition": {
+          "x": 12,
+          "y": 24
+        }
       }
     ],
     "security": {
@@ -41,6 +45,13 @@
       "icons/128x128@2x.png",
       "icons/icon.icns",
       "icons/icon.ico"
-    ]
+    ],
+    "macOS": {
+      "files": {
+        "macos/Assets.car": "Resources/Assets.car"
+      },
+      "infoPlist": "Info.plist",
+      "minimumSystemVersion": "10.14"
+    }
   }
 }
