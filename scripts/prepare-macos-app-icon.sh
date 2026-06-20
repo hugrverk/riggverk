@@ -158,23 +158,18 @@ xcrun actool \
   --output-partial-info-plist src-tauri/macos/assetcatalog_generated_info.plist \
   src-tauri/macos/Assets.xcassets
 
-if [ ! -f src-tauri/macos/AppIcon.icns ]; then
-  printf 'FAIL: actool did not produce src-tauri/macos/AppIcon.icns\n' >&2
-  exit 1
-fi
-
 if [ ! -f src-tauri/macos/Assets.car ]; then
   printf 'FAIL: actool did not produce src-tauri/macos/Assets.car\n' >&2
   exit 1
 fi
 
-if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist | grep -Fxq 'AppIcon'; then
-  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconFile to AppIcon\n' >&2
+if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist | grep -Fxq 'AppIcon'; then
+  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconName to AppIcon\n' >&2
   exit 1
 fi
 
-if ! /usr/libexec/PlistBuddy -c 'Print :CFBundleIconName' src-tauri/Info.plist | grep -Fxq 'AppIcon'; then
-  printf 'FAIL: src-tauri/Info.plist must set CFBundleIconName to AppIcon\n' >&2
+if /usr/libexec/PlistBuddy -c 'Print :CFBundleIconFile' src-tauri/Info.plist >/dev/null 2>&1; then
+  printf 'FAIL: src-tauri/Info.plist must not set CFBundleIconFile when using the asset catalog icon\n' >&2
   exit 1
 fi
 
