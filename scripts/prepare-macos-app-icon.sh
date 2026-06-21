@@ -52,8 +52,9 @@ cleanup() {
 trap cleanup EXIT
 
 cat >"$resize_swift" <<'SWIFT'
-import AppKit
+import CoreGraphics
 import Foundation
+import ImageIO
 
 struct RenderError: Error, CustomStringConvertible {
   let description: String
@@ -86,45 +87,47 @@ do {
   fail("could not create app icon directory: \(error)")
 }
 
-func loadImage(_ url: URL) throws -> NSImage {
-  guard let image = NSImage(contentsOf: url), image.isValid else {
+func loadImage(_ url: URL) throws -> CGImage {
+  guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
+    let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
+  else {
     throw RenderError(description: "could not read source icon: \(url.path)")
   }
   return image
 }
 
-func render(source: NSImage, target: URL, pixels: Int) throws {
-  guard let bitmap = NSBitmapImageRep(
-    bitmapDataPlanes: nil,
-    pixelsWide: pixels,
-    pixelsHigh: pixels,
-    bitsPerSample: 8,
-    samplesPerPixel: 4,
-    hasAlpha: true,
-    isPlanar: false,
-    colorSpaceName: .deviceRGB,
+func render(source: CGImage, target: URL, pixels: Int) throws {
+  let colorSpace = CGColorSpaceCreateDeviceRGB()
+  let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
+
+  guard let context = CGContext(
+    data: nil,
+    width: pixels,
+    height: pixels,
+    bitsPerComponent: 8,
     bytesPerRow: 0,
-    bitsPerPixel: 0
+    space: colorSpace,
+    bitmapInfo: bitmapInfo
   ) else {
-    throw RenderError(description: "could not create bitmap for \(target.path)")
+    throw RenderError(description: "could not create CGContext for \(target.path)")
   }
 
-  let rect = NSRect(origin: .zero, size: NSSize(width: pixels, height: pixels))
-  let sourceRect = NSRect(origin: .zero, size: source.size)
-  NSGraphicsContext.saveGraphicsState()
-  if let context = NSGraphicsContext(bitmapImageRep: bitmap) {
-    context.imageInterpolation = .high
-    NSGraphicsContext.current = context
-    NSColor.clear.setFill()
-    rect.fill()
-    source.draw(in: rect, from: sourceRect, operation: .sourceOver, fraction: 1.0)
-  }
-  NSGraphicsContext.restoreGraphicsState()
+  context.interpolationQuality = .high
+  let rect = CGRect(x: 0, y: 0, width: pixels, height: pixels)
+  context.clear(rect)
+  context.draw(source, in: rect)
 
-  guard let data = bitmap.representation(using: .png, properties: [:]) else {
-    throw RenderError(description: "could not encode png for \(target.path)")
+  guard let rendered = context.makeImage() else {
+    throw RenderError(description: "could not render image for \(target.path)")
   }
-  try data.write(to: target, options: .atomic)
+
+  guard let destination = CGImageDestinationCreateWithURL(target as CFURL, "public.png" as CFString, 1, nil) else {
+    throw RenderError(description: "could not create png destination for \(target.path)")
+  }
+  CGImageDestinationAddImage(destination, rendered, nil)
+  if !CGImageDestinationFinalize(destination) {
+    throw RenderError(description: "could not write png for \(target.path)")
+  }
 }
 
 do {
