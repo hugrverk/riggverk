@@ -110,13 +110,14 @@ func render(source: NSImage, target: URL, pixels: Int) throws {
   }
 
   let rect = NSRect(origin: .zero, size: NSSize(width: pixels, height: pixels))
+  let sourceRect = NSRect(origin: .zero, size: source.size)
   NSGraphicsContext.saveGraphicsState()
   if let context = NSGraphicsContext(bitmapImageRep: bitmap) {
     context.imageInterpolation = .high
     NSGraphicsContext.current = context
     NSColor.clear.setFill()
     rect.fill()
-    source.draw(in: rect, from: .zero, operation: .sourceOver, fraction: 1.0)
+    source.draw(in: rect, from: sourceRect, operation: .sourceOver, fraction: 1.0)
   }
   NSGraphicsContext.restoreGraphicsState()
 
