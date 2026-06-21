@@ -27,7 +27,7 @@ struct Color {
 }
 
 func cgColor(_ color: Color) -> CGColor {
-  return CGColor(red: color.r, green: color.g, blue: color.b, alpha: color.a)
+  CGColor(red: color.r, green: color.g, blue: color.b, alpha: color.a)
 }
 
 func fillPolygon(_ ctx: CGContext, _ points: [CGPoint], _ color: Color) {
@@ -42,93 +42,91 @@ func fillPolygon(_ ctx: CGContext, _ points: [CGPoint], _ color: Color) {
   ctx.fillPath()
 }
 
-func point(_ ax: CGFloat, _ ay: CGFloat, _ bx: CGFloat, _ by: CGFloat, _ t: CGFloat) -> CGPoint {
-  return CGPoint(x: ax + (bx - ax) * t, y: ay + (by - ay) * t)
+func point(_ a: CGPoint, _ b: CGPoint, _ t: CGFloat) -> CGPoint {
+  CGPoint(x: a.x + (b.x - a.x) * t, y: a.y + (b.y - a.y) * t)
 }
 
 func render(mode: String, size: Int, target: URL) throws {
   let s = CGFloat(size)
   let colorSpace = CGColorSpaceCreateDeviceRGB()
-  guard let ctx = CGContext(data: nil, width: size, height: size, bitsPerComponent: 8, bytesPerRow: 0, space: colorSpace, bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else {
+  guard let ctx = CGContext(
+    data: nil,
+    width: size,
+    height: size,
+    bitsPerComponent: 8,
+    bytesPerRow: 0,
+    space: colorSpace,
+    bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+  ) else {
     throw IconError(description: "could not create CGContext")
   }
 
-  let bgTop: Color
-  let bgBottom: Color
-  let shadow: Color
+  ctx.clear(CGRect(x: 0, y: 0, width: s, height: s))
+
   let left: [Color]
   let right: [Color]
+  let edge: Color
 
   if mode == "dark" {
-    bgTop = Color(r: 0.16, g: 0.16, b: 0.16, a: 1)
-    bgBottom = Color(r: 0.05, g: 0.05, b: 0.05, a: 1)
-    shadow = Color(r: 0, g: 0, b: 0, a: 0.30)
     left = [
-      Color(r: 0.86, g: 0.86, b: 0.86, a: 1),
-      Color(r: 0.66, g: 0.66, b: 0.66, a: 1),
-      Color(r: 0.42, g: 0.42, b: 0.42, a: 1),
-      Color(r: 0.25, g: 0.25, b: 0.25, a: 1),
+      Color(r: 0.92, g: 0.92, b: 0.92, a: 0.98),
+      Color(r: 0.76, g: 0.76, b: 0.76, a: 0.98),
+      Color(r: 0.58, g: 0.58, b: 0.58, a: 0.98),
+      Color(r: 0.43, g: 0.43, b: 0.43, a: 0.98),
     ]
     right = [
-      Color(r: 0.63, g: 0.63, b: 0.63, a: 1),
-      Color(r: 0.38, g: 0.38, b: 0.38, a: 1),
-      Color(r: 0.22, g: 0.22, b: 0.22, a: 1),
-      Color(r: 0.12, g: 0.12, b: 0.12, a: 1),
+      Color(r: 0.70, g: 0.70, b: 0.70, a: 0.98),
+      Color(r: 0.52, g: 0.52, b: 0.52, a: 0.98),
+      Color(r: 0.36, g: 0.36, b: 0.36, a: 0.98),
+      Color(r: 0.25, g: 0.25, b: 0.25, a: 0.98),
     ]
+    edge = Color(r: 1.00, g: 1.00, b: 1.00, a: 0.22)
   } else {
-    bgTop = Color(r: 0.98, g: 0.98, b: 0.97, a: 1)
-    bgBottom = Color(r: 0.86, g: 0.86, b: 0.85, a: 1)
-    shadow = Color(r: 0, g: 0, b: 0, a: 0.16)
     left = [
-      Color(r: 0.91, g: 0.91, b: 0.91, a: 1),
-      Color(r: 0.78, g: 0.78, b: 0.78, a: 1),
-      Color(r: 0.58, g: 0.58, b: 0.58, a: 1),
-      Color(r: 0.38, g: 0.38, b: 0.38, a: 1),
+      Color(r: 0.22, g: 0.22, b: 0.22, a: 0.96),
+      Color(r: 0.30, g: 0.30, b: 0.30, a: 0.96),
+      Color(r: 0.42, g: 0.42, b: 0.42, a: 0.96),
+      Color(r: 0.56, g: 0.56, b: 0.56, a: 0.96),
     ]
     right = [
-      Color(r: 0.72, g: 0.72, b: 0.72, a: 1),
-      Color(r: 0.48, g: 0.48, b: 0.48, a: 1),
-      Color(r: 0.28, g: 0.28, b: 0.28, a: 1),
-      Color(r: 0.16, g: 0.16, b: 0.16, a: 1),
+      Color(r: 0.39, g: 0.39, b: 0.39, a: 0.96),
+      Color(r: 0.50, g: 0.50, b: 0.50, a: 0.96),
+      Color(r: 0.64, g: 0.64, b: 0.64, a: 0.96),
+      Color(r: 0.76, g: 0.76, b: 0.76, a: 0.96),
     ]
+    edge = Color(r: 0.00, g: 0.00, b: 0.00, a: 0.18)
   }
-
-  let bgGradient = CGGradient(colorsSpace: colorSpace, colors: [cgColor(bgTop), cgColor(bgBottom)] as CFArray, locations: [0, 1])!
-  ctx.drawLinearGradient(bgGradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: s), options: [])
 
   // Use top-left icon design coordinates inside CoreGraphics' bottom-left user space.
   ctx.saveGState()
   ctx.translateBy(x: 0, y: s)
   ctx.scaleBy(x: 1, y: -1)
 
-  ctx.setFillColor(cgColor(shadow))
-  ctx.fillEllipse(in: CGRect(x: 175.0 / 1024.0 * s, y: 720.0 / 1024.0 * s, width: 674.0 / 1024.0 * s, height: 106.0 / 1024.0 * s))
-
-  let apex = CGPoint(x: 512.0 / 1024.0 * s, y: 160.0 / 1024.0 * s)
-  let leftBase = CGPoint(x: 158.0 / 1024.0 * s, y: 750.0 / 1024.0 * s)
-  let rightBase = CGPoint(x: 866.0 / 1024.0 * s, y: 750.0 / 1024.0 * s)
-  let centerBase = CGPoint(x: 512.0 / 1024.0 * s, y: 864.0 / 1024.0 * s)
+  let apex = CGPoint(x: 512.0 / 1024.0 * s, y: 190.0 / 1024.0 * s)
+  let leftBase = CGPoint(x: 220.0 / 1024.0 * s, y: 760.0 / 1024.0 * s)
+  let rightBase = CGPoint(x: 804.0 / 1024.0 * s, y: 760.0 / 1024.0 * s)
+  let centerBase = CGPoint(x: 512.0 / 1024.0 * s, y: 850.0 / 1024.0 * s)
   let bands: [CGFloat] = [0, 0.30, 0.56, 0.78, 1.0]
 
   for index in 0..<(bands.count - 1) {
     let t0 = bands[index]
     let t1 = bands[index + 1]
     fillPolygon(ctx, [
-      point(apex.x, apex.y, leftBase.x, leftBase.y, t0),
-      point(apex.x, apex.y, centerBase.x, centerBase.y, t0),
-      point(apex.x, apex.y, centerBase.x, centerBase.y, t1),
-      point(apex.x, apex.y, leftBase.x, leftBase.y, t1),
+      point(apex, leftBase, t0),
+      point(apex, centerBase, t0),
+      point(apex, centerBase, t1),
+      point(apex, leftBase, t1),
     ], left[index])
     fillPolygon(ctx, [
-      point(apex.x, apex.y, centerBase.x, centerBase.y, t0),
-      point(apex.x, apex.y, rightBase.x, rightBase.y, t0),
-      point(apex.x, apex.y, rightBase.x, rightBase.y, t1),
-      point(apex.x, apex.y, centerBase.x, centerBase.y, t1),
+      point(apex, centerBase, t0),
+      point(apex, rightBase, t0),
+      point(apex, rightBase, t1),
+      point(apex, centerBase, t1),
     ], right[index])
   }
 
-  ctx.setStrokeColor(cgColor(mode == "dark" ? Color(r: 1, g: 1, b: 1, a: 0.18) : Color(r: 0, g: 0, b: 0, a: 0.12)))
-  ctx.setLineWidth(max(1, s / 256))
+  ctx.setStrokeColor(cgColor(edge))
+  ctx.setLineWidth(max(1, s / 220))
   ctx.beginPath()
   ctx.move(to: apex)
   ctx.addLine(to: centerBase)
