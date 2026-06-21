@@ -41,14 +41,7 @@ dark_path = Path(sys.argv[2])
 out_path = Path(sys.argv[3])
 
 PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-SIZE_TO_ICNS = {
-    16: b"ic04",
-    32: b"ic05",
-    128: b"ic07",
-    256: b"ic08",
-    512: b"ic09",
-    1024: b"ic10",
-}
+DISPLAY_SLOT_KINDS = [b"ic07", b"ic08", b"ic09", b"ic10"]
 
 
 def read_png(path: Path) -> tuple[bytes, int, int]:
@@ -105,14 +98,6 @@ def png_has_visible_pixels(data: bytes) -> bool:
     return False
 
 
-def png_record_kind(size: int) -> bytes:
-    if size in SIZE_TO_ICNS:
-        return SIZE_TO_ICNS[size]
-    # Finder can downsample the 1024 slot, and using one source payload avoids
-    # lossy or empty build-time redraws.
-    return b"ic10"
-
-
 def make_icns(records: list[tuple[bytes, bytes]]) -> bytes:
     toc_payload = b"".join(kind + struct.pack(">I", len(payload) + 8) for kind, payload in records)
     all_records = [(b"TOC ", toc_payload), *records]
@@ -130,10 +115,14 @@ if not png_has_visible_pixels(light_png):
 if not png_has_visible_pixels(dark_png):
     raise SystemExit(f"FAIL: {dark_path} appears to have no visible pixels")
 
-light_kind = png_record_kind(light_w)
-dark_kind = png_record_kind(dark_w)
-dark_icns = make_icns([(dark_kind, dark_png)])
-combined = make_icns([(light_kind, light_png), (b"dark", dark_icns[8:])])
+# Store the original source PNG in every modern PNG-backed display slot.
+# The PNG payload itself carries its pixel dimensions; duplicating it across
+# slots avoids Finder falling back to an empty rounded placeholder when only a
+# 256px slot is present.
+light_records = [(kind, light_png) for kind in DISPLAY_SLOT_KINDS]
+dark_records = [(kind, dark_png) for kind in DISPLAY_SLOT_KINDS]
+dark_icns = make_icns(dark_records)
+combined = make_icns([*light_records, (b"dark", dark_icns[8:])])
 out_path.write_bytes(combined)
 
 # Re-read and verify the generated file structure.
@@ -153,6 +142,8 @@ while offset < len(data):
     offset += length
 if b"dark" not in record_types:
     raise SystemExit("FAIL: generated icon does not contain a nested dark ICNS record")
+if b"ic10" not in record_types:
+    raise SystemExit("FAIL: generated icon does not contain a 1024 display slot")
 print(f"generated nested dark macOS icon using {light_w}px source payloads")
 PY
 
