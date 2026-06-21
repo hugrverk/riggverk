@@ -96,6 +96,11 @@ func render(mode: String, size: Int, target: URL) throws {
   let bgGradient = CGGradient(colorsSpace: colorSpace, colors: [cgColor(bgTop), cgColor(bgBottom)] as CFArray, locations: [0, 1])!
   ctx.drawLinearGradient(bgGradient, start: CGPoint(x: 0, y: 0), end: CGPoint(x: 0, y: s), options: [])
 
+  // Use top-left icon design coordinates inside CoreGraphics' bottom-left user space.
+  ctx.saveGState()
+  ctx.translateBy(x: 0, y: s)
+  ctx.scaleBy(x: 1, y: -1)
+
   ctx.setFillColor(cgColor(shadow))
   ctx.fillEllipse(in: CGRect(x: 175.0 / 1024.0 * s, y: 720.0 / 1024.0 * s, width: 674.0 / 1024.0 * s, height: 106.0 / 1024.0 * s))
 
@@ -128,6 +133,7 @@ func render(mode: String, size: Int, target: URL) throws {
   ctx.move(to: apex)
   ctx.addLine(to: centerBase)
   ctx.strokePath()
+  ctx.restoreGState()
 
   guard let image = ctx.makeImage() else {
     throw IconError(description: "could not create output image")
@@ -143,7 +149,7 @@ func render(mode: String, size: Int, target: URL) throws {
 
 do {
   for mode in ["light", "dark"] {
-    for size in [128, 256, 512, 1024] {
+    for size in [16, 32, 64, 128, 256, 512, 1024] {
       try render(mode: mode, size: size, target: outputDir.appendingPathComponent("\(mode)-\(size).png"))
     }
   }
