@@ -102,10 +102,11 @@ func render(mode: String, size: Int, target: URL) throws {
   ctx.translateBy(x: 0, y: s)
   ctx.scaleBy(x: 1, y: -1)
 
-  let apex = CGPoint(x: 512.0 / 1024.0 * s, y: 190.0 / 1024.0 * s)
-  let leftBase = CGPoint(x: 220.0 / 1024.0 * s, y: 760.0 / 1024.0 * s)
-  let rightBase = CGPoint(x: 804.0 / 1024.0 * s, y: 760.0 / 1024.0 * s)
-  let centerBase = CGPoint(x: 512.0 / 1024.0 * s, y: 850.0 / 1024.0 * s)
+  // The glyph is scaled 10% around its previous visual center.
+  let apex = CGPoint(x: 512.0 / 1024.0 * s, y: 157.0 / 1024.0 * s)
+  let leftBase = CGPoint(x: 191.0 / 1024.0 * s, y: 784.0 / 1024.0 * s)
+  let rightBase = CGPoint(x: 833.0 / 1024.0 * s, y: 784.0 / 1024.0 * s)
+  let centerBase = CGPoint(x: 512.0 / 1024.0 * s, y: 883.0 / 1024.0 * s)
   let bands: [CGFloat] = [0, 0.30, 0.56, 0.78, 1.0]
 
   for index in 0..<(bands.count - 1) {
@@ -126,7 +127,7 @@ func render(mode: String, size: Int, target: URL) throws {
   }
 
   ctx.setStrokeColor(cgColor(edge))
-  ctx.setLineWidth(max(1, s / 220))
+  ctx.setLineWidth(max(1, s / 200))
   ctx.beginPath()
   ctx.move(to: apex)
   ctx.addLine(to: centerBase)
