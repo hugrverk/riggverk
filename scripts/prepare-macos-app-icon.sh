@@ -17,22 +17,6 @@ if [ "$platform" != "darwin" ]; then
   exit 0
 fi
 
-if ! command -v xcrun >/dev/null 2>&1; then
-  printf 'FAIL: xcrun is required to generate the macOS app icon\n' >&2
-  exit 1
-fi
-
-if ! command -v iconutil >/dev/null 2>&1; then
-  printf 'FAIL: iconutil is required to generate the macOS app icon\n' >&2
-  exit 1
-fi
-
-if ! xcrun --find swift >/dev/null 2>&1; then
-  printf 'FAIL: swift is required to render macOS app icon assets\n' >&2
-  exit 1
-fi
-
-appicon_dir="src-tauri/macos/Assets.xcassets/AppIcon.appiconset"
 light_source="src-tauri/macos/app-icon-light.png"
 dark_source="src-tauri/macos/app-icon-dark.png"
 output_icon="src-tauri/macos/AgentWorkspace.icns"
@@ -44,214 +28,136 @@ for source in "$light_source" "$dark_source"; do
   fi
 done
 
-work_dir="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-icon.XXXXXX")"
-resize_swift="$work_dir/resize-icons.swift"
-cleanup() {
-  rm -rf "$work_dir"
-}
-trap cleanup EXIT
-
-cat >"$resize_swift" <<'SWIFT'
-import CoreGraphics
-import Foundation
-import ImageIO
-
-struct RenderError: Error, CustomStringConvertible {
-  let description: String
-}
-
-func fail(_ message: String) -> Never {
-  FileHandle.standardError.write(Data("FAIL: \(message)\n".utf8))
-  exit(1)
-}
-
-let args = CommandLine.arguments
-if args.count != 4 {
-  fail("usage: resize <light-source.png> <dark-source.png> <appicon-dir>")
-}
-
-let lightSource = URL(fileURLWithPath: args[1])
-let darkSource = URL(fileURLWithPath: args[2])
-let appIconDir = URL(fileURLWithPath: args[3], isDirectory: true)
-let fileManager = FileManager.default
-
-for url in [lightSource, darkSource] {
-  if !fileManager.fileExists(atPath: url.path) {
-    fail("missing source icon: \(url.path)")
-  }
-}
-
-do {
-  try fileManager.createDirectory(at: appIconDir, withIntermediateDirectories: true)
-} catch {
-  fail("could not create app icon directory: \(error)")
-}
-
-func loadImage(_ url: URL) throws -> CGImage {
-  guard let source = CGImageSourceCreateWithURL(url as CFURL, nil),
-    let image = CGImageSourceCreateImageAtIndex(source, 0, nil)
-  else {
-    throw RenderError(description: "could not read source icon: \(url.path)")
-  }
-  return image
-}
-
-func render(source: CGImage, target: URL, pixels: Int) throws {
-  let colorSpace = CGColorSpaceCreateDeviceRGB()
-  let bitmapInfo = CGImageAlphaInfo.premultipliedLast.rawValue
-
-  guard let context = CGContext(
-    data: nil,
-    width: pixels,
-    height: pixels,
-    bitsPerComponent: 8,
-    bytesPerRow: 0,
-    space: colorSpace,
-    bitmapInfo: bitmapInfo
-  ) else {
-    throw RenderError(description: "could not create CGContext for \(target.path)")
-  }
-
-  context.interpolationQuality = .high
-  let rect = CGRect(x: 0, y: 0, width: pixels, height: pixels)
-  context.clear(rect)
-  context.draw(source, in: rect)
-
-  guard let rendered = context.makeImage() else {
-    throw RenderError(description: "could not render image for \(target.path)")
-  }
-
-  guard let destination = CGImageDestinationCreateWithURL(target as CFURL, "public.png" as CFString, 1, nil) else {
-    throw RenderError(description: "could not create png destination for \(target.path)")
-  }
-  CGImageDestinationAddImage(destination, rendered, nil)
-  if !CGImageDestinationFinalize(destination) {
-    throw RenderError(description: "could not write png for \(target.path)")
-  }
-}
-
-do {
-  let sources = [
-    ("light", try loadImage(lightSource)),
-    ("dark", try loadImage(darkSource)),
-  ]
-  for source in sources {
-    for points in [16, 32, 128, 256, 512] {
-      let oneX = appIconDir.appendingPathComponent("appicon-\(source.0)-\(points)x\(points).png")
-      let twoX = appIconDir.appendingPathComponent("appicon-\(source.0)-\(points)x\(points)@2x.png")
-      try render(source: source.1, target: oneX, pixels: points)
-      try render(source: source.1, target: twoX, pixels: points * 2)
-    }
-  }
-} catch {
-  fail(String(describing: error))
-}
-SWIFT
-
-swift_bin="$(xcrun --find swift)"
-swift_cache_dir="${CLANG_MODULE_CACHE_PATH:-$work_dir/clang-module-cache}"
-mkdir -p "$swift_cache_dir"
-CLANG_MODULE_CACHE_PATH="$swift_cache_dir" "$swift_bin" "$resize_swift" "$light_source" "$dark_source" "$appicon_dir"
-
-make_iconset() {
-  local variant="$1"
-  local iconset_dir="$work_dir/${variant}.iconset"
-  mkdir -p "$iconset_dir"
-
-  for points in 16 32 128 256 512; do
-    cp "$appicon_dir/appicon-${variant}-${points}x${points}.png" "$iconset_dir/icon_${points}x${points}.png"
-    cp "$appicon_dir/appicon-${variant}-${points}x${points}@2x.png" "$iconset_dir/icon_${points}x${points}@2x.png"
-  done
-
-  iconutil -c icns -o "$work_dir/${variant}.icns" "$iconset_dir"
-}
-
-make_iconset light
-make_iconset dark
-
-python3 - "$work_dir/light.icns" "$work_dir/dark.icns" "$output_icon" <<'PY'
+python3 - "$light_source" "$dark_source" "$output_icon" <<'PY'
 from __future__ import annotations
 
 import struct
 import sys
+import zlib
 from pathlib import Path
 
 light_path = Path(sys.argv[1])
 dark_path = Path(sys.argv[2])
 out_path = Path(sys.argv[3])
 
+PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+SIZE_TO_ICNS = {
+    16: b"ic04",
+    32: b"ic05",
+    128: b"ic07",
+    256: b"ic08",
+    512: b"ic09",
+    1024: b"ic10",
+}
 
-def read_icns(path: Path) -> bytes:
+
+def read_png(path: Path) -> tuple[bytes, int, int]:
     data = path.read_bytes()
-    if data[:4] != b"icns":
-        raise SystemExit(f"FAIL: {path} is not an icns file")
-    expected = struct.unpack(">I", data[4:8])[0]
-    if expected != len(data):
-        raise SystemExit(f"FAIL: {path} has invalid icns length {expected} != {len(data)}")
-    return data
+    if not data.startswith(PNG_MAGIC):
+        raise SystemExit(f"FAIL: {path} is not a PNG file")
+    if data[12:16] != b"IHDR":
+        raise SystemExit(f"FAIL: {path} is missing PNG IHDR")
+    width, height = struct.unpack(">II", data[16:24])
+    if width != height:
+        raise SystemExit(f"FAIL: {path} must be square, got {width}x{height}")
+    return data, width, height
 
 
-def records(data: bytes) -> list[tuple[bytes, bytes]]:
+def png_has_visible_pixels(data: bytes) -> bool:
     offset = 8
-    parsed: list[tuple[bytes, bytes]] = []
+    width = height = color_type = bit_depth = None
+    compressed = bytearray()
     while offset < len(data):
-        kind = data[offset : offset + 4]
-        length = struct.unpack(">I", data[offset + 4 : offset + 8])[0]
-        if length < 8 or offset + length > len(data):
-            raise SystemExit(f"FAIL: invalid icns record {kind!r} length {length}")
-        payload = data[offset + 8 : offset + length]
-        parsed.append((kind, payload))
-        offset += length
-    return parsed
+        length = struct.unpack(">I", data[offset:offset + 4])[0]
+        kind = data[offset + 4:offset + 8]
+        payload = data[offset + 8:offset + 8 + length]
+        offset += 12 + length
+        if kind == b"IHDR":
+            width, height = struct.unpack(">II", payload[:8])
+            bit_depth = payload[8]
+            color_type = payload[9]
+        elif kind == b"IDAT":
+            compressed.extend(payload)
+        elif kind == b"IEND":
+            break
+    if width is None or height is None or color_type is None or bit_depth != 8:
+        return True
+    if color_type not in (2, 6):
+        return True
+    channels = 3 if color_type == 2 else 4
+    row_len = width * channels
+    try:
+        raw = zlib.decompress(bytes(compressed))
+    except Exception:
+        return True
+    stride = row_len + 1
+    if len(raw) < stride * height:
+        return True
+    for y in range(height):
+        row = raw[y * stride + 1:y * stride + 1 + row_len]
+        if color_type == 6:
+            for index in range(0, len(row), 4):
+                if row[index + 3] and row[index:index + 3] != b"\x00\x00\x00":
+                    return True
+        else:
+            if any(value for value in row):
+                return True
+    return False
 
 
-def write_icns(path: Path, parsed: list[tuple[bytes, bytes]]) -> None:
-    toc_payload = b"".join(kind + struct.pack(">I", len(payload) + 8) for kind, payload in parsed)
-    all_records = [(b"TOC ", toc_payload), *parsed]
+def png_record_kind(size: int) -> bytes:
+    if size in SIZE_TO_ICNS:
+        return SIZE_TO_ICNS[size]
+    # Finder can downsample the 1024 slot, and using one source payload avoids
+    # lossy or empty build-time redraws.
+    return b"ic10"
+
+
+def make_icns(records: list[tuple[bytes, bytes]]) -> bytes:
+    toc_payload = b"".join(kind + struct.pack(">I", len(payload) + 8) for kind, payload in records)
+    all_records = [(b"TOC ", toc_payload), *records]
     total = 8 + sum(len(payload) + 8 for _, payload in all_records)
     out = bytearray(b"icns" + struct.pack(">I", total))
     for kind, payload in all_records:
         out += kind + struct.pack(">I", len(payload) + 8) + payload
-    path.write_bytes(bytes(out))
+    return bytes(out)
 
 
-light = read_icns(light_path)
-dark = read_icns(dark_path)
-base_records = [(kind, payload) for kind, payload in records(light) if kind != b"TOC "]
-base_records.append((b"dark", dark[8:]))
-write_icns(out_path, base_records)
+light_png, light_w, _ = read_png(light_path)
+dark_png, dark_w, _ = read_png(dark_path)
+if not png_has_visible_pixels(light_png):
+    raise SystemExit(f"FAIL: {light_path} appears to have no visible pixels")
+if not png_has_visible_pixels(dark_png):
+    raise SystemExit(f"FAIL: {dark_path} appears to have no visible pixels")
 
-combined = read_icns(out_path)
-record_types = [kind for kind, _ in records(combined)]
+light_kind = png_record_kind(light_w)
+dark_kind = png_record_kind(dark_w)
+dark_icns = make_icns([(dark_kind, dark_png)])
+combined = make_icns([(light_kind, light_png), (b"dark", dark_icns[8:])])
+out_path.write_bytes(combined)
+
+# Re-read and verify the generated file structure.
+data = out_path.read_bytes()
+if data[:4] != b"icns":
+    raise SystemExit("FAIL: generated icon is not an ICNS file")
+if struct.unpack(">I", data[4:8])[0] != len(data):
+    raise SystemExit("FAIL: generated icon has invalid ICNS length")
+offset = 8
+record_types: list[bytes] = []
+while offset < len(data):
+    kind = data[offset:offset + 4]
+    length = struct.unpack(">I", data[offset + 4:offset + 8])[0]
+    if length < 8 or offset + length > len(data):
+        raise SystemExit(f"FAIL: invalid generated ICNS record {kind!r}")
+    record_types.append(kind)
+    offset += length
 if b"dark" not in record_types:
-    raise SystemExit("FAIL: generated icon does not contain nested dark icns record")
-print("generated nested dark macOS icon")
+    raise SystemExit("FAIL: generated icon does not contain a nested dark ICNS record")
+print(f"generated nested dark macOS icon using {light_w}px source payloads")
 PY
 
 if [ ! -s "$output_icon" ]; then
   printf 'FAIL: missing generated macOS app icon: %s\n' "$output_icon" >&2
-  exit 1
-fi
-
-if ! python3 - "$output_icon" <<'PY'
-import struct
-import sys
-from pathlib import Path
-
-data = Path(sys.argv[1]).read_bytes()
-if data[:4] != b"icns":
-    raise SystemExit(1)
-offset = 8
-found = False
-while offset < len(data):
-    kind = data[offset:offset + 4]
-    length = struct.unpack(">I", data[offset + 4:offset + 8])[0]
-    found = found or kind == b"dark"
-    offset += length
-raise SystemExit(0 if found else 1)
-PY
-then
-  printf 'FAIL: generated macOS app icon does not contain a nested dark record\n' >&2
   exit 1
 fi
 
