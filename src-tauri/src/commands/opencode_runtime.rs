@@ -30,8 +30,6 @@ pub struct OpenCodeRuntimeHealth {
     pub small_model: Option<String>,
     pub autoupdate: Option<String>,
     pub snapshot: Option<bool>,
-    pub qwen_context: Option<u64>,
-    pub qwen_output: Option<u64>,
     pub bundled_agent_count: usize,
     pub installed_bundled_agent_count: usize,
     pub extra_installed_agent_count: usize,
@@ -59,14 +57,6 @@ fn extract_string_field(root: &serde_json::Value, path: &[&str]) -> Option<Strin
         current = current.get(key)?;
     }
     current.as_str().map(|s| s.to_string())
-}
-
-fn extract_u64_field(root: &serde_json::Value, path: &[&str]) -> Option<u64> {
-    let mut current = root;
-    for &key in path {
-        current = current.get(key)?;
-    }
-    current.as_u64()
 }
 
 /// List bundled agent filenames from a workspace agents directory.
@@ -426,8 +416,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     let mut small_model: Option<String> = None;
     let mut autoupdate: Option<String> = None;
     let mut snapshot: Option<bool> = None;
-    let mut qwen_context: Option<u64> = None;
-    let mut qwen_output: Option<u64> = None;
 
     // Track overall status
     let mut has_fail = false;
@@ -556,29 +544,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         small_model = extract_string_field(i_json, &["small_model"]);
         autoupdate = extract_string_field(i_json, &["autoupdate"]);
         snapshot = i_json.get("snapshot").and_then(|v| v.as_bool());
-        qwen_context = extract_u64_field(
-            i_json,
-            &[
-                "provider",
-                "opencode-go",
-                "models",
-                "qwen3.6-plus",
-                "limit",
-                "context",
-            ],
-        );
-        qwen_output = extract_u64_field(
-            i_json,
-            &[
-                "provider",
-                "opencode-go",
-                "models",
-                "qwen3.6-plus",
-                "limit",
-                "output",
-            ],
-        );
-
         // Check default_agent
         checks.push(OpenCodeRuntimeCheck {
             id: "default_agent".into(),
@@ -624,42 +589,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
                 })
                 .unwrap_or_else(|| "(not set)".into()),
         });
-
-        // Check qwen3.6-plus context
-        if let Some(ctx) = qwen_context {
-            checks.push(OpenCodeRuntimeCheck {
-                id: "qwen_context".into(),
-                label: "qwen3.6-plus context".into(),
-                status: "pass".into(),
-                detail: ctx.to_string(),
-            });
-        } else {
-            checks.push(OpenCodeRuntimeCheck {
-                id: "qwen_context".into(),
-                label: "qwen3.6-plus context".into(),
-                status: "warn".into(),
-                detail: "not set in installed config".into(),
-            });
-            // Missing qwen limits are informational warnings, not divergence
-        }
-
-        // Check qwen3.6-plus output
-        if let Some(out) = qwen_output {
-            checks.push(OpenCodeRuntimeCheck {
-                id: "qwen_output".into(),
-                label: "qwen3.6-plus output".into(),
-                status: "pass".into(),
-                detail: out.to_string(),
-            });
-        } else {
-            checks.push(OpenCodeRuntimeCheck {
-                id: "qwen_output".into(),
-                label: "qwen3.6-plus output".into(),
-                status: "warn".into(),
-                detail: "not set in installed config".into(),
-            });
-            // Missing qwen limits are informational warnings, not divergence
-        }
 
         // Compare installed config to rendered workspace config (same staging as install script).
         let configs_match_result = installed_config_matches_rendered(t_json, i_json, home_dir);
@@ -1075,8 +1004,6 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         small_model,
         autoupdate,
         snapshot,
-        qwen_context,
-        qwen_output,
         bundled_agent_count,
         installed_bundled_agent_count: installed_bundled_count,
         extra_installed_agent_count,
@@ -1209,7 +1136,7 @@ mod tests {
         write_file(
             &ws,
             "templates/opencode.json",
-            r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
+            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
         );
         write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
         write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
@@ -1224,7 +1151,7 @@ mod tests {
         write_file(
             &home,
             ".config/opencode/opencode.json",
-            r#"{"default_agent":"architect","model":"opencode-go/deepseek-v4-pro","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
+            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
         );
         write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
@@ -1242,13 +1169,11 @@ mod tests {
 
         assert_eq!(health.status, "synced");
         assert_eq!(health.default_agent, Some("architect".into()));
-        assert_eq!(health.model, Some("opencode-go/deepseek-v4-pro".into()));
+        assert_eq!(health.model, Some("opencode-go/glm-5.2".into()));
         assert_eq!(
             health.small_model,
             Some("opencode-go/deepseek-v4-flash".into())
         );
-        assert_eq!(health.qwen_context, Some(1000000));
-        assert_eq!(health.qwen_output, Some(65536));
         assert_eq!(health.bundled_agent_count, 2);
         assert_eq!(health.installed_bundled_agent_count, 2);
         assert_eq!(health.extra_installed_agent_count, 0);
@@ -1661,66 +1586,6 @@ mod tests {
             .warnings
             .iter()
             .any(|w| w.contains("custom-agent.md")));
-    }
-
-    #[test]
-    fn test_qwen_limits_extracted_when_present() {
-        let ws = temp_root("qwen-ws");
-        let home = temp_root("qwen-home");
-
-        write_file(
-            &ws,
-            "templates/opencode.json",
-            r#"{"provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
-        );
-        write_file(&ws, "agents/architect.md", "# architect");
-
-        write_file(
-            &home,
-            ".config/opencode/opencode.json",
-            r#"{"provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":1000000,"output":65536}}}}}}"#,
-        );
-        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-        add_tui(&ws, &home);
-
-        let health = compute_health(&ws, &home);
-        cleanup(&ws);
-        cleanup(&home);
-
-        assert_eq!(health.qwen_context, Some(1000000));
-        assert_eq!(health.qwen_output, Some(65536));
-    }
-
-    #[test]
-    fn test_missing_qwen_limits_produce_warn_not_panic() {
-        let ws = temp_root("no-qwen-ws");
-        let home = temp_root("no-qwen-home");
-
-        write_file(&ws, "templates/opencode.json", r#"{}"#);
-        write_file(&ws, "agents/architect.md", "# architect");
-
-        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
-        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-        add_tui(&ws, &home);
-
-        let health = compute_health(&ws, &home);
-        cleanup(&ws);
-        cleanup(&home);
-
-        let ctx_check = health
-            .checks
-            .iter()
-            .find(|c| c.id == "qwen_context")
-            .unwrap();
-        assert_eq!(ctx_check.status, "warn");
-        let out_check = health
-            .checks
-            .iter()
-            .find(|c| c.id == "qwen_output")
-            .unwrap();
-        assert_eq!(out_check.status, "warn");
-        assert_eq!(health.qwen_context, None);
-        assert_eq!(health.qwen_output, None);
     }
 
     // ── New tests for TUI config ──

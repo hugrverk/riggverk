@@ -402,8 +402,6 @@ export interface OpenCodeRuntimeHealth {
   small_model: string | null;
   autoupdate: string | null;
   snapshot: boolean | null;
-  qwen_context: number | null;
-  qwen_output: number | null;
   bundled_agent_count: number;
   installed_bundled_agent_count: number;
   extra_installed_agent_count: number;

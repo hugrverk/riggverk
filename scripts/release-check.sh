@@ -750,12 +750,12 @@ if ! grep -q '"default_agent": "architect"' resources/default-workspace/template
   printf 'FAIL: bundled opencode.json missing default_agent architect\n' >&2
   exit 1
 fi
-if ! grep -q '"model": "opencode-go/deepseek-v4-flash"' resources/default-workspace/templates/opencode.json; then
-  printf 'FAIL: bundled opencode.json missing expected model\n' >&2
+if ! grep -q '"model": "opencode-go/glm-5.2"' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing expected GLM 5.2 model\n' >&2
   exit 1
 fi
-if ! grep -q '"small_model":' resources/default-workspace/templates/opencode.json; then
-  printf 'FAIL: bundled opencode.json missing small_model\n' >&2
+if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled opencode.json missing expected DeepSeek v4 Flash small_model\n' >&2
   exit 1
 fi
 if ! grep -q '"autoupdate": "notify"' resources/default-workspace/templates/opencode.json; then
@@ -766,7 +766,7 @@ if ! grep -q '"snapshot": true' resources/default-workspace/templates/opencode.j
   printf 'FAIL: bundled opencode.json missing snapshot true\n' >&2
   exit 1
 fi
-printf '  opencode.json: default_agent=architect model=deepseek-v4-flash small_model=deepseek-v4-flash autoupdate=notify snapshot=true limits ok\n'
+printf '  opencode.json: default_agent=architect model=glm-5.2 small_model=deepseek-v4-flash autoupdate=notify snapshot=true\n'
 
 step "bundled default tui.json"
 if [ ! -f resources/default-workspace/templates/tui.json ]; then
@@ -984,12 +984,12 @@ if ! grep -q '"default_agent": "architect"' "$tmpdir/opencode.json"; then
   printf 'FAIL: smoke opencode.json missing default_agent architect\n' >&2
   apply_ok=false
 fi
-if ! grep -q '"model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing expected model\n' >&2
+if ! grep -q '"model": "opencode-go/glm-5.2"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing expected GLM 5.2 model\n' >&2
   apply_ok=false
 fi
-if ! grep -q '"small_model":' "$tmpdir/opencode.json"; then
-  printf 'FAIL: smoke opencode.json missing small_model\n' >&2
+if ! grep -q '"small_model": "opencode-go/deepseek-v4-flash"' "$tmpdir/opencode.json"; then
+  printf 'FAIL: smoke opencode.json missing expected DeepSeek v4 Flash small_model\n' >&2
   apply_ok=false
 fi
 # Model-agnostic agents — no model frontmatter expected

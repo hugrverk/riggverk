@@ -3,7 +3,7 @@
   "share": "disabled",
   "autoupdate": "notify",
   "snapshot": true,
-  "model": "opencode-go/deepseek-v4-flash",
+  "model": "opencode-go/glm-5.2",
   "small_model": "opencode-go/deepseek-v4-flash",
   "default_agent": "architect",
   "mcp": {
