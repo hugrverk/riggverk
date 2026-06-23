@@ -424,12 +424,33 @@
       "action": "remove"
     },
     {
+      "identity": "rules:claude",
+      "path_classes": [
+        "claude-rules"
+      ],
+      "digests": [
+        "sha256:3a735dbdecb49de96ed67d40b4542a57aa0b8ed4303db3a530ce54fd0d1e9d72"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "rules:codex",
       "path_classes": [
         "codex-rules"
       ],
       "digests": [
+        "sha256:17372bfb6929426db6c1e5f85e8ba56038b0f2cf12f5fd89ba45cd8010962058",
         "sha256:83891759951218efb030d94f9a0d21bbb48c8ab3df8357592cf683d31ac98e8f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "rules:opencode",
+      "path_classes": [
+        "opencode-rules"
+      ],
+      "digests": [
+        "sha256:ab51e4daa3948cc67cd707af537b72b49c1c7bf40f4bbf663a068fe40d35e0f3"
       ],
       "action": "update"
     },
@@ -1007,6 +1028,7 @@
         "sha256:15d3f9383b8f79884353606fdb813bac7780eb37d7a143d3c54f2e148b1b2b8f",
         "sha256:541d72e41289ebe6bd77b3f985a77ac6281561e2bc247225559b1ae446dffb91",
         "sha256:698534dfcad15cff4fa1fa0787d63371b4decdde55e5d4e7c19a6d36775f7fee",
+        "sha256:6f1883b9d8e37b74dc46b12f4b28023033bd3bc1905288c67685afbc0ae9da2f",
         "sha256:77b8014fa170ba7284455b8d18ea00c03e700a42e423fda69db681d5f04a6fb6",
         "sha256:78ef6890a7953484d4bfd0e7981c92f2e7584502abb5ecec94e174a13204c817",
         "sha256:8d26022b2c3360e550c0aa38f07237c07128b7f192f44ad6120e7f2a94a957d7",
@@ -1045,26 +1067,6 @@
         "sha256:ef8b365ec0d7b0f7622ebe715784ef74513855be532fc68ea18080d002aeae99",
         "sha256:f50803321f462e07e17e26ef1885dab5b7699496c82820875e1e5d61d0de2a00",
         "sha256:fc5622c5c835fa8aa157d614f4c7a74db36bc8b81fd9b2cd9ed7165a0a2da917"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:docs/prompt-templates/masterprompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:8b27e4d51c1199a4d6ddb2405803aa36c702dc323b96263377a45fca4042ffe8"
-      ],
-      "action": "update"
-    },
-    {
-      "identity": "workspace:file:docs/prompt-templates/standard-prompt.md",
-      "path_classes": [
-        "workspace-doc"
-      ],
-      "digests": [
-        "sha256:a98b935126b0d562866abd8bc84514a3e4be4845df5cff90c0b7edd7bd34f4ef"
       ],
       "action": "update"
     },
@@ -1512,6 +1514,7 @@
         "sha256:3dda6c097b0f9925988a994ca864b876e67b2033532ff1c2339084e5d81967d2",
         "sha256:40fcd58c049e2c6eec416c7919bce16d75352c3b01ccdc3ab6a9b4a3a0d1b8ee",
         "sha256:43eeb4123aa9016a260a26d810264f20f0b98858f34fa9e3905c19c5ab9aacee",
+        "sha256:52a1c60541715ac78eb0d405ae0095b76efa2a9ed391a09227709e21cbecf80e",
         "sha256:5c892211d2de007cff745b434e07a913f03ba1a3bed6a65a7f960e7285feabf3"
       ],
       "action": "update"
@@ -1522,6 +1525,7 @@
         "workspace-doc"
       ],
       "digests": [
+        "sha256:3ca6b3f6e35c64d53b7249ef2aa4ea8f8132b52c2067cd1de917bcd788794c18",
         "sha256:4253853e1f7e4a3a7a65d14bd5bc057104d472c0ebe93316683a47a6c090669b",
         "sha256:6e5880a43c97b32698d384dc7cbafc65951cc31014385e4942828d62c2a5a2e4",
         "sha256:e655e976fb859dc37207fc628f5ad31e551e25920b0bb3c5cc0ec5773083fbe3"
@@ -1577,7 +1581,18 @@
         "workspace-doc"
       ],
       "digests": [
-        "sha256:678ee227c8b638f5c822bf69fdf9b4c10e89e35c693927e7298559a580d8668a"
+        "sha256:678ee227c8b638f5c822bf69fdf9b4c10e89e35c693927e7298559a580d8668a",
+        "sha256:a1b36dc7d4304c0226453ee71d5e85fc4dea3e87cacf520e14f26f41cb0e1b39"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/sync/claude-rules.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:3a735dbdecb49de96ed67d40b4542a57aa0b8ed4303db3a530ce54fd0d1e9d72"
       ],
       "action": "update"
     },
@@ -1587,7 +1602,18 @@
         "workspace-doc"
       ],
       "digests": [
+        "sha256:17372bfb6929426db6c1e5f85e8ba56038b0f2cf12f5fd89ba45cd8010962058",
         "sha256:83891759951218efb030d94f9a0d21bbb48c8ab3df8357592cf683d31ac98e8f"
+      ],
+      "action": "update"
+    },
+    {
+      "identity": "workspace:file:templates/sync/opencode-rules.md",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:ab51e4daa3948cc67cd707af537b72b49c1c7bf40f4bbf663a068fe40d35e0f3"
       ],
       "action": "update"
     }
