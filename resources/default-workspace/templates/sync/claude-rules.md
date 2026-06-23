@@ -12,6 +12,19 @@ Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, 
 ## Working model
 Optimize for correctness, bounded scope, repository consistency, low maintenance, and solo-developer cognitive load. Prefer boring robust solutions, smallest safe diffs, and existing patterns. Do not trade away correctness, security, or final judgment quality to save usage.
 
+## Command output discipline
+For commands with unknown, noisy, recursive, or potentially large output, cap bytes instead of lines: `COMMAND 2>&1 | head -c 4000`.
+
+Apply this automatically for logs, test output, package-manager output, recursive listings, search results, large diffs, generated files, lockfiles, JSON dumps, and output that may contain long single lines.
+
+Prefer targeted commands over broad dumps. Inspect the smallest useful slice first, then expand only when evidence requires it.
+
+When `rtk` is available, prefer it for inspection-style commands where summarized output is acceptable, especially `git status`, `git diff`, grep/search, file reads, find/listing, test summaries, and package-manager inspection.
+
+Do not use `rtk` or output caps where exact stdout is consumed by another command or where exact output is the artifact: pipelines, generated files, machine-readable JSON, migrations, deploys, DB/infra commands, auth/network-sensitive commands, or commands involving secrets.
+
+Do not trade away correctness, security, or final verification quality to save tokens. Run broad validation before final handoff when the touched surface requires it.
+
 ## Skill routing
 Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full catalog when working inside this repo.
 - Code implementation and refactoring: `minimal-implementation`.
