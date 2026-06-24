@@ -10,6 +10,10 @@ vi.mock("@tauri-apps/api/core", () => ({
   invoke: (...args: unknown[]) => invoke(...args),
 }));
 
+vi.mock("../components/ConfirmDialog", () => ({
+  useConfirm: () => vi.fn(async () => true),
+}));
+
 const docA: DocumentContent = {
   id: "doc-a",
   title: "Doc A",

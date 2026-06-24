@@ -138,13 +138,17 @@ export function HarnessInstallationCard({
       nextActionTone={status?.conflict_details?.length ? "warn" : "ok"}
     />
     {path && <p className="ws-path-status-detail"><code>{path}</code></p>}
-    <dialog ref={conflictDialogRef} aria-labelledby={conflictTitleId}>
-      <div className="ws-panel">
-        <h2 id={conflictTitleId}>Preserved conflicts</h2>
+    <dialog ref={conflictDialogRef} aria-labelledby={conflictTitleId} className="app-modal">
+      <div className="app-modal-header">
+        <h2 id={conflictTitleId} className="app-modal-title">Preserved conflicts</h2>
+      </div>
+      <div className="app-modal-body">
         <p>These files differ from proven app-owned content and were not changed.</p>
         <ul>
           {status?.conflict_details?.map((detail) => <li key={detail}>{detail}</li>)}
         </ul>
+      </div>
+      <div className="app-modal-footer">
         <form method="dialog">
           <button className="btn btn-sm btn-primary" autoFocus>close</button>
         </form>

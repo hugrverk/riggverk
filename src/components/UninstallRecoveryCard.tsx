@@ -128,11 +128,13 @@ export function UninstallRecoveryCard({
       <dialog
         ref={dialogRef}
         aria-labelledby={confirmTitleId}
-        className="uninstall-dialog recovery-dialog"
+        className="app-modal"
         onClose={() => restoreButtonRef.current?.focus()}
       >
-        <div className="ws-panel">
-          <h2 id={confirmTitleId}>Restore workspace from uninstall backup?</h2>
+        <div className="app-modal-header">
+          <h2 id={confirmTitleId} className="app-modal-title">Restore workspace from uninstall backup?</h2>
+        </div>
+        <div className="app-modal-body">
           <p className="uninstall-summary">
             This restores app-owned files removed by the previous uninstall using the transaction
             backup. User-modified or conflicting files are not overwritten.
@@ -146,21 +148,21 @@ export function UninstallRecoveryCard({
               .
             </p>
           )}
-          <div className="uninstall-dialog-actions">
-            <form method="dialog">
-              <button type="submit" className="btn btn-sm" autoFocus onClick={closeConfirm}>
-                cancel
-              </button>
-            </form>
-            <button
-              type="button"
-              className="btn btn-sm btn-warn"
-              disabled={!canRestore}
-              onClick={confirmRestore}
-            >
-              confirm restore
+        </div>
+        <div className="app-modal-footer">
+          <form method="dialog">
+            <button type="submit" className="btn btn-sm" autoFocus onClick={closeConfirm}>
+              cancel
             </button>
-          </div>
+          </form>
+          <button
+            type="button"
+            className="btn btn-sm btn-warn"
+            disabled={!canRestore}
+            onClick={confirmRestore}
+          >
+            confirm restore
+          </button>
         </div>
       </dialog>
     </>

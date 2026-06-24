@@ -2,7 +2,8 @@ import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } fro
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "./components/TerminalOutput";
 import { AppHeaderNav, type AppHeaderView } from "./components/AppHeaderNav";
-import { confirmLeaveDirtyEditor } from "./lib/editorGuards";
+import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
+import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -39,12 +40,17 @@ function isWorkspaceLoadView(view: View): boolean {
 
 /* ---- main app ---- */
 
-function App() {
+/**
+ * Inner app shell that uses the confirm dialog context.
+ * Wrapped by `App()` in `ConfirmProvider`.
+ */
+function AppShell() {
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>("start");
   const viewRef = useRef<View>("start");
   useEffect(() => { viewRef.current = view; }, [view]);
   const appliedWorkspacePathRef = useRef<string | null | undefined>(undefined);
+  const confirm = useConfirm();
   const enabledHarnessIdsRef = useRef<InstallAgent[]>([]);
 
   // backup history state
@@ -375,12 +381,15 @@ function App() {
   }, [appSettings?.landing_view, appSettings]);
 
   const lastWorkspaceRefreshRef = useRef(0);
-  const switchView = useCallback((v: View) => {
+  const switchView = useCallback(async (v: View) => {
     const requestedHarness = harnessForView(v);
     if (requestedHarness && !enabledHarnessIds.includes(requestedHarness)) v = "start";
     if (v !== view) {
       const isLibraryDirty = view === "library" && isLibrarySourceDirty(librarySourceType);
-      if (isLibraryDirty && !confirmLeaveDirtyEditor()) return;
+      if (isLibraryDirty) {
+        const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+        if (!ok) return;
+      }
     }
     setView(v);
     if (v !== "settings") clearSettingsMsg();
@@ -846,6 +855,17 @@ function App() {
         )}
       </div>
     </div>
+  );
+}
+
+/**
+ * Root component wraps the app in the confirm dialog provider.
+ */
+function App() {
+  return (
+    <ConfirmProvider>
+      <AppShell />
+    </ConfirmProvider>
   );
 }
 

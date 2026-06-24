@@ -64,9 +64,11 @@ export function UninstallCard({ workspaceValid, busy, onApply }: UninstallCardPr
           </button>
         </HarnessActionGrid>
       </HarnessActionCard>
-      <dialog ref={dialogRef} aria-labelledby={titleId} className="uninstall-dialog">
-        <div className="ws-panel">
-          <h2 id={titleId}>Uninstall everything?</h2>
+      <dialog ref={dialogRef} aria-labelledby={titleId} className="app-modal">
+        <div className="app-modal-header">
+          <h2 id={titleId} className="app-modal-title">Uninstall everything?</h2>
+        </div>
+        <div className="app-modal-body">
           {plan && (
             <>
               <p className="uninstall-summary">{plan.summary}</p>
@@ -102,19 +104,19 @@ export function UninstallCard({ workspaceValid, busy, onApply }: UninstallCardPr
               )}
             </>
           )}
-          <div className="uninstall-dialog-actions">
-            <form method="dialog">
-              <button type="submit" className="btn btn-sm" autoFocus>cancel</button>
-            </form>
-            <button
-              type="button"
-              className="btn btn-sm btn-danger"
-              disabled={!plan?.plan_fingerprint || plan.removable.length === 0}
-              onClick={confirm}
-            >
-              uninstall everything
-            </button>
-          </div>
+        </div>
+        <div className="app-modal-footer">
+          <form method="dialog">
+            <button type="submit" className="btn btn-sm" autoFocus>cancel</button>
+          </form>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger"
+            disabled={!plan?.plan_fingerprint || plan.removable.length === 0}
+            onClick={confirm}
+          >
+            uninstall everything
+          </button>
         </div>
       </dialog>
     </>

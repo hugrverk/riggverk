@@ -1,7 +1,8 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
-import { confirmLeaveDirtyEditor } from "../lib/editorGuards";
+import { LEAVE_DIRTY_MESSAGE } from "../lib/editorGuards";
+import { useConfirm } from "../components/ConfirmDialog";
 import {
   createSaveOperationTracker,
   shouldApplyOpenCodeSourceSave,
@@ -38,6 +39,7 @@ export function useLibraryController({
   fetchStatus,
   view,
 }: LibraryControllerDeps) {
+  const confirm = useConfirm();
   const [skills, setSkills] = useState<SkillSummary[]>([]);
   const [skillsLoaded, setSkillsLoaded] = useState(false);
   const [activeSkillId, setActiveSkillId] = useState<string | null>(null);
@@ -156,12 +158,15 @@ export function useLibraryController({
 
   const libraryDirty = docDirty || agentTemplateDirty || configDirty || agentDirty;
 
-  const setGuardedLibrarySourceType = useCallback((type: LibrarySourceType) => {
+  const setGuardedLibrarySourceType = useCallback(async (type: LibrarySourceType) => {
     if (type === librarySourceType) return;
-    if (isLibrarySourceDirty(librarySourceType) && !confirmLeaveDirtyEditor()) return;
+    if (isLibrarySourceDirty(librarySourceType)) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     setLibrarySourceType(type);
     if (type === "configs") fetchStatus();
-  }, [librarySourceType, isLibrarySourceDirty, fetchStatus]);
+  }, [librarySourceType, isLibrarySourceDirty, fetchStatus, confirm]);
 
   const loadSkills = useCallback(async (generation = workspaceLoadGenerationRef.current) => {
     try {
@@ -330,7 +335,10 @@ export function useLibraryController({
   }, [invalidateEditorSaveOperations]);
 
   const selectDoc = useCallback(async (id: string) => {
-    if (docDirty && id !== activeDoc?.id && !confirmLeaveDirtyEditor()) return;
+    if (docDirty && id !== activeDoc?.id) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     docSaveOpRef.current.invalidate();
     activeDocIdRef.current = id;
     const generation = workspaceLoadGenerationRef.current;
@@ -344,7 +352,7 @@ export function useLibraryController({
       if (activeDocIdRef.current !== id) return;
       setError(`Read doc: ${e}`);
     }
-  }, [activeDoc?.id, docDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+  }, [activeDoc?.id, docDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
   const openDocEditor = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
@@ -404,7 +412,10 @@ export function useLibraryController({
   }, [activeDoc]);
 
   const onCreateDoc = useCallback(async () => {
-    if (docDirty && !confirmLeaveDirtyEditor()) return;
+    if (docDirty) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     const title = createDocTitle.trim();
     const slug = createDocSlug.trim();
     if (!title || !slug) {
@@ -426,7 +437,7 @@ export function useLibraryController({
     } finally {
       setCreateDocCreating(false);
     }
-  }, [createDocSlug, createDocTitle, docDirty, loadDocs]);
+  }, [createDocSlug, createDocTitle, docDirty, loadDocs, confirm]);
 
   const onChangeAgentTemplateDraft = useCallback((value: string) => {
     setAgentTemplateDraft(value);
@@ -480,7 +491,10 @@ export function useLibraryController({
   }, [agentTemplate]);
 
   const selectAgent = useCallback(async (id: string) => {
-    if (agentDirty && id !== activeAgentId && !confirmLeaveDirtyEditor()) return;
+    if (agentDirty && id !== activeAgentId) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     agentSaveOpRef.current.invalidate();
     activeAgentIdRef.current = id;
     setActiveAgentId(id);
@@ -495,7 +509,7 @@ export function useLibraryController({
       if (activeAgentIdRef.current !== id) return;
       setError(`Read agent: ${e}`);
     }
-  }, [activeAgentId, agentDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef]);
+  }, [activeAgentId, agentDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
   const openAgent = useCallback(async (id: string) => {
     try { await invoke<ActionResult>("open_agent_source", { filename: id }); } catch (e) { setError(`Open agent: ${e}`); }
@@ -703,24 +717,30 @@ export function useLibraryController({
     }
   }, [activeConfigTargetId, configEditorSourceContent, configTemplateContent]);
 
-  const selectConfigTarget = useCallback((targetId: string) => {
-    if (configDirty && targetId !== activeConfigTargetId && !confirmLeaveDirtyEditor()) return;
+  const selectConfigTarget = useCallback(async (targetId: string) => {
+    if (configDirty && targetId !== activeConfigTargetId) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     configSaveOpRef.current.invalidate();
     setActiveConfigTargetId(targetId);
     setActiveConfigSourceType("base");
     setConfigEditorSourceContent(null);
     setConfigEditorSourceSaveMessage("");
-  }, [activeConfigTargetId, configDirty]);
+  }, [activeConfigTargetId, configDirty, confirm]);
 
-  const selectConfigSourceType = useCallback((sourceType: string) => {
-    if (configDirty && sourceType !== activeConfigSourceType && !confirmLeaveDirtyEditor()) return;
+  const selectConfigSourceType = useCallback(async (sourceType: string) => {
+    if (configDirty && sourceType !== activeConfigSourceType) {
+      const ok = await confirm(LEAVE_DIRTY_MESSAGE);
+      if (!ok) return;
+    }
     configSaveOpRef.current.invalidate();
     setActiveConfigSourceType(sourceType);
     setConfigEditorSourceContent(null);
     setConfigEditorSourceSaveMessage("");
     setConfigMode("preview");
     setConfigSaveResult(null);
-  }, [activeConfigSourceType, configDirty]);
+  }, [activeConfigSourceType, configDirty, confirm]);
 
   const openSkill = useCallback((id: string) => {
     invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));

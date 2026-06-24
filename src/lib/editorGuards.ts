@@ -1,6 +1,8 @@
-export function confirmLeaveDirtyEditor(): boolean {
-  return window.confirm("Leave with unsaved changes?");
-}
+/**
+ * Message shown by the themed confirm modal when leaving a dirty editor.
+ * Import and pass to `confirm(message)` from `useConfirm()`.
+ */
+export const LEAVE_DIRTY_MESSAGE = "Leave with unsaved changes?";
 
 export function dirtyTabClass(dirty: boolean): string {
   return dirty ? " nav-icon-dirty" : "";
