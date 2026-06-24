@@ -4,10 +4,16 @@
 # Codex 0.134+ removed the legacy top-level `profile = "..."` selector and
 # `[profiles.*]` tables; profiles now live in separate `<name>.config.toml`
 # overlays selected with `--profile`. The managed defaults are plain
-# top-level keys.
+# top-level keys plus app default approval-reviewer settings.
 
+model = "gpt-5.5"
+model_reasoning_effort = "high"
 approval_policy = "on-request"
+approvals_reviewer = "user"
 sandbox_mode = "workspace-write"
+
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
 
 [mcp_servers]
 # Optional MCP snippets live under templates/codex/mcp/.
