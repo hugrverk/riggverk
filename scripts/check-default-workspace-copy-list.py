@@ -70,6 +70,7 @@ def main() -> None:
         "scripts/install-codex-config.sh",
         "scripts/install-codex-agents.sh",
         "scripts/merge-codex-config.py",
+        "scripts/ensure-codex-routing-defaults.py",
     }
     required_templates = {
         "templates/opencode.base.json",
@@ -78,6 +79,7 @@ def main() -> None:
     }
     required_docs = {
         "docs/prompt-templates/prompt.md",
+        "docs/prompt-templates/goal-prompt.md",
         "docs/prompt-templates/goal-prompt.md",
         "docs/prompt-templates/batch-prompt.md",
     }
