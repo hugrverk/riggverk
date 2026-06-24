@@ -72,7 +72,7 @@ One optional group level is supported for source organization. Deeper skill nest
 Installed layout remains flat:
 
 ```text
-<harness-skill-root>/<skill-name>/SKILL.md>
+<harness-skill-root>/<skill-name>/SKILL.md
 ```
 
 Global destinations:
