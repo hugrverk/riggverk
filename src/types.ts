@@ -422,6 +422,16 @@ export interface OpenCodeRuntimeHealth {
   next_action: string;
 }
 
+export interface ListAvailableModelsResult {
+  models: string[];
+  warning: string | null;
+}
+
+export interface OpenCodeModelSelection {
+  model: string;
+  small_model: string;
+}
+
 export interface BrainSetupSeedResult {
   status: string;
   source: string;

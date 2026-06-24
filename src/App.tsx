@@ -661,6 +661,7 @@ function App() {
             canRunReleaseCheck={canRunReleaseCheck}
             onHarnessSetupUpdate={runHarnessSetupUpdate}
             runtimeHealth={opencodeRuntimeHealth}
+            onModelUpdated={loadOpenCodeRuntimeHealth}
           />
         )}
 

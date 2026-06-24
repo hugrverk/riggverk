@@ -37,7 +37,10 @@ pub use content::{
     save_agent_source, save_agent_template, save_doc, save_opencode_config_source,
 };
 pub use cursor_profile::get_cursor_profile_health;
-pub use opencode_runtime::get_opencode_runtime_health;
+pub use opencode_runtime::{
+    get_opencode_runtime_health, list_available_opencode_models, read_opencode_model_selection,
+    update_opencode_model_selection,
+};
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };

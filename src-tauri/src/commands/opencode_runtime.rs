@@ -1098,6 +1098,286 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
     ))
 }
 
+// ── OpenCode model selection ──
+
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct ListAvailableModelsResult {
+    pub models: Vec<String>,
+    pub warning: Option<String>,
+}
+
+/// Parse `opencode models` stdout into a sorted list of unique `provider/model` strings.
+/// Skips empty lines, lines without a `/`, and lines where parts are empty.
+pub fn parse_opencode_models_output(output: &str) -> Vec<String> {
+    let mut models: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for line in output.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() {
+            continue;
+        }
+        // Accept only lines matching provider/model
+        if let Some(slash_pos) = trimmed.find('/') {
+            let provider = &trimmed[..slash_pos];
+            let model_name = &trimmed[slash_pos + 1..];
+            if !provider.is_empty() && !model_name.is_empty() {
+                models.insert(trimmed.to_string());
+            }
+        }
+    }
+    models.into_iter().collect()
+}
+
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct OpenCodeModelSelection {
+    pub model: String,
+    pub small_model: String,
+}
+
+const DEFAULT_MODEL: &str = "opencode-go/glm-5.2";
+const DEFAULT_SMALL_MODEL: &str = "opencode-go/deepseek-v4-flash";
+
+/// List available OpenCode models by running `opencode models --pure`.
+/// Returns a sorted, deduplicated list of `provider/model` strings.
+#[tauri::command]
+pub fn list_available_opencode_models() -> Result<ListAvailableModelsResult, String> {
+    use std::io::{BufRead, BufReader};
+    use std::process::{Command, Stdio};
+    use std::time::Duration;
+
+    let mut child = Command::new("opencode")
+        .args(["models", "--pure"])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| {
+            if e.kind() == std::io::ErrorKind::NotFound {
+                "opencode CLI not found on PATH. Install or update OpenCode to use model selection."
+                    .to_string()
+            } else {
+                format!("failed to run opencode models: {}", e)
+            }
+        })?;
+
+    let stdout_handle = child.stdout.take().expect("stdout configured");
+    let reader = BufReader::new(stdout_handle);
+
+    // Read stdout lines with a bounded timeout via a separate thread.
+    let lines: Vec<String> = {
+        let (tx, rx) = std::sync::mpsc::channel();
+        std::thread::spawn(move || {
+            let mut collected = Vec::new();
+            for line in reader.lines() {
+                match line {
+                    Ok(l) => collected.push(l),
+                    Err(_) => break,
+                }
+            }
+            let _ = tx.send(collected);
+        });
+        match rx.recv_timeout(Duration::from_secs(30)) {
+            Ok(lines) => lines,
+            Err(_) => {
+                // Timeout — kill the child
+                let _ = child.kill();
+                let _ = child.wait();
+                return Err("opencode models timed out after 30 seconds".to_string());
+            }
+        }
+    };
+
+    let wait_status = child.wait().map_err(|e| format!("wait failed: {}", e))?;
+    let output_str = lines.join("\n");
+    let models = parse_opencode_models_output(&output_str);
+
+    let warning = if !wait_status.success() {
+        // read stderr for context
+        let mut stderr = String::new();
+        if let Some(stderr_stream) = child.stderr.take() {
+            use std::io::Read;
+            let mut stderr_buf = String::new();
+            let _ = BufReader::new(stderr_stream).read_to_string(&mut stderr_buf);
+            stderr = stderr_buf.trim().to_string();
+        }
+        Some(if stderr.is_empty() {
+            "opencode models exited with a non-zero status".to_string()
+        } else {
+            format!("opencode models warning: {}", stderr)
+        })
+    } else if models.is_empty() {
+        Some("No parseable models found. Verify your OpenCode provider configuration.".to_string())
+    } else {
+        None
+    };
+
+    Ok(ListAvailableModelsResult { models, warning })
+}
+
+/// Read the current model and small_model from the workspace `templates/opencode.base.json`.
+/// Falls back to hardcoded defaults if missing or unparseable.
+#[tauri::command]
+pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String> {
+    use crate::commands::workspace::configured_workspace_path;
+    use crate::settings;
+
+    let workspace_root = configured_workspace_path(&settings::load())
+        .ok_or_else(|| "no workspace selected".to_string())?;
+    let base_path = workspace_root.join("templates/opencode.base.json");
+
+    if !base_path.is_file() {
+        return Ok(OpenCodeModelSelection {
+            model: DEFAULT_MODEL.to_string(),
+            small_model: DEFAULT_SMALL_MODEL.to_string(),
+        });
+    }
+
+    let content = std::fs::read_to_string(&base_path)
+        .map_err(|e| format!("failed to read opencode.base.json: {}", e))?;
+    let json: serde_json::Value =
+        serde_json::from_str(&content).map_err(|e| format!("invalid JSON: {}", e))?;
+
+    let model = json
+        .get("model")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_MODEL)
+        .to_string();
+    let small_model = json
+        .get("small_model")
+        .and_then(|v| v.as_str())
+        .filter(|s| !s.is_empty())
+        .unwrap_or(DEFAULT_SMALL_MODEL)
+        .to_string();
+
+    Ok(OpenCodeModelSelection { model, small_model })
+}
+
+/// Validate a model ID in `provider/model` format.
+fn validate_model_id(id: &str) -> Result<(), String> {
+    let trimmed = id.trim();
+    if trimmed.is_empty() {
+        return Err("model ID must not be empty".to_string());
+    }
+    if let Some(slash_pos) = trimmed.find('/') {
+        let provider = &trimmed[..slash_pos];
+        let model_name = &trimmed[slash_pos + 1..];
+        if provider.is_empty() || model_name.is_empty() {
+            return Err(format!(
+                "invalid model ID '{}': provider and model name must not be empty",
+                trimmed
+            ));
+        }
+        if trimmed[slash_pos + 1..].contains('/') {
+            return Err(format!(
+                "invalid model ID '{}': must be provider/model format with exactly one '/'",
+                trimmed
+            ));
+        }
+        Ok(())
+    } else {
+        Err(format!(
+            "invalid model ID '{}': must be in provider/model format",
+            trimmed
+        ))
+    }
+}
+
+/// Update `model` and `small_model` in the workspace `templates/opencode.base.json`,
+/// regenerate the `templates/opencode.json` snapshot, and validate it.
+#[tauri::command]
+pub fn update_opencode_model_selection(
+    model: String,
+    small_model: String,
+) -> Result<String, String> {
+    use crate::commands::workspace::configured_workspace_path;
+    use crate::settings;
+
+    // Validate inputs
+    validate_model_id(&model)?;
+    validate_model_id(&small_model)?;
+
+    let workspace_root = configured_workspace_path(&settings::load())
+        .ok_or_else(|| "no workspace selected".to_string())?;
+    let base_path = workspace_root.join("templates/opencode.base.json");
+
+    // Read existing base config
+    let existing_content = if base_path.is_file() {
+        std::fs::read_to_string(&base_path)
+            .map_err(|e| format!("failed to read opencode.base.json: {}", e))?
+    } else {
+        return Err("opencode.base.json not found in workspace templates".to_string());
+    };
+
+    let mut json: serde_json::Value = serde_json::from_str(&existing_content)
+        .map_err(|e| format!("invalid opencode.base.json: {}", e))?;
+
+    // Update model and small_model
+    if let Some(obj) = json.as_object_mut() {
+        obj.insert(
+            "model".to_string(),
+            serde_json::Value::String(model.clone()),
+        );
+        obj.insert(
+            "small_model".to_string(),
+            serde_json::Value::String(small_model.clone()),
+        );
+    } else {
+        return Err("opencode.base.json is not a JSON object".to_string());
+    }
+
+    // Write back preserving formatting via serde_json
+    let updated_content =
+        serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {}", e))?;
+    std::fs::write(&base_path, &updated_content)
+        .map_err(|e| format!("failed to write opencode.base.json: {}", e))?;
+
+    // Run generator --write
+    let gen_result = run_generator_write(&workspace_root)?;
+    if !gen_result.success {
+        return Err(format!(
+            "Config snapshot generation failed: {}",
+            gen_result.stderr
+        ));
+    }
+
+    // Validate generated opencode.json contains the selected models
+    let snapshot_path = workspace_root.join("templates/opencode.json");
+    if snapshot_path.is_file() {
+        let snapshot_content = std::fs::read_to_string(&snapshot_path)
+            .map_err(|e| format!("failed to read generated opencode.json: {}", e))?;
+        let snapshot_json: serde_json::Value = serde_json::from_str(&snapshot_content)
+            .map_err(|e| format!("generated opencode.json is not valid JSON: {}", e))?;
+
+        let stored_model = snapshot_json
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        let stored_small = snapshot_json
+            .get("small_model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+
+        if stored_model != model {
+            return Err(format!(
+                "Generated config has model '{}', expected '{}'. Regeneration may have failed.",
+                stored_model, model
+            ));
+        }
+        if stored_small != small_model {
+            return Err(format!(
+                "Generated config has small_model '{}', expected '{}'. Regeneration may have failed.",
+                stored_small, small_model
+            ));
+        }
+    } else {
+        return Err("Generated opencode.json not found after regeneration".to_string());
+    }
+
+    Ok(format!(
+        "Model selection updated: model={}, small_model={}",
+        model, small_model
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2180,5 +2460,223 @@ mod tests {
         );
 
         cleanup(&ws);
+    }
+
+    // ── OpenCode model selection tests ──
+
+    #[test]
+    fn test_parse_models_simple_lines() {
+        let output = "opencode-go/glm-5.2\nopencode-go/deepseek-v4-flash\nprovider2/model-x\n";
+        let models = parse_opencode_models_output(output);
+        assert_eq!(models.len(), 3);
+        assert_eq!(models[0], "opencode-go/deepseek-v4-flash");
+        assert_eq!(models[1], "opencode-go/glm-5.2");
+        assert_eq!(models[2], "provider2/model-x");
+    }
+
+    #[test]
+    fn test_parse_models_skips_empty_lines() {
+        let output = "\nopencode-go/a\n  \nopencode-go/b\n\n";
+        let models = parse_opencode_models_output(output);
+        assert_eq!(models.len(), 2);
+    }
+
+    #[test]
+    fn test_parse_models_skips_invalid_lines() {
+        let output = "opencode-go/valid\nnotavalidline\n/no-provider\nno-model/\n";
+        let models = parse_opencode_models_output(output);
+        assert_eq!(models.len(), 1);
+        assert_eq!(models[0], "opencode-go/valid");
+    }
+
+    #[test]
+    fn test_parse_models_deduplicates() {
+        let output = "provider/a\nprovider/b\nprovider/a\nprovider/c\n";
+        let models = parse_opencode_models_output(output);
+        assert_eq!(models.len(), 3);
+    }
+
+    #[test]
+    fn test_parse_models_empty_input() {
+        let models = parse_opencode_models_output("");
+        assert!(models.is_empty());
+    }
+
+    #[test]
+    fn test_validate_model_id_valid() {
+        assert!(validate_model_id("provider/model").is_ok());
+        assert!(validate_model_id("opencode-go/glm-5.2").is_ok());
+        assert!(validate_model_id("a/b").is_ok());
+    }
+
+    #[test]
+    fn test_validate_model_id_empty() {
+        assert!(validate_model_id("").is_err());
+        assert!(validate_model_id("   ").is_err());
+    }
+
+    #[test]
+    fn test_validate_model_id_no_slash() {
+        let err = validate_model_id("justmodel").unwrap_err();
+        assert!(err.contains("provider/model"));
+    }
+
+    #[test]
+    fn test_validate_model_id_empty_parts() {
+        assert!(validate_model_id("/model").is_err());
+        assert!(validate_model_id("provider/").is_err());
+    }
+
+    #[test]
+    fn test_validate_model_id_multiple_slashes() {
+        let err = validate_model_id("a/b/c").unwrap_err();
+        assert!(err.contains("exactly one"));
+    }
+
+    #[test]
+    fn test_update_base_config_preserves_unrelated_keys() {
+        let ws = temp_root("model-upd-preserve");
+        let home = temp_root("model-upd-home");
+
+        // Set up minimal workspace with base config
+        write_file(
+            &ws,
+            "templates/opencode.base.json",
+            r#"{
+            "$schema": "https://opencode.ai/config.json",
+            "model": "old-model",
+            "small_model": "old-small",
+            "autoupdate": "notify",
+            "snapshot": true,
+            "default_agent": "architect",
+            "compaction": {"auto": true}
+        }"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &ws,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &ws,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&ws, "README.md", "# readme\n");
+        fs::create_dir_all(ws.join("skills")).expect("create skills dir");
+
+        // Create a working generator script
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            &format!(
+                "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\nwith open('templates/opencode.policy.json') as f:\n    policy = json.load(f)\nconfig = dict(base)\nconfig['permission'] = {{'read': policy.get('read', {{}})}}\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n"
+            ),
+        );
+
+        // Read, update, and verify
+        let base_path = ws.join("templates/opencode.base.json");
+        let content = std::fs::read_to_string(&base_path).unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert(
+                "model".into(),
+                serde_json::Value::String("new-model".into()),
+            );
+            obj.insert(
+                "small_model".into(),
+                serde_json::Value::String("new-small".into()),
+            );
+        }
+        std::fs::write(&base_path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        // Verify preserved keys
+        let updated_content = std::fs::read_to_string(&base_path).unwrap();
+        let updated_json: serde_json::Value = serde_json::from_str(&updated_content).unwrap();
+        assert_eq!(updated_json["model"].as_str(), Some("new-model"));
+        assert_eq!(updated_json["small_model"].as_str(), Some("new-small"));
+        assert_eq!(updated_json["autoupdate"].as_str(), Some("notify"));
+        assert_eq!(updated_json["snapshot"].as_bool(), Some(true));
+        assert_eq!(updated_json["default_agent"].as_str(), Some("architect"));
+        assert!(updated_json["compaction"].is_object());
+        assert!(updated_json["$schema"].is_string());
+
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_update_base_config_generator_failure_detected() {
+        let ws = temp_root("model-upd-fail");
+        let home = temp_root("model-upd-fail-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.base.json",
+            r#"{"model":"old","small_model":"old-small"}"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &ws,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &ws,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&ws, "README.md", "# readme\n");
+        fs::create_dir_all(ws.join("skills")).expect("create skills dir");
+
+        // Generator script that always fails
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport sys\nprint('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
+        );
+
+        // Now update base config manually
+        let base_path = ws.join("templates/opencode.base.json");
+        let content = std::fs::read_to_string(&base_path).unwrap();
+        let mut json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert("model".into(), serde_json::Value::String("new".into()));
+            obj.insert(
+                "small_model".into(),
+                serde_json::Value::String("new-small".into()),
+            );
+        }
+        std::fs::write(&base_path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
+
+        // Verify generator detects stale state
+        let gen_result =
+            super::run_generator_write(&ws).expect("generator should return ActionResult");
+        assert!(!gen_result.success, "generator should fail");
+        assert!(gen_result.stderr.contains("simulated failure"));
+
+        cleanup(&ws);
+        cleanup(&home);
     }
 }
