@@ -18,6 +18,7 @@ export interface HarnessInstallationCardProps {
   busy: boolean;
   onUpdate: (surfaces: string[], label: string) => void;
   path?: string;
+  refreshKey?: number;
   secondaryAction?: {
     label: string;
     onClick: () => void;
@@ -34,6 +35,7 @@ export function HarnessInstallationCard({
   busy,
   onUpdate,
   path,
+  refreshKey,
   secondaryAction,
 }: HarnessInstallationCardProps) {
   const [status, setStatus] = useState<InstallationStatus | null>(null);
@@ -70,6 +72,12 @@ export function HarnessInstallationCard({
   useEffect(() => {
     if (!busy) refresh();
   }, [busy, refresh]);
+
+  // External trigger to refresh status (e.g. after model save)
+  useEffect(() => {
+    if (!busy && workspaceValid) refresh();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refreshKey]);
 
   if (!workspaceValid) return null;
 

@@ -19,9 +19,10 @@ import type {
 interface ModelSelectionPanelProps {
   workspaceValid: boolean;
   onModelUpdated: () => void;
+  onCardRefreshNeeded?: () => void;
 }
 
-function ModelSelectionPanel({ workspaceValid, onModelUpdated }: ModelSelectionPanelProps) {
+function ModelSelectionPanel({ workspaceValid, onModelUpdated, onCardRefreshNeeded }: ModelSelectionPanelProps) {
   const [available, setAvailable] = useState<ListAvailableModelsResult | null>(null);
   const [selection, setSelection] = useState<OpenCodeModelSelection | null>(null);
   const [draftModel, setDraftModel] = useState("");
@@ -30,41 +31,42 @@ function ModelSelectionPanel({ workspaceValid, onModelUpdated }: ModelSelectionP
   const [saving, setSaving] = useState(false);
   const [modelWarning, setModelWarning] = useState<string | null>(null);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
-  const genRef = useRef(0);
+  const selectionGenRef = useRef(0);
+  const modelsGenRef = useRef(0);
   const modelSelectId = useId();
   const smallModelSelectId = useId();
 
   const loadSelection = useCallback(async () => {
     if (!workspaceValid) return;
-    const gen = ++genRef.current;
+    const gen = ++selectionGenRef.current;
     try {
       const sel = await invoke<OpenCodeModelSelection>("read_opencode_model_selection");
-      if (gen !== genRef.current) return;
+      if (gen !== selectionGenRef.current) return;
       setSelection(sel);
       setDraftModel(sel.model);
       setDraftSmall(sel.small_model);
     } catch {
-      if (gen !== genRef.current) return;
+      if (gen !== selectionGenRef.current) return;
       setSelection(null);
     }
   }, [workspaceValid]);
 
   const loadModels = useCallback(async () => {
     if (!workspaceValid) return;
-    const gen = ++genRef.current;
+    const gen = ++modelsGenRef.current;
     setLoadingModels(true);
     setModelWarning(null);
     try {
       const result = await invoke<ListAvailableModelsResult>("list_available_opencode_models");
-      if (gen !== genRef.current) return;
+      if (gen !== modelsGenRef.current) return;
       setAvailable(result);
       if (result.warning) setModelWarning(result.warning);
     } catch (err) {
-      if (gen !== genRef.current) return;
+      if (gen !== modelsGenRef.current) return;
       setAvailable(null);
       setModelWarning(err instanceof Error ? err.message : String(err));
     } finally {
-      if (gen === genRef.current) setLoadingModels(false);
+      if (gen === modelsGenRef.current) setLoadingModels(false);
     }
   }, [workspaceValid]);
 
@@ -98,12 +100,14 @@ function ModelSelectionPanel({ workspaceValid, onModelUpdated }: ModelSelectionP
       await loadSelection();
       // Notify parent to refresh runtime health so Managed card shows pending
       onModelUpdated();
+      // Trigger managed installation card refresh
+      onCardRefreshNeeded?.();
     } catch (err) {
       setSaveMessage(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
-  }, [canSave, draftModel, draftSmall, loadSelection, onModelUpdated]);
+  }, [canSave, draftModel, draftSmall, loadSelection, onModelUpdated, onCardRefreshNeeded]);
 
   // Sync draft when selection reloads after save
   useEffect(() => {
@@ -266,6 +270,8 @@ export function OpenCodeView({
   runtimeHealth,
   onModelUpdated,
 }: OpenCodeViewProps) {
+  const [cardRefresh, setCardRefresh] = useState(0);
+  const triggerCardRefresh = useCallback(() => setCardRefresh((n) => n + 1), []);
   const statusText = workspaceValid ? "valid" : "setup needed";
   const busy = wsRunning !== null;
   const facts: TargetPageFact[] = [{ label: statusText, tone: workspaceValid ? "ok" : "warn" }];
@@ -294,6 +300,7 @@ export function OpenCodeView({
           <ModelSelectionPanel
             workspaceValid={workspaceValid}
             onModelUpdated={onModelUpdated}
+            onCardRefreshNeeded={triggerCardRefresh}
           />
 
           <HarnessInstallationCard
@@ -303,6 +310,7 @@ export function OpenCodeView({
             workspaceValid={workspaceValid}
             busy={busy}
             onUpdate={onHarnessSetupUpdate}
+            refreshKey={cardRefresh}
           />
 
         </div>
