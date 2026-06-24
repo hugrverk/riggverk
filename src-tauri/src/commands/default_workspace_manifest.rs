@@ -3,6 +3,8 @@ pub(super) const MANAGED_REFRESH_PATHS: &[&str] = &[
     "scripts/install-agent-rules.sh",
     "scripts/install-runtime-agents.sh",
     "scripts/install-opencode-config.sh",
+    "scripts/install-codex-config.sh",
+    "scripts/ensure-codex-routing-defaults.py",
     "scripts/install-cursor-workspace.sh",
     "scripts/check-cursor-profile.py",
     "templates/cursor/manifest.json",
