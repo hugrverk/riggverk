@@ -51,13 +51,6 @@ def check_no_markers(text: str, label: str) -> None:
 def managed_toml(tmp: Path) -> Path:
     """Create a bundled managed config."""
     return write_file(tmp / "managed.toml", """
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "auto"
-sandbox_mode = "none"
-
-[profiles.workspace-write]
 approval_policy = "auto"
 sandbox_mode = "none"
 """.lstrip())
@@ -67,6 +60,8 @@ def installed_with_markers(tmp: Path) -> Path:
     """Create an installed config with private markers."""
     return write_file(tmp / "installed.toml", """# User's custom model selection
 model = "claude-4-sonnet"
+approval_policy = "manual"
+sandbox_mode = "danger-full-access"
 
 # User personality
 personality = "user-personality-value-private"
@@ -137,11 +132,13 @@ def test_private_markers_present_in_output_file() -> None:
 
 
 def test_managed_fields_updated_in_output() -> None:
-    """Managed profile fields must be updated in output."""
+    """Managed top-level fields must be updated in output."""
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         installed = write_file(tmp / "installed.toml", """
 profile = "custom"
+approval_policy = "manual"
+sandbox_mode = "none"
 
 [profiles.safe]
 approval_policy = "manual"
@@ -155,23 +152,17 @@ sandbox_mode = "none"
 value = "preserved"
 """.lstrip())
         managed = write_file(tmp / "managed.toml", """
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "auto"
 sandbox_mode = "none"
-
-[profiles.workspace-write]
-approval_policy = "auto"
-sandbox_mode = "write"
 """.lstrip())
         out = tmp / "merged.json"
         run_script(str(installed), str(managed), "--merge", "--output", str(out))
 
         merged = json.loads(out.read_text(encoding="utf-8"))
-        assert merged["profile"] == "safe"
-        assert merged["profiles"]["safe"]["approval_policy"] == "auto"
-        assert merged["profiles"]["workspace-write"]["sandbox_mode"] == "write"
+        assert merged["approval_policy"] == "auto"
+        assert merged["sandbox_mode"] == "none"
+        assert "profile" in merged  # user-custom legacy selector value is not app-owned
+        assert "profiles" not in merged
         # User data preserved
         assert merged["user"]["data"]["value"] == "preserved"
 
@@ -182,6 +173,8 @@ def test_comments_preserved_in_apply() -> None:
         tmp = Path(td)
         installed = write_file(tmp / "installed.toml", """# User's custom model selection
 model = "claude-4-sonnet"
+approval_policy = "manual"
+sandbox_mode = "none"
 
 # This comment block must be preserved
 profile = "custom"
@@ -196,13 +189,6 @@ approval_policy = "auto"
 sandbox_mode = "none"
 """)
         managed = write_file(tmp / "managed.toml", """
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "auto"
-sandbox_mode = "none"
-
-[profiles.workspace-write]
 approval_policy = "auto"
 sandbox_mode = "write"
 """.lstrip())
@@ -216,9 +202,10 @@ sandbox_mode = "write"
         # Comments outside managed fields preserved
         assert "# User's custom model selection" in content
         assert "# This comment block must be preserved" in content
-        assert "# safe section comment preserved" in content
+        assert "# safe section comment preserved" not in content
+        assert "[profiles.safe]" not in content
         # Managed fields updated
-        assert 'profile = "safe"' in content
+        assert 'profile = "custom"' in content
         assert 'approval_policy = "auto"' in content
         assert 'sandbox_mode = "write"' in content
 
@@ -251,16 +238,10 @@ def test_managed_match_exit_code_based() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         installed = write_file(tmp / "installed.toml", """
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "auto"
 sandbox_mode = "none"
 """.lstrip())
         managed = write_file(tmp / "managed.toml", """
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "auto"
 sandbox_mode = "none"
 """.lstrip())
@@ -269,10 +250,8 @@ sandbox_mode = "none"
         assert result.returncode == 0, "should exit 0 when matching"
 
         managed2 = write_file(tmp / "managed2.toml", """
-profile = "unsafe"
-
-[profiles.safe]
 approval_policy = "manual"
+sandbox_mode = "none"
 """.lstrip())
         result2 = run_script(str(installed), str(managed2), "--managed-match")
         assert result2.returncode == 1, "should exit 1 when mismatching"
@@ -324,13 +303,6 @@ def test_render_rollback_managed_preserves_comments_and_user_content() -> None:
         backup = write_file(
             tmp / "backup.toml",
             """
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "auto"
-sandbox_mode = "none"
-
-[profiles.workspace-write]
 approval_policy = "auto"
 sandbox_mode = "none"
 """.lstrip(),
@@ -339,6 +311,8 @@ sandbox_mode = "none"
             tmp / "installed.toml",
             """# User model
 model = "claude-4-sonnet"
+approval_policy = "manual"
+sandbox_mode = "workspace-write"
 
 # keep this blank line
 
@@ -366,10 +340,9 @@ custom = { token = "private-mcp-token-codex-777" }
         content = result.stdout
         assert "# User model" in content
         assert "# keep this blank line" in content
-        assert "# inline comment" in content
         assert 'model = "claude-4-sonnet"' in content
         assert "private-mcp-token-codex-777" in content
-        assert 'profile = "safe"' in content
+        assert 'profile = "custom"' in content
         assert 'approval_policy = "auto"' in content
 
 
@@ -400,16 +373,16 @@ def test_top_level_managed_inline_comment_preserved_on_apply() -> None:
         tmp = Path(td)
         installed = write_file(
             tmp / "installed.toml",
-            'profile = "custom"  # keep this comment\n',
+            'approval_policy = "manual"  # keep this comment\n',
         )
-        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        managed = write_file(tmp / "managed.toml", 'approval_policy = "auto"\n')
         backup = tmp / "backups"
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
         assert result.returncode == 0, result.stderr
-        assert installed.read_text(encoding="utf-8") == 'profile = "safe"  # keep this comment\n'
+        assert installed.read_text(encoding="utf-8") == 'approval_policy = "auto"  # keep this comment\n'
 
 
-def test_profile_field_inline_comment_preserved_on_apply() -> None:
+def test_legacy_profile_table_removed_on_apply() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         installed = write_file(
@@ -423,9 +396,6 @@ def test_profile_field_inline_comment_preserved_on_apply() -> None:
         managed = write_file(
             tmp / "managed.toml",
             """
-profile = "safe"
-
-[profiles.safe]
 approval_policy = "auto"
 sandbox_mode = "none"
 """.lstrip(),
@@ -434,7 +404,8 @@ sandbox_mode = "none"
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
         assert result.returncode == 0, result.stderr
         content = installed.read_text(encoding="utf-8")
-        assert 'approval_policy = "auto"  # user note' in content
+        assert "[profiles.safe]" not in content
+        assert 'approval_policy = "auto"' in content
 
 
 def test_hash_inside_quoted_string_not_treated_as_comment() -> None:
@@ -442,15 +413,15 @@ def test_hash_inside_quoted_string_not_treated_as_comment() -> None:
         tmp = Path(td)
         installed = write_file(
             tmp / "installed.toml",
-            'profile = "safe#not-a-comment"  # real trailing comment\n',
+            'approval_policy = "manual#not-a-comment"  # real trailing comment\n',
         )
-        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        managed = write_file(tmp / "managed.toml", 'approval_policy = "auto"\n')
         backup = tmp / "backups"
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
         assert result.returncode == 0, result.stderr
         content = installed.read_text(encoding="utf-8")
-        assert 'profile = "safe"  # real trailing comment' in content
-        assert "safe#not-a-comment" not in content
+        assert 'approval_policy = "auto"  # real trailing comment' in content
+        assert "manual#not-a-comment" not in content
 
 
 def test_escaped_quote_before_hash_preserved() -> None:
@@ -458,14 +429,14 @@ def test_escaped_quote_before_hash_preserved() -> None:
         tmp = Path(td)
         installed = write_file(
             tmp / "installed.toml",
-            'profile = "safe\\"#still-value"  # real comment\n',
+            'approval_policy = "manual\\"#still-value"  # real comment\n',
         )
-        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        managed = write_file(tmp / "managed.toml", 'approval_policy = "auto"\n')
         backup = tmp / "backups"
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
         assert result.returncode == 0, result.stderr
         content = installed.read_text(encoding="utf-8")
-        assert 'profile = "safe"  # real comment' in content
+        assert 'approval_policy = "auto"  # real comment' in content
 
 
 def test_ambiguous_multiline_scalar_refused_zero_mutation() -> None:
@@ -475,7 +446,7 @@ def test_ambiguous_multiline_scalar_refused_zero_mutation() -> None:
             tmp / "installed.toml",
             'profile = """\nopen multiline\n',
         )
-        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        managed = write_file(tmp / "managed.toml", 'approval_policy = "auto"\n')
         backup = tmp / "backups"
         before = installed.read_text(encoding="utf-8")
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
@@ -487,7 +458,7 @@ def test_malformed_quoted_value_refused_zero_mutation() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
         installed = write_file(tmp / "installed.toml", 'profile = "unterminated\n')
-        managed = write_file(tmp / "managed.toml", 'profile = "safe"\n')
+        managed = write_file(tmp / "managed.toml", 'approval_policy = "auto"\n')
         backup = tmp / "backups"
         before = installed.read_text(encoding="utf-8")
         result = run_script(str(installed), str(managed), "--apply", "--backup-dir", str(backup))
@@ -498,52 +469,23 @@ def test_malformed_quoted_value_refused_zero_mutation() -> None:
 def test_render_rollback_preserves_same_line_inline_comment() -> None:
     with tempfile.TemporaryDirectory() as td:
         tmp = Path(td)
-        backup = write_file(tmp / "backup.toml", 'profile = "safe"\n')
+        backup = write_file(tmp / "backup.toml", 'approval_policy = "auto"\n')
         installed = write_file(
             tmp / "installed.toml",
-            'profile = "custom"  # keep this comment\n',
+            'approval_policy = "manual"  # keep this comment\n',
         )
         before = installed.read_text(encoding="utf-8")
         result = run_script(str(installed), str(backup), "--render-rollback-managed")
         assert result.returncode == 0, result.stderr
         assert installed.read_text(encoding="utf-8") == before
-        assert result.stdout == 'profile = "safe"  # keep this comment\n'
-
-
-def test_apply_preserves_user_owned_content() -> None:
-    """Apply must preserve user model, personality, MCP, dates, arrays, unknown tables."""
-    with tempfile.TemporaryDirectory() as td:
-        tmp = Path(td)
-        installed = installed_with_markers(tmp)
-        managed = write_file(tmp / "managed.toml", """
-profile = "safe"
-
-[profiles.safe]
-approval_policy = "manual"
-sandbox_mode = "none"
-
-[profiles.workspace-write]
-approval_policy = "manual"
-sandbox_mode = "none"
-""".lstrip())
-        backup = tmp / "backups"
-        result = run_script(
-            str(installed), str(managed), "--apply", "--backup-dir", str(backup)
-        )
-        assert result.returncode == 0, f"apply failed: {result.stderr}"
-
-        content = installed.read_text(encoding="utf-8")
-        assert "my-user-secret-token-999" in content
-        assert "user-personality-value-private" in content
-        assert "my-custom-api-key-888" in content
-        assert "private-mcp-token-codex-777" in content
-        assert 'last_updated = "2026-01-15"' in content
+        assert result.stdout == 'approval_policy = "auto"  # keep this comment\n'
 
 
 # ── Fallback parser tests (tomllib-compat subset) ──
 
 # Import the fallback parser from the main module
 import importlib.util
+sys.dont_write_bytecode = True
 _mod_spec = importlib.util.spec_from_file_location("_merge_codex_module", str(SCRIPT))
 _merge_mod = importlib.util.module_from_spec(_mod_spec)
 _mod_spec.loader.exec_module(_merge_mod)

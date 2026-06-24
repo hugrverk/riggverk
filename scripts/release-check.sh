@@ -306,14 +306,19 @@ for marker in 'sk-test-secret' 'ghp_test_secret' 'test-secret-value-98765'; do
     exit 1
   fi
 done
-# Verify user values preserved in resulting config
+# Verify user-owned values are preserved while managed routing defaults apply.
 python3 -c "
 import tomllib
 result = tomllib.load(open('$secret_home/.codex/config.toml', 'rb'))
-assert result.get('model') == 'gpt-4', 'model should be preserved'
+assert result.get('model') == 'gpt-5.5', 'managed model should be applied'
+assert result.get('model_reasoning_effort') == 'high', 'managed reasoning effort should be applied'
+assert result.get('approval_policy') == 'on-request', 'managed approval policy should be applied'
+assert result.get('sandbox_mode') == 'workspace-write', 'managed sandbox mode should be applied'
 assert result.get('personality') == 'helpful', 'personality should be preserved'
 assert result.get('unknown-table', {}).get('value') == 'should-be-preserved', 'unknown table should survive'
-print('  secret-marker apply: user values preserved')
+assert 'profile' not in result, 'legacy top-level profile selector should be removed'
+assert result.get('profiles', {}).get('safe', {}).get('model') == 'gpt-4', 'customized legacy profile table should be preserved'
+print('  secret-marker apply: user values preserved and managed defaults applied')
 "
 printf '  Codex config apply and secret-marker guard verified\n'
 
