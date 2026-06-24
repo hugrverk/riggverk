@@ -17,3 +17,4 @@ release/
 
 # Python cache
 __pycache__/
+.claude/launch.json
