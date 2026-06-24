@@ -72,7 +72,7 @@ One optional group level is supported for source organization. Deeper skill nest
 Installed layout remains flat:
 
 ```text
-<harness-skill-root>/<skill-name>/SKILL.md
+<harness-skill-root>/<skill-name>/SKILL.md>
 ```
 
 Global destinations:
@@ -129,7 +129,7 @@ User provider blocks, unrelated MCP entries, and unknown config keys are preserv
 
 ### Codex
 
-Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and only the allowlisted top-level Codex config fields `approval_policy` and `sandbox_mode`. Legacy app-shaped profile selectors and profile tables are removed during migration only.
+Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and allowlisted Codex config defaults: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. Legacy app-shaped profile selectors and profile tables are removed during migration only.
 
 Copies under the previous `~/.agents/skills` app location are detected for migration to `$CODEX_HOME/skills`. Diverged copies remain conflicts and are not removed automatically.
 
