@@ -1,6 +1,8 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::fs;
+use std::path::{Path, PathBuf};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use super::skills::discover_skills;
 use super::status::file_eq;
@@ -43,15 +45,27 @@ pub struct CodexRuntimeHealth {
     pub config_status: String,
     pub template_config_path: String,
     pub installed_config_path: String,
+    pub model: Option<String>,
+    pub model_reasoning_effort: Option<String>,
     pub approval_policy: Option<String>,
+    pub approvals_reviewer: Option<String>,
     pub sandbox_mode: Option<String>,
+    pub app_default_approvals_reviewer: Option<String>,
+    pub app_default_tools_approval_mode: Option<String>,
     pub checks: Vec<CodexRuntimeCheck>,
     pub warnings: Vec<String>,
     pub summary: String,
     pub next_action: String,
 }
 
-const MANAGED_TOP_LEVEL_KEYS: &[&str] = &["approval_policy", "sandbox_mode"];
+const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
+    "model",
+    "model_reasoning_effort",
+    "approval_policy",
+    "approvals_reviewer",
+    "sandbox_mode",
+];
+const MANAGED_APP_DEFAULT_KEYS: &[&str] = &["approvals_reviewer", "default_tools_approval_mode"];
 // Pre-0.134 profile scheme this app used to write. Codex now rejects the
 // top-level `profile` selector and ignores `[profiles.*]` tables, so
 // app-shipped remnants count as divergence and are removed on update.
@@ -64,7 +78,7 @@ fn list_bundled_codex_agents(agents_dir: &Path) -> Vec<String> {
     if !agents_dir.is_dir() {
         return names;
     }
-    let entries = match std::fs::read_dir(agents_dir) {
+    let entries = match fs::read_dir(agents_dir) {
         Ok(e) => e,
         Err(_) => return names,
     };
@@ -87,7 +101,7 @@ fn list_bundled_codex_agents(agents_dir: &Path) -> Vec<String> {
 }
 
 fn parse_codex_config(path: &Path) -> Option<toml::Value> {
-    let content = std::fs::read_to_string(path).ok()?;
+    let content = fs::read_to_string(path).ok()?;
     toml::from_str(&content).ok()
 }
 
@@ -106,6 +120,26 @@ pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value 
                 managed.insert(key.to_string(), value.clone());
             }
         }
+
+        if let Some(app_default) = table
+            .get("apps")
+            .and_then(|apps| apps.as_table())
+            .and_then(|apps| apps.get("_default"))
+            .and_then(|default| default.as_table())
+        {
+            let mut default_managed = toml::map::Map::new();
+            for key in MANAGED_APP_DEFAULT_KEYS {
+                if let Some(value) = app_default.get(*key) {
+                    default_managed.insert(key.to_string(), value.clone());
+                }
+            }
+            if !default_managed.is_empty() {
+                let mut apps = toml::map::Map::new();
+                apps.insert("_default".into(), toml::Value::Table(default_managed));
+                managed.insert("apps".into(), toml::Value::Table(apps));
+            }
+        }
+
         // Legacy markers: the template carries none, so any app-shipped
         // remnant makes the config read as diverged until cleaned up.
         if let Some(selector) = table.get("profile").and_then(|v| v.as_str()) {
@@ -137,41 +171,108 @@ pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
 }
 
-/// Restore managed Codex config fields from backup into the installed file via the
-/// line-preserving Python merge owner. Refuses on malformed TOML or ambiguous structure.
+fn unique_render_temp_dir() -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or_default()
+        .as_nanos();
+    std::env::temp_dir().join(format!(
+        "agent-workspace-codex-render-{}-{nanos}",
+        std::process::id()
+    ))
+}
+
+fn cleanup_temp_dir(path: &Path) {
+    let _ = fs::remove_dir_all(path);
+}
+
+/// Render Codex managed config fields from `managed_source` into `dest` via the
+/// line-preserving Python owners. Refuses on malformed TOML or ambiguous structure.
 pub(crate) fn render_codex_config_managed_projection(
     workspace_root: &Path,
     dest: &Path,
-    backup: &Path,
+    managed_source: &Path,
 ) -> Result<String, String> {
-    let script = workspace_root.join("scripts/merge-codex-config.py");
-    if !script.is_file() {
-        return Err(format!("missing Codex merge script: {}", script.display()));
+    let legacy_script = workspace_root.join("scripts/merge-codex-config.py");
+    if !legacy_script.is_file() {
+        return Err(format!(
+            "missing Codex merge script: {}",
+            legacy_script.display()
+        ));
     }
-    let script_str = super::workspace::path_arg(&script)?;
+    let routing_script = workspace_root.join("scripts/ensure-codex-routing-defaults.py");
+    if !routing_script.is_file() {
+        return Err(format!(
+            "missing Codex routing defaults script: {}",
+            routing_script.display()
+        ));
+    }
+
+    let legacy_script_str = super::workspace::path_arg(&legacy_script)?;
     let dest_str = super::workspace::path_arg(dest)?;
-    let backup_str = super::workspace::path_arg(backup)?;
-    let (ok, stdout, stderr, code) = super::process::run_cmd(
+    let managed_source_str = super::workspace::path_arg(managed_source)?;
+    let (ok, legacy_stdout, legacy_stderr, legacy_code) = super::process::run_cmd(
         "python3",
         &[
-            &script_str,
+            &legacy_script_str,
             &dest_str,
-            &backup_str,
+            &managed_source_str,
             "--render-rollback-managed",
         ],
         workspace_root,
     );
     if !ok {
         return Err(format!(
-            "codex managed rollback render failed (exit {:?}): {}",
-            code,
-            stderr.trim()
+            "codex legacy managed render failed (exit {:?}): {}",
+            legacy_code,
+            legacy_stderr.trim()
         ));
     }
-    stdout
+    legacy_stdout
         .parse::<toml::Value>()
-        .map_err(|e| format!("codex managed rollback rendered invalid TOML: {e}"))?;
-    Ok(stdout)
+        .map_err(|e| format!("codex legacy managed render produced invalid TOML: {e}"))?;
+
+    let temp_dir = unique_render_temp_dir();
+    let result = (|| -> Result<String, String> {
+        fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("create codex render temp dir: {e}"))?;
+        let temp_config = temp_dir.join("config.toml");
+        let temp_backup = temp_dir.join("backup");
+        fs::write(&temp_config, legacy_stdout.as_bytes())
+            .map_err(|e| format!("write codex render temp config: {e}"))?;
+
+        let routing_script_str = super::workspace::path_arg(&routing_script)?;
+        let temp_config_str = super::workspace::path_arg(&temp_config)?;
+        let temp_backup_str = super::workspace::path_arg(&temp_backup)?;
+        let (routing_ok, _routing_stdout, routing_stderr, routing_code) = super::process::run_cmd(
+            "python3",
+            &[
+                &routing_script_str,
+                &temp_config_str,
+                &managed_source_str,
+                "--apply",
+                "--backup-dir",
+                &temp_backup_str,
+            ],
+            workspace_root,
+        );
+        if !routing_ok {
+            return Err(format!(
+                "codex routing defaults render failed (exit {:?}): {}",
+                routing_code,
+                routing_stderr.trim()
+            ));
+        }
+
+        let rendered = fs::read_to_string(&temp_config)
+            .map_err(|e| format!("read codex rendered temp config: {e}"))?;
+        rendered
+            .parse::<toml::Value>()
+            .map_err(|e| format!("codex rendered config invalid TOML: {e}"))?;
+        Ok(rendered)
+    })();
+    cleanup_temp_dir(&temp_dir);
+    result
 }
 
 fn extract_string_field(table: &toml::Value, path: &[&str]) -> Option<String> {
@@ -312,7 +413,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     let mut installed_bundled_count = 0usize;
     let mut installed_agent_names: BTreeSet<String> = BTreeSet::new();
     if agents_target_dir.is_dir() {
-        if let Ok(entries) = std::fs::read_dir(&agents_target_dir) {
+        if let Ok(entries) = fs::read_dir(&agents_target_dir) {
             for entry in entries.flatten() {
                 let path = entry.path();
                 if !path.is_file() {
@@ -386,8 +487,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         ),
     });
 
+    let mut model = None;
+    let mut model_reasoning_effort = None;
     let mut approval_policy = None;
+    let mut approvals_reviewer = None;
     let mut sandbox_mode = None;
+    let mut app_default_approvals_reviewer = None;
+    let mut app_default_tools_approval_mode = None;
     let template_config = parse_codex_config(&template_config_path);
     let installed_config = parse_codex_config(&installed_config_path);
     let config_status = if !template_config_path.is_file() {
@@ -413,8 +519,17 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     };
 
     if let Some(installed) = &installed_config {
+        model = extract_string_field(installed, &["model"]);
+        model_reasoning_effort = extract_string_field(installed, &["model_reasoning_effort"]);
         approval_policy = extract_string_field(installed, &["approval_policy"]);
+        approvals_reviewer = extract_string_field(installed, &["approvals_reviewer"]);
         sandbox_mode = extract_string_field(installed, &["sandbox_mode"]);
+        app_default_approvals_reviewer =
+            extract_string_field(installed, &["apps", "_default", "approvals_reviewer"]);
+        app_default_tools_approval_mode = extract_string_field(
+            installed,
+            &["apps", "_default", "default_tools_approval_mode"],
+        );
         checks.push(CodexRuntimeCheck {
             id: "installed_config_valid".into(),
             label: "Installed config is valid TOML".into(),
@@ -444,7 +559,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
             .unwrap_or(false);
         checks.push(CodexRuntimeCheck {
             id: "managed_config_match".into(),
-            label: "Managed config sections match bundled workspace".into(),
+            label: "Managed config routing defaults match bundled workspace".into(),
             status: if managed_match {
                 "pass".into()
             } else if installed_config.is_some() {
@@ -453,9 +568,9 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
                 "fail".into()
             },
             detail: if managed_match {
-                "managed sections match bundled workspace (user model/MCP preserved)".into()
+                "managed routing defaults match bundled workspace (personality/MCP preserved)".into()
             } else if installed_config.is_some() {
-                "managed sections differ from bundled workspace".into()
+                "managed routing defaults differ from bundled workspace".into()
             } else {
                 "installed config missing".into()
             },
@@ -514,8 +629,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         config_status,
         template_config_path: template_config_path_str,
         installed_config_path: installed_config_path_str,
+        model,
+        model_reasoning_effort,
         approval_policy,
+        approvals_reviewer,
         sandbox_mode,
+        app_default_approvals_reviewer,
+        app_default_tools_approval_mode,
         checks,
         warnings,
         summary,
@@ -533,7 +653,6 @@ pub fn get_codex_runtime_health() -> Result<CodexRuntimeHealth, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::fs;
     use std::sync::atomic::{AtomicU64, Ordering};
 
     static TEST_COUNTER: AtomicU64 = AtomicU64::new(0);
@@ -557,6 +676,18 @@ mod tests {
         fs::write(path, content).expect("write file");
     }
 
+    fn managed_codex_config() -> &'static str {
+        r#"
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
+"#
+    }
+
     fn add_rules(ws: &Path, home: &Path) {
         write_file(&ws.join("templates/sync/codex-rules.md"), "# rules");
         write_file(&home.join(".codex/AGENTS.md"), "# rules");
@@ -576,20 +707,11 @@ mod tests {
     fn add_config(ws: &Path, home: &Path, installed_extra: &str) {
         write_file(
             &ws.join("templates/codex/config.toml"),
-            r#"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-"#,
+            managed_codex_config(),
         );
         write_file(
             &home.join(".codex/config.toml"),
-            &format!(
-                r#"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-{installed_extra}
-"#
-            ),
+            &format!("{}\n{}", managed_codex_config(), installed_extra),
         );
     }
 
@@ -634,16 +756,18 @@ command = "echo"
         add_rules(&ws, &home);
         write_file(
             &ws.join("templates/codex/config.toml"),
-            r#"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-"#,
+            managed_codex_config(),
         );
         write_file(
             &home.join(".codex/config.toml"),
             r#"
-approval_policy = "never"
+model = "gpt-5.4"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+approvals_reviewer = "user"
 sandbox_mode = "workspace-write"
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
 "#,
         );
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
@@ -658,31 +782,39 @@ sandbox_mode = "workspace-write"
     }
 
     #[test]
+    fn test_diverged_when_app_default_approval_differs() {
+        let installed = toml::from_str::<toml::Value>(
+            "model = \"gpt-5.5\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+        )
+        .expect("installed");
+        let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
+        assert!(!managed_codex_keys_match(&installed, &template));
+    }
+
+    #[test]
     fn test_diverged_when_legacy_profile_scheme_remains() {
         let ws = temp_root("cfg-legacy");
         let home = temp_root("cfg-legacy-home");
         add_rules(&ws, &home);
         write_file(
             &ws.join("templates/codex/config.toml"),
-            r#"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
-"#,
+            managed_codex_config(),
         );
         // Managed fields match, but the fatal pre-0.134 selector and an
         // app-shipped profile table remain — must read as diverged so the
         // update offers the cleanup.
         write_file(
             &home.join(".codex/config.toml"),
-            r#"
-approval_policy = "on-request"
-sandbox_mode = "workspace-write"
+            &format!(
+                r#"{}
 profile = "safe"
 
 [profiles.safe]
 approval_policy = "on-request"
 sandbox_mode = "workspace-write"
 "#,
+                managed_codex_config()
+            ),
         );
         add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
         add_skill(&ws, &home, "diagnose");
@@ -694,14 +826,12 @@ sandbox_mode = "workspace-write"
         assert_eq!(health.config_status, "diverged");
 
         // A user-customized profile table alone is preserved and not flagged.
-        let installed = toml::from_str::<toml::Value>(
-            "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n[profiles.custom]\nmy_key = true\n",
-        )
+        let installed = toml::from_str::<toml::Value>(&format!(
+            "{}\n[profiles.custom]\nmy_key = true\n",
+            managed_codex_config()
+        ))
         .expect("installed");
-        let template = toml::from_str::<toml::Value>(
-            "approval_policy = \"on-request\"\nsandbox_mode = \"workspace-write\"\n",
-        )
-        .expect("template");
+        let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
         assert!(managed_codex_keys_match(&installed, &template));
     }
 }
