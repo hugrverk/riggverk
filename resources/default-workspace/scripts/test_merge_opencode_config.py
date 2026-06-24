@@ -234,6 +234,219 @@ def test_apply_rollback_restores_on_bad_target() -> None:
         assert json.loads(installed.read_text(encoding="utf-8")) == ["not", "a", "dict"]
 
 
+# ── Retired qwen3.6-plus provider model tests ──
+
+
+def test_retired_qwen_removed_on_merge() -> None:
+    """--merge must remove qwen3.6-plus from provider.opencode-go.models."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "old",
+            "provider": {
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {
+                            "limit": {"context": 131072, "output": 65536},
+                        },
+                    },
+                },
+            },
+            "user_key": "preserve",
+        })
+        managed = write_json(tmp / "rendered.json", {
+            "model": "opencode-go/glm-5.2",
+        })
+        out = tmp / "merged.json"
+        run_script(str(installed), str(managed), "--merge", "--output", str(out))
+
+        merged = json.loads(out.read_text(encoding="utf-8"))
+        # qwen model must be gone
+        provider = merged.get("provider", {})
+        opencode_go = provider.get("opencode-go", {})
+        models = opencode_go.get("models", {})
+        assert "qwen3.6-plus" not in models, "retired qwen model must be removed"
+        # managed key updated
+        assert merged["model"] == "opencode-go/glm-5.2"
+        # user key preserved
+        assert merged["user_key"] == "preserve"
+
+
+def test_retired_qwen_causes_managed_match_mismatch() -> None:
+    """--managed-match must return 1 when retired qwen block exists."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "same",
+            "provider": {
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {"limit": {"context": 131072}},
+                    },
+                },
+            },
+        })
+        managed = write_json(tmp / "rendered.json", {"model": "same"})
+
+        # Managed keys match, but qwen block causes mismatch
+        result = run_script(str(installed), str(managed), "--managed-match")
+        assert result.returncode == 1, "should exit 1 when retired qwen block exists"
+
+
+def test_retired_qwen_no_false_positive_when_absent() -> None:
+    """--managed-match must return 0 when no retired qwen block exists."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "same",
+        })
+        managed = write_json(tmp / "rendered.json", {"model": "same"})
+
+        result = run_script(str(installed), str(managed), "--managed-match")
+        assert result.returncode == 0, "should exit 0 when no retired qwen block"
+
+
+def test_retired_qwen_preserves_other_providers() -> None:
+    """--merge must preserve non-qwen providers and models."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "old",
+            "provider": {
+                "custom-provider": {
+                    "api_key": "my-secret-key",
+                    "models": {
+                        "gpt-4": {"limit": {"context": 100000}},
+                    },
+                },
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {"limit": {"context": 131072}},
+                    },
+                },
+            },
+        })
+        managed = write_json(tmp / "rendered.json", {"model": "new"})
+        out = tmp / "merged.json"
+        run_script(str(installed), str(managed), "--merge", "--output", str(out))
+
+        merged = json.loads(out.read_text(encoding="utf-8"))
+        provider = merged.get("provider", {})
+        # Custom provider must be preserved
+        assert "custom-provider" in provider
+        assert provider["custom-provider"]["api_key"] == "my-secret-key"
+        assert provider["custom-provider"]["models"]["gpt-4"]["limit"]["context"] == 100000
+        # qwen must be gone
+        assert "opencode-go" not in provider or "models" not in provider.get("opencode-go", {})
+
+
+def test_retired_qwen_apply_cleans_and_preserves_custom_provider() -> None:
+    """--apply must remove qwen block and preserve custom provider."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "old",
+            "provider": {
+                "custom-provider": {
+                    "api_key": "my-secret-key",
+                },
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {"limit": {"context": 131072}},
+                    },
+                },
+            },
+            "mcp": {
+                "custom-mcp": {
+                    "command": ["custom"],
+                    "env": {"TOKEN": "my-token"},
+                },
+            },
+            "user_key": "preserve-me",
+        })
+        managed = write_json(tmp / "rendered.json", {
+            "model": "opencode-go/glm-5.2",
+        })
+        backup = tmp / "backups"
+        result = run_script(
+            str(installed), str(managed), "--apply", "--backup-dir", str(backup)
+        )
+        assert result.returncode == 0, f"apply failed: {result.stderr}"
+
+        final = json.loads(installed.read_text(encoding="utf-8"))
+        # qwen removed
+        provider = final.get("provider", {})
+        opencode_go = provider.get("opencode-go", {})
+        models = opencode_go.get("models", {})
+        assert "qwen3.6-plus" not in models
+        # custom provider preserved
+        assert provider["custom-provider"]["api_key"] == "my-secret-key"
+        # custom mcp preserved
+        assert final["mcp"]["custom-mcp"]["command"] == ["custom"]
+        assert final["mcp"]["custom-mcp"]["env"]["TOKEN"] == "my-token"
+        # user key preserved
+        assert final["user_key"] == "preserve-me"
+        # managed key updated
+        assert final["model"] == "opencode-go/glm-5.2"
+
+
+def test_retired_qwen_apply_prunes_empty_containers() -> None:
+    """--apply must prune empty models/opencode-go/provider when qwen was the only entry."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "old",
+            "provider": {
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {"limit": {"context": 131072}},
+                    },
+                },
+            },
+        })
+        managed = write_json(tmp / "rendered.json", {
+            "model": "opencode-go/glm-5.2",
+        })
+        backup = tmp / "backups"
+        result = run_script(
+            str(installed), str(managed), "--apply", "--backup-dir", str(backup)
+        )
+        assert result.returncode == 0, f"apply failed: {result.stderr}"
+
+        final = json.loads(installed.read_text(encoding="utf-8"))
+        # Empty containers pruned
+        assert "provider" not in final, "empty provider must be pruned"
+        assert final["model"] == "opencode-go/glm-5.2"
+
+
+def test_retired_qwen_managed_keys_match_after_apply() -> None:
+    """After --apply removes qwen, --managed-match must return 0."""
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        installed = write_json(tmp / "installed.json", {
+            "model": "opencode-go/glm-5.2",
+            "provider": {
+                "opencode-go": {
+                    "models": {
+                        "qwen3.6-plus": {"limit": {"context": 131072}},
+                    },
+                },
+            },
+        })
+        managed = write_json(tmp / "rendered.json", {
+            "model": "opencode-go/glm-5.2",
+        })
+        backup = tmp / "backups"
+        result = run_script(
+            str(installed), str(managed), "--apply", "--backup-dir", str(backup)
+        )
+        assert result.returncode == 0, f"apply failed: {result.stderr}"
+
+        # Now managed-match should pass
+        result2 = run_script(str(installed), str(managed), "--managed-match")
+        assert result2.returncode == 0, "should exit 0 after qwen cleaned"
+
+
 # ── Main guard ──
 
 if __name__ == "__main__":

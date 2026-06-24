@@ -1665,6 +1665,49 @@ bash scripts/smoke-pre-manifest-upgrade.sh
 step "tauri runtime smoke"
 bash "$repo_root/scripts/smoke-tauri-runtime.sh"
 
+step "retired qwen3.6-plus provider model — bundled templates"
+if rg -n 'qwen3\.6-plus' resources/default-workspace/templates/opencode.base.json resources/default-workspace/templates/opencode.json; then
+  printf 'FAIL: bundled templates must not contain retired qwen3.6-plus\n' >&2
+  exit 1
+fi
+printf '  bundled templates clean of qwen3.6-plus\n'
+
+step "retired qwen3.6-plus provider model — merge-opencode-config --apply smoke"
+qwen_tmp="$(mktemp -d)"
+printf '{"model":"opencode-go/glm-5.2","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":131072}}}},"custom-provider":{"api_key":"preserve-me"}},"user_key":"survive"}' \
+  > "$qwen_tmp/installed.json"
+printf '{"model":"opencode-go/glm-5.2"}' > "$qwen_tmp/managed.json"
+python3 resources/default-workspace/scripts/merge-opencode-config.py \
+  "$qwen_tmp/installed.json" "$qwen_tmp/managed.json" \
+  --apply --backup-dir "$qwen_tmp/backups" 2>&1
+# Verify qwen removed
+if grep -q 'qwen3\.6-plus' "$qwen_tmp/installed.json"; then
+  printf 'FAIL: --apply did not remove retired qwen block\n' >&2
+  exit 1
+fi
+# Verify custom provider preserved
+if ! grep -q '"custom-provider"' "$qwen_tmp/installed.json"; then
+  printf 'FAIL: --apply removed custom provider block\n' >&2
+  exit 1
+fi
+if ! grep -q '"preserve-me"' "$qwen_tmp/installed.json"; then
+  printf 'FAIL: --apply removed user provider api_key\n' >&2
+  exit 1
+fi
+if ! grep -q '"survive"' "$qwen_tmp/installed.json"; then
+  printf 'FAIL: --apply removed user_key\n' >&2
+  exit 1
+fi
+# Verify managed-match now passes
+python3 resources/default-workspace/scripts/merge-opencode-config.py \
+  "$qwen_tmp/installed.json" "$qwen_tmp/managed.json" \
+  --managed-match 2>&1 || {
+  printf 'FAIL: --managed-match fails after qwen cleanup\n' >&2
+  exit 1
+}
+rm -rf "$qwen_tmp"
+printf '  --apply smoke: qwen removed, custom provider preserved, managed-match passes\n'
+
 step "release smoke doc"
 if [ ! -f "$repo_root/docs/APP_RELEASE_SMOKE.md" ]; then
   printf 'FAIL: docs/APP_RELEASE_SMOKE.md not found\n' >&2

@@ -134,10 +134,25 @@ pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> ser
     serde_json::Value::Object(managed)
 }
 
+/// Check whether the installed config carries the retired `qwen3.6-plus`
+/// provider model, which should be cleaned up by sync/apply.
+fn has_retired_qwen_provider(config: &serde_json::Value) -> bool {
+    const RETIRED: &str = "qwen3.6-plus";
+    config
+        .get("provider")
+        .and_then(|p| p.get("opencode-go"))
+        .and_then(|og| og.get("models"))
+        .and_then(|m| m.as_object())
+        .is_some_and(|models| models.contains_key(RETIRED))
+}
+
 pub(crate) fn managed_opencode_keys_match(
     installed: &serde_json::Value,
     rendered: &serde_json::Value,
 ) -> bool {
+    if has_retired_qwen_provider(installed) {
+        return false;
+    }
     extract_managed_opencode_config(installed) == extract_managed_opencode_config(rendered)
 }
 
@@ -2144,6 +2159,90 @@ mod tests {
         assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
         cleanup(&ws);
         cleanup(&home);
+    }
+
+    // ── Retired qwen provider model tests ──
+
+    #[test]
+    fn test_retired_qwen_provider_causes_configs_match_fail() {
+        let ws = temp_root("qwen-ws");
+        let home = temp_root("qwen-home");
+
+        // Template (bundled) has no qwen block
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
+        );
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        // Installed config has the retired qwen block under provider
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash","provider":{"opencode-go":{"models":{"qwen3.6-plus":{"limit":{"context":131072}}}}}}"#,
+        );
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        // managed keys match otherwise, but retired qwen block causes drift
+        assert_eq!(
+            health.status, "diverged",
+            "retired qwen block should cause divergence"
+        );
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(
+            match_check.status, "warn",
+            "configs_match should be warn when retired qwen block exists"
+        );
+        assert!(
+            match_check.detail.contains("managed keys differ"),
+            "detail should mention managed key difference"
+        );
+    }
+
+    #[test]
+    fn test_retired_qwen_provider_absent_allows_synced() {
+        let ws = temp_root("no-qwen-ws");
+        let home = temp_root("no-qwen-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.json",
+            r#"{"model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
+        );
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
+        write_file(&ws, "agents/architect.md", "# architect");
+
+        // No qwen block — a custom provider is fine
+        write_file(
+            &home,
+            ".config/opencode/opencode.json",
+            r#"{"model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash","provider":{"custom":{"api_key":"safe"}}}"#,
+        );
+        write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
+        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.status, "synced");
+        let match_check = health
+            .checks
+            .iter()
+            .find(|c| c.id == "configs_match")
+            .unwrap();
+        assert_eq!(match_check.status, "pass");
     }
 
     #[test]
