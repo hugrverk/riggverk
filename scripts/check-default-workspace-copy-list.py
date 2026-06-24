@@ -80,7 +80,6 @@ def main() -> None:
     required_docs = {
         "docs/prompt-templates/prompt.md",
         "docs/prompt-templates/goal-prompt.md",
-        "docs/prompt-templates/goal-prompt.md",
         "docs/prompt-templates/batch-prompt.md",
     }
     required_refresh = {
