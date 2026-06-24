@@ -1098,6 +1098,34 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
     ))
 }
 
+// ── OpenCode executable resolution ──
+
+/// Resolve the absolute path to the `opencode` CLI.
+///
+/// Resolution order:
+/// 1. Normal PATH lookup via `executable_resolver::resolve_executable`.
+/// 2. Common macOS Homebrew paths: `/opt/homebrew/bin/opencode` and `/usr/local/bin/opencode`.
+///
+/// Returns `None` if no executable is found.
+fn resolve_opencode_executable() -> Option<std::path::PathBuf> {
+    // 1. Try PATH lookup
+    let path_env = std::env::var("PATH").unwrap_or_default();
+    if let Some(path) = crate::executable_resolver::resolve_executable("opencode", &path_env, None)
+    {
+        return Some(path);
+    }
+
+    // 2. Try common Homebrew paths (macOS GUI often lacks these in PATH)
+    for candidate in &["/opt/homebrew/bin/opencode", "/usr/local/bin/opencode"] {
+        let p = std::path::Path::new(candidate);
+        if crate::executable_resolver::is_executable_file(p, None) {
+            return Some(p.to_path_buf());
+        }
+    }
+
+    None
+}
+
 // ── OpenCode model selection ──
 
 #[derive(serde::Serialize, Clone, Debug)]
@@ -1180,18 +1208,23 @@ pub fn list_available_opencode_models() -> Result<ListAvailableModelsResult, Str
     use std::process::{Command, Stdio};
     use std::time::Duration;
 
-    let mut child = Command::new("opencode")
+    let opencode_path = resolve_opencode_executable().ok_or_else(|| {
+        "opencode CLI not found on PATH. If installed via Homebrew, ensure /opt/homebrew/bin \
+         is on the GUI PATH or reinstall via the bundled installer."
+            .to_string()
+    })?;
+
+    let mut child = Command::new(&opencode_path)
         .args(["models", "--pure"])
         .stdout(Stdio::piped())
         .stderr(Stdio::null())
         .spawn()
         .map_err(|e| {
-            if e.kind() == std::io::ErrorKind::NotFound {
-                "opencode CLI not found on PATH. Install or update OpenCode to use model selection."
-                    .to_string()
-            } else {
-                format!("failed to run opencode models: {}", e)
-            }
+            format!(
+                "failed to run opencode models ({}): {}",
+                opencode_path.display(),
+                e
+            )
         })?;
 
     let stdout_handle = child.stdout.take().expect("stdout configured");
@@ -2837,6 +2870,93 @@ mod tests {
         assert_eq!(models.len(), 2);
         assert_eq!(models[0], "other/model");
         assert_eq!(models[1], "provider/model");
+    }
+
+    // ── OpenCode executable resolver tests ──
+
+    #[cfg(unix)]
+    fn make_executable(path: &std::path::Path) {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755))
+            .expect("make executable");
+    }
+
+    #[cfg(not(unix))]
+    fn make_executable(_path: &std::path::Path) {}
+
+    #[test]
+    fn test_resolve_opencode_path_lookup() {
+        let _guard = crate::test_env::guard::lock();
+        let dir = temp_root("resolve-path");
+        std::fs::create_dir_all(&dir).expect("mkdir");
+
+        let fake_path = dir.join("opencode");
+        std::fs::write(&fake_path, "#!/bin/sh\necho opencode/fake-model\n")
+            .expect("write fake opencode");
+        make_executable(&fake_path);
+
+        let original_path = std::env::var("PATH").ok();
+        unsafe {
+            std::env::set_var("PATH", dir.to_string_lossy().as_ref());
+        }
+
+        let result = super::resolve_opencode_executable();
+
+        if let Some(p) = original_path {
+            unsafe { std::env::set_var("PATH", &p) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+
+        assert!(result.is_some(), "should find opencode via PATH");
+        assert_eq!(result.unwrap(), fake_path);
+
+        cleanup(&dir);
+    }
+
+    #[test]
+    fn test_resolve_opencode_fallback_path_check_leaves_no_panic() {
+        // This test verifies the fallback check does not panic when PATH is empty
+        // and no fallback candidate exists on the test machine.
+        // On dev machines with Homebrew opencode, the fallback may still find it,
+        // which is correct behavior.
+        let _guard = crate::test_env::guard::lock();
+        let original_path = std::env::var("PATH").ok();
+        unsafe {
+            std::env::set_var("PATH", "");
+        }
+
+        // Must not panic regardless of outcome
+        let _result = super::resolve_opencode_executable();
+
+        if let Some(p) = original_path {
+            unsafe { std::env::set_var("PATH", &p) };
+        } else {
+            unsafe { std::env::remove_var("PATH") };
+        }
+        // No assertion — just ensuring no panic
+    }
+
+    #[test]
+    fn test_list_available_opencode_models_error_message_safe() {
+        // Verify the error message when opencode cannot be found does not
+        // expose raw PATH values, auth files, or shell config.
+        let err = super::list_available_opencode_models();
+        if let Err(msg) = err {
+            assert!(
+                !msg.contains("PATH="),
+                "error must not expose raw PATH: {}",
+                msg
+            );
+            assert!(
+                !msg.contains("/home/"),
+                "error must not expose home directory: {}",
+                msg
+            );
+            // Should mention Homebrew if relevant
+            // (either the error mentions Homebrew or it succeeded)
+        }
+        // If it succeeded (opencode is installed), that's also fine
     }
 
     // ── Config update / generation tests ──

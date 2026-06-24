@@ -77,7 +77,7 @@ fn find_case_insensitive_match(base: &Path, suffix: &str) -> Option<PathBuf> {
     None
 }
 
-fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
+pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
     if !path.is_file() {
         return false;
     }
