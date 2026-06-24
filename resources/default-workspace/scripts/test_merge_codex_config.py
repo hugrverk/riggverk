@@ -540,6 +540,145 @@ sandbox_mode = "none"
         assert 'last_updated = "2026-01-15"' in content
 
 
+# ── Fallback parser tests (tomllib-compat subset) ──
+
+# Import the fallback parser from the main module
+import importlib.util
+_mod_spec = importlib.util.spec_from_file_location("_merge_codex_module", str(SCRIPT))
+_merge_mod = importlib.util.module_from_spec(_mod_spec)
+_mod_spec.loader.exec_module(_merge_mod)
+parse_minimal_toml = _merge_mod.parse_minimal_toml
+
+
+def test_fallback_parser_basic_scalars() -> None:
+    result = parse_minimal_toml('model = "gpt-5.5"\n')
+    assert result["model"] == "gpt-5.5"
+
+
+def test_fallback_parser_all_scalars() -> None:
+    text = """
+model = "gpt-5.5"
+model_reasoning_effort = "high"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["model"] == "gpt-5.5"
+    assert result["model_reasoning_effort"] == "high"
+    assert result["approval_policy"] == "on-request"
+    assert result["approvals_reviewer"] == "user"
+    assert result["sandbox_mode"] == "workspace-write"
+
+
+def test_fallback_parser_dotted_keys() -> None:
+    text = """
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["apps"]["_default"]["approvals_reviewer"] == "user"
+    assert result["apps"]["_default"]["default_tools_approval_mode"] == "prompt"
+
+
+def test_fallback_parser_simple_tables() -> None:
+    text = """
+[mcp_servers]
+[profiles.safe]
+[apps._default]
+""".strip()
+    result = parse_minimal_toml(text)
+    assert isinstance(result["mcp_servers"], dict)
+    assert isinstance(result["profiles"]["safe"], dict)
+    assert isinstance(result["apps"]["_default"], dict)
+
+
+def test_fallback_parser_inline_comment_after_string() -> None:
+    text = 'model = "gpt-5.5" # fast model\n'
+    result = parse_minimal_toml(text)
+    assert result["model"] == "gpt-5.5"
+
+
+def test_fallback_parser_hash_inside_quoted_string() -> None:
+    code_value = "safe#not-a-comment"
+    text = f'profile = "{code_value}"\n'
+    result = parse_minimal_toml(text)
+    assert result["profile"] == code_value
+
+
+def test_fallback_parser_boolean() -> None:
+    text = "enabled = true\ndisabled = false\n"
+    result = parse_minimal_toml(text)
+    assert result["enabled"] is True
+    assert result["disabled"] is False
+
+
+def test_fallback_parser_integer() -> None:
+    text = "timeout = 42\n"
+    result = parse_minimal_toml(text)
+    assert result["timeout"] == 42
+
+
+def test_fallback_parser_float() -> None:
+    text = "temperature = 0.7\n"
+    result = parse_minimal_toml(text)
+    assert isinstance(result["temperature"], float)
+
+
+def test_fallback_parser_empty_array() -> None:
+    text = "items = []\n"
+    result = parse_minimal_toml(text)
+    assert result["items"] == []
+
+
+def test_fallback_parser_skip_comments() -> None:
+    text = """
+# This is a comment
+model = "gpt-5.5"
+# Another comment
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["model"] == "gpt-5.5"
+    assert "model" in result
+
+
+def test_fallback_parser_mixed_content_with_unknown_tables() -> None:
+    text = """
+model = "gpt-5.5"
+approvals_reviewer = "user"
+
+[env]
+PATH = "/usr/bin"
+
+[mcp_servers.custom]
+url = "https://example.com"
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["model"] == "gpt-5.5"
+    assert result["approvals_reviewer"] == "user"
+    assert result["env"]["PATH"] == "/usr/bin"
+    assert result["mcp_servers"]["custom"]["url"] == "https://example.com"
+
+
+def test_fallback_parser_dotted_in_table() -> None:
+    text = """
+[apps]
+_default.approvals_reviewer = "user"
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["apps"]["_default"]["approvals_reviewer"] == "user"
+
+
+def test_fallback_parser_table_with_comment_line_after() -> None:
+    text = """
+[mcp_servers]
+# this is a comment after the table header
+enabled = true
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["mcp_servers"]["enabled"] is True
+
+
 # ── Main guard ──
 
 if __name__ == "__main__":

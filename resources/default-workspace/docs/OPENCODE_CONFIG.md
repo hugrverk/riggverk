@@ -121,6 +121,27 @@ The sync validates both JSON files before applying. It also installs agent files
 
 A backup is created before overwriting if the current config or agent files differ.
 
+## App-level model override
+
+The Agent Workspace app provides a **Model selection** UI in the OpenCode tab. When you select a model and small model, the selection is stored in an app-level override file at:
+
+```
+~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json
+```
+
+This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`.
+
+The override takes effect when you click **Install/Update** in the OpenCode tab. The installed `~/.config/opencode/opencode.json` receives the selected model and small_model from the override file. Workspace templates are not mutated.
+
+If no override exists, the workspace `templates/opencode.base.json` values are used as the source of truth for model selection.
+
+To remove the override, delete the file and run Install/Update:
+```
+rm ~/Library/Application\ Support/ai.agentworkspace.app/opencode-model-selection.json
+```
+
+The override is safe to delete; the app falls back to workspace template defaults.
+
 ## Customization
 
 The template is user-editable. Add project-specific allow/deny rules as needed. Avoid weakening the secret-file deny rules in the `read`, `edit`, and `bash` sections.

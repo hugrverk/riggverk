@@ -86,8 +86,60 @@ agent_basename() {
 validate_toml() {
   python3 - "$1" <<'PY'
 import sys
-import tomllib
 from pathlib import Path
+try:
+    import tomllib
+except ModuleNotFoundError:
+    import ast as _ast
+    class tomllib:
+        TOMLDecodeError = ValueError
+        @staticmethod
+        def loads(text):
+            root = {}
+            current = root
+            for line in text.splitlines():
+                s = line.strip()
+                if not s or s.startswith('#'):
+                    continue
+                if s.startswith('[') and s.endswith(']'):
+                    parts = [p.strip().strip('"') for p in s[1:-1].split('.')]
+                    if not parts or any(not p for p in parts):
+                        continue
+                    c = root
+                    for p in parts:
+                        c = c.setdefault(p, {})
+                    current = c
+                    continue
+                if '=' not in s:
+                    continue
+                k, v = s.split('=', 1)
+                v = v.strip()
+                ci = v.find('#')
+                in_q = False
+                esc = False
+                for i, ch in enumerate(v):
+                    if esc: esc = False; continue
+                    if ch == '\\': esc = True; continue
+                    if ch == '"': in_q = not in_q; continue
+                    if ch == '#' and not in_q: v = v[:i].rstrip(); break
+                if v == 'true': val = True
+                elif v == 'false': val = False
+                elif v.startswith('"'): val = _ast.literal_eval(v)
+                else:
+                    try: val = int(v)
+                    except ValueError:
+                        try: val = float(v)
+                        except ValueError: val = v
+                kk = k.strip()
+                if '.' in kk:
+                    ks = [p.strip().strip('"') for p in kk.split('.')]
+                    c = root
+                    for p in ks[:-1]:
+                        c = c.setdefault(p, {})
+                    c[ks[-1]] = val
+                else:
+                    current[kk] = val
+            return root
 
 path = Path(sys.argv[1])
 tomllib.loads(path.read_text(encoding="utf-8"))

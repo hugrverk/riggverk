@@ -158,7 +158,7 @@ function ModelSelectionPanel({ workspaceValid, onModelUpdated, onCardRefreshNeed
         </button>
       </div>
       <p className="harness-action-card-desc">
-        Choose model and small_model for sessions and background tasks.
+        Choose the OpenCode model override. It is stored in app settings and applied on the next OpenCode Install/Update; workspace templates are not edited.
       </p>
 
       <div className="ws-runtime-rows">
@@ -227,7 +227,7 @@ function ModelSelectionPanel({ workspaceValid, onModelUpdated, onCardRefreshNeed
       {saveMessage && (
         <p
           className="harness-action-next"
-          style={{ color: saveMessage.includes("Updated") || saveMessage.includes("updated") ? "var(--accent)" : "var(--warn)" }}
+          style={{ color: saveMessage.includes("saved") || saveMessage.includes("Saved") ? "var(--accent)" : "var(--warn)" }}
         >
           {saveMessage}
         </p>
