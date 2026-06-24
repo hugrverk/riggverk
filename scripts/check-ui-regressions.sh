@@ -19,12 +19,12 @@ fail() {
   exit 1
 }
 
-if rg -n 'box-shadow:[^;]*inset (2px 0|0 -2px)' src/styles.css >"$ui_tmp"; then
+if rg -n 'box-shadow:[^;]*inset (2px 0|0 -2px)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "heavy inset selected-state bars are not allowed"
 fi
 
-if rg -n 'border-left:[^;]*2px solid (var\(--accent\)|currentColor)' src/styles.css >"$ui_tmp"; then
+if rg -n 'border-left:[^;]*2px solid (var\(--accent\)|currentColor)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "heavy decorative selected left borders are not allowed"
 fi
@@ -49,14 +49,14 @@ if rg -n '>Overview<|\{SECTIONS\.find\(s => s\.id === section\)\?\.label' src/to
   fail "Repo Dashboard must not render a redundant section heading below the path controls"
 fi
 
-if ! rg -n -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: auto;' src/styles.css >"$ui_tmp"; then
+if ! rg -n -U '\.brain-setup-lib-body \.copyable-block-content \{[^}]*overflow: auto;' src/styles >"$ui_tmp"; then
   fail "Brain Setup Library content must define a local scroll container"
 fi
 
 if ! rg -n 'data-app-font-size' src/lib/settingsDraft.ts >"$ui_tmp"; then
   fail "app font-size setting must set a root data attribute"
 fi
-if ! rg -n -- '--app-font-size|--app-font-scale' src/styles.css >"$ui_tmp"; then
+if ! rg -n -- '--app-font-size|--app-font-scale' src/styles >"$ui_tmp"; then
   fail "app font-size setting must drive CSS variables"
 fi
 if ! rg -n 'Global app text size' src/views/SettingsView.tsx >"$ui_tmp"; then
@@ -65,32 +65,32 @@ fi
 if ! rg -n 'APP_FONT_SIZE_VALUES' src/views/SettingsView.tsx src/lib/settingsDraft.ts >"$ui_tmp"; then
   fail "app font-size setting must expose all persisted values"
 fi
-if ! rg -n -- '--text-xs|--text-sm|--text-base|--text-lg|--text-heading|--font-size-heading|--text-display' src/styles.css >"$ui_tmp"; then
+if ! rg -n -- '--text-xs|--text-sm|--text-base|--text-lg|--text-heading|--font-size-heading|--text-display' src/styles >"$ui_tmp"; then
   fail "semantic typography variables must exist"
 fi
-if rg -n -- '--text-heading:\s*[^;]*(rem|px|em|%)' src/styles.css >"$ui_tmp"; then
+if rg -n -- '--text-heading:\s*[^;]*(rem|px|em|%)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "--text-heading must remain a color token, not a font-size length"
 fi
-if rg -n -- '--font-size-heading:\s*(#|rgba?\()' src/styles.css >"$ui_tmp"; then
+if rg -n -- '--font-size-heading:\s*(#|rgba?\()' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "--font-size-heading must remain a length token, not a color"
 fi
-if ! rg -n -- '--font-size-heading:\s*[0-9.]+rem' src/styles.css >"$ui_tmp"; then
+if ! rg -n -- '--font-size-heading:\s*[0-9.]+rem' src/styles >"$ui_tmp"; then
   fail "semantic heading font-size token must exist"
 fi
-if rg -n 'zoom:\s*[^;]+' src/styles.css >"$ui_tmp"; then
+if rg -n 'zoom:\s*[^;]+' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "typography scaling must not use CSS zoom"
 fi
 if ! rg -n 'extra-large' src/lib/settingsDraft.ts src/types.ts src-tauri/src/settings.rs >"$ui_tmp"; then
   fail "extra-large app font-size value must exist in frontend and backend contracts"
 fi
-if ! rg -n 'font:\s*inherit' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'font:\s*inherit' src/styles >"$ui_tmp"; then
   fail "form controls must inherit typography"
 fi
 
-if rg -n -U '\.repo-dashboard-heat-(scroll|wrap|box|grid)[^{]*\{[^}]*overflow-y:\s*(auto|scroll)' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-heat-(scroll|wrap|box|grid)[^{]*\{[^}]*overflow-y:\s*(auto|scroll)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard heatmap must not use vertical overflow scrolling"
 fi
@@ -100,27 +100,27 @@ fi
 if ! rg -n 'ActivityHeatmapDensity|density=' src/tools/repoDashboard/RepoDashboardCharts.tsx >"$ui_tmp"; then
   fail "Repo Dashboard heatmap must pass density prop"
 fi
-if ! rg -n 'repo-dashboard-heat-density-compact|--heat-week-count' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'repo-dashboard-heat-density-compact|--heat-week-count' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard heatmap density CSS must exist"
 fi
-if ! rg -n 'repeat\(var\(--heat-week-count' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'repeat\(var\(--heat-week-count' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard heatmap grid must use week-count CSS variable"
 fi
-if rg -n -U '\.repo-dashboard-heat-cell[^{]*\{[^}]*width:\s*100%' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-heat-cell[^{]*\{[^}]*width:\s*100%' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard heat cells must not stretch to 100% width"
 fi
-if ! rg -n 'aspect-ratio:\s*1\s*/\s*1' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'aspect-ratio:\s*1\s*/\s*1' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard heat cells must keep square aspect ratio"
 fi
-if ! rg -n 'grid-template-columns: repeat\(var\(--heat-week-count[^)]+\),\s*var\(--heat-cell-size' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'grid-template-columns: repeat\(var\(--heat-week-count[^)]+\),\s*var\(--heat-cell-size' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard heat grid must size cells explicitly"
 fi
-if rg -n 'scrollRef|scrollLeft|repo-dashboard-heat-scroll' src/tools/repoDashboard/RepoDashboardCharts.tsx src/styles.css >"$ui_tmp"; then
+if rg -n 'scrollRef|scrollLeft|repo-dashboard-heat-scroll' src/tools/repoDashboard/RepoDashboardCharts.tsx src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard heatmap must not use horizontal scroll hacks"
 fi
-if rg -n -U '\.repo-dashboard-heat-(wrap|box|grid)[^{]*\{[^}]*overflow-x:\s*(auto|scroll)' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-heat-(wrap|box|grid)[^{]*\{[^}]*overflow-x:\s*(auto|scroll)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard heatmap must not use horizontal overflow scrolling"
 fi
@@ -134,7 +134,7 @@ fi
 if ! rg -n 'repo-dashboard-work-primary-columns|repo-dashboard-work-column-scroll' src/tools/repoDashboard/RepoWorkWorkspace.tsx >"$ui_tmp"; then
   fail "Repo Dashboard work columns layout must exist"
 fi
-if rg -n 'repo-dashboard-work-column-active|repo-dashboard-work-active-columns|repo-dashboard-work-subcolumn' src/tools/repoDashboard src/styles.css >"$ui_tmp"; then
+if rg -n 'repo-dashboard-work-column-active|repo-dashboard-work-active-columns|repo-dashboard-work-subcolumn' src/tools/repoDashboard src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "deprecated Repo Dashboard work column selectors must not return"
 fi
@@ -144,18 +144,18 @@ fi
 if ! rg -n 'density="default"' src/tools/repoDashboard/RepoActivityInsights.tsx >"$ui_tmp"; then
   fail "Repo Dashboard activity insights must use default heatmap density"
 fi
-if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-workspace \{[^}]*overflow:\s*auto' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard workspace shell must not scroll as a whole"
 fi
-if rg -n -U '\.repo-dashboard-overview-lower \.repo-dashboard-latest-content[^{]*\{[^}]*overflow:\s*(auto|scroll)' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-overview-lower \.repo-dashboard-latest-content[^{]*\{[^}]*overflow:\s*(auto|scroll)' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard latest content must not scroll independently"
 fi
-if rg -n -U '\.repo-dashboard-activity-insights-svg[^{]*\{[^}]*min-height:\s*[2-9][0-9]{2}px' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-activity-insights-svg[^{]*\{[^}]*min-height:\s*[2-9][0-9]{2}px' src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "Repo Dashboard activity chart must not force oversized min-height"
 fi
-if rg -n -U '\.repo-dashboard-heat-aside \{[^}]*overflow:\s*auto' src/styles.css >"$ui_tmp"; then
+if rg -n -U '\.repo-dashboard-heat-aside \{[^}]*overflow:\s*auto' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard heat aside must not scroll independently"
 fi
 if rg -n 'hellq|PRIVATE|uxsmedjan|PRIVATE' src/tools/repoDashboard/model.ts >"$ui_tmp"; then
@@ -165,13 +165,13 @@ fi
 if ! rg -n 'WORK_ITEMS_DISPLAY_CAP|Showing first' src/tools/repoDashboard/RepoWorkWorkspace.tsx src/tools/repoDashboard/RepoDashboardTool.tsx >"$ui_tmp"; then
   fail "Repo Dashboard work list must disclose display cap"
 fi
-if ! rg -n 'repo-dashboard-work-column-scroll \.repo-dashboard-list' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'repo-dashboard-work-column-scroll \.repo-dashboard-list' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard work column scroll container must exist"
 fi
-if ! rg -n 'grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'grid-template-columns: repeat\(3, minmax\(0, 1fr\)\)' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard work primary columns must use three-column grid"
 fi
-if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows:\s*repeat\(3' src/styles.css >"$ui_tmp"; then
+if ! rg -n -U '@media \(max-width: 1100px\)[\s\S]*\.repo-dashboard-work-primary-columns[\s\S]*grid-template-rows:\s*repeat\(3' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard work columns must stack on narrow viewports"
 fi
 if ! rg -n 'repo-dashboard-activity-chart-footer' src/tools/repoDashboard/RepoActivityInsights.tsx >"$ui_tmp"; then
@@ -181,18 +181,18 @@ if rg -n 'repo-dashboard-activity-insights-meta' src/tools/repoDashboard/RepoAct
   cat "$ui_tmp" >&2
   fail "deprecated Repo Dashboard activity meta row must not return"
 fi
-if ! rg -n '\[data-theme="light"\] \.repo-dashboard-heat-cell\.l1' src/styles.css >"$ui_tmp"; then
+if ! rg -n '\[data-theme="light"\] \.repo-dashboard-heat-cell\.l1' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard light-theme heat cells must define level-1 color"
 fi
-if rg -n 'repo-dashboard-heat-aside' src/tools/repoDashboard src/styles.css >"$ui_tmp"; then
+if rg -n 'repo-dashboard-heat-aside' src/tools/repoDashboard src/styles >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "deprecated Repo Dashboard heat aside must not return"
 fi
-if rg -n 'repo-dashboard-heat-card|repo-dashboard-overview-mid|repo-dashboard-overview-full' src/styles.css src/tools/repoDashboard >"$ui_tmp"; then
+if rg -n 'repo-dashboard-heat-card|repo-dashboard-overview-mid|repo-dashboard-overview-full' src/styles src/tools/repoDashboard >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "deprecated Repo Dashboard overview layout selectors must not return"
 fi
-if ! rg -n 'repo-dashboard-activity-sidebar|repo-dashboard-overview-lower' src/styles.css >"$ui_tmp"; then
+if ! rg -n 'repo-dashboard-activity-sidebar|repo-dashboard-overview-lower' src/styles >"$ui_tmp"; then
   fail "Repo Dashboard overview lower layout must exist"
 fi
 if rg -n 'Source health|buildSourceHealth' src/tools/repoDashboard/RepoDashboardTool.tsx src/tools/repoDashboard/model.ts >"$ui_tmp"; then
@@ -247,7 +247,7 @@ if rg -n 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/Pro
   fail "Prompt Builder shortcut hint block must not return"
 fi
 
-if ! rg -n 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles.css >"$ui_tmp"; then
+if ! rg -n 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles >"$ui_tmp"; then
   fail "Library Docs scoped reading surface must exist"
 fi
 if rg -n 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/components/AppHeaderNav.tsx >"$ui_tmp"; then

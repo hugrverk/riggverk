@@ -509,7 +509,18 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
-  const stylesSource = readFileSync(new URL("../src/styles.css", import.meta.url), "utf8");
+  const stylesSource = [
+    "../src/styles/_tokens.scss",
+    "../src/styles/_shell.scss",
+    "../src/styles/_content.scss",
+    "../src/styles/_settings-targets.scss",
+    "../src/styles/_workspace-library.scss",
+    "../src/styles/_tools-prompt.scss",
+    "../src/styles/_repo-dashboard.scss",
+    "../src/styles/_state-dialogs-terminal.scss",
+  ]
+    .map(path => readFileSync(new URL(path, import.meta.url), "utf8"))
+    .join("\n");
   assert.ok(
     stylesSource.includes("--repo-chart-series-1: #e4ed42"),
     "chart series 1 must use lime",

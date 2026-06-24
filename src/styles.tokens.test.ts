@@ -3,8 +3,19 @@ import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import { applyThemeSettings, defaultSettings } from "./lib/settingsDraft";
 
-const stylesPath = resolve(import.meta.dirname, "styles.css");
-const styles = readFileSync(stylesPath, "utf8");
+const stylePartials = [
+  "_tokens.scss",
+  "_shell.scss",
+  "_content.scss",
+  "_settings-targets.scss",
+  "_workspace-library.scss",
+  "_tools-prompt.scss",
+  "_repo-dashboard.scss",
+  "_state-dialogs-terminal.scss",
+];
+const styles = stylePartials
+  .map(file => readFileSync(resolve(import.meta.dirname, "styles", file), "utf8"))
+  .join("\n");
 
 function rootBlockDeclarations(): Map<string, string> {
   const match = styles.match(/:root\s*\{([^}]+)\}/);

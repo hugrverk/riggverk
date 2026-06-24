@@ -1,0 +1,138 @@
+:root {
+  --bg: #212121;
+  --bg-panel: color-mix(in srgb, var(--bg) 97%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 79%, black);
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --text: #e0e0e0;
+  --text-muted: #909090;
+  --text-heading: #ededed;
+  --accent-rgb: 110, 168, 254;
+  --accent: #6ea8fe;
+  --accent-dim: rgba(var(--accent-rgb), 0.12);
+  --accent-bg: rgba(var(--accent-rgb), 0.16);
+  --active-bg: rgba(var(--accent-rgb), 0.10);
+  --active-border: rgba(var(--accent-rgb), 0.24);
+  --active-border-strong: rgba(var(--accent-rgb), 0.34);
+  --focus-ring: rgba(var(--accent-rgb), 0.5);
+  --fail: #f87171;
+  --warn: #fbbf24;
+  --ok: #6ea8fe;
+  --dirty: #f59e0b;
+  --radius: 4px;
+  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
+  --app-font-size: 15px;
+  --app-font-scale: 1;
+  --text-xs: 0.667rem;
+  --text-sm: 0.8rem;
+  --text-base: 1rem;
+  --text-lg: 1.133rem;
+  --font-size-heading: 1.067rem;
+  --text-display: 1.2rem;
+  --header-height: 44px;
+  --traffic-light-reserve: 80px;
+  --nav-leading-gap: 10px;
+  --nav-icon-size: 32px;
+  --repo-chart-series-1: #e4ed42;
+  --repo-chart-series-2: #f1f1f1;
+  --repo-chart-series-3: #cdd63b;
+  --repo-chart-series-4: #dcdcdc;
+  --repo-chart-series-5: #b6bf34;
+  --repo-chart-series-6: #c8c8c8;
+  --repo-chart-series-7: #9fa82d;
+  --repo-chart-series-8: #b4b4b4;
+  --repo-chart-gridline: rgba(255, 255, 255, 0.06);
+  --repo-chart-axis: rgba(255, 255, 255, 0.12);
+  --repo-chart-text: rgba(255, 255, 255, 0.42);
+}
+
+[data-theme="light"] {
+  --bg: #f5f5f5;
+  --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
+  --border: rgba(0, 0, 0, 0.08);
+  --border-strong: rgba(0, 0, 0, 0.14);
+  --text: #1a1a1a;
+  --text-muted: #666666;
+  --text-heading: #111111;
+  --repo-chart-series-1: #7a830f;
+  --repo-chart-series-2: #6e737a;
+  --repo-chart-series-3: #6a720d;
+  --repo-chart-series-4: #5f646b;
+  --repo-chart-series-5: #5a610b;
+  --repo-chart-series-6: #565b61;
+  --repo-chart-series-7: #4a5009;
+  --repo-chart-series-8: #5c6167;
+  --repo-chart-gridline: rgba(0, 0, 0, 0.07);
+  --repo-chart-axis: rgba(0, 0, 0, 0.14);
+  --repo-chart-text: rgba(0, 0, 0, 0.45);
+}
+
+@media (prefers-color-scheme: light) {
+  [data-theme="system"] {
+    --bg: #f5f5f5;
+    --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
+    --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
+    --border: rgba(0, 0, 0, 0.08);
+    --border-strong: rgba(0, 0, 0, 0.14);
+    --text: #1a1a1a;
+    --text-muted: #666666;
+    --text-heading: #111111;
+    --repo-chart-series-1: #7a830f;
+    --repo-chart-series-2: #6e737a;
+    --repo-chart-series-3: #6a720d;
+    --repo-chart-series-4: #5f646b;
+    --repo-chart-series-5: #5a610b;
+    --repo-chart-series-6: #565b61;
+    --repo-chart-series-7: #4a5009;
+    --repo-chart-series-8: #5c6167;
+    --repo-chart-gridline: rgba(0, 0, 0, 0.07);
+    --repo-chart-axis: rgba(0, 0, 0, 0.14);
+    --repo-chart-text: rgba(0, 0, 0, 0.45);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Focus-visible for keyboard navigation */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.nav-icon:focus-visible, .btn:focus-visible, .copy-btn:focus-visible, .settings-accent-picker:focus-visible, .settings-target-row:focus-visible, .tool-section-tab:focus-visible, .prompt-loops-card:focus-visible, .prompt-loops-search input:focus-visible, .prompt-loops-composer-select:focus-visible, .prompt-loops-composer-textarea:focus-visible, .prompt-loops-option-chip:focus-visible, .prompt-loops-options-summary:focus-visible, .prompt-loops-composer-reset:focus-visible, .tool-field:focus-visible, .repo-dashboard-field:focus-visible, .repo-dashboard-btn:focus-visible, .repo-dashboard-kpi:focus-visible, .repo-dashboard-seg:focus-visible, .settings-input:focus-visible, .docs-create-input:focus-visible, .lib-search-input:focus-visible, .docs-search:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 1px;
+}
+
+button:focus:not(:focus-visible),
+input:focus:not(:focus-visible),
+textarea:focus:not(:focus-visible),
+[tabindex]:focus:not(:focus-visible) {
+  outline: none;
+}
+
+html, body, #root {
+  height: 100%;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: var(--app-font-size);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}

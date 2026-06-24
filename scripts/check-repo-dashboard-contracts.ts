@@ -15,6 +15,21 @@ function read(rel: string): string {
   return readFileSync(join(root, rel), "utf8");
 }
 
+function readStyles(): string {
+  return [
+    "src/styles/_tokens.scss",
+    "src/styles/_shell.scss",
+    "src/styles/_content.scss",
+    "src/styles/_settings-targets.scss",
+    "src/styles/_workspace-library.scss",
+    "src/styles/_tools-prompt.scss",
+    "src/styles/_repo-dashboard.scss",
+    "src/styles/_state-dialogs-terminal.scss",
+  ]
+    .map(read)
+    .join("\n");
+}
+
 function cssRuleBlock(styles: string, selector: string): string | undefined {
   const needle = `${selector} {`;
   let searchFrom = 0;
@@ -84,7 +99,7 @@ assert.match(rustSource, /"ls-tree"/);
 assert.match(rustSource, /"show"/);
 assert.doesNotMatch(rustSource, /sh\s+-c/);
 
-const styles = read("src/styles.css");
+const styles = readStyles();
 assert.match(styles, /\.tool-field,/);
 assert.match(styles, /--bg-panel:\s*color-mix\(in srgb, var\(--bg\)/);
 assert.match(styles, /--bg-inset:\s*color-mix\(in srgb, var\(--bg\)/);

@@ -2,7 +2,7 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import { isTauri } from "@tauri-apps/api/core";
 import App from "./App";
-import "./styles.css";
+import "./styles/index.scss";
 
 if (isTauri()) {
   document.documentElement.dataset.tauri = "";

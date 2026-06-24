@@ -11,7 +11,18 @@ const toolSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardTool.
 const workSource = readRepoDashboard("src/tools/repoDashboard/RepoWorkWorkspace.tsx");
 const chartsSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardCharts.tsx");
 const activitySource = readRepoDashboard("src/tools/repoDashboard/RepoActivityInsights.tsx");
-const stylesSource = readRepoDashboard("src/styles.css");
+const stylesSource = [
+  "src/styles/_tokens.scss",
+  "src/styles/_shell.scss",
+  "src/styles/_content.scss",
+  "src/styles/_settings-targets.scss",
+  "src/styles/_workspace-library.scss",
+  "src/styles/_tools-prompt.scss",
+  "src/styles/_repo-dashboard.scss",
+  "src/styles/_state-dialogs-terminal.scss",
+]
+  .map(readRepoDashboard)
+  .join("\n");
 const rustSource = readRepoDashboard("src-tauri/src/commands/repo_dashboard.rs");
 
 const sections = ['"overview"', '"work"', '"docs"'];
