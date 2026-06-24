@@ -1,22 +1,149 @@
 #!/usr/bin/env python3
 """Merge bundled Codex managed config sections into an installed config.toml.
 
-Uses tomllib for validation and line-based patching to preserve user content:
-comments, model, personality, MCP servers, unknown tables, arrays, dates, and
-formatting outside the exact managed fields. Refuses write when the patching
-target is ambiguous.
+Uses tomllib when available and a small compatibility parser on older system
+Python versions for the managed scalar/table subset this script owns. Line-based
+patching preserves user content: comments, personality, MCP servers, unknown
+tables, arrays, dates, and formatting outside the exact managed fields. Refuses
+write when the patching target is ambiguous.
 """
 
 from __future__ import annotations
 
 import argparse
+import ast
 import json
 import re
 import shutil
 import sys
-import tomllib
 from pathlib import Path
 from typing import Any
+
+
+def strip_inline_comment(text: str) -> str:
+    in_double = False
+    escape = False
+    i = 0
+    while i < len(text):
+        ch = text[i]
+        if in_double:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_double = False
+        else:
+            if ch == '"':
+                in_double = True
+            elif ch == "#":
+                return text[:i].rstrip()
+        i += 1
+    return text.rstrip()
+
+
+def parse_compat_value(raw: str) -> Any:
+    value = strip_inline_comment(raw).strip()
+    if not value:
+        raise ValueError("empty TOML value")
+    if value.startswith('"""'):
+        end = value.find('"""', 3)
+        if end < 0:
+            raise ValueError("unterminated multiline string")
+        return value[3:end]
+    if value.startswith('"'):
+        try:
+            return ast.literal_eval(value)
+        except (SyntaxError, ValueError) as exc:
+            raise ValueError(f"invalid string value: {exc}") from exc
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if value.startswith("[") and value.endswith("]"):
+        return []
+    if value.startswith("{") and value.endswith("}"):
+        return {}
+    try:
+        return int(value, 10)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def split_dotted_key(key: str) -> list[str]:
+    parts = [part.strip().strip('"') for part in key.split(".")]
+    if not parts or any(not part for part in parts):
+        raise ValueError(f"invalid dotted key: {key!r}")
+    return parts
+
+
+def table_at(root: dict[str, Any], parts: list[str]) -> dict[str, Any]:
+    current: Any = root
+    for part in parts:
+        if isinstance(current, list):
+            if not current or not isinstance(current[-1], dict):
+                current.append({})
+            current = current[-1]
+        if not isinstance(current, dict):
+            raise ValueError(f"TOML table prefix is not a table: {'.'.join(parts)}")
+        current = current.setdefault(part, {})
+    if not isinstance(current, dict):
+        raise ValueError(f"TOML table is not a table: {'.'.join(parts)}")
+    return current
+
+
+def assign_compat_value(current: dict[str, Any], dotted_key: str, value: Any) -> None:
+    parts = split_dotted_key(dotted_key)
+    table = table_at(current, parts[:-1]) if len(parts) > 1 else current
+    table[parts[-1]] = value
+
+
+def parse_minimal_toml(text: str) -> dict[str, Any]:
+    """Parse the scalar/table TOML subset needed when stdlib tomllib is absent.
+
+    This is a compatibility fallback for macOS system Python. It is deliberately
+    small and is only used to locate managed Codex keys; patching remains
+    line-based and preserves the original bytes outside managed assignments.
+    """
+    root: dict[str, Any] = {}
+    current = root
+    for raw_line in text.splitlines():
+        stripped = raw_line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        if stripped.startswith("[[") and stripped.endswith("]]" ):
+            parts = split_dotted_key(stripped[2:-2].strip())
+            parent = table_at(root, parts[:-1]) if len(parts) > 1 else root
+            array = parent.setdefault(parts[-1], [])
+            if not isinstance(array, list):
+                raise ValueError(f"TOML array table conflicts with existing value: {'.'.join(parts)}")
+            item: dict[str, Any] = {}
+            array.append(item)
+            current = item
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            current = table_at(root, split_dotted_key(stripped[1:-1].strip()))
+            continue
+        if "=" not in stripped:
+            raise ValueError(f"invalid TOML line: {stripped!r}")
+        key, raw_value = stripped.split("=", 1)
+        assign_compat_value(current, key.strip(), parse_compat_value(raw_value))
+    return root
+
+
+try:
+    import tomllib  # type: ignore[no-redef]
+except ModuleNotFoundError:
+    class tomllib:  # type: ignore[no-redef]
+        TOMLDecodeError = ValueError
+
+        @staticmethod
+        def loads(text: str) -> dict[str, Any]:
+            return parse_minimal_toml(text)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
