@@ -85,64 +85,144 @@ agent_basename() {
 
 validate_toml() {
   python3 - "$1" <<'PY'
+import ast
+import os
 import sys
 from pathlib import Path
-try:
-    import tomllib
-except ModuleNotFoundError:
-    import ast as _ast
-    class tomllib:
-        TOMLDecodeError = ValueError
-        @staticmethod
-        def loads(text):
-            root = {}
-            current = root
-            for line in text.splitlines():
-                s = line.strip()
-                if not s or s.startswith('#'):
-                    continue
-                if s.startswith('[') and s.endswith(']'):
-                    parts = [p.strip().strip('"') for p in s[1:-1].split('.')]
-                    if not parts or any(not p for p in parts):
-                        continue
-                    c = root
-                    for p in parts:
-                        c = c.setdefault(p, {})
-                    current = c
-                    continue
-                if '=' not in s:
-                    continue
-                k, v = s.split('=', 1)
-                v = v.strip()
-                ci = v.find('#')
-                in_q = False
-                esc = False
-                for i, ch in enumerate(v):
-                    if esc: esc = False; continue
-                    if ch == '\\': esc = True; continue
-                    if ch == '"': in_q = not in_q; continue
-                    if ch == '#' and not in_q: v = v[:i].rstrip(); break
-                if v == 'true': val = True
-                elif v == 'false': val = False
-                elif v.startswith('"'): val = _ast.literal_eval(v)
-                else:
-                    try: val = int(v)
-                    except ValueError:
-                        try: val = float(v)
-                        except ValueError: val = v
-                kk = k.strip()
-                if '.' in kk:
-                    ks = [p.strip().strip('"') for p in kk.split('.')]
-                    c = root
-                    for p in ks[:-1]:
-                        c = c.setdefault(p, {})
-                    c[ks[-1]] = val
-                else:
-                    current[kk] = val
-            return root
+
+
+def strip_inline_comment(text):
+    in_double = False
+    escape = False
+    for i, ch in enumerate(text):
+        if in_double:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_double = False
+            continue
+        if ch == '"':
+            in_double = True
+        elif ch == "#":
+            return text[:i].rstrip()
+    return text.rstrip()
+
+
+def parse_basic_value(value):
+    value = strip_inline_comment(value).strip()
+    if not value:
+        raise ValueError("empty TOML value")
+    if value == "true":
+        return True
+    if value == "false":
+        return False
+    if value.startswith('"'):
+        return ast.literal_eval(value)
+    if value.startswith("[") and value.endswith("]"):
+        return []
+    if value.startswith("{") and value.endswith("}"):
+        return {}
+    try:
+        return int(value, 10)
+    except ValueError:
+        pass
+    try:
+        return float(value)
+    except ValueError:
+        return value
+
+
+def parse_multiline_value(lines, start_index, first_value):
+    value = first_value.strip()
+    for quote in ('"""', "'''"):
+        if value.startswith(quote):
+            rest = value[3:]
+            end = rest.find(quote)
+            if end >= 0:
+                return rest[:end], start_index
+            collected = [rest]
+            i = start_index + 1
+            while i < len(lines):
+                line = lines[i]
+                end = line.find(quote)
+                if end >= 0:
+                    collected.append(line[:end])
+                    return "\n".join(collected), i
+                collected.append(line)
+                i += 1
+            raise ValueError("unterminated multiline TOML string")
+    return parse_basic_value(value), start_index
+
+
+def split_dotted_key(key):
+    parts = [part.strip().strip('"') for part in key.split(".")]
+    if not parts or any(not part for part in parts):
+        raise ValueError(f"invalid dotted key: {key!r}")
+    return parts
+
+
+def table_at(root, parts):
+    current = root
+    for part in parts:
+        if not isinstance(current, dict):
+            raise ValueError(f"table prefix is not a table: {'.'.join(parts)}")
+        current = current.setdefault(part, {})
+    if not isinstance(current, dict):
+        raise ValueError(f"table is not a table: {'.'.join(parts)}")
+    return current
+
+
+def assign_value(current, root, dotted_key, value):
+    parts = split_dotted_key(dotted_key)
+    table = table_at(root, parts[:-1]) if len(parts) > 1 else current
+    table[parts[-1]] = value
+
+
+def parse_minimal_toml(text):
+    root = {}
+    current = root
+    lines = text.splitlines()
+    i = 0
+    while i < len(lines):
+        raw = lines[i]
+        stripped = raw.strip()
+        if not stripped or stripped.startswith("#"):
+            i += 1
+            continue
+        if stripped.startswith("[") and stripped.endswith("]"):
+            if stripped.startswith("[[") and stripped.endswith("]]" ):
+                # Agent TOML currently does not need array-table semantics for validation.
+                table_name = stripped[2:-2].strip()
+            else:
+                table_name = stripped[1:-1].strip()
+            current = table_at(root, split_dotted_key(table_name))
+            i += 1
+            continue
+        if "=" not in stripped:
+            raise ValueError(f"invalid TOML line: {stripped!r}")
+        key, raw_value = stripped.split("=", 1)
+        value, i = parse_multiline_value(lines, i, raw_value)
+        assign_value(current, root, key.strip(), value)
+        i += 1
+    return root
+
+
+if not os.environ.get("AGENT_WORKSPACE_FORCE_TOML_FALLBACK"):
+    try:
+        import tomllib
+    except ModuleNotFoundError:
+        tomllib = None
+else:
+    tomllib = None
 
 path = Path(sys.argv[1])
-tomllib.loads(path.read_text(encoding="utf-8"))
+text = path.read_text(encoding="utf-8")
+if tomllib is not None:
+    tomllib.loads(text)
+else:
+    parse_minimal_toml(text)
 PY
 }
 
