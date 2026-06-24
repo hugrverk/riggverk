@@ -15,6 +15,7 @@ The app writes only to these known paths under user home:
 | Surface | Path |
 |---------|------|
 | OpenCode config | `~/.config/opencode/opencode.json` (managed-key merge) |
+| OpenCode model override | `~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json` (non-secret model preference) |
 | OpenCode agents | `~/.config/opencode/agents/` |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` |
 | OpenCode skills | `~/.config/opencode/skills/` |
