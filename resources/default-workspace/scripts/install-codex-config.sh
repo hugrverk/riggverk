@@ -4,6 +4,7 @@ set -euo pipefail
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_config="$repo_root/templates/codex/config.toml"
 MERGE_SCRIPT="$repo_root/scripts/merge-codex-config.py"
+ROUTING_DEFAULTS_SCRIPT="$repo_root/scripts/ensure-codex-routing-defaults.py"
 apply=0
 show_diff=0
 quiet=0
@@ -20,7 +21,7 @@ Options:
   --quiet            Print compact app-friendly output
   --help             Show this help
 
-Managed sections preserve user model, personality, MCP, and unknown tables.
+Managed sections preserve user personality, MCP, and unknown tables while enforcing the bundled Codex model/routing/approval defaults.
 Environment overrides:
   CODEX_CONFIG_PATH
   CODEX_HOME
@@ -46,6 +47,7 @@ done
 
 [ -f "$source_config" ] || die "missing source config: $source_config"
 [ -f "$MERGE_SCRIPT" ] || die "missing merge script: $MERGE_SCRIPT"
+[ -f "$ROUTING_DEFAULTS_SCRIPT" ] || die "missing routing defaults script: $ROUTING_DEFAULTS_SCRIPT"
 
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 target_config="${CODEX_CONFIG_PATH:-$codex_home/config.toml}"
@@ -57,15 +59,28 @@ backup_root() {
   printf '%s\n' "$root"
 }
 
-codex_config_managed_match() {
+codex_config_legacy_managed_match() {
   [ -f "$target_config" ] || return 1
   python3 "$MERGE_SCRIPT" --managed-match "$target_config" "$source_config"
+}
+
+codex_routing_defaults_match() {
+  [ -f "$target_config" ] || return 1
+  python3 "$ROUTING_DEFAULTS_SCRIPT" --managed-match "$target_config" "$source_config"
+}
+
+codex_config_managed_match() {
+  codex_config_legacy_managed_match && codex_routing_defaults_match
 }
 
 codex_config_merge_preview() {
   local dest="$1"
   if [ -f "$target_config" ]; then
     python3 "$MERGE_SCRIPT" --merge "$target_config" "$source_config" --output "$dest"
+    local preview_backup
+    preview_backup="$(mktemp -d)"
+    python3 "$ROUTING_DEFAULTS_SCRIPT" --apply "$dest" "$source_config" --backup-dir "$preview_backup"
+    rm -rf "$preview_backup"
   else
     cp "$source_config" "$dest"
   fi
@@ -90,7 +105,11 @@ if [ "$show_diff" -eq 1 ]; then
     if codex_config_managed_match; then
       printf 'codex-config managed sections synced\n'
     else
-      python3 -c "
+      if codex_config_legacy_managed_match; then
+        printf '%s\n' '--- codex-config legacy managed-section diffs'
+        printf '  legacy approval/sandbox fields synced\n'
+      else
+        python3 -c "
 import json, sys, tomllib
 from pathlib import Path
 ws = Path('$repo_root')
@@ -113,12 +132,14 @@ for p in profiles:
         if ip.get(f) != sp.get(f):
             diff_items.append(f'managed profile \"{p}.{f}\" would change')
 if diff_items:
-    print('--- codex-config managed-section diffs')
+    print('--- codex-config legacy managed-section diffs')
     for d in diff_items:
         print(f'  {d}')
 else:
-    print('  codex-config managed sections differ (structural change)')
+    print('  codex-config legacy managed sections differ (structural change)')
 " || true
+      fi
+      python3 "$ROUTING_DEFAULTS_SCRIPT" --diff "$target_config" "$source_config" || true
     fi
   else
     printf 'Codex config missing: %s\n' "$target_config"
@@ -141,14 +162,25 @@ if [ "$apply" -eq 1 ]; then
   fi
 
   if [ -f "$target_config" ]; then
-    if codex_config_managed_match; then
+    legacy_synced=0
+    routing_synced=0
+    if codex_config_legacy_managed_match; then legacy_synced=1; fi
+    if codex_routing_defaults_match; then routing_synced=1; fi
+
+    if [ "$legacy_synced" -eq 1 ] && [ "$routing_synced" -eq 1 ]; then
       [ "$quiet" -eq 1 ] && printf '%-15s synced\n' "codex-config" || printf 'codex-config managed sections already synced\n'
       exit 0
     fi
+
     ts="$(date -u +%Y%m%d-%H%M%S)"
     backup_dir="$(backup_root)/$ts/codex-config"
     mkdir -p "$backup_dir"
-    python3 "$MERGE_SCRIPT" --apply "$target_config" "$source_config" --backup-dir "$backup_dir"
+    if [ "$legacy_synced" -eq 0 ]; then
+      python3 "$MERGE_SCRIPT" --apply "$target_config" "$source_config" --backup-dir "$backup_dir"
+    fi
+    if [ "$routing_synced" -eq 0 ]; then
+      python3 "$ROUTING_DEFAULTS_SCRIPT" --apply "$target_config" "$source_config" --backup-dir "$backup_dir"
+    fi
     [ "$quiet" -eq 1 ] && printf '%-15s merged\n' "codex-config" || printf 'Merged managed sections into: %s\n' "$target_config"
   else
     mkdir -p "$(dirname "$target_config")"
