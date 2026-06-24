@@ -1183,7 +1183,7 @@ pub fn list_available_opencode_models() -> Result<ListAvailableModelsResult, Str
     let mut child = Command::new("opencode")
         .args(["models", "--pure"])
         .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
+        .stderr(Stdio::null())
         .spawn()
         .map_err(|e| {
             if e.kind() == std::io::ErrorKind::NotFound {
@@ -1308,8 +1308,43 @@ fn validate_model_id(id: &str) -> Result<(), String> {
     }
 }
 
+/// Attempt to restore the original base config content and best-effort regenerate.
+/// Returns the original error message, or an expanded error if restoration itself fails.
+fn rollback_base_and_regenerate(
+    base_path: &std::path::Path,
+    workspace_root: &std::path::Path,
+    original_content: &str,
+    original_error: String,
+) -> String {
+    // Restore original base content
+    if let Err(e) = std::fs::write(base_path, original_content) {
+        return format!(
+            "{} (rollback also failed: could not restore opencode.base.json: {})",
+            original_error, e
+        );
+    }
+    // Best-effort regenerate snapshot from restored base
+    if let Ok(result) = run_generator_write(workspace_root) {
+        if !result.success {
+            // Regeneration from restored base failed — include that detail
+            return format!(
+                "{} (restored base config, but snapshot regeneration also failed: {})",
+                original_error, result.stderr
+            );
+        }
+    }
+    // Regeneration succeeded or generator is unavailable — original error is the primary info
+    format!(
+        "{} (base config restored to previous state)",
+        original_error
+    )
+}
+
 /// Update `model` and `small_model` in the workspace `templates/opencode.base.json`,
 /// regenerate the `templates/opencode.json` snapshot, and validate it.
+///
+/// If the generator fails or snapshot validation fails, the base config is restored
+/// to its original content and a best-effort regeneration is attempted.
 #[tauri::command]
 pub fn update_opencode_model_selection(
     model: String,
@@ -1326,13 +1361,14 @@ pub fn update_opencode_model_selection(
         .ok_or_else(|| "no workspace selected".to_string())?;
     let base_path = workspace_root.join("templates/opencode.base.json");
 
-    // Read existing base config
+    // Read existing base config and remember original content for rollback
     let existing_content = if base_path.is_file() {
         std::fs::read_to_string(&base_path)
             .map_err(|e| format!("failed to read opencode.base.json: {}", e))?
     } else {
         return Err("opencode.base.json not found in workspace templates".to_string());
     };
+    let original_content = existing_content.clone();
 
     let mut json: serde_json::Value = serde_json::from_str(&existing_content)
         .map_err(|e| format!("invalid opencode.base.json: {}", e))?;
@@ -1351,28 +1387,59 @@ pub fn update_opencode_model_selection(
         return Err("opencode.base.json is not a JSON object".to_string());
     }
 
-    // Write back preserving formatting via serde_json
+    // Write updated content to base config
     let updated_content =
         serde_json::to_string_pretty(&json).map_err(|e| format!("serialization error: {}", e))?;
-    std::fs::write(&base_path, &updated_content)
-        .map_err(|e| format!("failed to write opencode.base.json: {}", e))?;
+    if let Err(e) = std::fs::write(&base_path, &updated_content) {
+        return Err(format!("failed to write opencode.base.json: {}", e));
+    }
 
     // Run generator --write
-    let gen_result = run_generator_write(&workspace_root)?;
+    let gen_result = match run_generator_write(&workspace_root) {
+        Ok(r) => r,
+        Err(e) => {
+            return Err(rollback_base_and_regenerate(
+                &base_path,
+                &workspace_root,
+                &original_content,
+                e,
+            ));
+        }
+    };
     if !gen_result.success {
-        return Err(format!(
-            "Config snapshot generation failed: {}",
-            gen_result.stderr
+        return Err(rollback_base_and_regenerate(
+            &base_path,
+            &workspace_root,
+            &original_content,
+            format!("Config snapshot generation failed: {}", gen_result.stderr),
         ));
     }
 
     // Validate generated opencode.json contains the selected models
     let snapshot_path = workspace_root.join("templates/opencode.json");
     if snapshot_path.is_file() {
-        let snapshot_content = std::fs::read_to_string(&snapshot_path)
-            .map_err(|e| format!("failed to read generated opencode.json: {}", e))?;
-        let snapshot_json: serde_json::Value = serde_json::from_str(&snapshot_content)
-            .map_err(|e| format!("generated opencode.json is not valid JSON: {}", e))?;
+        let snapshot_content = match std::fs::read_to_string(&snapshot_path) {
+            Ok(c) => c,
+            Err(e) => {
+                return Err(rollback_base_and_regenerate(
+                    &base_path,
+                    &workspace_root,
+                    &original_content,
+                    format!("failed to read generated opencode.json: {}", e),
+                ));
+            }
+        };
+        let snapshot_json: serde_json::Value = match serde_json::from_str(&snapshot_content) {
+            Ok(v) => v,
+            Err(e) => {
+                return Err(rollback_base_and_regenerate(
+                    &base_path,
+                    &workspace_root,
+                    &original_content,
+                    format!("generated opencode.json is not valid JSON: {}", e),
+                ));
+            }
+        };
 
         let stored_model = snapshot_json
             .get("model")
@@ -1384,19 +1451,34 @@ pub fn update_opencode_model_selection(
             .unwrap_or("");
 
         if stored_model != model {
-            return Err(format!(
-                "Generated config has model '{}', expected '{}'. Regeneration may have failed.",
-                stored_model, model
+            return Err(rollback_base_and_regenerate(
+                &base_path,
+                &workspace_root,
+                &original_content,
+                format!(
+                    "Generated config has model '{}', expected '{}'. Regeneration may have failed.",
+                    stored_model, model
+                ),
             ));
         }
         if stored_small != small_model {
-            return Err(format!(
-                "Generated config has small_model '{}', expected '{}'. Regeneration may have failed.",
-                stored_small, small_model
+            return Err(rollback_base_and_regenerate(
+                &base_path,
+                &workspace_root,
+                &original_content,
+                format!(
+                    "Generated config has small_model '{}', expected '{}'. Regeneration may have failed.",
+                    stored_small, small_model
+                ),
             ));
         }
     } else {
-        return Err("Generated opencode.json not found after regeneration".to_string());
+        return Err(rollback_base_and_regenerate(
+            &base_path,
+            &workspace_root,
+            &original_content,
+            "Generated opencode.json not found after regeneration".to_string(),
+        ));
     }
 
     Ok(format!(
@@ -2607,9 +2689,7 @@ mod tests {
         write_generator_script(
             &ws,
             "scripts/generate-opencode-config.py",
-            &format!(
-                "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\nwith open('templates/opencode.policy.json') as f:\n    policy = json.load(f)\nconfig = dict(base)\nconfig['permission'] = {{'read': policy.get('read', {{}})}}\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n"
-            ),
+            "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\nwith open('templates/opencode.policy.json') as f:\n    policy = json.load(f)\nconfig = dict(base)\nconfig['permission'] = {'read': policy.get('read', {})}\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n",
         );
 
         // Read, update, and verify
@@ -2878,7 +2958,7 @@ mod tests {
 
         // 7. Verify installed config in home dir was NOT touched
         let installed_content =
-            std::fs::read_to_string(&home.join(".config/opencode/opencode.json")).unwrap();
+            std::fs::read_to_string(home.join(".config/opencode/opencode.json")).unwrap();
         let installed_json: serde_json::Value = serde_json::from_str(&installed_content).unwrap();
         assert_eq!(
             installed_json["model"].as_str(),
@@ -2896,9 +2976,9 @@ mod tests {
     }
 
     #[test]
-    fn test_update_model_selection_generator_failure_reported() {
-        let ws = temp_root("model-upd-gen-fail");
-        let home = temp_root("model-upd-gen-fail-home");
+    fn test_update_model_selection_generator_failure_rollback() {
+        let ws = temp_root("model-upd-gen-rollback");
+        let home = temp_root("model-upd-gen-rollback-home");
 
         write_file(
             &ws,
@@ -2936,10 +3016,16 @@ mod tests {
             "#!/usr/bin/env python3\nimport sys\nprint('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
         );
 
-        // Simulate what update_opencode_model_selection does: write base then run generator
+        // Simulate what update_opencode_model_selection does with rollback:
+        // write base → run generator → on failure restore base → best-effort regenerate
         let base_path = ws.join("templates/opencode.base.json");
-        let content = std::fs::read_to_string(&base_path).unwrap();
-        let mut json: serde_json::Value = serde_json::from_str(&content).unwrap();
+        let snapshot_path = ws.join("templates/opencode.json");
+
+        // 1. Save original content for rollback
+        let original_content = std::fs::read_to_string(&base_path).unwrap();
+
+        // 2. Write updated base config
+        let mut json: serde_json::Value = serde_json::from_str(&original_content).unwrap();
         if let Some(obj) = json.as_object_mut() {
             obj.insert(
                 "model".into(),
@@ -2952,22 +3038,163 @@ mod tests {
         }
         std::fs::write(&base_path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 
-        // Generator should fail
+        // 3. Generator should fail
         let gen_result =
             super::run_generator_write(&ws).expect("generator should return ActionResult");
         assert!(!gen_result.success, "generator should fail");
         assert!(gen_result.stderr.contains("simulated failure"));
 
-        // Base config was already updated (generator failure should not roll back base)
-        let updated_content = std::fs::read_to_string(&base_path).unwrap();
-        let updated_json: serde_json::Value = serde_json::from_str(&updated_content).unwrap();
-        assert_eq!(updated_json["model"].as_str(), Some("provider/new-model"));
+        // 4. Rollback: restore original base content
+        std::fs::write(&base_path, &original_content).unwrap();
 
-        // Snapshot was NOT updated (generator failed)
-        let snapshot_path = ws.join("templates/opencode.json");
+        // 5. Best-effort regenerate from restored base (this will also fail since script always fails)
+        let _retry_result = super::run_generator_write(&ws);
+
+        // 6. Verify base config was restored to original values
+        let restored_content = std::fs::read_to_string(&base_path).unwrap();
+        let restored_json: serde_json::Value = serde_json::from_str(&restored_content).unwrap();
+        assert_eq!(
+            restored_json["model"].as_str(),
+            Some("old"),
+            "base config model should be restored after generator failure"
+        );
+        assert_eq!(
+            restored_json["small_model"].as_str(),
+            Some("old-small"),
+            "base config small_model should be restored after generator failure"
+        );
+
+        // 7. Snapshot was NOT updated with new values (generator failed)
         let snapshot_content = std::fs::read_to_string(&snapshot_path).unwrap_or_default();
-        // The old snapshot content was "{}" and generator didn't update it
         assert_eq!(snapshot_content.trim(), "{}");
+
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn test_update_model_selection_snapshot_validation_failure_rollback() {
+        let ws = temp_root("model-upd-val-rollback");
+        let home = temp_root("model-upd-val-rollback-home");
+
+        write_file(
+            &ws,
+            "templates/opencode.base.json",
+            r#"{"model":"old","small_model":"old-small"}"#,
+        );
+        write_file(
+            &ws,
+            "templates/opencode.policy.json",
+            r#"{"read":{"default":"allow"}}"#,
+        );
+        write_file(&ws, "templates/opencode.json", r#"{}"#);
+        write_file(&ws, "templates/tui.json", r#"{}"#);
+        write_file(&ws, ".agent-workspace/workspace.json", "{}");
+        write_file(&ws, "scripts/bootstrap.sh", "#!/usr/bin/env bash\n");
+        write_file(
+            &ws,
+            "scripts/install-agent-rules.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(
+            &ws,
+            "scripts/install-opencode-config.sh",
+            "#!/usr/bin/env bash\n",
+        );
+        write_file(&ws, "scripts/install-skills.sh", "#!/usr/bin/env bash\n");
+        write_file(&ws, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&ws, "README.md", "# readme\n");
+        fs::create_dir_all(ws.join("skills")).expect("create skills dir");
+
+        // Generator that succeeds but writes DIFFERENT model values (simulates a buggy generator)
+        write_generator_script(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\n# Intentionally write a DIFFERENT model to simulate validation failure\nconfig = dict(base)\nconfig['model'] = 'wrong/model'\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n",
+        );
+
+        // Simulate update with rollback: write base → run generator → validate → on mismatch, restore base
+        let base_path = ws.join("templates/opencode.base.json");
+        let snapshot_path = ws.join("templates/opencode.json");
+
+        // 1. Save original content for rollback
+        let original_content = std::fs::read_to_string(&base_path).unwrap();
+
+        // 2. Write updated base config with desired model values
+        let mut json: serde_json::Value = serde_json::from_str(&original_content).unwrap();
+        if let Some(obj) = json.as_object_mut() {
+            obj.insert(
+                "model".into(),
+                serde_json::Value::String("provider/new-model".into()),
+            );
+            obj.insert(
+                "small_model".into(),
+                serde_json::Value::String("provider/new-small".into()),
+            );
+        }
+        let updated_content = serde_json::to_string_pretty(&json).unwrap();
+        std::fs::write(&base_path, &updated_content).unwrap();
+
+        // 3. Generator succeeds (but writes wrong model)
+        let gen_result =
+            super::run_generator_write(&ws).expect("generator should return ActionResult");
+        assert!(
+            gen_result.success,
+            "generator write should succeed (but with wrong values)"
+        );
+
+        // 4. Validate snapshot - generator wrote 'wrong/model' not 'provider/new-model'
+        assert!(snapshot_path.is_file(), "snapshot should exist");
+        let snapshot_content = std::fs::read_to_string(&snapshot_path).unwrap();
+        let snapshot_json: serde_json::Value = serde_json::from_str(&snapshot_content).unwrap();
+        let stored_model = snapshot_json
+            .get("model")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        assert_eq!(
+            stored_model, "wrong/model",
+            "generator should have written the wrong model"
+        );
+        assert_ne!(
+            stored_model, "provider/new-model",
+            "snapshot model should NOT match requested model"
+        );
+
+        // 5. Rollback: restore original base content
+        std::fs::write(&base_path, &original_content).unwrap();
+
+        // 6. Best-effort regenerate from restored base
+        let retry_result = super::run_generator_write(&ws);
+        assert!(
+            retry_result.is_ok(),
+            "retry generator should return ActionResult"
+        );
+
+        // 7. Verify base config was restored to original values
+        let restored_content = std::fs::read_to_string(&base_path).unwrap();
+        let restored_json: serde_json::Value = serde_json::from_str(&restored_content).unwrap();
+        assert_eq!(
+            restored_json["model"].as_str(),
+            Some("old"),
+            "base config model should be restored after validation failure"
+        );
+        assert_eq!(
+            restored_json["small_model"].as_str(),
+            Some("old-small"),
+            "base config small_model should be restored after validation failure"
+        );
+
+        // 8. Snapshot state after rollback: generator is buggy so snapshot may not match.
+        //    The critical guarantee is that base config was restored. The snapshot is best-effort.
+        let final_snapshot_content = std::fs::read_to_string(&snapshot_path).unwrap();
+        let final_snapshot_json: serde_json::Value =
+            serde_json::from_str(&final_snapshot_content).unwrap();
+        // Generator still has the bug (always writes 'wrong/model'), but the base was restored.
+        // The rollback restored base to 'old' values; the snapshot is a separate concern.
+        assert!(
+            final_snapshot_json.get("model").is_some(),
+            "snapshot should still exist after rollback regenerate"
+        );
 
         cleanup(&ws);
         cleanup(&home);

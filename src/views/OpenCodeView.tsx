@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { TargetPageHeader, type TargetPageFact } from "../components/TargetPageHeader";
 import { TargetSettingsPanel } from "../components/TargetSettingsPanel";
@@ -124,9 +124,23 @@ function ModelSelectionPanel({ workspaceValid, onModelUpdated, onCardRefreshNeed
     return () => clearTimeout(timer);
   }, [saveMessage]);
 
+  // Build stable, deduped, sorted union of discovered models + current configured + draft values.
+  // This ensures the current selection always appears as a selectable option even when
+  // the model list from `opencode models` does not include it.
+  const modelOptions = useMemo(() => {
+    const set = new Set<string>();
+    for (const m of available?.models ?? []) {
+      set.add(m);
+    }
+    if (selection?.model) set.add(selection.model);
+    if (selection?.small_model) set.add(selection.small_model);
+    if (draftModel && draftModel.includes("/")) set.add(draftModel);
+    if (draftSmall && draftSmall.includes("/")) set.add(draftSmall);
+    return [...set].sort();
+  }, [available, selection, draftModel, draftSmall]);
+
   if (!workspaceValid) return null;
 
-  const modelOptions = available?.models ?? [];
   const showModelList = modelOptions.length > 0;
 
   return (
