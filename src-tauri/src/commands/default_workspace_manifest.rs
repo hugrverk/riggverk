@@ -124,6 +124,7 @@ pub(super) fn categories() -> Vec<(&'static str, &'static [&'static str])> {
                 "scripts/install-codex-config.sh",
                 "scripts/install-codex-agents.sh",
                 "scripts/merge-codex-config.py",
+                "scripts/ensure-codex-routing-defaults.py",
                 "scripts/install-cursor-workspace.sh",
                 "scripts/check-codex-profile.py",
                 "scripts/check-cursor-profile.py",
