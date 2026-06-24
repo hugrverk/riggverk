@@ -1425,45 +1425,6 @@
   outline-offset: 1px;
 }
 
-.repo-dashboard-chart {
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-  padding: 10px;
-}
-
-.repo-dashboard-chart svg {
-  display: block;
-  width: 100%;
-  height: auto;
-  min-height: 160px;
-  max-height: 188px;
-}
-
-.repo-dashboard-gridline { stroke: var(--border); }
-.repo-dashboard-axis { stroke: var(--border-strong); }
-.repo-dashboard-series-blue { fill: none; stroke: var(--accent); stroke-width: 2.2; }
-.repo-dashboard-series-green { fill: none; stroke: var(--ok); stroke-width: 2.2; }
-.repo-dashboard-chart-text { fill: var(--text-muted); font-family: var(--font-mono); font-size: var(--text-xs); }
-
-.repo-dashboard-legend {
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-  margin-top: 8px;
-  font-size: calc(var(--text-base) * 0.733);
-  color: var(--text-muted);
-}
-
-.repo-dashboard-legend i {
-  display: inline-block;
-  width: 16px;
-  border-top: 2px solid currentColor;
-  margin-right: 6px;
-}
-
-.repo-dashboard-blue { color: var(--accent); }
-.repo-dashboard-green { color: var(--ok); }
-
 .repo-dashboard-heatbox {
   border: 1px solid var(--border);
   background: var(--bg-inset);
