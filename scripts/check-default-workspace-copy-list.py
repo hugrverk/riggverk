@@ -86,6 +86,8 @@ def main() -> None:
         "scripts/install-agent-rules.sh",
         "scripts/install-runtime-agents.sh",
         "scripts/install-opencode-config.sh",
+        "scripts/install-codex-config.sh",
+        "scripts/ensure-codex-routing-defaults.py",
     }
     required_cursor_adapters = {
         "templates/cursor/agents/verifier.md",
