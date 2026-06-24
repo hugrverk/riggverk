@@ -18,7 +18,7 @@ The app writes only to these known paths under user home:
 | OpenCode agents | `~/.config/opencode/agents/` |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` |
 | OpenCode skills | `~/.config/opencode/skills/` |
-| Codex config | `~/.codex/config.toml` (allowlisted top-level `approval_policy` and `sandbox_mode` merge only) |
+| Codex config | `~/.codex/config.toml` (allowlisted Codex model/routing/approval defaults merge only) |
 | Codex agents | `~/.codex/agents/` |
 | Codex rules | `~/.codex/AGENTS.md` |
 | Codex skills | `$CODEX_HOME/skills/` (typically `~/.codex/skills/`) |
