@@ -1,5 +1,5 @@
 {
-  "description": "Codex config sections merged by Agent Workspace. User model, personality, MCP, and unknown tables are preserved. Legacy keys are the pre-0.134 profile scheme the app used to write; they are removed on update when they still carry app-shipped values.",
+  "description": "Legacy Codex config keys handled by merge-codex-config.py. Current routing defaults are enforced separately by ensure-codex-routing-defaults.py. Personality, MCP, and unknown tables are preserved. Legacy keys are the pre-0.134 profile scheme the app used to write; they are removed on update when they still carry app-shipped values.",
   "top_level_keys": [
     "approval_policy",
     "sandbox_mode"
