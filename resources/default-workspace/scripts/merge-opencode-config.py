@@ -41,42 +41,6 @@ def load_json(path: Path) -> Any:
         fail(f"unable to read {path}: {exc}")
 
 
-RETIRED_QWEN_MODEL = "qwen3.6-plus"
-
-
-def remove_retired_provider_model(config: dict[str, Any]) -> dict[str, Any]:
-    """Remove retired qwen3.6-plus model from provider.opencode-go.models.
-
-    Prunes empty ``models``, ``opencode-go``, and ``provider`` containers
-    after the removal.  Modifies and returns *config* in place — caller
-    must deep-copy if the original must be preserved.
-    """
-    provider = config.get("provider")
-    if not isinstance(provider, dict):
-        return config
-
-    opencode_go = provider.get("opencode-go")
-    if not isinstance(opencode_go, dict):
-        return config
-
-    models = opencode_go.get("models")
-    if not isinstance(models, dict):
-        return config
-
-    if RETIRED_QWEN_MODEL in models:
-        del models[RETIRED_QWEN_MODEL]
-
-    # Prune empty containers bottom-up
-    if not models:
-        del opencode_go["models"]
-    if not opencode_go:
-        del provider["opencode-go"]
-    if not provider:
-        del config["provider"]
-
-    return config
-
-
 def merge_managed(installed: dict[str, Any], managed: dict[str, Any]) -> dict[str, Any]:
     top_level, mcp_servers = load_managed_keys()
     merged = json.loads(json.dumps(installed))
@@ -92,7 +56,6 @@ def merge_managed(installed: dict[str, Any], managed: dict[str, Any]) -> dict[st
         for server in mcp_servers:
             if server in managed_mcp:
                 target_mcp[server] = json.loads(json.dumps(managed_mcp[server]))
-    remove_retired_provider_model(merged)
     return merged
 
 
@@ -114,19 +77,7 @@ def extract_managed(config: dict[str, Any]) -> dict[str, Any]:
 
 
 def managed_keys_match(installed: dict[str, Any], managed: dict[str, Any]) -> bool:
-    if extract_managed(installed) != extract_managed(managed):
-        return False
-    # Installed configs carrying the retired qwen provider model must be
-    # reconciled even when managed keys happen to match, so that
-    # --apply / --merge clean up the stale block.
-    provider = installed.get("provider")
-    if isinstance(provider, dict):
-        opencode_go = provider.get("opencode-go")
-        if isinstance(opencode_go, dict):
-            models = opencode_go.get("models")
-            if isinstance(models, dict) and RETIRED_QWEN_MODEL in models:
-                return False
-    return True
+    return extract_managed(installed) == extract_managed(managed)
 
 
 def write_json(path: Path, value: dict[str, Any]) -> None:
@@ -201,22 +152,15 @@ def apply_merge(target: Path, managed: dict[str, Any], backup_dir: Path | None) 
         shutil.copy2(backup_path, target)
         fail(f"staged validation failed for {target}: managed keys mismatch")
 
-    # Verify user provider still present (allow only the retired qwen model removal)
+    # Verify user provider still present (must not be modified by merge)
     user_provider = installed.get("provider")
-    if user_provider is not None:
-        # Wrap provider in a config-shaped dict so remove_retired_provider_model
-        # can operate on it, then extract the cleaned provider back out.
-        expected_provider = remove_retired_provider_model(
-            {"provider": json.loads(json.dumps(user_provider))}
-        ).get("provider")
-        if post_parsed.get("provider") != expected_provider:
-            staged.unlink()
-            shutil.copy2(backup_path, target)
-            fail(
-                f"staged validation failed for {target}: provider block modified "
-                f"(beyond removing retired {RETIRED_QWEN_MODEL!r}). "
-                f"Original restored from {backup_path}."
-            )
+    if post_parsed.get("provider") != user_provider:
+        staged.unlink()
+        shutil.copy2(backup_path, target)
+        fail(
+            f"staged validation failed for {target}: provider block modified "
+            f"by merge. Original restored from {backup_path}."
+        )
 
     # Atomic replace: rename staged -> target
     staged.replace(target)
