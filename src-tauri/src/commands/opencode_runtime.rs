@@ -271,8 +271,13 @@ pub(crate) fn render_expected_opencode_config(
     let mut rendered =
         transform_playwright_json(template_json, &config_path, &browsers_path, &version);
 
-    // Overlay app-level model override if present
-    if let Some(override_selection) = read_stored_opencode_model_selection() {
+    // Overlay app-level model override if present. Status/render callers pass the
+    // resolved user home explicitly, so tests and smoke runs must not read a
+    // real app-support override from the process environment by accident.
+    let override_selection = opencode_model_selection_path_for_home(home_dir)
+        .ok()
+        .and_then(|path| read_stored_opencode_model_selection_from_path(&path));
+    if let Some(override_selection) = override_selection {
         if let Some(obj) = rendered.as_object_mut() {
             obj.insert(
                 "model".to_string(),
@@ -1227,6 +1232,45 @@ struct StoredOpenCodeModelSelection {
 fn opencode_model_selection_path() -> Result<std::path::PathBuf, String> {
     let env = crate::platform_paths::PlatformEnv::from_process_env();
     let platform = crate::platform_paths::Platform::current();
+    crate::platform_paths::app_support_dir(&env, platform)
+        .map(|p| p.join("opencode-model-selection.json"))
+}
+
+/// Resolve the model override path for a caller-supplied home directory.
+///
+/// Production command handlers use `opencode_model_selection_path()` so they
+/// keep honoring the live platform environment. Render/status helpers receive
+/// a home path explicitly; when that path is an isolated test/smoke home, derive
+/// app support from it instead of leaking reads from the real user profile.
+fn opencode_model_selection_path_for_home(home_dir: &Path) -> Result<std::path::PathBuf, String> {
+    let platform = crate::platform_paths::Platform::current();
+    let process_env = crate::platform_paths::PlatformEnv::from_process_env();
+    let process_home = crate::platform_paths::resolve_user_home(&process_env, platform).ok();
+    let env = if process_home.as_deref() == Some(home_dir) {
+        process_env
+    } else {
+        let home = home_dir.to_string_lossy().into_owned();
+        crate::platform_paths::PlatformEnv {
+            home: Some(home.clone()),
+            userprofile: Some(home.clone()),
+            appdata: Some(
+                home_dir
+                    .join("AppData")
+                    .join("Roaming")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            xdg_config_home: Some(home_dir.join(".config").to_string_lossy().into_owned()),
+            xdg_data_home: Some(
+                home_dir
+                    .join(".local")
+                    .join("share")
+                    .to_string_lossy()
+                    .into_owned(),
+            ),
+            ..crate::platform_paths::PlatformEnv::default()
+        }
+    };
     crate::platform_paths::app_support_dir(&env, platform)
         .map(|p| p.join("opencode-model-selection.json"))
 }
@@ -3361,8 +3405,8 @@ mod tests {
             serde_json::from_str(r#"{"model":"template/model","small_model":"template/small"}"#)
                 .expect("parse template");
 
-        let rendered = render_expected_opencode_config(&template_json, &home)
-            .expect("render should succeed");
+        let rendered =
+            render_expected_opencode_config(&template_json, &home).expect("render should succeed");
 
         // Without override present at the actual app support path, template values are used
         // (the override file is in our temp dir, not at the real app support path)
@@ -3385,8 +3429,8 @@ mod tests {
             serde_json::from_str(r#"{"model":"bundled/model","small_model":"bundled/small"}"#)
                 .expect("parse template");
 
-        let rendered = render_expected_opencode_config(&template_json, &home)
-            .expect("render should succeed");
+        let rendered =
+            render_expected_opencode_config(&template_json, &home).expect("render should succeed");
 
         assert_eq!(rendered["model"].as_str(), Some("bundled/model"));
         assert_eq!(rendered["small_model"].as_str(), Some("bundled/small"));

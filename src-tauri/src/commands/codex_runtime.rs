@@ -234,8 +234,7 @@ pub(crate) fn render_codex_config_managed_projection(
 
     let temp_dir = unique_render_temp_dir();
     let result = (|| -> Result<String, String> {
-        fs::create_dir_all(&temp_dir)
-            .map_err(|e| format!("create codex render temp dir: {e}"))?;
+        fs::create_dir_all(&temp_dir).map_err(|e| format!("create codex render temp dir: {e}"))?;
         let temp_config = temp_dir.join("config.toml");
         let temp_backup = temp_dir.join("backup");
         fs::write(&temp_config, legacy_stdout.as_bytes())
@@ -568,7 +567,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
                 "fail".into()
             },
             detail: if managed_match {
-                "managed routing defaults match bundled workspace (personality/MCP preserved)".into()
+                "managed routing defaults match bundled workspace (personality/MCP preserved)"
+                    .into()
             } else if installed_config.is_some() {
                 "managed routing defaults differ from bundled workspace".into()
             } else {
