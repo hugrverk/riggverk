@@ -131,7 +131,7 @@ The editable sources are:
 
 ### Codex
 
-Agent Workspace manages only the allowlisted top-level fields `approval_policy` and `sandbox_mode` in `~/.codex/config.toml`. The merge script reads and writes those scalars only; user model, personality, MCP entries, custom profiles, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
+Agent Workspace manages only allowlisted Codex config defaults in `~/.codex/config.toml`: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
 
 App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Agent Workspace does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
 
