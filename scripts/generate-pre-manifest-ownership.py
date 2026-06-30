@@ -63,25 +63,36 @@ def removed_skill_names() -> list[str]:
 
 
 def historical_blobs_by_rel() -> dict[str, set[str]]:
-    """Map default-workspace relative path -> all blob shas across history.
+    """Map default-workspace relative path -> all blob shas across HEAD history.
 
     Matches the bundled workspace at any historical repository location
     (e.g. apps/ux-workspace-app/resources/default-workspace before the
-    repository was flattened).
+    repository was flattened). Tree inspection is intentional: rev-list
+    --objects emits each object once, with a path label that can change when
+    unrelated refs are present.
     """
     rel_to_shas: dict[str, set[str]] = {}
-    for line in git("rev-list", "--all", "--objects").decode().splitlines():
-        sha, _, path = line.partition(" ")
-        if not path:
-            continue
-        index = path.find(PREFIX)
-        if index == -1:
-            continue
-        if index != 0 and not path[:index].endswith("/"):
-            continue
-        rel = path[index + len(PREFIX) :]
-        if rel:
-            rel_to_shas.setdefault(rel, set()).add(sha)
+    prefix = PREFIX.encode()
+    for commit in git("rev-list", "HEAD").decode().splitlines():
+        for line in git("ls-tree", "-rz", "-r", "--full-tree", commit).split(b"\0"):
+            if not line:
+                continue
+            meta, _, raw_path = line.partition(b"\t")
+            if not raw_path:
+                continue
+            parts = meta.split()
+            if len(parts) < 3 or parts[1] != b"blob":
+                continue
+            index = raw_path.find(prefix)
+            if index == -1:
+                continue
+            if index != 0 and not raw_path[:index].endswith(b"/"):
+                continue
+            rel = raw_path[index + len(prefix) :].decode(
+                "utf-8", errors="surrogateescape"
+            )
+            if rel:
+                rel_to_shas.setdefault(rel, set()).add(parts[2].decode())
     return rel_to_shas
 
 
