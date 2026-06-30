@@ -37,6 +37,100 @@ search_quiet() {
   fi
 }
 
+search_fixed_quiet() {
+  local needle="$1"
+  shift
+  if command -v rg >/dev/null 2>&1; then
+    rg -qF -- "$needle" "$@"
+  else
+    grep -R -q -F -- "$needle" "$@"
+  fi
+}
+
+search_pruned_has_match() {
+  local pattern="$1"
+  shift
+  local tmp
+  tmp="$(mktemp)"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n "$pattern" "$@" \
+      -g '!target/**' \
+      -g '!node_modules/**' \
+      -g '!dist/**' \
+      >"$tmp" || true
+  else
+    find "$@" \
+      \( -name target -o -name node_modules -o -name dist \) -prune -o \
+      -type f -exec grep -n -E "$pattern" /dev/null {} \; \
+      >"$tmp" || true
+  fi
+  if [ -s "$tmp" ]; then
+    cat "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+search_pruned_fixed_has_match() {
+  local needle="$1"
+  shift
+  local tmp
+  tmp="$(mktemp)"
+  if command -v rg >/dev/null 2>&1; then
+    rg -nF -- "$needle" "$@" \
+      -g '!target/**' \
+      -g '!node_modules/**' \
+      -g '!dist/**' \
+      >"$tmp" || true
+  else
+    find "$@" \
+      \( -name target -o -name node_modules -o -name dist \) -prune -o \
+      -type f -exec grep -n -F -e "$needle" /dev/null {} \; \
+      >"$tmp" || true
+  fi
+  if [ -s "$tmp" ]; then
+    cat "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+search_pruned_ignore_case_has_match() {
+  local pattern="$1"
+  shift
+  local tmp
+  tmp="$(mktemp)"
+  if command -v rg >/dev/null 2>&1; then
+    rg -n --ignore-case "$pattern" "$@" \
+      -g '!target/**' \
+      -g '!node_modules/**' \
+      -g '!dist/**' \
+      >"$tmp" || true
+  else
+    find "$@" \
+      \( -name target -o -name node_modules -o -name dist \) -prune -o \
+      -type f -exec grep -n -E -i "$pattern" /dev/null {} \; \
+      >"$tmp" || true
+  fi
+  if [ -s "$tmp" ]; then
+    cat "$tmp"
+    rm -f "$tmp"
+    return 0
+  fi
+  rm -f "$tmp"
+  return 1
+}
+
+string_has_fixed() {
+  local needle="$1"
+  local text="$2"
+  grep -qF -- "$needle" <<<"$text"
+}
+
 assert_json_file() {
   local path="$1"
   local label="$2"
@@ -395,7 +489,8 @@ if [ "$cursor_always" -ge "$cursor_rules" ]; then
   printf 'FAIL: not all Cursor rules may be always-apply\n' >&2
   exit 1
 fi
-if rg -q 'sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+\S+|Basic[[:space:]]+\S+|gh[pousr]_[A-Za-z0-9_]{12,}' resources/default-workspace/templates/cursor/mcp; then
+cursor_mcp_token_pattern='sk-[A-Za-z0-9_-]{12,}|Bearer[[:space:]]+[^[:space:]]+|Basic[[:space:]]+[^[:space:]]+|gh[pousr]_[A-Za-z0-9_]{12,}'
+if search_quiet "$cursor_mcp_token_pattern" resources/default-workspace/templates/cursor/mcp; then
   printf 'FAIL: Cursor MCP templates contain token-like literals\n' >&2
   exit 1
 fi
@@ -446,17 +541,18 @@ PY
 printf '  Cursor manifest-listed agents/rules and frontmatter verified\n'
 python3 scripts/check-cursor-action-compat.py
 printf '  Cursor backend action/script compatibility verified\n'
-if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- '--copy-user-rules'; then
+cursor_setup_help="$(bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1)"
+if ! string_has_fixed '--copy-user-rules' "$cursor_setup_help"; then
   printf 'FAIL: install-cursor-workspace.sh --help missing --copy-user-rules\n' >&2
   exit 1
 fi
-if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'native Rust operations'; then
+if string_has_fixed 'native Rust operations' "$cursor_setup_help"; then
   : "ok"
 else
   printf 'FAIL: install-cursor-workspace.sh --help must state global setup uses native Rust operations\n' >&2
   exit 1
 fi
-if bash resources/default-workspace/scripts/install-cursor-workspace.sh --help 2>&1 | rg -qF -- 'never writes'; then
+if string_has_fixed 'never writes' "$cursor_setup_help"; then
   : "ok"
 else
   printf 'FAIL: install-cursor-workspace.sh --help must state it never writes global agents\n' >&2
@@ -483,7 +579,7 @@ if grep -q 'EDITABLE_CONFIG_TARGET_IDS.*cursor_setup' src/App.tsx; then
   exit 1
 fi
 for forbidden in '--global-agents' '--global-agents-only' 'CURSOR_AGENTS_TARGET' '$HOME/.cursor/agents'; do
-  if rg -qF -- "$forbidden" resources/default-workspace/scripts/install-cursor-workspace.sh; then
+  if search_fixed_quiet "$forbidden" resources/default-workspace/scripts/install-cursor-workspace.sh; then
     printf 'FAIL: install-cursor-workspace.sh must not contain global agent shell path: %s\n' "$forbidden" >&2
     exit 1
   fi
@@ -576,10 +672,8 @@ else
 fi
 
 step "regression: no fake global Cursor User Rules path"
-if rg -q '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md' \
-  src-tauri src resources/default-workspace \
-  -g '!src-tauri/target/**' \
-  --ignore-case 2>/dev/null; then
+if search_pruned_ignore_case_has_match '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md' \
+  src-tauri src resources/default-workspace >/dev/null 2>&1; then
   printf 'FAIL: must not claim a fake global Cursor User Rules file path\n' >&2
   exit 1
 fi
@@ -643,12 +737,13 @@ PY
 printf '  cursor_setup target registry verified\n'
 
 step "regression: cursor_setup is not in config_sync_targets"
-if rg -q 'cursor_setup' src-tauri/src/agent_targets.rs -A 5 | grep -q 'ConfigSyncTarget'; then
+cursor_setup_context="$(grep -A 5 'cursor_setup' src-tauri/src/agent_targets.rs || true)"
+if grep -q 'ConfigSyncTarget' <<<"$cursor_setup_context"; then
   printf 'FAIL: cursor_setup must not be in config_sync_targets\n' >&2
   exit 1
 fi
 # Verify opencode_config is the only config sync target
-opencode_count=$(rg 'id: "opencode_config"' src-tauri/src/agent_targets.rs | wc -l | tr -d ' ')
+opencode_count="$(grep -cF 'id: "opencode_config"' src-tauri/src/agent_targets.rs || true)"
 if [ "$opencode_count" -lt 1 ]; then
   printf 'FAIL: opencode_config must be in agent_targets.rs\n' >&2
   exit 1
@@ -1401,17 +1496,10 @@ fi
 
 step "app must not expose project-target sync/install UI"
 app_project_pattern='cursorProjectTarget|cursor_diff_project|cursor_sync_project|onCursorDiffProject|onCursorSyncProject|dry-run project|sync project|installScope|installTarget|Project install target|Project scope needs|validate_project_install_target|project scope requires'
-if command -v rg >/dev/null 2>&1; then
-  if rg -n "$app_project_pattern" src src-tauri -g '!target/**' >/dev/null 2>&1; then
-    printf 'FAIL: app source still references project-target UI/actions\n' >&2
-    rg -n "$app_project_pattern" src src-tauri -g '!target/**' >&2 || true
-    exit 1
-  fi
-else
-  if grep -R -n -E "$app_project_pattern" src src-tauri 2>/dev/null | grep -v target; then
-    printf 'FAIL: app source still references project-target UI/actions\n' >&2
-    exit 1
-  fi
+if search_pruned_has_match "$app_project_pattern" src src-tauri >/dev/null 2>&1; then
+  printf 'FAIL: app source still references project-target UI/actions\n' >&2
+  search_pruned_has_match "$app_project_pattern" src src-tauri >&2 || true
+  exit 1
 fi
 printf '  no project-target app surfaces in src/ or src-tauri/\n'
 
@@ -1561,7 +1649,7 @@ if ! search_has_match '~/.config/agent-workspace' src/lib/settingsDraft.ts src/v
   printf 'FAIL: frontend must reference ~/.config/agent-workspace\n' >&2
   exit 1
 fi
-if search_has_match -F '.config/.agent-workspace' \
+if search_pruned_fixed_has_match '.config/.agent-workspace' \
   src src-tauri README.md docs resources/default-workspace; then
   printf 'FAIL: mistaken install path ~/.config/.agent-workspace found in active sources\n' >&2
   exit 1

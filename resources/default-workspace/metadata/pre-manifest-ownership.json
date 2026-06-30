@@ -1186,6 +1186,16 @@
       "action": "update"
     },
     {
+      "identity": "workspace:file:scripts/check-playwright-mcp.sh",
+      "path_classes": [
+        "workspace-doc"
+      ],
+      "digests": [
+        "sha256:126e2c30ac9c4312689c8d5785b2ad64ca23b7eb545003a9b467510b3503954c"
+      ],
+      "action": "update"
+    },
+    {
       "identity": "workspace:file:scripts/ensure-codex-routing-defaults.py",
       "path_classes": [
         "workspace-doc"
