@@ -142,10 +142,20 @@ fn write_raw_atomic(workspace_root: &Path, raw: &[u8]) -> Result<(), String> {
     drop(output);
     fs::rename(&temp, &path).map_err(|e| format!("replace managed-state: {e}"))?;
     if let Some(parent) = path.parent() {
-        fs::File::open(parent)
-            .and_then(|directory| directory.sync_all())
-            .map_err(|e| format!("flush managed-state parent: {e}"))?;
+        flush_parent_directory(parent)?;
     }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn flush_parent_directory(parent: &Path) -> Result<(), String> {
+    fs::File::open(parent)
+        .and_then(|directory| directory.sync_all())
+        .map_err(|e| format!("flush managed-state parent: {e}"))
+}
+
+#[cfg(windows)]
+fn flush_parent_directory(_parent: &Path) -> Result<(), String> {
     Ok(())
 }
 
