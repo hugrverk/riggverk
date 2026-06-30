@@ -332,6 +332,42 @@ mod tests {
     }
 
     #[test]
+    fn windows_app_support_under_appdata() {
+        let env = win_env();
+        assert_eq!(
+            app_support_dir(&env, Platform::Windows).expect("app support"),
+            PathBuf::from(r"C:\Users\Example\AppData\Roaming").join("ai.agentworkspace.app")
+        );
+    }
+
+    #[test]
+    fn windows_backup_root_under_appdata_app_support() {
+        let env = win_env();
+        assert_eq!(
+            backup_root_path(&env, Platform::Windows).expect("backups"),
+            PathBuf::from(r"C:\Users\Example\AppData\Roaming")
+                .join("ai.agentworkspace.app")
+                .join("backups")
+        );
+    }
+
+    #[test]
+    fn windows_app_support_requires_appdata() {
+        let env = PlatformEnv {
+            appdata: None,
+            ..win_env()
+        };
+        assert_eq!(
+            app_support_dir(&env, Platform::Windows).expect_err("missing APPDATA"),
+            "APPDATA is not set"
+        );
+        assert_eq!(
+            backup_root_path(&env, Platform::Windows).expect_err("missing APPDATA"),
+            "APPDATA is not set"
+        );
+    }
+
+    #[test]
     fn macos_settings_preserve_application_support() {
         let env = mac_env();
         assert_eq!(

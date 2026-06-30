@@ -24,6 +24,9 @@ trap cleanup EXIT
 search_has_match() {
   if command -v rg >/dev/null 2>&1; then
     rg -n "$@"
+  elif [ "${1:-}" = "-F" ]; then
+    shift
+    grep -R -n -F "$@"
   else
     grep -R -n -E "$@"
   fi
@@ -32,6 +35,9 @@ search_has_match() {
 search_quiet() {
   if command -v rg >/dev/null 2>&1; then
     rg -q "$@"
+  elif [ "${1:-}" = "-F" ]; then
+    shift
+    grep -R -q -F "$@"
   else
     grep -R -q -E "$@"
   fi

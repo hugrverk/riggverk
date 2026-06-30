@@ -18,6 +18,8 @@ The script is read-only except for normal ignored build artifacts created by fro
 
 It does not run apply commands, install skills, create backups, write user config folders, inspect `.env` files, or manage `.agents/skills`.
 
+CI runs this POSIX release check on Ubuntu and macOS. Windows CI covers frontend, build, Rust format/check/Clippy/tests, and native app path behavior separately; native Windows support for the Bash installer scripts is out of scope until explicitly implemented and tested.
+
 ## Backend runtime smoke (optional)
 
 ```bash

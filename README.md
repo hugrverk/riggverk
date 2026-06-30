@@ -191,6 +191,8 @@ See `docs/SECURITY_MODEL.md` for detailed boundaries.
 
 ## Verification
 
+Continuous integration runs the POSIX installer and release checks on Ubuntu and macOS. Windows CI runs frontend and native Rust app checks separately; the Bash installer scripts are not covered as native Windows scripts.
+
 Primary checks include:
 
 ```bash
