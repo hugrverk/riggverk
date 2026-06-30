@@ -130,7 +130,7 @@ Dry-runs only unless testing your own machine:
 - [ ] `scripts/install-opencode-config.sh --quiet --diff`
 - [ ] `scripts/install-skills.sh --quiet --dry-run --global` for selected agents
 - [ ] Do not run `--apply` on someone else's machine without intent
-- [ ] Apply creates backups under `~/Library/Application Support/ai.agentworkspace.app/backups`
+- [ ] Apply creates backups under the platform backup root (`~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux)
 
 ## 6. Verify and Terminal Smoke
 

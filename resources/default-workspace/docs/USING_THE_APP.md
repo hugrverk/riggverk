@@ -78,7 +78,7 @@ In-app utilities separate from harness sync:
 
 ## Backups
 
-Applying changes that overwrite diverged target files creates backups under the platform-resolved Agent Workspace backup root (for example `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS).
+Applying changes that overwrite diverged target files creates backups under the platform-resolved Agent Workspace backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux.
 
 ## Release check
 

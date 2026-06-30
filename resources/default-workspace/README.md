@@ -26,7 +26,7 @@ All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to s
 - **`install-skills.sh`** — installs skills to native agent skill folders. App uses `--global` only.
 - **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
 
-All writes are explicit, previewed, and allowlisted. Existing managed targets are backed up before replacement under `~/Library/Application Support/ai.agentworkspace.app/backups`. The Agent Workspace app manages global/home config only. Cursor installation never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
+All writes are explicit, previewed, and allowlisted. Existing managed targets are backed up before replacement under the platform backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux. The Agent Workspace app manages global/home config only. Cursor installation never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
 
 ## Separation
 

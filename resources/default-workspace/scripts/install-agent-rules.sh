@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 CORE_RULES_FILE="$WORKSPACE_ROOT/templates/global-agent-rules.md"
 
 usage() {
@@ -70,19 +72,8 @@ if ! $codex && ! $opencode && ! $claude; then
   codex=true; opencode=true; claude=true
 fi
 
-backup_root() {
-  if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
-    printf '%s' "$AGENT_WORKSPACE_BACKUP_DIR"
-  else
-    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
-  fi
-}
-
-BACKUP_ROOT="$(backup_root)"
-
-case "$BACKUP_ROOT" in
-  /|"$HOME"|"") printf 'install-agent-rules.sh: refusing broad backup root: %s\n' "$BACKUP_ROOT" >&2; exit 1 ;;
-esac
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-agent-rules.sh" || exit 1
 
 resolve_target() {
   local agent_id="$1"

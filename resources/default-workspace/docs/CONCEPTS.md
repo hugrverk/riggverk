@@ -65,7 +65,7 @@ A target is an installed agent tool the workspace can sync to. Each target has a
 
 ## Backups
 
-When apply mode overwrites an existing diverged file, a backup is created first. Backups live under `~/Library/Application Support/ai.agentworkspace.app/backups`. Dry-run and diff modes never create backups.
+When apply mode overwrites an existing diverged file, a backup is created first. Backups live under the platform backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux. Dry-run and diff modes never create backups.
 
 ## Brain Setup
 

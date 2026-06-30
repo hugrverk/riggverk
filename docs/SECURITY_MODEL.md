@@ -10,12 +10,12 @@
 
 ## Managed surfaces
 
-The app writes only to these known paths under user home:
+The app writes only to these known user-config and app-support paths:
 
 | Surface | Path |
 |---------|------|
 | OpenCode config | `~/.config/opencode/opencode.json` (managed-key merge) |
-| OpenCode model override | `~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json` (non-secret model preference) |
+| OpenCode model override | app support dir plus `opencode-model-selection.json` (non-secret model preference) |
 | OpenCode agents | `~/.config/opencode/agents/` |
 | OpenCode rules | `~/.config/opencode/AGENTS.md` |
 | OpenCode skills | `~/.config/opencode/skills/` |
@@ -29,6 +29,13 @@ The app writes only to these known paths under user home:
 | Cursor agents | `~/.cursor/agents/` |
 | Cursor skills | `~/.cursor/skills/` |
 | Cursor MCP | `~/.cursor/mcp.json` (Playwright entry only) |
+
+App support and backup roots are platform-resolved:
+
+| Platform | App support dir | Backup root |
+|----------|-----------------|-------------|
+| macOS | `~/Library/Application Support/ai.agentworkspace.app` | `~/Library/Application Support/ai.agentworkspace.app/backups` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app` | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` |
 
 All writes are preceded by backup. Rollback restores exact prior state using a single shared persisted rollback core: per-artifact `in_flight` status is recorded before mutation, interrupted rollbacks reconcile against post-apply and backup digests without overwriting unrelated user edits, and conflicts fail closed.
 
@@ -52,7 +59,7 @@ All bundled scripts run locally with fixed allowlisted arguments. No script acce
 
 ## Backups
 
-Backups are stored under `~/Library/Application Support/ai.agentworkspace.app/backups`. Each backup is timestamped and maps to one allowlisted target surface. Backups contain copies of files before modification.
+Backups are stored under the platform-resolved backup root shown above, unless `AGENT_WORKSPACE_BACKUP_DIR` overrides it. Each backup is timestamped and maps to one allowlisted target surface. Backups contain copies of files before modification.
 
 Backup contents are read locally only for validation, comparison, and rollback restoration. The app does not transmit backup data. Backup reads are limited to allowlisted restore targets involved in a named rollback command; credential-like values encountered there are not intentionally extracted, authenticated with, logged, transmitted, or exposed in command output.
 

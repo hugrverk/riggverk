@@ -66,6 +66,7 @@ def main() -> None:
         "scripts/merge-opencode-config.py",
         "scripts/generate-opencode-config.py",
         "scripts/playwright-mcp-lib.sh",
+        "scripts/lib/platform-paths.sh",
         "scripts/check-playwright-mcp.sh",
         "scripts/install-codex-config.sh",
         "scripts/install-codex-agents.sh",
@@ -87,6 +88,7 @@ def main() -> None:
         "scripts/install-runtime-agents.sh",
         "scripts/install-opencode-config.sh",
         "scripts/install-codex-config.sh",
+        "scripts/lib/platform-paths.sh",
         "scripts/ensure-codex-routing-defaults.py",
     }
     required_cursor_adapters = {

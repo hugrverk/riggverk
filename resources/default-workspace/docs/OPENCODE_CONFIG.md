@@ -123,11 +123,12 @@ A backup is created before overwriting if the current config or agent files diff
 
 ## App-level model override
 
-The Agent Workspace app provides a **Model selection** UI in the OpenCode tab. When you select a model and small model, the selection is stored in an app-level override file at:
+The Agent Workspace app provides a **Model selection** UI in the OpenCode tab. When you select a model and small model, the selection is stored in an app-level override file:
 
-```
-~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json
-```
+| Platform | Override file |
+|----------|---------------|
+| macOS | `~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json` |
+| Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/opencode-model-selection.json` |
 
 This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`.
 

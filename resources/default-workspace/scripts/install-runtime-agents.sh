@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 OPENCODE_AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/agents"
 CLAUDE_AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/templates/claude/agents"
 
@@ -69,18 +71,8 @@ if ! $opencode && ! $claude; then
   claude=true
 fi
 
-backup_root() {
-  if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
-    printf '%s' "$AGENT_WORKSPACE_BACKUP_DIR"
-  else
-    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
-  fi
-}
-
-BACKUP_ROOT="$(backup_root)"
-case "$BACKUP_ROOT" in
-  /|"$HOME"|"") printf 'install-runtime-agents.sh: refusing broad backup root: %s\n' "$BACKUP_ROOT" >&2; exit 1 ;;
-esac
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-runtime-agents.sh" || exit 1
 
 agents_source_dir() {
   case "$1" in

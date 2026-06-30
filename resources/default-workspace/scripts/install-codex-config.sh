@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$repo_root/scripts/lib/platform-paths.sh"
 source_config="$repo_root/templates/codex/config.toml"
 MERGE_SCRIPT="$repo_root/scripts/merge-codex-config.py"
 ROUTING_DEFAULTS_SCRIPT="$repo_root/scripts/ensure-codex-routing-defaults.py"
@@ -52,11 +54,12 @@ done
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 target_config="${CODEX_CONFIG_PATH:-$codex_home/config.toml}"
 
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+[ -n "${BACKUP_ROOT//[[:space:]]/}" ] || die "backup directory is empty"
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-codex-config.sh" || exit 1
+
 backup_root() {
-  local root="${AGENT_WORKSPACE_BACKUP_DIR:-$HOME/Library/Application Support/ai.agentworkspace.app/backups}"
-  [ -n "${root//[[:space:]]/}" ] || die "backup directory is empty"
-  case "$root" in / | "$HOME" | "$HOME/") die "refusing broad backup directory: $root" ;; esac
-  printf '%s\n' "$root"
+  printf '%s\n' "$BACKUP_ROOT"
 }
 
 codex_config_legacy_managed_match() {

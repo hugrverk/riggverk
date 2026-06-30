@@ -3,6 +3,8 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 AGENTS_SOURCE_DIR="$WORKSPACE_ROOT/templates/codex/agents"
 
 usage() {
@@ -50,18 +52,8 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-backup_root() {
-  if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
-    printf '%s' "$AGENT_WORKSPACE_BACKUP_DIR"
-  else
-    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
-  fi
-}
-
-BACKUP_ROOT="$(backup_root)"
-case "$BACKUP_ROOT" in
-  /|"$HOME"|"") printf 'install-codex-agents.sh: refusing broad backup root: %s\n' "$BACKUP_ROOT" >&2; exit 1 ;;
-esac
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-codex-agents.sh" || exit 1
 
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 TARGET_AGENTS_DIR="${CODEX_AGENTS_DIR:-$codex_home/agents}"

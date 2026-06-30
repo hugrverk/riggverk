@@ -5,6 +5,8 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # shellcheck source=scripts/playwright-mcp-lib.sh
 . "$WORKSPACE_ROOT/scripts/playwright-mcp-lib.sh"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 
 SOURCE_FILE="$WORKSPACE_ROOT/templates/opencode.json"
 TUI_SOURCE_FILE="$WORKSPACE_ROOT/templates/tui.json"
@@ -121,19 +123,8 @@ should_sync_agents() {
   ! $config_only
 }
 
-backup_root() {
-  if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
-    printf '%s' "$AGENT_WORKSPACE_BACKUP_DIR"
-  else
-    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
-  fi
-}
-
-BACKUP_ROOT="$(backup_root)"
-
-case "$BACKUP_ROOT" in
-  /|"$HOME"|"") printf 'install-opencode-config.sh: refusing broad backup root: %s\n' "$BACKUP_ROOT" >&2; exit 1 ;;
-esac
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-opencode-config.sh" || exit 1
 
 TARGET="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode/opencode.json}"
 TUI_TARGET="${OPENCODE_TUI_CONFIG_PATH:-$HOME/.config/opencode/tui.json}"

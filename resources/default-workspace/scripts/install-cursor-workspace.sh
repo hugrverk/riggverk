@@ -4,6 +4,8 @@ set -euo pipefail
 caller_dir="$PWD"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 
 RULES_SOURCE="$WORKSPACE_ROOT/templates/cursor/rules"
 AGENTS_SOURCE="$WORKSPACE_ROOT/templates/cursor/agents"
@@ -83,16 +85,8 @@ ensure_child() {
   case "$child" in "$root"/*) ;; *) die "destination outside root: $child" ;; esac
 }
 
-backup_root() {
-  if [ -n "${AGENT_WORKSPACE_BACKUP_DIR:-}" ]; then
-    printf '%s' "$AGENT_WORKSPACE_BACKUP_DIR"
-  else
-    printf '%s/Library/Application Support/ai.agentworkspace.app/backups' "${HOME:?}"
-  fi
-}
-
-BACKUP_ROOT="$(backup_root)"
-case "$BACKUP_ROOT" in /|"$HOME"|"") die "refusing broad backup root: $BACKUP_ROOT" ;; esac
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-cursor-workspace.sh" || exit 1
 backup_timestamp="$(date -u +%Y%m%d-%H%M%S)"
 
 backup_file() {

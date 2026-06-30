@@ -177,12 +177,15 @@ printf '  README/docs drift checks ok\n'
 
 step "bundled default workspace scripts"
 bash -n resources/default-workspace/scripts/bootstrap.sh
+bash -n resources/default-workspace/scripts/lib/platform-paths.sh
+bash -n resources/default-workspace/scripts/test-platform-paths.sh
 bash -n resources/default-workspace/scripts/install-skills.sh
 bash -n resources/default-workspace/scripts/install-agent-rules.sh
 bash -n resources/default-workspace/scripts/install-opencode-config.sh
 bash -n resources/default-workspace/scripts/install-codex-config.sh
 bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
 bash -n resources/default-workspace/scripts/install-runtime-agents.sh
+bash resources/default-workspace/scripts/test-platform-paths.sh
 
 step "bundled default workspace opencode generator script"
 if [ ! -f resources/default-workspace/scripts/generate-opencode-config.py ]; then
