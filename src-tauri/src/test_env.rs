@@ -13,8 +13,17 @@ pub fn process_home() -> PathBuf {
 #[cfg(test)]
 pub fn set_test_user_dirs(dir: &Path) {
     let dir_str = dir.to_string_lossy();
+    let xdg_config_home = dir.join(".config");
+    let xdg_data_home = dir.join(".local").join("share");
+    let _ = std::fs::create_dir_all(&xdg_config_home);
+    let _ = std::fs::create_dir_all(&xdg_data_home);
     unsafe {
         std::env::set_var("HOME", dir_str.as_ref());
+        std::env::set_var(
+            "XDG_CONFIG_HOME",
+            xdg_config_home.to_string_lossy().as_ref(),
+        );
+        std::env::set_var("XDG_DATA_HOME", xdg_data_home.to_string_lossy().as_ref());
         #[cfg(windows)]
         {
             std::env::set_var("USERPROFILE", dir_str.as_ref());

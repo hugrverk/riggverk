@@ -2186,6 +2186,7 @@ mod tests {
         assert_eq!(result.message, "No operations to apply");
     }
 
+    #[cfg(unix)]
     #[test]
     fn symlink_preflight_rejects_symlink() {
         // Test the reject_symlink function directly
@@ -2290,6 +2291,7 @@ mod tests {
         assert!(!result.success);
     }
 
+    #[cfg(unix)]
     #[test]
     fn regular_file_remove_rejects_symlinked_parent() {
         // Remove rejects when the destination's parent chain contains a symlink.
@@ -2318,6 +2320,7 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_symlinked_parent() {
         // Apply rejects when the destination's parent chain contains a symlink.
@@ -2343,6 +2346,7 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    #[cfg(unix)]
     #[test]
     fn regular_file_apply_rejects_dangling_destination_symlink() {
         let base = std::env::temp_dir().join(format!(

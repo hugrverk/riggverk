@@ -518,6 +518,7 @@ mod tests {
         assert!(err.message().contains("deeper than one group level"));
     }
 
+    #[cfg(unix)]
     #[test]
     fn symlinked_group_rejected() {
         let root = temp_root("sym-group");
@@ -538,6 +539,7 @@ mod tests {
         let _ = fs::remove_dir_all(&root);
     }
 
+    #[cfg(unix)]
     #[test]
     fn symlinked_skill_rejected() {
         let root = temp_root("sym-skill");
