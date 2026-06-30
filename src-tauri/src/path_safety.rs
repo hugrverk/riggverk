@@ -2,6 +2,7 @@
 //!
 //! Rejects symlinks on paths and in parent chains up to an allowlisted root.
 
+use std::ffi::OsStr;
 use std::fs;
 use std::path::{Component, Path, PathBuf};
 
@@ -96,15 +97,37 @@ fn normalize_allowlisted_root(root: &Path) -> Result<PathBuf, String> {
 }
 
 fn paths_equal_under_root(path: &Path, root: &Path) -> bool {
-    path.components().eq(root.components())
+    let mut path_components = path.components();
+    let mut root_components = root.components();
+    loop {
+        match (path_components.next(), root_components.next()) {
+            (None, None) => return true,
+            (Some(actual), Some(expected)) if component_eq(actual, &expected) => {}
+            _ => return false,
+        }
+    }
 }
 
 fn component_eq(a: Component<'_>, b: &Component<'_>) -> bool {
     match (a, b) {
-        (Component::Normal(a), Component::Normal(b)) => a == *b,
+        (Component::Prefix(a), Component::Prefix(b)) => os_str_eq(a.as_os_str(), b.as_os_str()),
+        (Component::Normal(a), Component::Normal(b)) => os_str_eq(a, b),
         (Component::RootDir, Component::RootDir) => true,
         (Component::CurDir, Component::CurDir) => true,
         _ => false,
+    }
+}
+
+fn os_str_eq(a: &OsStr, b: &OsStr) -> bool {
+    #[cfg(windows)]
+    {
+        let a = a.to_string_lossy();
+        let b = b.to_string_lossy();
+        a.eq_ignore_ascii_case(&b)
+    }
+    #[cfg(not(windows))]
+    {
+        a == b
     }
 }
 
@@ -197,5 +220,13 @@ mod tests {
             "path outside allowlisted root must be rejected"
         );
         let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn windows_drive_prefix_descendant_passes() {
+        let root = PathBuf::from(r"C:\Users\runneradmin\AppData\Local\Temp\aw-root");
+        let child = PathBuf::from(r"c:\users\runneradmin\AppData\Local\Temp\aw-root\child");
+        assert!(reject_path_escape(&child, &root, "child").is_ok());
     }
 }

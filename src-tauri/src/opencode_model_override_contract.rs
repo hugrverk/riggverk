@@ -19,35 +19,15 @@ fn write_file(root: &Path, rel: &str, content: &str) -> PathBuf {
     path
 }
 
-fn restore_env(key: &str, value: Option<String>) {
-    unsafe {
-        if let Some(value) = value {
-            std::env::set_var(key, value);
-        } else {
-            std::env::remove_var(key);
-        }
-    }
-}
-
 fn with_isolated_home<T>(name: &str, run: impl FnOnce(&Path) -> T) -> T {
     let _guard = crate::test_env::guard::lock();
+    let _env = crate::test_env::guard::EnvRestore::capture();
     let home = temp_root(name);
     fs::create_dir_all(&home).expect("create home");
-
-    let old_home = std::env::var("HOME").ok();
-    let old_xdg = std::env::var("XDG_CONFIG_HOME").ok();
-    let old_appdata = std::env::var("APPDATA").ok();
-    unsafe {
-        std::env::set_var("HOME", &home);
-        std::env::remove_var("XDG_CONFIG_HOME");
-        std::env::remove_var("APPDATA");
-    }
+    crate::test_env::set_test_user_dirs(&home);
 
     let result = run(&home);
 
-    restore_env("HOME", old_home);
-    restore_env("XDG_CONFIG_HOME", old_xdg);
-    restore_env("APPDATA", old_appdata);
     let _ = fs::remove_dir_all(&home);
     result
 }
