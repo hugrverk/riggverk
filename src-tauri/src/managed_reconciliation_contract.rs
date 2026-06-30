@@ -435,6 +435,14 @@ mod tests {
         .expect("apply_setup")
     }
 
+    fn display_path_ends_with(path: &str, parts: &[&str]) -> bool {
+        let mut suffix = PathBuf::new();
+        for part in parts {
+            suffix.push(part);
+        }
+        Path::new(path).ends_with(suffix)
+    }
+
     fn collect_regular_files_under(root: &Path) -> Result<BTreeMap<PathBuf, Vec<u8>>, String> {
         let mut files = BTreeMap::new();
         if !root.exists() {
@@ -1027,7 +1035,7 @@ mod tests {
             uninstall_plan
                 .preserved
                 .iter()
-                .any(|item| item.path.ends_with("tdd/SKILL.md")),
+                .any(|item| display_path_ends_with(&item.path, &["tdd", "SKILL.md"])),
             "modified skill must be preserved: {:?}",
             uninstall_plan
                 .preserved
@@ -1177,7 +1185,7 @@ mod tests {
             uninstall_preview
                 .preserved
                 .iter()
-                .any(|item| item.path.ends_with("tdd/SKILL.md")),
+                .any(|item| display_path_ends_with(&item.path, &["tdd", "SKILL.md"])),
             "modified skill must appear in preserved preview"
         );
         assert!(
