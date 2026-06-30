@@ -136,10 +136,12 @@ The override takes effect when you click **Install/Update** in the OpenCode tab.
 
 If no override exists, the workspace `templates/opencode.base.json` values are used as the source of truth for model selection.
 
-To remove the override, delete the file and run Install/Update:
-```
-rm ~/Library/Application\ Support/ai.agentworkspace.app/opencode-model-selection.json
-```
+To remove the override, delete the file for your platform and run Install/Update:
+
+| Platform | Command |
+|----------|---------|
+| macOS | `rm "$HOME/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json"` |
+| Linux | `rm "${XDG_CONFIG_HOME:-$HOME/.config}/ai.agentworkspace.app/opencode-model-selection.json"` |
 
 The override is safe to delete; the app falls back to workspace template defaults.
 
