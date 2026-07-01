@@ -185,19 +185,13 @@ fn check_skills_synced(home: &Path, workspace_root: &Path) -> bool {
         if !installed_skill_md.is_file() {
             return false;
         }
-        // Find source and compare content
-        let source_dir = crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
-            .resolve_source(workspace_root);
-        if let Some(src_dir) = source_dir {
-            let source_skill_md = src_dir.join("SKILL.md");
-            if source_skill_md.is_file() {
-                // Compare actual content, not just existence
-                if !file_eq(&installed_skill_md, &source_skill_md) {
-                    return false;
-                }
-            }
-        }
-        true
+        let Some(source_skill_md) =
+            crate::artifact_registry::ArtifactId::ClaudeSkill(skill_name.clone())
+                .resolve_source(workspace_root)
+        else {
+            return false;
+        };
+        source_skill_md.is_file() && file_eq(&installed_skill_md, &source_skill_md)
     })
 }
 
@@ -309,6 +303,27 @@ mod tests {
         fs::write(path, content).expect("write file");
     }
 
+    fn write_claude_skill(ws: &Path, home: &Path, name: &str) {
+        write_file(
+            &ws.join(format!("skills/test-group/{name}/SKILL.md")),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Canonical\n"
+            ),
+        );
+        write_file(
+            &ws.join(format!("templates/skills/claude/{name}/SKILL.md")),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Claude adapter\n"
+            ),
+        );
+        write_file(
+            &home.join(format!(".claude/skills/{name}/SKILL.md")),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: claude\n---\n# Claude adapter\n"
+            ),
+        );
+    }
+
     #[test]
     fn health_reports_not_configured_when_claude_dir_missing() {
         let home = temp_dir("no-claude-dir");
@@ -354,17 +369,7 @@ mod tests {
         write_file(&home.join(".claude/agents/scribe.md"), "# scribe\n");
         write_file(&home.join(".claude/agents/verifier.md"), "# verifier\n");
 
-        // Set up workspace skills source with a Claude-eligible skill
-        write_file(
-            &ws.join("skills/test-group/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
-        );
-
-        // Install matching skill in Claude skills dir
-        write_file(
-            &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
-        );
+        write_claude_skill(&ws, &home, "claude-skill");
 
         let health = compute_health(&ws, &home);
         assert!(health.rules_synced);
@@ -497,15 +502,8 @@ mod tests {
             "# verifier\n",
         );
 
-        // Add a Claude-eligible skill so skills_synced can be verified
-        write_file(
-            &ws.join("skills/group/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
-        );
-        write_file(
-            &home.join(".claude/skills/claude-skill/SKILL.md"),
-            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Skill\n",
-        );
+        // Add a Claude-eligible skill so skills_synced can be verified.
+        write_claude_skill(&ws, &home, "claude-skill");
 
         write_file(&home.join(".claude/CLAUDE.md"), "rules");
         write_file(&home.join(".claude/agents/repo-scout.md"), "# scout\n");
@@ -543,5 +541,52 @@ mod tests {
         assert!(!health.agents_synced);
         // Should not crash or read the MCP/settings files
         assert_eq!(health.installed_agent_count, 0);
+    }
+
+    #[test]
+    fn health_reports_skills_synced_against_generated_adapter() {
+        let home = temp_dir("claude-skill-adapter");
+        let ws = temp_dir("claude-skill-adapter-ws");
+        write_claude_skill(&ws, &home, "claude-skill");
+
+        let health = compute_health(&ws, &home);
+        assert!(health.skills_synced);
+        assert_eq!(health.expected_skill_count, 1);
+        assert_eq!(health.installed_skill_count, 1);
+    }
+
+    #[test]
+    fn health_reports_skills_not_synced_when_installed_content_is_canonical_only() {
+        let home = temp_dir("claude-skill-canonical-installed");
+        let ws = temp_dir("claude-skill-canonical-installed-ws");
+        write_claude_skill(&ws, &home, "claude-skill");
+        write_file(
+            &home.join(".claude/skills/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
+        );
+
+        let health = compute_health(&ws, &home);
+        assert!(!health.skills_synced);
+        assert_eq!(health.expected_skill_count, 1);
+        assert_eq!(health.installed_skill_count, 1);
+    }
+
+    #[test]
+    fn health_reports_skills_not_synced_when_generated_adapter_source_missing() {
+        let home = temp_dir("claude-skill-adapter-missing");
+        let ws = temp_dir("claude-skill-adapter-missing-ws");
+        write_file(
+            &ws.join("skills/test-group/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
+        );
+        write_file(
+            &home.join(".claude/skills/claude-skill/SKILL.md"),
+            "---\nname: claude-skill\ndescription: test skill\ntargets: claude\n---\n# Canonical\n",
+        );
+
+        let health = compute_health(&ws, &home);
+        assert!(!health.skills_synced);
+        assert_eq!(health.expected_skill_count, 1);
+        assert_eq!(health.installed_skill_count, 1);
     }
 }

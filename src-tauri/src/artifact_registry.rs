@@ -676,6 +676,44 @@ mod tests {
     }
 
     #[test]
+    fn all_skill_artifact_sources_resolve_to_generated_adapter_files() {
+        let ws = temp_dir("all-skill-adapter-sources");
+        write_skill(
+            &ws,
+            "skills/frontend-design",
+            "frontend-design",
+            "codex, opencode, claude, cursor",
+        );
+        for harness in ["opencode", "codex", "claude", "cursor"] {
+            write_skill_adapter(&ws, harness, "frontend-design");
+        }
+
+        let name = SkillName::new("frontend-design").unwrap();
+        let cases = [
+            (ArtifactId::OpenCodeSkill(name.clone()), "opencode"),
+            (ArtifactId::CodexSkill(name.clone()), "codex"),
+            (ArtifactId::ClaudeSkill(name.clone()), "claude"),
+            (ArtifactId::CursorSkill(name.clone()), "cursor"),
+            (ArtifactId::CodexLegacySkill(name), "codex"),
+        ];
+
+        for (artifact, harness) in cases {
+            let source = artifact.resolve_source(&ws).expect("source path");
+            let expected = PathBuf::from(format!(
+                "templates/skills/{harness}/frontend-design/SKILL.md"
+            ));
+            assert!(
+                source.ends_with(&expected),
+                "{artifact:?} resolved to {}",
+                source.display()
+            );
+            assert!(source.is_file(), "adapter source should exist");
+            assert_eq!(source.file_name().unwrap(), "SKILL.md");
+            assert!(!source.ends_with("skills/frontend-design/SKILL.md"));
+        }
+    }
+
+    #[test]
     fn skill_discovery_supports_root_level() {
         let ws = temp_dir("skill-root");
         write_skill(

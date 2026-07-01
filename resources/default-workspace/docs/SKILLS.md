@@ -83,7 +83,7 @@ Each `SKILL.md` frontmatter may include optional metadata fields:
 - `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
 - `related` — comma-separated related skill names.
 
-These fields are operator guidance only. They do not change runtime behavior or install destinations.
+`targets` drives generated adapter output under `templates/skills/<harness>/` and expands the managed skill surface for each harness. Destination paths remain fixed per harness: generated adapters install flat to each harness skill root as `<harness-skill-root>/<name>/SKILL.md`. Other metadata fields are operator guidance only.
 
 ## Generated Adapters
 
