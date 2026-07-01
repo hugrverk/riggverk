@@ -58,7 +58,7 @@ See `docs/WORKSPACE_CONTRACT.md` for the complete contract.
 
 ## Skills
 
-The bundled catalog contains exactly 21 skills.
+The bundled semantic catalog contains exactly 21 canonical skills.
 
 Source layouts:
 
@@ -69,7 +69,16 @@ skills/<group>/<skill>/SKILL.md
 
 One optional group level is supported for source organization. Deeper skill nesting is invalid.
 
-Installed layout remains flat:
+Harness-specific adapters are generated from the canonical catalog plus compact overlays:
+
+```text
+templates/skills/<harness>/<skill>/SKILL.md
+metadata/skill-adapters.json
+```
+
+Run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays. Generated adapters must not be edited by hand.
+
+Installed layout remains flat and single-file:
 
 ```text
 <harness-skill-root>/<skill-name>/SKILL.md
@@ -82,7 +91,7 @@ Global destinations:
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-All current bundled skills support all four harnesses. There are no skill profiles or persistent per-harness skill selections.
+All current bundled skills support all four harnesses. There are no harness-only skills, skill profiles, or persistent per-harness skill selections.
 
 Deprecated Agent Workspace skills are classified against bundled reference snapshots. Identical managed copies may be removed after backup; diverged and unknown copies are preserved.
 
@@ -123,25 +132,25 @@ Generated adapters must remain current with their shared body and harness metada
 
 ### OpenCode
 
-Agent Workspace manages composed rules, native agents, the canonical skill catalog, selected config keys, and the named Playwright MCP entry.
+Agent Workspace manages composed rules, native agents, generated skill adapters, selected config keys, and the named Playwright MCP entry.
 
 User provider blocks, unrelated MCP entries, and unknown config keys are preserved.
 
 ### Codex
 
-Agent Workspace manages rules, native TOML agents, the canonical skill catalog, and allowlisted Codex config defaults: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. Legacy app-shaped profile selectors and profile tables are removed during migration only.
+Agent Workspace manages rules, native TOML agents, generated skill adapters, and allowlisted Codex config defaults: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. Legacy app-shaped profile selectors and profile tables are removed during migration only.
 
 Copies under the previous `~/.agents/skills` app location are detected for migration to `$CODEX_HOME/skills`. Diverged copies remain conflicts and are not removed automatically.
 
 ### Claude Code
 
-Agent Workspace manages rules, native subagents, and the canonical skill catalog.
+Agent Workspace manages rules, native subagents, and generated skill adapters.
 
 Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed. The app does not inspect or write those surfaces.
 
 ### Cursor
 
-Cursor global setup is owned by native Rust operations. Agent Workspace manages six global agents, the canonical skill catalog, and the named Playwright MCP entry.
+Cursor global setup is owned by native Rust operations. Agent Workspace manages six global agents, generated skill adapters, and the named Playwright MCP entry.
 
 Cursor User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
 
@@ -197,6 +206,7 @@ Primary checks include:
 
 ```bash
 python3 scripts/generate-agent-adapters.py --check
+python3 scripts/generate-skill-adapters.py --check
 python3 scripts/generate-agent-rules.py --check
 python3 scripts/generate-default-opencode-config.py --check
 python3 scripts/check-skill-routing.py

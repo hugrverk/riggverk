@@ -226,9 +226,10 @@ def generate() -> dict[str, object]:
         if name in removed:
             continue
         digests = history.for_rel(rel)
-        current = current_digest(rel)
-        if current:
-            digests.discard(current)
+        # Canonical skill files were the harness install source before
+        # generated skill adapters were introduced. Keep the current canonical
+        # digest approved so pre-adapter installs from the immediately prior
+        # app version can be adopted and updated to adapters.
         if digests:
             artifacts.append(
                 entry(

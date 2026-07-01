@@ -608,10 +608,10 @@ pub fn detect_artifact_state(
             }
         }
         ArtifactKind::SkillFile => {
-            if !dest.is_file() {
-                (OperationKind::Create, PreviousState::Absent)
-            } else if !source.is_file() {
+            if !source.is_file() {
                 (OperationKind::Unavailable, PreviousState::Unavailable)
+            } else if !dest.is_file() {
+                (OperationKind::Create, PreviousState::Absent)
             } else if file_eq(&dest, &source) {
                 (OperationKind::NoChange, PreviousState::ManagedFile)
             } else {
@@ -1936,6 +1936,25 @@ mod tests {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let artifacts = expand_surface_fail_closed(SetupSurfaceId::OpenCodeSkills, &repo).unwrap();
         assert_eq!(artifacts.len(), 21);
+    }
+
+    #[test]
+    fn missing_generated_skill_adapter_is_unavailable() {
+        let home = temp("missing-adapter-home");
+        let ws = temp("missing-adapter-ws");
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(ws.join("skills/test-skill")).unwrap();
+        fs::write(
+            ws.join("skills/test-skill/SKILL.md"),
+            "---\nname: test-skill\ndescription: test skill\ntargets: opencode\n---\n# test-skill\n",
+        )
+        .unwrap();
+        let artifact = ArtifactId::OpenCodeSkill(
+            crate::artifact_registry::SkillName::new("test-skill").unwrap(),
+        );
+        let (kind, previous) = detect_artifact_state(&artifact, &ws, &home);
+        assert_eq!(kind, OperationKind::Unavailable);
+        assert_eq!(previous, PreviousState::Unavailable);
     }
 
     #[test]

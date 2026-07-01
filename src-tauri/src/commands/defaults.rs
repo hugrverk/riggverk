@@ -105,6 +105,7 @@ mod tests {
                 "Readme",
                 "Docs",
                 "Templates",
+                "Skill adapters",
                 "Agent specs",
                 "Agents",
                 "Scripts",

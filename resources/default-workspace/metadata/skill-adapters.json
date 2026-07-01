@@ -1,0 +1,626 @@
+{
+  "canonical_root": "skills",
+  "overlay_root": "templates/skills/_overlays",
+  "skills": {
+    "accessibility-review": {
+      "canonical": "skills/accessibility-review/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/accessibility-review/SKILL.md",
+        "codex": "templates/skills/codex/accessibility-review/SKILL.md",
+        "cursor": "templates/skills/cursor/accessibility-review/SKILL.md",
+        "opencode": "templates/skills/opencode/accessibility-review/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "browser-qa": {
+      "canonical": "skills/browser-qa/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/browser-qa/SKILL.md",
+        "codex": "templates/skills/codex/browser-qa/SKILL.md",
+        "cursor": "templates/skills/cursor/browser-qa/SKILL.md",
+        "opencode": "templates/skills/opencode/browser-qa/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md",
+          "templates/skills/_overlays/skills/browser-qa/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "context-budget": {
+      "canonical": "skills/context-budget/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/context-budget/SKILL.md",
+        "codex": "templates/skills/codex/context-budget/SKILL.md",
+        "cursor": "templates/skills/cursor/context-budget/SKILL.md",
+        "opencode": "templates/skills/opencode/context-budget/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "current-docs": {
+      "canonical": "skills/current-docs/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/current-docs/SKILL.md",
+        "codex": "templates/skills/codex/current-docs/SKILL.md",
+        "cursor": "templates/skills/cursor/current-docs/SKILL.md",
+        "opencode": "templates/skills/opencode/current-docs/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "database-migrations": {
+      "canonical": "skills/database-migrations/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/database-migrations/SKILL.md",
+        "codex": "templates/skills/codex/database-migrations/SKILL.md",
+        "cursor": "templates/skills/cursor/database-migrations/SKILL.md",
+        "opencode": "templates/skills/opencode/database-migrations/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "diagnose": {
+      "canonical": "skills/diagnose/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/diagnose/SKILL.md",
+        "codex": "templates/skills/codex/diagnose/SKILL.md",
+        "cursor": "templates/skills/cursor/diagnose/SKILL.md",
+        "opencode": "templates/skills/opencode/diagnose/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "frontend-design": {
+      "canonical": "skills/frontend-design/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/frontend-design/SKILL.md",
+        "codex": "templates/skills/codex/frontend-design/SKILL.md",
+        "cursor": "templates/skills/cursor/frontend-design/SKILL.md",
+        "opencode": "templates/skills/opencode/frontend-design/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md",
+          "templates/skills/_overlays/skills/frontend-design/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "handoff": {
+      "canonical": "skills/handoff/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/handoff/SKILL.md",
+        "codex": "templates/skills/codex/handoff/SKILL.md",
+        "cursor": "templates/skills/cursor/handoff/SKILL.md",
+        "opencode": "templates/skills/opencode/handoff/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "implementation-plan": {
+      "canonical": "skills/implementation-plan/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/implementation-plan/SKILL.md",
+        "codex": "templates/skills/codex/implementation-plan/SKILL.md",
+        "cursor": "templates/skills/cursor/implementation-plan/SKILL.md",
+        "opencode": "templates/skills/opencode/implementation-plan/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "kretsverket-editor-change": {
+      "canonical": "skills/kretsverket/kretsverket-editor-change/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/kretsverket-editor-change/SKILL.md",
+        "codex": "templates/skills/codex/kretsverket-editor-change/SKILL.md",
+        "cursor": "templates/skills/cursor/kretsverket-editor-change/SKILL.md",
+        "opencode": "templates/skills/opencode/kretsverket-editor-change/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "kretsverket-electrical-drawing": {
+      "canonical": "skills/kretsverket/kretsverket-electrical-drawing/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/kretsverket-electrical-drawing/SKILL.md",
+        "codex": "templates/skills/codex/kretsverket-electrical-drawing/SKILL.md",
+        "cursor": "templates/skills/cursor/kretsverket-electrical-drawing/SKILL.md",
+        "opencode": "templates/skills/opencode/kretsverket-electrical-drawing/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "kretsverket-file-compatibility": {
+      "canonical": "skills/kretsverket/kretsverket-file-compatibility/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/kretsverket-file-compatibility/SKILL.md",
+        "codex": "templates/skills/codex/kretsverket-file-compatibility/SKILL.md",
+        "cursor": "templates/skills/cursor/kretsverket-file-compatibility/SKILL.md",
+        "opencode": "templates/skills/opencode/kretsverket-file-compatibility/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "kretsverket-symbol-system": {
+      "canonical": "skills/kretsverket/kretsverket-symbol-system/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/kretsverket-symbol-system/SKILL.md",
+        "codex": "templates/skills/codex/kretsverket-symbol-system/SKILL.md",
+        "cursor": "templates/skills/cursor/kretsverket-symbol-system/SKILL.md",
+        "opencode": "templates/skills/opencode/kretsverket-symbol-system/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "minimal-implementation": {
+      "canonical": "skills/minimal-implementation/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/minimal-implementation/SKILL.md",
+        "codex": "templates/skills/codex/minimal-implementation/SKILL.md",
+        "cursor": "templates/skills/cursor/minimal-implementation/SKILL.md",
+        "opencode": "templates/skills/opencode/minimal-implementation/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "prototype": {
+      "canonical": "skills/prototype/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/prototype/SKILL.md",
+        "codex": "templates/skills/codex/prototype/SKILL.md",
+        "cursor": "templates/skills/cursor/prototype/SKILL.md",
+        "opencode": "templates/skills/opencode/prototype/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "release-check": {
+      "canonical": "skills/release-check/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/release-check/SKILL.md",
+        "codex": "templates/skills/codex/release-check/SKILL.md",
+        "cursor": "templates/skills/cursor/release-check/SKILL.md",
+        "opencode": "templates/skills/opencode/release-check/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md",
+          "templates/skills/_overlays/skills/release-check/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "screenshot-review": {
+      "canonical": "skills/screenshot-review/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/screenshot-review/SKILL.md",
+        "codex": "templates/skills/codex/screenshot-review/SKILL.md",
+        "cursor": "templates/skills/cursor/screenshot-review/SKILL.md",
+        "opencode": "templates/skills/opencode/screenshot-review/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "security-review": {
+      "canonical": "skills/security-review/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/security-review/SKILL.md",
+        "codex": "templates/skills/codex/security-review/SKILL.md",
+        "cursor": "templates/skills/cursor/security-review/SKILL.md",
+        "opencode": "templates/skills/opencode/security-review/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md",
+          "templates/skills/_overlays/skills/security-review/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "tdd": {
+      "canonical": "skills/tdd/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/tdd/SKILL.md",
+        "codex": "templates/skills/codex/tdd/SKILL.md",
+        "cursor": "templates/skills/cursor/tdd/SKILL.md",
+        "opencode": "templates/skills/opencode/tdd/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "wordpress-woocommerce": {
+      "canonical": "skills/wordpress-woocommerce/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/wordpress-woocommerce/SKILL.md",
+        "codex": "templates/skills/codex/wordpress-woocommerce/SKILL.md",
+        "cursor": "templates/skills/cursor/wordpress-woocommerce/SKILL.md",
+        "opencode": "templates/skills/opencode/wordpress-woocommerce/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    },
+    "zoom-out": {
+      "canonical": "skills/zoom-out/SKILL.md",
+      "outputs": {
+        "claude": "templates/skills/claude/zoom-out/SKILL.md",
+        "codex": "templates/skills/codex/zoom-out/SKILL.md",
+        "cursor": "templates/skills/cursor/zoom-out/SKILL.md",
+        "opencode": "templates/skills/opencode/zoom-out/SKILL.md"
+      },
+      "overlays": {
+        "claude": [
+          "templates/skills/_overlays/global/claude.md"
+        ],
+        "codex": [
+          "templates/skills/_overlays/global/codex.md"
+        ],
+        "cursor": [
+          "templates/skills/_overlays/global/cursor.md"
+        ],
+        "opencode": [
+          "templates/skills/_overlays/global/opencode.md"
+        ]
+      },
+      "targets": [
+        "codex",
+        "opencode",
+        "claude",
+        "cursor"
+      ]
+    }
+  },
+  "targets": [
+    "codex",
+    "claude",
+    "opencode",
+    "cursor"
+  ],
+  "version": 1
+}

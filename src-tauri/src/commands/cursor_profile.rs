@@ -89,7 +89,7 @@ pub(crate) fn sync_dir_status(
 }
 
 pub(crate) fn sync_skill_dirs_status(
-    source_root: &Path,
+    workspace_root: &Path,
     target_root: &Path,
     skill_names: &[String],
 ) -> (String, usize, usize) {
@@ -100,21 +100,18 @@ pub(crate) fn sync_skill_dirs_status(
         return ("missing".into(), 0, skill_names.len());
     }
 
-    // Discover actual source paths (handles grouped skills like kretsverket/<name>/SKILL.md)
-    let discovered =
-        crate::skills_install::discover_workspace_skills(source_root).unwrap_or_default();
-
     let mut installed = 0;
     let mut missing = 0;
     let mut diverged = 0;
     for name in skill_names {
-        let source = match discovered.get(name) {
-            Some(path) => path.join("SKILL.md"),
-            None => {
-                diverged += 1;
-                continue;
-            }
-        };
+        let source = workspace_root
+            .join("templates/skills/cursor")
+            .join(name)
+            .join("SKILL.md");
+        if !source.is_file() {
+            diverged += 1;
+            continue;
+        }
         let target = target_root.join(name).join("SKILL.md");
         if !target.is_file() {
             missing += 1;
@@ -472,7 +469,7 @@ pub fn get_cursor_profile_health() -> Result<CursorProfileHealth, String> {
 
     let recommended_skills = manifest_recommended_skills(&root);
     let (global_skills_status, global_skills_count, expected_global_skills_count) =
-        sync_skill_dirs_status(&root.join("skills"), &paths.skills, &recommended_skills);
+        sync_skill_dirs_status(&root, &paths.skills, &recommended_skills);
 
     let mcp_status = global_mcp_status(&paths, &root, &mut warnings);
     let legacy_cleanup_status = legacy_permission_cleanup_status(&paths.permissions)
@@ -609,6 +606,36 @@ mod tests {
         let mut warnings = Vec::new();
         let status = workspace_resources_status(&root, &mut warnings);
         assert_eq!(status, "current", "warnings: {:?}", warnings);
+    }
+
+    #[test]
+    fn cursor_skill_status_compares_generated_adapter_not_canonical_source() {
+        use std::fs;
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        let root = std::env::temp_dir().join(format!("cursor-skill-adapter-ws-{nonce}"));
+        let target_root = root.join("cursor-skills");
+        let adapter = root.join("templates/skills/cursor/frontend-design");
+        let canonical = root.join("skills/frontend-design");
+        let installed = target_root.join("frontend-design");
+        fs::create_dir_all(&adapter).expect("adapter dir");
+        fs::create_dir_all(&canonical).expect("canonical dir");
+        fs::create_dir_all(&installed).expect("installed dir");
+        fs::write(adapter.join("SKILL.md"), "adapter skill\n").expect("write adapter");
+        fs::write(canonical.join("SKILL.md"), "canonical skill\n").expect("write canonical");
+        fs::write(installed.join("SKILL.md"), "adapter skill\n").expect("write installed");
+
+        let (status, installed_count, expected_count) =
+            sync_skill_dirs_status(&root, &target_root, &[String::from("frontend-design")]);
+        let _ = fs::remove_dir_all(&root);
+
+        assert_eq!(status, "synced");
+        assert_eq!(installed_count, 1);
+        assert_eq!(expected_count, 1);
     }
 
     #[test]

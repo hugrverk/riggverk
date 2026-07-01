@@ -4,6 +4,7 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_DIR="$WORKSPACE_ROOT/skills"
+ADAPTERS_DIR="$WORKSPACE_ROOT/templates/skills"
 
 VALID_AGENTS="codex opencode claude cursor"
 
@@ -228,6 +229,18 @@ agent_project_dest() {
   esac
 }
 
+adapter_file_for_agent() {
+  local agent="$1"
+  local name="$2"
+  local adapter="$ADAPTERS_DIR/$agent/$name/SKILL.md"
+  if [ ! -f "$adapter" ]; then
+    printf 'install-skills.sh: missing generated %s adapter for skill: %s\n' "$agent" "$name" >&2
+    printf 'install-skills.sh: run scripts/generate-skill-adapters.py --write from the app repository\n' >&2
+    return 1
+  fi
+  printf '%s' "$adapter"
+}
+
 validate_project_target() {
   local raw="$1"
   if [ ! -d "$raw" ]; then
@@ -441,6 +454,9 @@ if $dry_run; then
     else
       dest="$(agent_global_dest "$agent")"
     fi
+    for name in "${install_names[@]}"; do
+      adapter_file_for_agent "$agent" "$name" >/dev/null
+    done
     if $quiet; then
       printf '%-10s %s\n' "${agent}:" "${install_names[*]}"
     else
@@ -483,8 +499,16 @@ for agent in "${selected_agents[@]}"; do
   i=0
   while [ $i -lt "${#install_names[@]}" ]; do
     name="${install_names[$i]}"
-    dir="${install_dirs[$i]}"
-    src_dir="$SKILLS_DIR/$dir"
+    src_file="$(adapter_file_for_agent "$agent" "$name")" || {
+      if $quiet; then
+        printf '  %-10s FAIL %s (missing adapter)\n' "${agent}:" "$name"
+      else
+        printf '    FAIL %s (missing adapter)\n' "$name"
+      fi
+      exit_code=1
+      i=$((i + 1))
+      continue
+    }
     dest_dir="$dest_root/$name"
     if ! ensure_contained "$dest_root" "$name"; then
       if $quiet; then
@@ -496,15 +520,13 @@ for agent in "${selected_agents[@]}"; do
       i=$((i + 1))
       continue
     fi
-    if [ -d "$dest_dir" ]; then
-      rm -rf "$dest_dir"
-    fi
-    cp -R "$src_dir" "$dest_dir"
+    mkdir -p "$dest_dir"
+    cp "$src_file" "$dest_dir/SKILL.md"
     if [ $? -ne 0 ]; then
       if $quiet; then
-        printf '  %-10s FAIL %s (src=%s dest=%s)\n' "${agent}:" "$name" "$src_dir" "$dest_dir"
+        printf '  %-10s FAIL %s (src=%s dest=%s)\n' "${agent}:" "$name" "$src_file" "$dest_dir/SKILL.md"
       else
-        printf '    FAIL %s (src=%s dest=%s)\n' "$name" "$src_dir" "$dest_dir"
+        printf '    FAIL %s (src=%s dest=%s)\n' "$name" "$src_file" "$dest_dir/SKILL.md"
       fi
       exit_code=1
     else

@@ -3,12 +3,16 @@
 
 from __future__ import annotations
 
+import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = REPO_ROOT / "resources/default-workspace/skills"
+ADAPTER_ROOT = REPO_ROOT / "resources/default-workspace/templates/skills"
+ADAPTER_MANIFEST = REPO_ROOT / "resources/default-workspace/metadata/skill-adapters.json"
 EXPECTED_COUNT = 21
 
 EXPECTED_SKILLS = {
@@ -165,6 +169,57 @@ def validate_skill_metadata(discovered: dict[str, Path]) -> None:
             fail(f"{path}: {name} targets must be exactly {sorted(ALL_HARNESSES)}; {'; '.join(msg_parts)}")
 
 
+def validate_skill_adapters(discovered: dict[str, Path]) -> None:
+    if not ADAPTER_MANIFEST.is_file():
+        fail(f"adapter manifest missing: {ADAPTER_MANIFEST}")
+    try:
+        manifest = json.loads(ADAPTER_MANIFEST.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        fail(f"{ADAPTER_MANIFEST}: invalid JSON: {exc}")
+    if manifest.get("version") != 1:
+        fail(f"{ADAPTER_MANIFEST}: unsupported version")
+    if set(manifest.get("targets", [])) != ALL_HARNESSES:
+        fail(f"{ADAPTER_MANIFEST}: targets must be exactly {sorted(ALL_HARNESSES)}")
+    manifest_skills = manifest.get("skills")
+    if not isinstance(manifest_skills, dict):
+        fail(f"{ADAPTER_MANIFEST}: missing skills object")
+    if set(manifest_skills) != set(discovered):
+        missing = set(discovered) - set(manifest_skills)
+        extra = set(manifest_skills) - set(discovered)
+        if missing:
+            fail(f"{ADAPTER_MANIFEST}: missing skills: {sorted(missing)}")
+        if extra:
+            fail(f"{ADAPTER_MANIFEST}: unknown skills: {sorted(extra)}")
+
+    for skill, canonical_path in discovered.items():
+        entry = manifest_skills[skill]
+        if entry.get("canonical") != canonical_path.relative_to(REPO_ROOT / "resources/default-workspace").as_posix():
+            fail(f"{ADAPTER_MANIFEST}: {skill} canonical path mismatch")
+        if set(entry.get("targets", [])) != ALL_HARNESSES:
+            fail(f"{ADAPTER_MANIFEST}: {skill} targets must be exactly {sorted(ALL_HARNESSES)}")
+        outputs = entry.get("outputs")
+        if not isinstance(outputs, dict) or set(outputs) != ALL_HARNESSES:
+            fail(f"{ADAPTER_MANIFEST}: {skill} outputs must cover {sorted(ALL_HARNESSES)}")
+        for harness in ALL_HARNESSES:
+            expected = ADAPTER_ROOT / harness / skill / "SKILL.md"
+            if not expected.is_file():
+                fail(f"generated {harness} adapter missing for {skill}: {expected}")
+            rel_expected = expected.relative_to(REPO_ROOT / "resources/default-workspace").as_posix()
+            if outputs.get(harness) != rel_expected:
+                fail(f"{ADAPTER_MANIFEST}: {skill} {harness} output path mismatch")
+
+    result = subprocess.run(
+        [sys.executable, "scripts/generate-skill-adapters.py", "--check"],
+        cwd=REPO_ROOT,
+        text=True,
+        capture_output=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        output = (result.stdout + result.stderr).strip()
+        fail(f"generated skill adapters are stale:\n{output[:4000]}")
+
+
 def extract_skill_tokens(text: str) -> set[str]:
     tokens: set[str] = set()
     for match in re.finditer(r"`([a-z][a-z0-9-]*)`", text):
@@ -293,6 +348,7 @@ def main() -> None:
             fail(f"unexpected extra skills: {sorted(extra)}")
 
     validate_skill_metadata(discovered_map)
+    validate_skill_adapters(discovered_map)
     validate_routing_sources(discovered)
     validate_active_docs()
     scan_repo_for_removed_skills()

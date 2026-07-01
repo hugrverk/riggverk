@@ -224,6 +224,7 @@ def main() -> None:
     release = read(ROOT / "scripts/release-check.sh")
     for command in (
         "python3 scripts/generate-pre-manifest-ownership.py --check",
+        "python3 scripts/generate-skill-adapters.py --check",
         "bash scripts/smoke-pre-manifest-upgrade.sh",
     ):
         if command not in release:

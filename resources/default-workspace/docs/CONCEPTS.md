@@ -11,16 +11,16 @@ The workspace is plain-text, user-editable, and can be versioned with Git. The a
 | Concept | Location | Purpose |
 |---------|----------|---------|
 | Docs | `docs/` | Workspace documentation and guides |
-| Skills | `skills/` | Reusable agent instruction files |
+| Skills | `skills/`, `templates/skills/` | Canonical skill sources and generated harness adapters |
 | Templates | `templates/` | Source templates for rules and config |
 | Scripts | `scripts/` | Sync, install, and bootstrap operations |
 | Shared runtime agents | `agents/` | OpenCode runtime agent prompts (six bundled agents) |
 
 ## Skills
 
-Skills are reusable agent instruction files. Each skill lives in its own directory under `skills/` with a `SKILL.md` file. Skills define specialized behaviors for coding agents (e.g., frontend design, security review, debugging).
+Skills are reusable agent instruction files. Canonical semantic skills live under `skills/` with a `SKILL.md` file. Generated harness adapters live under `templates/skills/<harness>/<skill>/SKILL.md` and are what managed setup installs.
 
-The app installs skills globally (system-wide). The bundled workspace includes 21 skills at `skills/<skill>/SKILL.md` or `skills/<group>/<skill>/SKILL.md`.
+The app installs skills globally (system-wide). The bundled workspace includes 21 canonical skills at `skills/<skill>/SKILL.md` or `skills/<group>/<skill>/SKILL.md`, all targeting Codex, OpenCode, Claude, and Cursor through generated adapters.
 
 See [SKILLS.md](SKILLS.md) for the full skill directory contract.
 

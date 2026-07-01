@@ -32,7 +32,7 @@ Validation is read-only. It does not run scripts, install files, or inspect cred
 
 ## Bundled resources
 
-The default workspace currently contains 21 bundled skills, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
+The default workspace currently contains 21 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
 Bundled resources are immutable installation input. The explicit **Install or Update** action:
 
@@ -74,6 +74,17 @@ Global destinations:
 - Cursor: `~/.cursor/skills`
 
 All 21 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
+
+## Skill adapters
+
+Canonical skill files under `skills/` are the semantic source of truth. `scripts/generate-skill-adapters.py` combines those canonical files with compact harness overlays under `templates/skills/_overlays/` and writes generated adapters to:
+
+```text
+templates/skills/<harness>/<skill>/SKILL.md
+metadata/skill-adapters.json
+```
+
+Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
 
 ## Skill ownership and cleanup
 
@@ -137,11 +148,11 @@ App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-
 
 ### Claude Code
 
-Agent Workspace manages Claude rules, native subagents, and skills. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
+Agent Workspace manages Claude rules, native subagents, and generated skill adapters. Claude settings, authentication, trust state, caches, and user-scoped MCP credentials remain Claude-managed and are not read or written by Agent Workspace.
 
 ### Cursor
 
-Cursor global agents, canonical skills, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
+Cursor global agents, generated skill adapters, and the named Playwright MCP entry are managed by native Rust operations. User Rules and Auto Review remain manual IDE settings. Project `.cursor/*`, project agents, project MCP, `.cursorignore`, and `AGENTS.md` are not written by the global setup flow.
 
 ## Backups and writes
 

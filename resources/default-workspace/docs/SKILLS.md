@@ -1,6 +1,6 @@
 # Skills
 
-The bundled default workspace contains **21 skills**. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **21 skills**: 21 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
@@ -85,6 +85,15 @@ Each `SKILL.md` frontmatter may include optional metadata fields:
 
 These fields are operator guidance only. They do not change runtime behavior or install destinations.
 
+## Generated Adapters
+
+- `skills/**/SKILL.md` — canonical semantic source files.
+- `templates/skills/_overlays/` — compact global and skill-specific harness overlays.
+- `templates/skills/<harness>/<skill>/SKILL.md` — generated adapter files installed by managed setup and `scripts/install-skills.sh`.
+- `metadata/skill-adapters.json` — generated adapter manifest.
+
+Generated adapter files are not hand-maintained. In the source repository, run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays.
+
 ## Agent Metadata
 
 - `metadata/agents.json` — sidecar metadata for agents under `agents/`. Does not modify agent runtime frontmatter.
@@ -96,4 +105,4 @@ These fields are operator guidance only. They do not change runtime behavior or 
 ./scripts/install-skills.sh --dry-run --agent cursor --global
 ```
 
-Agent Workspace syncs the canonical bundled skill set to every enabled harness. Skills install globally to harness-native skill roots in flat layout.
+Agent Workspace syncs generated adapters for the canonical bundled skill set to every enabled harness. Skills install globally to harness-native skill roots in flat single-file layout.

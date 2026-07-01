@@ -56,7 +56,9 @@ def main() -> None:
 
     scripts = section_paths(manifest_text, "Scripts")
     templates = section_paths(manifest_text, "Templates")
+    skill_adapters = section_paths(manifest_text, "Skill adapters")
     docs = section_paths(manifest_text, "Docs")
+    metadata = section_paths(manifest_text, "Metadata")
     refresh = managed_refresh_paths(manifest_text)
 
     required_scripts = {
@@ -115,6 +117,28 @@ def main() -> None:
         if not adapter_path.is_file() or adapter_path.stat().st_size == 0:
             fail(f"Cursor adapter missing or empty on disk: {rel}")
 
+    generated_skill_adapters = {
+        path.relative_to(ROOT / "resources" / "default-workspace").as_posix()
+        for path in (ROOT / "resources/default-workspace/templates/skills").glob("*/*/SKILL.md")
+    }
+    skill_overlay_sources = {
+        path.relative_to(ROOT / "resources" / "default-workspace").as_posix()
+        for path in (ROOT / "resources/default-workspace/templates/skills/_overlays").rglob("*.md")
+    }
+    if len(generated_skill_adapters) != 84:
+        fail(f"expected 84 generated skill adapters, found {len(generated_skill_adapters)}")
+    expected_skill_adapter_paths = generated_skill_adapters | skill_overlay_sources
+    missing_skill_adapter_paths = expected_skill_adapter_paths - skill_adapters
+    extra_skill_adapter_paths = skill_adapters - expected_skill_adapter_paths
+    for rel in sorted(missing_skill_adapter_paths):
+        fail(f"Skill adapters section missing: {rel}")
+    for rel in sorted(extra_skill_adapter_paths):
+        fail(f"Skill adapters section has stale path: {rel}")
+    if "metadata/skill-adapters.json" not in metadata:
+        fail("Metadata section missing: metadata/skill-adapters.json")
+    if not (ROOT / "resources/default-workspace/metadata/skill-adapters.json").is_file():
+        fail("skill adapter metadata missing on disk")
+
     user_owned_prefixes = ("docs/", "skills/", "agents/")
     for rel in sorted(refresh):
         if rel.startswith(user_owned_prefixes):
@@ -123,7 +147,7 @@ def main() -> None:
             fail(f"managed refresh must not overwrite editable source: {rel}")
 
     print(
-        "  bundled manifest: runtime installers + Cursor adapters listed; "
+        "  bundled manifest: runtime installers + Cursor/skill adapters listed; "
         "app action scripts refreshable backup-first"
     )
 

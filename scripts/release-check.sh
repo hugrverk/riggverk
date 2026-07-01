@@ -465,6 +465,14 @@ if grep -q 'rm -rf.*dest_dir' "$skill_file"; then
     exit 1
   fi
 fi
+if ! grep -q 'templates/skills' "$skill_file"; then
+  printf 'FAIL: install-skills.sh must install generated harness skill adapters\n' >&2
+  exit 1
+fi
+if grep -q 'cp -R.*SKILLS_DIR' "$skill_file" || grep -q 'cp -R.*src_dir' "$skill_file"; then
+  printf 'FAIL: install-skills.sh must not copy canonical skill directories\n' >&2
+  exit 1
+fi
 
 step "bundled default cursor setup"
 python3 resources/default-workspace/scripts/check-cursor-profile.py
@@ -821,6 +829,10 @@ python3 -m unittest scripts/test_opencode_policy_compose.py
 
 step "bundled OpenCode permission contract"
 python3 scripts/validate_opencode_permissions.py
+
+step "bundled harness skill adapters are current"
+python3 -m unittest scripts/test_generate_skill_adapters.py
+python3 scripts/generate-skill-adapters.py --check
 
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check

@@ -224,8 +224,7 @@ impl ArtifactId {
                 Some(workspace_root.join("agents").join(name.file_name()))
             }
             ArtifactId::OpenCodeSkill(name) => {
-                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
-                    .map(|path| path.join("SKILL.md"))
+                skill_adapter_source(workspace_root, "opencode", name.as_str())
             }
             ArtifactId::CodexConfig => Some(workspace_root.join("templates/codex/config.toml")),
             ArtifactId::CodexRules => Some(workspace_root.join("templates/sync/codex-rules.md")),
@@ -235,8 +234,7 @@ impl ArtifactId {
                     .join(name.file_name_with_extension("toml")),
             ),
             ArtifactId::CodexSkill(name) => {
-                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
-                    .map(|path| path.join("SKILL.md"))
+                skill_adapter_source(workspace_root, "codex", name.as_str())
             }
             ArtifactId::ClaudeRules => Some(workspace_root.join("templates/sync/claude-rules.md")),
             ArtifactId::ClaudeAgent(name) => Some(
@@ -245,8 +243,7 @@ impl ArtifactId {
                     .join(name.file_name()),
             ),
             ArtifactId::ClaudeSkill(name) => {
-                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
-                    .map(|path| path.join("SKILL.md"))
+                skill_adapter_source(workspace_root, "claude", name.as_str())
             }
             ArtifactId::CursorAgent(name) => Some(
                 workspace_root
@@ -254,16 +251,14 @@ impl ArtifactId {
                     .join(name.file_name()),
             ),
             ArtifactId::CursorSkill(name) => {
-                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
-                    .map(|path| path.join("SKILL.md"))
+                skill_adapter_source(workspace_root, "cursor", name.as_str())
             }
             ArtifactId::CursorMcp => Some(
                 crate::commands::cursor_profile::cursor_root(workspace_root)
                     .join("mcp/playwright.mcp.json"),
             ),
             ArtifactId::CodexLegacySkill(name) => {
-                crate::skill_discovery::find_skill_source_dir(workspace_root, name.as_str())
-                    .map(|path| path.join("SKILL.md"))
+                skill_adapter_source(workspace_root, "codex", name.as_str())
             }
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
         }
@@ -296,6 +291,20 @@ impl ArtifactId {
 
 fn resolve_cursor_paths() -> Result<crate::cursor_profile_paths::CursorProfilePaths, String> {
     crate::cursor_profile_paths::resolve_cursor_profile_paths()
+}
+
+fn skill_adapter_source(workspace_root: &Path, harness: &str, skill_name: &str) -> Option<PathBuf> {
+    if !crate::agent_skill_targets::VALID_SKILL_AGENTS.contains(&harness) {
+        return None;
+    }
+    Some(
+        workspace_root
+            .join("templates")
+            .join("skills")
+            .join(harness)
+            .join(skill_name)
+            .join("SKILL.md"),
+    )
 }
 
 // ── Surface-to-artifact expansion ──
@@ -480,6 +489,18 @@ mod tests {
         );
     }
 
+    fn write_skill_adapter(ws: &Path, harness: &str, name: &str) {
+        write_file(
+            &ws.join("templates/skills")
+                .join(harness)
+                .join(name)
+                .join("SKILL.md"),
+            &format!(
+                "---\nname: {name}\ndescription: test skill\ntargets: codex, opencode, claude, cursor\n---\n# {name}\n\n## Harness Adapter\n"
+            ),
+        );
+    }
+
     // ── Surface expansion tests ──
 
     #[test]
@@ -626,14 +647,32 @@ mod tests {
     fn skill_artifacts_resolve_to_skill_md_files() {
         let ws = temp_dir("skill-md");
         write_skill(&ws, "skills/frontend-design", "frontend-design", "opencode");
+        write_skill_adapter(&ws, "opencode", "frontend-design");
         let home = temp_dir("skill-md-home");
         let artifact = ArtifactId::OpenCodeSkill(SkillName::new("frontend-design").unwrap());
         let dest = artifact.resolve_dest(&home, &ws).unwrap();
         let source = artifact.resolve_source(&ws).unwrap();
         assert!(source.is_file(), "source SKILL.md should exist");
+        assert!(source.ends_with("templates/skills/opencode/frontend-design/SKILL.md"));
         assert_eq!(source.file_name().unwrap(), "SKILL.md");
         assert_eq!(dest.file_name().unwrap(), "SKILL.md");
         let _ = fs::remove_dir_all(&home);
+    }
+
+    #[test]
+    fn skill_artifacts_resolve_to_harness_adapter_even_when_canonical_exists() {
+        let ws = temp_dir("skill-adapter-source");
+        write_skill(
+            &ws,
+            "skills/frontend-design",
+            "frontend-design",
+            "codex, opencode, claude, cursor",
+        );
+        write_skill_adapter(&ws, "claude", "frontend-design");
+        let artifact = ArtifactId::ClaudeSkill(SkillName::new("frontend-design").unwrap());
+        let source = artifact.resolve_source(&ws).unwrap();
+        assert!(source.ends_with("templates/skills/claude/frontend-design/SKILL.md"));
+        assert!(!source.ends_with("skills/frontend-design/SKILL.md"));
     }
 
     #[test]

@@ -355,15 +355,6 @@ pub fn validate_skill_targets(catalog: &[DiscoveredSkill]) -> Result<(), String>
     Ok(())
 }
 
-/// Find source directory for a skill name (root-level or grouped).
-pub fn find_skill_source_dir(workspace_root: &Path, name: &str) -> Option<PathBuf> {
-    let catalog = discover_skill_catalog(workspace_root).ok()?;
-    catalog
-        .iter()
-        .find(|s| s.name == name)
-        .map(|s| s.source_dir.clone())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
