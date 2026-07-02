@@ -42,6 +42,15 @@ def digest(raw: bytes) -> str:
     return f"sha256:{hashlib.sha256(raw).hexdigest()}"
 
 
+def shipped_digest_variants(raw: bytes) -> set[str]:
+    digests = {digest(raw)}
+    if b"\0" in raw or b"\n" not in raw:
+        return digests
+    crlf = raw.replace(b"\r\n", b"\n").replace(b"\n", b"\r\n")
+    digests.add(digest(crlf))
+    return digests
+
+
 def rust_string_list(path: Path, start: str, end: str) -> list[str]:
     text = path.read_text(encoding="utf-8")
     section = text.split(start, 1)[1].split(end, 1)[0]
@@ -99,16 +108,16 @@ def historical_blobs_by_rel() -> dict[str, set[str]]:
 class HistoricalDigests:
     def __init__(self) -> None:
         self._by_rel = historical_blobs_by_rel()
-        self._blob_cache: dict[str, str] = {}
+        self._blob_cache: dict[str, set[str]] = {}
 
     def for_rel(self, rel: str) -> set[str]:
         digests: set[str] = set()
         for sha in sorted(self._by_rel.get(rel, set())):
             cached = self._blob_cache.get(sha)
             if cached is None:
-                cached = digest(git("cat-file", "blob", sha))
+                cached = shipped_digest_variants(git("cat-file", "blob", sha))
                 self._blob_cache[sha] = cached
-            digests.add(cached)
+            digests.update(cached)
         return digests
 
     def shipped_for_rels(self, rels: list[str]) -> set[str]:

@@ -190,7 +190,20 @@ mod tests {
             .len()
     }
 
-    fn install_source_skills_to_harness(harness: &str) {
+    #[derive(Clone, Copy)]
+    enum HarnessSkillLineEndings {
+        Native,
+        Crlf,
+    }
+
+    fn to_crlf(raw: &[u8]) -> Vec<u8> {
+        String::from_utf8_lossy(raw)
+            .replace("\r\n", "\n")
+            .replace('\n', "\r\n")
+            .into_bytes()
+    }
+
+    fn install_source_skills_to_harness(harness: &str, line_endings: HarnessSkillLineEndings) {
         let mut catalog = discover_skill_catalog(&bundled_workspace_src()).expect("catalog");
         catalog.sort_by(|a, b| a.name.cmp(&b.name));
         let dest_root = agent_global_skills_dest(harness).expect("dest");
@@ -198,6 +211,11 @@ mod tests {
         for skill in &catalog {
             let target = dest_root.join(&skill.name);
             copy_dir_all(&skill.source_dir, &target).expect("copy skill");
+            if matches!(line_endings, HarnessSkillLineEndings::Crlf) {
+                let skill_md = target.join("SKILL.md");
+                let raw = fs::read(&skill_md).expect("read copied skill");
+                fs::write(&skill_md, to_crlf(&raw)).expect("write crlf skill");
+            }
         }
     }
 
@@ -278,6 +296,10 @@ mod tests {
 
     impl OldInstallFixture {
         fn build() -> Self {
+            Self::build_with_harness_skill_line_endings(HarnessSkillLineEndings::Native)
+        }
+
+        fn build_with_harness_skill_line_endings(line_endings: HarnessSkillLineEndings) -> Self {
             let base = temp_base("fixture");
             let _ = fs::remove_dir_all(&base);
             let home = base.join("home");
@@ -295,7 +317,7 @@ mod tests {
             .expect("home");
 
             for harness in ["opencode", "codex", "claude", "cursor"] {
-                install_source_skills_to_harness(harness);
+                install_source_skills_to_harness(harness, line_endings);
                 install_removed_skills_to_harness(&resolved_home, harness);
             }
             install_codex_legacy_skills(&resolved_home);
@@ -834,6 +856,44 @@ mod tests {
                 .all(|record| record.identity
                     != crate::managed_state::artifact_identity(&conflicted)),
             "same-name unowned conflict must remain unclaimed"
+        );
+
+        fixture.cleanup();
+    }
+
+    #[test]
+    fn pre_manifest_crlf_harness_skills_upgrade_to_generated_adapters() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let fixture =
+            OldInstallFixture::build_with_harness_skill_line_endings(HarnessSkillLineEndings::Crlf);
+
+        let plan = preview_reconciliation();
+        let result = apply_surfaces_from_preview(&plan);
+        assert!(result.success, "apply failed: {}", result.message);
+
+        let exact_cursor = ArtifactId::CursorSkill(
+            SkillName::new("accessibility-review").expect("canonical skill"),
+        );
+        let managed = read_managed_state(&fixture.ws).expect("managed-state.json");
+        assert!(
+            managed
+                .artifacts
+                .iter()
+                .any(|record| record.identity
+                    == crate::managed_state::artifact_identity(&exact_cursor)),
+            "CRLF pre-adapter harness skill should be adopted and upgraded"
+        );
+        let source = exact_cursor
+            .resolve_source(&fixture.ws)
+            .expect("adapter source");
+        let dest = exact_cursor
+            .resolve_dest(&fixture.home, &fixture.ws)
+            .expect("adapter dest");
+        assert_eq!(
+            fs::read(dest).expect("installed adapter"),
+            fs::read(source).expect("source adapter"),
+            "installed Cursor skill should be the generated adapter"
         );
 
         fixture.cleanup();
