@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Use for throwaway prototype work before production implementation.
+description: Validate throwaway UI variants, state-machine or data-model options, and interaction experiments before production implementation. Keeps prototype code separate from production paths; pair with `frontend-design` for UI prototypes.
 category: workflow
 risk: low
 targets: codex, opencode, claude, cursor
