@@ -45,3 +45,13 @@ Do not invent verification, hide uncertainty, repeat long source material, or de
 - Keep dynamic context tight. Read task-relevant files, avoid broad dumps, and summarize handoffs compactly.
 - Do not rely on mutating hooks by default. File edits, shell commands, and external writes must stay within the active task and harness permissions.
 - Final synthesis belongs in the parent context with changed files, verification, gaps, and residual risk.
+
+### Claude Handoff
+
+Repository state captured when this skill loaded:
+
+- Status: !`git status --short 2>/dev/null | head -c 1200`
+- Recent commits: !`git log --oneline -8 2>/dev/null | head -c 800`
+- Diff stat: !`git diff --stat 2>/dev/null | tail -4`
+
+Use this as starting evidence for Verified/Not verified instead of re-deriving it.

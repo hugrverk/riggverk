@@ -94,6 +94,11 @@ Each `SKILL.md` frontmatter may include optional metadata fields:
 
 Generated adapter files are not hand-maintained. In the source repository, run `python3 scripts/generate-skill-adapters.py --write` after changing canonical skills or overlays.
 
+Two harness-specific transforms apply during generation:
+
+- Claude adapters hoist a canonical `## When To Use` section into `when_to_use` frontmatter (Claude Code appends it to the description in the skill listing, where invocation decisions happen; combined description + when_to_use is capped at 1,536 characters).
+- An overlay file may open with a `---` frontmatter block whose `key: value` lines merge into the adapter frontmatter (for example `release-check`'s Claude overlay sets `context: fork`, `agent: verifier`, `background: false`). Collisions with canonical fields fail generation.
+
 ## Agent Metadata
 
 - `metadata/agents.json` — sidecar metadata for agents under `agents/`. Does not modify agent runtime frontmatter.

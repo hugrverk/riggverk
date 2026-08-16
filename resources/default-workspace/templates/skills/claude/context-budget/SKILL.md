@@ -1,6 +1,7 @@
 ---
 name: context-budget
 description: Audit skills, rules, docs, agent prompts, and tooling config for token overhead, overlap, and safe simplification without removing essential safety guidance.
+when_to_use: "The workspace feels slow, bloated, repetitive, or hard for agents to load. Reviewing skills, global rules, agent prompts, docs, MCP/tooling config, or app default workspace content. Before adding new baseline skills or broad rules. When deciding whether to keep, merge, shorten, make optional, or remove instructions."
 category: workflow
 risk: low
 targets: codex, opencode, claude, cursor
@@ -8,19 +9,6 @@ related: implementation-plan
 ---
 
 # Context Budget
-
-## Purpose
-
-- Reduce workspace instruction bloat without weakening safety or repo canon.
-- Identify overlapping skills, rules, docs, prompts, agents, MCP/tooling config, and repeated guidance.
-- Prioritize the highest-savings simplifications first.
-
-## When To Use
-
-- The workspace feels slow, bloated, repetitive, or hard for agents to load.
-- Reviewing skills, global rules, agent prompts, docs, MCP/tooling config, or app default workspace content.
-- Before adding new baseline skills or broad rules.
-- When deciding whether to keep, merge, shorten, make optional, or remove instructions.
 
 ## Do Not Use When
 

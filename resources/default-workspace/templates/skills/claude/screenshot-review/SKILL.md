@@ -9,11 +9,7 @@ related: frontend-design, browser-qa, accessibility-review
 
 # Screenshot Review
 
-## Purpose
-
-- Turn screenshots into a bounded UI diagnosis and patch plan.
-- Identify visual drift without jumping straight to code.
-- Pair well with frontend-design for implementation planning.
+Turn screenshots into a bounded diagnosis and patch plan; do not jump straight to code.
 
 ## Process
 
@@ -23,6 +19,14 @@ related: frontend-design, browser-qa, accessibility-review
 4. Compare against existing design tokens, components, and product language when repo context is available.
 5. Rank issues by user impact and implementation risk.
 6. Propose a small patch plan. Do not edit files unless explicitly asked.
+
+## Frequent root causes
+
+- Squeezed or overflowing text in a row: flex/grid child missing `min-width: 0` or truncation styles.
+- Clipped focus ring or shadow: `overflow: hidden` on an ancestor, or no padding around focusable content.
+- Horizontal scroll on mobile: fixed widths, `100vw` plus scrollbar, or an unwrapped wide element (table, `pre`, image).
+- Misaligned icon/text rows: mixed line-heights or icons not flex-centered.
+- Uneven spacing rhythm: hardcoded margins instead of the repo's spacing tokens.
 
 ## Output
 

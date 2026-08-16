@@ -21,7 +21,8 @@
       "default_skills": ["zoom-out"],
       "safe_to_edit_runtime": false,
       "notes": [
-        "Use proactively before implementation when repo structure is unclear."
+        "Use proactively before implementation when repo structure is unclear.",
+        "zoom-out keeps disable-model-invocation: true, which also blocks Claude subagent skill preloading; the Claude adapter therefore pins a cheap model but preloads no skills."
       ]
     },
     "inspector.md": {

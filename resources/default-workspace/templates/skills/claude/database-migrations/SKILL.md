@@ -1,6 +1,7 @@
 ---
 name: database-migrations
 description: Plan and review safe database schema or data changes across common stacks, with explicit migration, rollback, and DB push reporting.
+when_to_use: "Schema changes: tables, columns, constraints, indexes, enums, views, triggers, functions, policies, or relations. Data migrations, seed changes, large backfills, cleanup scripts, or operational database changes. ORM migration generation, raw SQL migration review, plugin activation schema changes, or DB deployment planning. Any implementation prompt or report that includes \"DB push\", \"migration\", \"schema\", or \"backfill\" status."
 category: database
 risk: high
 targets: codex, opencode, claude, cursor
@@ -9,18 +10,7 @@ related: security-review, release-check
 
 # Database Migrations
 
-## Purpose
-
-- Make database changes explicit, reviewable, reversible, and deployable.
-- Reduce production lock, backfill, rollback, and compatibility risk.
-- Work across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
-
-## When To Use
-
-- Schema changes: tables, columns, constraints, indexes, enums, views, triggers, functions, policies, or relations.
-- Data migrations, seed changes, large backfills, cleanup scripts, or operational database changes.
-- ORM migration generation, raw SQL migration review, plugin activation schema changes, or DB deployment planning.
-- Any implementation prompt or report that includes "DB push", "migration", "schema", or "backfill" status.
+Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
 
 ## Do Not Use When
 

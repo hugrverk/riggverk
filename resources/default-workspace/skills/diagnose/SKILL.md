@@ -28,6 +28,7 @@ No blind fixes. Build a feedback loop first, then use it to falsify hypotheses.
    - Run the loop until the failure is observed.
    - Shrink inputs, setup, and code path until the failing case is small enough to reason about.
    - Keep the original full-path repro for final verification.
+   - For regressions, find the last known-good commit or version; if the loop is scriptable, let `git bisect run` localize the causing change before instrumenting.
 
 4. **Hypothesise.**
    - List 3-5 ranked, falsifiable hypotheses before changing code.

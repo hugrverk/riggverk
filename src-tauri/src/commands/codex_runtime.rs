@@ -696,7 +696,7 @@ mod tests {
 
     fn managed_codex_config() -> &'static str {
         r#"
-model = "gpt-5.5"
+model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 approval_policy = "on-request"
 approvals_reviewer = "user"
@@ -812,7 +812,7 @@ apps._default.default_tools_approval_mode = "prompt"
     #[test]
     fn test_diverged_when_app_default_approval_differs() {
         let installed = toml::from_str::<toml::Value>(
-            "model = \"gpt-5.5\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+            "model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
         )
         .expect("installed");
         let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");

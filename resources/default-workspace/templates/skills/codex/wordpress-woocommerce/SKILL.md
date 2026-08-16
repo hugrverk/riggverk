@@ -9,16 +9,13 @@ related: security-review, browser-qa, accessibility-review
 
 # WordPress WooCommerce
 
-## Purpose
-
-- Implement or review WordPress and WooCommerce changes safely.
-- Prefer WordPress and WooCommerce APIs, hooks, filters, and template overrides over brittle patches.
-- Keep changes small, secure, translatable, and verifiable.
+Prefer WordPress and WooCommerce APIs, hooks, filters, and template overrides over brittle patches.
 
 ## Process
 
 1. **Inspect context.**
    - Identify whether the task touches theme, plugin, WooCommerce template, hook/filter, REST endpoint, admin UI, frontend assets, or content.
+   - Identify classic vs block theme and shortcode vs block cart/checkout before choosing extension points; hooks and template overrides differ between them.
    - Read relevant PHP, templates, SCSS/CSS, JS, and existing hooks before editing.
    - Check existing text domain, naming patterns, asset pipeline, and verification commands.
    - Do not assume WooCommerce markup or hooks without inspecting the current version and local overrides.

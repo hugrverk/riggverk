@@ -9,11 +9,7 @@ related: context-budget
 
 # Implementation Plan
 
-## Purpose
-
-- Convert an approved direction into executable slices.
-- Make the plan clear enough for a coding agent with no project memory to execute safely.
-- Optimize for small diffs, verification, and low rework.
+Make the plan clear enough for a coding agent with no project memory to execute safely; optimize for small diffs, verification, and low rework.
 
 ## Process
 
@@ -65,4 +61,3 @@ related: context-budget
 - Do not plan broad rewrites unless explicitly requested.
 - Do not bury risky changes inside a large slice.
 - Do not treat the plan as verified implementation.
-- Do not claim commands passed unless they were run.

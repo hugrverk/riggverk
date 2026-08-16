@@ -1,6 +1,7 @@
 ---
 name: accessibility-review
 description: Review user interfaces for practical WCAG 2.2 AA accessibility risks around semantics, controls, keyboard, focus, labels, contrast, and responsive usability.
+when_to_use: "UI components, forms, navigation, menus, modals, dropdowns, tables, dashboards, checkout, onboarding, or admin screens change. A review asks whether controls are usable by keyboard, screen readers, touch, or text scaling. Adding custom controls, dynamic validation, async status, live updates, drag/drop, or complex interactive widgets. Before accepting frontend changes that affect user input or task completion."
 category: accessibility
 risk: low
 targets: codex, opencode, claude, cursor
@@ -8,19 +9,6 @@ related: frontend-design, browser-qa
 ---
 
 # Accessibility Review
-
-## Purpose
-
-- Catch accessibility defects in user interfaces before handoff.
-- Focus on practical WCAG 2.2 AA risks that affect real use.
-- Complement frontend implementation and browser QA without becoming a broad UX critique.
-
-## When To Use
-
-- UI components, forms, navigation, menus, modals, dropdowns, tables, dashboards, checkout, onboarding, or admin screens change.
-- A review asks whether controls are usable by keyboard, screen readers, touch, or text scaling.
-- Adding custom controls, dynamic validation, async status, live updates, drag/drop, or complex interactive widgets.
-- Before accepting frontend changes that affect user input or task completion.
 
 ## Do Not Use When
 

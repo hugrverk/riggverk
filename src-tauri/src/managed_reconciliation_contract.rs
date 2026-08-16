@@ -139,6 +139,10 @@ mod tests {
 
     #[test]
     fn old_current_workspace_file_without_managed_state_is_conflict() {
+        // Serialize with the other env-mutating fixtures; parallel runs stomp
+        // HOME/AGENT_WORKSPACE_PATH mid-flight for guarded tests otherwise.
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
         let base = temp_base("historical-conflict");
         let _ = fs::remove_dir_all(&base);
         fs::create_dir_all(&base).expect("base");

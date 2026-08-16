@@ -41,7 +41,8 @@
       },
       "overlays": {
         "claude": [
-          "templates/skills/_overlays/global/claude.md"
+          "templates/skills/_overlays/global/claude.md",
+          "templates/skills/_overlays/skills/browser-qa/claude.md"
         ],
         "codex": [
           "templates/skills/_overlays/global/codex.md",
@@ -100,7 +101,8 @@
       },
       "overlays": {
         "claude": [
-          "templates/skills/_overlays/global/claude.md"
+          "templates/skills/_overlays/global/claude.md",
+          "templates/skills/_overlays/skills/current-docs/claude.md"
         ],
         "codex": [
           "templates/skills/_overlays/global/codex.md"
@@ -217,7 +219,8 @@
       },
       "overlays": {
         "claude": [
-          "templates/skills/_overlays/global/claude.md"
+          "templates/skills/_overlays/global/claude.md",
+          "templates/skills/_overlays/skills/handoff/claude.md"
         ],
         "codex": [
           "templates/skills/_overlays/global/codex.md"
@@ -449,7 +452,8 @@
       },
       "overlays": {
         "claude": [
-          "templates/skills/_overlays/global/claude.md"
+          "templates/skills/_overlays/global/claude.md",
+          "templates/skills/_overlays/skills/release-check/claude.md"
         ],
         "codex": [
           "templates/skills/_overlays/global/codex.md"

@@ -8,12 +8,6 @@ targets: codex, opencode, claude, cursor
 
 # Current Docs
 
-## Purpose
-
-- Prevent stale assumptions about libraries, frameworks, SDKs, CLIs, APIs, models, tools, and platforms.
-- Use current primary sources only where freshness changes implementation risk.
-- Keep documentation lookup small, cited, and actionable.
-
 ## When To Use
 
 - The task depends on framework/library APIs, SDK methods, CLIs, config formats, hooks, plugin APIs, package versions, model/tool docs, or platform behavior.

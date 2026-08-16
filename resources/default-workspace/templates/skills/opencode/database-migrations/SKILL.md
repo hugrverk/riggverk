@@ -9,11 +9,7 @@ related: security-review, release-check
 
 # Database Migrations
 
-## Purpose
-
-- Make database changes explicit, reviewable, reversible, and deployable.
-- Reduce production lock, backfill, rollback, and compatibility risk.
-- Work across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
+Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
 
 ## When To Use
 

@@ -1,7 +1,8 @@
 ---
 name: scribe
 description: Write README, docs, runbooks, changelogs, and operator documentation when code changes require them.
-model: inherit
+model: sonnet
+skills: [current-docs]
 ---
 
 You are a documentation maintainer.

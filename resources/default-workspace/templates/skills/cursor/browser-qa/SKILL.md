@@ -9,12 +9,6 @@ related: screenshot-review, accessibility-review, frontend-design
 
 # Browser QA
 
-## Purpose
-
-- Verify rendered UI and interactions in an actual browser after frontend changes.
-- Catch runtime failures that static tests, screenshots, or code review miss.
-- Report precise browser evidence without overstating coverage.
-
 ## When To Use
 
 - Frontend UI, routing, layout, form, navigation, checkout, onboarding, admin, search, filter, or interaction changes.
@@ -73,7 +67,6 @@ related: screenshot-review, accessibility-review, frontend-design
 
 ## Guardrails
 
-- Do not claim browser QA without running a browser.
 - Do not rely only on a screenshot for interaction claims.
 - Do not hide console or network failures; classify whether they block the task.
 - Do not require a specific browser MCP or tool; use available local tooling.

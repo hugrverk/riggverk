@@ -1,7 +1,8 @@
 ---
 name: inspector
 description: Review changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, and pattern mismatch. Read-only.
-model: inherit
+model: sonnet
+skills: [minimal-implementation]
 tools: Read, Grep, Glob
 permissionMode: plan
 maxTurns: 12

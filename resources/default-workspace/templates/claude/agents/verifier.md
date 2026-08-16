@@ -1,7 +1,7 @@
 ---
 name: verifier
 description: Run or inspect non-destructive verification after an implementation and report evidence, failures, and remaining risk.
-model: inherit
+model: sonnet
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit
 maxTurns: 20

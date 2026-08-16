@@ -1,6 +1,7 @@
 ---
 name: browser-qa
 description: Verify frontend changes in a live browser or browser automation with route smoke tests, interactions, responsive checks, console/network review, and concise evidence.
+when_to_use: "Frontend UI, routing, layout, form, navigation, checkout, onboarding, admin, search, filter, or interaction changes. CSS/responsive changes where viewport behavior matters. Changes involving client-side data fetching, hydration, routing, or browser-only APIs. Before claiming a user-facing UI flow is fixed."
 category: frontend
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -8,19 +9,6 @@ related: screenshot-review, accessibility-review, frontend-design
 ---
 
 # Browser QA
-
-## Purpose
-
-- Verify rendered UI and interactions in an actual browser after frontend changes.
-- Catch runtime failures that static tests, screenshots, or code review miss.
-- Report precise browser evidence without overstating coverage.
-
-## When To Use
-
-- Frontend UI, routing, layout, form, navigation, checkout, onboarding, admin, search, filter, or interaction changes.
-- CSS/responsive changes where viewport behavior matters.
-- Changes involving client-side data fetching, hydration, routing, or browser-only APIs.
-- Before claiming a user-facing UI flow is fixed.
 
 ## Do Not Use When
 
@@ -73,7 +61,6 @@ related: screenshot-review, accessibility-review, frontend-design
 
 ## Guardrails
 
-- Do not claim browser QA without running a browser.
 - Do not rely only on a screenshot for interaction claims.
 - Do not hide console or network failures; classify whether they block the task.
 - Do not require a specific browser MCP or tool; use available local tooling.
@@ -88,3 +75,9 @@ related: screenshot-review, accessibility-review, frontend-design
 - Keep dynamic context tight. Read task-relevant files, avoid broad dumps, and summarize handoffs compactly.
 - Do not rely on mutating hooks by default. File edits, shell commands, and external writes must stay within the active task and harness permissions.
 - Final synthesis belongs in the parent context with changed files, verification, gaps, and residual risk.
+
+### Claude Browser QA
+
+- When the Claude Code Browser pane tools are available, prefer them: `preview_start` (a `.claude/launch.json` entry or a URL) to launch or attach, `navigate` plus `read_page`/`find` for structure, `read_console_messages` and `read_network_requests` for failures, `resize_window` presets for responsive checks, and screenshots as evidence.
+- Attach to an already-running dev server with a url-only launch entry instead of starting a duplicate.
+- Without browser tooling, fall back to available automation (Playwright, curl smoke) and state what could not be exercised.

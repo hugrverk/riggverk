@@ -26,7 +26,7 @@ Do not use `rtk` or output caps where exact stdout is consumed by another comman
 Do not trade away correctness, security, or final verification quality to save tokens. Run broad validation before final handoff when the touched surface requires it.
 
 ## Skill routing
-Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full catalog when working inside this repo.
+Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
 - Code implementation and refactoring: `minimal-implementation`.
 - Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
@@ -67,7 +67,7 @@ Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
 
 ## Codex harness
 
-- Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `$CODEX_HOME/skills` (typically `~/.codex/skills`) unless `CODEX_SKILLS_PATH` overrides.
+- Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `$CODEX_HOME/skills` (typically `~/.codex/skills`).
 - `~/.codex/config.toml` is manual-review only; never assume Agent Workspace owns the full file.
 - Respect Codex sandbox, approval, and config boundaries; do not bypass documented safety settings.
 

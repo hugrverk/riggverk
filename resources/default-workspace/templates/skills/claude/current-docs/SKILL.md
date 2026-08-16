@@ -1,26 +1,13 @@
 ---
 name: current-docs
 description: Check official or primary current documentation when implementation depends on version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior.
+when_to_use: "The task depends on framework/library APIs, SDK methods, CLIs, config formats, hooks, plugin APIs, package versions, model/tool docs, or platform behavior. You are unsure whether recalled behavior is current. The codebase version is newer than your known baseline. An error suggests changed flags, deprecated APIs, renamed options, or altered defaults. Adding or upgrading dependencies, plugins, SDKs, MCP servers, tools, or platform integrations."
 category: docs
 risk: low
 targets: codex, opencode, claude, cursor
 ---
 
 # Current Docs
-
-## Purpose
-
-- Prevent stale assumptions about libraries, frameworks, SDKs, CLIs, APIs, models, tools, and platforms.
-- Use current primary sources only where freshness changes implementation risk.
-- Keep documentation lookup small, cited, and actionable.
-
-## When To Use
-
-- The task depends on framework/library APIs, SDK methods, CLIs, config formats, hooks, plugin APIs, package versions, model/tool docs, or platform behavior.
-- You are unsure whether recalled behavior is current.
-- The codebase version is newer than your known baseline.
-- An error suggests changed flags, deprecated APIs, renamed options, or altered defaults.
-- Adding or upgrading dependencies, plugins, SDKs, MCP servers, tools, or platform integrations.
 
 ## Do Not Use When
 
@@ -76,3 +63,8 @@ targets: codex, opencode, claude, cursor
 - Keep dynamic context tight. Read task-relevant files, avoid broad dumps, and summarize handoffs compactly.
 - Do not rely on mutating hooks by default. File edits, shell commands, and external writes must stay within the active task and harness permissions.
 - Final synthesis belongs in the parent context with changed files, verification, gaps, and residual risk.
+
+### Claude Current Docs
+
+- Use WebSearch to locate current primary sources and WebFetch to read them; check for an `llms.txt` index on documentation sites first.
+- Pin claims to the fetched page, not memory, and note the retrieval date for fast-moving APIs.

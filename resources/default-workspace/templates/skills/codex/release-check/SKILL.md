@@ -9,21 +9,18 @@ related: security-review, database-migrations
 
 # Release Check
 
-## Purpose
-
-- Check readiness before merge or deploy.
-- Surface risk before it reaches production.
-- Keep the checklist short and evidence-based.
+Keep the gate short and evidence-based.
 
 ## Process
 
-1. Inspect branch, git status, recent commits, and diff summary.
-2. Identify changed areas and risk level.
-3. Check whether migrations, env changes, credentials, scheduled jobs, webhooks, or data backfills are involved.
-4. Run or list required build, lint, test, typecheck, or project verification commands.
-5. Define manual smoke checks for the affected product surfaces.
-6. Confirm rollback path or safe revert plan.
-7. Report blockers separately from acceptable residual risk.
+1. Discover the repo's canonical release gate (`./scripts/release-check.sh`, `npm run verify`, CI workflow, Makefile target) and prefer running it over composing an ad-hoc list.
+2. Inspect branch, git status, recent commits, and diff summary.
+3. Identify changed areas and risk level.
+4. Check whether migrations, env changes, credentials, scheduled jobs, webhooks, or data backfills are involved.
+5. Run or list required build, lint, test, typecheck, or project verification commands not covered by the canonical gate.
+6. Define manual smoke checks for the affected product surfaces.
+7. Confirm rollback path or safe revert plan.
+8. Report blockers separately from acceptable residual risk.
 
 ## Output
 

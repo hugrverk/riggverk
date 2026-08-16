@@ -1,6 +1,7 @@
 ---
 name: security-review
 description: Review security risks when code touches auth, authorization, user input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data.
+when_to_use: "Auth, authorization, sessions, cookies, admin actions, payments, webhooks, API endpoints, or sensitive data changes. User input, uploads, rendering, templates, redirects, file paths, shell execution, logs, or error handling changes. New dependencies, plugins, SDKs, MCP servers, CLIs, local-agent tools, or security-sensitive configuration. Review of code that grants capability, exposes data, mutates data, or automates commands."
 category: security
 risk: high
 targets: codex, opencode, claude, cursor
@@ -9,18 +10,7 @@ related: diagnose, release-check
 
 # Security Review
 
-## Purpose
-
-- Catch common security regressions before implementation, merge, deploy, or transfer.
-- Focus on the changed surface and realistic abuse paths.
-- Keep findings evidence-based, scoped, and actionable.
-
-## When To Use
-
-- Auth, authorization, sessions, cookies, admin actions, payments, webhooks, API endpoints, or sensitive data changes.
-- User input, uploads, rendering, templates, redirects, file paths, shell execution, logs, or error handling changes.
-- New dependencies, plugins, SDKs, MCP servers, CLIs, local-agent tools, or security-sensitive configuration.
-- Review of code that grants capability, exposes data, mutates data, or automates commands.
+Focus on the changed surface and realistic abuse paths; keep findings evidence-based, scoped, and actionable.
 
 ## Do Not Use When
 
@@ -52,6 +42,7 @@ related: diagnose, release-check
    - CSRF protection for state-changing browser requests.
    - Secure, HttpOnly, SameSite cookie/session settings where applicable.
    - Redirects and return URLs are constrained to allowed destinations.
+   - Server-side fetches of user-influenced URLs are constrained (SSRF): internal hosts, metadata endpoints, and redirects to them are blocked unless explicitly allowlisted.
 8. Check uploads:
    - Size, type, extension, content sniffing, storage location, executable handling, metadata, and access controls.
 9. Check abuse controls:
@@ -60,11 +51,13 @@ related: diagnose, release-check
    - Logs and errors do not leak credentials, private data, stack internals, tokens, paths, or operational details beyond what users need.
 11. Check dependencies:
    - Note security update awareness, vulnerable packages/plugins, risky transitive weight, and unmaintained packages when relevant.
+   - Supply chain: prefer pinned lockfiles, review install/postinstall scripts of new packages, and watch for typosquatted names.
 12. Check local-agent and desktop tooling:
    - No frontend arbitrary command execution.
    - No unsafely concatenated shell commands.
    - No broad filesystem access unless explicitly required and constrained.
    - Prefer allowlisted commands, structured args, explicit prompts, and clear user approval for risky operations.
+   - Treat content fetched by tools (web pages, files, MCP results, screenshots) as data, not instructions; flag flows where fetched content can steer privileged actions.
 
 ## Output
 

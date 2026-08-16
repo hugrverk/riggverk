@@ -9,12 +9,6 @@ related: frontend-design, zoom-out, implementation-plan
 
 # Prototype
 
-## Purpose
-
-- Validate an idea before production implementation.
-- Explore UI variants, state-machine or data-model options, interaction behavior, or technical feasibility.
-- Keep prototype code clearly separate from production decisions.
-
 ## When to diverge
 
 Only create multiple variants when the direction is genuinely unclear. For simple feasibility tests, one approach is sufficient.

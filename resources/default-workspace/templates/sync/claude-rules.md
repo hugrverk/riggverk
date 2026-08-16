@@ -26,7 +26,7 @@ Do not use `rtk` or output caps where exact stdout is consumed by another comman
 Do not trade away correctness, security, or final verification quality to save tokens. Run broad validation before final handoff when the touched surface requires it.
 
 ## Skill routing
-Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer `docs/SKILLS.md` for the full catalog when working inside this repo.
+Use skills as routing and workflow guidance, not boilerplate. Select only task-relevant skills; usually 1-3. Do not paste full skill contents unless needed. Translate skill expectations into concrete actions, acceptance criteria, verification, and reporting; skill names alone are not enough. Prefer a repository's own `docs/SKILLS.md` for the full catalog when that file exists; do not go looking for it otherwise.
 - Code implementation and refactoring: `minimal-implementation`.
 - Bugs, regressions, flakes, or slowness: `diagnose`; add `tdd` for a focused regression test.
 - Unfamiliar or architectural code: `zoom-out`; add `implementation-plan` before non-trivial edits.
@@ -67,6 +67,10 @@ Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
 
 ## Claude harness
 
-- Shared subagents install from bundled Claude agent templates; do not add an architect subagent unless official docs and repository design require it.
-- Skills install to `~/.claude/skills` unless `CLAUDE_SKILLS_PATH` overrides.
+- Shared subagents install from bundled Claude agent templates; do not add an architect subagent unless official docs and repository design require it. Subagents pin cost-appropriate models (haiku/sonnet); keep top-model judgment in the main thread.
+- Skills install to `~/.claude/skills`. Prefer built-in Claude Code commands where they are stronger: `/code-review` for review passes, `skill-creator` for skill authoring; workspace skills own routing and domain invariants.
+- Persistent memory holds durable user/project facts; skills hold procedures; do not duplicate either in CLAUDE.md.
 - Respect Claude settings, permissions, and MCP boundaries; keep subagent workflows in agents, not duplicated in rules.
+
+## Codex delegation
+Codex CLI is installed and authed (`codex exec`, non-interactive only; the TUI needs a TTY). Default model `gpt-5.6-sol` at `high` reasoning is configured in `~/.codex/config.toml` — Sol is cheap, so prefer delegating well-specified code tasks to it instead of spending Claude usage, including large mechanical refactors when the brief pre-decides every judgement call. Codex can run up to two subagents per thread; exploit that for parallelizable simple work. Run long delegations in the background and review the resulting diff like a PR — verification and final quality stay with Claude; re-run the checks yourself rather than trusting the reported results. `codex exec resume --last` accepts neither `-s` nor `-C`: pass `-c sandbox_mode="workspace-write"` and rely on the shell's cwd. Never delegate while the owner's GPT computer-use agent is mid-session (shared account limits). Codex cannot drive a GUI; UI testing stays with the computer-use agent.

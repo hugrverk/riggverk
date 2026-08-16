@@ -9,12 +9,6 @@ related: frontend-design, browser-qa
 
 # Accessibility Review
 
-## Purpose
-
-- Catch accessibility defects in user interfaces before handoff.
-- Focus on practical WCAG 2.2 AA risks that affect real use.
-- Complement frontend implementation and browser QA without becoming a broad UX critique.
-
 ## When To Use
 
 - UI components, forms, navigation, menus, modals, dropdowns, tables, dashboards, checkout, onboarding, or admin screens change.

@@ -19,7 +19,7 @@ Default target:
 
 - Codex config: `~/.codex/config.toml` or `CODEX_CONFIG_PATH`
 
-`./scripts/install-codex-config.sh --apply` merges only managed Codex defaults into `~/.codex/config.toml`. The legacy merge owner keeps `approval_policy` and `sandbox_mode` in sync and removes app-shaped legacy `profile = "safe"` selectors plus `[profiles.safe]`/`[profiles.workspace-write]` tables. The routing-defaults owner then enforces `gpt-5.5` high reasoning, manual approval review, workspace-write sandboxing, and prompt-based app default tool approvals. User personality, MCP entries, unrelated tables, and unknown keys are preserved; ambiguous TOML refuses with zero mutation.
+`./scripts/install-codex-config.sh --apply` merges only managed Codex defaults into `~/.codex/config.toml`. The legacy merge owner keeps `approval_policy` and `sandbox_mode` in sync and removes app-shaped legacy `profile = "safe"` selectors plus `[profiles.safe]`/`[profiles.workspace-write]` tables. The routing-defaults owner then enforces the template's defaults from `templates/codex/config.toml` — currently `gpt-5.6-sol` high reasoning, manual approval review, workspace-write sandboxing, and prompt-based app default tool approvals; the template is the single value source for future bumps. User personality, MCP entries, unrelated tables, and unknown keys are preserved; ambiguous TOML refuses with zero mutation.
 
 Native Codex agents live in `templates/codex/agents/*.toml` and sync to `~/.codex/agents` via `./scripts/install-codex-agents.sh`.
 

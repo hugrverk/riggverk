@@ -80,6 +80,76 @@ def validate_skill_name(path: Path, name: str) -> None:
         fail(f"{path.relative_to(REPO_ROOT)}: invalid skill name: {name!r}")
 
 
+def split_canonical(path: Path, text: str) -> tuple[list[str], str]:
+    """Split canonical text into frontmatter lines (keepends) and body.
+
+    Reconstruction must be byte-exact so untransformed adapters stay stable.
+    """
+    lines = text.splitlines(keepends=True)
+    if not lines or lines[0] != "---\n":
+        fail(f"{path.relative_to(REPO_ROOT)}: canonical frontmatter must open with '---'")
+    for index in range(1, len(lines)):
+        if lines[index].strip() == "---":
+            fm_lines = lines[1:index]
+            body = "".join(lines[index + 1:])
+            if "---\n" + "".join(fm_lines) + "---\n" + body != text:
+                fail(f"{path.relative_to(REPO_ROOT)}: canonical frontmatter delimiters are not plain '---' lines")
+            return fm_lines, body
+    fail(f"{path.relative_to(REPO_ROOT)}: canonical frontmatter never closes")
+    raise AssertionError("unreachable")
+
+
+WHEN_TO_USE_HEADER = "## When To Use"
+WHEN_TO_USE_CHAR_CAP = 1536
+
+
+def hoist_when_to_use(path: Path, fm_lines: list[str], body: str) -> tuple[list[str], str]:
+    """Move the '## When To Use' body section into when_to_use frontmatter.
+
+    Claude Code appends when_to_use to the description in the skill listing,
+    which is where invocation decisions happen; the body loads too late.
+    """
+    lines = body.splitlines()
+    start = next((i for i, line in enumerate(lines) if line.strip() == WHEN_TO_USE_HEADER), None)
+    if start is None:
+        return fm_lines, body
+    end = len(lines)
+    for index in range(start + 1, len(lines)):
+        if lines[index].startswith("## "):
+            end = index
+            break
+    bullets = [line.strip()[2:].strip() for line in lines[start + 1:end] if line.strip().startswith("- ")]
+    if not bullets:
+        fail(f"{path.relative_to(REPO_ROOT)}: '{WHEN_TO_USE_HEADER}' section has no bullets to hoist")
+    when_to_use = " ".join(item if item.endswith(".") else item + "." for item in bullets)
+    description = ""
+    for line in fm_lines:
+        match = FIELD_RE.match(line.strip())
+        if match and match.group(1) == "description":
+            description = match.group(2)
+            break
+    if len(description) + len(when_to_use) > WHEN_TO_USE_CHAR_CAP:
+        fail(
+            f"{path.relative_to(REPO_ROOT)}: description + when_to_use is "
+            f"{len(description) + len(when_to_use)} chars (cap {WHEN_TO_USE_CHAR_CAP}); trim the section"
+        )
+    new_fm: list[str] = []
+    inserted = False
+    for line in fm_lines:
+        new_fm.append(line)
+        match = FIELD_RE.match(line.strip())
+        if not inserted and match and match.group(1) == "description":
+            new_fm.append(f"when_to_use: {json.dumps(when_to_use)}\n")
+            inserted = True
+    if not inserted:
+        fail(f"{path.relative_to(REPO_ROOT)}: cannot hoist when_to_use without a description field")
+    del lines[start:end]
+    new_body = "\n".join(lines)
+    if body.endswith("\n"):
+        new_body += "\n"
+    return new_fm, new_body
+
+
 def discover_skills() -> dict[str, dict[str, object]]:
     if not SKILLS_ROOT.is_dir():
         fail(f"skills root not found: {SKILLS_ROOT}")
@@ -99,6 +169,7 @@ def discover_skills() -> dict[str, dict[str, object]]:
 
         text = skill_md.read_text(encoding="utf-8")
         fields, frontmatter = parse_frontmatter(skill_md, text)
+        fm_lines, body = split_canonical(skill_md, text)
         name = fields.get("name", "")
         description = fields.get("description", "")
         if not name:
@@ -113,6 +184,8 @@ def discover_skills() -> dict[str, dict[str, object]]:
             "path": skill_md,
             "text": text,
             "frontmatter": frontmatter,
+            "fm_lines": fm_lines,
+            "body": body,
             "targets": targets,
         }
     if not discovered:
@@ -120,13 +193,34 @@ def discover_skills() -> dict[str, dict[str, object]]:
     return dict(sorted(discovered.items()))
 
 
-def load_overlay(path: Path) -> str:
+def load_overlay(path: Path) -> tuple[list[str], str]:
+    """Load an overlay file as (frontmatter override lines, body).
+
+    An overlay may open with a '---' block whose `key: value` lines are merged
+    into the adapter frontmatter (collisions with canonical fields fail).
+    """
     text = path.read_text(encoding="utf-8")
-    return text.strip() + "\n"
+    fm_lines: list[str] = []
+    body = text
+    if text.startswith("---\n"):
+        lines = text.splitlines(keepends=True)
+        closing = None
+        for index in range(1, len(lines)):
+            if lines[index].strip() == "---":
+                closing = index
+                break
+        if closing is None:
+            fail(f"{path.relative_to(REPO_ROOT)}: overlay frontmatter never closes")
+        fm_lines = lines[1:closing]
+        for line in fm_lines:
+            if not FIELD_RE.match(line.strip()):
+                fail(f"{path.relative_to(REPO_ROOT)}: overlay frontmatter line is not 'key: value': {line.strip()!r}")
+        body = "".join(lines[closing + 1:])
+    return fm_lines, body.strip() + "\n"
 
 
-def overlay_sources(skills: dict[str, dict[str, object]]) -> dict[tuple[str, str | None], str]:
-    overlays: dict[tuple[str, str | None], str] = {}
+def overlay_sources(skills: dict[str, dict[str, object]]) -> dict[tuple[str, str | None], tuple[list[str], str]]:
+    overlays: dict[tuple[str, str | None], tuple[list[str], str]] = {}
     if not OVERLAY_ROOT.exists():
         return overlays
 
@@ -159,21 +253,52 @@ def adapter_path(harness: str, skill_name: str) -> Path:
     return TEMPLATE_SKILLS_ROOT / harness / skill_name / "SKILL.md"
 
 
-def compose_adapter(canonical: str, harness: str, skill_name: str, overlays: dict[tuple[str, str | None], str]) -> str:
-    content = canonical if canonical.endswith("\n") else canonical + "\n"
+def compose_adapter(info: dict[str, object], harness: str, skill_name: str, overlays: dict[tuple[str, str | None], tuple[list[str], str]]) -> str:
+    global_overlay = overlays.get((harness, None))
+    skill_overlay = overlays.get((harness, skill_name))
+    overlay_fm: list[str] = []
+    for overlay in (global_overlay, skill_overlay):
+        if overlay:
+            overlay_fm.extend(overlay[0])
+
+    path = info["path"]  # type: ignore[assignment]
+    if harness == "claude" or overlay_fm:
+        fm_lines = list(info["fm_lines"])  # type: ignore[arg-type]
+        body = str(info["body"])
+        if harness == "claude":
+            fm_lines, body = hoist_when_to_use(path, fm_lines, body)  # type: ignore[arg-type]
+        if overlay_fm:
+            existing: set[str] = set()
+            for line in fm_lines:
+                match = FIELD_RE.match(line.strip())
+                if match:
+                    existing.add(match.group(1))
+            for line in overlay_fm:
+                match = FIELD_RE.match(line.strip())
+                key = match.group(1) if match else ""
+                if key in existing:
+                    fail(f"{path.relative_to(REPO_ROOT)}: overlay frontmatter key {key!r} collides with existing frontmatter")  # type: ignore[union-attr]
+                existing.add(key)
+                fm_lines.append(line if line.endswith("\n") else line + "\n")
+        content = "---\n" + "".join(fm_lines) + "---\n" + body
+    else:
+        content = str(info["text"])
+    if not content.endswith("\n"):
+        content += "\n"
+
     sections = [
         "<!-- Generated by scripts/generate-skill-adapters.py. Do not edit directly. -->\n",
         "## Harness Adapter\n\n",
     ]
-    global_overlay = overlays.get((harness, None))
-    skill_overlay = overlays.get((harness, skill_name))
-    if global_overlay:
-        sections.append(global_overlay)
+    global_body = global_overlay[1] if global_overlay else ""
+    skill_body = skill_overlay[1] if skill_overlay else ""
+    if global_body:
+        sections.append(global_body)
         sections.append("\n")
-    if skill_overlay:
-        sections.append(skill_overlay)
+    if skill_body:
+        sections.append(skill_body)
         sections.append("\n")
-    if not global_overlay and not skill_overlay:
+    if not global_body and not skill_body:
         sections.append(f"### {harness}\n\nUse the canonical skill instructions above for this harness.\n")
     return content + "\n" + "".join(sections).rstrip() + "\n"
 
@@ -187,12 +312,11 @@ def generated_outputs() -> tuple[dict[Path, str], dict[str, object]]:
     for skill_name, info in skills.items():
         targets = tuple(info["targets"])  # type: ignore[arg-type]
         source_path = info["path"]  # type: ignore[assignment]
-        canonical = str(info["text"])
         skill_outputs: dict[str, str] = {}
         skill_overlays: dict[str, list[str]] = {}
         for harness in targets:
             output = adapter_path(harness, skill_name)
-            outputs[output] = compose_adapter(canonical, harness, skill_name, overlays)
+            outputs[output] = compose_adapter(info, harness, skill_name, overlays)
             skill_outputs[harness] = rel(output)
             paths: list[str] = []
             global_path = OVERLAY_ROOT / "global" / f"{harness}.md"

@@ -9,12 +9,6 @@ related: implementation-plan
 
 # Context Budget
 
-## Purpose
-
-- Reduce workspace instruction bloat without weakening safety or repo canon.
-- Identify overlapping skills, rules, docs, prompts, agents, MCP/tooling config, and repeated guidance.
-- Prioritize the highest-savings simplifications first.
-
 ## When To Use
 
 - The workspace feels slow, bloated, repetitive, or hard for agents to load.

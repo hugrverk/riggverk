@@ -2569,6 +2569,13 @@ mod tests {
 
     #[test]
     fn apply_rejects_missing_preview_token() {
+        // Hermetic user dirs: operator settings must not decide surface enablement here.
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let home = std::env::temp_dir().join("aw-apply-token-home");
+        let _ = fs::remove_dir_all(&home);
+        fs::create_dir_all(&home).expect("home");
+        set_test_user_dirs(&home);
         let result = apply_setup(
             vec!["open_code_rules".to_string()],
             false,
@@ -2577,6 +2584,7 @@ mod tests {
         );
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Preview token required"));
+        let _ = fs::remove_dir_all(&home);
     }
 
     // ── Transaction preflight tests ──

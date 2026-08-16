@@ -80,7 +80,7 @@ TOKENISH = re.compile(r"(sk-[A-Za-z0-9_-]{12,}|Bearer\s+\S+|Basic\s+\S+|gh[pousr
 
 
 EXPECTED_TOP_LEVEL = {
-    "model": "gpt-5.5",
+    "model": "gpt-5.6-sol",
     "model_reasoning_effort": "high",
     "approval_policy": "on-request",
     "approvals_reviewer": "user",
