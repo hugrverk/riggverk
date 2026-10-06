@@ -130,21 +130,14 @@ TARGET="${OPENCODE_CONFIG_PATH:-$HOME/.config/opencode/opencode.json}"
 TUI_TARGET="${OPENCODE_TUI_CONFIG_PATH:-$HOME/.config/opencode/tui.json}"
 TARGET_AGENTS_DIR="${OPENCODE_AGENTS_DIR:-$HOME/.config/opencode/agents}"
 
-# Refuse unsafe target agents directories
-case "$TARGET_AGENTS_DIR" in
-  /|"$HOME"|"$HOME/"*)
-    if [ "$TARGET_AGENTS_DIR" = "/" ] || [ "$TARGET_AGENTS_DIR" = "$HOME" ] || [ "$TARGET_AGENTS_DIR" = "$HOME/" ]; then
-      printf 'install-opencode-config.sh: refusing unsafe OPENCODE_AGENTS_DIR: %s\n' "$TARGET_AGENTS_DIR" >&2
-      exit 1
-    fi
-    ;;
-esac
-
-# Refuse empty TARGET_AGENTS_DIR
-if [ -z "$TARGET_AGENTS_DIR" ]; then
+# Refuse unsafe target agents directories (home/config roots, "$HOME//", "$HOME/.")
+# and an explicitly empty OPENCODE_AGENTS_DIR (the ${VAR:-default} above would
+# silently replace an empty value).
+if [ "${OPENCODE_AGENTS_DIR+x}" = "x" ] && [ -z "$OPENCODE_AGENTS_DIR" ]; then
   printf 'install-opencode-config.sh: refusing empty OPENCODE_AGENTS_DIR\n' >&2
   exit 1
 fi
+agent_workspace_refuse_unsafe_agents_dir "$TARGET_AGENTS_DIR" "OPENCODE_AGENTS_DIR" "install-opencode-config.sh" || exit 1
 
 validate_json() {
   if command -v python3 >/dev/null 2>&1; then
@@ -212,39 +205,40 @@ fi
 
 if $diff_mode; then
   has_diffs=false
+  diff_failed=false
 
   # Config diffs (managed keys only; no full config output)
   if should_sync_config && [ -f "$TARGET" ]; then
     if opencode_config_managed_match; then
       if ! $quiet; then printf '  opencode config managed keys synced\n'; fi
     else
-      python3 -c "
+      python3 - "$WORKSPACE_ROOT" "$TARGET" "$rendered_opencode" <<'PY' || diff_failed=true
 import json, sys
 from pathlib import Path
-ws = Path('$WORKSPACE_ROOT')
+ws = Path(sys.argv[1])
 managed = json.loads((ws / 'metadata/opencode-managed-keys.json').read_text())
 top = set(managed.get('top_level', []))
 mcp = set(managed.get('mcp_servers', []))
-installed = json.loads(Path('$TARGET').read_text())
-rendered = json.loads(Path('$rendered_opencode').read_text())
+installed = json.loads(Path(sys.argv[2]).read_text())
+rendered = json.loads(Path(sys.argv[3]).read_text())
 diff_keys = []
 for k in top:
     iv = installed.get(k)
     rv = rendered.get(k)
     if iv != rv:
-        diff_keys.append(f'managed key \"{k}\" would change')
+        diff_keys.append(f'managed key "{k}" would change')
 for s in mcp:
     im = installed.get('mcp', {}).get(s)
     rm = rendered.get('mcp', {}).get(s)
     if im != rm:
-        diff_keys.append(f'managed MCP entry \"{s}\" would update')
+        diff_keys.append(f'managed MCP entry "{s}" would update')
 if diff_keys:
     print('--- opencode config managed-key diffs')
     for d in diff_keys:
         print(f'  {d}')
 else:
     print('  opencode config diffs: managed keys differ (structural change)')
-" || true
+PY
       has_diffs=true
     fi
   elif should_sync_config; then
@@ -292,6 +286,10 @@ else:
         printf '  opencode config + tui + agents synced\n'
       fi
     fi
+  fi
+  if $diff_failed; then
+    printf 'install-opencode-config.sh: could not compute the managed-key diff (see errors above)\n' >&2
+    exit 1
   fi
   exit 0
 fi

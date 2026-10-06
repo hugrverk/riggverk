@@ -58,12 +58,7 @@ agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-codex-agents.sh
 codex_home="${CODEX_HOME:-$HOME/.codex}"
 TARGET_AGENTS_DIR="${CODEX_AGENTS_DIR:-$codex_home/agents}"
 
-case "$TARGET_AGENTS_DIR" in
-  /|"$HOME"|"$HOME/"|"$HOME/.codex")
-    printf 'install-codex-agents.sh: refusing unsafe CODEX_AGENTS_DIR: %s\n' "$TARGET_AGENTS_DIR" >&2
-    exit 1
-    ;;
-esac
+agent_workspace_refuse_unsafe_agents_dir "$TARGET_AGENTS_DIR" "CODEX_AGENTS_DIR" "install-codex-agents.sh" || exit 1
 
 list_agent_files() {
   if [ -d "$AGENTS_SOURCE_DIR" ]; then
