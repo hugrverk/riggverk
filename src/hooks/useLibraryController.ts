@@ -104,6 +104,8 @@ export function useLibraryController({
   const agentSaveOpRef = useRef(createSaveOperationTracker());
   const agentTemplateSaveOpRef = useRef(createSaveOperationTracker());
   const configSaveOpRef = useRef(createSaveOperationTracker());
+  // Bumped when a workspace switch reloads the Library, so the config source effects refetch for the new workspace.
+  const [libraryReloadEpoch, setLibraryReloadEpoch] = useState(0);
 
   const invalidateEditorSaveOperations = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -317,8 +319,10 @@ export function useLibraryController({
       loadSkills(generation).catch(() => {}),
       loadDocs(generation).catch(() => {}),
       loadAgentSources(generation).catch(() => {}),
+      loadAgentTemplate(generation),
     ]);
-  }, [loadAgentSources, loadDocs, loadSkills, workspaceLoadGenerationRef]);
+    setLibraryReloadEpoch(epoch => epoch + 1);
+  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
@@ -346,7 +350,19 @@ export function useLibraryController({
     setActiveAgentId(null);
     setActiveAgentContent(null);
     setAgentTemplate(null);
+
+    // The config editor draft belongs to the old workspace: a stale dirty draft must never reach the next one.
+    configSourceLoadSeqRef.current += 1;
+    configDraftIdentityRef.current = null;
     setConfigTemplateContent(null);
+    setConfigEditorSources([]);
+    setConfigEditorSourceContent(null);
+    setConfigEditorSourceSaveMessage("");
+    setConfigDraft("");
+    setConfigDirty(false);
+    setConfigSaving(false);
+    setConfigSaveResult(null);
+    setConfigMode("preview");
   }, [invalidateEditorSaveOperations]);
 
   const selectDoc = useCallback(async (id: string) => {
@@ -794,13 +810,13 @@ export function useLibraryController({
         void loadConfigTemplate(activeConfigTargetId);
       }
     }
-  }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate, loadConfigEditorSources]);
+  }, [view, librarySourceType, activeConfigTargetId, libraryReloadEpoch, loadConfigTemplate, loadConfigEditorSources]);
 
   useEffect(() => {
     if (activeConfigTargetId === "opencode_config" && activeConfigSourceType && view === "library" && librarySourceType === "configs") {
       void loadConfigEditorSourceContent(activeConfigSourceType);
     }
-  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, loadConfigEditorSourceContent]);
+  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, libraryReloadEpoch, loadConfigEditorSourceContent]);
 
   useEffect(() => {
     if (activeConfigTargetId === "opencode_config" && configEditorSourceContent) {

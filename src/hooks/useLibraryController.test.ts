@@ -486,3 +486,73 @@ describe("useLibraryController open actions", () => {
     expect(deps.setError).not.toHaveBeenCalled();
   });
 });
+
+describe("useLibraryController workspace switch", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  const configSource = (content: string): DocumentContent => ({
+    id: "opencode_config:base",
+    title: "OpenCode config",
+    path: "config/opencode.json",
+    section: "config",
+    source: "workspace",
+    content,
+  });
+
+  function backend(workspace: { config: string; template: string }) {
+    invoke.mockImplementation((cmd: string) => {
+      if (cmd === "list_opencode_config_editor_sources") return Promise.resolve([]);
+      if (cmd === "read_opencode_config_source") return Promise.resolve(configSource(workspace.config));
+      if (cmd === "read_agent_template") {
+        return Promise.resolve({ ...docA, id: "agent-template", content: workspace.template });
+      }
+      if (cmd === "save_opencode_config_source") return Promise.resolve(successResult("save_opencode_config_source"));
+      if (cmd === "list_skills" || cmd === "list_docs") return Promise.resolve([]);
+      if (cmd === "list_agent_metadata") return Promise.resolve({ agents: [] });
+      if (cmd === "get_docs_health") return Promise.resolve(null);
+      return Promise.reject(new Error(`unexpected invoke: ${cmd}`));
+    });
+  }
+
+  it("drops workspace A's dirty OpenCode config draft and reloads the sources for workspace B", async () => {
+    const { deps, workspaceLoadGenerationRef } = createDeps(0);
+    const { result } = renderHook(() => useLibraryController(deps));
+    backend({ config: "config of A", template: "rules of A" });
+
+    await act(async () => {
+      result.current.setActiveConfigTargetId("opencode_config");
+      await result.current.setGuardedLibrarySourceType("configs");
+    });
+    await waitFor(() => expect(result.current.configEditorSourceContent?.content).toBe("config of A"));
+    await act(async () => {
+      result.current.onChangeConfigDraft("dirty draft of A");
+    });
+    expect(result.current.configDirty).toBe(true);
+
+    // `:workspace choose` accepts workspace B: the reset runs first, the reload follows.
+    backend({ config: "config of B", template: "rules of B" });
+    await act(async () => {
+      workspaceLoadGenerationRef.current = 1;
+      result.current.resetLibraryState();
+    });
+    expect(result.current.configDraft).toBe("");
+    expect(result.current.configDirty).toBe(false);
+    expect(result.current.configEditorSourceContent).toBeNull();
+
+    // A save before B's source has loaded must not write A's draft into B.
+    await act(async () => {
+      await result.current.onSaveConfig();
+    });
+    expect(invoke).not.toHaveBeenCalledWith("save_opencode_config_source", expect.anything());
+
+    await act(async () => {
+      await result.current.loadWorkspaceLibraryResources(1);
+    });
+    await waitFor(() => expect(result.current.configEditorSourceContent?.content).toBe("config of B"));
+    expect(result.current.configDraft).toBe("config of B");
+    expect(result.current.configDirty).toBe(false);
+    expect(result.current.agentTemplate?.content).toBe("rules of B");
+  });
+});
