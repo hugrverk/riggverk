@@ -21,7 +21,6 @@ import {
   themeColorDefaults,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
-import { useConfirmMode } from "../shell/ShellState";
 import type { AppSettings } from "../types";
 import { INSTALL_AGENTS, type InstallAgent } from "../types";
 import { Glyph, type GlyphName } from "../ui/Glyph";
@@ -322,8 +321,7 @@ export function SettingsView({
   const colorsValid = accentValid && backgroundValid && foregroundValid;
   const showRetry = settingsSaveStatus === "error" && !!onRetrySave;
 
-  // The reset asks through the confirm dialog; the status bar shows CONFIRM while that is open.
-  useConfirmMode(resetting);
+  // The reset asks through the confirm dialog, which puts the status bar in CONFIRM mode itself.
   const runReset = useCallback(async () => {
     if (resetting) return;
     setResetting(true);

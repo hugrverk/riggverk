@@ -1,6 +1,5 @@
 import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
-import { ConfirmProvider } from "../components/ConfirmDialog";
 import type { Platform } from "../keyboard/keymap";
 import { AppFrame, type AppFrameProps } from "../shell/AppFrame";
 import { ShellProviders } from "../shell/ShellProviders";
@@ -23,11 +22,9 @@ export function renderWithShell(
   { strict = false, platform = "other", chordTimeoutMs, ...options }: RenderWithShellOptions = {},
 ): RenderResult {
   const tree = (node: ReactNode) => (
-    <ConfirmProvider>
-      <ShellProviders platform={platform} chordTimeoutMs={chordTimeoutMs}>
-        {node}
-      </ShellProviders>
-    </ConfirmProvider>
+    <ShellProviders platform={platform} chordTimeoutMs={chordTimeoutMs}>
+      {node}
+    </ShellProviders>
   );
   const wrap = (node: ReactNode) => (strict ? <StrictMode>{tree(node)}</StrictMode> : tree(node));
   const result = render(wrap(ui), options);

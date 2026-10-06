@@ -387,7 +387,7 @@ describe("SettingsView reset", () => {
     expect(props.onReset).not.toHaveBeenCalled();
   });
 
-  it("shows CONFIRM while the reset is pending and ignores a second request", async () => {
+  it("ignores a second request while the reset is pending", async () => {
     let finish: () => void = () => {};
     const onReset = vi.fn(() => new Promise<void>(resolveReset => {
       finish = resolveReset;
@@ -396,11 +396,11 @@ describe("SettingsView reset", () => {
     focus(radios("Theme")[0]!);
 
     press(document.activeElement!, "r");
-    expect(mode()).toBe("CONFIRM");
     press(document.activeElement!, "r");
     expect(onReset).toHaveBeenCalledTimes(1);
 
     await act(async () => finish());
-    expect(mode()).toBe("NORMAL");
+    press(document.activeElement!, "r");
+    expect(onReset).toHaveBeenCalledTimes(2);
   });
 });

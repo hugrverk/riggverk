@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useKeymap } from "../keyboard/useKeymap";
-import { renderWithShell } from "../test/renderWithShell";
+import { renderInFrame, renderWithShell } from "../test/renderWithShell";
 import { ConfirmProvider, useConfirm } from "./ConfirmDialog";
 
 function TestConsumer({ message = "Test message" }: { message?: string }) {
@@ -196,6 +196,41 @@ describe("ConfirmDialog", () => {
     expect(dialog.hasAttribute("open")).toBe(false);
   });
 
+  describe("status bar mode", () => {
+    const mode = () => screen.getByLabelText("Status bar").querySelector(".mode")!.textContent;
+
+    it("shows CONFIRM while any confirmation is open and NORMAL again once it settles", async () => {
+      const results: boolean[] = [];
+      renderInFrame(<ConfirmProbe results={results} />);
+      expect(mode()).toBe("NORMAL");
+
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      await screen.findByRole("dialog");
+      expect(mode()).toBe("CONFIRM");
+      fireEvent.click(screen.getByRole("button", { name: "cancel" }));
+      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      const cancel = await screen.findByRole("button", { name: "cancel" });
+      expect(mode()).toBe("CONFIRM");
+      fireEvent.keyDown(cancel, { key: "y" });
+      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+      expect(results).toEqual([false, true]);
+    });
+
+    it("stays in CONFIRM when a second confirmation supersedes the first", async () => {
+      renderInFrame(<ConfirmProbe results={[]} />);
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      await screen.findByText("First?");
+      fireEvent.click(screen.getByRole("button", { name: "ask second" }));
+      await screen.findByText("Second?");
+      expect(mode()).toBe("CONFIRM");
+
+      fireEvent.keyDown(screen.getByRole("button", { name: "cancel" }), { key: "n" });
+      await vi.waitFor(() => expect(mode()).toBe("NORMAL"));
+    });
+  });
+
   describe("keys", () => {
     async function openConfirm(results: boolean[]) {
       render(
@@ -304,6 +339,26 @@ describe("ConfirmDialog", () => {
       fireEvent.keyDown(cancel, { key: "y" });
       await vi.waitFor(() => expect(results).toEqual([true]));
       expect(globalRun).toHaveBeenCalledTimes(1);
+    });
+
+    it("handles y exactly once even when the window keymap binds y", async () => {
+      const results: boolean[] = [];
+      const globalRun = vi.fn();
+      function GlobalY() {
+        useKeymap([{ id: "test.global-y", keys: "y", title: "Global y", scope: "global", run: globalRun }]);
+        return null;
+      }
+      renderWithShell(
+        <>
+          <GlobalY />
+          <ConfirmProbe results={results} />
+        </>,
+      );
+
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      fireEvent.keyDown(await screen.findByRole("button", { name: "cancel" }), { key: "y" });
+      await vi.waitFor(() => expect(results).toEqual([true]));
+      expect(globalRun).not.toHaveBeenCalled();
     });
   });
 });

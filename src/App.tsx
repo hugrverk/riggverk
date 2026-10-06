@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } fro
 import { invoke } from "@tauri-apps/api/core";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
-import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog";
+import { useConfirm } from "./components/ConfirmDialog";
 import { ViewFallback } from "./components/ViewFallback";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
@@ -48,7 +48,7 @@ function isWorkspaceLoadView(view: View): boolean {
 
 /**
  * Inner app shell that uses the confirm dialog context.
- * Wrapped by `App()` in `ConfirmProvider`.
+ * Rendered by `App()` inside `ShellProviders`, which also provides the confirm dialog.
  */
 function AppShell() {
   const [error, setError] = useState<string | null>(null);
@@ -875,15 +875,13 @@ function AppShell() {
 }
 
 /**
- * Root component wraps the app in the confirm dialog provider and the shell (keymap, commands, overlays).
+ * Root component wraps the app in the shell (keymap, commands, overlays, confirm dialog).
  */
 function App() {
   return (
-    <ConfirmProvider>
-      <ShellProviders>
-        <AppShell />
-      </ShellProviders>
-    </ConfirmProvider>
+    <ShellProviders>
+      <AppShell />
+    </ShellProviders>
   );
 }
 

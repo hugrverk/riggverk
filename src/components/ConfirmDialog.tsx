@@ -9,6 +9,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
+import { useConfirmMode } from "../shell/ShellState";
 
 export interface ConfirmConfig {
   title?: string;
@@ -43,10 +44,12 @@ export function useConfirm() {
 
 /**
  * Wraps the app tree and provides the `confirm` function via `useConfirm()`.
- * Renders a single themed `<dialog>` at the root level.
+ * Renders a single themed `<dialog>` at the root level. Mounted by `ShellProviders` inside the shell
+ * state: the status bar shows CONFIRM while the dialog is open, for every caller.
  */
 export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [open, setOpen] = useState(false);
+  useConfirmMode(open);
   const [config, setConfig] = useState<ConfirmConfig | null>(null);
   const resolveRef = useRef<(value: boolean) => void>(() => {});
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -102,8 +105,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     }
   }, [open]);
 
-  // The window keymap stands down while a modal dialog is open, so the dialog owns its keys. Enter is left alone:
-  // it activates whichever button has focus.
+  // The window keymap stands down while a modal dialog is open (`data-keyscope="overlay"`), and this handler
+  // consumes the key (preventDefault) before the keymap sees it, so the dialog owns y/n/Esc without double
+  // handling. Enter is left alone: it activates whichever button has focus.
   const handleKeyDown = (event: ReactKeyboardEvent<HTMLDialogElement>) => {
     if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
     if (event.key === "Escape") {
