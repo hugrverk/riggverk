@@ -850,22 +850,7 @@ pub fn plan_artifacts_for_uninstall(
     home: &Path,
 ) -> Result<UninstallArtifactPlan, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
-    let bootstrap_records = if workspace_root.join("skills").is_dir() {
-        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
-        .as_ref()
-        .map(|s| s.artifacts.clone())
-        .unwrap_or_default();
-    let known: std::collections::HashSet<String> =
-        records.iter().map(|r| r.identity.clone()).collect();
-    records.extend(
-        bootstrap_records
-            .into_iter()
-            .filter(|record| !known.contains(&record.identity)),
-    );
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
 
     let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root)?;
@@ -967,31 +952,60 @@ pub fn plan_artifacts_for_uninstall(
     })
 }
 
+/// Managed records plus historical-ownership records for pre-manifest copies.
+///
+/// Pre-manifest copies stay adoptable after the first apply: explicit managed
+/// records win, historical-ownership records fill the gaps for artifacts an
+/// earlier app version installed but no apply has touched. Artifacts that
+/// already have a record are not inspected again, and one that cannot be
+/// inspected only loses its own adoption.
+fn records_with_bootstrap(
+    workspace_root: &Path,
+    home: &Path,
+    managed: Option<&crate::managed_state::ManagedState>,
+) -> Vec<crate::managed_state::ManagedArtifactRecord> {
+    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
+        .map(|state| state.artifacts.clone())
+        .unwrap_or_default();
+    if !workspace_root.join("skills").is_dir() {
+        return records;
+    }
+    let known: HashSet<String> = records.iter().map(|r| r.identity.clone()).collect();
+    match crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home, &known) {
+        Ok(inference) => {
+            log_skipped_bootstrap(&inference.skipped);
+            records.extend(
+                inference
+                    .records
+                    .into_iter()
+                    .filter(|record| !known.contains(&record.identity)),
+            );
+        }
+        Err(error) => log_skipped_bootstrap(&[error]),
+    }
+    records
+}
+
+/// Plans run several times per preview or apply; report each reason once.
+fn log_skipped_bootstrap(skipped: &[String]) {
+    static LOGGED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let Ok(mut logged) = LOGGED.get_or_init(Mutex::default).lock() else {
+        return;
+    };
+    for reason in skipped {
+        if logged.insert(reason.clone()) {
+            eprintln!("agent-workspace: skipped historical-ownership check: {reason}");
+        }
+    }
+}
+
 pub fn plan_artifacts_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
 ) -> Result<Vec<PlannedArtifact>, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
-    let bootstrap_records = if workspace_root.join("skills").is_dir() {
-        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
-        .as_ref()
-        .map(|s| s.artifacts.clone())
-        .unwrap_or_default();
-    // Pre-manifest copies stay adoptable after the first apply: explicit
-    // managed records win, historical-ownership records fill the gaps for
-    // artifacts an earlier app version installed but no apply has touched.
-    let known: std::collections::HashSet<String> =
-        records.iter().map(|r| r.identity.clone()).collect();
-    records.extend(
-        bootstrap_records
-            .into_iter()
-            .filter(|record| !known.contains(&record.identity)),
-    );
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
     let canonical_identities =

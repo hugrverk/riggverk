@@ -383,9 +383,13 @@ mod tests {
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }
-            let bootstrap =
-                crate::managed_bootstrap::infer_bootstrap_records(&ws_canon, &resolved_home)
-                    .expect("bootstrap records");
+            let bootstrap = crate::managed_bootstrap::infer_bootstrap_records(
+                &ws_canon,
+                &resolved_home,
+                &std::collections::HashSet::new(),
+            )
+            .expect("bootstrap records")
+            .records;
             assert!(
                 bootstrap.iter().any(|record| {
                     record.identity.contains("\"scout\"")
@@ -980,6 +984,110 @@ mod tests {
             "scout skill dir should not be auto-removed unless in REMOVED_SKILL_NAMES"
         );
         fixture.cleanup();
+    }
+
+    #[test]
+    fn unreadable_artifact_does_not_discard_other_bootstrap_adoptions() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("bootstrap-partial");
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        copy_dir_all(&current_bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+        let ws = ws.canonicalize().expect("canonical workspace");
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        // An exact historical scout agent is adoptable.
+        let scout_dest = resolved_home.join(".config/opencode/agents/scout.md");
+        fs::create_dir_all(scout_dest.parent().unwrap()).expect("agents dir");
+        fs::write(&scout_dest, historical_scout_bytes()).expect("scout agent");
+        // The user's OpenCode config has comments, so it does not parse as JSON.
+        fs::write(
+            resolved_home.join(".config/opencode/opencode.json"),
+            "// my own notes\n{ \"theme\": \"dark\" }\n",
+        )
+        .expect("commented config");
+        // One artifact that cannot be read at all.
+        let skill = discover_skill_catalog(&current_bundled_workspace_src())
+            .expect("catalog")
+            .into_iter()
+            .next()
+            .expect("skill");
+        let unreadable = agent_global_skills_dest("claude")
+            .expect("claude skills")
+            .join(&skill.name)
+            .join("SKILL.md");
+        fs::create_dir_all(unreadable.parent().unwrap()).expect("skill dir");
+        fs::write(&unreadable, "unreadable").expect("skill file");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("chmod");
+        }
+        let can_read = fs::read(&unreadable).is_ok();
+
+        let scout = ArtifactId::OpenCodeAgent(AgentName::new(LEGACY_SCOUT_AGENT).expect("scout"));
+        let scout_identity = artifact_identity(&scout);
+        let inference = crate::managed_bootstrap::infer_bootstrap_records(
+            &ws,
+            &resolved_home,
+            &std::collections::HashSet::new(),
+        )
+        .expect("inference survives per-artifact failures");
+        assert!(
+            inference
+                .records
+                .iter()
+                .any(|r| r.identity == scout_identity),
+            "scout adoption must survive: {inference:?}"
+        );
+        if !can_read {
+            assert!(
+                inference
+                    .skipped
+                    .iter()
+                    .any(|reason| reason.contains(&skill.name)),
+                "unreadable artifact must be reported: {:?}",
+                inference.skipped
+            );
+        }
+        // Artifacts that already have a managed record are not inspected again.
+        let known = std::collections::HashSet::from([scout_identity.clone()]);
+        let again = crate::managed_bootstrap::infer_bootstrap_records(&ws, &resolved_home, &known)
+            .expect("inference with known records");
+        assert!(again.records.iter().all(|r| r.identity != scout_identity));
+
+        // End to end: the adoption still turns the old scout into a removal.
+        let planned = setup_transaction::plan_artifacts_for_surfaces(
+            &[
+                SetupSurfaceId::OpenCodeAgents,
+                SetupSurfaceId::OpenCodeConfig,
+            ],
+            &ws,
+            &resolved_home,
+        )
+        .expect("plan");
+        assert_planned_kind(&planned, scout, OperationKind::Remove);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644));
+        }
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]

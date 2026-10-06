@@ -6,6 +6,7 @@
 use std::collections::HashSet;
 use std::fs;
 use std::path::Path;
+use std::sync::OnceLock;
 
 use serde::Deserialize;
 
@@ -51,7 +52,17 @@ struct HistoricalOwnershipArtifact {
     action: String,
 }
 
-fn historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
+/// The metadata is embedded at build time, so it is parsed and validated once
+/// per process instead of on every digest check.
+fn historical_manifest() -> Result<&'static HistoricalOwnershipManifest, String> {
+    static MANIFEST: OnceLock<Result<HistoricalOwnershipManifest, String>> = OnceLock::new();
+    MANIFEST
+        .get_or_init(parse_historical_manifest)
+        .as_ref()
+        .map_err(Clone::clone)
+}
+
+fn parse_historical_manifest() -> Result<HistoricalOwnershipManifest, String> {
     let manifest: HistoricalOwnershipManifest = serde_json::from_str(include_str!(
         "../../resources/default-workspace/metadata/pre-manifest-ownership.json"
     ))
@@ -324,27 +335,48 @@ pub(crate) fn approved_codex_legacy_digest(
         .is_ok_and(|current_digest| current_digest == digest)
 }
 
-/// Infer bootstrap managed records from an old installation before first managed-state.json.
+/// Result of [`infer_bootstrap_records`].
+#[derive(Debug, Default)]
+pub struct BootstrapInference {
+    pub records: Vec<ManagedArtifactRecord>,
+    /// Artifacts that could not be inspected (unreadable or unparsable). They
+    /// are skipped so one bad file cannot discard every other adoption.
+    pub skipped: Vec<String>,
+}
+
+/// Infer bootstrap managed records from an old installation.
+///
+/// Artifacts whose identity is already in `known_identities` have a managed
+/// record and are not inspected again.
 pub fn infer_bootstrap_records(
     workspace_root: &Path,
     home: &Path,
-) -> Result<Vec<ManagedArtifactRecord>, String> {
-    let mut records = Vec::new();
+    known_identities: &HashSet<String>,
+) -> Result<BootstrapInference, String> {
+    let mut inference = BootstrapInference::default();
     for rel in stale_workspace_paths(workspace_root) {
+        let identity = workspace_file_identity(&rel);
         let path = workspace_root.join(&rel);
-        if path.is_file() {
-            let hash = setup_fingerprint::hash_file_path(&path)?;
-            let artifact = WorkspaceRelPath::new(&rel).map(ArtifactId::WorkspaceFile);
-            if artifact
-                .as_ref()
-                .is_some_and(|artifact| approved_historical_digest(artifact, "remove", &hash))
-            {
-                records.push(ManagedArtifactRecord {
-                    identity: workspace_file_identity(&rel),
-                    hash,
-                    surface: None,
-                });
+        if known_identities.contains(&identity) || !path.is_file() {
+            continue;
+        }
+        let hash = match setup_fingerprint::hash_file_path(&path) {
+            Ok(hash) => hash,
+            Err(error) => {
+                inference.skipped.push(format!("{rel}: {error}"));
+                continue;
             }
+        };
+        let artifact = WorkspaceRelPath::new(&rel).map(ArtifactId::WorkspaceFile);
+        if artifact
+            .as_ref()
+            .is_some_and(|artifact| approved_historical_digest(artifact, "remove", &hash))
+        {
+            inference.records.push(ManagedArtifactRecord {
+                identity,
+                hash,
+                surface: None,
+            });
         }
     }
     // Adopt every still-current artifact (workspace files, harness skills,
@@ -356,11 +388,20 @@ pub fn infer_bootstrap_records(
         workspace_root,
     )?;
     for artifact in canonical {
-        let hash =
-            setup_fingerprint::artifact_installed_managed_digest(&artifact, workspace_root, home)?;
-        if hash != ABSENT_DIGEST && approved_historical_digest(&artifact, "update", &hash) {
-            records.push(ManagedArtifactRecord {
-                identity: artifact_identity(&artifact),
+        let identity = artifact_identity(&artifact);
+        // Configs have no historical digests; only inspect what could match.
+        if known_identities.contains(&identity)
+            || historical_identity_and_path_class(&artifact).is_none()
+        {
+            continue;
+        }
+        let Some(hash) = inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
+        else {
+            continue;
+        };
+        if approved_historical_digest(&artifact, "update", &hash) {
+            inference.records.push(ManagedArtifactRecord {
+                identity,
                 hash,
                 surface: surface_record_label(&artifact),
             });
@@ -373,15 +414,26 @@ pub fn infer_bootstrap_records(
             "claude" => ArtifactId::ClaudeSkill(sn),
             _ => ArtifactId::CursorSkill(sn),
         };
-        for artifact in stale_harness_skill_artifacts(workspace_root, home, harness, map)? {
-            let hash = setup_fingerprint::artifact_installed_managed_digest(
-                &artifact,
-                workspace_root,
-                home,
-            )?;
-            if hash != ABSENT_DIGEST && approved_historical_digest(&artifact, "remove", &hash) {
-                records.push(ManagedArtifactRecord {
-                    identity: artifact_identity(&artifact),
+        let stale = match stale_harness_skill_artifacts(workspace_root, home, harness, map) {
+            Ok(stale) => stale,
+            Err(error) => {
+                inference.skipped.push(format!("{harness} skills: {error}"));
+                continue;
+            }
+        };
+        for artifact in stale {
+            let identity = artifact_identity(&artifact);
+            if known_identities.contains(&identity) {
+                continue;
+            }
+            let Some(hash) =
+                inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
+            else {
+                continue;
+            };
+            if approved_historical_digest(&artifact, "remove", &hash) {
+                inference.records.push(ManagedArtifactRecord {
+                    identity,
                     hash,
                     surface: Some(format!("{:?}", artifact.surface()).to_lowercase()),
                 });
@@ -389,32 +441,71 @@ pub fn infer_bootstrap_records(
         }
     }
     if let Some(agent) = stale_opencode_scout_agent(workspace_root, home) {
-        let hash =
-            setup_fingerprint::artifact_installed_managed_digest(&agent, workspace_root, home)?;
-        if hash != ABSENT_DIGEST && approved_historical_digest(&agent, "remove", &hash) {
-            records.push(ManagedArtifactRecord {
-                identity: artifact_identity(&agent),
-                hash,
-                surface: Some("open_code_agents".into()),
-            });
+        let identity = artifact_identity(&agent);
+        if !known_identities.contains(&identity) {
+            if let Some(hash) =
+                inspect_installed_digest(&mut inference, &agent, workspace_root, home)
+            {
+                if approved_historical_digest(&agent, "remove", &hash) {
+                    inference.records.push(ManagedArtifactRecord {
+                        identity,
+                        hash,
+                        surface: Some("open_code_agents".into()),
+                    });
+                }
+            }
         }
     }
-    for artifact in codex_legacy_migration_artifacts(workspace_root, home)? {
-        let hash =
-            setup_fingerprint::artifact_installed_managed_digest(&artifact, workspace_root, home)?;
-        if hash != ABSENT_DIGEST
-            && approved_codex_legacy_digest(&artifact, &hash, workspace_root, home)
-        {
-            records.push(ManagedArtifactRecord {
-                identity: artifact_identity(&artifact),
-                hash,
-                surface: Some("codex_skills".into()),
-            });
+    match codex_legacy_migration_artifacts(workspace_root, home) {
+        Ok(legacy) => {
+            for artifact in legacy {
+                let identity = artifact_identity(&artifact);
+                if known_identities.contains(&identity) {
+                    continue;
+                }
+                let Some(hash) =
+                    inspect_installed_digest(&mut inference, &artifact, workspace_root, home)
+                else {
+                    continue;
+                };
+                if approved_codex_legacy_digest(&artifact, &hash, workspace_root, home) {
+                    inference.records.push(ManagedArtifactRecord {
+                        identity,
+                        hash,
+                        surface: Some("codex_skills".into()),
+                    });
+                }
+            }
+        }
+        Err(error) => inference
+            .skipped
+            .push(format!("codex legacy skills: {error}")),
+    }
+    inference
+        .records
+        .sort_by(|a, b| a.identity.cmp(&b.identity));
+    inference.records.dedup_by(|a, b| a.identity == b.identity);
+    Ok(inference)
+}
+
+/// Installed managed digest of an artifact that exists; `None` when it is
+/// absent or could not be read (recorded in `inference.skipped`).
+fn inspect_installed_digest(
+    inference: &mut BootstrapInference,
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Option<String> {
+    match setup_fingerprint::artifact_installed_managed_digest(artifact, workspace_root, home) {
+        Ok(hash) if hash == ABSENT_DIGEST => None,
+        Ok(hash) => Some(hash),
+        Err(error) => {
+            inference
+                .skipped
+                .push(format!("{}: {error}", artifact_identity(artifact)));
+            None
         }
     }
-    records.sort_by(|a, b| a.identity.cmp(&b.identity));
-    records.dedup_by(|a, b| a.identity == b.identity);
-    Ok(records)
 }
 
 /// Record label for the owning surface; workspace files carry no surface.
@@ -504,6 +595,13 @@ mod tests {
                 .iter()
                 .any(|entry| entry.identity == format!("removed-skill:{name}")));
         }
+    }
+
+    #[test]
+    fn historical_manifest_is_parsed_once() {
+        let first = historical_manifest().expect("historical manifest");
+        let second = historical_manifest().expect("historical manifest");
+        assert!(std::ptr::eq(first, second));
     }
 
     #[test]
