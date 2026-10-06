@@ -12,13 +12,29 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "opencode-agents",
     "codex-agents",
     "claude-agents",
+    "codex-config",
+    "cursor-agents",
+    "cursor-rules",
+    "cursor-mcp",
+    "cursor-permissions",
+    "playwright-mcp",
     "codex",
     "opencode",
     "claude",
 ];
 
 /// Targets whose current location is a directory holding one file per backup file.
-const DIRECTORY_TARGET_IDS: &[&str] = &["opencode-agents", "codex-agents", "claude-agents"];
+/// `opencode-config` and `codex-config` hold several config files (`opencode.json`,
+/// `tui.json`, `config.toml`) under one id.
+const DIRECTORY_TARGET_IDS: &[&str] = &[
+    "opencode-agents",
+    "codex-agents",
+    "claude-agents",
+    "cursor-agents",
+    "cursor-rules",
+    "opencode-config",
+    "codex-config",
+];
 
 const BACKUP_FILE_LIMIT: usize = 50;
 const BACKUP_RUN_LIMIT: usize = 20;
@@ -218,10 +234,16 @@ fn resolve_current_target(target_id: &str) -> Result<PathBuf, String> {
         "codex-rules" => ".codex/AGENTS.md",
         "opencode-rules" => ".config/opencode/AGENTS.md",
         "claude-rules" => ".claude/CLAUDE.md",
-        "opencode-config" => ".config/opencode/opencode.json",
+        "opencode-config" => ".config/opencode",
         "opencode-agents" => ".config/opencode/agents",
         "claude-agents" => ".claude/agents",
         "codex-agents" => ".codex/agents",
+        "codex-config" => ".codex",
+        "cursor-agents" => ".cursor/agents",
+        "cursor-rules" => ".cursor/rules",
+        "cursor-mcp" => ".cursor/mcp.json",
+        "cursor-permissions" => ".cursor/permissions.json",
+        "playwright-mcp" => ".config/playwright-mcp/config.json",
         // Legacy backwards-compatible IDs (read-only)
         "codex" => ".codex/AGENTS.md",
         "opencode" => ".config/opencode/AGENTS.md",
@@ -1086,6 +1108,67 @@ mod tests {
         let _ = fs::remove_dir_all(&outside);
 
         assert!(details.files.is_empty());
+    }
+
+    #[test]
+    fn script_written_backup_targets_are_listed_with_their_current_files() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_root("script-targets-home");
+        fs::create_dir_all(&home).expect("create home");
+        crate::test_env::set_test_user_dirs(&home);
+
+        let root = temp_root("script-targets");
+        let run = root.join("20260501-143000");
+        // Every backup id the install scripts and Cursor profile code write.
+        let cases = [
+            ("codex-config", "config.toml", ".codex/config.toml"),
+            (
+                "opencode-config",
+                "opencode.json",
+                ".config/opencode/opencode.json",
+            ),
+            ("opencode-config", "tui.json", ".config/opencode/tui.json"),
+            ("cursor-agents", "scout.md", ".cursor/agents/scout.md"),
+            ("cursor-rules", "krets.mdc", ".cursor/rules/krets.mdc"),
+            ("cursor-mcp", "mcp.json", ".cursor/mcp.json"),
+            (
+                "cursor-permissions",
+                "permissions.json",
+                ".cursor/permissions.json",
+            ),
+            (
+                "playwright-mcp",
+                "config.json",
+                ".config/playwright-mcp/config.json",
+            ),
+        ];
+        for (target, name, current) in cases {
+            write_backup_file(&run.join(target).join(name), b"backed up");
+            write_backup_file(&home.join(current), b"backed up");
+        }
+
+        let runs = list_backups_from_root(&root).expect("list");
+        let details = get_backup_details_from_root(&root, "20260501-143000").expect("details");
+        let _ = fs::remove_dir_all(&root);
+        let _ = fs::remove_dir_all(&home);
+
+        assert_eq!(runs.len(), 1);
+        assert_eq!(runs[0].file_count, cases.len());
+        assert_eq!(details.files.len(), cases.len());
+        for (target, name, current) in cases {
+            let file = details
+                .files
+                .iter()
+                .find(|f| f.target_id == target && f.filename == name)
+                .unwrap_or_else(|| panic!("{target}/{name} missing from details"));
+            assert_eq!(file.current_status, "matches", "{target}/{name}");
+            assert!(
+                PathBuf::from(&file.current_path).ends_with(current),
+                "{target}/{name}: {}",
+                file.current_path
+            );
+        }
     }
 
     #[test]
