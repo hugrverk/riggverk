@@ -98,13 +98,25 @@ describe("PromptLoopsTool", () => {
     expect(onContextSeedConsumed).not.toHaveBeenCalled();
   });
 
-  it("switches prompt groups with number keys outside editable controls", () => {
+  it("leaves number keys and / to the global shell keymap instead of switching groups or focusing search", () => {
     render(<PromptLoopsTool />);
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBeGreaterThan(1);
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
 
-    fireEvent.keyDown(document, { key: "2" });
+    const digit = fireEvent.keyDown(document, { key: "2" });
+    const slash = fireEvent.keyDown(document, { key: "/" });
+    expect(digit).toBe(true);
+    expect(slash).toBe(true);
+    expect(tabs[0]?.getAttribute("aria-selected")).toBe("true");
+    expect(tabs[1]?.getAttribute("aria-selected")).toBe("false");
+    expect(document.activeElement).toBe(document.body);
+  });
+
+  it("still switches prompt groups through the group tabs", () => {
+    render(<PromptLoopsTool />);
+    const tabs = screen.getAllByRole("tab");
+    fireEvent.click(tabs[1]!);
     expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
   });
 });

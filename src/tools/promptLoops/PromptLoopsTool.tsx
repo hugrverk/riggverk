@@ -175,15 +175,12 @@ export function PromptLoopsTool({
     setSelectedOptions(prev => togglePromptOption(prev, optionId));
   }, []);
 
+  // Number keys belong to the global tab layer and `/` to the pane filter (shell keymap), so only the
+  // arrow-key row navigation stays local.
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (isEditableEventTarget(event.target)) return;
-      if (event.key === "/" && document.activeElement !== searchRef.current) {
-        event.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
       if (document.activeElement === searchRef.current) return;
       if (!items.length) return;
 
@@ -194,13 +191,6 @@ export function PromptLoopsTool({
       if (event.key === "ArrowUp") {
         event.preventDefault();
         setItemIndex(i => Math.max(0, i - 1));
-      }
-      if (event.key >= "1" && event.key <= "4") {
-        const next = Number(event.key) - 1;
-        if (PROMPT_LOOP_GROUPS[next]) {
-          setGroupIndex(next);
-          setItemIndex(0);
-        }
       }
     };
     document.addEventListener("keydown", onKeyDown);
