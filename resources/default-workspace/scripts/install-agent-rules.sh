@@ -141,6 +141,9 @@ handle_target() {
     return 0
   fi
 
+  # handle_target runs on the left of `||`, where bash ignores `set -e`: every
+  # mutating step below checks its own status, and the target is never written
+  # unless its backup was copied and verified.
   if $apply; then
     if [ -f "$target" ]; then
       if cmp -s "$source_file" "$target"; then
@@ -148,17 +151,22 @@ handle_target() {
         return 0
       fi
       local ts
-      ts="$(date -u +%Y%m%d-%H%M%S)"
-      local backup_dir="$BACKUP_ROOT/$ts/$(target_label "$1")"
-      mkdir -p "$backup_dir"
+      ts="$(date -u +%Y%m%d-%H%M%S)" || return 1
+      local backup_dir="$BACKUP_ROOT/$ts/$label"
       local backup_file="$backup_dir/$(basename "$target")"
-      cp "$target" "$backup_file"
+      if ! mkdir -p "$backup_dir" || ! cp "$target" "$backup_file" || ! cmp -s "$target" "$backup_file"; then
+        printf 'install-agent-rules.sh: %s backup to %s failed; target left unchanged: %s\n' "$label" "$backup_file" "$target" >&2
+        return 1
+      fi
       if ! $quiet; then printf '  %s backed up to %s\n' "$label" "$backup_file"; fi
     else
-      mkdir -p "$(dirname "$target")"
+      mkdir -p "$(dirname "$target")" || return 1
       if ! $quiet; then printf '  %s creating new\n' "$label"; fi
     fi
-    cp "$source_file" "$target"
+    cp "$source_file" "$target" || {
+      printf 'install-agent-rules.sh: %s write failed: %s\n' "$label" "$target" >&2
+      return 1
+    }
     if ! $quiet; then printf '  %s synced\n' "$label"; fi
   fi
 }
