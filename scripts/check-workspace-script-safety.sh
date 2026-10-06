@@ -432,6 +432,21 @@ test_agents_dir_guards() {
   done
 }
 
+# HOME (here a symlinked temp path) must be refused as a project target even
+# when it carries a project marker.
+test_broad_project_targets() {
+  local home
+  home="$(new_home h-broad)"
+  mkdir -p "$home/.git"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$tmp_root/broad-backups" "$scripts/install-skills.sh" --project --target "$home" --apply --quiet
+  assert_nonzero "install-skills.sh must refuse HOME as a project target"
+  assert_log "refusing broad project target"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$tmp_root/broad-backups" "$scripts/install-cursor-workspace.sh" --project --target "$home" --apply --quiet
+  assert_nonzero "install-cursor-workspace.sh must refuse HOME as a project target"
+  assert_log "refusing broad project target"
+  [ ! -e "$home/.cursor" ] && [ ! -e "$home/.claude" ] && [ ! -e "$home/.opencode" ] || fail "a broad project target was written"
+}
+
 test_playwright_guard_home_paths() {
   local ws
   ws="$tmp_root/ws-playwright"
@@ -457,6 +472,7 @@ test_bootstrap_modes
 test_codex_diff_paths
 test_opencode_diff_paths
 test_agents_dir_guards
+test_broad_project_targets
 test_playwright_guard_home_paths
 "
 

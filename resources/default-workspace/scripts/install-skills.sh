@@ -264,12 +264,15 @@ validate_project_target() {
     exit 1
   fi
   local target
-  target="$(cd "$raw" && pwd)"
-  local home="${HOME:?}"
+  target="$(cd "$raw" && pwd -P)"
+  # Resolve every comparison root the same way as the target (symlinked homes
+  # and /tmp must still be recognised as broad).
+  local home
+  home="$(cd "${HOME:?}" 2>/dev/null && pwd -P || printf '%s' "$HOME")"
   local tmp_root
-  tmp_root="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd || printf '%s' "${TMPDIR:-/tmp}")"
+  tmp_root="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P || printf '%s' "${TMPDIR:-/tmp}")"
   local slash_tmp
-  slash_tmp="$(cd /tmp 2>/dev/null && pwd || printf '%s' /tmp)"
+  slash_tmp="$(cd /tmp 2>/dev/null && pwd -P || printf '%s' /tmp)"
 
   local broad
   for broad in "/" "/Users" "$home" "$home/Projects" "$tmp_root" "$slash_tmp"; do
