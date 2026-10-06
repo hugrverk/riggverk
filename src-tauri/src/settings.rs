@@ -620,7 +620,7 @@ mod tests {
     fn missing_enabled_harness_ids_loads_all_defaults() {
         let json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
         let mut object = json.as_object().cloned().expect("settings object");
-        object.remove("enabled_harness_ids");
+        object.shift_remove("enabled_harness_ids");
         let loaded: AppSettings = serde_json::from_value(serde_json::Value::Object(object))
             .expect("load legacy settings");
         assert_eq!(

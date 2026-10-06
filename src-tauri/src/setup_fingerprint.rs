@@ -26,9 +26,34 @@ pub fn hash_file_path(path: &Path) -> Result<String, String> {
     hash_file(path)
 }
 
+/// Hash JSON with object keys sorted at every level.
+///
+/// serde_json keeps insertion order (`preserve_order`), but digests stored in managed
+/// state predate that and were computed over sorted keys. Sorting keeps those records
+/// valid; semantic key order (OpenCode `permission`) is checked separately at plan time.
 fn hash_json_value(value: &serde_json::Value) -> Result<String, String> {
-    let canonical = serde_json::to_string(value).map_err(|e| format!("serialize json: {e}"))?;
+    let canonical =
+        serde_json::to_string(&sorted_json(value)).map_err(|e| format!("serialize json: {e}"))?;
     Ok(hash_bytes(canonical.as_bytes()))
+}
+
+fn sorted_json(value: &serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => {
+            let mut entries: Vec<_> = map.iter().collect();
+            entries.sort_by_key(|(key, _)| *key);
+            serde_json::Value::Object(
+                entries
+                    .into_iter()
+                    .map(|(key, child)| (key.clone(), sorted_json(child)))
+                    .collect(),
+            )
+        }
+        serde_json::Value::Array(items) => {
+            serde_json::Value::Array(items.iter().map(sorted_json).collect())
+        }
+        other => other.clone(),
+    }
 }
 
 fn hash_toml_value(value: &toml::Value) -> String {
@@ -273,6 +298,25 @@ pub fn artifact_installed_full_digest(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn json_digest_ignores_key_order_at_every_level() {
+        let sorted: serde_json::Value =
+            serde_json::from_str(r#"{"a":1,"permission":{"bash":{"*":"ask","rm *":"deny"}}}"#)
+                .unwrap();
+        let reordered: serde_json::Value =
+            serde_json::from_str(r#"{"permission":{"bash":{"rm *":"deny","*":"ask"}},"a":1}"#)
+                .unwrap();
+        assert_eq!(
+            hash_json_value(&sorted).unwrap(),
+            hash_json_value(&reordered).unwrap()
+        );
+        // Records written before `preserve_order` hashed the sorted serialization.
+        assert_eq!(
+            hash_json_value(&reordered).unwrap(),
+            hash_bytes(br#"{"a":1,"permission":{"bash":{"*":"ask","rm *":"deny"}}}"#)
+        );
+    }
     use crate::artifact_registry::{ArtifactId, SkillName};
     use crate::setup_lifecycle::SetupSurfaceId;
     use crate::setup_transaction;

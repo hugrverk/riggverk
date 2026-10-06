@@ -230,7 +230,7 @@ fn prepare_legacy_permission_cleanup(target_path: &Path) -> Result<Option<String
         .cloned()
         .collect();
     if cleaned.is_empty() {
-        object.remove("mcpAllowlist");
+        object.shift_remove("mcpAllowlist");
     } else {
         object.insert("mcpAllowlist".into(), serde_json::Value::Array(cleaned));
     }
