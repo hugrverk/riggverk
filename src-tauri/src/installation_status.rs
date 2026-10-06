@@ -62,6 +62,9 @@ pub struct RulesStatus {
     /// Which marker rule failed, for `malformed_markers`.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub malformed_reason: Option<MalformedReason>,
+    /// The user chose to manage this hand-edited file themselves: it is not
+    /// reported as a conflict and Agent Workspace leaves it alone.
+    pub user_managed: bool,
 }
 
 fn aggregate_state(
@@ -206,9 +209,14 @@ fn surface_status(
         InstallationState::Conflict => format!("{} conflicts preserved", counts.conflict_count),
         InstallationState::Unavailable => "unavailable".to_string(),
     };
-    let assessment = own.iter().find_map(|p| p.rules);
-    let detail = assessment.and_then(|a| rules_detail(&a)).unwrap_or(detail);
-    let rules = assessment.map(|a| RulesStatus {
+    let assessment = own.iter().find_map(|p| {
+        p.rules
+            .map(|rules| (rules, p.kind == OperationKind::Manual))
+    });
+    let detail = assessment
+        .and_then(|(a, user_managed)| rules_detail(&a, user_managed))
+        .unwrap_or(detail);
+    let rules = assessment.map(|(a, user_managed)| RulesStatus {
         layout: a.layout,
         refinement_lines: a.refinement_lines,
         conflict_reason: match a.plan {
@@ -216,6 +224,7 @@ fn surface_status(
             _ => None,
         },
         malformed_reason: a.malformed,
+        user_managed,
     });
     SurfaceInstallationStatus {
         surface,
@@ -228,7 +237,15 @@ fn surface_status(
 
 /// Status line for a rules surface. A base update that keeps the user's text
 /// is an update, never a conflict; only edits the app cannot merge are.
-fn rules_detail(assessment: &crate::rules_block::RulesAssessment) -> Option<String> {
+fn rules_detail(
+    assessment: &crate::rules_block::RulesAssessment,
+    user_managed: bool,
+) -> Option<String> {
+    if user_managed {
+        return Some(
+            "base updates available; you manage this file, so none are applied".to_string(),
+        );
+    }
     let kept = match assessment.refinement_lines {
         0 => String::new(),
         1 => "; refinements: 1 line preserved".to_string(),
@@ -295,6 +312,7 @@ mod tests {
             previous_state: PreviousState::Absent,
             rollback_action: RollbackAction::NoAction,
             rules: None,
+            rules_rewrite: None,
         }
     }
 

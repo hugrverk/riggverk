@@ -197,6 +197,18 @@ pub struct PlannedArtifact {
     pub rollback_action: RollbackAction,
     /// Block classification for rules artifacts; `None` for every other artifact.
     pub rules: Option<crate::rules_block::RulesAssessment>,
+    /// Exact content for an explicit rules conversion; `None` for every
+    /// regular plan.
+    pub rules_rewrite: Option<RulesRewrite>,
+}
+
+/// A rules file the user chose to convert: the complete new content, and the
+/// digest of the file it was computed from. Apply refuses to write when the
+/// file changed since.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RulesRewrite {
+    pub content: String,
+    pub expected_installed_digest: String,
 }
 
 const MAX_PREVIEW_TOKENS: usize = 64;
@@ -711,18 +723,22 @@ fn assess_rules(
 ) -> Option<crate::rules_block::RulesAssessment> {
     use crate::rules_block::{MalformedReason, RulesAssessment, RulesConflict, RulesLayout};
     let source_text = fs::read_to_string(source).ok()?;
+    let unusable = |reason| {
+        Some(RulesAssessment {
+            plan: crate::rules_block::RulesPlan::Conflict(RulesConflict::MalformedMarkers),
+            layout: RulesLayout::Malformed,
+            malformed: Some(reason),
+            refinement_lines: 0,
+        })
+    };
     let installed = match fs::symlink_metadata(dest) {
+        Ok(meta) if meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES => {
+            return unusable(MalformedReason::TooLarge);
+        }
         Ok(_) => match fs::read(dest) {
             Ok(bytes) => Some(bytes),
             // Present but unreadable (a directory, no permission): never replaced.
-            Err(_) => {
-                return Some(RulesAssessment {
-                    plan: crate::rules_block::RulesPlan::Conflict(RulesConflict::MalformedMarkers),
-                    layout: RulesLayout::Malformed,
-                    malformed: Some(MalformedReason::NotUtf8),
-                    refinement_lines: 0,
-                });
-            }
+            Err(_) => return unusable(MalformedReason::NotUtf8),
         },
         Err(_) => None,
     };
@@ -752,6 +768,101 @@ fn plan_rules_artifact(
         return None;
     }
     assess_rules(artifact, &dest, &source, managed_hash)
+}
+
+/// Conflicts the user may resolve by converting the file onto the base block.
+/// Malformed markers are never rewritten: the file is not understood.
+pub fn is_convertible(plan: crate::rules_block::RulesPlan) -> bool {
+    use crate::rules_block::{RulesConflict, RulesPlan};
+    matches!(
+        plan,
+        RulesPlan::Conflict(RulesConflict::LegacyDiverged | RulesConflict::BaseBlockEdited)
+    )
+}
+
+/// Installed state and classification of a rules artifact, for previews and
+/// explicit conversion.
+pub struct RulesContext {
+    pub source_text: String,
+    pub bundled_root: PathBuf,
+    pub installed: Option<Vec<u8>>,
+    pub assessment: crate::rules_block::RulesAssessment,
+}
+
+pub fn rules_context(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<RulesContext, String> {
+    if !artifact.is_rules_block() {
+        return Err("not a rules artifact".to_string());
+    }
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let identity = crate::managed_state::artifact_identity(artifact);
+    let managed_hash = managed_hash_for(&identity, &records);
+    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
+        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+    let source = artifact
+        .resolve_source(&bundled_root)
+        .ok_or_else(|| "rules source is unavailable".to_string())?;
+    let source_text = fs::read_to_string(&source).map_err(|e| format!("read rules source: {e}"))?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
+    let installed = match fs::symlink_metadata(&dest) {
+        Ok(meta) if meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES => {
+            return Err("rules file is too large".to_string());
+        }
+        Ok(_) => Some(fs::read(&dest).map_err(|e| format!("read rules file: {e}"))?),
+        Err(_) => None,
+    };
+    Ok(RulesContext {
+        source_text,
+        bundled_root,
+        installed,
+        assessment,
+    })
+}
+
+/// The transaction operation for converting a rules file with `rewrite`.
+pub fn conversion_operation(
+    artifact: &ArtifactId,
+    assessment: crate::rules_block::RulesAssessment,
+    rewrite: RulesRewrite,
+) -> PlannedArtifact {
+    PlannedArtifact {
+        artifact: artifact.clone(),
+        surface: artifact.surface(),
+        kind: OperationKind::Update,
+        previous_state: PreviousState::ManagedFile,
+        rollback_action: rollback_action_for(OperationKind::Update, PreviousState::ManagedFile),
+        rules: Some(assessment),
+        rules_rewrite: Some(rewrite),
+    }
+}
+
+/// Fingerprint of an explicit rules conversion: the regular plan fingerprint
+/// plus the exact content to be written.
+pub fn conversion_fingerprint(
+    workspace_root: &Path,
+    home: &Path,
+    operation: &PlannedArtifact,
+) -> Result<String, String> {
+    let rewrite = operation
+        .rules_rewrite
+        .as_ref()
+        .ok_or_else(|| "conversion without content".to_string())?;
+    let base = compute_plan_fingerprint(
+        workspace_root,
+        &[operation.surface],
+        std::slice::from_ref(operation),
+        home,
+    )?;
+    stable_fingerprint(&[
+        base,
+        rewrite.expected_installed_digest.clone(),
+        crate::stable_digest::bytes(rewrite.content.as_bytes()),
+    ])
 }
 
 /// Re-checks, at apply time, that a rules file may still be written: the plan
@@ -1012,6 +1123,7 @@ pub fn plan_artifacts_for_uninstall(
                     PreviousState::ManagedFile,
                 ),
                 rules: None,
+                rules_rewrite: None,
             });
         } else {
             preserved.push(artifact);
@@ -1046,6 +1158,7 @@ pub fn plan_artifacts_for_uninstall(
                     previous_state,
                     rollback_action,
                     rules: None,
+                    rules_rewrite: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -1068,6 +1181,9 @@ fn rules_block_has_user_content(artifact: &ArtifactId, workspace_root: &Path, ho
     let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
         return false;
     };
+    if fs::metadata(&dest).is_ok_and(|meta| meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES) {
+        return false;
+    }
     let Ok(bytes) = fs::read(&dest) else {
         return false;
     };
@@ -1152,7 +1268,19 @@ pub fn plan_artifacts_for_surfaces(
         let managed_hash = managed_hash_for(&identity, &records);
         let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
         let (kind, previous_state) = match &rules {
-            Some(assessment) => rules_outcome(assessment.plan),
+            Some(assessment) => {
+                let (kind, previous_state) = rules_outcome(assessment.plan);
+                // A hand-edited file the user chose to manage stays untouched
+                // and reports no conflict; it needs their own action.
+                if kind == OperationKind::Conflict
+                    && is_convertible(assessment.plan)
+                    && crate::rules_preferences::is_user_managed(workspace_root, &artifact)
+                {
+                    (OperationKind::Manual, previous_state)
+                } else {
+                    (kind, previous_state)
+                }
+            }
             None => {
                 let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
                 let (kind, previous_state) = refine_with_managed_hash(
@@ -1184,6 +1312,7 @@ pub fn plan_artifacts_for_surfaces(
             previous_state,
             rollback_action,
             rules,
+            rules_rewrite: None,
         });
     }
 
@@ -1221,6 +1350,7 @@ pub fn plan_artifacts_for_surfaces(
             previous_state,
             rollback_action,
             rules: None,
+            rules_rewrite: None,
         });
     }
     Ok(planned)

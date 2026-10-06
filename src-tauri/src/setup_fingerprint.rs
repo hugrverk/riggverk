@@ -200,6 +200,11 @@ pub fn artifact_installed_managed_digest_from_path(
             return Ok(ABSENT_DIGEST.into());
         }
         crate::path_safety::reject_symlink(path, "rules file")?;
+        if fs::metadata(path)
+            .is_ok_and(|meta| meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES)
+        {
+            return hash_file(path);
+        }
         let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
         return Ok(crate::rules_block::installed_managed_digest(&bytes));
     }

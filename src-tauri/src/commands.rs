@@ -21,6 +21,7 @@ pub(crate) use workspace::configured_workspace_path;
 mod repo_dashboard;
 mod repo_dashboard_commands;
 mod repo_dashboard_history;
+mod rules;
 mod settings_commands;
 mod skills;
 mod status;
@@ -44,6 +45,9 @@ pub use opencode_runtime::{
 };
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
+};
+pub use rules::{
+    apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
 };
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{

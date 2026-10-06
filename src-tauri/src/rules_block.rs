@@ -28,11 +28,16 @@ pub const END_MARKER: &str = "<!-- END AGENT-WORKSPACE BASE -->";
 const BEGIN_PREFIX: &str = "<!-- BEGIN AGENT-WORKSPACE BASE";
 const BOM: &str = "\u{feff}";
 
+/// Largest rules file read and rewritten. Real files are a few kilobytes; a
+/// bigger one is not something the app should load whole.
+pub const MAX_RULES_FILE_BYTES: u64 = 4 * 1024 * 1024;
+
 /// Why a rules file cannot be split into prefix, block, and suffix.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MalformedReason {
     NotUtf8,
+    TooLarge,
     DuplicateBegin,
     DuplicateEnd,
     MissingEnd,
@@ -44,6 +49,7 @@ impl MalformedReason {
     pub fn message(self) -> &'static str {
         match self {
             Self::NotUtf8 => "file is not valid UTF-8",
+            Self::TooLarge => "file is larger than 4 MB",
             Self::DuplicateBegin => "more than one BEGIN AGENT-WORKSPACE BASE marker",
             Self::DuplicateEnd => "more than one END AGENT-WORKSPACE BASE marker",
             Self::MissingEnd => "BEGIN marker has no matching END marker",
@@ -103,6 +109,29 @@ impl RulesFile<'_> {
         out.push_str(eol);
         out.push_str(&with_eol(&canonical_body(source), eol));
         out.push_str(self.end);
+        out.push_str(self.suffix);
+        out
+    }
+
+    /// Like `render_with_body`, with `moved` (text the user's edits were moved
+    /// into) placed right after the END line and before the old suffix.
+    pub fn render_converted(&self, source: &str, moved: &str) -> String {
+        let eol = if self.begin.ends_with("\r\n") {
+            "\r\n"
+        } else {
+            "\n"
+        };
+        let mut out = String::with_capacity(self.prefix.len() + source.len() + moved.len() + 256);
+        out.push_str(self.bom);
+        out.push_str(self.prefix);
+        out.push_str(BEGIN_MARKER);
+        out.push_str(eol);
+        out.push_str(&with_eol(&canonical_body(source), eol));
+        out.push_str(self.end);
+        if !self.end.ends_with('\n') {
+            out.push_str(eol);
+        }
+        out.push_str(moved);
         out.push_str(self.suffix);
         out
     }
@@ -254,13 +283,13 @@ fn is_end_line(line: &str) -> bool {
 
 /// An open fenced code block (CommonMark: up to three spaces of indent, then
 /// three or more backticks or tildes).
-struct Fence {
+pub(crate) struct Fence {
     marker: u8,
     length: usize,
 }
 
 impl Fence {
-    fn opened_by(line: &str) -> Option<Self> {
+    pub(crate) fn opened_by(line: &str) -> Option<Self> {
         let rest = strip_fence_indent(line)?;
         let marker = *rest.as_bytes().first()?;
         if marker != b'`' && marker != b'~' {
@@ -277,7 +306,7 @@ impl Fence {
         Some(Self { marker, length })
     }
 
-    fn closed_by(&self, line: &str) -> bool {
+    pub(crate) fn closed_by(&self, line: &str) -> bool {
         let Some(rest) = strip_fence_indent(line) else {
             return false;
         };

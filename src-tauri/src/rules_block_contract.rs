@@ -12,6 +12,10 @@ mod tests {
     use crate::commands::setup::{
         apply_setup, preview_setup, rollback_setup_transaction, SetupResult,
     };
+    use crate::commands::{
+        apply_rules_conversion, preview_rules_conversion, preview_rules_diff,
+        set_rules_user_managed,
+    };
     use crate::installation_status::{status_for_surfaces, InstallationState};
     use crate::managed_state::{
         artifact_identity, read_managed_state, write_managed_state_atomic, ManagedArtifactRecord,
@@ -614,5 +618,367 @@ mod tests {
             format!("{PREFIX}{}", block(&codex))
         );
         assert!(!Path::new(&env.home.join(".codex/AGENTS.md")).exists());
+    }
+
+    // ── Phase 2: diff, conversion, leave as is ──
+
+    /// A base the app shipped before (bundled history), by digest.
+    fn shipped_base(harness: &str, digest: &str) -> String {
+        let bundled = crate::setup_roots::bundled_root().expect("bundled root");
+        let hex = digest.strip_prefix("sha256:").unwrap_or(digest);
+        fs::read_to_string(
+            bundled
+                .join("metadata/rules-history")
+                .join(harness)
+                .join(format!("{hex}.md")),
+        )
+        .expect("bundled history file")
+    }
+
+    const OWNER_BASE: &str =
+        "sha256:423b5e6752243cafc042a66f3b4d13660ba6395206c2772d35b56f3d51f18534";
+    const OWNER_RECORD: &str =
+        "sha256:834d664d4cd827917edce6dbd1c51d0b26077f945f7705dd81750caef4c4fd4f";
+
+    /// The owner's file: a shipped base with one line of "Codex delegation"
+    /// edited by hand, and a managed record for an older shipped template.
+    fn owner_state(env: &Env) -> String {
+        let base = shipped_base("claude", OWNER_BASE);
+        let refined = base.replace("`gpt-5.6-sol` at `high`", "`gpt-6.1-sol` at `xhigh`");
+        assert_ne!(refined, base);
+        env.write_claude(&refined);
+        env.record(&ArtifactId::ClaudeRules, OWNER_RECORD);
+        refined
+    }
+
+    #[test]
+    fn update_diff_shows_the_block_change_and_leaves_the_file_alone() {
+        let env = Env::new("diff-update");
+        let content = format!("{PREFIX}{}{SUFFIX}", block(OLD_BASE));
+        env.write_claude(&content);
+        env.record(&ArtifactId::ClaudeRules, &body_digest(OLD_BASE));
+
+        let view = preview_rules_diff("claude_rules".into(), None).unwrap();
+        assert!(view.applicable);
+        assert_eq!(serde_json::to_value(view.mode).unwrap(), "update");
+        assert!(view.diff.contains("-# Old base\n"), "{}", view.diff);
+        assert!(
+            view.diff.contains("+# Global Agent Rules\n"),
+            "{}",
+            view.diff
+        );
+        assert!(view.removed > 0 && view.added > 0);
+        assert!(!view.truncated);
+        assert_eq!(env.read_claude(), content, "a preview never writes");
+    }
+
+    #[test]
+    fn update_diff_for_a_refused_file_is_informational() {
+        let env = Env::new("diff-refused");
+        env.write_claude(&OLD_BASE.replace("careful", "very careful"));
+        let view = preview_rules_diff("claude_rules".into(), Some("update".into())).unwrap();
+        assert!(!view.applicable);
+        assert!(view.note.unwrap().contains("update refused"));
+        assert!(view.diff.contains("+# Global Agent Rules\n"));
+    }
+
+    #[test]
+    fn update_diff_for_a_missing_file_is_a_new_file() {
+        let env = Env::new("diff-create");
+        let view = preview_rules_diff("claude_rules".into(), None).unwrap();
+        assert!(view.applicable);
+        assert_eq!(view.removed, 0);
+        assert!(view.added > 10);
+        assert!(!env.claude_file().exists());
+    }
+
+    #[test]
+    fn edits_diff_shows_the_owners_single_changed_line_against_its_base() {
+        let env = Env::new("diff-edits");
+        let refined = owner_state(&env);
+
+        let view = preview_rules_diff("claude_rules".into(), Some("edits".into())).unwrap();
+        assert!(view.applicable);
+        assert_eq!(view.compared_base.as_deref(), Some(OWNER_BASE));
+        assert_eq!((view.removed, view.added), (1, 1), "{}", view.diff);
+        assert!(view.diff.contains("-Codex CLI is installed"));
+        assert!(view.diff.contains("gpt-6.1-sol"));
+        assert!(view.note.unwrap().contains("closest shipped base"));
+        assert_eq!(env.read_claude(), refined);
+    }
+
+    #[test]
+    fn diff_previews_reject_unknown_modes_and_non_rules_surfaces() {
+        let _env = Env::new("diff-reject");
+        assert!(preview_rules_diff("claude_rules".into(), Some("bogus".into())).is_err());
+        assert!(preview_rules_diff("claude_agents".into(), None).is_err());
+        assert!(preview_rules_diff("nope".into(), None).is_err());
+    }
+
+    #[test]
+    fn converting_the_owner_file_moves_only_the_edited_section_below_the_block() {
+        let env = Env::new("convert-owner");
+        let source = source_of("claude-rules.md");
+        let refined = owner_state(&env);
+
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(preview.applicable, "{:?}", preview.reason);
+        assert_eq!(preview.moved_sections, vec!["## Codex delegation"]);
+        assert_eq!(preview.compared_base.as_deref(), Some(OWNER_BASE));
+        assert_eq!(preview.compared_base_changed_lines, Some(2));
+        assert!(preview.result.starts_with(BEGIN_MARKER));
+        assert!(preview.result.contains(&source));
+        assert!(preview.result.contains("`gpt-6.1-sol` at `xhigh`"));
+        assert!(!preview.result.contains("`gpt-5.6-sol`"));
+        assert!(preview
+            .diff
+            .starts_with("--- installed\n+++ after conversion\n"));
+        assert_eq!(env.read_claude(), refined, "the preview never writes");
+
+        let result = apply_rules_conversion(
+            "claude_rules".into(),
+            preview.plan_fingerprint.clone(),
+            preview.preview_token.clone(),
+        )
+        .unwrap();
+        assert!(result.success, "{}", result.message);
+        assert_eq!(
+            env.read_claude(),
+            preview.result,
+            "exactly the previewed file"
+        );
+        assert_eq!(
+            env.recorded_hash(&ArtifactId::ClaudeRules),
+            Some(body_digest(&source))
+        );
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::NoChange);
+        assert_eq!(planned.rules.unwrap().refinement_lines, 3);
+        assert_eq!(env.backup_entries(), 1);
+
+        // The conversion is a transaction: while the file is untouched it rolls back.
+        let rolled = rollback_setup_transaction(result.transaction_id, false).unwrap();
+        assert!(rolled.success, "{}", rolled.message);
+        assert_eq!(env.read_claude(), refined);
+    }
+
+    #[test]
+    fn a_converted_file_then_updates_like_any_block_file() {
+        let env = Env::new("convert-then-update");
+        owner_state(&env);
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        let result = apply_rules_conversion(
+            "claude_rules".into(),
+            preview.plan_fingerprint,
+            preview.preview_token,
+        )
+        .unwrap();
+        assert!(result.success, "{}", result.message);
+
+        // A later base update keeps the moved refinements.
+        let converted = env.read_claude();
+        let parsed = crate::rules_block::parse(&converted).unwrap().unwrap();
+        let moved = parsed.suffix.to_string();
+        let older = converted.replacen(parsed.body, OLD_BASE, 1);
+        env.write_claude(&older);
+        env.record(&ArtifactId::ClaudeRules, &body_digest(OLD_BASE));
+        let applied = env.apply("claude_rules");
+        assert!(applied.success, "{}", applied.message);
+        let after = env.read_claude();
+        assert!(after.ends_with(&moved));
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::NoChange
+        );
+    }
+
+    #[test]
+    fn conversion_refuses_when_the_file_changed_after_preview() {
+        let env = Env::new("convert-stale");
+        owner_state(&env);
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        let edited = format!("{}\n- one more thought\n", env.read_claude());
+        env.write_claude(&edited);
+
+        let err = apply_rules_conversion(
+            "claude_rules".into(),
+            preview.plan_fingerprint.clone(),
+            preview.preview_token.clone(),
+        )
+        .unwrap_err();
+        assert!(err.contains("mismatch") || err.contains("changed"), "{err}");
+        assert_eq!(env.read_claude(), edited);
+        assert_eq!(env.backup_entries(), 0);
+        // Missing proof is refused outright.
+        assert!(
+            apply_rules_conversion("claude_rules".into(), None, preview.preview_token).is_err()
+        );
+        assert!(
+            apply_rules_conversion("claude_rules".into(), preview.plan_fingerprint, None).is_err()
+        );
+    }
+
+    #[test]
+    fn converting_an_edited_block_keeps_the_text_around_it() {
+        let env = Env::new("convert-block");
+        let source = source_of("claude-rules.md");
+        let base = shipped_base("claude", OWNER_BASE);
+        let edited = base.replace("## Scope", "## Scope (changed by me)");
+        assert_ne!(edited, base);
+        let content = format!("{PREFIX}{}{SUFFIX}", block(&edited));
+        env.write_claude(&content);
+        env.record(&ArtifactId::ClaudeRules, &body_digest(&base));
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).rules.unwrap().plan,
+            RulesPlan::Conflict(RulesConflict::BaseBlockEdited)
+        );
+
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(preview.applicable, "{:?}", preview.reason);
+        assert_eq!(
+            preview.origin,
+            Some(crate::rules_convert::ConversionOrigin::EditedBlock)
+        );
+        assert!(preview.result.starts_with(PREFIX));
+        assert!(preview.result.ends_with(SUFFIX));
+        assert!(preview.result.contains("## Scope (changed by me)"));
+
+        let result = apply_rules_conversion(
+            "claude_rules".into(),
+            preview.plan_fingerprint,
+            preview.preview_token,
+        )
+        .unwrap();
+        assert!(result.success, "{}", result.message);
+        let converted = env.read_claude();
+        let parsed = crate::rules_block::parse(&converted).unwrap().unwrap();
+        assert_eq!(parsed.prefix, PREFIX);
+        assert_eq!(parsed.body_digest(), body_digest(&source));
+        assert!(parsed.suffix.ends_with(SUFFIX));
+    }
+
+    #[test]
+    fn conversion_is_not_offered_for_clean_or_malformed_files() {
+        let env = Env::new("convert-refused");
+        let source = source_of("claude-rules.md");
+        env.write_claude(&crate::rules_block::render_new(&source));
+        let clean = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(!clean.applicable);
+        assert!(clean.plan_fingerprint.is_none() && clean.preview_token.is_none());
+
+        let malformed = format!("{BEGIN_MARKER}\nno end\n");
+        env.write_claude(&malformed);
+        let refused = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(!refused.applicable);
+        assert!(refused.reason.unwrap().contains("malformed"));
+        assert!(apply_rules_conversion(
+            "claude_rules".into(),
+            Some("a".repeat(64)),
+            Some("t".into())
+        )
+        .is_err());
+        assert_eq!(env.read_claude(), malformed);
+    }
+
+    #[test]
+    fn leaving_a_conflict_as_is_reports_updates_instead_of_a_conflict() {
+        let env = Env::new("leave-as-is");
+        let refined = owner_state(&env);
+        let conflict =
+            status_for_surfaces(&[SetupSurfaceId::ClaudeRules], &env.ws, &env.home).unwrap();
+        assert_eq!(conflict.state, InstallationState::Conflict);
+
+        set_rules_user_managed("claude_rules".into(), true).unwrap();
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::Manual);
+        let status =
+            status_for_surfaces(&[SetupSurfaceId::ClaudeRules], &env.ws, &env.home).unwrap();
+        assert_ne!(status.state, InstallationState::Conflict);
+        assert_eq!(status.counts.conflict_count, 0);
+        let rules = status.surfaces[0].rules.as_ref().unwrap();
+        assert!(rules.user_managed);
+        assert_eq!(rules.conflict_reason, Some(RulesConflict::LegacyDiverged));
+        assert!(status.surfaces[0].detail.contains("you manage this file"));
+        let plan = preview_setup(vec!["claude_rules".into()]).unwrap();
+        assert!(!plan.is_blocked);
+        assert!(!plan.has_pending_changes);
+        assert_eq!(env.read_claude(), refined);
+
+        // The user can still change their mind: the conflict returns.
+        set_rules_user_managed("claude_rules".into(), false).unwrap();
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::Conflict
+        );
+    }
+
+    #[test]
+    fn leaving_as_is_needs_a_conflict_and_never_hides_a_clean_update() {
+        let env = Env::new("leave-guard");
+        env.write_claude(&format!("{PREFIX}{}", block(OLD_BASE)));
+        env.record(&ArtifactId::ClaudeRules, &body_digest(OLD_BASE));
+        assert!(set_rules_user_managed("claude_rules".into(), true).is_err());
+        assert!(set_rules_user_managed("claude_agents".into(), true).is_err());
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::Update
+        );
+    }
+
+    #[test]
+    fn a_user_managed_file_that_becomes_clean_updates_normally() {
+        let env = Env::new("leave-then-fix");
+        owner_state(&env);
+        set_rules_user_managed("claude_rules".into(), true).unwrap();
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::Manual
+        );
+
+        // The user wraps their file in the block by hand, with an older base.
+        env.write_claude(&format!("{PREFIX}{}", block(OLD_BASE)));
+        env.record(&ArtifactId::ClaudeRules, &body_digest(OLD_BASE));
+        assert_eq!(
+            env.plan(SetupSurfaceId::ClaudeRules).kind,
+            OperationKind::Update
+        );
+    }
+
+    #[test]
+    fn an_oversized_rules_file_is_never_loaded_or_rewritten() {
+        let env = Env::new("oversized");
+        let huge = "x".repeat(crate::rules_block::MAX_RULES_FILE_BYTES as usize + 1);
+        env.write_claude(&huge);
+
+        let planned = env.plan(SetupSurfaceId::ClaudeRules);
+        assert_eq!(planned.kind, OperationKind::Conflict);
+        assert_eq!(
+            planned.rules.unwrap().malformed,
+            Some(MalformedReason::TooLarge)
+        );
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(!preview.applicable);
+        assert!(preview_rules_diff("claude_rules".into(), None).is_err());
+        assert_eq!(env.read_claude(), huge);
+    }
+
+    #[test]
+    fn converting_clears_a_recorded_user_managed_choice() {
+        let env = Env::new("convert-clears-choice");
+        owner_state(&env);
+        set_rules_user_managed("claude_rules".into(), true).unwrap();
+        let preview = preview_rules_conversion("claude_rules".into()).unwrap();
+        assert!(preview.applicable);
+        let result = apply_rules_conversion(
+            "claude_rules".into(),
+            preview.plan_fingerprint,
+            preview.preview_token,
+        )
+        .unwrap();
+        assert!(result.success, "{}", result.message);
+        assert!(!crate::rules_preferences::is_user_managed(
+            &env.ws,
+            &ArtifactId::ClaudeRules
+        ));
     }
 }

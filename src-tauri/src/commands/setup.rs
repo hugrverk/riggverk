@@ -623,7 +623,23 @@ fn apply_rules_artifact(
     dest: &Path,
     workspace_root: &Path,
     home: &Path,
+    rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
+    if let Some(rewrite) = rewrite {
+        // An explicit conversion writes exactly the previewed content, and only
+        // over the file the preview was computed from.
+        let installed =
+            fs::read(dest).map_err(|e| format!("read rules file {}: {e}", dest.display()))?;
+        if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
+            return Err("rules file changed since preview; preview the conversion again".into());
+        }
+        return crate::safe_filesystem::write_regular_file_atomic(
+            dest,
+            rewrite.content.as_bytes(),
+            home,
+        )
+        .map_err(|e| format!("write rules file {}: {e}", dest.display()));
+    }
     setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
     let source_text = fs::read_to_string(source)
         .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
@@ -652,6 +668,7 @@ fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
     home: &Path,
+    rules_rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
@@ -667,7 +684,14 @@ fn apply_single_artifact(
     }
 
     if artifact.is_rules_block() {
-        return apply_rules_artifact(artifact, &source, &dest, workspace_root, home);
+        return apply_rules_artifact(
+            artifact,
+            &source,
+            &dest,
+            workspace_root,
+            home,
+            rules_rewrite,
+        );
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
@@ -825,7 +849,7 @@ fn user_home() -> Result<PathBuf, String> {
 // ── Apply ──
 
 /// Apply artifact-level operations using artifact-owned transactions.
-fn apply_planned_artifacts(
+pub(super) fn apply_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
     manual_steps: Vec<String>,
     preview_token: Option<&str>,
@@ -1179,7 +1203,7 @@ fn apply_planned_artifacts(
         let mutation = if matches!(p.kind, OperationKind::Remove) {
             remove_single_artifact(&p.artifact, &ws_root, &home)
         } else {
-            apply_single_artifact(&p.artifact, &ws_root, &home)
+            apply_single_artifact(&p.artifact, &ws_root, &home, p.rules_rewrite.as_ref())
         };
         if let Err(e) = mutation {
             manifest.operations[operation_index].apply_status =
@@ -2453,7 +2477,7 @@ mod tests {
         let artifact = ArtifactId::OpenCodeSkill(
             crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
         );
-        apply_single_artifact(&artifact, &ws, &resolved_home).expect("apply skill");
+        apply_single_artifact(&artifact, &ws, &resolved_home, None).expect("apply skill");
         let source = artifact
             .resolve_source(&crate::setup_roots::bundled_root().expect("bundled root"))
             .expect("skill source");
@@ -2555,7 +2579,7 @@ mod tests {
         std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
         // No need to create source - validate_artifact_source_dest will reject first
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base)
+        let err = apply_single_artifact(&artifact, &base, &base, None)
             .expect_err("symlinked parent apply must be rejected");
         assert!(err.contains("symlink") || err.contains("parent"), "{err}");
         let _ = fs::remove_dir_all(&base);
@@ -2582,7 +2606,7 @@ mod tests {
         )
         .unwrap();
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base)
+        let err = apply_single_artifact(&artifact, &base, &base, None)
             .expect_err("dangling destination must be rejected");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);
