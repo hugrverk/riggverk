@@ -1461,11 +1461,15 @@ printf '  install-runtime-agents.sh: claude agents written (5)\n'
 step "harness pages use one managed installation owner"
 for view in ClaudeView CodexView CursorView OpenCodeView; do
   path="src/views/${view}.tsx"
-  if [ "$(grep -c '<HarnessInstallationCard' "$path")" -ne 1 ]; then
-    printf 'FAIL: %s must render exactly one HarnessInstallationCard\n' "$path" >&2
+  if [ "$(grep -c '<HarnessPage' "$path")" -ne 1 ]; then
+    printf 'FAIL: %s must render exactly one HarnessPage\n' "$path" >&2
     exit 1
   fi
 done
+if [ "$(grep -c '<InstallPlanPane' src/views/HarnessPage.tsx)" -ne 1 ]; then
+  printf 'FAIL: HarnessPage must render exactly one InstallPlanPane (single install owner)\n' >&2
+  exit 1
+fi
 if search_has_match 'sync_claude_agents|diff_claude_agents|sync_opencode_agents|diff_opencode_agents' src/App.tsx src/views; then
   printf 'FAIL: page-scoped agent mutation wiring must not return\n' >&2
   exit 1
