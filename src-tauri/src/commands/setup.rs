@@ -1877,7 +1877,7 @@ pub fn get_installation_status(
     surfaces: Vec<String>,
 ) -> Result<crate::installation_status::InstallationStatus, String> {
     let settings = crate::settings::load();
-    let surface_ids: Vec<SetupSurfaceId> = if surfaces.is_empty() {
+    let surface_ids = if surfaces.is_empty() {
         crate::settings::enabled_setup_surfaces(&settings)
     } else {
         let parsed: Vec<SetupSurfaceId> = surfaces
@@ -1887,8 +1887,7 @@ pub fn get_installation_status(
                     .map_err(|_| format!("Unknown surface ID: {s}"))
             })
             .collect::<Result<_, _>>()?;
-        reject_disabled_surfaces(&parsed, &settings)?;
-        parsed
+        gate_requested_surfaces(parsed, &settings)?
     };
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
@@ -1923,6 +1922,43 @@ fn reject_disabled_surfaces(
     }
 }
 
+/// Surfaces an explicit request may act on. Harness-disabled surfaces are
+/// rejected; target-disabled surfaces are dropped silently. The result may be
+/// empty, and an empty result must stay an empty plan, never "all surfaces".
+fn gate_requested_surfaces(
+    requested: Vec<SetupSurfaceId>,
+    settings: &crate::settings::AppSettings,
+) -> Result<Vec<SetupSurfaceId>, String> {
+    reject_disabled_surfaces(&requested, settings)?;
+    Ok(requested
+        .into_iter()
+        .filter(|surface| crate::settings::surface_enabled(settings, *surface))
+        .collect())
+}
+
+/// Plans exactly `surface_ids`. `plan_setup` treats an empty list as "all
+/// surfaces", so an empty list returns an explicit empty plan instead.
+fn plan_surfaces(
+    surface_ids: Vec<SetupSurfaceId>,
+    ws_root: &Path,
+    home: &Path,
+) -> Result<SetupPlan, String> {
+    if surface_ids.is_empty() {
+        return Ok(crate::setup_lifecycle::empty_plan());
+    }
+    let states: Vec<_> = surface_ids
+        .iter()
+        .map(|s| detect_surface_state(*s, ws_root, home))
+        .collect();
+    let request = SetupRequest {
+        surfaces: surface_ids,
+        skip_manual: true,
+    };
+    let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
+    attach_plan_preview(&mut plan, ws_root, home)?;
+    Ok(plan)
+}
+
 /// Read-only preview: detect real state for requested surfaces.
 ///
 /// Plans every requested surface and hashes artifacts, so it runs off the
@@ -1950,56 +1986,19 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         })
         .collect();
     let settings = crate::settings::load();
-    reject_disabled_surfaces(&requested_surface_ids, &settings)?;
     let surface_ids = if requested_surface_ids.is_empty() {
         crate::settings::enabled_setup_surfaces(&settings)
     } else {
-        requested_surface_ids
+        gate_requested_surfaces(requested_surface_ids, &settings)?
     };
 
-    if surfaces.is_empty() {
-        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
-        let home = crate::platform_paths::resolve_user_home(
-            &crate::platform_paths::PlatformEnv::from_process_env(),
-            crate::platform_paths::Platform::current(),
-        )
-        .map_err(|e| format!("user home: {e}"))?;
-
-        let states: Vec<_> = surface_ids
-            .iter()
-            .map(|s| detect_surface_state(*s, &ws_root, &home))
-            .collect();
-
-        let request = SetupRequest {
-            surfaces: surface_ids,
-            skip_manual: true,
-        };
-
-        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        attach_plan_preview(&mut plan, &ws_root, &home)?;
-        Ok(plan)
-    } else {
-        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
-        let home = crate::platform_paths::resolve_user_home(
-            &crate::platform_paths::PlatformEnv::from_process_env(),
-            crate::platform_paths::Platform::current(),
-        )
-        .map_err(|e| format!("user home: {e}"))?;
-
-        let states: Vec<_> = surface_ids
-            .iter()
-            .map(|s| detect_surface_state(*s, &ws_root, &home))
-            .collect();
-
-        let request = SetupRequest {
-            surfaces: surface_ids,
-            skip_manual: true,
-        };
-
-        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        attach_plan_preview(&mut plan, &ws_root, &home)?;
-        Ok(plan)
-    }
+    let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
+    .map_err(|e| format!("user home: {e}"))?;
+    plan_surfaces(surface_ids, &ws_root, &home)
 }
 
 #[tauri::command]
@@ -2035,7 +2034,12 @@ pub fn apply_setup(
         return Err("At least one surface ID is required".to_string());
     }
     let settings = crate::settings::load();
-    reject_disabled_surfaces(&surface_ids, &settings)?;
+    let surface_ids = gate_requested_surfaces(surface_ids, &settings)?;
+    if surface_ids.is_empty() {
+        // Every requested surface is target-disabled: nothing to apply.
+        let plan = crate::setup_lifecycle::empty_plan();
+        return Ok(apply_setup_plan_with_token(&plan, None));
+    }
 
     // Use real detection instead of synthetic all-Create states
     let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
@@ -3740,6 +3744,110 @@ mod tests {
             fs::read_to_string(&edited_dest).unwrap(),
             "my own changes",
             "a user-modified retired skill must be preserved"
+        );
+    }
+
+    // ── Target gating ──
+
+    fn disable_targets(ids: &[&str]) {
+        let mut settings = crate::settings::load();
+        settings
+            .enabled_target_ids
+            .retain(|id| !ids.contains(&id.as_str()));
+        crate::settings::save(settings).expect("save settings");
+    }
+
+    #[test]
+    fn gate_requested_surfaces_drops_target_disabled_and_may_empty() {
+        let mut settings = crate::settings::AppSettings::default();
+        settings
+            .enabled_target_ids
+            .retain(|id| id != "cursor_setup");
+        let kept = gate_requested_surfaces(
+            vec![
+                SetupSurfaceId::CursorAgents,
+                SetupSurfaceId::ClaudeRules,
+                SetupSurfaceId::CursorMcp,
+            ],
+            &settings,
+        )
+        .expect("gate");
+        assert_eq!(kept, vec![SetupSurfaceId::ClaudeRules]);
+
+        let emptied = gate_requested_surfaces(
+            vec![SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
+            &settings,
+        )
+        .expect("gate");
+        assert!(emptied.is_empty());
+    }
+
+    #[test]
+    fn gate_requested_surfaces_still_rejects_disabled_harness() {
+        let mut settings = crate::settings::AppSettings::default();
+        settings.enabled_harness_ids = vec![crate::agent_targets::HarnessId::Claude];
+        let err = gate_requested_surfaces(vec![SetupSurfaceId::CodexRules], &settings)
+            .expect_err("disabled harness");
+        assert!(err.contains("Harness disabled"), "error: {err}");
+    }
+
+    #[test]
+    fn preview_with_only_target_disabled_surfaces_is_an_empty_plan() {
+        let _env = TempSetupEnv::new("gate-preview");
+        disable_targets(&["cursor_setup"]);
+        let plan =
+            preview_setup(vec!["cursor_agents".into(), "cursor_mcp".into()]).expect("preview");
+        assert!(plan.operations.is_empty(), "{:?}", plan.operations);
+        assert!(plan.synced.is_empty());
+        assert!(!plan.has_pending_changes);
+        assert!(!plan.is_blocked);
+        assert!(plan.plan_fingerprint.is_none());
+        assert!(plan.preview_token.is_none());
+    }
+
+    #[test]
+    fn preview_drops_target_disabled_surfaces_from_a_mixed_request() {
+        let _env = TempSetupEnv::new("gate-preview-mixed");
+        disable_targets(&["cursor_setup"]);
+        let plan =
+            preview_setup(vec!["cursor_agents".into(), "claude_rules".into()]).expect("preview");
+        let surfaces: Vec<SetupSurfaceId> = plan.operations.iter().map(|op| op.surface).collect();
+        assert_eq!(surfaces, vec![SetupSurfaceId::ClaudeRules]);
+    }
+
+    #[test]
+    fn apply_with_only_target_disabled_surfaces_is_a_no_op() {
+        let env = TempSetupEnv::new("gate-apply");
+        disable_targets(&["cursor_setup"]);
+        let result = apply_setup(vec!["cursor_mcp".into()], false, None, None)
+            .expect("apply must not fail for gated-out surfaces");
+        assert!(result.success);
+        assert!(result.applied.is_empty());
+        assert!(
+            !env.home.join(".cursor").exists(),
+            "a disabled target must not be written"
+        );
+    }
+
+    #[test]
+    fn installation_status_does_not_count_target_disabled_surfaces() {
+        let _env = TempSetupEnv::new("gate-status");
+        let both = vec!["claude_rules".to_string(), "cursor_agents".to_string()];
+        let enabled = get_installation_status(both.clone()).expect("status");
+        assert_eq!(enabled.surfaces.len(), 2);
+
+        disable_targets(&["cursor_setup"]);
+        let gated = get_installation_status(both).expect("status");
+        let surfaces: Vec<SetupSurfaceId> = gated.surfaces.iter().map(|s| s.surface).collect();
+        assert_eq!(surfaces, vec![SetupSurfaceId::ClaudeRules]);
+        assert!(gated.counts.create_count < enabled.counts.create_count);
+
+        let emptied = get_installation_status(vec!["cursor_agents".into()]).expect("status");
+        assert!(emptied.surfaces.is_empty());
+        assert_eq!(emptied.counts.create_count, 0);
+        assert_eq!(
+            emptied.state,
+            crate::installation_status::InstallationState::Current
         );
     }
 }
