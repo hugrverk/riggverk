@@ -1,8 +1,9 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
 use std::path::Path;
+use std::time::Duration;
 
-use super::process::ActionResult;
+use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions};
 
 #[derive(Serialize, Clone, Debug)]
 pub struct OpenCodeRuntimeCheck {
@@ -368,10 +369,21 @@ pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path
     }
 }
 
+/// The config generators are sub-second scripts; anything longer is hung.
+const GENERATOR_TIMEOUT: Duration = Duration::from_secs(30);
+const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
+
 /// Try to run a generator --check script from the workspace root.
 /// Returns `Some(status, detail)` if a generator was found and executed,
 /// `None` if no generator script exists or `python3` is unavailable.
 fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
+    run_generator_check_with_timeout(workspace_root, GENERATOR_TIMEOUT)
+}
+
+fn run_generator_check_with_timeout(
+    workspace_root: &Path,
+    timeout: Duration,
+) -> Option<(String, String)> {
     let candidates = [
         "scripts/generate-opencode-config.py",
         "scripts/generate-default-opencode-config.py",
@@ -383,45 +395,54 @@ fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
             continue;
         }
 
-        let output = std::process::Command::new("python3")
-            .args([script_rel, "--check"])
-            .current_dir(workspace_root)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output();
-
-        match output {
-            Ok(out) => {
-                let passed = out.status.success();
-                let stderr = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                let stdout = String::from_utf8_lossy(&out.stdout).trim().to_string();
-                let detail = if passed {
-                    if !stdout.is_empty() {
-                        stdout
-                    } else {
-                        "snapshot is current".into()
-                    }
-                } else if !stderr.is_empty() {
-                    stderr
-                } else if !stdout.is_empty() {
-                    stdout
-                } else {
-                    "snapshot is stale (generator check failed)".into()
-                };
-                return Some((
-                    if passed {
-                        "current".into()
-                    } else {
-                        "stale".into()
-                    },
-                    detail,
-                ));
-            }
-            Err(_) => {
-                // python3 not found or similar
-                return None;
-            }
+        let out = run_cmd_bounded(
+            "python3",
+            &[script_rel, "--check"],
+            workspace_root,
+            BoundedCmdOptions {
+                timeout: Some(timeout),
+                stdout_cap: GENERATOR_OUTPUT_CAP,
+                stderr_cap: GENERATOR_OUTPUT_CAP,
+                ..BoundedCmdOptions::default()
+            },
+        );
+        if out.timed_out {
+            // Do not claim "stale" for a check that never finished.
+            return Some((
+                "valid".into(),
+                format!(
+                    "not freshness-checked: generator --check timed out after {}s",
+                    timeout.as_secs()
+                ),
+            ));
         }
+        // No exit status: python3 not found / not spawnable (or killed by a signal),
+        // so no freshness check is possible.
+        out.exit_code?;
+        let passed = out.success;
+        let stderr = out.stderr.trim().to_string();
+        let stdout = out.stdout.trim().to_string();
+        let detail = if passed {
+            if !stdout.is_empty() {
+                stdout
+            } else {
+                "snapshot is current".into()
+            }
+        } else if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            "snapshot is stale (generator check failed)".into()
+        };
+        return Some((
+            if passed {
+                "current".into()
+            } else {
+                "stale".into()
+            },
+            detail,
+        ));
     }
     None
 }
@@ -858,6 +879,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     // - "valid": source files + snapshot exist and are valid, no generator available to check freshness
     // - "missing": some required files missing or invalid
     // - "unknown": no snapshot files at all
+    let mut generator_unavailable = false;
     let (generated_snapshot_status, mut generated_snapshot_detail) = if base_source_exists
         && base_source_valid
         && policy_source_exists
@@ -868,10 +890,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         // Try running generator --check to verify freshness
         match run_generator_check(workspace_root) {
             Some((status, detail)) => (status, detail),
-            None => (
-                "valid".into(),
-                "source + snapshot valid; not freshness-checked (no generator)".into(),
-            ),
+            None => {
+                generator_unavailable = true;
+                (
+                    "valid".into(),
+                    "source + snapshot valid; not freshness-checked (no generator)".into(),
+                )
+            }
         }
     } else if !base_source_exists && !policy_source_exists && !snapshot_exists {
         ("unknown".into(), String::new())
@@ -893,7 +918,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     if base_source_exists
         && policy_source_exists
         && generated_snapshot_status == "valid"
-        && run_generator_check(workspace_root).is_none()
+        && generator_unavailable
     {
         warnings
             .push("OpenCode config generator script not found. Run Install or Update.".to_string());
@@ -1070,7 +1095,8 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
     }
 }
 
-#[tauri::command]
+// `async` keeps the generator --check subprocess off the main thread.
+#[tauri::command(async)]
 pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     use crate::agent_targets;
     use crate::commands::workspace::configured_workspace_path;
@@ -1104,25 +1130,34 @@ pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult,
 
         let script_str = super::workspace::path_arg(&script_path)?;
 
-        let output = std::process::Command::new("python3")
-            .args([&script_str, "--write"])
-            .current_dir(workspace_root)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::piped())
-            .output()
-            .map_err(|e| {
-                if e.kind() == std::io::ErrorKind::NotFound {
-                    "python3 is not available on this system. Install Python 3 to generate config."
-                        .to_string()
-                } else {
-                    format!("failed to run generator: {}", e)
-                }
-            })?;
+        let output = run_cmd_bounded(
+            "python3",
+            &[&script_str, "--write"],
+            workspace_root,
+            BoundedCmdOptions {
+                timeout: Some(GENERATOR_TIMEOUT),
+                stdout_cap: GENERATOR_OUTPUT_CAP,
+                stderr_cap: GENERATOR_OUTPUT_CAP,
+                ..BoundedCmdOptions::default()
+            },
+        );
+        if output.timed_out {
+            return Err(format!(
+                "generator timed out after {} seconds",
+                GENERATOR_TIMEOUT.as_secs()
+            ));
+        }
+        if output.exit_code.is_none() {
+            return Err(
+                "python3 is not available on this system or could not be started. Install Python 3 and ensure it is on PATH to generate config."
+                    .to_string(),
+            );
+        }
 
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
-        let stderr = String::from_utf8_lossy(&output.stderr).into_owned();
-        let success = output.status.success();
-        let exit_code = output.status.code();
+        let stdout = output.stdout;
+        let stderr = output.stderr;
+        let success = output.success;
+        let exit_code = output.exit_code;
 
         return Ok(ActionResult::new(
             success,
@@ -1334,65 +1369,65 @@ fn read_stored_opencode_model_selection_from_path(
     Some(OpenCodeModelSelection { model, small_model })
 }
 
+/// `opencode models` may refresh its provider catalog over the network.
+const OPENCODE_MODELS_TIMEOUT: Duration = Duration::from_secs(30);
+/// A model catalog is a few hundred short lines; cap far above that.
+const OPENCODE_MODELS_STDOUT_CAP: usize = 4 * 1024 * 1024;
+
 /// List available OpenCode models by running `opencode models --pure`.
 /// Returns a sorted, deduplicated list of `provider/model` strings.
-#[tauri::command]
+// `async` keeps the (network-bound) subprocess off the main thread.
+#[tauri::command(async)]
 pub fn list_available_opencode_models() -> Result<ListAvailableModelsResult, String> {
-    use std::io::{BufRead, BufReader};
-    use std::process::{Command, Stdio};
-    use std::time::Duration;
+    list_models_with_executable(resolve_opencode_executable(), OPENCODE_MODELS_TIMEOUT)
+}
 
-    let opencode_path = resolve_opencode_executable().ok_or_else(|| {
+fn list_models_with_executable(
+    opencode_path: Option<std::path::PathBuf>,
+    timeout: Duration,
+) -> Result<ListAvailableModelsResult, String> {
+    let opencode_path = opencode_path.ok_or_else(|| {
         "opencode CLI not found on PATH. If installed via Homebrew, ensure /opt/homebrew/bin \
          is on the GUI PATH or reinstall via the bundled installer."
             .to_string()
     })?;
+    let program = opencode_path
+        .to_str()
+        .ok_or_else(|| "opencode CLI path is not valid UTF-8".to_string())?;
+    let cwd = std::env::current_dir().unwrap_or_else(|_| std::env::temp_dir());
 
-    let mut child = Command::new(&opencode_path)
-        .args(["models", "--pure"])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
-        .map_err(|e| {
-            format!(
-                "failed to run opencode models ({}): {}",
-                opencode_path.display(),
-                e
-            )
-        })?;
-
-    let stdout_handle = child.stdout.take().expect("stdout configured");
-    let reader = BufReader::new(stdout_handle);
-
-    // Read stdout lines with a bounded timeout via a separate thread.
-    let lines: Vec<String> = {
-        let (tx, rx) = std::sync::mpsc::channel();
-        std::thread::spawn(move || {
-            let mut collected = Vec::new();
-            for line in reader.lines() {
-                match line {
-                    Ok(l) => collected.push(l),
-                    Err(_) => break,
-                }
+    let result = run_cmd_bounded(
+        program,
+        &["models", "--pure"],
+        &cwd,
+        BoundedCmdOptions {
+            timeout: Some(timeout),
+            stdout_cap: OPENCODE_MODELS_STDOUT_CAP,
+            stderr_cap: 64 * 1024,
+            ..BoundedCmdOptions::default()
+        },
+    );
+    if result.timed_out {
+        return Err(format!(
+            "opencode models timed out after {} seconds",
+            timeout.as_secs()
+        ));
+    }
+    if result.exit_code.is_none() {
+        let detail = result.stderr.trim();
+        return Err(format!(
+            "failed to run opencode models ({}): {}",
+            opencode_path.display(),
+            if detail.is_empty() {
+                "terminated without an exit status"
+            } else {
+                detail
             }
-            let _ = tx.send(collected);
-        });
-        match rx.recv_timeout(Duration::from_secs(30)) {
-            Ok(lines) => lines,
-            Err(_) => {
-                // Timeout — kill the child
-                let _ = child.kill();
-                let _ = child.wait();
-                return Err("opencode models timed out after 30 seconds".to_string());
-            }
-        }
-    };
+        ));
+    }
 
-    let wait_status = child.wait().map_err(|e| format!("wait failed: {}", e))?;
-    let output_str = lines.join("\n");
-    let models = parse_opencode_models_output(&output_str);
-
-    let warning = if !wait_status.success() {
+    let models = parse_opencode_models_output(&result.stdout);
+    let warning = if !result.success {
         Some(
             "opencode models reported a non-zero exit. Check your OpenCode CLI and provider configuration."
                 .to_string(),
@@ -3000,25 +3035,121 @@ mod tests {
     }
 
     #[test]
-    fn test_list_available_opencode_models_error_message_safe() {
-        // Verify the error message when opencode cannot be found does not
-        // expose raw PATH values, auth files, or shell config.
-        let err = super::list_available_opencode_models();
-        if let Err(msg) = err {
-            assert!(
-                !msg.contains("PATH="),
-                "error must not expose raw PATH: {}",
-                msg
-            );
-            assert!(
-                !msg.contains("/home/"),
-                "error must not expose home directory: {}",
-                msg
-            );
-            // Should mention Homebrew if relevant
-            // (either the error mentions Homebrew or it succeeded)
+    fn test_list_models_missing_cli_error_is_safe() {
+        // No executable is spawned: the error for a missing CLI must not expose raw
+        // PATH values or the home directory.
+        let msg = list_models_with_executable(None, Duration::from_secs(1))
+            .expect_err("missing opencode CLI must be an error");
+        assert!(msg.contains("opencode CLI not found"), "{msg}");
+        assert!(
+            !msg.contains("PATH="),
+            "error must not expose raw PATH: {msg}"
+        );
+        assert!(
+            !msg.contains("/home/"),
+            "error must not expose home directory: {msg}"
+        );
+        if let Ok(home) = std::env::var("HOME") {
+            if !home.is_empty() {
+                assert!(!msg.contains(&home), "error must not expose HOME: {msg}");
+            }
         }
-        // If it succeeded (opencode is installed), that's also fine
+    }
+
+    #[test]
+    fn test_list_models_unspawnable_cli_is_an_error() {
+        let missing = std::env::temp_dir().join("agent-workspace-no-such-opencode-binary");
+        let msg = list_models_with_executable(Some(missing), Duration::from_secs(1))
+            .expect_err("unspawnable CLI must be an error");
+        assert!(msg.starts_with("failed to run opencode models"), "{msg}");
+    }
+
+    #[cfg(unix)]
+    fn write_stub_opencode(dir: &Path, body: &str) -> PathBuf {
+        fs::create_dir_all(dir).expect("create stub dir");
+        let path = dir.join("opencode");
+        fs::write(&path, format!("#!/bin/sh\n{body}\n")).expect("write stub opencode");
+        make_executable(&path);
+        path
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_list_models_parses_stub_output() {
+        let dir = temp_root("models-stub-ok");
+        let stub = write_stub_opencode(
+            &dir,
+            "echo opencode-go/glm-5.2\necho lmstudio/google/gemma-3n-e4b\necho garbage",
+        );
+        let result = list_models_with_executable(Some(stub), Duration::from_secs(10));
+        cleanup(&dir);
+
+        let result = result.expect("stub run succeeds");
+        assert_eq!(
+            result.models,
+            vec![
+                "lmstudio/google/gemma-3n-e4b".to_string(),
+                "opencode-go/glm-5.2".to_string()
+            ]
+        );
+        assert!(result.warning.is_none());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_list_models_nonzero_exit_warns_but_keeps_models() {
+        let dir = temp_root("models-stub-fail");
+        let stub = write_stub_opencode(&dir, "echo provider/model\nexit 3");
+        let result = list_models_with_executable(Some(stub), Duration::from_secs(10));
+        cleanup(&dir);
+
+        let result = result.expect("non-zero exit is a warning, not an error");
+        assert_eq!(result.models, vec!["provider/model".to_string()]);
+        assert!(result
+            .warning
+            .as_deref()
+            .is_some_and(|w| w.contains("non-zero")));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_list_models_times_out_instead_of_hanging() {
+        let dir = temp_root("models-stub-hang");
+        // `exec` so the killed process is the sleeper itself (no orphan holding the pipe).
+        let stub = write_stub_opencode(&dir, "exec sleep 30");
+        let started = std::time::Instant::now();
+        let result = list_models_with_executable(Some(stub), Duration::from_millis(300));
+        cleanup(&dir);
+
+        let msg = result.expect_err("a hung CLI must time out");
+        assert!(msg.contains("timed out"), "{msg}");
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "timeout must bound the wait"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_generator_check_timeout_is_not_reported_as_stale() {
+        let _guard = crate::test_env::guard::lock();
+        let ws = temp_root("gen-chk-hang-ws");
+        write_file(
+            &ws,
+            "scripts/generate-opencode-config.py",
+            "import time\ntime.sleep(30)\n",
+        );
+        let started = std::time::Instant::now();
+        let result = run_generator_check_with_timeout(&ws, Duration::from_millis(500));
+        cleanup(&ws);
+
+        let (status, detail) = result.expect("a hung generator still reports a status");
+        assert_eq!(status, "valid");
+        assert!(detail.contains("timed out"), "{detail}");
+        assert!(
+            started.elapsed() < Duration::from_secs(10),
+            "timeout must bound the wait"
+        );
     }
 
     // ── Managed config ordering (OpenCode permission is last-match-wins) ──
