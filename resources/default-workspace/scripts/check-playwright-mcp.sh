@@ -54,7 +54,7 @@ else
 fi
 
 # Personal home directories must not be baked into shipped templates/scripts.
-# Neutral placeholders such as /Users/example are allowed.
+# Neutral example paths such as /Users/example are allowed.
 home_path_pattern='/(Users|home)/[A-Za-z0-9._-]+'
 home_path_allowed='/(Users|home)/(example|Shared|user|username|you)([^A-Za-z0-9._-]|$)'
 if grep -R -h -E -e "$home_path_pattern" --exclude=check-playwright-mcp.sh "$repo_root/templates" "$repo_root/scripts" 2>/dev/null \
