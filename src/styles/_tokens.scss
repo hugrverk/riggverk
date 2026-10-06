@@ -64,11 +64,9 @@
   --text-heading: #f5f5f2;
   --accent-rgb: 127, 183, 255;
   --accent: #7fb7ff;
-  --accent-dim: rgba(var(--accent-rgb), 0.08);
   --accent-bg: rgba(var(--accent-rgb), 0.12);
   --active-bg: rgba(var(--accent-rgb), 0.10);
   --active-border: rgba(var(--accent-rgb), 0.24);
-  --active-border-strong: rgba(var(--accent-rgb), 0.34);
   --sel: rgba(var(--accent-rgb), 0.16);
   --focus-ring: var(--accent);
   --inv-bg: var(--accent);
@@ -92,15 +90,10 @@
   --font-size-heading: 1rem;
   --text-xs: var(--fs-sm);
   --text-sm: var(--fs-sm);
-  --text-base: var(--fs);
-  --text-lg: var(--fs);
   --text-display: var(--fs);
   --topline-height: 28px;
   --statusbar-height: 24px;
-  --header-height: 44px;
   --traffic-light-reserve: 80px;
-  --nav-leading-gap: 10px;
-  --nav-icon-size: 32px;
   --repo-chart-series-1: #e4ed42;
   --repo-chart-series-2: #f1f1f1;
   --repo-chart-series-3: #cdd63b;
@@ -113,10 +106,6 @@
   --repo-chart-axis: rgba(255, 255, 255, 0.12);
   --repo-chart-text: rgba(255, 255, 255, 0.42);
 }
-
-/* --text-xs/sm/base/lg/display are interim aliases for partials not yet migrated to
-   --fs/--fs-sm; the cleanup slice removes them. --header-height, --nav-* serve the legacy
-   header until the TopLine lands. */
 
 [data-theme="light"] {
   color-scheme: light;

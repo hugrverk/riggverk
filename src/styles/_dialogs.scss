@@ -11,27 +11,6 @@
   color: var(--fail);
 }
 
-.uninstall-card-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.uninstall-card-title {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.uninstall-card-actions {
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-}
-
 /* ---- modal dialogs ----
    A native <dialog> (it stays the overlay scope for the keymap) drawn as a titled box: accent border,
    the title sitting on the top border like a pane title, a body, and an inset footer row that holds the
@@ -152,14 +131,6 @@ dialog::backdrop {
   max-height: 200px;
   overflow: auto;
   font-size: var(--fs-sm);
-}
-
-.uninstall-dialog-actions {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
-  flex-wrap: wrap;
 }
 
 /* ---- error boundary fallback ----

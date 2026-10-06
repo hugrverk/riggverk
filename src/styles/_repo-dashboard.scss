@@ -140,7 +140,6 @@
 }
 
 .tool-field,
-.lib-field,
 .repo-dashboard-field {
   height: calc(var(--lh) + 6px);
   background: var(--bg-inset);
@@ -153,7 +152,6 @@
 }
 
 .tool-field:focus-visible,
-.lib-field:focus-visible,
 .repo-dashboard-field:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
@@ -1202,34 +1200,6 @@
   overflow: auto;
 }
 
-.repo-dashboard-latest-facts {
-  display: grid;
-  gap: 6px;
-  margin: 0;
-  font-size: var(--fs-sm);
-}
-
-.repo-dashboard-latest-facts > div {
-  display: grid;
-  grid-template-columns: 88px minmax(0, 1fr);
-  gap: 8px;
-  align-items: baseline;
-}
-
-.repo-dashboard-latest-facts dt {
-  margin: 0;
-  color: var(--text-muted);
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  font-size: var(--fs-sm);
-}
-
-.repo-dashboard-latest-facts dd {
-  margin: 0;
-  color: var(--text);
-  word-break: break-word;
-}
-
 .repo-dashboard-source-pill {
   font-family: var(--font-mono);
   font-size: var(--fs-sm);
@@ -1718,7 +1688,6 @@
 
 }
 
-.lib-docs-workspace,
 .repo-dashboard-docs-workspace {
   display: flex;
   flex-direction: column;
@@ -1728,38 +1697,12 @@
   overflow: hidden;
 }
 
-.lib-docs-workspace {
-  padding: 10px 12px 12px;
-}
-
-.lib-docs-toolbar {
-  flex-shrink: 0;
-}
-
-.lib-docs-source-tabs {
-  max-width: 100%;
-}
-
-.lib-docs-body,
 .repo-dashboard-docs-body {
   display: grid;
   grid-template-columns: minmax(220px, 0.9fr) minmax(0, 1.6fr);
   gap: 14px;
   min-height: 0;
   flex: 1 1 0;
-}
-
-.lib-docs-list-pane,
-.lib-docs-reader-pane {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  min-height: 0;
-  min-width: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-  padding: 10px 12px;
 }
 
 /* The repo docs panes are .pane sections: border, background and title come from the pane primitives. */
@@ -1801,204 +1744,18 @@
   padding: 10px 10px 8px;
 }
 
-.lib-docs-search-wrap {
-  flex: 0 0 auto;
-}
-
-.lib-docs-search {
-  width: 100%;
-}
-
-.lib-docs-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  overflow: auto;
-  min-height: 0;
-  flex: 1 1 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lib-docs-list-section-items {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.lib-docs-list-section + .lib-docs-list-section {
-  margin-top: 8px;
-}
-
-.lib-docs-section-label {
-  padding: 0 2px 4px;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-}
-
-.lib-docs-list-item {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 2px;
-  width: 100%;
-  padding: 8px 10px;
-  border: 1px solid transparent;
-  border-radius: var(--radius);
-  background: transparent;
-  text-align: left;
-  cursor: pointer;
-  font: inherit;
-  color: inherit;
-}
-
-.lib-docs-list-item:hover,
-.lib-docs-list-item.active {
-  border-color: var(--active-border);
-  background: var(--active-bg);
-}
-
-.lib-docs-list-item:focus-visible {
-  outline: 2px solid var(--focus-ring, var(--active-border));
-  outline-offset: 1px;
-}
-
-.lib-docs-list-title,
 .repo-dashboard-docs-list-title {
   font-size: var(--fs-sm);
   color: var(--text-heading);
 }
 
-.lib-docs-list-path,
 .repo-dashboard-docs-list-path {
   font-size: var(--fs-sm);
   word-break: break-word;
 }
 
-.lib-docs-context-pill {
-  margin-top: 2px;
-}
-
-.lib-docs-new-btn {
-  flex: 0 0 auto;
-  align-self: flex-start;
-}
-
-.lib-docs-reader-head {
-  flex: 0 0 auto;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin: -10px -12px 0;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--border);
-}
-
 .repo-dashboard-docs-reader-head {
   flex: 0 0 auto;
-}
-
-.lib-docs-reader-head-main {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  min-width: 0;
-  flex: 1;
-}
-
-.lib-docs-reader-actions {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  flex-shrink: 0;
-}
-
-.lib-docs-icon-group {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-}
-
-.lib-docs-icon-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 28px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text-muted);
-  cursor: pointer;
-  transition: color 0.1s, border-color 0.1s, background 0.1s;
-}
-
-.lib-docs-icon-btn.copy-btn {
-  position: static;
-  opacity: 1;
-  width: 28px;
-  height: 28px;
-}
-
-.lib-docs-icon-btn:hover {
-  color: var(--text);
-  border-color: rgba(var(--accent-rgb), 0.35);
-}
-
-.lib-docs-icon-btn:focus-visible {
-  outline: 2px solid var(--focus-ring, var(--active-border));
-  outline-offset: 1px;
-}
-
-.lib-docs-icon-btn-active,
-.lib-docs-icon-btn[aria-pressed="true"] {
-  border-color: var(--active-border);
-  background: var(--active-bg);
-  color: var(--text-heading);
-}
-
-.lib-docs-modified-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--dirty);
-  flex-shrink: 0;
-}
-
-.lib-docs-reader-title {
-  margin: 0;
-  font-size: var(--fs);
-}
-
-.lib-docs-reader-title {
-  font-weight: 600;
-  color: var(--text-heading);
-  line-height: 1.25;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.lib-docs-reader-path {
-  margin: 0;
-  word-break: break-word;
-}
-
-.lib-docs-reader-path {
-  font-size: var(--fs-sm);
-  line-height: 1.35;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
 }
 
 .repo-dashboard-docs-reader-role {
@@ -2010,7 +1767,6 @@
   color: var(--text-muted);
 }
 
-.lib-docs-reader-scroll,
 .repo-dashboard-docs-reader-scroll {
   overflow: auto;
   min-height: 0;
@@ -2018,7 +1774,6 @@
   padding-right: 2px;
 }
 
-.lib-docs-reader-scroll:focus-visible,
 .repo-dashboard-docs-reader-scroll:focus-visible,
 .repo-dashboard-work-column-scroll:focus-visible {
   outline: none;
@@ -2143,18 +1898,15 @@
 }
 
 @media (max-width: 860px) {
-  .lib-docs-body,
   .repo-dashboard-docs-body {
     grid-template-columns: 1fr;
     grid-template-rows: auto minmax(0, 1fr);
   }
 
-  .lib-docs-list-pane,
   .repo-dashboard-docs-list-pane {
     max-height: min(36vh, 320px);
   }
 
-  .lib-docs-reader-pane,
   .repo-dashboard-docs-reader-pane {
     min-height: 0;
   }
@@ -2305,132 +2057,6 @@
   flex: 0 1 auto;
   max-height: 36%;
   min-height: 0;
-}
-
-.lib-docs-stale-action {
-  margin-top: 4px;
-}
-
-.lib-docs-editor {
-  width: 100%;
-  min-height: 100%;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  padding: 0;
-  line-height: 1.6;
-  resize: none;
-  outline: none;
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-}
-
-.lib-docs-editor:focus {
-  box-shadow: none;
-}
-
-.lib-docs-save-row {
-  flex-shrink: 0;
-  padding-top: 4px;
-  border-top: 1px solid var(--border);
-}
-
-.lib-docs-create-form {
-  flex-shrink: 0;
-  margin: 0;
-  padding: 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-}
-
-.lib-docs-markdown {
-  max-width: 72ch;
-  line-height: 1.6;
-}
-
-.lib-docs-markdown p {
-  margin: 0 0 0.75rem;
-}
-
-.lib-docs-markdown ul,
-.lib-docs-markdown ol {
-  margin: 0 0 0.75rem;
-  padding-left: 1.35rem;
-}
-
-.lib-docs-markdown li + li {
-  margin-top: 0.25rem;
-}
-
-.lib-docs-markdown li > ul,
-.lib-docs-markdown li > ol {
-  margin-top: 0.25rem;
-  margin-bottom: 0;
-}
-
-.lib-docs-markdown blockquote {
-  margin: 0 0 0.75rem;
-  padding: 0.35rem 0 0.35rem 0.75rem;
-  border-left: 2px solid var(--border-strong);
-  color: var(--text-muted);
-}
-
-.lib-docs-markdown hr {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 1rem 0;
-}
-
-.lib-docs-markdown table {
-  display: block;
-  width: max-content;
-  max-width: 100%;
-  overflow-x: auto;
-  border-collapse: collapse;
-  margin: 0 0 0.75rem;
-  font-size: var(--fs-sm);
-}
-
-.lib-docs-markdown th,
-.lib-docs-markdown td {
-  border: 1px solid var(--border);
-  padding: 6px 10px;
-  text-align: left;
-  vertical-align: top;
-}
-
-.lib-docs-markdown th {
-  background: var(--bg-panel);
-  font-weight: 600;
-}
-
-.lib-docs-markdown .markdown-inline-code {
-  font-family: var(--font-mono);
-  font-size: 0.92em;
-  padding: 0.1em 0.35em;
-  border-radius: 3px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-}
-
-.lib-docs-markdown .markdown-code {
-  font-family: var(--font-mono);
-  font-size: var(--fs-sm);
-  line-height: 1.5;
-  overflow-x: auto;
-  max-width: 100%;
-}
-
-.lib-docs-markdown a {
-  color: var(--accent);
-  text-decoration: underline;
-  text-underline-offset: 2px;
-}
-
-.lib-docs-markdown .markdown-link-blocked {
-  color: var(--text-muted);
-  text-decoration: line-through;
 }
 
 /* ---- snapshot notices: gh failures, capped/truncated data, history fallback, stale docs source ---- */

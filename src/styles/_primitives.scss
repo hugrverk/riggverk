@@ -14,14 +14,13 @@
      .rows                   <ul role="listbox">; .row = <li role="option" aria-selected>
        .row .cur             16px cursor cell (▸ on the active row)
        .row .nm              name cell (ellipsis); .row .meta right cell (muted)
-       .row-btn              full-width button variant of a row (mouse)
      .group                  uppercase muted group header inside .rows or a pane body
      .filter                 pane filter row: <div class="filter"><span class="c-acc">/</span><input></div>
    Key/value
      .kv                     <dl class="kv"><dt>key</dt><dd>value</dd></dl>; dd.wrap allows wrapping
    Keys and glyphs
      kbd                     key cap; .action-key = <button class="action-key"><kbd>u</kbd> update</button>
-     .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred
+     .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
      .c-ok .c-warn .c-fail .c-acc .c-dim .c-head   semantic text colours
    Tables
      .matrix-grid            surface matrix: display:grid, columns from --matrix-cols (inline style);
@@ -56,7 +55,8 @@
 .c-dim { color: var(--text-muted); }
 .c-head { color: var(--text-heading); }
 
-.g {
+/* `tr.g` is the plan table's group row (see .plan), not a glyph cell: it keeps table layout. */
+.g:not(tr) {
   display: inline-block;
   width: 1ch;
   text-align: center;
@@ -193,15 +193,6 @@ kbd {
 .row[aria-selected="true"] { background: var(--sel); }
 .row[aria-selected="true"] .nm { color: var(--text-heading); font-weight: 500; }
 
-.row-btn {
-  width: 100%;
-  border: 0;
-  background: none;
-  color: inherit;
-  text-align: left;
-  cursor: pointer;
-}
-
 .group {
   padding: 2px 10px 0;
   color: var(--text-muted);
@@ -312,18 +303,16 @@ kbd {
 
 .plan td:first-child, .plan th:first-child { width: 16px; padding: 0; text-align: center; }
 
-/* tr.g is a group row, not a glyph cell: undo the .g inline-block/1ch rule. */
-.plan tr.g { display: table-row; width: auto; }
-
 .plan tr.g td {
   padding-top: 6px;
+  text-align: left;
   color: var(--text-muted);
   font-size: var(--fs-sm);
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
 
-.plan tr[aria-selected="true"] td, .plan tr.sel td { background: var(--sel); }
+.plan tr[aria-selected="true"] td { background: var(--sel); }
 .plan .op { font-weight: 600; }
 .plan .note { color: var(--text-muted); }
 .plan tr.conf td { background: var(--warn-bg); }

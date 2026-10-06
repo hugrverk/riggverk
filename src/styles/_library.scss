@@ -217,3 +217,94 @@
   line-height: var(--lh);
   white-space: pre;
 }
+
+/* ---- rendered document preview (DocContent) ---- */
+
+.lib-docs-markdown {
+  max-width: 72ch;
+  line-height: 1.6;
+}
+
+.lib-docs-markdown p {
+  margin: 0 0 0.75rem;
+}
+
+.lib-docs-markdown ul,
+.lib-docs-markdown ol {
+  margin: 0 0 0.75rem;
+  padding-left: 1.35rem;
+}
+
+.lib-docs-markdown li + li {
+  margin-top: 0.25rem;
+}
+
+.lib-docs-markdown li > ul,
+.lib-docs-markdown li > ol {
+  margin-top: 0.25rem;
+  margin-bottom: 0;
+}
+
+.lib-docs-markdown blockquote {
+  margin: 0 0 0.75rem;
+  padding: 0.35rem 0 0.35rem 0.75rem;
+  border-left: 2px solid var(--border-strong);
+  color: var(--text-muted);
+}
+
+.lib-docs-markdown hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 1rem 0;
+}
+
+.lib-docs-markdown table {
+  display: block;
+  width: max-content;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 0.75rem;
+  font-size: var(--fs-sm);
+}
+
+.lib-docs-markdown th,
+.lib-docs-markdown td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  vertical-align: top;
+}
+
+.lib-docs-markdown th {
+  background: var(--bg-panel);
+  font-weight: 600;
+}
+
+.lib-docs-markdown .markdown-inline-code {
+  font-family: var(--font-mono);
+  font-size: 0.92em;
+  padding: 0.1em 0.35em;
+  border-radius: 3px;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+}
+
+.lib-docs-markdown .markdown-code {
+  font-family: var(--font-mono);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.lib-docs-markdown a {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.lib-docs-markdown .markdown-link-blocked {
+  color: var(--text-muted);
+  text-decoration: line-through;
+}
