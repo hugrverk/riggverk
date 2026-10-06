@@ -134,11 +134,39 @@ pub(crate) fn extract_managed_opencode_config(config: &serde_json::Value) -> ser
     serde_json::Value::Object(managed)
 }
 
+/// Structural equality that also requires object keys to appear in the same order.
+///
+/// `serde_json::Value` equality ignores key order, but OpenCode evaluates `permission`
+/// rules last-match-wins in key order, so a reordered (e.g. sorted) block is a different policy.
+fn ordered_json_eq(a: &serde_json::Value, b: &serde_json::Value) -> bool {
+    match (a, b) {
+        (serde_json::Value::Object(x), serde_json::Value::Object(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .zip(y.iter())
+                    .all(|((kx, vx), (ky, vy))| kx == ky && ordered_json_eq(vx, vy))
+        }
+        (serde_json::Value::Array(x), serde_json::Value::Array(y)) => {
+            x.len() == y.len()
+                && x.iter()
+                    .zip(y.iter())
+                    .all(|(vx, vy)| ordered_json_eq(vx, vy))
+        }
+        _ => a == b,
+    }
+}
+
 pub(crate) fn managed_opencode_keys_match(
     installed: &serde_json::Value,
     rendered: &serde_json::Value,
 ) -> bool {
-    extract_managed_opencode_config(installed) == extract_managed_opencode_config(rendered)
+    let installed = extract_managed_opencode_config(installed);
+    let rendered = extract_managed_opencode_config(rendered);
+    installed == rendered
+        && match (installed.get("permission"), rendered.get("permission")) {
+            (Some(a), Some(b)) => ordered_json_eq(a, b),
+            _ => true,
+        }
 }
 
 /// Merge managed keys from `managed` into `installed`, preserving unrelated user-owned fields.
@@ -2944,6 +2972,118 @@ mod tests {
             // (either the error mentions Homebrew or it succeeded)
         }
         // If it succeeded (opencode is installed), that's also fine
+    }
+
+    // ── Managed config ordering (OpenCode permission is last-match-wins) ──
+
+    fn json_keys(value: &serde_json::Value) -> Vec<&str> {
+        value
+            .as_object()
+            .expect("object")
+            .keys()
+            .map(String::as_str)
+            .collect()
+    }
+
+    #[test]
+    fn test_merge_managed_config_keeps_template_permission_order() {
+        // Alphabetical order would put "**/.env*" before "src/**" and "edit" before "read".
+        let template: serde_json::Value = serde_json::from_str(
+            r#"{"permission":{"*":"ask","read":{"*":"allow","**/.env*":"deny"},
+                "edit":{"*":"ask","src/**":"allow","**/.env*":"deny"}}}"#,
+        )
+        .expect("parse template");
+        let installed: serde_json::Value =
+            serde_json::from_str(r#"{"theme":"mine","permission":{"edit":"deny","*":"allow"}}"#)
+                .expect("parse installed");
+
+        let merged =
+            merge_managed_opencode_config(&installed, &extract_managed_opencode_config(&template));
+        // Round-trip through the text that setup writes to disk.
+        let written = serde_json::to_string_pretty(&merged).expect("serialize");
+        let reparsed: serde_json::Value = serde_json::from_str(&written).expect("reparse");
+
+        assert_eq!(reparsed["theme"], "mine", "user keys are preserved");
+        let permission = &reparsed["permission"];
+        assert_eq!(json_keys(permission), ["*", "read", "edit"]);
+        assert_eq!(
+            json_keys(&permission["edit"]),
+            ["*", "src/**", "**/.env*"],
+            "a deny listed after an allow must stay last"
+        );
+        assert_eq!(json_keys(&permission["read"]), ["*", "**/.env*"]);
+    }
+
+    #[test]
+    fn test_merge_managed_config_preserves_bundled_template_order() {
+        let template_text = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../resources/default-workspace/templates/opencode.json"
+        ));
+        let template: serde_json::Value = serde_json::from_str(template_text).expect("template");
+        let merged = merge_managed_opencode_config(
+            &serde_json::json!({}),
+            &extract_managed_opencode_config(&template),
+        );
+        let reparsed: serde_json::Value =
+            serde_json::from_str(&serde_json::to_string_pretty(&merged).expect("serialize"))
+                .expect("reparse");
+
+        for section in ["bash", "edit", "read"] {
+            assert_eq!(
+                json_keys(&reparsed["permission"][section]),
+                json_keys(&template["permission"][section]),
+                "permission.{section} order must match the template"
+            );
+        }
+        let edit = json_keys(&reparsed["permission"]["edit"]);
+        let position = |key: &str| edit.iter().position(|k| *k == key).expect(key);
+        assert!(
+            position("src/**") < position("**/.env*"),
+            "secret deny must come after the broad src/** allow"
+        );
+    }
+
+    #[test]
+    fn test_managed_keys_match_requires_permission_order() {
+        let ordered: serde_json::Value = serde_json::from_str(
+            r#"{"permission":{"edit":{"*":"ask","src/**":"allow","**/.env*":"deny"}}}"#,
+        )
+        .expect("parse");
+        let sorted: serde_json::Value = serde_json::from_str(
+            r#"{"permission":{"edit":{"*":"ask","**/.env*":"deny","src/**":"allow"}}}"#,
+        )
+        .expect("parse");
+
+        // serde_json equality ignores key order, which is why the health check needs more.
+        assert_eq!(ordered, sorted);
+        assert!(managed_opencode_keys_match(&ordered, &ordered));
+        assert!(!managed_opencode_keys_match(&sorted, &ordered));
+    }
+
+    #[test]
+    fn test_health_flags_reordered_installed_permission() {
+        let (ws, home) = setup_synced_workspace("perm-order");
+        let template = r#"{"default_agent":"architect","permission":{"edit":{"*":"ask","src/**":"allow","**/.env*":"deny"}}}"#;
+        let reordered = r#"{"default_agent":"architect","permission":{"edit":{"*":"ask","**/.env*":"deny","src/**":"allow"}}}"#;
+        write_file(&ws, "templates/opencode.json", template);
+
+        write_file(&home, ".config/opencode/opencode.json", template);
+        let in_order = compute_health(&ws, &home);
+        write_file(&home, ".config/opencode/opencode.json", reordered);
+        let out_of_order = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        let status_of = |health: &OpenCodeRuntimeHealth| {
+            health
+                .checks
+                .iter()
+                .find(|check| check.id == "configs_match")
+                .map(|check| check.status.clone())
+        };
+        assert_eq!(status_of(&in_order).as_deref(), Some("pass"));
+        assert_eq!(status_of(&out_of_order).as_deref(), Some("warn"));
     }
 
     // ── Config update / generation tests ──
