@@ -149,7 +149,16 @@ function CommandLineBox({ initial }: { initial: string }) {
         if (event.target === event.currentTarget) closeCommandLine();
       }}
     >
-      <div className="cmdbox" role="dialog" aria-modal="true" aria-label="Command line">
+      <div
+        className="cmdbox"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Command line"
+        // A click on the box chrome (padding, colon, kbd) would blur the input and lose Escape; only the input itself takes the mouse.
+        onMouseDown={event => {
+          if (event.target !== inputRef.current) event.preventDefault();
+        }}
+      >
         <div className="line">
           <span className="colon" aria-hidden="true">:</span>
           <input

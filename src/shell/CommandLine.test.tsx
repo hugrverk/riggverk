@@ -79,6 +79,21 @@ describe("CommandLine", () => {
     expect(document.activeElement).toBe(anchor);
   });
 
+  it("keeps focus in the input when the box chrome is clicked, and Escape still closes", () => {
+    setup(commandSet());
+    const input = openCommandLine();
+    const box = screen.getByRole("dialog", { name: "Command line" });
+    // preventDefault on mousedown is what keeps the browser from moving focus off the input.
+    for (const chrome of [box, box.querySelector(".colon")!, box.querySelector("kbd")!, box.querySelector(".line")!]) {
+      expect(fireEvent.mouseDown(chrome)).toBe(false);
+    }
+    // The input itself keeps its normal mouse behaviour (caret placement, selection).
+    expect(fireEvent.mouseDown(input)).toBe(true);
+    expect(document.activeElement).toBe(input);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Command line" })).toBeNull();
+  });
+
   it("renders the suggestions as direct children of .sug and errors as .err below it", () => {
     setup(commandSet());
     const input = openCommandLine();
