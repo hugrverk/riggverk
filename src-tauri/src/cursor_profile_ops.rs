@@ -74,43 +74,54 @@ pub struct ProfileRunOutput {
     pub exit_code: i32,
 }
 
-fn utc_backup_timestamp() -> String {
-    #[cfg(windows)]
-    {
-        use std::process::Command;
-        if let Ok(output) = Command::new("powershell")
-            .args([
-                "-NoProfile",
-                "-Command",
-                "(Get-Date).ToUniversalTime().ToString('yyyyMMdd-HHmmss')",
-            ])
-            .output()
-        {
-            if output.status.success() {
-                if let Ok(text) = String::from_utf8(output.stdout) {
-                    let trimmed = text.trim().to_string();
-                    if trimmed.len() == 15 {
-                        return trimmed;
-                    }
-                }
-            }
+/// `YYYYMMDD-HHMMSS` in UTC, the directory name format the Backups view recognizes.
+fn utc_backup_timestamp(unix_secs: u64) -> String {
+    let days = (unix_secs / 86_400) as i64;
+    let secs_of_day = unix_secs % 86_400;
+    // Days since 1970-01-01 to a proleptic Gregorian date (Hinnant's civil_from_days).
+    let z = days + 719_468;
+    let era = z.div_euclid(146_097);
+    let day_of_era = z.rem_euclid(146_097);
+    let year_of_era =
+        (day_of_era - day_of_era / 1_460 + day_of_era / 36_524 - day_of_era / 146_096) / 365;
+    let day_of_year = day_of_era - (365 * year_of_era + year_of_era / 4 - year_of_era / 100);
+    let month_index = (5 * day_of_year + 2) / 153;
+    let day = day_of_year - (153 * month_index + 2) / 5 + 1;
+    let month = if month_index < 10 {
+        month_index + 3
+    } else {
+        month_index - 9
+    };
+    let year = year_of_era + era * 400 + i64::from(month <= 2);
+    format!(
+        "{year:04}{month:02}{day:02}-{:02}{:02}{:02}",
+        secs_of_day / 3_600,
+        secs_of_day % 3_600 / 60,
+        secs_of_day % 60
+    )
+}
+
+/// First backup destination at or after `now_secs` that does not exist yet, so a second
+/// backup of the same file within one second never overwrites the first.
+fn unique_backup_dest(
+    root: &Path,
+    label: &str,
+    file_name: &std::ffi::OsStr,
+    now_secs: u64,
+) -> Result<PathBuf, String> {
+    for offset in 0..10_000u64 {
+        let dest = root
+            .join(utc_backup_timestamp(now_secs + offset))
+            .join(label)
+            .join(file_name);
+        if fs::symlink_metadata(&dest).is_err() {
+            return Ok(dest);
         }
     }
-    #[cfg(not(windows))]
-    {
-        use std::process::Command;
-        if let Ok(output) = Command::new("date").args(["-u", "+%Y%m%d-%H%M%S"]).output() {
-            if output.status.success() {
-                if let Ok(text) = String::from_utf8(output.stdout) {
-                    let trimmed = text.trim().to_string();
-                    if trimmed.len() == 15 {
-                        return trimmed;
-                    }
-                }
-            }
-        }
-    }
-    "00000000-000000".to_string()
+    Err(format!(
+        "no free backup slot for {}",
+        file_name.to_string_lossy()
+    ))
 }
 
 fn backup_file_before_write(path: &Path, label: &str) -> Result<(), String> {
@@ -118,14 +129,19 @@ fn backup_file_before_write(path: &Path, label: &str) -> Result<(), String> {
         return Ok(());
     }
     let root = backup_root()?;
-    let ts = utc_backup_timestamp();
-    let backup_dir = root.join(&ts).join(label);
+    let file_name = path
+        .file_name()
+        .ok_or_else(|| format!("backup path has no filename: {}", path.display()))?;
+    let now_secs = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|elapsed| elapsed.as_secs())
+        .map_err(|e| format!("system clock before unix epoch: {e}"))?;
+    let dest = unique_backup_dest(&root, label, file_name, now_secs)?;
+    let backup_dir = dest
+        .parent()
+        .ok_or_else(|| format!("backup destination has no parent: {}", dest.display()))?;
     crate::safe_filesystem::create_directory_all_no_symlinks(&root, &root)?;
-    crate::safe_filesystem::create_directory_all_no_symlinks(&backup_dir, &root)?;
-    let dest = backup_dir.join(
-        path.file_name()
-            .ok_or_else(|| format!("backup path has no filename: {}", path.display()))?,
-    );
+    crate::safe_filesystem::create_directory_all_no_symlinks(backup_dir, &root)?;
     crate::safe_filesystem::copy_regular_file_no_symlinks(path, &dest, &root)
         .map_err(|e| format!("backup {}: {e}", path.display()))?;
     Ok(())
@@ -691,6 +707,30 @@ mod tests {
             profile_root.parent().unwrap_or(profile_root).to_path_buf(),
             profile_root.to_path_buf(),
         )
+    }
+
+    #[test]
+    fn backup_timestamp_formats_utc_calendar_dates() {
+        assert_eq!(utc_backup_timestamp(0), "19700101-000000");
+        assert_eq!(utc_backup_timestamp(951_782_400), "20000229-000000");
+        assert_eq!(utc_backup_timestamp(1_700_000_000), "20231114-221320");
+        assert_eq!(utc_backup_timestamp(4_102_444_799), "20991231-235959");
+    }
+
+    #[test]
+    fn unique_backup_dest_never_reuses_an_existing_backup() {
+        let root = temp_root("unique-backup");
+        let name = std::ffi::OsStr::new("mcp.json");
+        let first = unique_backup_dest(&root, "cursor-mcp", name, 1_700_000_000).expect("first");
+        assert!(first.starts_with(root.join("20231114-221320")));
+        fs::create_dir_all(first.parent().unwrap()).expect("mkdir");
+        fs::write(&first, "first").expect("write first");
+
+        let second = unique_backup_dest(&root, "cursor-mcp", name, 1_700_000_000).expect("second");
+        assert_ne!(first, second);
+        assert!(second.starts_with(root.join("20231114-221321")));
+        assert_eq!(fs::read_to_string(&first).expect("first intact"), "first");
+        let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
