@@ -417,7 +417,11 @@ test_agents_dir_guards() {
       PLAYWRIGHT_MCP_CONFIG_PATH="$home/pw/config.json" \
       OPENCODE_AGENTS_DIR="$dir" "$scripts/install-opencode-config.sh" --apply --quiet
     assert_nonzero "install-opencode-config.sh accepted OPENCODE_AGENTS_DIR='$dir'"
-    assert_log "refusing"
+    if [ -z "$dir" ]; then
+      assert_log "refusing empty OPENCODE_AGENTS_DIR"
+    else
+      assert_log "refusing unsafe OPENCODE_AGENTS_DIR"
+    fi
     assert_empty_dir "$home"
   done
   for dir in "$home" "$home//" "$home/." "/"; do
