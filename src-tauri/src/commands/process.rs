@@ -12,6 +12,7 @@ use crate::shell_runtime::format_spawn_error;
 /// Timeout applied by `run_cmd` to short helper spawns (`open`, `git`, scripts).
 pub(super) const DEFAULT_RUN_CMD_TIMEOUT: Duration = Duration::from_secs(120);
 /// Time a timed-out process tree gets to exit after SIGTERM before SIGKILL.
+#[cfg(unix)]
 const TERMINATE_GRACE: Duration = Duration::from_secs(1);
 /// Time output readers get to reach EOF once the child exited or was killed.
 const DEFAULT_DRAIN_GRACE: Duration = Duration::from_secs(2);

@@ -3,6 +3,8 @@ set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$repo_root"
+# Python helpers under resources/ are shipped in the app bundle; never leave bytecode caches there.
+export PYTHONDONTWRITEBYTECODE=1
 
 step() {
   printf '\n==> %s\n' "$1"

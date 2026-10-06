@@ -74,7 +74,7 @@ validate_skill_name() {
       ;;
   esac
   case "$name" in
-    *[!a-z0-9-]*)
+    *[![:lower:][:digit:]-]*)
       printf 'install-skills.sh: invalid skill name: "%s" from %s\n' "$name" "$source" >&2
       printf 'install-skills.sh: skill names must start with a-z0-9 and contain only a-z0-9-\n' >&2
       return 1

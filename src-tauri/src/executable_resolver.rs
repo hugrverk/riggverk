@@ -101,6 +101,8 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
 /// Returns `current` with every existing directory from `fallbacks` that is not already on it
 /// appended, or `None` when nothing changes. Append-only so system tools earlier on the path
 /// are never shadowed. An unset or empty `current` is left alone.
+// Only the unix startup path calls this; tests exercise it on every platform.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn append_missing_path_dirs(current: &OsStr, fallbacks: &[PathBuf]) -> Option<OsString> {
     if current.is_empty() {
         return None;
