@@ -71,9 +71,11 @@ export function LibraryList<T>({
   const onCursorChange = (key: string) => {
     setCursor(key);
     cancelPending();
-    if (!live.current.followCursor || key === live.current.activeKey) return;
+    if (key === live.current.activeKey) return;
     timer.current = setTimeout(() => {
       timer.current = null;
+      // Decided now, not when the cursor moved: an edit started during the pause must not raise the discard dialog.
+      if (!live.current.followCursor) return;
       open(key);
     }, SELECT_DELAY_MS);
   };
