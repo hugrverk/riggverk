@@ -23,6 +23,16 @@ const ALLOWED_TARGET_IDS: &[&str] = &[
     "claude",
 ];
 
+/// Skill backups written by `install-skills.sh`: `<run>/<agent>-skills/<skill>/SKILL.md`.
+/// One level deeper than the other targets, and the backup does not record whether it came
+/// from a global or a project install, so no current file is compared.
+const SKILL_TARGET_IDS: &[&str] = &[
+    "codex-skills",
+    "opencode-skills",
+    "claude-skills",
+    "cursor-skills",
+];
+
 /// Targets whose current location is a directory holding one file per backup file.
 /// `opencode-config` and `codex-config` hold several config files (`opencode.json`,
 /// `tui.json`, `config.toml`) under one id.
@@ -347,6 +357,22 @@ fn legacy_run_summary(run_path: &Path, name: &str) -> Option<BackupRunSummary> {
         }
     }
 
+    for target_id in SKILL_TARGET_IDS {
+        let target_dir = run_path.join(target_id);
+        let is_real_dir = std::fs::symlink_metadata(&target_dir)
+            .map(|m| m.is_dir())
+            .unwrap_or(false);
+        if !is_real_dir {
+            continue;
+        }
+        let mut entries = Vec::new();
+        collect_backup_entries(&target_dir, "", 0, usize::MAX, &mut entries);
+        if !entries.is_empty() {
+            targets.push(target_id.to_string());
+            file_count += entries.len();
+        }
+    }
+
     (file_count > 0).then(|| BackupRunSummary {
         id: name.to_string(),
         timestamp: name.to_string(),
@@ -632,7 +658,34 @@ fn get_backup_details_from_root(root: &Path, run_id: &str) -> Result<BackupRunDe
         }
     }
 
-    if kind != RunKind::Legacy {
+    if kind == RunKind::Legacy {
+        for target_id in SKILL_TARGET_IDS {
+            let target_dir = canonical_run.join(target_id);
+            let is_real_dir = std::fs::symlink_metadata(&target_dir)
+                .map(|m| m.is_dir())
+                .unwrap_or(false);
+            if !is_real_dir || files.len() >= BACKUP_FILE_LIMIT {
+                continue;
+            }
+            let mut entries = Vec::new();
+            collect_backup_entries(
+                &target_dir,
+                "",
+                0,
+                BACKUP_FILE_LIMIT - files.len(),
+                &mut entries,
+            );
+            files.extend(entries.into_iter().map(|entry| BackupFileSummary {
+                target_id: target_id.to_string(),
+                filename: entry.relative,
+                backup_path: entry.path.to_string_lossy().into_owned(),
+                backup_size: entry.size,
+                current_path: String::new(),
+                current_exists: false,
+                current_status: "unknown".to_string(),
+            }));
+        }
+    } else {
         files = managed_run_files(kind, &canonical_run);
     }
 
@@ -829,6 +882,55 @@ mod tests {
         );
         // current_exists may be false in CI, but the path shape is what matters
 
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn skill_backups_from_install_skills_are_listed_and_detailed() {
+        let root = temp_root("skill-backups");
+        let run_dir = root.join("20260501-143000");
+        // Layout written by install-skills.sh: <ts>/<agent>-skills/<name>/SKILL.md.
+        for (agent, skill) in [
+            ("opencode", "diagnose"),
+            ("opencode", "tdd"),
+            ("codex", "diagnose"),
+        ] {
+            let dir = run_dir.join(format!("{agent}-skills")).join(skill);
+            fs::create_dir_all(&dir).expect("create skill backup dir");
+            fs::write(dir.join("SKILL.md"), b"old skill").expect("write skill backup");
+        }
+        // Hidden and symlinked entries stay invisible, like in the other layouts.
+        fs::write(run_dir.join("opencode-skills/.DS_Store"), b"x").expect("write dotfile");
+
+        let runs = list_backups_from_root(&root).expect("list backups");
+        assert_eq!(runs.len(), 1, "a run holding only skill backups is listed");
+        assert_eq!(runs[0].file_count, 3);
+        assert!(runs[0].targets.contains(&"opencode-skills".to_string()));
+        assert!(runs[0].targets.contains(&"codex-skills".to_string()));
+
+        let details = get_backup_details_from_root(&root, "20260501-143000").expect("details");
+        let mut files: Vec<(String, String)> = details
+            .files
+            .iter()
+            .map(|f| (f.target_id.clone(), f.filename.clone()))
+            .collect();
+        files.sort();
+        assert_eq!(
+            files,
+            vec![
+                ("codex-skills".to_string(), "diagnose/SKILL.md".to_string()),
+                (
+                    "opencode-skills".to_string(),
+                    "diagnose/SKILL.md".to_string()
+                ),
+                ("opencode-skills".to_string(), "tdd/SKILL.md".to_string()),
+            ]
+        );
+        // The backup does not record the install scope, so no current file is claimed.
+        assert!(details
+            .files
+            .iter()
+            .all(|f| f.current_status == "unknown" && f.current_path.is_empty()));
         let _ = fs::remove_dir_all(&root);
     }
 
