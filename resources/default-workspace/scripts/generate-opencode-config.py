@@ -6,12 +6,15 @@ Reads templates/opencode.base.json (non-permission config) and
 templates/opencode.policy.json (compact policy) and produces the
 templates/opencode.json snapshot.
 
-Paths are relative to the workspace root (inferred from the script location
-under scripts/).
+Paths are relative to the workspace root: inferred from the script location
+under scripts/, or given with --root (the app runs its bundled copy of this
+script against the active workspace, so a script inside that workspace never
+runs).
 
 Usage:
   python3 scripts/generate-opencode-config.py --check   # verify snapshot is current
   python3 scripts/generate-opencode-config.py --write   # regenerate snapshot
+  python3 scripts/generate-opencode-config.py --root DIR --check|--write
   python3 scripts/generate-opencode-config.py --help    # this message
 
 Exit codes:
@@ -24,10 +27,22 @@ import os
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-BASE_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.base.json")
-POLICY_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.policy.json")
-SNAPSHOT_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.json")
+WORKSPACE_ROOT = ""
+BASE_PATH = ""
+POLICY_PATH = ""
+SNAPSHOT_PATH = ""
+
+
+def set_workspace_root(root):
+    """Point the template paths at a workspace root."""
+    global WORKSPACE_ROOT, BASE_PATH, POLICY_PATH, SNAPSHOT_PATH
+    WORKSPACE_ROOT = os.path.abspath(root)
+    BASE_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.base.json")
+    POLICY_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.policy.json")
+    SNAPSHOT_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.json")
+
+
+set_workspace_root(os.path.join(SCRIPT_DIR, ".."))
 
 # Stable permission key order (matching the original hand-maintained ordering)
 PERMISSION_KEY_ORDER = [
@@ -260,10 +275,19 @@ def cmd_help():
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    if "--root" in args:
+        index = args.index("--root")
+        if index + 1 >= len(args):
+            print("--root requires a directory", file=sys.stderr)
+            sys.exit(1)
+        set_workspace_root(args[index + 1])
+        args = args[:index] + args[index + 2:]
+
+    if len(args) != 1:
         cmd_help()
 
-    arg = sys.argv[1]
+    arg = args[0]
     if arg == "--check":
         cmd_check()
     elif arg == "--write":

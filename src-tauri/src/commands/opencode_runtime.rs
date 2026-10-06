@@ -1,9 +1,9 @@
 use serde::Serialize;
 use std::collections::BTreeSet;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions};
+use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions, BoundedCmdResult};
 use super::status::file_eq;
 
 #[derive(Serialize, Clone, Debug)]
@@ -363,78 +363,99 @@ pub(crate) fn opencode_config_sync_status(workspace_root: &Path, home_dir: &Path
 const GENERATOR_TIMEOUT: Duration = Duration::from_secs(30);
 const GENERATOR_OUTPUT_CAP: usize = 256 * 1024;
 
-/// Try to run a generator --check script from the workspace root.
-/// Returns `Some(status, detail)` if a generator was found and executed,
-/// `None` if no generator script exists or `python3` is unavailable.
+/// Bundled path of the snapshot generator. The app never runs a generator out of the active
+/// workspace: that folder is user-chosen and only validated by marker files, so any script it carries
+/// is untrusted. The bundled copy runs instead and gets the workspace as a `--root` data argument.
+const GENERATOR_SCRIPT_REL: &str = "scripts/generate-opencode-config.py";
+
+/// The generator from the bundled, read-only resource root, or why it is unavailable.
+fn bundled_generator_script(workspace_root: &Path) -> Result<PathBuf, String> {
+    let script = crate::setup_roots::bundled_root_for(workspace_root)?.join(GENERATOR_SCRIPT_REL);
+    if script.is_file() {
+        Ok(script)
+    } else {
+        Err(format!(
+            "bundled OpenCode config generator is missing: {}",
+            script.display()
+        ))
+    }
+}
+
+/// `python3 <script> --root <workspace> <mode>`, run with the script's own folder as working directory
+/// so nothing in the workspace is picked up as a working-directory side input.
+fn run_generator(
+    script: &Path,
+    workspace_root: &Path,
+    mode: &str,
+    timeout: Duration,
+) -> Result<BoundedCmdResult, String> {
+    let script_str = super::workspace::path_arg(script)?;
+    let root_str = super::workspace::path_arg(workspace_root)?;
+    let cwd = script.parent().unwrap_or(script);
+    Ok(run_cmd_bounded(
+        "python3",
+        &[&script_str, "--root", &root_str, mode],
+        cwd,
+        BoundedCmdOptions {
+            timeout: Some(timeout),
+            stdout_cap: GENERATOR_OUTPUT_CAP,
+            stderr_cap: GENERATOR_OUTPUT_CAP,
+            ..BoundedCmdOptions::default()
+        },
+    ))
+}
+
+/// Run the bundled generator's --check against the workspace.
+/// Returns `Some(status, detail)` if the generator ran, `None` if it is unavailable
+/// (bundled script missing or `python3` not spawnable).
 fn run_generator_check(workspace_root: &Path) -> Option<(String, String)> {
-    run_generator_check_with_timeout(workspace_root, GENERATOR_TIMEOUT)
+    let script = bundled_generator_script(workspace_root).ok()?;
+    run_generator_check_with_timeout(&script, workspace_root, GENERATOR_TIMEOUT)
 }
 
 fn run_generator_check_with_timeout(
+    script: &Path,
     workspace_root: &Path,
     timeout: Duration,
 ) -> Option<(String, String)> {
-    let candidates = [
-        "scripts/generate-opencode-config.py",
-        "scripts/generate-default-opencode-config.py",
-    ];
-
-    for script_rel in &candidates {
-        let script_path = workspace_root.join(script_rel);
-        if !script_path.is_file() {
-            continue;
-        }
-
-        let out = run_cmd_bounded(
-            "python3",
-            &[script_rel, "--check"],
-            workspace_root,
-            BoundedCmdOptions {
-                timeout: Some(timeout),
-                stdout_cap: GENERATOR_OUTPUT_CAP,
-                stderr_cap: GENERATOR_OUTPUT_CAP,
-                ..BoundedCmdOptions::default()
-            },
-        );
-        if out.timed_out {
-            // Do not claim "stale" for a check that never finished.
-            return Some((
-                "valid".into(),
-                format!(
-                    "not freshness-checked: generator --check timed out after {}s",
-                    timeout.as_secs()
-                ),
-            ));
-        }
-        // No exit status: python3 not found / not spawnable (or killed by a signal),
-        // so no freshness check is possible.
-        out.exit_code?;
-        let passed = out.success;
-        let stderr = out.stderr.trim().to_string();
-        let stdout = out.stdout.trim().to_string();
-        let detail = if passed {
-            if !stdout.is_empty() {
-                stdout
-            } else {
-                "snapshot is current".into()
-            }
-        } else if !stderr.is_empty() {
-            stderr
-        } else if !stdout.is_empty() {
-            stdout
-        } else {
-            "snapshot is stale (generator check failed)".into()
-        };
+    let out = run_generator(script, workspace_root, "--check", timeout).ok()?;
+    if out.timed_out {
+        // Do not claim "stale" for a check that never finished.
         return Some((
-            if passed {
-                "current".into()
-            } else {
-                "stale".into()
-            },
-            detail,
+            "valid".into(),
+            format!(
+                "not freshness-checked: generator --check timed out after {}s",
+                timeout.as_secs()
+            ),
         ));
     }
-    None
+    // No exit status: python3 not found / not spawnable (or killed by a signal),
+    // so no freshness check is possible.
+    out.exit_code?;
+    let passed = out.success;
+    let stderr = out.stderr.trim().to_string();
+    let stdout = out.stdout.trim().to_string();
+    let detail = if passed {
+        if !stdout.is_empty() {
+            stdout
+        } else {
+            "snapshot is current".into()
+        }
+    } else if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        "snapshot is stale (generator check failed)".into()
+    };
+    Some((
+        if passed {
+            "current".into()
+        } else {
+            "stale".into()
+        },
+        detail,
+    ))
 }
 
 /// Compute OpenCode runtime health for a given workspace root and home directory.
@@ -884,7 +905,7 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
                 generator_unavailable = true;
                 (
                     "valid".into(),
-                    "source + snapshot valid; not freshness-checked (no generator)".into(),
+                    "source + snapshot valid; not freshness-checked (generator unavailable)".into(),
                 )
             }
         }
@@ -903,15 +924,17 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> OpenCodeRuntime
         generated_snapshot_detail = "Regenerate opencode.json before sync.".into();
     }
 
-    // When source templates exist but no generator script, surface a warning
-    // so the user knows a workspace upgrade can add it.
+    // The generator is the app's bundled copy; it is missing only when the app bundle is damaged
+    // or python3 cannot start.
     if base_source_exists
         && policy_source_exists
         && generated_snapshot_status == "valid"
         && generator_unavailable
     {
-        warnings
-            .push("OpenCode config generator script not found. Run Install or Update.".to_string());
+        warnings.push(
+            "OpenCode config generator unavailable: python3 or the bundled generator script is missing."
+                .to_string(),
+        );
     }
 
     // Bundled agents check
@@ -1100,74 +1123,57 @@ pub fn get_opencode_runtime_health() -> Result<OpenCodeRuntimeHealth, String> {
     Ok(compute_health(&workspace_root, &home))
 }
 
-/// Run a known generator's --write under the given workspace root.
+/// Run the bundled generator's --write against the given workspace root.
 /// Returns an ActionResult with command output.
 /// This is the testable helper; the Tauri command wraps it.
 pub(crate) fn run_generator_write(workspace_root: &Path) -> Result<ActionResult, String> {
-    let candidates = [
-        "scripts/generate-opencode-config.py",
-        "scripts/generate-default-opencode-config.py",
-    ];
-
-    for script_rel in &candidates {
-        let script_path = workspace_root.join(script_rel);
-        if !script_path.is_file() {
-            continue;
-        }
-
-        // Ensure the script is within the workspace root (no symlink escape)
-        let _canonical = super::content::safe_canonical_target(workspace_root, &script_path)?;
-
-        let script_str = super::workspace::path_arg(&script_path)?;
-
-        let output = run_cmd_bounded(
-            "python3",
-            &[&script_str, "--write"],
-            workspace_root,
-            BoundedCmdOptions {
-                timeout: Some(GENERATOR_TIMEOUT),
-                stdout_cap: GENERATOR_OUTPUT_CAP,
-                stderr_cap: GENERATOR_OUTPUT_CAP,
-                ..BoundedCmdOptions::default()
-            },
-        );
-        if output.timed_out {
-            return Err(format!(
-                "generator timed out after {} seconds",
-                GENERATOR_TIMEOUT.as_secs()
-            ));
-        }
-        if output.exit_code.is_none() {
-            return Err(
-                "python3 is not available on this system or could not be started. Install Python 3 and ensure it is on PATH to generate config."
-                    .to_string(),
-            );
-        }
-
-        let stdout = output.stdout;
-        let stderr = output.stderr;
-        let success = output.success;
-        let exit_code = output.exit_code;
-
-        return Ok(ActionResult::new(
-            success,
+    match bundled_generator_script(workspace_root) {
+        Ok(script) => run_generator_write_with_script(&script, workspace_root),
+        Err(error) => Ok(ActionResult::new(
+            false,
             "generate_opencode_config_snapshot",
-            if success {
-                "Generated opencode.json snapshot.".to_string()
-            } else {
-                stdout
-            },
-            stderr,
-            exit_code,
+            String::new(),
+            error,
+            Some(1),
+        )),
+    }
+}
+
+fn run_generator_write_with_script(
+    script: &Path,
+    workspace_root: &Path,
+) -> Result<ActionResult, String> {
+    // The generator opens the snapshot for writing: a symlink must not carry the write out of the workspace.
+    super::content::safe_canonical_target(
+        workspace_root,
+        &workspace_root.join("templates/opencode.json"),
+    )?;
+
+    let output = run_generator(script, workspace_root, "--write", GENERATOR_TIMEOUT)?;
+    if output.timed_out {
+        return Err(format!(
+            "generator timed out after {} seconds",
+            GENERATOR_TIMEOUT.as_secs()
         ));
     }
+    if output.exit_code.is_none() {
+        return Err(
+            "python3 is not available on this system or could not be started. Install Python 3 and ensure it is on PATH to generate config."
+                .to_string(),
+        );
+    }
 
+    let success = output.success;
     Ok(ActionResult::new(
-        false,
+        success,
         "generate_opencode_config_snapshot",
-        String::new(),
-        "No OpenCode config generator found in this workspace. Expected one of: scripts/generate-opencode-config.py, scripts/generate-default-opencode-config.py".to_string(),
-        Some(1),
+        if success {
+            "Generated opencode.json snapshot.".to_string()
+        } else {
+            output.stdout
+        },
+        output.stderr,
+        output.exit_code,
     ))
 }
 
@@ -1606,25 +1612,28 @@ mod tests {
         let ws = temp_root(&format!("{name}-ws"));
         let home = temp_root(&format!("{name}-home"));
 
+        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
         write_file(
             &ws,
-            "templates/opencode.json",
+            "templates/opencode.base.json",
             r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
         );
-        write_file(&ws, "templates/tui.json", r#"{"theme":"system"}"#);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
         write_file(
             &ws,
             "templates/opencode.policy.json",
             r#"{"read":{"default":"allow","deny":[]}}"#,
         );
+        // The snapshot is what the (bundled) generator makes of the two sources, so it checks as current.
+        write_file(&ws, "templates/opencode.json", "{}");
+        let generated = super::run_generator_write(&ws).expect("bundled generator runs");
+        assert!(generated.success, "{}", generated.stderr);
         write_file(&ws, "agents/architect.md", "# architect");
         write_file(&ws, "agents/repo-scout.md", "# scout");
 
         write_file(
             &home,
             ".config/opencode/opencode.json",
-            r#"{"default_agent":"architect","model":"opencode-go/glm-5.2","small_model":"opencode-go/deepseek-v4-flash"}"#,
+            &fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot"),
         );
         write_file(&home, ".config/opencode/tui.json", r#"{"theme":"system"}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
@@ -1652,7 +1661,7 @@ mod tests {
         assert_eq!(health.extra_installed_agent_count, 0);
         assert!(health.agent_mismatches.is_empty());
         assert_eq!(health.tui_status, "synced");
-        assert_eq!(health.generated_snapshot_status, "valid");
+        assert_eq!(health.generated_snapshot_status, "current");
         assert!(health.summary.contains("matches"));
         assert_eq!(health.next_action, "No runtime action needed.");
     }
@@ -2146,71 +2155,38 @@ mod tests {
 
     // ── New tests for generated snapshot ──
 
-    #[test]
-    fn test_generated_snapshot_current() {
-        let ws = temp_root("gen-cur-ws");
-        let home = temp_root("gen-cur-home");
-
-        write_file(&ws, "templates/opencode.json", r#"{}"#);
+    /// Workspace and home for the generator freshness check. The bundled generator runs against the
+    /// workspace's three snapshot files, so they come from the bundled templates (a matching set).
+    fn setup_generator_check_workspace(name: &str) -> (PathBuf, PathBuf) {
+        let ws = temp_root(&format!("{name}-ws"));
+        let home = temp_root(&format!("{name}-home"));
+        for template in [
+            "opencode.json",
+            "opencode.base.json",
+            "opencode.policy.json",
+        ] {
+            let source = crate::setup_roots::bundled_root()
+                .expect("bundled root")
+                .join("templates")
+                .join(template);
+            write_file(
+                &ws,
+                &format!("templates/{template}"),
+                &fs::read_to_string(source).expect("read bundled template"),
+            );
+        }
         write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
         write_file(&ws, "agents/architect.md", "# architect");
 
         write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
         write_file(&home, ".config/opencode/tui.json", r#"{}"#);
         write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-
-        let health = compute_health(&ws, &home);
-        cleanup(&ws);
-        cleanup(&home);
-
-        // Without a generator script, status is "valid" (not freshness-checked)
-        assert_eq!(health.generated_snapshot_status, "valid");
-        assert!(health
-            .generated_snapshot_detail
-            .contains("not freshness-checked"));
+        (ws, home)
     }
 
     #[test]
     fn test_generated_snapshot_current_with_check() {
-        let ws = temp_root("gen-chk-ok-ws");
-        let home = temp_root("gen-chk-ok-home");
-
-        write_file(&ws, "templates/opencode.json", r#"{}"#);
-        write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
-        write_file(&ws, "agents/architect.md", "# architect");
-
-        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
-        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
-        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-
-        // Create a generator script that passes --check
-        let script_dir = ws.join("scripts");
-        fs::create_dir_all(&script_dir).expect("create scripts dir");
-        let script_path = script_dir.join("generate-opencode-config.py");
-        fs::write(
-            &script_path,
-            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--check':\n    sys.exit(0)\n",
-        )
-        .expect("write generator script");
-        // Make it executable (macOS/Linux)
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
-                .expect("make script executable");
-        }
+        let (ws, home) = setup_generator_check_workspace("gen-chk-ok");
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -2222,38 +2198,9 @@ mod tests {
 
     #[test]
     fn test_generated_snapshot_stale_with_check() {
-        let ws = temp_root("gen-chk-fail-ws");
-        let home = temp_root("gen-chk-fail-home");
-
-        write_file(&ws, "templates/opencode.json", r#"{}"#);
-        write_file(&ws, "templates/tui.json", r#"{}"#);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
-        write_file(&ws, "agents/architect.md", "# architect");
-
-        write_file(&home, ".config/opencode/opencode.json", r#"{}"#);
-        write_file(&home, ".config/opencode/tui.json", r#"{}"#);
-        write_file(&home, ".config/opencode/agents/architect.md", "# architect");
-
-        // Create a generator script that FAILS --check
-        let script_dir = ws.join("scripts");
-        fs::create_dir_all(&script_dir).expect("create scripts dir");
-        let script_path = script_dir.join("generate-opencode-config.py");
-        fs::write(
-            &script_path,
-            "#!/usr/bin/env python3\nimport sys\nprint('CHECK FAILED: opencode.json snapshot is stale', file=sys.stderr)\nsys.exit(1)\n",
-        )
-        .expect("write generator script");
-        #[cfg(unix)]
-        {
-            use std::os::unix::fs::PermissionsExt;
-            fs::set_permissions(&script_path, fs::Permissions::from_mode(0o755))
-                .expect("make script executable");
-        }
+        let (ws, home) = setup_generator_check_workspace("gen-chk-fail");
+        // A source edit the snapshot does not reflect.
+        write_file(&ws, "templates/opencode.base.json", r#"{"model":"edited"}"#);
 
         let health = compute_health(&ws, &home);
         cleanup(&ws);
@@ -2445,127 +2392,163 @@ mod tests {
         fs::create_dir_all(root.join("skills")).expect("create skills dir");
     }
 
-    #[test]
-    fn test_generator_write_success_via_generate_default() {
-        let ws = temp_root("gen-write-def");
-        write_marker_workspace(&ws);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
+    fn bundled_template(name: &str) -> String {
+        let path = crate::setup_roots::bundled_root()
+            .expect("bundled root")
+            .join("templates")
+            .join(name);
+        fs::read_to_string(path).expect("read bundled template")
+    }
+
+    /// Sources the bundled generator can process, with a snapshot that does not match them yet.
+    fn write_generator_inputs(ws: &Path) {
         write_file(
-            &ws,
+            ws,
+            "templates/opencode.base.json",
+            &bundled_template("opencode.base.json"),
+        );
+        write_file(
+            ws,
             "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
+            &bundled_template("opencode.policy.json"),
         );
+        write_file(ws, "templates/opencode.json", "{}");
+    }
 
-        // Use generate-default-opencode-config.py which exists in the dev checkout
-        // We can't rely on it existing in a temp workspace, so create a custom one
-        // that simply writes a marker file to prove --write was called
+    /// Stand-in generator for the injected-script entry points. It lives outside the workspace, as the
+    /// bundled one does, and receives the production arguments: `<script> --root <workspace> <mode>`.
+    fn fake_generator(label: &str, body: &str) -> (PathBuf, PathBuf) {
+        let dir = temp_root(label);
+        let prelude = "#!/usr/bin/env python3\nimport sys, os\nargs = sys.argv[1:]\nassert len(args) == 3 and args[0] == '--root', args\nroot, mode = args[1], args[2]\n";
         write_generator_script(
-            &ws,
-            "scripts/generate-default-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nif len(sys.argv) >= 2 and sys.argv[1] == '--write':\n    with open('templates/.generated_marker', 'w') as f:\n        f.write('ok')\n    sys.exit(0)\nsys.exit(1)\n",
+            &dir,
+            "scripts/generate-opencode-config.py",
+            &format!("{prelude}{body}"),
         );
+        let script = dir.join("scripts/generate-opencode-config.py");
+        (dir, script)
+    }
 
-        let result = super::run_generator_write(&ws).expect("generator should succeed");
+    #[test]
+    fn test_generator_write_regenerates_snapshot_in_workspace() {
+        let ws = temp_root("gen-write-real");
+        write_marker_workspace(&ws);
+        write_generator_inputs(&ws);
+
+        let result = super::run_generator_write(&ws).expect("generator should run");
+        let snapshot = fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot");
         cleanup(&ws);
 
-        assert!(result.success, "generator write should succeed");
+        assert!(result.success, "{}", result.stderr);
         assert_eq!(result.action, "generate_opencode_config_snapshot");
-        assert!(
-            result.stdout.contains("Generated"),
-            "stdout should indicate generation"
-        );
-    }
-
-    #[test]
-    fn test_generator_write_via_opencode_config_script() {
-        let ws = temp_root("gen-write-alt");
-        write_marker_workspace(&ws);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
-
-        // Only provide generate-opencode-config.py (the alternative name)
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--write':\n    with open('templates/.generated_marker', 'w') as f:\n        f.write('ok')\n    sys.exit(0)\nsys.exit(1)\n",
-        );
-
-        let result = super::run_generator_write(&ws).expect("generator should succeed");
-        cleanup(&ws);
-
-        assert!(result.success);
         assert!(result.stdout.contains("Generated"));
+        assert_eq!(snapshot, bundled_template("opencode.json"));
     }
 
     #[test]
-    fn test_generator_write_first_candidate_used_when_both_exist() {
-        let ws = temp_root("gen-write-first");
+    fn test_generator_write_reports_generator_failure() {
+        let ws = temp_root("gen-write-fail");
         write_marker_workspace(&ws);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
+        write_generator_inputs(&ws);
+        write_file(&ws, "templates/opencode.policy.json", r#"{"bogus":{}}"#);
 
-        // Both scripts present. Only the first candidate succeeds.
-        // generate-opencode-config.py returns 0, generate-default-opencode-config.py returns 1.
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1] == '--write':\n    sys.exit(0)\nelse:\n    sys.exit(1)\n",
-        );
-        write_generator_script(
-            &ws,
-            "scripts/generate-default-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nsys.exit(1)\n",
-        );
-
-        let result = super::run_generator_write(&ws).expect("should return ActionResult");
-        cleanup(&ws);
-
-        assert!(result.success, "first candidate should be used and succeed");
-    }
-
-    #[test]
-    fn test_generator_write_no_script_returns_error() {
-        let ws = temp_root("gen-write-no");
-        write_marker_workspace(&ws);
-        // No generator scripts at all
-
-        let result = super::run_generator_write(&ws).expect("should return ActionResult (not Err)");
+        let result = super::run_generator_write(&ws).expect("generator should run");
+        let snapshot = fs::read_to_string(ws.join("templates/opencode.json")).expect("snapshot");
         cleanup(&ws);
 
         assert!(!result.success);
-        assert!(result.stderr.contains("No OpenCode config generator found"));
+        assert!(result.stderr.contains("unknown keys"), "{}", result.stderr);
+        assert_eq!(
+            snapshot, "{}",
+            "a failed generation leaves the snapshot alone"
+        );
     }
 
     #[test]
-    fn test_generator_write_uses_write_not_check_or_apply() {
-        let ws = temp_root("gen-write-flag");
+    fn test_generator_write_runs_with_workspace_as_data_argument() {
+        let ws = temp_root("gen-write-args");
         write_marker_workspace(&ws);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
+        let (gen_dir, script) = fake_generator(
+            "gen-write-args-script",
+            "assert mode == '--write', mode\nopen(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'cwd.txt'), 'w').write(os.getcwd())\nopen(os.path.join(root, 'templates', '.generated_marker'), 'w').write('ok')\n",
         );
 
-        // Script that verifies argv[1] is --write, not --check or --apply
+        let result =
+            super::run_generator_write_with_script(&script, &ws).expect("generator should run");
+        let cwd = fs::read_to_string(gen_dir.join("scripts/cwd.txt")).expect("recorded cwd");
+        let marker = ws.join("templates/.generated_marker").is_file();
+        let recorded_cwd = Path::new(&cwd).canonicalize().expect("cwd");
+        let expected_cwd = gen_dir.join("scripts").canonicalize().expect("script dir");
+        cleanup(&ws);
+        cleanup(&gen_dir);
+
+        assert!(result.success, "{}", result.stderr);
+        assert!(marker, "the workspace is what the generator writes into");
+        assert_eq!(
+            recorded_cwd, expected_cwd,
+            "the generator runs from its own folder, not from the workspace"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_workspace_generator_scripts_are_never_executed() {
+        let (ws, home) = setup_generator_check_workspace("gen-pinned");
+        let sentinel = temp_root("gen-pinned-sentinel");
+        let malicious = format!(
+            "#!/usr/bin/env python3\nimport sys\nopen('{}', 'w').write('executed')\nsys.exit(1)\n",
+            sentinel.display()
+        );
+        write_generator_script(&ws, "scripts/generate-opencode-config.py", &malicious);
         write_generator_script(
             &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    print(f'UNEXPECTED ARGS: {sys.argv[1:]}', file=sys.stderr)\n    sys.exit(1)\n",
+            "scripts/generate-default-opencode-config.py",
+            &malicious,
         );
 
-        let result = super::run_generator_write(&ws).expect("generator should succeed");
+        let health = compute_health(&ws, &home);
+        let check = super::run_generator_check(&ws);
+        let write = super::run_generator_write(&ws).expect("bundled generator should run");
+        let sentinel_created = sentinel.exists();
         cleanup(&ws);
+        cleanup(&home);
+        let _ = fs::remove_file(&sentinel);
 
-        assert!(result.success, "generator must be called with --write");
+        assert!(
+            !sentinel_created,
+            "a generator script inside the workspace must never run"
+        );
+        // The bundled generator answered instead: a malicious script would have failed the check.
+        assert_eq!(health.generated_snapshot_status, "current");
+        assert_eq!(check.expect("generator ran").0, "current");
+        assert!(write.success, "{}", write.stderr);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_generator_write_refuses_snapshot_symlink_leaving_workspace() {
+        let ws = temp_root("gen-link-ws");
+        let outside = temp_root("gen-link-outside");
+        write_marker_workspace(&ws);
+        write_generator_inputs(&ws);
+        write_file(&outside, "target.json", "keep");
+        fs::remove_file(ws.join("templates/opencode.json")).expect("remove snapshot");
+        std::os::unix::fs::symlink(
+            outside.join("target.json"),
+            ws.join("templates/opencode.json"),
+        )
+        .expect("link snapshot");
+
+        let result = super::run_generator_write(&ws);
+        let untouched = fs::read_to_string(outside.join("target.json")).expect("target");
+        cleanup(&ws);
+        cleanup(&outside);
+
+        assert!(
+            result.is_err(),
+            "write through an escaping symlink must be refused"
+        );
+        assert_eq!(untouched, "keep");
     }
 
     #[test]
@@ -2617,42 +2600,6 @@ mod tests {
         assert_eq!(super::opencode_config_sync_status(&ws, &home), "diverged");
         cleanup(&ws);
         cleanup(&home);
-    }
-
-    #[test]
-    fn test_generator_write_does_not_target_home_config() {
-        let ws = temp_root("gen-write-safe");
-        write_marker_workspace(&ws);
-        write_file(&ws, "templates/opencode.base.json", r#"{"model":"test"}"#);
-        write_file(
-            &ws,
-            "templates/opencode.policy.json",
-            r#"{"read":{"default":"allow"}}"#,
-        );
-
-        // Script that writes to a marker file under the workspace only
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys, os\nif sys.argv[1] == '--write':\n    # Write only under workspace/templates/\n    ws = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))\n    with open(os.path.join(ws, 'templates', 'opencode.json'), 'w') as f:\n        f.write('{\"generated\":true}')\n    sys.exit(0)\nsys.exit(1)\n",
-        );
-
-        let result = super::run_generator_write(&ws).expect("generator should succeed");
-        assert!(result.success);
-
-        // Verify the generated file exists inside the workspace
-        let snapshot = ws.join("templates/opencode.json");
-        assert!(
-            snapshot.is_file(),
-            "snapshot should be written in workspace templates/"
-        );
-        let content = std::fs::read_to_string(&snapshot).unwrap_or_default();
-        assert!(
-            content.contains("generated"),
-            "snapshot should contain generated content"
-        );
-
-        cleanup(&ws);
     }
 
     // ── OpenCode model selection tests ──
@@ -2792,13 +2739,6 @@ mod tests {
         write_file(&ws, "README.md", "# readme\n");
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
 
-        // Create a working generator script
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\nwith open('templates/opencode.policy.json') as f:\n    policy = json.load(f)\nconfig = dict(base)\nconfig['permission'] = {'read': policy.get('read', {})}\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n",
-        );
-
         // Read, update, and verify
         let base_path = ws.join("templates/opencode.base.json");
         let content = std::fs::read_to_string(&base_path).unwrap();
@@ -2865,10 +2805,9 @@ mod tests {
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
 
         // Generator script that always fails
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nprint('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
+        let (gen_dir, script) = fake_generator(
+            "model-upd-fail-gen",
+            "print('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
         );
 
         // Now update base config manually
@@ -2885,13 +2824,14 @@ mod tests {
         std::fs::write(&base_path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 
         // Verify generator detects stale state
-        let gen_result =
-            super::run_generator_write(&ws).expect("generator should return ActionResult");
+        let gen_result = super::run_generator_write_with_script(&script, &ws)
+            .expect("generator should return ActionResult");
         assert!(!gen_result.success, "generator should fail");
         assert!(gen_result.stderr.contains("simulated failure"));
 
         cleanup(&ws);
         cleanup(&home);
+        cleanup(&gen_dir);
     }
 
     // ── Hardened parser tests ──
@@ -3117,14 +3057,13 @@ mod tests {
     fn test_generator_check_timeout_is_not_reported_as_stale() {
         let _guard = crate::test_env::guard::lock();
         let ws = temp_root("gen-chk-hang-ws");
-        write_file(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "import time\ntime.sleep(30)\n",
-        );
+        fs::create_dir_all(&ws).expect("create workspace");
+        let (gen_dir, script) =
+            fake_generator("gen-chk-hang-script", "import time\ntime.sleep(30)\n");
         let started = std::time::Instant::now();
-        let result = run_generator_check_with_timeout(&ws, Duration::from_millis(500));
+        let result = run_generator_check_with_timeout(&script, &ws, Duration::from_millis(500));
         cleanup(&ws);
+        cleanup(&gen_dir);
 
         let (status, detail) = result.expect("a hung generator still reports a status");
         assert_eq!(status, "valid");
@@ -3298,14 +3237,7 @@ mod tests {
             r#"{"model":"installed-model","small_model":"installed-small"}"#,
         );
 
-        // Generator script that merges base + policy into snapshot
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\nwith open('templates/opencode.policy.json') as f:\n    policy = json.load(f)\nconfig = dict(base)\nconfig['permission'] = {'read': policy.get('read', {})}\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n",
-        );
-
-        // ── Simulate what update_opencode_model_selection does ──
+        // ── Simulate what update_opencode_model_selection does (bundled generator) ──
 
         let base_path = ws.join("templates/opencode.base.json");
         let snapshot_path = ws.join("templates/opencode.json");
@@ -3418,10 +3350,9 @@ mod tests {
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
 
         // Generator that always fails
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport sys\nprint('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
+        let (gen_dir, script) = fake_generator(
+            "model-upd-gen-rollback-script",
+            "print('simulated failure', file=sys.stderr)\nsys.exit(1)\n",
         );
 
         // Simulate what update_opencode_model_selection does with rollback:
@@ -3447,8 +3378,8 @@ mod tests {
         std::fs::write(&base_path, serde_json::to_string_pretty(&json).unwrap()).unwrap();
 
         // 3. Generator should fail
-        let gen_result =
-            super::run_generator_write(&ws).expect("generator should return ActionResult");
+        let gen_result = super::run_generator_write_with_script(&script, &ws)
+            .expect("generator should return ActionResult");
         assert!(!gen_result.success, "generator should fail");
         assert!(gen_result.stderr.contains("simulated failure"));
 
@@ -3456,7 +3387,7 @@ mod tests {
         std::fs::write(&base_path, &original_content).unwrap();
 
         // 5. Best-effort regenerate from restored base (this will also fail since script always fails)
-        let _retry_result = super::run_generator_write(&ws);
+        let _retry_result = super::run_generator_write_with_script(&script, &ws);
 
         // 6. Verify base config was restored to original values
         let restored_content = std::fs::read_to_string(&base_path).unwrap();
@@ -3478,6 +3409,7 @@ mod tests {
 
         cleanup(&ws);
         cleanup(&home);
+        cleanup(&gen_dir);
     }
 
     #[test]
@@ -3515,10 +3447,9 @@ mod tests {
         fs::create_dir_all(ws.join("skills")).expect("create skills dir");
 
         // Generator that succeeds but writes DIFFERENT model values (simulates a buggy generator)
-        write_generator_script(
-            &ws,
-            "scripts/generate-opencode-config.py",
-            "#!/usr/bin/env python3\nimport json, sys\nwith open('templates/opencode.base.json') as f:\n    base = json.load(f)\n# Intentionally write a DIFFERENT model to simulate validation failure\nconfig = dict(base)\nconfig['model'] = 'wrong/model'\nwith open('templates/opencode.json', 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\nif sys.argv[1:] == ['--write']:\n    sys.exit(0)\nelse:\n    sys.exit(0)\n",
+        let (gen_dir, script) = fake_generator(
+            "model-upd-val-rollback-script",
+            "import json\nwith open(os.path.join(root, 'templates', 'opencode.base.json')) as f:\n    base = json.load(f)\n# Intentionally write a DIFFERENT model to simulate validation failure\nconfig = dict(base)\nconfig['model'] = 'wrong/model'\nwith open(os.path.join(root, 'templates', 'opencode.json'), 'w') as f:\n    json.dump(config, f, indent=2)\n    f.write('\\n')\n",
         );
 
         // Simulate update with rollback: write base → run generator → validate → on mismatch, restore base
@@ -3544,8 +3475,8 @@ mod tests {
         std::fs::write(&base_path, &updated_content).unwrap();
 
         // 3. Generator succeeds (but writes wrong model)
-        let gen_result =
-            super::run_generator_write(&ws).expect("generator should return ActionResult");
+        let gen_result = super::run_generator_write_with_script(&script, &ws)
+            .expect("generator should return ActionResult");
         assert!(
             gen_result.success,
             "generator write should succeed (but with wrong values)"
@@ -3572,7 +3503,7 @@ mod tests {
         std::fs::write(&base_path, &original_content).unwrap();
 
         // 6. Best-effort regenerate from restored base
-        let retry_result = super::run_generator_write(&ws);
+        let retry_result = super::run_generator_write_with_script(&script, &ws);
         assert!(
             retry_result.is_ok(),
             "retry generator should return ActionResult"
@@ -3606,6 +3537,7 @@ mod tests {
 
         cleanup(&ws);
         cleanup(&home);
+        cleanup(&gen_dir);
     }
 
     // ── Model override file tests ──

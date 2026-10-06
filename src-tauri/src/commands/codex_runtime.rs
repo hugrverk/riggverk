@@ -192,19 +192,23 @@ fn cleanup_temp_dir(path: &Path) {
 
 /// Render Codex managed config fields from `managed_source` into `dest` via the
 /// line-preserving Python owners. Refuses on malformed TOML or ambiguous structure.
+///
+/// `bundled_root` is the app's bundled, read-only resource root (`setup_roots::bundled_root_for`):
+/// the scripts run from there and never from the active workspace, which is user-chosen and untrusted.
+/// The workspace-owned files reach the scripts only as path arguments.
 pub(crate) fn render_codex_config_managed_projection(
-    workspace_root: &Path,
+    bundled_root: &Path,
     dest: &Path,
     managed_source: &Path,
 ) -> Result<String, String> {
-    let legacy_script = workspace_root.join("scripts/merge-codex-config.py");
+    let legacy_script = bundled_root.join("scripts/merge-codex-config.py");
     if !legacy_script.is_file() {
         return Err(format!(
             "missing Codex merge script: {}",
             legacy_script.display()
         ));
     }
-    let routing_script = workspace_root.join("scripts/ensure-codex-routing-defaults.py");
+    let routing_script = bundled_root.join("scripts/ensure-codex-routing-defaults.py");
     if !routing_script.is_file() {
         return Err(format!(
             "missing Codex routing defaults script: {}",
@@ -223,7 +227,7 @@ pub(crate) fn render_codex_config_managed_projection(
             &managed_source_str,
             "--render-rollback-managed",
         ],
-        workspace_root,
+        bundled_root,
     );
     if !ok {
         return Err(format!(
@@ -257,7 +261,7 @@ pub(crate) fn render_codex_config_managed_projection(
                 "--backup-dir",
                 &temp_backup_str,
             ],
-            workspace_root,
+            bundled_root,
         );
         if !routing_ok {
             return Err(format!(

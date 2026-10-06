@@ -2219,8 +2219,9 @@ fn restore_artifact_from_backup_with_mode(
                         let workspace_root = workspace_root.ok_or_else(|| {
                             "workspace root required for codex managed rollback".to_string()
                         })?;
+                        // The merge scripts come from the bundled root, never from the runtime workspace.
                         let rendered = crate::commands::render_codex_config_managed_projection(
-                            workspace_root,
+                            &crate::setup_roots::bundled_root_for(workspace_root)?,
                             &dest,
                             &backup_path,
                         )?;
@@ -2855,5 +2856,68 @@ mod tests {
             crate::rules_block::RulesPlan::UpdateBlock
         );
         let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_codex_rollback_never_runs_workspace_scripts() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+
+        let home = temp("codex-rollback-home");
+        let ws = temp("codex-rollback-ws");
+        let backups = temp("codex-rollback-backups");
+        let sentinel = temp("codex-rollback-sentinel");
+        let malicious = format!(
+            "#!/usr/bin/env python3\nopen('{}', 'w').write('executed')\n",
+            sentinel.display()
+        );
+        for script in ["merge-codex-config.py", "ensure-codex-routing-defaults.py"] {
+            fs::create_dir_all(ws.join("scripts")).unwrap();
+            fs::write(ws.join("scripts").join(script), &malicious).unwrap();
+        }
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::write(
+            home.join(".codex/config.toml"),
+            "approval_policy = \"never\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(backups.join("artifacts")).unwrap();
+        fs::write(
+            backups.join("artifacts/codex-config"),
+            "approval_policy = \"on-request\"\n",
+        )
+        .unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::CodexConfig,
+            surface: SetupSurfaceId::CodexConfig,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::MergeableConfigFile,
+            rollback_action: RollbackAction::RestoreManagedConfigFile,
+            backup_rel: Some("artifacts/codex-config".into()),
+            ..Default::default()
+        };
+
+        let result = restore_artifact_from_backup_with_mode(
+            &op,
+            &backups,
+            &home,
+            RollbackRestoreMode::ManagedProjectionMerge,
+            Some(&ws),
+        );
+        let sentinel_created = sentinel.exists();
+        let restored = fs::read_to_string(home.join(".codex/config.toml")).unwrap_or_default();
+        for dir in [&home, &ws, &backups] {
+            let _ = fs::remove_dir_all(dir);
+        }
+        let _ = fs::remove_file(&sentinel);
+
+        assert!(
+            !sentinel_created,
+            "a merge script inside the workspace must never run"
+        );
+        result.expect("the bundled merge scripts render the rollback");
+        assert!(restored.contains("approval_policy"), "{restored}");
     }
 }
