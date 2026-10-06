@@ -1124,7 +1124,6 @@
 }
 
 .repo-dashboard-recent-activity-scroll {
-  --recent-activity-row-height: 3.35rem;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -1378,14 +1377,12 @@
   --heat-gap: 3px;
   --heat-day-w: 30px;
   --heat-month-size: 10px;
-  --heat-cell-max: 13px;
 }
 
 .repo-dashboard-heat-density-compact {
   --heat-gap: 2px;
   --heat-day-w: 26px;
   --heat-month-size: 9px;
-  --heat-cell-max: 11px;
 }
 
 .repo-dashboard-heat-wrap {
