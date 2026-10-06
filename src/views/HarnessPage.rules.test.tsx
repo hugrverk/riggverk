@@ -401,6 +401,8 @@ describe("rules diff (d)", () => {
     press("n");
     expect(screen.getByRole("listbox", { name: "Claude surfaces" })).toBeTruthy();
     expect(mode()).toBe("NORMAL");
+    // The keyboard goes back to the pane the review was opened from, so d, v and m work again at once.
+    expect(document.activeElement).toBe(surfaces());
   });
 
   it("Escape closes the diff from anywhere", async () => {

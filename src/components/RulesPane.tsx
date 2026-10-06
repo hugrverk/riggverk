@@ -25,6 +25,8 @@ export interface RulesPaneProps {
   backupRoot?: string | null;
   /** Whether `v` (convert) is offered from the diff: the file is a conflict the app can convert. */
   canConvert: boolean;
+  /** The pane that takes the keyboard back when the review closes. Default `surfaces`. */
+  returnPaneId?: string;
 }
 
 const ERROR_HINT = {
@@ -153,7 +155,7 @@ function ConversionBody({ preview, view }: { preview: RulesConversionPreview; vi
  * edits and the update, `v` open the conversion from the diff, `f` switch the conversion between its diff and the
  * resulting file, `r` open the review again after an error, `j`/`k`/`g g`/`G` scroll. Enter never applies.
  */
-export function RulesPane({ flow, index = 1, busyLabel, backupRoot, canConvert }: RulesPaneProps) {
+export function RulesPane({ flow, index = 1, busyLabel, backupRoot, canConvert, returnPaneId = "surfaces" }: RulesPaneProps) {
   const { state } = flow;
   const open = state.status !== "idle";
   useConfirmMode(open);
@@ -174,13 +176,16 @@ export function RulesPane({ flow, index = 1, busyLabel, backupRoot, canConvert }
     if (free) focusPaneById(RULES_PANE_ID);
   }, [open, state.status]);
 
-  // When the review closes the page's own panes come back; hand them the keyboard instead of leaving it on the body.
+  // When the review closes the page's own panes come back; hand the keyboard to the pane the review was opened
+  // from (where d, v and m live) instead of leaving it on the body.
   useEffect(
     () => () => {
       const active = document.activeElement;
-      if (!active || active === document.body || !active.isConnected) focusDefaultPane();
+      if (!active || active === document.body || !active.isConnected) {
+        if (!focusPaneById(returnPaneId)) focusDefaultPane();
+      }
     },
-    [],
+    [returnPaneId],
   );
 
   const surface = state.status === "idle" ? null : state.surface;
