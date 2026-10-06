@@ -462,6 +462,27 @@ describe("SettingsView workspace row", () => {
     await act(async () => {});
   });
 
+  it("reaches choose and reset from the appearance pane, and hints them in its footer", async () => {
+    const onChooseWorkspace = vi.fn(async () => null);
+    const onResetWorkspace = vi.fn(async () => null);
+    const { rerenderFrame, props } = renderSettings({ onChooseWorkspace, onResetWorkspace });
+
+    const footer = pane("Appearance").querySelector(".pane-foot") as HTMLElement;
+    expect(within(footer).getByRole("button", { name: /choose folder/ })).not.toBeNull();
+    expect(within(footer).getByRole("button", { name: /reset folder/ }).getAttribute("aria-disabled")).toBe("true");
+
+    focus(radios("Theme")[0]!);
+    press(document.activeElement!, "c");
+    expect(onChooseWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+
+    rerenderFrame(<SettingsView {...props} appSettings={custom} />);
+    focus(radios("Theme")[0]!);
+    press(document.activeElement!, "R", { shiftKey: true });
+    expect(onResetWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+  });
+
   it("resets from the shifted R key and the button only when a custom folder is active", async () => {
     const onResetWorkspace = vi.fn(async () => null);
     const { rerenderFrame, props } = renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace });

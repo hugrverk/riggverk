@@ -264,6 +264,8 @@ function ColorField({
   );
 }
 
+const WORKSPACE_PANES = ["settings-appearance", "settings-app"] as const;
+
 const NAV_HINTS: ReactNode = (
   <>
     <span>
@@ -368,25 +370,33 @@ export function SettingsView({
     });
   };
 
-  const bindings: Binding[] = [
+  // `c` and `R` work from both panes (the workspace row is in the app pane, but the appearance pane has the
+  // initial focus) and are hinted in both footers.
+  const workspaceBindings: Binding[] = WORKSPACE_PANES.flatMap(paneId => [
     {
-      id: "settings.workspace.choose",
+      id: `settings.workspace.choose.${paneId}`,
       keys: "c",
       title: "Choose the workspace folder",
-      scope: "pane",
-      paneId: "settings-app",
+      hint: "choose folder",
+      scope: "pane" as const,
+      paneId,
       when: () => (onChooseWorkspace ? workspaceDisabled("choose") : false),
       run: () => runWorkspace("choose"),
     },
     {
-      id: "settings.workspace.reset",
+      id: `settings.workspace.reset.${paneId}`,
       keys: "R",
       title: "Reset the workspace to the default folder",
-      scope: "pane",
-      paneId: "settings-app",
+      hint: "reset folder",
+      scope: "pane" as const,
+      paneId,
       when: () => (onResetWorkspace ? workspaceDisabled("reset") : false),
       run: () => runWorkspace("reset"),
     },
+  ]);
+
+  const bindings: Binding[] = [
+    ...workspaceBindings,
     {
       id: "settings.reset",
       keys: "r",
