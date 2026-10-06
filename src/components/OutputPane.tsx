@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useMemo, useRef } from "react";
 import { useKeymap } from "../keyboard/useKeymap";
 import type { Binding } from "../keyboard/registry";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
@@ -64,7 +64,8 @@ export function OutputPane({
   onRollback,
 }: OutputPaneProps) {
   const notify = useNotify();
-  const text = outputTextOf(wsLog);
+  // Redaction scans the whole log; do it once per log, not on every render.
+  const text = useMemo(() => outputTextOf(wsLog), [wsLog]);
   const latest = useRef({ text, wsRunning, wsLog, rollbackTransactionId, onClear, onRefresh, onRollback });
   latest.current = { text, wsRunning, wsLog, rollbackTransactionId, onClear, onRefresh, onRollback };
 

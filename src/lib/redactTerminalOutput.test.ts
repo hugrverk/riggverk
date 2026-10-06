@@ -74,4 +74,29 @@ describe("redactTerminalOutput", () => {
       expect(redactTerminalOutput(input)).toBe(input);
     });
   }
+
+  it("redacts names that carry the secret word anywhere in their segments", () => {
+    expect(redactTerminalOutput("x-api-key.v2: abcd1234efgh5678")).toBe("x-api-key.v2: [REDACTED]");
+    expect(redactTerminalOutput("my.session_id=abcd1234efgh5678")).toBe("my.session_id=[REDACTED]");
+    expect(redactTerminalOutput("not a token=ok but PASSWORD=hunter2")).toBe("not a token=[REDACTED] but PASSWORD=[REDACTED]");
+  });
+
+  it("still finds a secret assignment nested in the value of a harmless one", () => {
+    expect(redactTerminalOutput("callback=https://x.example/y?token=abcd1234efgh5678 next=1")).toBe(
+      "callback=https://x.example/y?token=[REDACTED] next=1",
+    );
+  });
+
+  // Long separator-joined tokens (minified bundles, base64url blobs, hashes) used to cost O(n^2).
+  for (const separator of ["-", "_", "."]) {
+    it(`redacts long ${JSON.stringify(separator)}-joined tokens in linear time`, () => {
+      const token = `a${separator}`.repeat(48_000);
+      const input = `${token}\nsecret=hunter2hunter2\n${token}b`;
+      const started = performance.now();
+      const output = redactTerminalOutput(input);
+      expect(performance.now() - started).toBeLessThan(1000);
+      expect(output).toContain("secret=[REDACTED]");
+      expect(output).not.toContain("hunter2");
+    });
+  }
 });

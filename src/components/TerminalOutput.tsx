@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
 import { applyOutputLineTone } from "../lib/installPlan";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 import { Glyph } from "../ui/Glyph";
@@ -123,8 +123,10 @@ export function ActionResultOutput({
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
-  const safeStdout = redactTerminalOutput(result.stdout);
-  const safeStderr = redactTerminalOutput(result.stderr);
+  const [safeStdout, safeStderr] = useMemo(
+    () => [redactTerminalOutput(result.stdout), redactTerminalOutput(result.stderr)],
+    [result.stdout, result.stderr],
+  );
   const redacted = safeStdout !== result.stdout || safeStderr !== result.stderr;
 
   return (
