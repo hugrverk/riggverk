@@ -513,8 +513,10 @@ python3 -c "
 import tomllib
 result = tomllib.load(open('$secret_home/.codex/config.toml', 'rb'))
 template = tomllib.load(open('resources/default-workspace/templates/codex/config.toml', 'rb'))
-for key in ('model', 'model_reasoning_effort', 'approval_policy', 'sandbox_mode'):
+for key in ('approval_policy', 'sandbox_mode'):
     assert result.get(key) == template[key], f'managed {key} should match the template default'
+assert result.get('model') == 'gpt-4', 'user-owned model must be preserved (create-only key)'
+assert result.get('model_reasoning_effort') == template['model_reasoning_effort'], 'absent create-only key should be seeded from the template'
 assert result.get('personality') == 'helpful', 'personality should be preserved'
 assert result.get('unknown-table', {}).get('value') == 'should-be-preserved', 'unknown table should survive'
 assert 'profile' not in result, 'legacy top-level profile selector should be removed'
