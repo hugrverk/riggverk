@@ -488,12 +488,30 @@ pub fn apply_rules_conversion(
         &[surface_id],
     )?;
 
-    let result = apply_planned_artifacts(&[plan.operation], Vec::new(), Some(token));
+    let mut result = apply_planned_artifacts(&[plan.operation], Vec::new(), Some(token));
     if result.success {
-        // The file is under the block now; a recorded "I manage it" no longer applies.
-        let _ = crate::rules_preferences::set_user_managed(&ws_root, &artifact, false);
+        clear_user_managed_after_conversion(&ws_root, &artifact, &mut result);
     }
     Ok(result)
+}
+
+/// The file is under the block now, so a recorded "I manage it" no longer applies. Runs after
+/// the apply released the setup mutation guard, so it takes the guard like
+/// `set_rules_user_managed`. A failure is reported in the result: the file would otherwise keep
+/// being treated as user managed with no sign why.
+fn clear_user_managed_after_conversion(
+    ws_root: &Path,
+    artifact: &ArtifactId,
+    result: &mut SetupResult,
+) {
+    let cleared = crate::setup_mutation_guard::try_acquire_setup_mutation_guard()
+        .and_then(|_guard| crate::rules_preferences::set_user_managed(ws_root, artifact, false));
+    if let Err(error) = cleared {
+        result.manual_steps.push(format!(
+            "The file was converted, but the \"leave as is\" choice for {} could not be cleared: {error}",
+            file_label(artifact)
+        ));
+    }
 }
 
 // ── Leave as is ──
@@ -514,4 +532,95 @@ pub fn set_rules_user_managed(surface: String, user_managed: bool) -> Result<(),
         }
     }
     crate::rules_preferences::set_user_managed(&ws_root, &artifact, user_managed)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn temp_workspace(label: &str) -> PathBuf {
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("aw-rules-clear-{label}-{nanos}"));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    fn converted_result() -> SetupResult {
+        SetupResult {
+            success: true,
+            transaction_id: "1".into(),
+            applied: vec![],
+            failed: vec![],
+            rolled_back: vec![],
+            manual_steps: vec![],
+            message: String::new(),
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_clear_of_the_user_managed_choice_is_reported() {
+        use std::os::unix::fs::PermissionsExt;
+        let ws = temp_workspace("write-fails");
+        crate::rules_preferences::set_user_managed(&ws, &ArtifactId::ClaudeRules, true).unwrap();
+        let prefs_dir = ws.join(".agent-workspace");
+        std::fs::set_permissions(&prefs_dir, std::fs::Permissions::from_mode(0o555)).unwrap();
+        let writable = std::fs::File::create(prefs_dir.join("probe")).is_ok();
+        if writable {
+            // Running with privileges that ignore directory modes: the failure cannot be staged.
+            let _ = std::fs::set_permissions(&prefs_dir, std::fs::Permissions::from_mode(0o755));
+            let _ = std::fs::remove_dir_all(&ws);
+            return;
+        }
+
+        let mut result = converted_result();
+        clear_user_managed_after_conversion(&ws, &ArtifactId::ClaudeRules, &mut result);
+
+        let _ = std::fs::set_permissions(&prefs_dir, std::fs::Permissions::from_mode(0o755));
+        let still_recorded =
+            crate::rules_preferences::is_user_managed(&ws, &ArtifactId::ClaudeRules);
+        let _ = std::fs::remove_dir_all(&ws);
+        assert!(still_recorded);
+        assert!(result.success, "the conversion itself succeeded");
+        assert_eq!(result.manual_steps.len(), 1, "{:?}", result.manual_steps);
+        assert!(
+            result.manual_steps[0].contains("CLAUDE.md")
+                && result.manual_steps[0].contains("could not be cleared"),
+            "{:?}",
+            result.manual_steps
+        );
+    }
+
+    #[test]
+    fn clearing_the_user_managed_choice_waits_for_the_setup_mutation_guard() {
+        let ws = temp_workspace("guard-held");
+        crate::rules_preferences::set_user_managed(&ws, &ArtifactId::ClaudeRules, true).unwrap();
+        let held = loop {
+            if let Ok(guard) = crate::setup_mutation_guard::try_acquire_setup_mutation_guard() {
+                break guard;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        };
+
+        let mut result = converted_result();
+        clear_user_managed_after_conversion(&ws, &ArtifactId::ClaudeRules, &mut result);
+
+        drop(held);
+        let still_recorded =
+            crate::rules_preferences::is_user_managed(&ws, &ArtifactId::ClaudeRules);
+        let _ = std::fs::remove_dir_all(&ws);
+        assert!(
+            still_recorded,
+            "the choice must not change without the guard"
+        );
+        assert_eq!(result.manual_steps.len(), 1, "{:?}", result.manual_steps);
+        assert!(
+            result.manual_steps[0].contains("already in progress"),
+            "{:?}",
+            result.manual_steps
+        );
+    }
 }
