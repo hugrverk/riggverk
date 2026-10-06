@@ -17,8 +17,11 @@ import {
 
 type EnabledSettings = Pick<AppSettings, "enabled_target_ids" | "enabled_harness_ids">;
 
-/** A surface state as the pages show it: the backend states plus `off` (target toggle) and `unknown` (not fetched). */
-export type SurfaceDisplayState = InstallationState | "off" | "unknown";
+/**
+ * A surface state as the pages show it: the backend states plus `off` (target toggle), `unknown` (not fetched)
+ * and `user_managed` (a rules file the user chose to manage; the backend reports it as current).
+ */
+export type SurfaceDisplayState = InstallationState | "off" | "unknown" | "user_managed";
 
 export interface StateDisplay {
   glyph: GlyphName;
@@ -34,6 +37,7 @@ const STATE_DISPLAY: Record<SurfaceDisplayState, StateDisplay> = {
   unavailable: { glyph: "none", tone: "dim", label: "unavailable" },
   off: { glyph: "none", tone: "dim", label: "off" },
   unknown: { glyph: "none", tone: "dim", label: "unknown" },
+  user_managed: { glyph: "partial", tone: "warn", label: "you manage" },
 };
 
 export function overviewLabel(id: OverviewId): string {
@@ -125,7 +129,7 @@ export function surfaceRowsFor(
       };
     }
     const row = statusRow(entry?.status, surface);
-    const state: SurfaceDisplayState = row?.state ?? "unknown";
+    const state: SurfaceDisplayState = row?.rules?.user_managed ? "user_managed" : (row?.state ?? "unknown");
     return {
       surface,
       name: surfaceShortName(surface),

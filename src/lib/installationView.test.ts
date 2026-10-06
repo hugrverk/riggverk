@@ -82,6 +82,17 @@ describe("surfaceRowsFor", () => {
     expect(codexRows[0]).toMatchObject({ targetId: "codex_config", display: { label: "off", glyph: "none" } });
   });
 
+  it("shows a rules file the user manages as 'you manage', not as current", () => {
+    const managed: SurfaceInstallationStatus = {
+      ...surface("claude_rules", "current"),
+      rules: { layout: "legacy", refinement_lines: 0, conflict_reason: "legacy_diverged", user_managed: true },
+    };
+    const rows = surfaceRowsFor("claude", entry("claude", status("current", [managed])), SETTINGS);
+    expect(rows[0]).toMatchObject({ state: "user_managed", display: { label: "you manage", tone: "warn" } });
+    const matrix = matrixModel({ entries: { claude: entry("claude", status("current", [managed])) } } as unknown as InstallationOverview, ["claude"], SETTINGS);
+    expect(matrix[0]!.cells.find(cell => cell.column === "rules")).toMatchObject({ state: "user_managed" });
+  });
+
   it("marks surfaces as unknown until the status arrives", () => {
     expect(surfaceRowsFor("workspace", undefined, null)).toEqual([
       expect.objectContaining({ surface: "workspace_bundle", state: "unknown" }),

@@ -307,7 +307,10 @@ pub fn plan_setup(
                 conflicts.push(op);
             }
             OperationKind::Manual => {
-                let step = format!("{} requires manual setup. See docs.", surface.label());
+                let step = format!(
+                    "{} is managed by you, so base updates are not applied. Review the diff or hand it back from the harness page.",
+                    surface.label()
+                );
                 let op = PlannedOperation {
                     surface: *surface,
                     kind,

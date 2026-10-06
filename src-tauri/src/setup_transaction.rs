@@ -539,7 +539,11 @@ pub fn detect_surface_state(
         OperationKind::Create => format!("{} not installed", surface.label()),
         OperationKind::Update => format!("{} differs from source", surface.label()),
         OperationKind::Conflict => format!("{} has conflicts", surface.label()),
-        OperationKind::Manual => format!("{} requires manual action", surface.label()),
+        // Only a rules file the user chose to manage plans as Manual.
+        OperationKind::Manual => format!(
+            "{}: you manage this file; base updates are skipped",
+            surface.label()
+        ),
         OperationKind::Unavailable => format!("{} unavailable", surface.label()),
         OperationKind::Remove => format!("{} has old app files to remove", surface.label()),
     };
