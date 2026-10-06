@@ -13,7 +13,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 SKILLS_ROOT = REPO_ROOT / "resources/default-workspace/skills"
 ADAPTER_ROOT = REPO_ROOT / "resources/default-workspace/templates/skills"
 ADAPTER_MANIFEST = REPO_ROOT / "resources/default-workspace/metadata/skill-adapters.json"
-EXPECTED_COUNT = 21
+EXPECTED_COUNT = 22
 
 EXPECTED_SKILLS = {
     "accessibility-review",
@@ -32,6 +32,7 @@ EXPECTED_SKILLS = {
     "minimal-implementation",
     "prototype",
     "release-check",
+    "retro",
     "screenshot-review",
     "security-review",
     "tdd",
@@ -295,8 +296,8 @@ def validate_routing_sources(discovered: set[str]) -> None:
                     # agents.json only lists default_skills subsets, not full catalog
                     continue
         if source.name == "SKILLS.md":
-            if "21 skill" not in text and "21 skills" not in text:
-                fail(f"{source}: missing exact count of 21 skills")
+            if f"{EXPECTED_COUNT} skill" not in text:
+                fail(f"{source}: missing exact count of {EXPECTED_COUNT} skills")
             for skill in discovered:
                 if f"`{skill}`" not in text:
                     fail(f"{source}: bundled skill missing from catalog: {skill}")

@@ -58,7 +58,7 @@ See `docs/WORKSPACE_CONTRACT.md` for the complete contract.
 
 ## Skills
 
-The bundled semantic catalog contains exactly 21 canonical skills.
+The bundled semantic catalog contains exactly 22 canonical skills.
 
 Source layouts:
 
