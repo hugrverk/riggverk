@@ -133,6 +133,25 @@ describe("StatusBar", () => {
     expect(status().textContent).toContain("move");
   });
 
+  it("keeps the command and help hints in their own group after the droppable ones", () => {
+    renderInFrame(
+      <View
+        bindings={[{ id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "main", run: () => {} }]}
+      />,
+    );
+    act(() => screen.getByRole("listbox", { name: "rows" }).focus());
+    const hints = status().querySelector(".hints")!;
+    const keep = status().querySelector(".hints-keep")!;
+    expect(hints.compareDocumentPosition(keep) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(keep as HTMLElement).getAllByRole("button").map(button => button.textContent)).toEqual([
+      expect.stringContaining("command"),
+      expect.stringContaining("help"),
+    ]);
+    // Everything else lives in the part that drops from the end when the bar is narrow.
+    expect(within(hints as HTMLElement).queryByRole("button", { name: /command|help/ })).toBeNull();
+    expect(within(hints as HTMLElement).getByRole("button", { name: /update/ })).not.toBeNull();
+  });
+
   it("while typing, drops hints that cannot fire in a text field and shows how to leave", () => {
     const save = vi.fn();
     renderInFrame(

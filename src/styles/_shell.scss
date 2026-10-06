@@ -146,16 +146,38 @@
   color: var(--text-muted);
 }
 
+/* One row tall: a hint that does not fit wraps onto a second, clipped row, so whole hints drop from the end
+   instead of being cut mid-word. `.hints-keep` (command, help) is outside it and never shrinks. */
 .statusbar .hints {
   display: flex;
-  gap: 14px;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  column-gap: 14px;
   min-width: 0;
+  height: var(--statusbar-height);
   overflow: hidden;
 }
 
-.statusbar .hints > * { color: var(--text-muted); white-space: nowrap; }
-.statusbar .hints kbd { margin-right: 4px; }
-.statusbar .hints .action-key kbd { margin-right: 0; }
+.statusbar .hints > * {
+  display: inline-flex;
+  align-items: center;
+  height: var(--statusbar-height);
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+.statusbar .hints-keep {
+  display: flex;
+  flex-shrink: 0;
+  gap: 14px;
+  margin-left: 14px;
+}
+
+.statusbar .hints-keep > * { color: var(--text-muted); white-space: nowrap; }
+.statusbar .hints kbd,
+.statusbar .hints-keep kbd { margin-right: 4px; }
+.statusbar .hints .action-key kbd,
+.statusbar .hints-keep .action-key kbd { margin-right: 0; }
 
 .statusbar .chord {
   margin-right: 14px;

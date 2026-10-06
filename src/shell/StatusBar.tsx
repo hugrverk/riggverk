@@ -5,6 +5,9 @@ import { BindingActionKey } from "../ui/BindingActionKey";
 import { Kbd } from "../ui/Kbd";
 import { useShellMode, useShellState } from "./ShellState";
 
+/** Hints that stay visible however narrow the bar gets: how to reach everything else. */
+const ALWAYS_VISIBLE_HINT_IDS = new Set(["shell.command", "shell.help"]);
+
 export interface StatusBarProps {
   /** Current view, shown as the first context segment. */
   viewLabel: string;
@@ -16,6 +19,8 @@ export interface StatusBarProps {
  * Bottom bar: derived mode (NORMAL / INSERT / COMMAND / CONFIRM / HELP), context, the pending chord, and
  * hints for the focused pane plus the global actions. Hinted bindings render as clickable ActionKeys; the
  * positional hints (tab numbers, pane and row movement) are plain text because they are not single actions.
+ * When the bar is too narrow the hints drop from the end, a whole hint at a time; `:` command and `?` help
+ * sit in their own group and always stay.
  */
 export function StatusBar({ viewLabel, right }: StatusBarProps) {
   const mode = useShellMode();
@@ -28,6 +33,8 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
   const offered = (entry: RegisteredBinding) => isVisibleHint(entry) && (!typing || entry.binding.inEditable === true);
   const paneHints = activePaneId ? paneHintEntries(entries, activePaneId).filter(offered) : [];
   const globalHints = entries.filter(entry => entry.binding.scope === "global" && !entry.binding.paneId).filter(offered);
+  const alwaysHints = globalHints.filter(entry => ALWAYS_VISIBLE_HINT_IDS.has(entry.binding.id));
+  const otherGlobalHints = globalHints.filter(entry => !ALWAYS_VISIBLE_HINT_IDS.has(entry.binding.id));
   const context = statusContext ? `${viewLabel} › ${statusContext}` : viewLabel;
 
   return (
@@ -93,12 +100,19 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
             {paneHints.map(entry => (
               <BindingActionKey key={entry.binding.id} entry={entry} />
             ))}
-            {globalHints.map(entry => (
+            {otherGlobalHints.map(entry => (
               <BindingActionKey key={entry.binding.id} entry={entry} />
             ))}
           </>
         )}
       </div>
+      {mode !== "COMMAND" && mode !== "HELP" && alwaysHints.length > 0 && (
+        <div className="hints-keep">
+          {alwaysHints.map(entry => (
+            <BindingActionKey key={entry.binding.id} entry={entry} />
+          ))}
+        </div>
+      )}
       <span className="rt">{right}</span>
     </footer>
   );
