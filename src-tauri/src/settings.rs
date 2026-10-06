@@ -50,7 +50,15 @@ pub struct AppSettings {
     pub active_repo_dashboard_id: Option<String>,
     #[serde(default)]
     pub revision: u64,
+    /// Marker for the enabled-target defaults this file was written under.
+    /// Files without it predate target gating and are migrated on load.
+    #[serde(default)]
+    pub target_defaults_version: u32,
 }
+
+/// Bump when the default set of enabled targets changes in a way that existing
+/// settings files must be migrated for.
+pub const TARGET_DEFAULTS_VERSION: u32 = 1;
 
 impl Default for AppSettings {
     fn default() -> Self {
@@ -68,6 +76,7 @@ impl Default for AppSettings {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
+            target_defaults_version: TARGET_DEFAULTS_VERSION,
         }
     }
 }
@@ -91,6 +100,8 @@ pub enum MutationOutcome {
 struct DiskLoad {
     settings: AppSettings,
     warning: Option<String>,
+    /// The file predates the current target defaults and was migrated in memory.
+    migrated: bool,
 }
 
 fn default_app_font_size() -> String {
@@ -120,6 +131,13 @@ fn normalize_app_font_size(value: &str) -> String {
     }
 }
 
+fn normalize_landing_view(value: &str) -> String {
+    match value {
+        "start" | "repo-dashboard" | "prompts" | "library" => value.to_string(),
+        _ => default_landing_view(),
+    }
+}
+
 fn validate_hex_color(raw: &str) -> Option<String> {
     let trimmed = raw.trim();
     if trimmed.is_empty() {
@@ -142,10 +160,7 @@ fn normalize(settings: &mut AppSettings) {
         _ => settings.appearance = "dark".into(),
     }
     settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
-    match settings.landing_view.as_str() {
-        "start" | "repo-dashboard" | "prompts" | "library" => {}
-        _ => settings.landing_view = default_landing_view(),
-    }
+    settings.landing_view = normalize_landing_view(&settings.landing_view);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -189,6 +204,7 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         _ => settings.appearance = "dark".into(),
     }
     settings.app_font_size = normalize_app_font_size(&settings.app_font_size);
+    settings.landing_view = normalize_landing_view(&settings.landing_view);
 
     if let Some(ref val) = settings.workspace_path {
         if is_legacy_default_workspace_path(val) {
@@ -224,7 +240,59 @@ fn normalize_for_save(settings: &mut AppSettings) -> Result<(), String> {
         .map(|id| id.trim().to_string())
         .filter(|id| !id.is_empty());
 
+    // Anything written by this build carries the current target defaults, even
+    // when the caller (e.g. the UI) round-tripped an older object without the marker.
+    settings.target_defaults_version = TARGET_DEFAULTS_VERSION;
+
     Ok(())
+}
+
+/// Targets whose surfaces already hold managed records in the workspace's managed state.
+fn managed_target_ids(settings: &AppSettings) -> Vec<String> {
+    let Some(workspace_root) = crate::commands::configured_workspace_path(settings) else {
+        return Vec::new();
+    };
+    let Some(state) = crate::managed_state::read_managed_state(&workspace_root) else {
+        return Vec::new();
+    };
+    state
+        .artifacts
+        .iter()
+        .filter_map(|record| {
+            record
+                .surface
+                .as_deref()
+                .and_then(|surface| {
+                    serde_json::from_value::<crate::setup_lifecycle::SetupSurfaceId>(
+                        serde_json::Value::String(surface.to_string()),
+                    )
+                    .ok()
+                })
+                .or_else(|| {
+                    serde_json::from_str::<crate::artifact_registry::ArtifactId>(&record.identity)
+                        .ok()
+                        .map(|artifact| artifact.surface())
+                })
+        })
+        .filter_map(agent_targets::surface_target_id)
+        .map(str::to_string)
+        .collect()
+}
+
+/// Settings written before target toggles gated Install: Install wrote every
+/// surface of an enabled harness regardless of `enabled_target_ids`. Move such
+/// files to the current defaults, and keep every target the user had enabled or
+/// whose surface already holds managed records so nothing is silently dropped.
+fn migrate_target_defaults(settings: &mut AppSettings) -> bool {
+    if settings.target_defaults_version >= TARGET_DEFAULTS_VERSION {
+        return false;
+    }
+    let mut ids = agent_targets::default_enabled_ids();
+    ids.extend(settings.enabled_target_ids.iter().cloned());
+    ids.extend(managed_target_ids(settings));
+    settings.enabled_target_ids = agent_targets::normalize_enabled_ids(&ids);
+    settings.target_defaults_version = TARGET_DEFAULTS_VERSION;
+    true
 }
 
 pub fn harness_enabled(settings: &AppSettings, harness: HarnessId) -> bool {
@@ -243,17 +311,30 @@ pub fn effective_enabled_target_ids(settings: &AppSettings) -> Vec<String> {
         .collect()
 }
 
+/// A surface may be installed when its harness is enabled and, for
+/// target-gated surfaces, its target toggle is on.
+pub fn surface_enabled(
+    settings: &AppSettings,
+    surface: crate::setup_lifecycle::SetupSurfaceId,
+) -> bool {
+    surface
+        .harness()
+        .is_none_or(|harness| harness_enabled(settings, harness))
+        && agent_targets::surface_target_id(surface).is_none_or(|target_id| {
+            settings
+                .enabled_target_ids
+                .iter()
+                .any(|enabled| enabled == target_id)
+        })
+}
+
 pub fn enabled_setup_surfaces(
     settings: &AppSettings,
 ) -> Vec<crate::setup_lifecycle::SetupSurfaceId> {
     crate::setup_lifecycle::SetupSurfaceId::ALL
         .iter()
         .copied()
-        .filter(|surface| {
-            surface
-                .harness()
-                .is_none_or(|harness| harness_enabled(settings, harness))
-        })
+        .filter(|surface| surface_enabled(settings, *surface))
         .collect()
 }
 
@@ -284,6 +365,7 @@ fn read_settings_from_path(path: &PathBuf, recover_corrupt: bool) -> Result<Disk
             return Ok(DiskLoad {
                 settings: AppSettings::default(),
                 warning: None,
+                migrated: false,
             });
         }
         Err(error) => return Err(format!("read settings: {error}")),
@@ -292,9 +374,11 @@ fn read_settings_from_path(path: &PathBuf, recover_corrupt: bool) -> Result<Disk
     match serde_json::from_str::<AppSettings>(&json) {
         Ok(mut settings) => {
             normalize(&mut settings);
+            let migrated = migrate_target_defaults(&mut settings);
             Ok(DiskLoad {
                 settings,
                 warning: None,
+                migrated,
             })
         }
         Err(_) if recover_corrupt => {
@@ -302,11 +386,13 @@ fn read_settings_from_path(path: &PathBuf, recover_corrupt: bool) -> Result<Disk
             Ok(DiskLoad {
                 settings: AppSettings::default(),
                 warning: Some(SETTINGS_CORRUPT_RECOVERY_MESSAGE.to_string()),
+                migrated: false,
             })
         }
         Err(_) => Ok(DiskLoad {
             settings: AppSettings::default(),
             warning: None,
+            migrated: false,
         }),
     }
 }
@@ -342,9 +428,10 @@ where
     let DiskLoad {
         mut settings,
         warning,
+        migrated,
     } = disk_load_under_write_lock(true)?;
     let loaded_revision = settings.revision;
-    let outcome = mutator(&mut settings)?;
+    let outcome = persisted_outcome(mutator(&mut settings)?, migrated);
     let settings = match outcome {
         MutationOutcome::Unchanged => settings,
         MutationOutcome::Changed => {
@@ -358,6 +445,16 @@ where
     })
 }
 
+/// A migrated file is persisted even when the caller changed nothing, so the
+/// migration runs once and later toggles are not re-derived from managed state.
+fn persisted_outcome(outcome: MutationOutcome, migrated: bool) -> MutationOutcome {
+    if migrated {
+        MutationOutcome::Changed
+    } else {
+        outcome
+    }
+}
+
 fn mutate_settings_locked<F>(mutator: F) -> Result<AppSettings, String>
 where
     F: FnOnce(&mut AppSettings) -> Result<MutationOutcome, String>,
@@ -365,9 +462,10 @@ where
     let DiskLoad {
         mut settings,
         warning: _,
+        migrated,
     } = disk_load_under_write_lock(true)?;
     let loaded_revision = settings.revision;
-    let outcome = mutator(&mut settings)?;
+    let outcome = persisted_outcome(mutator(&mut settings)?, migrated);
     match outcome {
         MutationOutcome::Unchanged => Ok(settings),
         MutationOutcome::Changed => {
@@ -480,7 +578,7 @@ mod tests {
         effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
         get_settings_snapshot_with_mutate, load, mutate_settings, normalize, normalize_for_save,
         save, save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
-        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE,
+        SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
     use crate::path_utils::is_legacy_default_workspace_path;
@@ -505,6 +603,7 @@ mod tests {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
+            target_defaults_version: TARGET_DEFAULTS_VERSION,
         }
     }
 
@@ -606,6 +705,7 @@ mod tests {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
+            target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
 
         normalize(&mut settings);
@@ -743,6 +843,7 @@ mod tests {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
+            target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, Some("#ffaa00".into()));
@@ -764,6 +865,7 @@ mod tests {
             repo_dashboard_entries: Vec::new(),
             active_repo_dashboard_id: None,
             revision: 0,
+            target_defaults_version: TARGET_DEFAULTS_VERSION,
         };
         normalize(&mut s);
         assert_eq!(s.accent_color, None);
@@ -1050,6 +1152,241 @@ mod tests {
             assert_eq!(snapshot.settings.workspace_path, None);
             assert!(snapshot.load_warning.is_none());
             assert_eq!(snapshot.settings.revision, saved.revision.saturating_add(1));
+        });
+    }
+
+    fn surfaces_without(
+        excluded: &[crate::setup_lifecycle::SetupSurfaceId],
+    ) -> Vec<crate::setup_lifecycle::SetupSurfaceId> {
+        crate::setup_lifecycle::SetupSurfaceId::ALL
+            .iter()
+            .copied()
+            .filter(|surface| !excluded.contains(surface))
+            .collect()
+    }
+
+    #[test]
+    fn default_settings_gate_only_the_codex_config_surface() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        assert_eq!(
+            enabled_setup_surfaces(&AppSettings::default()),
+            surfaces_without(&[SetupSurfaceId::CodexConfig])
+        );
+    }
+
+    #[test]
+    fn enabling_codex_config_includes_its_surface() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings::default();
+        settings.enabled_target_ids.push("codex_config".into());
+        assert!(enabled_setup_surfaces(&settings).contains(&SetupSurfaceId::CodexConfig));
+    }
+
+    #[test]
+    fn disabled_target_excludes_only_its_surfaces() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings::default();
+        settings
+            .enabled_target_ids
+            .retain(|id| id != "claude_agents" && id != "cursor_setup");
+        assert_eq!(
+            enabled_setup_surfaces(&settings),
+            surfaces_without(&[
+                SetupSurfaceId::CodexConfig,
+                SetupSurfaceId::ClaudeAgents,
+                SetupSurfaceId::CursorAgents,
+                SetupSurfaceId::CursorMcp,
+            ])
+        );
+    }
+
+    #[test]
+    fn target_toggle_does_not_enable_a_disabled_harness_surface() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        let mut settings = AppSettings::default();
+        settings.enabled_target_ids.push("codex_config".into());
+        settings.enabled_harness_ids = vec![agent_targets::HarnessId::Claude];
+        let surfaces = enabled_setup_surfaces(&settings);
+        assert!(!surfaces.contains(&SetupSurfaceId::CodexConfig));
+        assert!(!surfaces.contains(&SetupSurfaceId::CodexRules));
+        assert!(surfaces.contains(&SetupSurfaceId::ClaudeRules));
+    }
+
+    #[test]
+    fn saved_landing_view_is_normalized() {
+        let mut settings = settings_with_path(None);
+        settings.landing_view = "not-a-view".into();
+        normalize_for_save(&mut settings).expect("save normalization");
+        assert_eq!(settings.landing_view, "start");
+
+        for view in ["start", "repo-dashboard", "prompts", "library"] {
+            settings.landing_view = view.into();
+            normalize_for_save(&mut settings).expect("save normalization");
+            assert_eq!(settings.landing_view, view);
+        }
+    }
+
+    #[test]
+    fn save_with_current_revision_succeeds_and_advances_revision() {
+        with_temp_home(|_| {
+            let first = save_with_revision_check(AppSettings::default(), Some(0))
+                .expect("first save against the current revision");
+            assert_eq!(first.revision, 1);
+
+            let mut next = first.clone();
+            next.appearance = "light".into();
+            let second = save_with_revision_check(next, Some(first.revision))
+                .expect("save against the current revision");
+            assert_eq!(second.revision, 2);
+            assert_eq!(second.appearance, "light");
+            assert_eq!(get_settings_snapshot().expect("reload").settings, second);
+
+            let mut stale = second.clone();
+            stale.appearance = "dark".into();
+            assert_eq!(
+                save_with_revision_check(stale, Some(first.revision)).expect_err("stale"),
+                SETTINGS_CONFLICT_ERROR
+            );
+
+            let third = save_with_revision_check(second.clone(), None)
+                .expect("an absent expected revision skips the check");
+            assert_eq!(third.revision, 3);
+        });
+    }
+
+    fn legacy_settings_json(enabled_targets: &[&str]) -> String {
+        let mut json = serde_json::to_value(AppSettings::default()).expect("serialize defaults");
+        let object = json.as_object_mut().expect("settings object");
+        object.remove("target_defaults_version");
+        object.insert(
+            "enabled_target_ids".into(),
+            serde_json::json!(enabled_targets),
+        );
+        json.to_string()
+    }
+
+    fn seed_managed_record(surface: Option<&str>, identity: &str) {
+        let root = crate::path_utils::default_installed_workspace_path().expect("workspace path");
+        let state = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                identity: identity.to_string(),
+                hash: crate::stable_digest::bytes(identity.as_bytes()),
+                surface: surface.map(str::to_string),
+            }],
+        };
+        crate::managed_state::write_managed_state_atomic(&root, &state)
+            .expect("seed managed state");
+    }
+
+    #[test]
+    fn settings_without_marker_migrate_to_current_target_defaults_once() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            write_settings_file(
+                dir,
+                &legacy_settings_json(&["codex_rules", "opencode_rules", "opencode_config"]),
+            );
+
+            let migrated = get_settings_snapshot().expect("snapshot").settings;
+            assert_eq!(migrated.target_defaults_version, TARGET_DEFAULTS_VERSION);
+            assert_eq!(
+                migrated.enabled_target_ids,
+                agent_targets::default_enabled_ids()
+            );
+            assert!(!migrated
+                .enabled_target_ids
+                .contains(&"codex_config".to_string()));
+            assert_eq!(migrated.revision, 1, "migration is persisted");
+
+            let again = get_settings_snapshot().expect("second snapshot").settings;
+            assert_eq!(again, migrated, "migration must not run twice");
+        });
+    }
+
+    #[test]
+    fn migration_keeps_targets_whose_surfaces_are_already_managed() {
+        use crate::setup_lifecycle::SetupSurfaceId;
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            seed_managed_record(Some("codex_config"), "codex-config-record");
+            write_settings_file(dir, &legacy_settings_json(&["codex_rules"]));
+
+            let settings = load();
+            assert!(settings
+                .enabled_target_ids
+                .contains(&"codex_config".to_string()));
+            assert!(enabled_setup_surfaces(&settings).contains(&SetupSurfaceId::CodexConfig));
+        });
+    }
+
+    #[test]
+    fn migration_resolves_managed_surface_from_identity_without_surface_field() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            let identity = crate::managed_state::artifact_identity(
+                &crate::artifact_registry::ArtifactId::CodexConfig,
+            );
+            seed_managed_record(None, &identity);
+            write_settings_file(dir, &legacy_settings_json(&[]));
+
+            assert!(load()
+                .enabled_target_ids
+                .contains(&"codex_config".to_string()));
+        });
+    }
+
+    #[test]
+    fn migration_ignores_managed_skills_and_workspace_records() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            seed_managed_record(Some("codex_skills"), "codex-skill-record");
+            write_settings_file(dir, &legacy_settings_json(&[]));
+
+            assert_eq!(
+                load().enabled_target_ids,
+                agent_targets::default_enabled_ids()
+            );
+        });
+    }
+
+    #[test]
+    fn migration_keeps_targets_the_user_enabled() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            write_settings_file(dir, &legacy_settings_json(&["codex_config"]));
+
+            assert!(load()
+                .enabled_target_ids
+                .contains(&"codex_config".to_string()));
+        });
+    }
+
+    #[test]
+    fn settings_with_marker_are_not_migrated() {
+        with_temp_home(|dir| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            seed_managed_record(Some("codex_config"), "codex-config-record");
+            let mut current = AppSettings::default();
+            current.enabled_target_ids = vec!["codex_rules".into()];
+            write_settings_file(dir, &serde_json::to_string(&current).expect("serialize"));
+
+            assert_eq!(load().enabled_target_ids, vec!["codex_rules".to_string()]);
+        });
+    }
+
+    #[test]
+    fn saving_stamps_the_marker_so_saved_toggles_are_not_re_migrated() {
+        with_temp_home(|_| {
+            std::env::remove_var("AGENT_WORKSPACE_PATH");
+            let mut round_tripped = AppSettings::default();
+            round_tripped.enabled_target_ids = vec!["codex_rules".into()];
+            round_tripped.target_defaults_version = 0;
+
+            let saved = save_with_revision_check(round_tripped, None).expect("save");
+            assert_eq!(saved.target_defaults_version, TARGET_DEFAULTS_VERSION);
+            assert_eq!(load().enabled_target_ids, vec!["codex_rules".to_string()]);
         });
     }
 }

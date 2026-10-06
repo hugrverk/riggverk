@@ -17,6 +17,7 @@ pub(crate) use opencode_runtime::{
     render_expected_opencode_config,
 };
 pub(crate) use status::file_eq;
+pub(crate) use workspace::configured_workspace_path;
 mod repo_dashboard;
 mod repo_dashboard_commands;
 mod repo_dashboard_history;

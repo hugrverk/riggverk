@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::setup_lifecycle::SetupSurfaceId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HarnessId {
@@ -164,18 +166,42 @@ pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
         .collect()
 }
 
-pub fn default_enabled_rule_ids() -> Vec<String> {
-    vec!["codex_rules".into(), "opencode_rules".into()]
-}
-
-pub fn default_enabled_config_ids() -> Vec<String> {
-    vec!["opencode_config".into()]
-}
+/// Targets that stay OFF until the user opts in. `codex_config` rewrites the
+/// user's approval and sandbox posture in `~/.codex/config.toml`.
+const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config"];
 
 pub fn default_enabled_ids() -> Vec<String> {
-    let mut ids = default_enabled_rule_ids();
-    ids.extend(default_enabled_config_ids());
-    ids
+    targets()
+        .iter()
+        .map(|target| target.id)
+        .filter(|id| !DEFAULT_DISABLED_TARGET_IDS.contains(id))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Setup surfaces gated by a target toggle. Skills surfaces and the workspace
+/// bundle are not target-gated.
+pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
+    match target_id {
+        "codex_rules" => &[SetupSurfaceId::CodexRules],
+        "codex_agents" => &[SetupSurfaceId::CodexAgents],
+        "codex_config" => &[SetupSurfaceId::CodexConfig],
+        "opencode_rules" => &[SetupSurfaceId::OpenCodeRules],
+        "opencode_agents" => &[SetupSurfaceId::OpenCodeAgents],
+        "opencode_config" => &[SetupSurfaceId::OpenCodeConfig],
+        "claude_rules" => &[SetupSurfaceId::ClaudeRules],
+        "claude_agents" => &[SetupSurfaceId::ClaudeAgents],
+        "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
+        _ => &[],
+    }
+}
+
+/// The target whose toggle gates `surface`, or `None` for ungated surfaces.
+pub fn surface_target_id(surface: SetupSurfaceId) -> Option<&'static str> {
+    targets()
+        .iter()
+        .map(|target| target.id)
+        .find(|id| target_surfaces(id).contains(&surface))
 }
 
 pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
@@ -303,6 +329,62 @@ mod tests {
             !default_enabled_ids().contains(&"codex_config".to_string()),
             "Codex config must stay manual-review only by default"
         );
+    }
+
+    #[test]
+    fn default_enabled_ids_cover_every_target_except_codex_config() {
+        let mut expected: Vec<String> = targets()
+            .iter()
+            .map(|t| t.id.to_string())
+            .filter(|id| id != "codex_config")
+            .collect();
+        let mut actual = default_enabled_ids();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected);
+        for id in [
+            "codex_rules",
+            "codex_agents",
+            "opencode_rules",
+            "opencode_agents",
+            "opencode_config",
+            "claude_rules",
+            "claude_agents",
+            "cursor_setup",
+        ] {
+            assert!(actual.contains(&id.to_string()), "{id} must default ON");
+        }
+    }
+
+    #[test]
+    fn every_target_gates_surfaces_of_its_own_harness() {
+        for target in targets() {
+            let surfaces = target_surfaces(target.id);
+            assert!(!surfaces.is_empty(), "{} gates no surface", target.id);
+            for surface in surfaces {
+                assert_eq!(
+                    surface.harness(),
+                    Some(target.harness),
+                    "{} gates a surface of another harness: {surface:?}",
+                    target.id
+                );
+                assert_eq!(surface_target_id(*surface), Some(target.id));
+            }
+        }
+        assert!(target_surfaces("unknown_target").is_empty());
+    }
+
+    #[test]
+    fn skills_and_workspace_surfaces_are_not_target_gated() {
+        for surface in [
+            SetupSurfaceId::ClaudeSkills,
+            SetupSurfaceId::OpenCodeSkills,
+            SetupSurfaceId::CodexSkills,
+            SetupSurfaceId::CursorSkills,
+            SetupSurfaceId::WorkspaceBundle,
+        ] {
+            assert_eq!(surface_target_id(surface), None, "{surface:?}");
+        }
     }
 
     #[test]
