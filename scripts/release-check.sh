@@ -294,6 +294,11 @@ fi
 step "pre-manifest ownership semantic coverage"
 python3 scripts/generate-pre-manifest-ownership.py --check
 
+# Reads past versions of the rules templates from git history, so it needs full history
+# (CI checks out with fetch-depth: 0), like the pre-manifest generator above.
+step "rules history is current"
+python3 scripts/generate-rules-history.py --check
+
 step "release-check syntax"
 bash -n scripts/release-check.sh
 for repo_script in \
