@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import type { ActionResult } from "../components/TerminalOutput";
 import type { WorkspaceDiagnostics } from "../types";
@@ -33,23 +33,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
   const [wsLog, setWsLog] = useState<ActionResult | null>(null);
   const [wsRunning, setWsRunning] = useState<string | null>(null);
   const [wsLogCompletedAt, setWsLogCompletedAt] = useState<number | null>(null);
-
-  const [activityIndex, setActivityIndex] = useState(0);
-
-  useEffect(() => {
-    if (!wsRunning) return;
-    setActivityIndex(0);
-    const id = window.setInterval(() => setActivityIndex(i => (i + 1) % 8), 110);
-    return () => window.clearInterval(id);
-  }, [wsRunning]);
-
-  function activityCellClass(index: number): string {
-    const distance = (index - activityIndex + 8) % 8;
-    if (distance === 0) return "terminal-activity-cell terminal-activity-cell-active";
-    if (distance === 1 || distance === 7) return "terminal-activity-cell terminal-activity-cell-mid";
-    if (distance === 2 || distance === 6) return "terminal-activity-cell terminal-activity-cell-low";
-    return "terminal-activity-cell";
-  }
 
   const runWsAction = useCallback(async (action: string, label: string) => {
     if (workspaceActionLockRef.current) return;
@@ -141,8 +124,6 @@ export function useWorkspaceActions(opts: UseWorkspaceActionsOptions) {
     wsRunning,
     wsLog,
     wsLogCompletedAt,
-    activityIndex,
-    activityCellClass,
     runWsAction,
     runWsTask,
     workspaceActionRequestIdRef,

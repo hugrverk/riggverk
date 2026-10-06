@@ -19,8 +19,6 @@ interface StartViewProps {
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
@@ -42,8 +40,6 @@ export function StartView({
   wsLog,
   wsLogCompletedAt,
   wsRunning,
-  activityIndex,
-  activityCellClass,
   status,
   workspaceValid,
   gitAvailable,
@@ -123,8 +119,6 @@ export function StartView({
           wsRunning={wsRunning}
           wsLog={wsLog}
           wsLogCompletedAt={wsLogCompletedAt}
-          activityIndex={activityIndex}
-          activityCellClass={activityCellClass}
           status={status}
           workspaceValid={workspaceValid}
           gitAvailable={gitAvailable}

@@ -1,6 +1,6 @@
 import { useState, useCallback, useRef } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActionResult } from "../components/TerminalOutput";
+import { invokeOpen } from "./invokeOpen";
 import type { BackupRunDetails, BackupRunSummary } from "../types";
 
 export function useBackups(setError: (msg: string) => void) {
@@ -34,7 +34,7 @@ export function useBackups(setError: (msg: string) => void) {
   }, [setError]);
 
   const openBackupsFolder = useCallback(() => {
-    invoke<ActionResult>("open_backups_folder").catch(e => setError(`Open backups: ${e}`));
+    void invokeOpen("open_backups_folder", undefined, "Open backups", setError);
   }, [setError]);
 
   return { backups, selectedBackupId, backupDetails, loadBackups, loadBackupDetails, openBackupsFolder };

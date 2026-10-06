@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
 
 export interface ActionResult {
@@ -17,35 +18,38 @@ function relativeTime(ts: number): string {
   return "earlier";
 }
 
-export function ActivityLoader({
-  activityIndex,
-  activityCellClass,
-  idle = false,
-}: {
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
-  idle?: boolean;
-}) {
-  void activityIndex;
+const ACTIVITY_CELLS = 8;
+const ACTIVITY_STEP_MS = 110;
+
+function activityCellClass(index: number, activeIndex: number): string {
+  const distance = (index - activeIndex + ACTIVITY_CELLS) % ACTIVITY_CELLS;
+  if (distance === 0) return "terminal-activity-cell terminal-activity-cell-active";
+  if (distance === 1 || distance === ACTIVITY_CELLS - 1) return "terminal-activity-cell terminal-activity-cell-mid";
+  if (distance === 2 || distance === ACTIVITY_CELLS - 2) return "terminal-activity-cell terminal-activity-cell-low";
+  return "terminal-activity-cell";
+}
+
+/** Owns its animation tick so only this small component re-renders while a task runs. */
+export function ActivityLoader({ idle = false }: { idle?: boolean }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (idle) return;
+    const id = window.setInterval(() => setActiveIndex(i => (i + 1) % ACTIVITY_CELLS), ACTIVITY_STEP_MS);
+    return () => window.clearInterval(id);
+  }, [idle]);
+
   return (
     <div
       className={`terminal-activity${idle ? " terminal-activity-idle" : ""}`}
       aria-hidden="true"
     >
-      {Array.from({ length: 8 }, (_, i) => <span key={i} className={activityCellClass(i)} />)}
+      {Array.from({ length: ACTIVITY_CELLS }, (_, i) => <span key={i} className={activityCellClass(i, activeIndex)} />)}
     </div>
   );
 }
 
-export function RunningState({
-  label,
-  activityIndex,
-  activityCellClass,
-}: {
-  label: string;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
-}) {
+export function RunningState({ label }: { label: string }) {
   return (
     <>
       <div className="tui-cmdline tui-running">
@@ -54,7 +58,7 @@ export function RunningState({
         <span className="tui-caret" aria-hidden="true" />
       </div>
       <div className="tui-progress" role="status" aria-label={`${label} running`}>
-        <ActivityLoader activityIndex={activityIndex} activityCellClass={activityCellClass} />
+        <ActivityLoader />
         <span className="tui-progress-label">working…</span>
       </div>
     </>
@@ -138,8 +142,6 @@ export function TerminalState({
   completedAt,
   readyLabel,
   idleContent,
-  activityIndex,
-  activityCellClass,
   sectioned = true,
   showNoOutput = true,
 }: {
@@ -148,13 +150,11 @@ export function TerminalState({
   completedAt?: number;
   readyLabel: string;
   idleContent?: React.ReactNode;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
   if (runningLabel) {
-    return <RunningState label={runningLabel} activityIndex={activityIndex} activityCellClass={activityCellClass} />;
+    return <RunningState label={runningLabel} />;
   }
 
   if (result) {

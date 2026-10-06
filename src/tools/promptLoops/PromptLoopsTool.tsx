@@ -30,12 +30,15 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
 
 interface PromptLoopsToolProps {
   contextSeed?: PromptLoopContextSeed | null;
+  /** Called once a seed has been applied so the owner can drop it instead of re-applying it on the next visit. */
+  onContextSeedConsumed?: (seedId: string) => void;
   savedRepos?: RepoDashboardEntry[];
   savedReposLoading?: boolean;
 }
 
 export function PromptLoopsTool({
   contextSeed = null,
+  onContextSeedConsumed,
   savedRepos = [],
   savedReposLoading = false,
 }: PromptLoopsToolProps) {
@@ -157,7 +160,8 @@ export function PromptLoopsTool({
       setRepoEntryId(contextSeed.repoEntryId);
     }
     showStatus("context loaded from Repo Dashboard");
-  }, [contextSeed, showStatus]);
+    onContextSeedConsumed?.(contextSeed.id);
+  }, [contextSeed, onContextSeedConsumed, showStatus]);
 
   const clearComposer = useCallback(() => {
     setRepoEntryId(NO_REPO_CONTEXT_VALUE);

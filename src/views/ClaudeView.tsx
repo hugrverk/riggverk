@@ -15,8 +15,6 @@ interface ClaudeViewProps {
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
   wsRunning: string | null;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
@@ -28,7 +26,7 @@ interface ClaudeViewProps {
 export function ClaudeView(props: ClaudeViewProps) {
   const {
     appSettings, agentTargets, settingsSaveStatus, onToggleTarget,
-    wsLog, wsLogCompletedAt, wsRunning, activityIndex, activityCellClass,
+    wsLog, wsLogCompletedAt, wsRunning,
     status, workspaceValid, gitAvailable, canRunReleaseCheck,
     onHarnessSetupUpdate, runtimeHealth,
   } = props;
@@ -76,8 +74,6 @@ export function ClaudeView(props: ClaudeViewProps) {
           wsRunning={wsRunning}
           wsLog={wsLog}
           wsLogCompletedAt={wsLogCompletedAt}
-          activityIndex={activityIndex}
-          activityCellClass={activityCellClass}
           status={status}
           workspaceValid={workspaceValid}
           gitAvailable={gitAvailable}

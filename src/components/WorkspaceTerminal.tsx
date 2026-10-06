@@ -5,8 +5,6 @@ interface WorkspaceTerminalProps {
   wsRunning: string | null;
   wsLog: ActionResult | null;
   wsLogCompletedAt: number | null;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
   status: StatusData | null;
   workspaceValid: boolean;
   gitAvailable: boolean;
@@ -18,8 +16,6 @@ export function WorkspaceTerminal({
   wsRunning,
   wsLog,
   wsLogCompletedAt,
-  activityIndex,
-  activityCellClass,
   status,
   workspaceValid,
   gitAvailable,
@@ -47,11 +43,7 @@ export function WorkspaceTerminal({
                 <>{terminalStatusText} &middot; {statusText}</>
               )}
             </span>
-            <ActivityLoader
-              activityIndex={activityIndex}
-              activityCellClass={activityCellClass}
-              idle={!wsRunning}
-            />
+            <ActivityLoader idle={!wsRunning} />
           </span>
         </div>
         <div className="ws-terminal-body">
@@ -60,8 +52,6 @@ export function WorkspaceTerminal({
             result={wsLog}
             completedAt={wsLogCompletedAt ?? undefined}
             readyLabel="operations ready"
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             idleContent={
               <div className="log-empty">
                 <div className="tui-cmdline">

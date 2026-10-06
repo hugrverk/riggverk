@@ -40,8 +40,6 @@ const baseProps = {
   wsLog: null,
   wsLogCompletedAt: null,
   wsRunning: null,
-  activityIndex: 0,
-  activityCellClass: () => "terminal-activity-cell",
   status: null,
   workspaceValid: false,
   gitAvailable: false,

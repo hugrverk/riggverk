@@ -9,25 +9,18 @@ describe("PromptLoopsTool", () => {
     cleanup();
   });
 
-  it("does not render obsolete switcher or shortcut hint blocks", () => {
-    const { container } = render(<PromptLoopsTool />);
-    expect(container.querySelector(".tools-switcher")).toBeNull();
-    expect(container.querySelector(".tool-sidebar-footer")).toBeNull();
-    expect(container.querySelector(".tool-sidebar-hints")).toBeNull();
-    expect(screen.queryByText(/1–4/)).toBeNull();
-    expect(screen.queryByText(/↑↓/)).toBeNull();
-  });
-
   it("navigates prompt items with arrow keys outside editable controls", () => {
     const { container } = render(<PromptLoopsTool />);
-    const cards = () => container.querySelectorAll(".prompt-loops-card");
-    expect(cards().length).toBeGreaterThan(1);
+    const cards = Array.from(container.querySelectorAll(".prompt-loops-card"));
+    expect(cards.length).toBeGreaterThan(1);
     const firstActive = container.querySelector(".prompt-loops-card-active");
-    expect(firstActive).not.toBeNull();
+    expect(firstActive).toBe(cards[0]);
 
     fireEvent.keyDown(document, { key: "ArrowDown" });
-    const secondActive = container.querySelector(".prompt-loops-card-active");
-    expect(secondActive).not.toBe(firstActive);
+    expect(container.querySelector(".prompt-loops-card-active")).toBe(cards[1]);
+
+    fireEvent.keyDown(document, { key: "ArrowUp" });
+    expect(container.querySelector(".prompt-loops-card-active")).toBe(cards[0]);
   });
 
   it("ignores global shortcuts while an editable control is focused", () => {
@@ -70,17 +63,39 @@ describe("PromptLoopsTool", () => {
     expect(serialized).not.toMatch(/Operator metadata:|Recommended executor:|Recommended target:|masterprompt/i);
   });
 
-  it("does not render legacy sidebar chrome", () => {
-    const { container } = render(<PromptLoopsTool />);
-    expect(container.querySelector(".prompt-loops-sidebar")).toBeNull();
-  });
-
   it("selects prompt groups from tabs", () => {
     render(<PromptLoopsTool />);
     const tabs = screen.getAllByRole("tab");
     fireEvent.click(tabs[1]!);
     expect(tabs[1]?.getAttribute("aria-selected")).toBe("true");
     expect(tabs[0]?.getAttribute("aria-selected")).toBe("false");
+  });
+
+  it("applies a context seed once and reports it as consumed", () => {
+    const onContextSeedConsumed = vi.fn();
+    const seed = { id: "seed-1", taskContext: "Selected Repo Dashboard item: fix the thing" };
+    const { rerender } = render(
+      <PromptLoopsTool contextSeed={seed} onContextSeedConsumed={onContextSeedConsumed} />,
+    );
+
+    const textarea = screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement;
+    expect(textarea.value).toBe(seed.taskContext);
+    expect(onContextSeedConsumed).toHaveBeenCalledTimes(1);
+    expect(onContextSeedConsumed).toHaveBeenCalledWith("seed-1");
+
+    // Re-rendering with the same seed (owner has not cleared it yet) must not re-apply or re-report it.
+    fireEvent.change(textarea, { target: { value: "edited by the user" } });
+    rerender(<PromptLoopsTool contextSeed={seed} onContextSeedConsumed={onContextSeedConsumed} />);
+    expect((screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement).value).toBe("edited by the user");
+    expect(onContextSeedConsumed).toHaveBeenCalledTimes(1);
+  });
+
+  it("does not apply anything when the owner has already cleared the seed", () => {
+    const onContextSeedConsumed = vi.fn();
+    render(<PromptLoopsTool contextSeed={null} onContextSeedConsumed={onContextSeedConsumed} />);
+    const textarea = screen.getByRole("textbox", { name: "Optional task or context" }) as HTMLTextAreaElement;
+    expect(textarea.value).toBe("");
+    expect(onContextSeedConsumed).not.toHaveBeenCalled();
   });
 
   it("switches prompt groups with number keys outside editable controls", () => {

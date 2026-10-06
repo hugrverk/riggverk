@@ -446,3 +446,41 @@ describe("useLibraryController agent draft survives reload", () => {
     expect(result.current.agentDirty).toBe(false);
   });
 });
+
+describe("useLibraryController open actions", () => {
+  beforeEach(() => {
+    invoke.mockReset();
+  });
+
+  it("reports a soft failure from the OS opener", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockResolvedValue({ success: false, action: "open_doc", stdout: "", stderr: "no default app", exit_code: 1 });
+
+    await act(async () => {
+      await result.current.openDocEditor("doc-a");
+      await result.current.openAgent("agent-a.md");
+      result.current.openSkill("skill-a");
+    });
+
+    expect(invoke).toHaveBeenCalledWith("open_doc", { id: "doc-a" });
+    expect(invoke).toHaveBeenCalledWith("open_agent_source", { filename: "agent-a.md" });
+    expect(invoke).toHaveBeenCalledWith("open_skill", { id: "skill-a" });
+    await waitFor(() => expect(deps.setError).toHaveBeenCalledTimes(3));
+    expect(deps.setError).toHaveBeenCalledWith("Open doc: no default app");
+    expect(deps.setError).toHaveBeenCalledWith("Open agent: no default app");
+    expect(deps.setError).toHaveBeenCalledWith("Open: no default app");
+  });
+
+  it("stays quiet when the opener succeeds", async () => {
+    const { deps } = createDeps();
+    const { result } = renderHook(() => useLibraryController(deps));
+    invoke.mockResolvedValue(successResult("open_doc", ""));
+
+    await act(async () => {
+      await result.current.openDocEditor("doc-a");
+    });
+
+    expect(deps.setError).not.toHaveBeenCalled();
+  });
+});

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import type { ActionResult } from "./components/TerminalOutput";
 import { AppHeaderNav, type AppHeaderView } from "./components/AppHeaderNav";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
+import { invokeOpen } from "./lib/invokeOpen";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
@@ -218,8 +218,6 @@ function AppShell() {
     wsRunning,
     wsLog,
     wsLogCompletedAt,
-    activityIndex,
-    activityCellClass,
     runWsAction,
     runWsTask,
     workspaceActionRequestIdRef,
@@ -230,6 +228,11 @@ function AppShell() {
     workspaceDiagnostics,
     setError,
   });
+
+  // Keep the backups chip current: on mount and whenever a workspace task (apply, uninstall, rollback) finishes.
+  useEffect(() => {
+    if (!wsRunning) void loadBackups();
+  }, [wsRunning, loadBackups]);
 
   const resetWorkspaceBoundState = useCallback(() => {
     workspaceActionRequestIdRef.current += 1;
@@ -322,13 +325,10 @@ function AppShell() {
     }
   }, [agentTargets, appSettings, activeConfigTargetId]);
 
-  const openDefaultWorkspaceFolder = useCallback(async () => {
-    try {
-      await invoke("open_default_workspace_folder");
-    } catch (e) {
-      setError(`Open folder: ${e}`);
-    }
-  }, []);
+  const openDefaultWorkspaceFolder = useCallback(
+    () => invokeOpen("open_default_workspace_folder", undefined, "Open folder", setError),
+    [],
+  );
 
   useEffect(() => { void loadSettings(); }, [loadSettings]);
 
@@ -404,6 +404,10 @@ function AppShell() {
   const { entries: savedRepos, activeEntryId: savedReposActiveId, loading: savedReposLoading } = savedRepoView;
   const [promptContextSeed, setPromptContextSeed] = useState<PromptLoopContextSeed | null>(null);
   const promptContextSeedRef = useRef(0);
+
+  const handlePromptContextSeedConsumed = useCallback((seedId: string) => {
+    setPromptContextSeed(current => (current?.id === seedId ? null : current));
+  }, []);
 
   const handleUsePromptContext = useCallback(
     (payload: { item: RepoDashboardWorkItem; repoPath: string }) => {
@@ -605,8 +609,6 @@ function AppShell() {
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
@@ -628,8 +630,6 @@ function AppShell() {
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
@@ -648,8 +648,6 @@ function AppShell() {
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
@@ -669,8 +667,6 @@ function AppShell() {
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
@@ -689,8 +685,6 @@ function AppShell() {
             wsLog={wsLog}
             wsLogCompletedAt={wsLogCompletedAt}
             wsRunning={wsRunning}
-            activityIndex={activityIndex}
-            activityCellClass={activityCellClass}
             status={status}
             workspaceValid={workspaceValid}
             gitAvailable={gitAvailable}
@@ -732,7 +726,7 @@ function AppShell() {
             onCreateDoc={onCreateDoc}
             // Rules
             agentTemplate={agentTemplate}
-            onOpenTemplate={() => invoke<ActionResult>("open_agent_template").catch(e => setError(`Open: ${e}`))}
+            onOpenTemplate={() => void invokeOpen("open_agent_template", undefined, "Open", setError)}
             agentTemplateDraft={agentTemplateDraft}
             agentTemplateDirty={agentTemplateDirty}
             agentTemplateSaving={agentTemplateSaving}
@@ -773,9 +767,9 @@ function AppShell() {
             onSelectConfigTarget={selectConfigTarget}
             onOpenConfig={() => {
               if (activeConfigTargetId === "opencode_config") {
-                invoke<ActionResult>("open_opencode_config_source", { sourceType: activeConfigSourceType }).catch(e => setError(`Open: ${e}`));
+                void invokeOpen("open_opencode_config_source", { sourceType: activeConfigSourceType }, "Open", setError);
               } else {
-                invoke<ActionResult>("open_config_template", { targetId: activeConfigTargetId }).catch(e => setError(`Open: ${e}`));
+                void invokeOpen("open_config_template", { targetId: activeConfigTargetId }, "Open", setError);
               }
             }}
             configDraft={configDraft}
@@ -805,6 +799,7 @@ function AppShell() {
         {view === "prompts" && (
           <PromptLoopsTool
             contextSeed={promptContextSeed}
+            onContextSeedConsumed={handlePromptContextSeedConsumed}
             savedRepos={savedRepos}
             savedReposLoading={savedReposLoading}
           />

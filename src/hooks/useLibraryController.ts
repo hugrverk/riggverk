@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { LEAVE_DIRTY_MESSAGE } from "../lib/editorGuards";
+import { invokeOpen } from "../lib/invokeOpen";
 import { useConfirm } from "../components/ConfirmDialog";
 import {
   createSaveOperationTracker,
@@ -368,9 +369,10 @@ export function useLibraryController({
     }
   }, [activeDoc?.id, docDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
-  const openDocEditor = useCallback(async (id: string) => {
-    try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
-  }, [setError]);
+  const openDocEditor = useCallback(
+    (id: string) => invokeOpen("open_doc", { id }, "Open doc", setError),
+    [setError],
+  );
 
   const onSaveDoc = useCallback(async () => {
     if (!activeDoc) return;
@@ -525,9 +527,10 @@ export function useLibraryController({
     }
   }, [activeAgentId, agentDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
-  const openAgent = useCallback(async (id: string) => {
-    try { await invoke<ActionResult>("open_agent_source", { filename: id }); } catch (e) { setError(`Open agent: ${e}`); }
-  }, [setError]);
+  const openAgent = useCallback(
+    (id: string) => invokeOpen("open_agent_source", { filename: id }, "Open agent", setError),
+    [setError],
+  );
 
   const onSaveAgent = useCallback(async () => {
     // The draft belongs to the loaded content, which can lag behind the selected id.
@@ -758,7 +761,7 @@ export function useLibraryController({
   }, [activeConfigSourceType, configDirty, confirm]);
 
   const openSkill = useCallback((id: string) => {
-    invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));
+    void invokeOpen("open_skill", { id }, "Open", setError);
   }, [setError]);
 
   const readSkill = useCallback(async (id: string) => {
