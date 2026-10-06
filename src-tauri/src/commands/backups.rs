@@ -706,6 +706,7 @@ mod tests {
 
     #[test]
     fn resolve_current_target_known_ids() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         for tid in ALLOWED_TARGET_IDS {
             let result = resolve_current_target(tid);
