@@ -549,14 +549,8 @@ fn remove_single_artifact(
     if !dest.exists() {
         return Ok(());
     }
-    let root = if matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-    ) {
-        workspace_root
-    } else {
-        home
-    };
+    let root = artifact.allowlist_root(home, workspace_root)?;
+    let root = root.as_path();
 
     if dest.is_dir() {
         crate::safe_filesystem::remove_dir_no_symlinks(&dest, root)
@@ -625,6 +619,7 @@ fn apply_rules_artifact(
     home: &Path,
     rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
+    let root = artifact.allowlist_root(home, workspace_root)?;
     if let Some(rewrite) = rewrite {
         // An explicit conversion writes exactly the previewed content, and only
         // over the file the preview was computed from.
@@ -636,7 +631,7 @@ fn apply_rules_artifact(
         return crate::safe_filesystem::write_regular_file_atomic(
             dest,
             rewrite.content.as_bytes(),
-            home,
+            &root,
         )
         .map_err(|e| format!("write rules file {}: {e}", dest.display()));
     }
@@ -660,7 +655,7 @@ fn apply_rules_artifact(
     } else {
         crate::rules_block::render_new(&source_text)
     };
-    crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), home)
+    crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), &root)
         .map_err(|e| format!("write rules file {}: {e}", dest.display()))
 }
 
@@ -672,13 +667,14 @@ fn apply_single_artifact(
 ) -> Result<(), String> {
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
+    let root = artifact.allowlist_root(home, workspace_root)?;
 
     if source.is_dir() {
         if dest.exists() {
-            crate::safe_filesystem::remove_dir_no_symlinks(&dest, home)
+            crate::safe_filesystem::remove_dir_no_symlinks(&dest, &root)
                 .map_err(|e| format!("replace dir: {e}"))?;
         }
-        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
+        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, &root)
             .map_err(|e| format!("apply dir: {e}"))?;
         return Ok(());
     }
@@ -733,7 +729,7 @@ fn apply_single_artifact(
                 .map_err(|e| format!("serialize opencode config: {e}"))?
                 + "\n")
                 .as_bytes(),
-            home,
+            &root,
         )
         .map_err(|e| format!("write opencode config {}: {e}", dest.display()))?;
         return Ok(());
@@ -749,23 +745,15 @@ fn apply_single_artifact(
             return crate::safe_filesystem::write_regular_file_atomic(
                 &dest,
                 rendered.as_bytes(),
-                home,
+                &root,
             );
         }
-        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, home)
+        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
             .map_err(|e| format!("write codex config {}: {e}", dest.display()))?;
         return Ok(());
     }
 
-    let root = if matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-    ) {
-        workspace_root
-    } else {
-        home
-    };
-    crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, root)
+    crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
         .map_err(|e| format!("create {}: {e}", dest.display()))?;
     Ok(())
 }
@@ -2493,6 +2481,71 @@ mod tests {
             .unwrap(),
             "keep me"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn codex_artifacts_apply_and_remove_under_codex_home_outside_home() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-codex-home-outside-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        let codex = base.join("elsewhere/codex");
+        fs::create_dir_all(&home).expect("home");
+        fs::create_dir_all(&codex).expect("codex home");
+        copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        std::env::set_var("CODEX_HOME", &codex);
+
+        let agent = crate::artifact_registry::AgentName::new("inspector").unwrap();
+        let cases = [
+            (ArtifactId::CodexRules, "AGENTS.md"),
+            (ArtifactId::CodexConfig, "config.toml"),
+            (ArtifactId::CodexAgent(agent), "agents/inspector.toml"),
+        ];
+        let planned = setup_transaction::plan_artifacts_for_surfaces(
+            &[
+                SetupSurfaceId::CodexRules,
+                SetupSurfaceId::CodexConfig,
+                SetupSurfaceId::CodexAgents,
+            ],
+            &ws,
+            &home,
+        )
+        .expect("preview under CODEX_HOME outside home");
+        assert!(
+            planned
+                .iter()
+                .all(|p| p.kind == crate::setup_lifecycle::OperationKind::Create),
+            "{:?}",
+            planned
+                .iter()
+                .map(|p| (&p.artifact, p.kind))
+                .collect::<Vec<_>>()
+        );
+        for (artifact, rel) in &cases {
+            apply_single_artifact(artifact, &ws, &home, None)
+                .unwrap_or_else(|e| panic!("apply {artifact:?}: {e}"));
+            assert!(codex.join(rel).is_file(), "{artifact:?} not written");
+            // A second apply replaces the installed file.
+            apply_single_artifact(artifact, &ws, &home, None)
+                .unwrap_or_else(|e| panic!("re-apply {artifact:?}: {e}"));
+        }
+        assert!(!home.join(".codex").exists());
+        for (artifact, rel) in &cases {
+            remove_single_artifact(artifact, &ws, &home)
+                .unwrap_or_else(|e| panic!("remove {artifact:?}: {e}"));
+            assert!(!codex.join(rel).exists(), "{artifact:?} not removed");
+        }
         let _ = fs::remove_dir_all(&base);
     }
 

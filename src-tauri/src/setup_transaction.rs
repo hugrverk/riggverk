@@ -460,13 +460,9 @@ pub fn validate_artifact_source_dest(
     }
     let ws_root = workspace_root.to_path_buf();
     let dest = artifact.resolve_dest(home, &ws_root)?;
-    let dest_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-        &ws_root
-    } else {
-        home
-    };
-    crate::path_safety::reject_path_escape(&dest, dest_root, "destination")?;
-    reject_symlink_parent_chain(&dest, dest_root, "destination")?;
+    let dest_root = artifact.allowlist_root(home, &ws_root)?;
+    crate::path_safety::reject_path_escape(&dest, &dest_root, "destination")?;
+    reject_symlink_parent_chain(&dest, &dest_root, "destination")?;
     reject_symlink(&dest, "destination")?;
     let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
         .canonicalize()
@@ -1758,17 +1754,13 @@ pub fn backup_artifact(
     let backup_path = backup_dir.join(&rel);
     reject_path_within_transaction_root(&backup_path, backup_dir)?;
     // Validate source parent chain against the appropriate root.
-    let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-        workspace_root
-    } else {
-        home
-    };
+    let source_root = artifact.allowlist_root(home, workspace_root)?;
     if dest.is_dir() {
         crate::safe_filesystem::copy_private_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     } else {
-        reject_symlink_parent_chain(&dest, source_root, "backup source file")?;
+        reject_symlink_parent_chain(&dest, &source_root, "backup source file")?;
         crate::safe_filesystem::copy_private_regular_file_no_symlinks(
             &dest,
             &backup_path,
@@ -2144,10 +2136,8 @@ fn restore_artifact_from_backup_with_mode(
         workspace_root.ok_or_else(|| "workspace root required for rollback".to_string())?;
     let dest = op.artifact.resolve_dest(home, ws_root)?;
     reject_symlink(&dest, "rollback destination")?;
-    let allowlist_root = match &op.artifact {
-        ArtifactId::WorkspaceFile(_) => ws_root,
-        _ => home,
-    };
+    let allowlist_root = op.artifact.allowlist_root(home, ws_root)?;
+    let allowlist_root = allowlist_root.as_path();
 
     let restore_dest = dest.clone();
 
@@ -2572,6 +2562,9 @@ mod tests {
     fn validate_artifact_source_dest_rejects_dangling_destination() {
         #[cfg(unix)]
         {
+            let _guard = crate::test_env::guard::lock();
+            let _restore = crate::test_env::guard::EnvRestore::capture();
+            unsafe { std::env::remove_var("CODEX_HOME") };
             let base = temp("dangling-dest");
             let _ = fs::remove_dir_all(&base);
             let ws = base.join("ws");
@@ -2587,6 +2580,97 @@ mod tests {
             assert!(err.contains("symlink"), "{err}");
             let _ = fs::remove_dir_all(&base);
         }
+    }
+
+    fn codex_agent_artifact() -> ArtifactId {
+        ArtifactId::CodexAgent(crate::artifact_registry::AgentName::new("repo-scout").unwrap())
+    }
+
+    #[test]
+    fn validate_artifact_source_dest_allows_codex_home_outside_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-outside");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        let codex = base.join("elsewhere/codex");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&codex).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", &codex) };
+
+        for artifact in [
+            ArtifactId::CodexRules,
+            ArtifactId::CodexConfig,
+            codex_agent_artifact(),
+        ] {
+            let (_, dest) = validate_artifact_source_dest(&artifact, &ws, &home)
+                .unwrap_or_else(|e| panic!("{artifact:?}: {e}"));
+            assert!(dest.starts_with(&codex), "{artifact:?}: {dest:?}");
+        }
+        // Surfaces that live under home keep their home allowlist.
+        let (_, dest) =
+            validate_artifact_source_dest(&ArtifactId::ClaudeRules, &ws, &home).unwrap();
+        assert!(dest.starts_with(&home), "{dest:?}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn validate_artifact_source_dest_rejects_relative_codex_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-relative");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", "relative/codex") };
+
+        let err = validate_artifact_source_dest(&ArtifactId::CodexRules, &ws, &home)
+            .expect_err("relative CODEX_HOME must be rejected");
+        assert!(err.contains("CODEX_HOME must be an absolute path"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn explicit_rollback_restores_codex_artifact_under_codex_home_outside_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-restore");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        let codex = base.join("elsewhere/codex");
+        let backup_dir = base.join("backup");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(codex.join("agents")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", &codex) };
+        let dest = codex.join("agents/repo-scout.toml");
+        fs::write(&dest, "applied").unwrap();
+        fs::write(backup_dir.join("artifacts/agent"), "before").unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: codex_agent_artifact(),
+            surface: SetupSurfaceId::CodexAgents,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::ManagedFile,
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/agent".into()),
+            apply_status: ApplyStatus::Applied,
+            ..Default::default()
+        };
+
+        restore_artifact_from_backup_with_mode(
+            &op,
+            &backup_dir,
+            &home,
+            RollbackRestoreMode::FullBackup,
+            Some(&ws),
+        )
+        .expect("restore under CODEX_HOME");
+
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "before");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

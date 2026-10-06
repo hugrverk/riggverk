@@ -184,6 +184,20 @@ pub enum ArtifactKind {
     McpConfig,
 }
 
+/// `CODEX_HOME` (or `~/.codex`). A relative value is rejected: file operations would resolve
+/// it against the process working directory while the allowlist check resolves it against home.
+fn absolute_codex_home(home: &Path) -> Result<PathBuf, String> {
+    let dir = codex_home(home);
+    if dir.is_absolute() {
+        Ok(dir)
+    } else {
+        Err(format!(
+            "CODEX_HOME must be an absolute path (got {})",
+            dir.display()
+        ))
+    }
+}
+
 impl ArtifactId {
     /// Resolve the destination path for this artifact.
     pub fn resolve_dest(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
@@ -201,15 +215,20 @@ impl ArtifactId {
                 .join(".config/opencode/skills")
                 .join(name.as_str())
                 .join("SKILL.md")),
-            ArtifactId::CodexConfig => Ok(codex_home(home).join("config.toml")),
-            ArtifactId::CodexRules => Ok(codex_home(home).join("AGENTS.md")),
-            ArtifactId::CodexAgent(name) => Ok(codex_home(home)
+            ArtifactId::CodexConfig => Ok(absolute_codex_home(home)?.join("config.toml")),
+            ArtifactId::CodexRules => Ok(absolute_codex_home(home)?.join("AGENTS.md")),
+            ArtifactId::CodexAgent(name) => Ok(absolute_codex_home(home)?
                 .join("agents")
                 .join(name.file_name_with_extension("toml"))),
             ArtifactId::CodexSkill(name) => {
-                Ok(crate::agent_skill_targets::codex_global_skills_dest(home)
-                    .join(name.as_str())
-                    .join("SKILL.md"))
+                let skills = crate::agent_skill_targets::codex_global_skills_dest(home);
+                if !skills.is_absolute() {
+                    return Err(format!(
+                        "Codex skills destination must be an absolute path (check CODEX_HOME and CODEX_SKILLS_PATH): {}",
+                        skills.display()
+                    ));
+                }
+                Ok(skills.join(name.as_str()).join("SKILL.md"))
             }
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
@@ -235,6 +254,32 @@ impl ArtifactId {
                     .join("SKILL.md"))
             }
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
+        }
+    }
+
+    /// Directory the destination must stay inside when it is written, backed up, restored, or
+    /// removed: the workspace for workspace files, `CODEX_HOME` for Codex artifacts when it lies
+    /// outside `home`, and `home` otherwise (which keeps the symlink-chain check from `home` down
+    /// for the default `~/.codex`).
+    pub fn allowlist_root(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
+        match self {
+            ArtifactId::WorkspaceFile(_) => Ok(workspace_root.to_path_buf()),
+            ArtifactId::CodexConfig
+            | ArtifactId::CodexRules
+            | ArtifactId::CodexAgent(_)
+            | ArtifactId::CodexSkill(_) => {
+                let dest = self.resolve_dest(home, workspace_root)?;
+                if dest.starts_with(home) {
+                    return Ok(home.to_path_buf());
+                }
+                let codex_root = absolute_codex_home(home)?;
+                Ok(if dest.starts_with(&codex_root) {
+                    codex_root
+                } else {
+                    home.to_path_buf()
+                })
+            }
+            _ => Ok(home.to_path_buf()),
         }
     }
 
