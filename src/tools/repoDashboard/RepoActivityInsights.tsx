@@ -667,7 +667,7 @@ export function RepoActivityInsights({
                     Show all
                   </button>
                 </div>
-                <div className="repo-dashboard-contributor-visibility-list font-mono">
+                <div className="repo-dashboard-contributor-visibility-list font-mono scroll-cue">
                   <div
                     className="repo-dashboard-contributor-visibility-header"
                     aria-hidden="true"
@@ -697,7 +697,7 @@ export function RepoActivityInsights({
               index={allStats.length ? 4 : 3}
               title="commit activity"
               className="repo-dashboard-heatmap-panel"
-              bodyClassName="repo-dashboard-pane-body repo-dashboard-heatmap-body"
+              bodyClassName="repo-dashboard-pane-body repo-dashboard-heatmap-body scroll-cue"
             >
               {heatmapCells.length ? (
                 <ActivityHeatmap cells={heatmapCells} density="default" layout="embedded" />

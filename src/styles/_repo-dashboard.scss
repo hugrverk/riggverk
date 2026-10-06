@@ -536,8 +536,9 @@
   max-height: 100%;
 }
 
+/* The pane is `scrollable`: a long card scrolls inside it instead of being cut at the pane edge. */
 .repo-dashboard-latest-body {
-  overflow: hidden;
+  overflow: auto;
 }
 
 .repo-dashboard-recent-body {
@@ -547,9 +548,7 @@
 }
 
 .repo-dashboard-overview-lower .repo-dashboard-latest-content {
-  flex: 1 1 0;
-  min-height: 0;
-  overflow: hidden;
+  min-width: 0;
 }
 
 .repo-dashboard-overview-lower .repo-dashboard-recent-activity-card {
@@ -582,7 +581,10 @@
 
 .repo-dashboard-activity-sidebar {
   display: grid;
-  grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
+  /* The heatmap asks for its natural height (grid, month rail, legend) so it fits instead of scrolling a few px.
+     Contributors keep room for a header and one row (its list scrolls) and take what is left. At the 620px
+     minimum window the heatmap scrolls by the shortfall, with the edge cue from _primitives. */
+  grid-template-rows: minmax(96px, 1fr) minmax(0, auto);
   gap: 14px;
   min-width: 0;
   min-height: 0;
@@ -605,7 +607,7 @@
   overflow: hidden;
 }
 
-/* The heatmap needs ~150px; on the 620px minimum window the pane scrolls instead of cutting the legend. */
+/* When even its natural height does not fit (the 620px minimum window with large text) the pane scrolls, with the edge cue from _primitives, instead of cutting the legend. */
 .repo-dashboard-heatmap-body {
   display: flex;
   flex-direction: column;
