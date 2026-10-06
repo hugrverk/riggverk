@@ -624,7 +624,7 @@ mod tests {
             discover_skill_catalog(&workspace)
                 .expect("installed catalog")
                 .len(),
-            21
+            22
         );
         assert!(read_managed_state(&workspace).is_some());
         let current = crate::installation_status::status_for_surfaces(
@@ -649,7 +649,7 @@ mod tests {
             discover_skill_catalog(&fixture.ws)
                 .expect("runtime catalog")
                 .len(),
-            33
+            34
         );
         assert_eq!(
             fs::read_dir(fixture.ws.join("agents"))
@@ -761,7 +761,7 @@ mod tests {
         let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
         assert_eq!(
             catalog.len(),
-            22,
+            23,
             "modified stale runtime skill is preserved"
         );
         assert!(

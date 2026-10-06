@@ -1935,7 +1935,7 @@ mod tests {
     fn expand_bundled_opencode_skills_count() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let artifacts = expand_surface_fail_closed(SetupSurfaceId::OpenCodeSkills, &repo).unwrap();
-        assert_eq!(artifacts.len(), 21);
+        assert_eq!(artifacts.len(), 22);
     }
 
     #[test]

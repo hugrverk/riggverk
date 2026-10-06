@@ -442,7 +442,7 @@ def scan_repo_for_removed_skills() -> None:
             continue
         if path in MIGRATION_FIXTURE_ALLOWLIST:
             continue
-        if "node_modules" in path.parts or "target" in path.parts or ".git" in path.parts:
+        if {"node_modules", "target", ".git", ".claude"} & set(path.parts):
             continue
         if path.suffix not in SCANNED_SUFFIXES:
             continue
