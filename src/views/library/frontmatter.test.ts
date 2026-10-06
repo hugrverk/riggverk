@@ -26,4 +26,11 @@ describe("stripFrontmatter", () => {
     const open = "---\nname: tdd\n\n# Title";
     expect(stripFrontmatter(open)).toBe(open);
   });
+
+  it("rejects a long unterminated CRLF block in linear time", () => {
+    const open = `---\r\n${"name: tdd\r\n".repeat(200)}\r\n# Title`;
+    const started = performance.now();
+    expect(stripFrontmatter(open)).toBe(open);
+    expect(performance.now() - started).toBeLessThan(500);
+  });
 });

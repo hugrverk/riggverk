@@ -1,4 +1,4 @@
-const FRONTMATTER = /^---[ \t]*\r?\n((?:[^\n]*\r?\n)*?)---[ \t]*(?:\r?\n|$)/;
+const FRONTMATTER = /^---[ \t]*\r?\n((?:[^\r\n]*\r?\n)*?)---[ \t]*(?:\r?\n|$)/;
 const YAML_KEY = /^[A-Za-z0-9_-]+[ \t]*:/m;
 
 /**
