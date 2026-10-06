@@ -448,6 +448,12 @@ function AppShell() {
     ]);
   }, [loadWorkspaceDiagnostics, loadDocs, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
 
+  // An install or a rules conversion that wrote files leaves the transaction `z` rolls back.
+  const onApplied = useCallback((result: SetupResult) => {
+    clearUninstallRecovery();
+    setApplyTransactionId(result.applied.length > 0 ? result.transaction_id : null);
+  }, [clearUninstallRecovery]);
+
   // `u`, `p`, `:update` and `:preview` open the review on the page; only `y` there applies it.
   const install = useInstallScreen({
     view,
@@ -456,10 +462,7 @@ function AppShell() {
     settings: appSettings,
     runWorkspaceTask: runWsTask,
     refresh: refreshAfterApply,
-    onApplied: result => {
-      clearUninstallRecovery();
-      setApplyTransactionId(result.applied.length > 0 ? result.transaction_id : null);
-    },
+    onApplied,
   });
 
   const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {
@@ -624,6 +627,9 @@ function AppShell() {
   };
   const harnessPageProps = {
     ...pageProps,
+    runWorkspaceTask: runWsTask,
+    refreshAfterApply,
+    onApplied,
     appSettings,
     agentTargets: visibleAgentTargets,
     settingsSaveStatus,

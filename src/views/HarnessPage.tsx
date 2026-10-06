@@ -1,6 +1,10 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { InstallPlanPane } from "../components/InstallPlanPane";
 import { OutputPane } from "../components/OutputPane";
+import { RulesPane } from "../components/RulesPane";
+import { RulesSummary } from "../components/RulesSummary";
+import { useRulesActions } from "../hooks/useRulesActions";
+import { useRulesFlow } from "../hooks/useRulesFlow";
 import { useKeymap } from "../keyboard/useKeymap";
 import { HARNESS_LABELS } from "../lib/harnessInstallation";
 import { runtimeRowsFor, runtimeVerdict, type HarnessRuntimeHealth } from "../lib/harnessRuntimeRows";
@@ -10,6 +14,7 @@ import {
   targetMeta,
   updateActionFor,
 } from "../lib/installationView";
+import { rulesModelFor, rulesOverrideWarning, rulesSurfaceOf } from "../lib/rulesView";
 import { filterTargetsForPage } from "../lib/targetGroups";
 import { ActionKey } from "../ui/ActionKey";
 import { Glyph } from "../ui/Glyph";
@@ -33,7 +38,8 @@ export interface HarnessPageProps extends HarnessViewProps {
 /**
  * One harness (Codex, OpenCode, Cursor, Claude) as four panes: [1] the targets it syncs (a multi-select list,
  * Space toggles and the change autosaves), [2] its surfaces and installation state, [3] runtime facts, [4]
- * output. Update and preview open the install review in place of the four panes.
+ * output. Update and preview open the install review in place of the four panes; `d` and `v` on a rules file
+ * open the rules review (a diff, or the preview of converting it) the same way.
  */
 export function HarnessPage({
   harness,
@@ -50,6 +56,9 @@ export function HarnessPage({
   rollbackTransactionId,
   onRollback,
   onRefresh,
+  runWorkspaceTask,
+  refreshAfterApply,
+  onApplied,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -68,6 +77,26 @@ export function HarnessPage({
 
   const update = updateActionFor(harness, entry, { workspaceValid, busyLabel: wsRunning, settingsSaving: saving });
   const previewDisabled = previewDisabledFor(harness, { workspaceValid, busyLabel: wsRunning });
+
+  const rulesSurface = rulesSurfaceOf(harness);
+  const rulesModel = workspaceValid ? rulesModelFor(harness, entry?.status) : null;
+  const rulesFlow = useRulesFlow({ runWorkspaceTask, refresh: refreshAfterApply, onApplied });
+  const installOpen = install.isOpenOn(harness);
+  const rules = useRulesActions({
+    harness,
+    model: rulesModel,
+    workspaceValid,
+    busyLabel: wsRunning,
+    installOpen,
+    flow: rulesFlow,
+    paneIds: ["surfaces"],
+    reload: () => overview.refresh(),
+  });
+  // `:update` can open the install review while a rules review is showing; the install review wins.
+  useEffect(() => {
+    if (installOpen) rulesFlow.close();
+  }, [installOpen, rulesFlow.close]);
+
   useKeymap(
     installBindings({
       idPrefix: harness,
@@ -78,7 +107,7 @@ export function HarnessPage({
       onPreview: () => void install.open(harness, { readOnly: true }),
       onRefresh: () => void overview.refresh(),
     }),
-    { enabled: !install.isOpenOn(harness) },
+    { enabled: !installOpen && !rulesFlow.open },
   );
 
   const outputPane = (index: number) => (
@@ -98,10 +127,25 @@ export function HarnessPage({
     />
   );
 
-  if (install.isOpenOn(harness)) {
+  if (installOpen) {
     return (
       <section className="screen install" aria-label={`${label} install review`}>
         <InstallPlanPane flow={install.flow} index={1} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        {outputPane(2)}
+      </section>
+    );
+  }
+
+  if (rulesFlow.open) {
+    return (
+      <section className="screen install" aria-label={`${label} rules review`}>
+        <RulesPane
+          flow={rulesFlow}
+          index={1}
+          busyLabel={wsRunning}
+          backupRoot={backupRoot}
+          canConvert={rulesModel?.convertible === true}
+        />
         {outputPane(2)}
       </section>
     );
@@ -112,6 +156,7 @@ export function HarnessPage({
   const verdict = runtimeVerdict(runtime);
   const cursorTarget = targets.find(target => target.id === targetCursor) ?? targets[0];
   const enabledCount = targets.filter(target => enabledTargets.has(target.id)).length;
+  const override = rulesOverrideWarning(runtime.harness === "codex" ? runtime.health : null);
 
   return (
     <section className="screen quad" aria-label={label}>
@@ -182,21 +227,31 @@ export function HarnessPage({
             No valid workspace installed. Install it on the workspace page first.
           </p>
         )}
+        {override && (
+          <p className="rules-alert" role="alert">
+            <Glyph name="conflict" tone="warn" /> <b>{override.title}.</b> {override.detail}
+          </p>
+        )}
         <PaneList
           label={`${label} surfaces`}
           items={surfaceRows}
           getKey={row => row.surface}
-          renderItem={row => (
-            <>
-              <span className="nm">
-                {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
-              </span>
-              <span className={`meta ${toneClass(row.display.tone)}`.trim()}>
-                <Glyph name={row.display.glyph} tone={row.display.tone} /> {row.display.label}
-              </span>
-            </>
-          )}
+          renderItem={row => {
+            // A file the user keeps is not current and not a conflict; the rules model says so.
+            const display = row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
+            return (
+              <>
+                <span className="nm">
+                  {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
+                </span>
+                <span className={`meta ${toneClass(display.tone)}`.trim()}>
+                  <Glyph name={display.glyph} tone={display.tone} /> {display.label}
+                </span>
+              </>
+            );
+          }}
         />
+        {rulesModel && <RulesSummary model={rulesModel} error={rules.error} />}
         {entry?.status && <p className="c-dim pane-note">{entry.status.summary}</p>}
         {entry?.error && (
           <p className="c-fail pane-note" role="status">

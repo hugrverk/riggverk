@@ -1,7 +1,7 @@
 import type { InstallationOverview } from "../hooks/useInstallationOverview";
-import type { InstallScreen } from "../hooks/useInstallScreen";
+import type { InstallScreen, RunWorkspaceTask } from "../hooks/useInstallScreen";
 import type { SettingsSaveStatus } from "../lib/settingsDraft";
-import type { ActionResult, AgentTargetMeta, AppSettings, StatusData } from "../types";
+import type { ActionResult, AgentTargetMeta, AppSettings, SetupResult, StatusData } from "../types";
 
 /** What the output pane of the Start and harness pages needs. */
 export interface PageOutputProps {
@@ -30,8 +30,18 @@ export interface PageInstallProps {
   onRefresh: () => void;
 }
 
+/** What converting a rules file needs from the app: it runs and reports like an install. */
+export interface PageRulesProps {
+  /** The workspace task runner: action lock, output pane, minimum running time. */
+  runWorkspaceTask: RunWorkspaceTask;
+  /** Reload what a conversion may have changed on disk. */
+  refreshAfterApply: () => void | Promise<void>;
+  /** A conversion wrote files: the transaction `z` rolls back. */
+  onApplied: (result: SetupResult) => void;
+}
+
 /** Props every harness page (Codex, OpenCode, Cursor, Claude) receives from the app shell. */
-export interface HarnessViewProps extends PageOutputProps, PageInstallProps {
+export interface HarnessViewProps extends PageOutputProps, PageInstallProps, PageRulesProps {
   appSettings: AppSettings | null;
   agentTargets: AgentTargetMeta[];
   settingsSaveStatus: SettingsSaveStatus;

@@ -1,5 +1,6 @@
 import type { Tone } from "../ui/tone";
 import type {
+  CodexRuntimeHealth,
   InstallAgent,
   InstallationState,
   InstallationStatus,
@@ -185,4 +186,60 @@ export function rulesModelFor(harness: InstallAgent, status: InstallationStatus 
   const row = status?.surfaces.find(candidate => candidate.surface === surface);
   if (!row?.rules) return null;
   return rulesModel(surface, row.state, row.rules);
+}
+
+/** The file a harness's rules surface writes, for messages. */
+export function rulesFileName(harness: InstallAgent): string {
+  return harness === "claude" ? "CLAUDE.md" : "AGENTS.md";
+}
+
+/** Whether an action is offered (`visible`) and, when it is offered but cannot run now, why not (`reason`). */
+export interface RulesGate {
+  visible: boolean;
+  reason: string | null;
+}
+
+export interface RulesGates {
+  diff: RulesGate;
+  convert: RulesGate;
+  /** `m` on a file the user does not manage yet: record "leave as is". */
+  leave: RulesGate;
+  /** `m` on a user-managed file: hand it back to the app. */
+  manage: RulesGate;
+}
+
+export interface RulesGateContext {
+  workspaceValid: boolean;
+  /** Label of a workspace task in flight, or null. */
+  busyLabel: string | null;
+  /** A review (install or rules) is open on the page: the actions wait for it to close. */
+  blockedBy: string | null;
+}
+
+/** What `d`, `v` and `m` (and `:rules ...`) may do for `model` right now. */
+export function rulesGates(model: RulesModel | null, context: RulesGateContext): RulesGates {
+  const hidden: RulesGate = { visible: false, reason: null };
+  if (!model || !context.workspaceValid) return { diff: hidden, convert: hidden, leave: hidden, manage: hidden };
+  const wait = context.blockedBy ?? (context.busyLabel ? `${context.busyLabel} is running` : null);
+  const gate = (visible: boolean, reason: string | null = null): RulesGate => ({ visible, reason: visible ? wait ?? reason : null });
+  return {
+    diff: gate(model.kind !== "absent", model.diffDisabled || null),
+    convert: gate(model.convertible || model.kind === "malformed", model.convertible ? null : "the markers are malformed; fix them by hand first"),
+    leave: gate(model.convertible && !model.user_managed),
+    manage: gate(model.user_managed),
+  };
+}
+
+export interface RulesOverrideWarning {
+  title: string;
+  detail: string;
+}
+
+/**
+ * Codex reads `$CODEX_HOME/AGENTS.override.md` instead of `AGENTS.md` when it has content, which silently drops the
+ * base. The runtime health reports it as a `rules_override` warning check.
+ */
+export function rulesOverrideWarning(health: Pick<CodexRuntimeHealth, "checks"> | null | undefined): RulesOverrideWarning | null {
+  const check = health?.checks?.find(candidate => candidate.id === "rules_override" && candidate.status === "warn");
+  return check ? { title: check.label, detail: check.detail } : null;
 }
