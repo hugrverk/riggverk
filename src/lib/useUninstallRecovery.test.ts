@@ -22,7 +22,7 @@ describe("useUninstallRecovery", () => {
     expect(result.current.transactionId).toBeNull();
   });
 
-  it("captures a non-empty uninstall transaction id", () => {
+  it("captures the transaction id of a successful uninstall that changed something", () => {
     const { result } = renderHook(() => useUninstallRecovery());
 
     act(() => {
@@ -32,22 +32,33 @@ describe("useUninstallRecovery", () => {
     expect(result.current.transactionId).toBe("1710000000000");
   });
 
-  it("captures transaction evidence from a failed uninstall result", () => {
+  it("does not arm recovery for a failed uninstall", () => {
     const { result } = renderHook(() => useUninstallRecovery());
 
     act(() => {
       result.current.captureFromUninstallResult(
-        uninstallResult({ success: false, failed: ["partial failure"] }),
+        uninstallResult({ success: false, applied: [], failed: ["preflight failed"] }),
       );
     });
 
-    expect(result.current.transactionId).toBe("1710000000000");
+    expect(result.current.transactionId).toBeNull();
   });
 
-  it("does not capture an empty transaction id", () => {
+  it("does not arm recovery for a no-op uninstall", () => {
     const { result } = renderHook(() => useUninstallRecovery());
 
     act(() => {
+      result.current.captureFromUninstallResult(uninstallResult({ applied: [] }));
+    });
+
+    expect(result.current.transactionId).toBeNull();
+  });
+
+  it("ignores a missing result and an empty transaction id", () => {
+    const { result } = renderHook(() => useUninstallRecovery());
+
+    act(() => {
+      result.current.captureFromUninstallResult(null);
       result.current.captureFromUninstallResult(uninstallResult({ transaction_id: "" }));
     });
 
@@ -59,45 +70,12 @@ describe("useUninstallRecovery", () => {
 
     act(() => {
       result.current.captureFromUninstallResult(uninstallResult());
-      result.current.clearRecovery();
-    });
-
-    expect(result.current.transactionId).toBeNull();
-  });
-
-  it("models successful rollback clearing the candidate", () => {
-    const { result } = renderHook(() => useUninstallRecovery());
-
-    act(() => {
-      result.current.captureFromUninstallResult(uninstallResult());
     });
     expect(result.current.transactionId).toBe("1710000000000");
 
     act(() => {
       result.current.clearRecovery();
     });
-    expect(result.current.transactionId).toBeNull();
-  });
-
-  it("models successful install or update clearing an obsolete candidate", () => {
-    const { result } = renderHook(() => useUninstallRecovery());
-
-    act(() => {
-      result.current.captureFromUninstallResult(uninstallResult());
-      result.current.clearRecovery();
-    });
-
-    expect(result.current.transactionId).toBeNull();
-  });
-
-  it("models workspace-bound reset clearing the candidate", () => {
-    const { result } = renderHook(() => useUninstallRecovery());
-
-    act(() => {
-      result.current.captureFromUninstallResult(uninstallResult());
-      result.current.clearRecovery();
-    });
-
     expect(result.current.transactionId).toBeNull();
   });
 });
