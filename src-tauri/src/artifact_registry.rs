@@ -67,9 +67,19 @@ pub enum ArtifactId {
     WorkspaceFile(WorkspaceRelPath),
 }
 
-/// Workspace-relative path for bundled files. Validated at construction.
+/// Workspace-relative path for bundled files. Validated at construction and on
+/// deserialization, so a manifest cannot smuggle in a path `new` would refuse.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct WorkspaceRelPath(String);
+
+impl TryFrom<String> for WorkspaceRelPath {
+    type Error = String;
+
+    fn try_from(rel: String) -> Result<Self, Self::Error> {
+        Self::new(rel.as_str()).ok_or_else(|| format!("invalid workspace-relative path: {rel:?}"))
+    }
+}
 
 impl WorkspaceRelPath {
     pub fn new(rel: impl Into<String>) -> Option<Self> {
@@ -85,9 +95,18 @@ impl WorkspaceRelPath {
     }
 }
 
-/// Agent file name without extension. Validated at construction.
+/// Agent file name without extension. Validated at construction and on deserialization.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct AgentName(String);
+
+impl TryFrom<String> for AgentName {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::new(name.as_str()).ok_or_else(|| format!("invalid agent name: {name:?}"))
+    }
+}
 
 impl AgentName {
     pub fn new(name: impl Into<String>) -> Option<Self> {
@@ -118,9 +137,18 @@ impl AgentName {
     }
 }
 
-/// Skill directory name. Validated at construction.
+/// Skill directory name. Validated at construction and on deserialization.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct SkillName(String);
+
+impl TryFrom<String> for SkillName {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::new(name.as_str()).ok_or_else(|| format!("invalid skill name: {name:?}"))
+    }
+}
 
 impl SkillName {
     pub fn new(name: impl Into<String>) -> Option<Self> {
@@ -873,5 +901,53 @@ mod tests {
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
         assert_eq!(artifacts[0].surface(), SetupSurfaceId::CursorMcp);
+    }
+
+    // ── Deserialization validation ──
+
+    #[test]
+    fn deserializing_artifact_ids_applies_name_validation() {
+        for json in [
+            r#"{"type":"CodexAgent","name":"../x"}"#,
+            r#"{"type":"OpenCodeAgent","name":"a/b"}"#,
+            r#"{"type":"ClaudeAgent","name":"Upper"}"#,
+            r#"{"type":"CodexSkill","name":"../x"}"#,
+            r#"{"type":"CursorSkill","name":""}"#,
+            r#"{"type":"WorkspaceFile","name":"../x"}"#,
+            r#"{"type":"WorkspaceFile","name":"/etc/passwd"}"#,
+            r#"{"type":"WorkspaceFile","name":""}"#,
+        ] {
+            let parsed = serde_json::from_str::<ArtifactId>(json);
+            assert!(parsed.is_err(), "{json} must not deserialize: {parsed:?}");
+        }
+    }
+
+    #[test]
+    fn deserialized_names_report_what_was_rejected() {
+        let err = serde_json::from_str::<AgentName>(r#""../x""#).expect_err("agent name");
+        assert!(err.to_string().contains("invalid agent name"), "{err}");
+        let err = serde_json::from_str::<SkillName>(r#""../x""#).expect_err("skill name");
+        assert!(err.to_string().contains("invalid skill name"), "{err}");
+        let err = serde_json::from_str::<WorkspaceRelPath>(r#""a/../x""#).expect_err("rel path");
+        assert!(
+            err.to_string().contains("invalid workspace-relative path"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn valid_names_still_roundtrip_through_serde() {
+        let agent = AgentName::new("repo-scout").unwrap();
+        assert_eq!(serde_json::to_string(&agent).unwrap(), r#""repo-scout""#);
+        assert_eq!(
+            serde_json::from_str::<AgentName>(r#""repo-scout""#).unwrap(),
+            agent
+        );
+        let rel = WorkspaceRelPath::new("scripts/merge-codex-config.py").unwrap();
+        let json = serde_json::to_string(&ArtifactId::WorkspaceFile(rel.clone())).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ArtifactId>(&json).unwrap(),
+            ArtifactId::WorkspaceFile(rel)
+        );
     }
 }
