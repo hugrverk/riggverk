@@ -1,5 +1,8 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { focusPaneById } from "../../keyboard/focus";
 import type { RepoDocFile, RepoDocsSource } from "../../types";
+import { Pane } from "../../ui/Pane";
+import { PaneList } from "../../ui/PaneList";
 import { classifyDocRole, compareDocsByRole, docRoleLabel } from "./docRoles";
 import { shouldIncludeDocInDashboardList } from "./docsParser";
 import { docsSourceLabel, docsSourceWarning } from "./model";
@@ -42,6 +45,9 @@ export function pickReadableDocPath(docs: RepoDocFile[], preferred: string | nul
   return sorted[0]?.path ?? null;
 }
 
+/** Moving the list cursor selects after this pause so holding j/k does not re-render the document on every row. */
+const DOC_SELECT_DEBOUNCE_MS = 120;
+
 function docListStatus(doc: RepoDocFile): string {
   if (!doc.found) return "missing";
   if (!doc.readable) return "unreadable";
@@ -83,84 +89,105 @@ export function RepoDocsWorkspace({
   const selectedDoc = docs.find(d => d.path === selectedPath) ?? null;
   const sourceWarning = docsSourceWarning(docsSource, docsStale);
 
+  // The list cursor leads; the selection (what the reader shows) follows it after a short pause.
+  const [cursorPath, setCursorPath] = useState<string | null>(selectedPath);
+  const selectTimer = useRef<number | null>(null);
+  const cancelPendingSelect = () => {
+    if (selectTimer.current !== null) {
+      window.clearTimeout(selectTimer.current);
+      selectTimer.current = null;
+    }
+  };
+  useEffect(() => {
+    setCursorPath(selectedPath);
+  }, [selectedPath]);
+  useEffect(() => cancelPendingSelect, []);
+
+  const onCursorChange = (path: string) => {
+    // A cursor whose row was filtered away is repaired by the list; that is not the reader's cue to switch documents.
+    const userMove = filteredDocs.some(doc => doc.path === cursorPath);
+    setCursorPath(path);
+    cancelPendingSelect();
+    if (!userMove || path === selectedPath) return;
+    selectTimer.current = window.setTimeout(() => {
+      selectTimer.current = null;
+      onSelectPath(path);
+    }, DOC_SELECT_DEBOUNCE_MS);
+  };
+
+  const openDoc = (doc: RepoDocFile) => {
+    cancelPendingSelect();
+    onSelectPath(doc.path);
+    focusPaneById("docs-reader");
+  };
+
   return (
     <div className="repo-dashboard-docs-workspace">
       <div className="repo-dashboard-docs-body">
-        <aside className="repo-dashboard-docs-list-pane" aria-label="Document list">
-          <label className="repo-dashboard-docs-search-wrap font-mono">
-            <span className="visually-hidden">Filter documents</span>
-            <input
-              type="search"
-              className="repo-dashboard-field repo-dashboard-docs-search"
-              value={searchQuery}
-              onChange={e => onSearchQueryChange(e.target.value)}
-              placeholder="Filter by path or title"
-              aria-label="Filter documents"
-            />
-          </label>
-          {!filteredDocs.length ? (
-            <p className="text-muted small" role="status">
-              {docs.length
+        <Pane
+          id="docs-list"
+          index={2}
+          title="docs"
+          meta={`· ${filteredDocs.length}`}
+          label="Document list"
+          className="repo-dashboard-docs-list-pane"
+          bodyClassName="repo-dashboard-docs-list-body"
+          defaultFocus
+        >
+          <PaneList
+            label="Repository documents"
+            items={filteredDocs}
+            getKey={doc => doc.path}
+            cursorKey={cursorPath}
+            onCursorChange={onCursorChange}
+            selectedKeys={selectedPath ? [selectedPath] : []}
+            onActivate={openDoc}
+            activateHint="read"
+            filter={{
+              value: searchQuery,
+              onChange: onSearchQueryChange,
+              label: "Filter documents",
+              placeholder: "filter by path or title",
+            }}
+            empty={
+              docs.length
                 ? "No documents match the current filter."
-                : "No Markdown documents discovered in this repository."}
-            </p>
-          ) : (
-            <ul
-              className="repo-dashboard-docs-list"
-              role="listbox"
-              aria-label="Repository documents"
-              aria-activedescendant={
-                selectedPath ? `repo-doc-option-${selectedPath.replace(/[^\w-]+/g, "-")}` : undefined
-              }
-            >
-              {filteredDocs.map(doc => {
-                const status = docListStatus(doc);
-                const selected = doc.path === selectedPath;
-                const optionId = `repo-doc-option-${doc.path.replace(/[^\w-]+/g, "-")}`;
-                const role = classifyDocRole(doc.path, doc.content);
-                const roleLabel =
-                  role !== "unknown"
-                    ? docRoleLabel(role, doc.path)
-                    : doc.path.toLowerCase().startsWith("docs/")
-                      ? docRoleLabel("reference", doc.path)
-                      : null;
-                return (
-                  <li key={doc.path} role="none">
-                    <button
-                      type="button"
-                      id={optionId}
-                      role="option"
-                      aria-selected={selected}
-                      className={`repo-dashboard-docs-list-item${selected ? " active" : ""}`}
-                      onClick={() => onSelectPath(doc.path)}
-                    >
-                      <span className="font-mono repo-dashboard-docs-list-title">
-                        {docDisplayTitle(doc.path)}
-                      </span>
-                      {roleLabel ? (
-                        <span className="prompt-loops-pill repo-dashboard-docs-role-pill">
-                          {roleLabel}
-                        </span>
-                      ) : null}
-                      <span className="font-mono repo-dashboard-docs-list-path text-muted">
-                        {doc.path}
-                      </span>
-                      {status !== "readable" ? (
-                        <span className="prompt-loops-pill repo-dashboard-docs-list-status">
-                          {status}
-                        </span>
-                      ) : null}
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </aside>
+                : "No Markdown documents discovered in this repository."
+            }
+            renderItem={doc => {
+              const status = docListStatus(doc);
+              const role = classifyDocRole(doc.path, doc.content);
+              const roleLabel =
+                role !== "unknown"
+                  ? docRoleLabel(role, doc.path)
+                  : doc.path.toLowerCase().startsWith("docs/")
+                    ? docRoleLabel("reference", doc.path)
+                    : null;
+              return (
+                <>
+                  <span className="nm" title={doc.path}>
+                    <span className="repo-dashboard-docs-list-title">{docDisplayTitle(doc.path)}</span>{" "}
+                    <span className="c-dim repo-dashboard-docs-list-path">{doc.path}</span>
+                  </span>
+                  <span className="meta">
+                    {roleLabel}
+                    {roleLabel && status !== "readable" ? " · " : null}
+                    {status !== "readable" ? <span className="c-warn">{status}</span> : null}
+                  </span>
+                </>
+              );
+            }}
+          />
+        </Pane>
 
-        <section
+        <Pane
+          id="docs-reader"
+          index={3}
+          title={selectedDoc ? docDisplayTitle(selectedDoc.path) : "reader"}
+          meta={selectedDoc ? `· ${selectedDoc.path}` : undefined}
+          label="Document reader"
           className="repo-dashboard-docs-reader-pane"
-          aria-label="Document reader"
+          bodyClassName="repo-dashboard-docs-reader-body"
         >
           {!selectedDoc ? (
             <p className="text-muted small" role="status">
@@ -169,12 +196,6 @@ export function RepoDocsWorkspace({
           ) : (
             <>
               <header className="repo-dashboard-docs-reader-head">
-                <h3 className="font-mono repo-dashboard-docs-reader-title">
-                  {docDisplayTitle(selectedDoc.path)}
-                </h3>
-                <p className="font-mono small text-muted repo-dashboard-docs-reader-path">
-                  {selectedDoc.path}
-                </p>
                 {selectedDoc.found && selectedDoc.readable ? (
                   <p className="text-muted small repo-dashboard-docs-reader-role">
                     Role: {docRoleLabel(classifyDocRole(selectedDoc.path, selectedDoc.content), selectedDoc.path)}
@@ -203,6 +224,7 @@ export function RepoDocsWorkspace({
                   role="region"
                   aria-label="Document content"
                   tabIndex={0}
+                  data-pane-primary=""
                 >
                   <MarkdownRenderer content={selectedDoc.content} />
                 </div>
@@ -242,7 +264,7 @@ export function RepoDocsWorkspace({
               ) : null}
             </details>
           )}
-        </section>
+        </Pane>
       </div>
     </div>
   );

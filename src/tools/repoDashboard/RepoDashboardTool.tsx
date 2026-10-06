@@ -30,6 +30,7 @@ import {
   buildCanonicalWorkSummary,
   buildDocSourceSummaries,
   buildHeatmapCells,
+  buildSnapshotNotices,
   buildWorkStatusCounts,
   filterDocsSnapshotWarnings,
   filterWorkItemsByCanonicalSource,
@@ -44,9 +45,14 @@ import {
 } from "./model";
 import { useTransientStatus } from "../../lib/useTransientStatus";
 import { ToolSectionTabs } from "../../components/ToolSectionTabs";
+import { focusPaneById } from "../../keyboard/focus";
+import type { Binding } from "../../keyboard/registry";
+import { useKeymap } from "../../keyboard/useKeymap";
+import { Pane } from "../../ui/Pane";
 import { LatestChangeCard } from "./LatestChangeCard";
 import { RepoActivityInsights } from "./RepoActivityInsights";
 import { pickReadableDocPath, RepoDocsWorkspace } from "./RepoDocsWorkspace";
+import { noticesNeedToggle, RepoSnapshotNotices } from "./RepoSnapshotNotices";
 import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
 
 export type RepoDashboardSection = "overview" | "work" | "docs";
@@ -143,6 +149,8 @@ export function RepoDashboardTool({
   const loadSeqRef = useRef(0);
   const discoverSeqRef = useRef(0);
   const [syncClock, setSyncClock] = useState(0);
+  const [noticesExpanded, setNoticesExpanded] = useState(false);
+  const discoverButtonRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     if (!lastSynced || loading) return;
@@ -198,6 +206,7 @@ export function RepoDashboardTool({
   }, [activeEntryId, refreshFor, savedEntries]);
 
   useEffect(() => {
+    setNoticesExpanded(false);
     if (!snapshot) {
       setDocsSelectedPath(null);
       return;
@@ -268,6 +277,15 @@ export function RepoDashboardTool({
     setDiscoverSelectedPaths(new Set());
     setDiscoverImportStatus(null);
   }, []);
+
+  // The panel opens as a new pane: bring the keyboard into it so Escape and h/l work without a click,
+  // and hand focus back to the Discover button once it closes (after the button is enabled again).
+  const discoverWasOpenRef = useRef(false);
+  useEffect(() => {
+    if (discoverOpen) focusPaneById("discover");
+    else if (discoverWasOpenRef.current) discoverButtonRef.current?.focus();
+    discoverWasOpenRef.current = discoverOpen;
+  }, [discoverOpen]);
 
   const toggleDiscoverRepo = useCallback((path: string, checked: boolean) => {
     setDiscoverSelectedPaths(prev => {
@@ -453,14 +471,14 @@ export function RepoDashboardTool({
     [onUsePromptContext, repoPath],
   );
 
-  const sectionCount = (id: RepoDashboardSection): string => {
-    if (!snapshot) return "-";
+  const sectionCount = (id: RepoDashboardSection): string | undefined => {
+    if (!snapshot) return undefined;
     if (id === "overview") return String(snapshot.commits.length);
     if (id === "work") return String(workStatusCounts.open + workStatusCounts.started);
     if (id === "docs") {
       return String(snapshot.docs.filter(d => d.found && d.readable).length);
     }
-    return "-";
+    return undefined;
   };
 
   const needsPlanningCount = canonicalMode
@@ -472,148 +490,221 @@ export function RepoDashboardTool({
     : "gh issues";
   const docOpenCount = activeDocWorkCount(workItems);
 
+  const showSnapshot = snapshot !== null && snapshotMatchesPath && !loading;
+  const notices = useMemo(() => (snapshot ? buildSnapshotNotices(snapshot) : []), [snapshot]);
+
+  const cycleSection = (delta: number) => {
+    const index = SECTIONS.findIndex(s => s.id === section);
+    setSection(SECTIONS[(index + delta + SECTIONS.length) % SECTIONS.length]!.id);
+  };
+
+  // Tab numbers and `h`/`l` belong to the shell; `/` and row movement come from the Docs PaneList.
+  // Section keys come in two spellings: `<`/`>` (the Nordic Mac `<>` key) and `[`/`]`, which need Option there and
+  // Alt is never bound. The first spelling is the one shown in the hints.
+  const bindings: Binding[] = [
+    {
+      id: "repo.section.prev",
+      keys: ["<", "["],
+      title: "Previous section",
+      group: "Repo Dashboard",
+      hint: "prev",
+      scope: "global",
+      run: () => cycleSection(-1),
+    },
+    {
+      id: "repo.section.next",
+      keys: [">", "]"],
+      title: "Next section",
+      group: "Repo Dashboard",
+      hint: "next section",
+      scope: "global",
+      run: () => cycleSection(1),
+    },
+    {
+      id: "repo.refresh",
+      keys: "r",
+      title: "Refresh dashboard",
+      group: "Repo Dashboard",
+      hint: "refresh",
+      scope: "global",
+      when: () => (loading ? "syncing" : repoPath.trim() ? true : "enter a repository path first"),
+      run: () => void refresh(),
+    },
+    {
+      id: "repo.notices",
+      keys: "w",
+      title: "Show or fold all snapshot warnings",
+      group: "Repo Dashboard",
+      scope: "global",
+      when: () => showSnapshot && noticesNeedToggle(notices),
+      run: () => setNoticesExpanded(expanded => !expanded),
+    },
+    {
+      id: "repo.discover.close",
+      keys: "Escape",
+      title: "Close discover panel",
+      group: "Repo Dashboard",
+      hint: "close",
+      scope: "pane",
+      paneId: "discover",
+      when: () => discoverOpen,
+      run: () => closeDiscoverPanel(),
+    },
+  ];
+  useKeymap(bindings);
+
   return (
     <div className="repo-dashboard-tool">
-      <section className="repo-dashboard-main">
-        <header className="repo-dashboard-topbar">
-          <div className="repo-dashboard-topbar-nav">
-            <ToolSectionTabs
-              className="repo-dashboard-section-tabs"
-              items={SECTIONS.map(({ id, label }) => ({
-                id,
-                label,
-                count: sectionCount(id),
-              }))}
-              activeId={section}
-              onSelect={id => setSection(id as RepoDashboardSection)}
-              ariaLabel="Dashboard sections"
-            />
-            <label className="repo-dashboard-section-select-wrap font-mono">
-              <select
-                className="repo-dashboard-field repo-dashboard-section-select"
-                value={section}
-                onChange={e => setSection(e.target.value as RepoDashboardSection)}
-                aria-label="Dashboard section"
-              >
-                {SECTIONS.map(({ id, label }) => (
-                  <option key={id} value={id}>{label}</option>
-                ))}
-              </select>
-            </label>
-          </div>
-          <div className="repo-dashboard-repo-strip">
-            {savedEntries && savedEntries.length > 0 && (
-              <select
-                className="repo-dashboard-field repo-dashboard-field-saved"
-                value={selectedSavedId}
-                onChange={e => {
-                  const entry = savedEntries?.find(x => x.id === e.target.value);
-                  if (entry) {
-                    const branch = entry.default_branch ?? "";
-                    setRepoPath(entry.path);
-                    setDefaultBranch(branch);
-                    void refreshFor(entry.path, branch);
-                  }
-                }}
-                aria-label="Saved repositories"
-                title="Saved repository"
-              >
-                <option value="">Saved repo…</option>
-                {savedEntries.map(entry => (
-                  <option key={entry.id} value={entry.id}>{entry.label}</option>
-                ))}
-              </select>
-            )}
-            <div className="repo-dashboard-path-group">
-              <div className="repo-dashboard-path-field">
-                <input
-                  className="repo-dashboard-field repo-dashboard-field-path"
-                  value={repoPath}
-                  onChange={e => setRepoPath(e.target.value)}
-                  placeholder="Local repository path"
-                  aria-label="Local repository path"
-                  spellCheck={false}
-                />
-                <span
-                  className={`repo-dashboard-sync-status repo-dashboard-sync-status-${syncState}`}
-                  role="status"
-                  aria-live="polite"
+      <section className="repo-dashboard-main screen">
+        <Pane
+          id="repo"
+          index={1}
+          title="repo"
+          meta={snapshotMatchesPath && snapshot ? `· ${snapshot.branch}` : undefined}
+          label="Repository"
+          className="repo-dashboard-topbar-pane"
+          bodyClassName="repo-dashboard-topbar-body"
+        >
+          <header className="repo-dashboard-topbar">
+            <div className="repo-dashboard-topbar-nav">
+              <ToolSectionTabs
+                className="repo-dashboard-section-tabs"
+                items={SECTIONS.map(({ id, label }) => ({
+                  id,
+                  label,
+                  count: sectionCount(id),
+                }))}
+                activeId={section}
+                onSelect={id => setSection(id as RepoDashboardSection)}
+                ariaLabel="Dashboard sections"
+              />
+              <label className="repo-dashboard-section-select-wrap font-mono">
+                <select
+                  className="repo-dashboard-field repo-dashboard-section-select"
+                  value={section}
+                  onChange={e => setSection(e.target.value as RepoDashboardSection)}
+                  aria-label="Dashboard section"
                 >
-                  {syncLabel}
-                  {pickerStatus ? ` · ${pickerStatus}` : ""}
-                  {saveStatus ? ` · ${saveStatus}` : ""}
-                </span>
+                  {SECTIONS.map(({ id, label }) => (
+                    <option key={id} value={id}>{label}</option>
+                  ))}
+                </select>
+              </label>
+              <span
+                className={`repo-dashboard-sync-status repo-dashboard-sync-status-${syncState}`}
+                role="status"
+                aria-live="polite"
+              >
+                {syncLabel}
+                {pickerStatus ? ` · ${pickerStatus}` : ""}
+                {saveStatus ? ` · ${saveStatus}` : ""}
+              </span>
+            </div>
+            <div className="repo-dashboard-repo-strip">
+              {savedEntries && savedEntries.length > 0 && (
+                <select
+                  className="repo-dashboard-field repo-dashboard-field-saved"
+                  value={selectedSavedId}
+                  onChange={e => {
+                    const entry = savedEntries?.find(x => x.id === e.target.value);
+                    if (entry) {
+                      const branch = entry.default_branch ?? "";
+                      setRepoPath(entry.path);
+                      setDefaultBranch(branch);
+                      void refreshFor(entry.path, branch);
+                    }
+                  }}
+                  aria-label="Saved repositories"
+                  title="Saved repository"
+                >
+                  <option value="">Saved repo…</option>
+                  {savedEntries.map(entry => (
+                    <option key={entry.id} value={entry.id}>{entry.label}</option>
+                  ))}
+                </select>
+              )}
+              <div className="repo-dashboard-path-group">
+                <div className="repo-dashboard-path-field">
+                  <input
+                    className="repo-dashboard-field repo-dashboard-field-path"
+                    value={repoPath}
+                    onChange={e => setRepoPath(e.target.value)}
+                    placeholder="Local repository path"
+                    aria-label="Local repository path"
+                    spellCheck={false}
+                  />
+                </div>
+                <button
+                  type="button"
+                  className="repo-dashboard-btn"
+                  onClick={() => void chooseRepoFolder()}
+                  disabled={loading}
+                  aria-label="Choose repository folder"
+                  title="Browse folder"
+                >
+                  Browse
+                </button>
               </div>
+              <input
+                className="repo-dashboard-field repo-dashboard-field-branch"
+                value={defaultBranch}
+                onChange={e => setDefaultBranch(e.target.value)}
+                placeholder="Branch"
+                aria-label="Default branch override"
+                title="Default branch override (empty = auto-detect)"
+                spellCheck={false}
+              />
               <button
+                ref={discoverButtonRef}
                 type="button"
-                className="repo-dashboard-btn"
-                onClick={() => void chooseRepoFolder()}
-                disabled={loading}
-                aria-label="Choose repository folder"
-                title="Browse folder"
+                className="repo-dashboard-btn repo-dashboard-btn-secondary"
+                onClick={() => void startDiscoverLocalRepos()}
+                disabled={loading || discoverLoading}
+                aria-label="Discover local git repositories in a folder"
+                title="Scan a parent folder for local git checkouts"
               >
-                Browse
+                Discover
               </button>
+              <div className="repo-dashboard-strip-actions">
+                <button
+                  type="button"
+                  className="repo-dashboard-btn"
+                  onClick={() => void saveCurrentRepo()}
+                  disabled={loading || !repoPath.trim()}
+                  aria-label="Save repository path to settings"
+                  title="Save to settings"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  className={`repo-dashboard-btn repo-dashboard-btn-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
+                  onClick={() => void refresh()}
+                  disabled={loading}
+                  aria-busy={loading}
+                  aria-label="Refresh dashboard"
+                  title="Refresh dashboard"
+                >
+                  {loading ? "…" : "Refresh"}
+                </button>
+              </div>
             </div>
-            <input
-              className="repo-dashboard-field repo-dashboard-field-branch"
-              value={defaultBranch}
-              onChange={e => setDefaultBranch(e.target.value)}
-              placeholder="Branch"
-              aria-label="Default branch override"
-              title="Default branch override (empty = auto-detect)"
-              spellCheck={false}
-            />
-            <button
-              type="button"
-              className="repo-dashboard-btn repo-dashboard-btn-secondary"
-              onClick={() => void startDiscoverLocalRepos()}
-              disabled={loading || discoverLoading}
-              aria-label="Discover local git repositories in a folder"
-              title="Scan a parent folder for local git checkouts"
-            >
-              Discover
-            </button>
-            <div className="repo-dashboard-strip-actions">
-              <button
-                type="button"
-                className="repo-dashboard-btn"
-                onClick={() => void saveCurrentRepo()}
-                disabled={loading || !repoPath.trim()}
-                aria-label="Save repository path to settings"
-                title="Save to settings"
-              >
-                Save
-              </button>
-              <button
-                type="button"
-                className={`repo-dashboard-btn repo-dashboard-btn-refresh${syncState === "stale" || syncState === "idle" ? " repo-dashboard-btn-refresh-emphasis" : ""}`}
-                onClick={() => void refresh()}
-                disabled={loading}
-                aria-busy={loading}
-                aria-label="Refresh dashboard"
-                title="Refresh dashboard"
-              >
-                {loading ? "…" : "Refresh"}
-              </button>
-            </div>
-          </div>
-        </header>
+          </header>
+        </Pane>
 
         <div className="repo-dashboard-workspace">
           {discoverOpen && (
-            <div
-              className="repo-dashboard-card repo-dashboard-discover-panel"
-              role="region"
-              aria-label="Discover local repositories"
+            <Pane
+              id="discover"
+              title="discover local repos"
+              label="Discover local repositories"
+              className="repo-dashboard-discover-panel"
+              bodyClassName="repo-dashboard-pane-body repo-dashboard-discover-body"
             >
-              <div className="repo-dashboard-discover-head">
-                <h2 className="font-mono repo-dashboard-discover-title">Discover local repos</h2>
-                <p className="text-muted small repo-dashboard-discover-desc">
-                  Shallow scan of one folder you choose (immediate children and one nested level).
-                  Imports add to saved Repo Dashboard entries for Prompt Builder.
-                </p>
-              </div>
+              <p className="text-muted small repo-dashboard-discover-desc">
+                Shallow scan of one folder you choose (immediate children and one nested level).
+                Imports add to saved Repo Dashboard entries for Prompt Builder.
+              </p>
               {discoverParentPath ? (
                 <p className="font-mono small repo-dashboard-discover-parent" role="status">
                   Scanning: {discoverParentPath}
@@ -695,7 +786,7 @@ export function RepoDashboardTool({
                   <span className="text-muted small" role="status">{discoverImportStatus}</span>
                 ) : null}
               </div>
-            </div>
+            </Pane>
           )}
 
           {loading && (
@@ -738,6 +829,14 @@ export function RepoDashboardTool({
             </div>
           )}
 
+          {showSnapshot && (
+            <RepoSnapshotNotices
+              notices={notices}
+              expanded={noticesExpanded}
+              onToggle={() => setNoticesExpanded(expanded => !expanded)}
+            />
+          )}
+
           {snapshot && snapshotMatchesPath && !loading && section === "overview" && (
             <div className="repo-dashboard-overview">
               <RepoActivityInsights
@@ -761,25 +860,39 @@ export function RepoDashboardTool({
               />
 
               <div className="repo-dashboard-overview-lower">
-                <div className="repo-dashboard-card repo-dashboard-latest">
-                  <h2 className="font-mono">Latest merge / commit</h2>
+                <Pane
+                  id="latest"
+                  index={5}
+                  title="latest merge / commit"
+                  label="Latest merge or commit"
+                  className="repo-dashboard-latest"
+                  bodyClassName="repo-dashboard-pane-body repo-dashboard-latest-body"
+                  scrollable
+                >
                   <LatestChangeCard
                     snapshot={snapshot}
                     latestMerge={latestMerge}
                     latestCommit={latestCommit}
                   />
-                </div>
-                <div className="repo-dashboard-card repo-dashboard-recent-activity-card">
-                  <h2 className="font-mono">Recent activity</h2>
+                </Pane>
+                <Pane
+                  id="recent"
+                  index={6}
+                  title="recent activity"
+                  label="Recent activity"
+                  className="repo-dashboard-recent-activity-card"
+                  bodyClassName="repo-dashboard-pane-body repo-dashboard-recent-body"
+                >
                   <div
                     className="repo-dashboard-recent-activity-scroll"
                     role="region"
                     aria-label="Recent commits"
                     tabIndex={0}
+                    data-pane-primary=""
                   >
                     <RecentActivityList commits={recentCommits} />
                   </div>
-                </div>
+                </Pane>
               </div>
             </div>
           )}

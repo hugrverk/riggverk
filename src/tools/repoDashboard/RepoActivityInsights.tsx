@@ -9,6 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import type { RepoCommitEntry } from "../../types";
+import { Pane } from "../../ui/Pane";
 import {
   ACTIVITY_INSIGHTS_RANGE_DAYS,
   activityChartDayX,
@@ -342,6 +343,7 @@ function ActivityInsightsChart({
             width={CHART_W - CHART_L - CHART_R}
             height={CHART_H - CHART_T - CHART_B}
             tabIndex={0}
+            data-pane-primary=""
             role="application"
             aria-label="Activity chart date navigator. Arrow keys move between dates. Escape clears selection."
             aria-controls={liveStatusId}
@@ -594,9 +596,16 @@ export function RepoActivityInsights({
         </p>
       ) : (
         <div className="repo-dashboard-activity-insights-body">
-          <div className="repo-dashboard-activity-insights-chart">
+          <Pane
+            id="contributions"
+            index={2}
+            title="contributions"
+            label="Contributions"
+            className="repo-dashboard-activity-insights-chart"
+            bodyClassName="repo-dashboard-pane-body repo-dashboard-chart-body"
+            defaultFocus
+          >
             <div className="repo-dashboard-activity-chart-header">
-              <h3 className="repo-dashboard-activity-chart-title font-mono">Contributions</h3>
               <div className="repo-dashboard-activity-chart-header-controls">
                 <div className="repo-dashboard-toolbar" role="group" aria-label="Activity range">
                   {ACTIVITY_INSIGHTS_RANGE_DAYS.map(days => (
@@ -636,12 +645,18 @@ export function RepoActivityInsights({
               mode={chartMode}
               rangeDays={rangeDays}
             />
-          </div>
+          </Pane>
           <div className="repo-dashboard-activity-sidebar">
             {allStats.length ? (
-              <div className="repo-dashboard-contributor-panel">
+              <Pane
+                id="contributors"
+                index={3}
+                title="contributors"
+                meta={`· ${allStats.length}`}
+                className="repo-dashboard-contributor-panel"
+                bodyClassName="repo-dashboard-pane-body repo-dashboard-contributor-body"
+              >
                 <div className="repo-dashboard-contributor-panel-head">
-                  <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
                   <button
                     type="button"
                     className={`repo-dashboard-contributor-show-all font-mono${allContributorsVisible ? " repo-dashboard-contributor-show-all-inactive" : ""}`}
@@ -675,10 +690,15 @@ export function RepoActivityInsights({
                     />
                   ))}
                 </div>
-              </div>
+              </Pane>
             ) : null}
-            <div className="repo-dashboard-heatmap-panel">
-              <h3 className="font-mono repo-dashboard-heatmap-panel-title">Commit activity</h3>
+            <Pane
+              id="commit-activity"
+              index={allStats.length ? 4 : 3}
+              title="commit activity"
+              className="repo-dashboard-heatmap-panel"
+              bodyClassName="repo-dashboard-pane-body repo-dashboard-heatmap-body"
+            >
               {heatmapCells.length ? (
                 <ActivityHeatmap cells={heatmapCells} density="default" layout="embedded" />
               ) : (
@@ -686,7 +706,7 @@ export function RepoActivityInsights({
                   No activity data.
                 </p>
               )}
-            </div>
+            </Pane>
           </div>
         </div>
       )}

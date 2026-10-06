@@ -4,6 +4,7 @@ import type {
   RepoDashboardWorkItem,
   RepoDashboardWorkType,
   RepoDashboardCanonicalSource,
+  RepoDashboardSnapshot,
   RepoDocFile,
   RepoDocsSource,
 } from "../../types";
@@ -82,13 +83,14 @@ export interface RemainingByType {
   pctLeft: number;
 }
 
+/** Theme tokens (never literal colours), kept in step with the `.repo-dashboard-chip.<type>` rules. */
 export const WORK_TYPE_COLORS: Record<RepoDashboardWorkType, string> = {
-  roadmap: "#7fa786",
-  feature: "#7e9ecf",
-  gap: "#71b8b3",
-  todo: "#9b87c7",
-  fix: "#c3a767",
-  note: "#9a9a9a",
+  roadmap: "var(--ok)",
+  feature: "var(--accent)",
+  gap: "color-mix(in srgb, var(--accent) 55%, var(--ok))",
+  todo: "var(--warn)",
+  fix: "var(--fail)",
+  note: "var(--text-muted)",
 };
 
 
@@ -750,7 +752,7 @@ const DOC_LANE_META: Record<
     label: "GitHub",
     description: "Open issues via gh CLI",
     pathHint: "gh issue list",
-    color: "#58a6ff",
+    color: "var(--accent)",
   },
   other: {
     label: "Other",
@@ -936,6 +938,39 @@ export function filterDocsSnapshotWarnings(
     skip.add("No remote documentation ref available — using local checkout.");
   }
   return warnings.filter(w => !skip.has(w));
+}
+
+export interface SnapshotNotice {
+  /** Stable key: the message text. */
+  id: string;
+  /** warn: something is degraded or incomplete; info: expected limitation (no gh CLI). */
+  tone: "warn" | "info";
+  text: string;
+}
+
+/**
+ * Everything in a snapshot the reader should not have to dig for: backend warnings (gh failures,
+ * capped or truncated data, history fallback), stale documentation source, and why gh enrichment is off.
+ */
+export function buildSnapshotNotices(
+  snapshot: Pick<RepoDashboardSnapshot, "warnings" | "docs_source" | "docs_stale" | "gh">,
+): SnapshotNotice[] {
+  const notices: SnapshotNotice[] = [];
+  const seen = new Set<string>();
+  const push = (tone: SnapshotNotice["tone"], raw: string) => {
+    const text = raw.trim();
+    if (!text || seen.has(text)) return;
+    seen.add(text);
+    notices.push({ id: text, tone, text });
+  };
+  const sourceWarning = docsSourceWarning(snapshot.docs_source, snapshot.docs_stale);
+  if (sourceWarning) push("warn", sourceWarning);
+  for (const warning of filterDocsSnapshotWarnings(snapshot.warnings, snapshot.docs_source)) push("warn", warning);
+  if (!snapshot.gh.authenticated) {
+    const firstLine = snapshot.gh.message?.split("\n")[0]?.trim();
+    if (firstLine) push("info", /^gh\b/i.test(firstLine) ? firstLine : `gh: ${firstLine}`);
+  }
+  return notices;
 }
 
 export function repoDashboardBrandLabel(repoPath: string): string {

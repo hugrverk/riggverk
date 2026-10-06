@@ -1,4 +1,5 @@
 import type { RepoDashboardWorkItem, RepoDashboardWorkType } from "../../types";
+import { Pane } from "../../ui/Pane";
 import { isPromptContextEligibleWorkItem } from "../promptLoops/contextHandoff";
 import type {
   CanonicalSourceFilter,
@@ -159,36 +160,42 @@ function WorkItemsList({
 }
 
 function WorkColumn({
-  id,
   title,
+  index,
   count,
   items,
   emptyMessage,
   canonicalMode,
+  defaultFocus,
   onUsePromptContext,
 }: {
-  id: string;
   title: string;
+  /** `[n]` in the pane title. */
+  index: number;
   count: number;
   items: RepoDashboardWorkItem[];
   emptyMessage: string;
   canonicalMode: boolean;
+  defaultFocus: boolean;
   onUsePromptContext?: (item: RepoDashboardWorkItem) => void;
 }) {
   return (
-    <section
+    <Pane
+      id={`work-${title.toLowerCase()}`}
+      index={index}
+      title={title.toLowerCase()}
+      meta={`· ${count}`}
+      label={`${title} work`}
       className="repo-dashboard-work-column"
-      aria-label={`${title} work`}
-      aria-labelledby={id}
+      bodyClassName="repo-dashboard-work-column-body"
+      defaultFocus={defaultFocus}
     >
-      <h3 id={id} className="font-mono repo-dashboard-work-column-title">
-        {title} ({count})
-      </h3>
       <div
         className="repo-dashboard-work-column-scroll"
         role="region"
-        aria-labelledby={id}
+        aria-label={`${title} items`}
         tabIndex={0}
+        data-pane-primary=""
       >
         <WorkItemsList
           items={items}
@@ -197,7 +204,7 @@ function WorkColumn({
           emptyMessage={emptyMessage}
         />
       </div>
-    </section>
+    </Pane>
   );
 }
 
@@ -263,149 +270,159 @@ export function RepoWorkWorkspace({
 
   return (
     <div className="repo-dashboard-work-workspace">
-      <header className="repo-dashboard-work-head">
-        <div className="repo-dashboard-work-summary-row">
-          <div className="repo-dashboard-work-summary-stats font-mono" role="status">
-            {canonicalMode && canonicalSummary ? (
-              <>
-                <span className="repo-dashboard-work-summary-stat">
-                  <strong>{canonicalSummary.displayed}</strong>
-                  <span className="repo-dashboard-work-summary-label">
-                    of {canonicalSummary.total} active
+      <Pane
+        id="work-summary"
+        index={2}
+        title="work"
+        label="Work summary and filters"
+        className="repo-dashboard-work-summary-pane"
+        bodyClassName="repo-dashboard-pane-body"
+      >
+        <header className="repo-dashboard-work-head">
+          <div className="repo-dashboard-work-summary-row">
+            <div className="repo-dashboard-work-summary-stats font-mono" role="status">
+              {canonicalMode && canonicalSummary ? (
+                <>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <strong>{canonicalSummary.displayed}</strong>
+                    <span className="repo-dashboard-work-summary-label">
+                      of {canonicalSummary.total} active
+                    </span>
                   </span>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">bugs</span>
-                  <strong>{canonicalSummary.bugs}</strong>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">verify</span>
-                  <strong>{canonicalSummary.verify}</strong>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">enhancements</span>
-                  <strong>{canonicalSummary.enhancements}</strong>
-                </span>
-                {canonicalSummary.other ? (
-                  <>
-                    <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                      ·
-                    </span>
-                    <span className="repo-dashboard-work-summary-stat">
-                      <span className="repo-dashboard-work-summary-label">other</span>
-                      <strong>{canonicalSummary.other}</strong>
-                    </span>
-                  </>
-                ) : null}
-              </>
-            ) : (
-              <>
-                <span className="repo-dashboard-work-summary-stat">
-                  <strong>{displayedCount}</strong>
-                  <span className="repo-dashboard-work-summary-label">of {totalItemCount} items</span>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">started</span>
-                  <strong>{partition.activeStarted.length}</strong>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">open</span>
-                  <strong>{partition.activeOpen.length}</strong>
-                </span>
-                <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
-                  ·
-                </span>
-                <span className="repo-dashboard-work-summary-stat">
-                  <span className="repo-dashboard-work-summary-label">done</span>
-                  <strong>{partition.done.length}</strong>
-                </span>
-              </>
-            )}
-          </div>
-          <div className="repo-dashboard-work-filters font-mono">
-            {canonicalMode ? (
-              <>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">bugs</span>
+                    <strong>{canonicalSummary.bugs}</strong>
+                  </span>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">verify</span>
+                    <strong>{canonicalSummary.verify}</strong>
+                  </span>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">enhancements</span>
+                    <strong>{canonicalSummary.enhancements}</strong>
+                  </span>
+                  {canonicalSummary.other ? (
+                    <>
+                      <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                        ·
+                      </span>
+                      <span className="repo-dashboard-work-summary-stat">
+                        <span className="repo-dashboard-work-summary-label">other</span>
+                        <strong>{canonicalSummary.other}</strong>
+                      </span>
+                    </>
+                  ) : null}
+                </>
+              ) : (
+                <>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <strong>{displayedCount}</strong>
+                    <span className="repo-dashboard-work-summary-label">of {totalItemCount} items</span>
+                  </span>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">started</span>
+                    <strong>{partition.activeStarted.length}</strong>
+                  </span>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">open</span>
+                    <strong>{partition.activeOpen.length}</strong>
+                  </span>
+                  <span className="repo-dashboard-work-summary-sep" aria-hidden="true">
+                    ·
+                  </span>
+                  <span className="repo-dashboard-work-summary-stat">
+                    <span className="repo-dashboard-work-summary-label">done</span>
+                    <strong>{partition.done.length}</strong>
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="repo-dashboard-work-filters font-mono">
+              {canonicalMode ? (
+                <>
+                  <select
+                      className="repo-dashboard-field repo-dashboard-work-filter-select"
+                      value={sourceFilter}
+                      onChange={e =>
+                        onSourceFilterChange(e.target.value as CanonicalSourceFilter)
+                      }
+                      aria-label="Filter by work source"
+                    >
+                      <option value="all">All sources</option>
+                      <option value="backlog">Backlog</option>
+                      <option value="audit">Audit</option>
+                      <option value="github">GitHub</option>
+                    </select>
+                  <select
+                      className="repo-dashboard-field repo-dashboard-work-filter-select"
+                      value={priorityFilter}
+                      onChange={e =>
+                        onPriorityFilterChange(e.target.value as PriorityFilter)
+                      }
+                      aria-label="Filter by priority"
+                    >
+                      <option value="all">All priorities</option>
+                      <option value="high">High</option>
+                      <option value="medium">Medium</option>
+                      <option value="low">Low</option>
+                      <option value="unspecified">Unspecified</option>
+                    </select>
+                </>
+              ) : (
                 <select
                     className="repo-dashboard-field repo-dashboard-work-filter-select"
-                    value={sourceFilter}
+                    value={typeFilter}
                     onChange={e =>
-                      onSourceFilterChange(e.target.value as CanonicalSourceFilter)
+                      onTypeFilterChange(e.target.value as RepoDashboardWorkType | "all")
                     }
-                    aria-label="Filter by work source"
+                    aria-label="Filter by work type"
                   >
-                    <option value="all">All sources</option>
-                    <option value="backlog">Backlog</option>
-                    <option value="audit">Audit</option>
-                    <option value="github">GitHub</option>
+                    <option value="all">All types</option>
+                    {workTypes.map(type => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
                   </select>
-                <select
-                    className="repo-dashboard-field repo-dashboard-work-filter-select"
-                    value={priorityFilter}
-                    onChange={e =>
-                      onPriorityFilterChange(e.target.value as PriorityFilter)
-                    }
-                    aria-label="Filter by priority"
-                  >
-                    <option value="all">All priorities</option>
-                    <option value="high">High</option>
-                    <option value="medium">Medium</option>
-                    <option value="low">Low</option>
-                    <option value="unspecified">Unspecified</option>
-                  </select>
-              </>
-            ) : (
-              <select
-                  className="repo-dashboard-field repo-dashboard-work-filter-select"
-                  value={typeFilter}
-                  onChange={e =>
-                    onTypeFilterChange(e.target.value as RepoDashboardWorkType | "all")
-                  }
-                  aria-label="Filter by work type"
+              )}
+              {filtersActive ? (
+                <button
+                  type="button"
+                  className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-filter-reset"
+                  onClick={onResetFilters}
                 >
-                  <option value="all">All types</option>
-                  {workTypes.map(type => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-            )}
-            {filtersActive ? (
-              <button
-                type="button"
-                className="repo-dashboard-btn repo-dashboard-btn-secondary repo-dashboard-filter-reset"
-                onClick={onResetFilters}
-              >
-                Clear
-              </button>
-            ) : null}
+                  Clear
+                </button>
+              ) : null}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+      </Pane>
 
       <div
         className={`repo-dashboard-work-primary-columns${canonicalMode ? " repo-dashboard-work-canonical-columns" : ""}`}
       >
-        {columns.map(([title, columnItems, columnId, emptyDefault]) => (
+        {columns.map(([title, columnItems, columnId, emptyDefault], columnIndex) => (
           <WorkColumn
             key={columnId}
-            id={columnId}
             title={title}
+            index={columnIndex + 3}
+            defaultFocus={columnIndex === 0}
             count={columnItems.length}
             items={columnItems}
             canonicalMode={canonicalMode}
@@ -420,17 +437,23 @@ export function RepoWorkWorkspace({
       </div>
 
       {canonicalMode && canonicalPartition.other.length ? (
-        <section className="repo-dashboard-work-other-section" aria-label="Other work items">
-          <h3 className="font-mono repo-dashboard-work-column-title">
-            Other ({canonicalPartition.other.length})
-          </h3>
+        <Pane
+          id="work-other"
+          index={columns.length + 3}
+          title="other"
+          meta={`· ${canonicalPartition.other.length}`}
+          label="Other work items"
+          className="repo-dashboard-work-other-section"
+          bodyClassName="repo-dashboard-pane-body"
+          scrollable
+        >
           <WorkItemsList
             items={canonicalPartition.other}
             canonicalMode
             onUsePromptContext={onUsePromptContext}
             emptyMessage="No other items."
           />
-        </section>
+        </Pane>
       ) : null}
 
       {!displayedCount && emptyMessage ? (
