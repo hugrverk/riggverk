@@ -148,77 +148,8 @@
 
 .lib-meta .group { padding-top: 0; }
 
-/* Rendered working copy: the TUI treatment of .markdown-body (mockup "rendered"). The doubled class keeps
-   these rules ahead of any older .lib-docs-markdown rules elsewhere in the cascade. */
-.markdown-body.lib-docs-markdown {
-  max-width: 72ch;
-  padding: 0 10px;
-  line-height: var(--lh);
-}
-
-/* Every heading is one text row tall; the leading marks carry the hierarchy. */
-.markdown-body.lib-docs-markdown h1 { font-size: var(--fs); }
-.markdown-body.lib-docs-markdown p { margin: 0 0 var(--lh); }
-
-.markdown-body.lib-docs-markdown :is(ul, ol) {
-  margin: 0 0 var(--lh);
-  padding-left: 2ch;
-}
-
-.markdown-body.lib-docs-markdown li + li { margin-top: 0; }
-.markdown-body.lib-docs-markdown li > :is(ul, ol) { margin-bottom: 0; }
-
-.lib-docs-markdown h1::before { content: "# "; color: var(--text-muted); }
-.lib-docs-markdown h2::before { content: "## "; color: var(--text-muted); }
-.lib-docs-markdown h3::before { content: "### "; color: var(--text-muted); }
-
-.lib-docs-markdown .copyable-block .markdown-code { padding-top: 8px; }
-
-.lib-docs-markdown ul { list-style: none; }
-.lib-docs-markdown ul > li::before {
-  content: "• ";
-  margin-left: -2ch;
-  color: var(--accent);
-}
-
-/* ---- configs ---- */
-
-.configs-code {
-  margin: 0;
-  color: var(--text);
-  font-size: var(--fs-sm);
-  line-height: var(--lh);
-  white-space: pre;
-  overflow-x: auto;
-  background: transparent;
-}
-
-/* ---- brain setup ---- */
-
-.brain-setup-lib-summary {
-  max-width: 62ch;
-  margin: 0 0 var(--lh);
-  padding: 0 10px;
-  color: var(--text-muted);
-}
-
-.brain-setup-lib-body .copyable-block-terminal {
-  margin: 0 10px;
-}
-
-/* The block scrolls sideways locally; the pane body scrolls vertically. */
-.brain-setup-lib-body .copyable-block-content {
-  overflow: auto;
-}
-
-.brain-setup-lib-body .brain-setup-pre {
-  margin: 0;
-  font-size: var(--fs-sm);
-  line-height: var(--lh);
-  white-space: pre;
-}
-
-/* ---- rendered document preview (DocContent) ---- */
+/* Rendered working copy (DocContent): base rules for the scoped reading surface, then the TUI treatment of
+   .markdown-body (mockup "rendered"). The doubled class keeps the TUI rules ahead of the base ones. */
 
 .lib-docs-markdown {
   max-width: 72ch;
@@ -307,4 +238,72 @@
 .lib-docs-markdown .markdown-link-blocked {
   color: var(--text-muted);
   text-decoration: line-through;
+}
+
+.markdown-body.lib-docs-markdown {
+  max-width: 72ch;
+  padding: 0 10px;
+  line-height: var(--lh);
+}
+
+/* Every heading is one text row tall; the leading marks carry the hierarchy. */
+.markdown-body.lib-docs-markdown h1 { font-size: var(--fs); }
+.markdown-body.lib-docs-markdown p { margin: 0 0 var(--lh); }
+
+.markdown-body.lib-docs-markdown :is(ul, ol) {
+  margin: 0 0 var(--lh);
+  padding-left: 2ch;
+}
+
+.markdown-body.lib-docs-markdown li + li { margin-top: 0; }
+.markdown-body.lib-docs-markdown li > :is(ul, ol) { margin-bottom: 0; }
+
+.lib-docs-markdown h1::before { content: "# "; color: var(--text-muted); }
+.lib-docs-markdown h2::before { content: "## "; color: var(--text-muted); }
+.lib-docs-markdown h3::before { content: "### "; color: var(--text-muted); }
+
+.lib-docs-markdown .copyable-block .markdown-code { padding-top: 8px; }
+
+.lib-docs-markdown ul { list-style: none; }
+.lib-docs-markdown ul > li::before {
+  content: "• ";
+  margin-left: -2ch;
+  color: var(--accent);
+}
+
+/* ---- configs ---- */
+
+.configs-code {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  line-height: var(--lh);
+  white-space: pre;
+  overflow-x: auto;
+  background: transparent;
+}
+
+/* ---- brain setup ---- */
+
+.brain-setup-lib-summary {
+  max-width: 62ch;
+  margin: 0 0 var(--lh);
+  padding: 0 10px;
+  color: var(--text-muted);
+}
+
+.brain-setup-lib-body .copyable-block-terminal {
+  margin: 0 10px;
+}
+
+/* The block scrolls sideways locally; the pane body scrolls vertically. */
+.brain-setup-lib-body .copyable-block-content {
+  overflow: auto;
+}
+
+.brain-setup-lib-body .brain-setup-pre {
+  margin: 0;
+  font-size: var(--fs-sm);
+  line-height: var(--lh);
+  white-space: pre;
 }
