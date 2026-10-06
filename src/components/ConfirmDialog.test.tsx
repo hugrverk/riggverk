@@ -1,5 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { useKeymap } from "../keyboard/useKeymap";
+import { renderWithShell } from "../test/renderWithShell";
 import { ConfirmProvider, useConfirm } from "./ConfirmDialog";
 
 function TestConsumer({ message = "Test message" }: { message?: string }) {
@@ -192,5 +194,116 @@ describe("ConfirmDialog", () => {
     });
     expect(onResult).toHaveBeenCalledTimes(1);
     expect(dialog.hasAttribute("open")).toBe(false);
+  });
+
+  describe("keys", () => {
+    async function openConfirm(results: boolean[]) {
+      render(
+        <ConfirmProvider>
+          <ConfirmProbe results={results} />
+        </ConfirmProvider>,
+      );
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      return (await screen.findByRole("dialog")) as HTMLDialogElement;
+    }
+
+    it("focuses cancel when the dialog opens so Enter does not confirm by default", async () => {
+      const dialog = await openConfirm([]);
+      const cancel = screen.getByRole("button", { name: "cancel" });
+      expect(document.activeElement).toBe(cancel);
+      expect(dialog.contains(cancel)).toBe(true);
+    });
+
+    it("lets Enter on the focused cancel button leave the confirmation open", async () => {
+      const results: boolean[] = [];
+      const dialog = await openConfirm(results);
+      fireEvent.keyDown(screen.getByRole("button", { name: "cancel" }), { key: "Enter" });
+      await Promise.resolve();
+      expect(results).toEqual([]);
+      expect(dialog.hasAttribute("open")).toBe(true);
+    });
+
+    it("leaves Enter to the native button activation on the confirm button", async () => {
+      await openConfirm([]);
+      const confirmButton = screen.getByRole("button", { name: "confirm" });
+      // fireEvent returns false when a handler called preventDefault, which would stop the browser's click.
+      expect(fireEvent.keyDown(confirmButton, { key: "Enter" })).toBe(true);
+    });
+
+    it("cancels on Escape and closes the dialog", async () => {
+      const results: boolean[] = [];
+      const dialog = await openConfirm(results);
+      fireEvent.keyDown(screen.getByRole("button", { name: "confirm" }), { key: "Escape" });
+      await vi.waitFor(() => expect(results).toEqual([false]));
+      expect(dialog.hasAttribute("open")).toBe(false);
+    });
+
+    it("confirms on y and cancels on n, in either case", async () => {
+      const results: boolean[] = [];
+      render(
+        <ConfirmProvider>
+          <ConfirmProbe results={results} />
+        </ConfirmProvider>,
+      );
+      for (const [key, expected] of [["y", true], ["N", false], ["Y", true], ["n", false]] as const) {
+        fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+        const cancel = await screen.findByRole("button", { name: "cancel" });
+        fireEvent.keyDown(cancel, { key });
+        await vi.waitFor(() => expect(results.at(-1)).toBe(expected));
+      }
+      expect(results).toEqual([true, false, true, false]);
+    });
+
+    it("ignores y and n with a modifier, while composing, and on key repeat", async () => {
+      const results: boolean[] = [];
+      const dialog = await openConfirm(results);
+      const cancel = screen.getByRole("button", { name: "cancel" });
+      fireEvent.keyDown(cancel, { key: "y", ctrlKey: true });
+      fireEvent.keyDown(cancel, { key: "y", metaKey: true });
+      fireEvent.keyDown(cancel, { key: "n", altKey: true });
+      fireEvent.keyDown(cancel, { key: "y", isComposing: true });
+      fireEvent.keyDown(cancel, { key: "y", repeat: true });
+      await Promise.resolve();
+      expect(results).toEqual([]);
+      expect(dialog.hasAttribute("open")).toBe(true);
+    });
+
+    it("exposes the keys as hints without changing the button names", async () => {
+      await openConfirm([]);
+      const cancel = screen.getByRole("button", { name: "cancel" });
+      const confirmButton = screen.getByRole("button", { name: "confirm" });
+      expect(cancel.getAttribute("aria-keyshortcuts")).toBe("n");
+      expect(confirmButton.getAttribute("aria-keyshortcuts")).toBe("y");
+      expect(cancel.querySelector("kbd")!.textContent).toBe("n");
+      expect(confirmButton.querySelector("kbd")!.textContent).toBe("y");
+      expect(screen.getByRole("dialog").getAttribute("data-keyscope")).toBe("overlay");
+    });
+
+    it("keeps the window keymap out of the way while the dialog is open", async () => {
+      const results: boolean[] = [];
+      const globalRun = vi.fn();
+      function GlobalBinding() {
+        useKeymap([{ id: "test.global", keys: "1", title: "Global one", scope: "global", run: globalRun }]);
+        return null;
+      }
+      renderWithShell(
+        <>
+          <GlobalBinding />
+          <ConfirmProbe results={results} />
+        </>,
+      );
+
+      fireEvent.keyDown(document.body, { key: "1" });
+      expect(globalRun).toHaveBeenCalledTimes(1);
+
+      fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+      const cancel = await screen.findByRole("button", { name: "cancel" });
+      fireEvent.keyDown(cancel, { key: "1" });
+      expect(globalRun).toHaveBeenCalledTimes(1);
+
+      fireEvent.keyDown(cancel, { key: "y" });
+      await vi.waitFor(() => expect(results).toEqual([true]));
+      expect(globalRun).toHaveBeenCalledTimes(1);
+    });
   });
 });

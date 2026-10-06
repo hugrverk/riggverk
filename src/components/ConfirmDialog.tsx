@@ -6,6 +6,7 @@ import {
   useId,
   useRef,
   useState,
+  type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
 
@@ -28,6 +29,8 @@ const ConfirmContext = createContext<ConfirmContextValue>({
 /**
  * Returns an async `confirm(config)` function that shows a themed modal
  * dialog and resolves with `true` on confirm or `false` on cancel/Escape.
+ * Keys: `y` confirms, `n` and Escape cancel. Focus starts on cancel, so Enter only
+ * confirms after the user moved to the confirm button (native button activation).
  *
  * Use it to replace synchronous `window.confirm()` in React code:
  *
@@ -47,7 +50,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const [config, setConfig] = useState<ConfirmConfig | null>(null);
   const resolveRef = useRef<(value: boolean) => void>(() => {});
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const cancelRef = useRef<HTMLButtonElement>(null);
   const titleId = useId();
+  const messageId = useId();
 
   const confirm = useCallback((cfg: ConfirmConfig | string) => {
     const resolved = typeof cfg === "string" ? { message: cfg } : cfg;
@@ -62,11 +67,12 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => () => resolveRef.current(false), []);
 
-  // Show the native dialog when a confirm is triggered
+  // Show the native dialog when a confirm is triggered; the safe choice (cancel) takes focus.
   useEffect(() => {
     if (open && dialogRef.current && !dialogRef.current.open) {
       dialogRef.current.showModal();
     }
+    if (open) cancelRef.current?.focus();
   }, [open]);
 
   const handleConfirm = useCallback(() => {
@@ -96,14 +102,39 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
     }
   }, [open]);
 
+  // The window keymap stands down while a modal dialog is open, so the dialog owns its keys. Enter is left alone:
+  // it activates whichever button has focus.
+  const handleKeyDown = (event: ReactKeyboardEvent<HTMLDialogElement>) => {
+    if (event.nativeEvent.isComposing || event.metaKey || event.ctrlKey || event.altKey) return;
+    if (event.key === "Escape") {
+      event.preventDefault();
+      handleCancel();
+      return;
+    }
+    if (event.repeat) return;
+    const key = event.key.toLowerCase();
+    if (key === "y") {
+      event.preventDefault();
+      handleConfirm();
+    } else if (key === "n") {
+      event.preventDefault();
+      handleCancel();
+    }
+  };
+
+  // The key caps are aria-hidden so the buttons keep the plain accessible names "cancel" / "confirm";
+  // aria-keyshortcuts exposes the keys to assistive technology instead.
   return (
     <ConfirmContext.Provider value={{ confirm }}>
       {children}
       <dialog
         ref={dialogRef}
         aria-labelledby={titleId}
+        aria-describedby={messageId}
         className="app-modal"
+        data-keyscope="overlay"
         onClose={handleClose}
+        onKeyDown={handleKeyDown}
       >
         <div className="app-modal-header">
           <h2 id={titleId} className="app-modal-title">
@@ -111,23 +142,25 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
           </h2>
         </div>
         <div className="app-modal-body">
-          <p>{config?.message}</p>
+          <p id={messageId}>{config?.message}</p>
         </div>
         <div className="app-modal-footer">
           <button
+            ref={cancelRef}
             type="button"
             className="btn btn-sm"
-            autoFocus
+            aria-keyshortcuts="n"
             onClick={handleCancel}
           >
-            {config?.cancelLabel ?? "cancel"}
+            <kbd aria-hidden="true">n</kbd> {config?.cancelLabel ?? "cancel"}
           </button>
           <button
             type="button"
             className={`btn btn-sm${config?.destructive ? " btn-danger" : " btn-primary"}`}
+            aria-keyshortcuts="y"
             onClick={handleConfirm}
           >
-            {config?.confirmLabel ?? "confirm"}
+            <kbd aria-hidden="true">y</kbd> {config?.confirmLabel ?? "confirm"}
           </button>
         </div>
       </dialog>

@@ -42,6 +42,19 @@ describe("ErrorBoundary", () => {
     expect(screen.getByRole("button", { name: "reload" })).toBeTruthy();
   });
 
+  it("draws the fallback as a pane with the actions in its footer and focus on try again", () => {
+    render(
+      <ErrorBoundary>
+        <Fragile />
+      </ErrorBoundary>,
+    );
+    const pane = screen.getByRole("region", { name: "Application error" });
+    expect(pane.classList.contains("pane")).toBe(true);
+    const footer = pane.querySelector(".pane-foot")!;
+    expect(Array.from(footer.querySelectorAll("button")).map(button => button.textContent)).toEqual(["try again", "reload"]);
+    expect(document.activeElement).toBe(screen.getByRole("button", { name: "try again" }));
+  });
+
   it("re-renders the children after try again once the cause is gone", () => {
     render(
       <ErrorBoundary>

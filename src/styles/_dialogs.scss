@@ -1,13 +1,14 @@
 /* ---- uninstall ---- */
 
 .btn-danger {
-  border-color: color-mix(in srgb, var(--fail) 35%, transparent);
+  border-color: var(--fail);
   color: var(--fail);
 }
 
 .btn-danger:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--fail) 12%, transparent);
-  border-color: color-mix(in srgb, var(--fail) 55%, transparent);
+  background: var(--fail-bg);
+  border-color: var(--fail);
+  color: var(--fail);
 }
 
 .uninstall-card-head {
@@ -18,7 +19,7 @@
 
 .uninstall-card-title {
   font-family: var(--font-mono);
-  font-size: var(--text-xs);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -31,64 +32,71 @@
   margin-top: 8px;
 }
 
-/* ---- themed modal dialogs ---- */
+/* ---- modal dialogs ----
+   A native <dialog> (it stays the overlay scope for the keymap) drawn as a titled box: accent border,
+   the title sitting on the top border like a pane title, a body, and an inset footer row that holds the
+   key-hinted buttons (<button class="btn"><kbd>y</kbd> confirm</button>). ConfirmDialog, the uninstall
+   dialogs and the conflict dialog share these classes:
+     .app-modal  > .app-modal-header > h2.app-modal-title
+                 > .app-modal-body
+                 > .app-modal-footer
+   The dialog itself must not clip (overflow: visible) or the title notch would be cut off; the body scrolls. */
 
 dialog {
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-panel);
-  color: var(--text);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-
-  /* Center in viewport */
   position: fixed;
   inset: 0;
   margin: auto;
-
-  /* Responsive sizing */
   width: min(560px, calc(100vw - 32px));
   max-height: calc(100vh - 48px);
-  overflow-y: auto;
-  overflow-x: hidden;
+  padding: 0;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  overflow: visible;
 }
 
+/* The fallback keeps the dim backdrop in engines where ::backdrop does not inherit custom properties. */
 dialog::backdrop {
-  background: rgba(0, 0, 0, 0.45);
-}
-
-[data-theme="light"] dialog::backdrop {
-  background: rgba(0, 0, 0, 0.25);
-}
-
-@media (prefers-color-scheme: light) {
-  [data-theme="system"] dialog::backdrop {
-    background: rgba(0, 0, 0, 0.25);
-  }
+  background: var(--backdrop, rgba(0, 0, 0, 0.45));
 }
 
 .app-modal-header {
-  margin-bottom: 12px;
+  position: absolute;
+  top: 0;
+  left: 10px;
+  z-index: 1;
+  transform: translateY(-50%);
+  max-width: calc(100% - 20px);
+  padding: 0 6px;
+  background: var(--surface);
+  line-height: 16px;
 }
 
 .app-modal-title {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
   margin: 0;
+  overflow: hidden;
+  color: var(--text-heading);
+  font-size: var(--fs-sm);
+  font-weight: 500;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-modal-body {
+  max-height: calc(100vh - 140px);
+  padding: 14px 10px 8px;
+  overflow-y: auto;
   color: var(--text);
-  font-size: var(--text-sm);
-  line-height: 1.55;
 }
 
 .app-modal-body p {
-  margin: 8px 0;
+  margin: 0 0 var(--lh);
+}
+
+.app-modal-body p:last-child {
+  margin-bottom: 0;
 }
 
 .app-modal-body ul {
@@ -96,7 +104,7 @@ dialog::backdrop {
   padding-left: 18px;
   max-height: 240px;
   overflow-y: auto;
-  font-size: var(--text-xs);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
@@ -106,10 +114,21 @@ dialog::backdrop {
 
 .app-modal-footer {
   display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  margin-top: 14px;
   flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 4px 12px;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--inset);
+}
+
+.app-modal-footer .btn kbd {
+  min-width: 0;
+  border-color: currentColor;
+  background: transparent;
+  color: inherit;
+  line-height: calc(var(--lh) - 6px);
 }
 
 .uninstall-summary {
@@ -119,7 +138,7 @@ dialog::backdrop {
 
 .uninstall-detail {
   margin: 6px 0;
-  font-size: var(--text-sm);
+  font-size: var(--fs-sm);
 }
 
 .uninstall-detail summary {
@@ -132,7 +151,7 @@ dialog::backdrop {
   padding-left: 18px;
   max-height: 200px;
   overflow: auto;
-  font-size: var(--text-xs);
+  font-size: var(--fs-sm);
 }
 
 .uninstall-dialog-actions {
@@ -141,4 +160,52 @@ dialog::backdrop {
   gap: 8px;
   margin-top: 14px;
   flex-wrap: wrap;
+}
+
+/* ---- error boundary fallback ----
+   Rendered by ErrorBoundary outside the shell providers, straight into #root: one fail-tinted pane
+   centred in the window with the actions in its footer. */
+
+.error-screen {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px 16px;
+  overflow: auto;
+}
+
+.error-screen .pane,
+.error-screen .pane:focus-within {
+  width: min(640px, 100%);
+  border-color: var(--fail);
+}
+
+.error-screen .pane-title b,
+.error-screen .pane:focus-within > .pane-title b {
+  color: var(--fail);
+}
+
+.error-screen .pane-body {
+  padding: 14px 10px 10px;
+}
+
+.error-screen .pane-foot {
+  gap: 6px 10px;
+  padding: 6px 10px;
+  background: var(--inset);
+}
+
+.error-message {
+  display: flex;
+  gap: 8px;
+  color: var(--fail);
+  overflow-wrap: anywhere;
+}
+
+.error-hint {
+  margin-top: var(--lh);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
 }
