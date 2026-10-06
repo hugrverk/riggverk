@@ -1,6 +1,6 @@
 ---
 name: handoff
-description: Review executor evidence and produce a compact, trustworthy handoff with verified state, risks, and the safest next action.
+description: Turns a session or an executor or subagent report into a compact, redacted handoff with verified versus claimed state, changed files, risks, and the single safest next action. Use when pausing work, transferring context, reviewing another agent's report, or nearing the context limit.
 category: workflow
 risk: low
 targets: codex, opencode, claude, cursor
@@ -9,12 +9,12 @@ related: diagnose, implementation-plan, release-check
 
 # Handoff
 
-Use when reviewing an executor report, pausing work, transferring context, or deciding the next action.
+Done when: a fresh agent could execute the next action without reading the session, and every Verified line cites a command, file, or diff.
 
 ## Process
 
 1. Extract the goal, current state, changed files, commands run, results, blockers, and stated risks.
-2. Separate verified facts from unsupported claims, assumptions, and checks not run.
+2. Separate verified facts from unsupported claims, assumptions, and checks not run. A line without a cited command, file, or diff belongs under Not verified.
 3. Decide the safest next action:
    - accept
    - verify
@@ -22,7 +22,8 @@ Use when reviewing an executor report, pausing work, transferring context, or de
    - revert
    - continue with a bounded slice
 4. Reference existing commits, diffs, docs, issues, and reports instead of duplicating them.
-5. Produce a compact handoff that another agent can act on without rereading the full session.
+5. Redact secrets, tokens, passwords, auth headers, and personal data from everything you write or quote.
+6. Produce a compact handoff that another agent can act on without rereading the full session. When it is written to a file, save it in the OS temporary directory, not the workspace.
 
 ## Output
 

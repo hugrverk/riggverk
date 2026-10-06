@@ -1,6 +1,6 @@
 ---
 name: context-budget
-description: Audit skills, rules, docs, agent prompts, and tooling config for token overhead, overlap, and safe simplification without removing essential safety guidance.
+description: Audits always-loaded and on-demand agent instructions (rules, skill descriptions and bodies, agent prompts, tool config) for token cost, duplication, and contradictions, and proposes small safe cuts. Use when adding skills or rules, or when instructions feel bloated, repetitive, or conflicting.
 category: workflow
 risk: low
 targets: codex, opencode, claude, cursor
@@ -9,12 +9,7 @@ related: implementation-plan
 
 # Context Budget
 
-## When To Use
-
-- The workspace feels slow, bloated, repetitive, or hard for agents to load.
-- Reviewing skills, global rules, agent prompts, docs, MCP/tooling config, or app default workspace content.
-- Before adding new baseline skills or broad rules.
-- When deciding whether to keep, merge, shorten, make optional, or remove instructions.
+Done when: each recommendation names the file, measured bytes saved, behavior risk, and the check showing no safety rule was lost.
 
 ## Do Not Use When
 
@@ -32,39 +27,43 @@ related: implementation-plan
    - Docs.
    - Tool/MCP config.
    - App default workspace resources.
-2. Estimate rough overhead:
-   - Count files, lines, and approximate tokens where practical.
+2. Measure the always-loaded surface first: rules files, skill `description` text, agent descriptions, tool schemas. Bodies load on demand and rank lower.
+   - Count bytes (`wc -c`), files, and lines; estimate tokens only as an estimate.
    - Note always-loaded vs optional or on-demand content.
-   - Treat tool schemas and connector descriptions as overhead when visible.
 3. Identify duplication:
    - Repeated safety rules.
    - Overlapping skill triggers.
    - Broad generic advice repeated across docs.
    - Tool-specific instructions that should be agent-neutral.
    - Long examples that could become references or be removed.
-4. Classify each component:
+4. Apply writing-for-agents checks to each instruction:
+   - No-op test: an instruction the model already follows by default changes nothing; delete the whole sentence.
+   - Sediment: stale layers that survived because adding felt safe and removing felt risky; drop lines that no longer bear on the task.
+   - Single source of truth: keep each meaning in one place; do not restate what the repo, config, or `--help` already shows.
+   - Pointer wording: a pointer (skill description, rule line naming a doc) decides when material is reached, so sharpen it before inlining the target; one trigger per branch.
+5. Classify each component:
    - Keep.
    - Merge.
    - Shorten.
    - Make optional/on-demand.
    - Remove.
-5. Protect essential content:
+6. Protect essential content:
    - Credentials and secret-handling rules.
    - Git/destructive-action guardrails.
    - Verification requirements.
    - Repo-canon instructions.
    - Safety and security review boundaries.
-6. Prioritize by savings and risk:
+7. Prioritize by savings and risk:
    - Highest line/token savings.
    - Lowest behavioral risk.
    - Clearest ownership.
    - Fewest sync surfaces.
-7. Recommend small slices rather than one broad purge.
+8. Recommend small slices rather than one broad purge.
 
 ## Output
 
 - Scope audited.
-- Counts: files, lines, and rough token estimate when practical.
+- Counts: files, lines, bytes, and rough token estimate when practical.
 - Biggest bloat sources.
 - Overlaps found.
 - Keep/merge/shorten/optional/remove recommendations.

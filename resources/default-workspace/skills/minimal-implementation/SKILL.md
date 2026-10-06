@@ -1,6 +1,6 @@
 ---
 name: minimal-implementation
-description: Implement the smallest complete change that fits existing ownership. Use after direction is clear; pair with `implementation-plan` when the slice map is not yet defined.
+description: Implements the smallest complete change that fits existing ownership, then runs a simplification pass and the narrowest falsifying check. Use when the direction is clear and code must change. Plan first with implementation-plan when slices are undefined.
 category: implementation
 risk: low
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: implementation-plan, diagnose, tdd
 # Minimal Implementation
 
 Use for code implementation and refactoring. Build the smallest complete, clear, and verifiable solution. Minimize necessary complexity, not line count.
+
+Done when: the diff contains only the requested behavior, the narrowest falsifying check ran green, and checks not run are reported.
 
 ## Rules
 

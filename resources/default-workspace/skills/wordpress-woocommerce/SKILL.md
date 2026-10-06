@@ -1,6 +1,6 @@
 ---
 name: wordpress-woocommerce
-description: Work on WordPress/WooCommerce themes, templates, hooks, filters, plugins, REST/AJAX, checkout/cart/product UI, security, i18n, and frontend integration.
+description: Implements and reviews WordPress and WooCommerce changes (themes, template overrides, hooks and filters, plugins, REST/AJAX, cart, checkout, product UI) with sanitize, escape, nonce, and capability discipline. Use when the repository contains WordPress or WooCommerce code.
 category: commerce
 risk: high
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: security-review, browser-qa, accessibility-review
 # WordPress WooCommerce
 
 Prefer WordPress and WooCommerce APIs, hooks, filters, and template overrides over brittle patches.
+
+Done when: the extension point is justified, sanitize, escape, nonce, and capability checks are in place where relevant, and verification run versus not run is stated.
 
 ## Process
 
@@ -51,7 +53,7 @@ Prefer WordPress and WooCommerce APIs, hooks, filters, and template overrides ov
 6. **Verify.**
    - Run the narrowest relevant checks available.
    - Prefer existing repo commands.
-   - For PHP, run syntax checks or project verification if available.
+   - For PHP, run `php -l` on changed files, plus `wp` (WP-CLI) checks or PHPCS with the WordPress standard when the repo configures them.
    - For assets, rebuild CSS/JS if source files changed.
    - For WooCommerce flows, list manual route checks such as product, shop, cart, checkout, and account when relevant.
    - State what was not verified.

@@ -1,6 +1,6 @@
 ---
 name: kretsverket-file-compatibility
-description: Protect .krets and .kretsym persistence, parsing, migrations, defaults, and untrusted imports without silent data loss.
+description: Protects Kretsverket .krets and .kretsym persistence (parsing, defaults, migrations, round trips, untrusted imports) with no silent data loss. Use when a Kretsverket change alters saved fields, file versions, import handling, or load and save code.
 category: kretsverket
 risk: high
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: security-review, tdd, release-check, minimal-implementation
 # Kretsverket File Compatibility
 
 Use for .krets and .kretsym persistence, parsing, migrations, defaults, and untrusted imports.
+
+Done when: the change is classified, `npm run test`, `npm run check:krets`, and `npm run build` pass, and a save and reload smoke covers changed behavior.
 
 ## Classification
 
@@ -44,3 +46,10 @@ Every change must be classified as one of:
 - `npm run build`
 
 Add browser save and reload smoke when behavior changes.
+
+## Output
+
+- Change classification.
+- Old and new payload shapes, with defaults and migration behavior.
+- Commands and round-trip smoke run, with results.
+- Not verified and residual risk.
