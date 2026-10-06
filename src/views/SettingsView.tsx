@@ -17,6 +17,7 @@ import {
   contrastRatio,
   hasPoorContrast,
   isValidThemeHex,
+  themeAccentDefault,
   themeColorDefaults,
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
@@ -49,18 +50,6 @@ interface SettingsViewProps {
   /** Asks for confirmation itself; the returned promise settles once the confirm (and the save) are done. */
   onReset: () => void | Promise<void>;
   colorResetKey: number;
-}
-
-/**
- * Accent used when no override is set. Mirrors `--accent` in _tokens.scss (the dark `:root` block and the paper
- * `[data-theme="light"]` block); SettingsView.test.tsx fails when they drift apart.
- */
-const ACCENT_DEFAULTS = { dark: "#7fb7ff", light: "#0b5fa5" } as const;
-
-function defaultAccent(appearance: AppSettings["appearance"]): string {
-  if (appearance === "light") return ACCENT_DEFAULTS.light;
-  if (appearance === "dark") return ACCENT_DEFAULTS.dark;
-  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? ACCENT_DEFAULTS.light : ACCENT_DEFAULTS.dark;
 }
 
 const APPEARANCE_OPTIONS = [
@@ -489,7 +478,7 @@ export function SettingsView({
           label="Accent"
           draft={accentDraft}
           saved={appSettings.accent_color}
-          defaultPicker={defaultAccent(appSettings.appearance)}
+          defaultPicker={themeAccentDefault(appSettings.appearance)}
           touched={accentTouched}
           onDraftChange={applyAccent}
           onReset={() => {

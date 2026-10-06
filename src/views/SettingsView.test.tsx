@@ -1,9 +1,12 @@
 import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
-import { readFileSync } from "node:fs";
-import { resolve } from "node:path";
 import { useState, type ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { defaultSettings, themeColorDefaults, type SettingsSaveStatus } from "../lib/settingsDraft";
+import {
+  defaultSettings,
+  themeAccentDefault,
+  themeColorDefaults,
+  type SettingsSaveStatus,
+} from "../lib/settingsDraft";
 import { renderInFrame } from "../test/renderWithShell";
 import type { AppSettings } from "../types";
 import { SettingsView } from "./SettingsView";
@@ -288,17 +291,12 @@ describe("SettingsView colour fields", () => {
     expect((screen.getByLabelText("Foreground hex code") as HTMLInputElement).placeholder).toBe(defaults.foreground);
   });
 
-  it("uses the current theme accent as the placeholder, matching the token sheet", () => {
-    const tokens = readFileSync(resolve(import.meta.dirname, "../styles/_tokens.scss"), "utf8");
-    const dark = tokens.match(/:root\s*\{[^}]*?--accent:\s*(#[0-9a-f]{6})/i)![1]!;
-    const light = tokens.match(/\[data-theme="light"\]\s*\{[^}]*?--accent:\s*(#[0-9a-f]{6})/i)![1]!;
-    expect(dark).not.toBe(light);
-
+  it("uses the current theme accent as the placeholder", () => {
     renderSettings({ appSettings: { ...defaultSettings(), appearance: "dark" } });
-    expect((screen.getByLabelText("Accent hex code") as HTMLInputElement).placeholder).toBe(dark);
+    expect((screen.getByLabelText("Accent hex code") as HTMLInputElement).placeholder).toBe(themeAccentDefault("dark"));
     cleanup();
     renderSettings({ appSettings: { ...defaultSettings(), appearance: "light" } });
-    expect((screen.getByLabelText("Accent hex code") as HTMLInputElement).placeholder).toBe(light);
+    expect((screen.getByLabelText("Accent hex code") as HTMLInputElement).placeholder).toBe(themeAccentDefault("light"));
   });
 
   it("warns when the custom foreground and background are hard to read", () => {

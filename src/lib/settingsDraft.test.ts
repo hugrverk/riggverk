@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   APP_FONT_SIZE_VALUES,
@@ -7,6 +9,7 @@ import {
   defaultSettings,
   inverseForeground,
   normalizeAppFontSize,
+  themeAccentDefault,
 } from "./settingsDraft";
 
 describe("defaultSettings", () => {
@@ -86,6 +89,32 @@ describe("inverseForeground", () => {
   it("picks the foreground with the higher contrast against the accent", () => {
     expect(inverseForeground("#7fb7ff")).toBe("#111111");
     expect(inverseForeground("#1b6f33")).toBe("#ffffff");
+  });
+});
+
+describe("themeAccentDefault", () => {
+  const tokens = readFileSync(resolve(import.meta.dirname, "../styles/_tokens.scss"), "utf8");
+  const dark = tokens.match(/:root\s*\{[^}]*?--accent:\s*(#[0-9a-f]{6})/i)![1]!;
+  const light = tokens.match(/\[data-theme="light"\]\s*\{[^}]*?--accent:\s*(#[0-9a-f]{6})/i)![1]!;
+
+  it("matches the accent in the token sheet for both themes", () => {
+    expect(dark).not.toBe(light);
+    expect(themeAccentDefault("dark")).toBe(dark);
+    expect(themeAccentDefault("light")).toBe(light);
+  });
+
+  it("follows the system colour scheme for the system theme", () => {
+    const original = window.matchMedia;
+    const prefersLight = (matches: boolean) =>
+      ((query: string) => ({ matches: query.includes("light") && matches, media: query })) as unknown as typeof window.matchMedia;
+    try {
+      window.matchMedia = prefersLight(true);
+      expect(themeAccentDefault("system")).toBe(light);
+      window.matchMedia = prefersLight(false);
+      expect(themeAccentDefault("system")).toBe(dark);
+    } finally {
+      window.matchMedia = original;
+    }
   });
 });
 
