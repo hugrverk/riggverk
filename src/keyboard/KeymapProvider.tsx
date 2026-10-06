@@ -159,12 +159,10 @@ export function KeymapProvider({ children, platform: platformOverride, chordTime
         inList: active instanceof Element && active.closest("[role='listbox']") !== null,
       });
     };
-    let blurTimer: ReturnType<typeof setTimeout> | null = null;
     const onFocusOut = (event: FocusEvent) => {
-      // Focus is moving somewhere else: focusin will report it. A null target means blur()/removal.
-      if (event.relatedTarget !== null) return;
-      if (blurTimer) clearTimeout(blurTimer);
-      blurTimer = setTimeout(syncFocus, 0);
+      // Focus is moving to another element: focusin reports it. A null relatedTarget means blur() or removal
+      // (activeElement is already the body then), or the window lost focus (activeElement is unchanged).
+      if (event.relatedTarget === null) syncFocus();
     };
 
     window.addEventListener("keydown", onKeyDown);
@@ -176,7 +174,6 @@ export function KeymapProvider({ children, platform: platformOverride, chordTime
       document.removeEventListener("focusin", syncFocus);
       document.removeEventListener("focusout", onFocusOut);
       if (timer) clearTimeout(timer);
-      if (blurTimer) clearTimeout(blurTimer);
     };
   }, [registries, platform, chordTimeoutMs]);
 

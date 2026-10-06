@@ -4,6 +4,7 @@ export {
   KeymapRegistry,
   bindingGroup,
   evaluateWhen,
+  isVisibleHint,
   paneHintEntries,
   type Binding,
   type RegisteredBinding,

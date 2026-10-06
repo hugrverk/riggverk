@@ -1,0 +1,167 @@
+import { act, cleanup, fireEvent, screen, within } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import type { CommandSpec } from "../keyboard/commands/parser";
+import { useCommands } from "../keyboard/commands/useCommands";
+import { useKeymapEntries } from "../keyboard/context";
+import { groupBindings } from "./HelpOverlay";
+import type { Binding } from "../keyboard/registry";
+import { useKeymap } from "../keyboard/useKeymap";
+import { renderInFrame } from "../test/renderWithShell";
+import { Pane } from "../ui/Pane";
+import { PaneList } from "../ui/PaneList";
+
+afterEach(cleanup);
+
+const noop = () => {};
+
+function Registrar({ bindings, commands = [] }: { bindings: Binding[]; commands?: CommandSpec[] }) {
+  useKeymap(bindings);
+  useCommands(commands);
+  return null;
+}
+
+function openHelp() {
+  fireEvent.keyDown(document.body, { key: "?", shiftKey: true });
+  return screen.getByRole("dialog", { name: "Keyboard help" });
+}
+
+describe("HelpOverlay", () => {
+  it("lists every registered binding grouped, generated from the registry", () => {
+    const extra: Binding[] = [
+      { id: "t.update", keys: "u", title: "Update harness", group: "Harness", hint: "update", scope: "pane", paneId: "main", run: noop },
+      { id: "t.save", keys: "Mod+s", title: "Save", group: "Editor", scope: "editor", inEditable: true, run: noop },
+      { id: "t.top", keys: "g g", title: "Jump to top", group: "Harness", scope: "pane", paneId: "main", run: noop },
+      { id: "t.off", keys: "x", title: "Needs a plan", group: "Harness", scope: "pane", paneId: "main", when: () => "no plan yet", run: noop },
+    ];
+    let registered: readonly string[] = [];
+    function Probe() {
+      registered = useKeymapEntries().map(entry => entry.binding.id);
+      return null;
+    }
+    renderInFrame(
+      <>
+        <Registrar bindings={extra} />
+        <Probe />
+        <Pane id="main" index={1} title="main">
+          <PaneList label="rows" items={[{ id: "a" }]} getKey={row => row.id} renderItem={row => <span>{row.id}</span>} />
+        </Pane>
+      </>,
+    );
+    const help = openHelp();
+    // Every registered binding id has a line (list bindings of one pane collapse into the same titles).
+    const entries = registered;
+    expect(entries.length).toBeGreaterThan(15);
+    const text = help.textContent!;
+    for (const title of [
+      "Go to Workspace",
+      "Go to Settings",
+      "Focus previous pane",
+      "Focus next pane",
+      "Command line",
+      "Keyboard help",
+      "Open settings",
+      "Leave text field, dismiss error",
+      "Move down",
+      "Move up",
+      "First item",
+      "Last item",
+      "Update harness",
+      "Save",
+      "Jump to top",
+      "Needs a plan (no plan yet)",
+    ]) {
+      expect(text).toContain(title);
+    }
+    expect(within(help).getByRole("region", { name: "Harness" })).not.toBeNull();
+    expect(within(help).getByRole("region", { name: "Editor" })).not.toBeNull();
+    expect(within(help).getByRole("region", { name: "Navigate" })).not.toBeNull();
+    expect(within(help).getByRole("region", { name: "Lists" })).not.toBeNull();
+  });
+
+  it("renders key caps per binding (chords as separate caps, Mod per platform)", () => {
+    renderInFrame(
+      <Registrar
+        bindings={[
+          { id: "t.top", keys: "g g", title: "Jump to top", group: "Harness", scope: "pane", paneId: "main", run: noop },
+          { id: "t.save", keys: "Mod+s", title: "Save", group: "Editor", scope: "editor", run: noop },
+        ]}
+      />,
+      {},
+      { platform: "mac" },
+    );
+    const help = openHelp();
+    const row = (title: string) => within(help).getByText(title).previousElementSibling as HTMLElement;
+    expect(Array.from(row("Jump to top").querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["g", "g"]);
+    expect(Array.from(row("Save").querySelectorAll("kbd")).map(kbd => kbd.textContent)).toEqual(["⌘S"]);
+  });
+
+  it("lists the registered commands with their aliases", () => {
+    renderInFrame(
+      <Registrar
+        bindings={[]}
+        commands={[{ name: "release-check", aliases: ["rc"], summary: "run the workspace release check", run: noop }]}
+      />,
+    );
+    const help = openHelp();
+    expect(within(help).getByText("release-check / rc")).not.toBeNull();
+    expect(within(help).getByText("run the workspace release check")).not.toBeNull();
+  });
+
+  it("closes with Escape, ? and q, restoring focus to where it was", () => {
+    renderInFrame(
+      <Pane id="main" index={1} title="main" scrollable>
+        <button type="button">anchor</button>
+      </Pane>,
+    );
+    const anchor = screen.getByRole("button", { name: "anchor" });
+    for (const key of ["Escape", "?", "q"]) {
+      act(() => anchor.focus());
+      const help = openHelp();
+      expect(document.activeElement).toBe(help);
+      fireEvent.keyDown(help, { key });
+      expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
+      expect(document.activeElement).toBe(anchor);
+    }
+  });
+
+  it("closes from its close button and traps Tab inside", () => {
+    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    const help = openHelp();
+    const close = within(help).getByRole("button", { name: /close/ });
+    act(() => close.focus());
+    const prevented = !fireEvent.keyDown(close, { key: "Tab" });
+    expect(prevented).toBe(true);
+    expect(document.activeElement).toBe(close);
+    fireEvent.click(close);
+    expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
+  });
+
+  it("does not run background bindings while open", () => {
+    const run = vi.fn();
+    renderInFrame(<Registrar bindings={[{ id: "t.j", keys: "j", title: "J", scope: "global", run }]} />);
+    const help = openHelp();
+    fireEvent.keyDown(help, { key: "j" });
+    expect(run).not.toHaveBeenCalled();
+  });
+});
+
+describe("groupBindings", () => {
+  it("collapses identical lines from several panes and orders well-known groups first", () => {
+    const entry = (id: string, keys: string, title: string, group?: string, scope: Binding["scope"] = "global") => ({
+      binding: { id, keys, title, group, scope, run: noop } satisfies Binding,
+      chords: [],
+      seq: 0,
+    });
+    const groups = groupBindings(
+      [
+        entry("a", "j", "Move down", "Lists", "list"),
+        entry("b", "j", "Move down", "Lists", "list"),
+        entry("c", "z", "Zed thing", "Zed"),
+        entry("d", "1", "Go to Workspace", "Navigate"),
+      ],
+      "other",
+    );
+    expect(groups.map(group => group.name)).toEqual(["Navigate", "Lists", "Zed"]);
+    expect(groups[1]!.lines).toHaveLength(1);
+  });
+});

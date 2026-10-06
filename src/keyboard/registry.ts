@@ -115,6 +115,13 @@ export class KeymapRegistry {
   }
 }
 
+/** A hinted binding shows unless `when()` is false; a `when()` reason string shows it disabled. */
+export function isVisibleHint(entry: RegisteredBinding): boolean {
+  if (!entry.binding.hint) return false;
+  const { active, disabledReason } = evaluateWhen(entry.binding);
+  return active || disabledReason !== null;
+}
+
 /** Bindings that show up in a pane footer: anchored to the pane and carrying a hint. */
 export function paneHintEntries(entries: readonly RegisteredBinding[], paneId: string): RegisteredBinding[] {
   return entries.filter(entry => entry.binding.paneId === paneId && entry.binding.hint);

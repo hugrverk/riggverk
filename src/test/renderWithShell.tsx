@@ -2,6 +2,7 @@ import { StrictMode, type ReactElement, type ReactNode } from "react";
 import { render, type RenderOptions, type RenderResult } from "@testing-library/react";
 import { ConfirmProvider } from "../components/ConfirmDialog";
 import type { Platform } from "../keyboard/keymap";
+import { AppFrame, type AppFrameProps } from "../shell/AppFrame";
 import { ShellProviders } from "../shell/ShellProviders";
 
 export interface RenderWithShellOptions extends Omit<RenderOptions, "wrapper"> {
@@ -33,5 +34,37 @@ export function renderWithShell(
   return {
     ...result,
     rerender: next => result.rerender(wrap(next)),
+  };
+}
+
+export type FrameProps = Partial<Omit<AppFrameProps, "children">>;
+
+/** The app's frame with sensible defaults, for tests that need top line, status bar and overlays. */
+export function TestFrame({ children, ...props }: FrameProps & { children?: ReactNode }) {
+  return (
+    <AppFrame
+      view="start"
+      onSwitchView={() => {}}
+      libraryDirty={false}
+      settingsErrored={false}
+      error={null}
+      onDismissError={() => {}}
+      {...props}
+    >
+      {children}
+    </AppFrame>
+  );
+}
+
+/** `renderWithShell` plus the frame around `children`. */
+export function renderInFrame(
+  children: ReactNode,
+  props: FrameProps = {},
+  options: RenderWithShellOptions = {},
+): RenderResult & { rerenderFrame: (children: ReactNode, props?: FrameProps) => void } {
+  const result = renderWithShell(<TestFrame {...props}>{children}</TestFrame>, options);
+  return {
+    ...result,
+    rerenderFrame: (next, nextProps = props) => result.rerender(<TestFrame {...nextProps}>{next}</TestFrame>),
   };
 }
