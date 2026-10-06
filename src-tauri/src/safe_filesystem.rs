@@ -602,40 +602,6 @@ pub fn remove_empty_directory_no_symlinks(
     fs::remove_dir(path).map_err(|e| format!("remove empty directory {}: {e}", path.display()))
 }
 
-/// Reject symlinks at any depth within a directory tree (does not follow symlinks).
-#[allow(dead_code)]
-pub fn reject_nested_symlinks(dir: &Path, label: &str) -> Result<(), String> {
-    reject_nested_symlinks_recurse(dir, label, 0)
-}
-
-fn reject_nested_symlinks_recurse(dir: &Path, label: &str, depth: usize) -> Result<(), String> {
-    if depth > MAX_RECURSE_DEPTH {
-        return Err(format!(
-            "max symlink check depth exceeded in {}: {}",
-            label,
-            dir.display()
-        ));
-    }
-    reject_symlink(dir, label)?;
-    if !dir.is_dir() {
-        return Ok(());
-    }
-    for entry in fs::read_dir(dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))? {
-        let entry = entry.map_err(|e| format!("entry error in {}: {e}", dir.display()))?;
-        let path = entry.path();
-        let ft = entry
-            .file_type()
-            .map_err(|e| format!("file type error: {e}"))?;
-        if ft.is_symlink() {
-            return Err(format!("nested symlink in {}: {}", label, path.display()));
-        }
-        if ft.is_dir() {
-            reject_nested_symlinks_recurse(&path, label, depth + 1)?;
-        }
-    }
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;

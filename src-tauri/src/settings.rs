@@ -413,7 +413,7 @@ pub fn load() -> AppSettings {
         .unwrap_or_default()
 }
 
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub fn get_settings_snapshot() -> Result<GetSettingsResponse, String> {
     get_settings_snapshot_with_mutate(|_| Ok(MutationOutcome::Unchanged))
 }
@@ -483,18 +483,6 @@ where
         .lock()
         .map_err(|_| "settings lock poisoned".to_string())?;
     mutate_settings_locked(mutator)
-}
-
-#[allow(dead_code)]
-pub fn save(settings: AppSettings) -> Result<AppSettings, String> {
-    let _guard = SETTINGS_WRITE_MUTEX
-        .lock()
-        .map_err(|_| "settings lock poisoned".to_string())?;
-    let incoming = settings;
-    mutate_settings_locked(|current| {
-        *current = incoming;
-        Ok(MutationOutcome::Changed)
-    })
 }
 
 pub fn save_with_revision_check(
@@ -577,7 +565,7 @@ mod tests {
     use super::{
         effective_enabled_target_ids, enabled_setup_surfaces, get_settings_snapshot,
         get_settings_snapshot_with_mutate, load, mutate_settings, normalize, normalize_for_save,
-        save, save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
+        save_with_revision_check, validate_hex_color, AppSettings, MutationOutcome,
         SETTINGS_CONFLICT_ERROR, SETTINGS_CORRUPT_RECOVERY_MESSAGE, TARGET_DEFAULTS_VERSION,
     };
     use crate::agent_targets;
@@ -587,6 +575,11 @@ mod tests {
     use std::sync::{Arc, Barrier};
     use std::thread;
     use std::time::Duration;
+
+    /// Unconditional write through the production path (no revision check), for building fixtures.
+    fn save(settings: AppSettings) -> Result<AppSettings, String> {
+        save_with_revision_check(settings, None)
+    }
 
     fn settings_with_path(path: Option<&str>) -> AppSettings {
         AppSettings {
@@ -912,12 +905,6 @@ mod tests {
                 appdata: Some(
                     dir.join("AppData")
                         .join("Roaming")
-                        .to_string_lossy()
-                        .into_owned(),
-                ),
-                local_appdata: Some(
-                    dir.join("AppData")
-                        .join("Local")
                         .to_string_lossy()
                         .into_owned(),
                 ),

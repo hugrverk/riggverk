@@ -135,7 +135,7 @@ fn curated_doc_registry() -> &'static [DocEntry] {
 }
 
 /// Relative paths that must never appear in normal Library Docs (implementation/debug assets).
-#[cfg_attr(not(test), allow(dead_code))]
+#[cfg(test)]
 pub(crate) const FORBIDDEN_LIBRARY_DOC_REL_PATHS: &[&str] = &[
     "templates/cursor/manifest.json",
     "templates/cursor/mcp/mcp.example.json",

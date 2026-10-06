@@ -138,17 +138,6 @@ pub(crate) fn configured_workspace_path(settings: &settings::AppSettings) -> Opt
     default_installed_workspace_path().ok()
 }
 
-#[allow(dead_code)]
-pub(super) fn repo_path() -> PathBuf {
-    let settings = settings::load();
-    repo_path_from_settings(&settings)
-}
-
-#[cfg_attr(not(test), allow(dead_code))]
-fn repo_path_from_settings(settings: &settings::AppSettings) -> PathBuf {
-    configured_workspace_path(settings).unwrap_or_default()
-}
-
 pub(super) fn validate_workspace_root(root: PathBuf) -> Result<PathBuf, String> {
     let canonical = root
         .canonicalize()

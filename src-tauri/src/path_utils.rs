@@ -5,7 +5,7 @@ use crate::platform_paths::{
 };
 
 /// Display form of the canonical installed workspace path (verified by release-check).
-#[allow(dead_code)]
+#[cfg(test)]
 pub(crate) const DEFAULT_INSTALLED_WORKSPACE_DISPLAY: &str = "~/.config/agent-workspace";
 
 fn resolve_home_string() -> Result<String, String> {

@@ -3,6 +3,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::agent_skill_targets::validate_skill_name;
+use crate::path_safety::reject_symlink;
 
 fn extract_frontmatter(content: &str, key: &str) -> String {
     let prefix = format!("{key}:");
@@ -30,15 +31,6 @@ fn path_within_root(child: &Path, root: &Path) -> Result<(), String> {
             child.display()
         ))
     }
-}
-
-fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 fn has_deeper_skill_md(dir: &Path) -> bool {
@@ -88,8 +80,8 @@ fn register_discovered_skill(
     skill_md: &Path,
     fallback_name: &str,
 ) -> Result<(), String> {
-    reject_symlink_path(skill_dir, "skill directory")?;
-    reject_symlink_path(skill_md, "skill file")?;
+    reject_symlink(skill_dir, "skill directory")?;
+    reject_symlink(skill_md, "skill file")?;
     if !skill_md.is_file() {
         return Ok(());
     }
@@ -114,7 +106,7 @@ pub fn discover_workspace_skills(skills_dir: &Path) -> Result<HashMap<String, Pa
             skills_dir.display()
         ));
     }
-    reject_symlink_path(skills_dir, "skills root")?;
+    reject_symlink(skills_dir, "skills root")?;
     let canonical_root = skills_dir
         .canonicalize()
         .map_err(|e| format!("cannot canonicalize skills root: {e}"))?;

@@ -6,6 +6,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::artifact_registry::AgentName;
+use crate::path_safety::reject_symlink;
 
 /// Harness identifier for agent source discovery.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -40,18 +41,6 @@ pub struct DiscoveredAgent {
     pub name: AgentName,
     pub source_path: PathBuf,
     pub harness: AgentHarness,
-}
-
-fn reject_symlink(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 /// Discover agents for a harness from its canonical source directory.
@@ -134,53 +123,9 @@ pub fn discover_agent_names(
         .map(|agents| agents.into_iter().map(|a| a.name).collect())
 }
 
-/// Compare an installed agent directory against canonical harness sources.
-///
-/// Unknown extra agents in the target directory are allowed. Fails closed when
-/// the canonical source is missing or unreadable.
-#[allow(dead_code)]
-pub fn compare_agents_for_harness(
-    harness: AgentHarness,
-    workspace_root: &Path,
-    target_dir: &Path,
-) -> crate::setup_lifecycle::OperationKind {
-    use crate::setup_lifecycle::OperationKind;
-
-    let agents = match discover_agents(harness, workspace_root) {
-        Ok(a) => a,
-        Err(_) => return OperationKind::Unavailable,
-    };
-    if !target_dir.exists() {
-        return OperationKind::Create;
-    }
-    if reject_symlink(target_dir, "agent target directory").is_err() {
-        return OperationKind::Conflict;
-    }
-    if !target_dir.is_dir() {
-        return OperationKind::Conflict;
-    }
-    let ext = harness.native_extension();
-    for agent in &agents {
-        let installed = target_dir.join(format!("{}.{}", agent.name.as_str(), ext));
-        if reject_symlink(&installed, "installed agent file").is_err() {
-            return OperationKind::Conflict;
-        }
-        if !installed.is_file() {
-            return OperationKind::Update;
-        }
-        match (fs::read(&agent.source_path), fs::read(&installed)) {
-            (Ok(src), Ok(dst)) if src == dst => {}
-            (Err(_), _) | (_, Err(_)) => return OperationKind::Conflict,
-            _ => return OperationKind::Update,
-        }
-    }
-    OperationKind::NoChange
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::setup_lifecycle::OperationKind;
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -208,6 +153,20 @@ mod tests {
         let _ = fs::remove_dir_all(&ws);
         assert_eq!(agents.len(), 2);
         assert!(agents.iter().any(|a| a.name.as_str() == "repo-scout"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn symlinked_agent_source_directory_is_refused() {
+        let ws = temp_root("sym-source");
+        write_file(&ws.join("real-agents/scout.md"), "# scout");
+        std::os::unix::fs::symlink(ws.join("real-agents"), ws.join("agents")).unwrap();
+        let err = discover_agents(AgentHarness::OpenCode, &ws).unwrap_err();
+        let _ = fs::remove_dir_all(&ws);
+        assert!(
+            err.contains("refusing symlink agent source directory"),
+            "{err}"
+        );
     }
 
     #[test]
@@ -280,39 +239,6 @@ mod tests {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let agents = discover_agents(AgentHarness::Cursor, &repo).expect("cursor");
         assert_eq!(agents.len(), 6);
-    }
-
-    #[test]
-    fn compare_missing_source_is_unavailable() {
-        let ws = temp_root("cmp-missing-src");
-        let target = ws.join("agents");
-        fs::create_dir_all(&target).unwrap();
-        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
-        let _ = fs::remove_dir_all(&ws);
-        assert!(matches!(kind, OperationKind::Unavailable));
-    }
-
-    #[test]
-    fn compare_missing_target_dir_is_create() {
-        let ws = temp_root("cmp-create");
-        write_file(&ws.join("agents/scout.md"), "# scout");
-        let target = ws.join("missing-agents");
-        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
-        let _ = fs::remove_dir_all(&ws);
-        assert!(matches!(kind, OperationKind::Create));
-    }
-
-    #[test]
-    fn compare_extra_unknown_agent_still_synced() {
-        let ws = temp_root("cmp-extra");
-        write_file(&ws.join("agents/scout.md"), "# scout");
-        let target = ws.join("installed");
-        fs::create_dir_all(&target).unwrap();
-        write_file(&target.join("scout.md"), "# scout");
-        write_file(&target.join("user-custom.md"), "# custom");
-        let kind = compare_agents_for_harness(AgentHarness::OpenCode, &ws, &target);
-        let _ = fs::remove_dir_all(&ws);
-        assert!(matches!(kind, OperationKind::NoChange));
     }
 
     #[test]

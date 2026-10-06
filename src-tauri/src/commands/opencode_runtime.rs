@@ -4,6 +4,7 @@ use std::path::Path;
 use std::time::Duration;
 
 use super::process::{run_cmd_bounded, ActionResult, BoundedCmdOptions};
+use super::status::file_eq;
 
 #[derive(Serialize, Clone, Debug)]
 pub struct OpenCodeRuntimeCheck {
@@ -87,17 +88,6 @@ fn list_bundled_agents(agents_dir: &Path) -> Vec<String> {
     }
     names.sort();
     names
-}
-
-/// Compare two files byte-for-byte.
-fn file_eq(a: &Path, b: &Path) -> bool {
-    if !a.exists() || !b.exists() {
-        return false;
-    }
-    match (std::fs::read(a), std::fs::read(b)) {
-        (Ok(ac), Ok(bc)) => ac == bc,
-        _ => false,
-    }
 }
 
 const PLAYWRIGHT_MCP_VERSION_DEFAULT: &str = "0.0.48";
@@ -1325,13 +1315,6 @@ fn opencode_model_selection_path_for_home(home_dir: &Path) -> Result<std::path::
                     .into_owned(),
             ),
             xdg_config_home: Some(home_dir.join(".config").to_string_lossy().into_owned()),
-            xdg_data_home: Some(
-                home_dir
-                    .join(".local")
-                    .join("share")
-                    .to_string_lossy()
-                    .into_owned(),
-            ),
             ..crate::platform_paths::PlatformEnv::default()
         }
     };

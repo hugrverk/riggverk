@@ -61,12 +61,6 @@ pub fn codex_legacy_skills_dest(home: &Path) -> PathBuf {
     home.join(".agents").join("skills")
 }
 
-/// Documented project-local Codex skill destination (`<repo>/.agents/skills`).
-#[cfg_attr(not(test), allow(dead_code))]
-pub fn codex_project_skills_dest(project_root: &Path) -> PathBuf {
-    project_root.join(".agents").join("skills")
-}
-
 pub fn validate_skill_dest_root(dest: &Path) -> Result<(), String> {
     if dest.as_os_str().is_empty() {
         return Err("skill destination root is empty".into());
@@ -200,15 +194,6 @@ mod tests {
             home.join(".agents").join("skills")
         );
         let _ = fs::remove_dir_all(&home);
-    }
-
-    #[test]
-    fn codex_project_skills_dest_matches_docs() {
-        let repo = PathBuf::from("/tmp/example-repo");
-        assert_eq!(
-            codex_project_skills_dest(&repo),
-            repo.join(".agents").join("skills")
-        );
     }
 
     #[test]

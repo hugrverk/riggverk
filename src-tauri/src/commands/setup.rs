@@ -3854,7 +3854,7 @@ mod tests {
         settings
             .enabled_target_ids
             .retain(|id| !ids.contains(&id.as_str()));
-        crate::settings::save(settings).expect("save settings");
+        crate::settings::save_with_revision_check(settings, None).expect("save settings");
     }
 
     #[test]

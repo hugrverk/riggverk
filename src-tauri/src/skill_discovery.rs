@@ -8,6 +8,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 
 use crate::agent_skill_targets::VALID_SKILL_AGENTS;
+use crate::path_safety::reject_symlink;
 
 /// One discovered skill from the workspace skills catalog.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -41,18 +42,6 @@ impl std::fmt::Display for SkillDiscoveryError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(self.message())
     }
-}
-
-fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    let meta = fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 fn has_deeper_skill_md(dir: &Path) -> bool {
@@ -175,8 +164,8 @@ fn register_skill(
     fallback_name: &str,
     group: &str,
 ) -> Result<(), String> {
-    reject_symlink_path(skill_dir, "skill directory")?;
-    reject_symlink_path(skill_md, "skill file")?;
+    reject_symlink(skill_dir, "skill directory")?;
+    reject_symlink(skill_md, "skill file")?;
     if !skill_md.is_file() {
         return Ok(());
     }
@@ -215,7 +204,7 @@ pub fn discover_skill_catalog(
             skills_dir.display()
         )));
     }
-    if let Err(e) = reject_symlink_path(&skills_dir, "skills root") {
+    if let Err(e) = reject_symlink(&skills_dir, "skills root") {
         return Err(SkillDiscoveryError::InvalidCatalog(e));
     }
 
