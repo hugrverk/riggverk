@@ -650,15 +650,15 @@ let agentTemplate: DocumentContent = {
 };
 
 const configSources: ConfigEditorSourceMeta[] = [
-  { id: "template", label: "template", rel_path: "templates/opencode.json", editable: true, helper: "bundled base config" },
+  { id: "base", label: "base", rel_path: "templates/opencode.json", editable: true, helper: "bundled base config" },
   { id: "policy", label: "policy", rel_path: "templates/opencode-policy.json", editable: true, helper: "local overrides" },
-  { id: "generated", label: "generated", rel_path: "generated/opencode.json", editable: false, helper: "snapshot written on install" },
+  { id: "snapshot", label: "snapshot", rel_path: "generated/opencode.json", editable: false, helper: "snapshot written on install" },
 ];
 
 const configStore = new Map<string, DocumentContent>([
-  ["template", { id: "template", title: "opencode.json", path: `${WORKSPACE}/templates/opencode.json`, section: "templates", source: "workspace", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"small_model\": \"anthropic/claude-haiku-4-5\",\n  \"autoupdate\": true\n}\n" }],
+  ["base", { id: "base", title: "opencode.json", path: `${WORKSPACE}/templates/opencode.json`, section: "templates", source: "workspace", content: "{\n  \"$schema\": \"https://opencode.ai/config.json\",\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"small_model\": \"anthropic/claude-haiku-4-5\",\n  \"autoupdate\": true\n}\n" }],
   ["policy", { id: "policy", title: "opencode-policy.json", path: `${WORKSPACE}/templates/opencode-policy.json`, section: "templates", source: "workspace", content: "{\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
-  ["generated", { id: "generated", title: "opencode.json (generated)", path: `${WORKSPACE}/generated/opencode.json`, section: "generated", source: "generated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
+  ["snapshot", { id: "snapshot", title: "opencode.json (generated)", path: `${WORKSPACE}/generated/opencode.json`, section: "generated", source: "generated", content: "{\n  \"model\": \"anthropic/claude-sonnet-4-5\",\n  \"permission\": { \"bash\": \"ask\", \"edit\": \"allow\" }\n}\n" }],
 ]);
 
 let modelSelection: OpenCodeModelSelection = {
@@ -877,7 +877,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "read_config_template": {
       const targetId = arg<string>(args, "targetId");
       const target = TARGETS.find(t => t.id === targetId);
-      return { id: targetId, title: target?.label ?? targetId, path: `${WORKSPACE}/${target?.source_rel ?? targetId}`, section: "templates", source: "workspace", content: configStore.get("template")!.content } satisfies DocumentContent;
+      return { id: targetId, title: target?.label ?? targetId, path: `${WORKSPACE}/${target?.source_rel ?? targetId}`, section: "templates", source: "workspace", content: configStore.get("base")!.content } satisfies DocumentContent;
     }
     case "list_opencode_config_editor_sources":
       return configSources;
