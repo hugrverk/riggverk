@@ -19,8 +19,19 @@ describe("defaultSettings", () => {
     ]);
   });
 
-  it("uses the shared default target list", () => {
+  it("enables every rules, agents and config target except codex_config", () => {
     expect(defaultSettings().enabled_target_ids).toBe(DEFAULT_TARGET_IDS);
+    expect([...DEFAULT_TARGET_IDS].sort()).toEqual([
+      "claude_agents",
+      "claude_rules",
+      "codex_agents",
+      "codex_rules",
+      "cursor_setup",
+      "opencode_agents",
+      "opencode_config",
+      "opencode_rules",
+    ]);
+    expect(DEFAULT_TARGET_IDS).not.toContain("codex_config");
   });
 });
 
