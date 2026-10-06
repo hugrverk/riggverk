@@ -11,8 +11,27 @@ function TestConsumer({ message = "Test message" }: { message?: string }) {
   );
 }
 
+const originalShowModal = HTMLDialogElement.prototype.showModal;
+const originalClose = HTMLDialogElement.prototype.close;
+
+/** Probe that records what each `confirm()` call resolves to. */
+function ConfirmProbe({ results }: { results: boolean[] }) {
+  const confirm = useConfirm();
+  return (
+    <>
+      <button type="button" onClick={async () => { results.push(await confirm("First?")); }}>
+        ask first
+      </button>
+      <button type="button" onClick={async () => { results.push(await confirm("Second?")); }}>
+        ask second
+      </button>
+    </>
+  );
+}
+
 describe("ConfirmDialog", () => {
   beforeEach(() => {
+    // jsdom has no native modal dialog; emulate open/close and the `close` event browsers fire.
     HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
       this.setAttribute("open", "");
     });
@@ -24,15 +43,43 @@ describe("ConfirmDialog", () => {
 
   afterEach(() => {
     cleanup();
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
   });
 
-  it("renders children", () => {
+  it("resolves true and closes the dialog when confirm is clicked", async () => {
+    const results: boolean[] = [];
     render(
       <ConfirmProvider>
-        <div data-testid="child">hello</div>
+        <ConfirmProbe results={results} />
       </ConfirmProvider>,
     );
-    expect(screen.getByTestId("child")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+    const dialog = await screen.findByRole("dialog");
+    fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+
+    await vi.waitFor(() => expect(results).toEqual([true]));
+    expect(dialog.hasAttribute("open")).toBe(false);
+  });
+
+  it("settles a superseded confirmation as declined when a second one opens", async () => {
+    const results: boolean[] = [];
+    render(
+      <ConfirmProvider>
+        <ConfirmProbe results={results} />
+      </ConfirmProvider>,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "ask first" }));
+    await screen.findByText("First?");
+    fireEvent.click(screen.getByRole("button", { name: "ask second" }));
+
+    await vi.waitFor(() => expect(results).toEqual([false]));
+    expect(screen.getByText("Second?")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "confirm" }));
+    await vi.waitFor(() => expect(results).toEqual([false, true]));
   });
 
   it("shows a themed dialog with message when confirmed", async () => {
@@ -135,11 +182,15 @@ describe("ConfirmDialog", () => {
     fireEvent.click(screen.getByRole("button", { name: /show confirm/i }));
     const dialog = await screen.findByRole("dialog");
 
-    // Native dialog close fires the close event on close()
+    // What a browser does for Escape on a modal dialog: key press, `cancel`, then close (which fires `close`).
+    fireEvent.keyDown(dialog, { key: "Escape" });
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
     dialog.close();
 
     await vi.waitFor(() => {
       expect(onResult).toHaveBeenCalledWith(false);
     });
+    expect(onResult).toHaveBeenCalledTimes(1);
+    expect(dialog.hasAttribute("open")).toBe(false);
   });
 });

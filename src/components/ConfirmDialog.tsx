@@ -52,11 +52,15 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
   const confirm = useCallback((cfg: ConfirmConfig | string) => {
     const resolved = typeof cfg === "string" ? { message: cfg } : cfg;
     return new Promise<boolean>((resolve) => {
+      // A confirmation that is still open is superseded: settle it as declined instead of leaking its promise.
+      resolveRef.current(false);
       resolveRef.current = resolve;
       setConfig(resolved);
       setOpen(true);
     });
   }, []);
+
+  useEffect(() => () => resolveRef.current(false), []);
 
   // Show the native dialog when a confirm is triggered
   useEffect(() => {
@@ -67,7 +71,9 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   const handleConfirm = useCallback(() => {
     const resolve = resolveRef.current;
-    // Close before resolving so onClose sees open=false and no-ops
+    // Detach the resolver first: close() may fire the `close` event synchronously, and onClose
+    // would otherwise settle this confirmation as declined before `resolve(true)` runs.
+    resolveRef.current = () => {};
     setOpen(false);
     dialogRef.current?.close();
     resolve(true);
@@ -75,6 +81,7 @@ export function ConfirmProvider({ children }: { children: ReactNode }) {
 
   const handleCancel = useCallback(() => {
     const resolve = resolveRef.current;
+    resolveRef.current = () => {};
     setOpen(false);
     dialogRef.current?.close();
     resolve(false);
