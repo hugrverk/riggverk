@@ -45,7 +45,7 @@ Sizes are body lines / approximate words (tokens ≈ words × 1.3). All 21 skill
 | `security-review` | security | high | 84 / 594 | keep | High-risk anchor; `sentinel` agent default skill; boundary vs the agent documented in SKILLS.md. |
 | `tdd` | testing | low | 44 / 255 | keep | Anti-overlap language vs `diagnose` present in both descriptions. |
 | `wordpress-woocommerce` | commerce | high | 77 / 485 | keep | Only shared-domain skill; self-contained; no generic-skill overlap beyond deliberate security/i18n reminders scoped to WP APIs. |
-| `zoom-out` | architecture | low | 29 / 123 | keep | Smallest skill; `disable-model-invocation: true` makes it user/agent-routed only; `repo-scout` default skill. |
+| `zoom-out` | architecture | low | 29 / 123 | keep | Smallest skill; model-invocable and routed by the global rules; preloaded by the Claude `repo-scout` agent. |
 
 Catalog totals: ~1,240 body lines, ~6,700 words, roughly 9k tokens for the full canonical catalog. Per-session cost is far lower because harnesses load skills on demand and rules instruct selecting 1–3 skills per task.
 

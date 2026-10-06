@@ -2,6 +2,7 @@
 name: repo-scout
 description: Map unfamiliar repository areas, ownership, existing patterns, and verification commands before implementation.
 model: haiku
+skills: [zoom-out]
 tools: Read, Grep, Glob
 permissionMode: plan
 maxTurns: 12
