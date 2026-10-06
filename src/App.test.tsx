@@ -20,6 +20,7 @@ interface Backend {
   settings: AppSettings;
   commandLog: string[];
   openResult: { success: boolean; stderr: string };
+  releaseCheckAvailable: boolean;
 }
 
 const DEFAULT_WORKSPACE = "/tmp/ws";
@@ -29,6 +30,7 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     settings: { ...defaultSettings(), revision: 1, ...overrides },
     commandLog: [],
     openResult: { success: true, stderr: "" },
+    releaseCheckAvailable: false,
   };
   invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; path?: string }) => {
     backend.commandLog.push(command);
@@ -65,13 +67,15 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
           total_config_targets: 0,
           backup_root: "/tmp/backups",
           backup_root_exists: false,
-          release_check_available: false,
+          release_check_available: backend.releaseCheckAvailable,
           bundled_resources_status: "current",
           missing_bundled_count: 0,
           missing_bundled_sample: [],
         });
       case "list_agent_metadata":
         return Promise.resolve({ agents: [], warnings: [] });
+      case "run_action":
+        return Promise.resolve({ success: true, action: "release_check", stdout: "ok", stderr: "", exit_code: 0 });
       case "open_default_workspace_folder":
         return Promise.resolve({ success: backend.openResult.success, action: command, stdout: "", stderr: backend.openResult.stderr, exit_code: 1 });
       default:
@@ -121,6 +125,47 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByRole("radio", { name: "library" }).getAttribute("aria-checked")).toBe("true"));
     expect(screen.getByRole("region", { name: "Settings" })).toBe(settings);
     expect(commandCount(backend, "list_docs")).toBe(0);
+  });
+
+  it("asks before release-check runs a script from the active workspace and names the folder", async () => {
+    const originalShowModal = HTMLDialogElement.prototype.showModal;
+    const originalClose = HTMLDialogElement.prototype.close;
+    HTMLDialogElement.prototype.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+      this.setAttribute("open", "");
+    });
+    HTMLDialogElement.prototype.close = vi.fn(function close(this: HTMLDialogElement) {
+      this.removeAttribute("open");
+      this.dispatchEvent(new Event("close"));
+    });
+    try {
+      const backend = installBackend({ workspace_path: "/tmp/chosen-ws" });
+      backend.releaseCheckAvailable = true;
+      render(<App />);
+      const status = await screen.findByRole("region", { name: "Status" });
+      const runButton = await within(status).findByRole("button", { name: /release-check/i });
+      await waitFor(() => expect(runButton).not.toHaveAttribute("aria-disabled", "true"));
+
+      await act(async () => {
+        fireEvent.click(runButton);
+      });
+      const dialog = await screen.findByRole("dialog", { name: "run release-check", hidden: true });
+      expect(dialog.textContent).toContain("scripts/release-check.sh from /tmp/chosen-ws");
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: /cancel/i, hidden: true }));
+      });
+      expect(commandCount(backend, "run_action")).toBe(0);
+
+      await act(async () => {
+        fireEvent.click(runButton);
+      });
+      await act(async () => {
+        fireEvent.click(within(dialog).getByRole("button", { name: /run/i, hidden: true }));
+      });
+      await waitFor(() => expect(commandCount(backend, "run_action")).toBe(1));
+    } finally {
+      HTMLDialogElement.prototype.showModal = originalShowModal;
+      HTMLDialogElement.prototype.close = originalClose;
+    }
   });
 
   it("shows an error banner when the OS opener reports a soft failure", async () => {

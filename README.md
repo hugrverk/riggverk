@@ -143,7 +143,7 @@ Overrides are honored in release builds too. Use them with a temporary `HOME` wh
 - Existing files that Install or a Library save would overwrite are backed up first, owner-only (0700 dirs, 0600 files on Unix).
 - Config and rules merges preserve user-owned content or refuse unsafe writes with zero mutation.
 - Credential-bearing files and unrelated personal files are outside the workspace contract.
-- Python generators and merge scripts run from the bundled copy, never from the workspace. The user-triggered release check is the exception: it runs `scripts/release-check.sh` from the workspace if you put one there.
+- Python generators and merge scripts run from the bundled copy, never from the workspace. The user-triggered release check is the exception: it runs `scripts/release-check.sh` from the workspace if you put one there, after a confirmation that names the folder.
 - Repo Dashboard runs `git fetch --prune` and `gh` against the repository you select, with your own git and `gh` credentials. Git runs with fsmonitor and hooks disabled. Open trusted repositories only.
 
 See `docs/SECURITY_MODEL.md` for the full boundaries.

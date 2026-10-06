@@ -607,6 +607,17 @@ function AppShell() {
   const visibleAgentIds = useMemo(() => new Set(visibleAgentSources.map(agent => agent.id)), [visibleAgentSources]);
   const workspaceValid = workspaceDiagnostics?.valid === true;
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
+  // release-check is the one action that executes a script from the active (user-chosen) workspace,
+  // so it always names the exact folder and asks first.
+  const runReleaseCheck = useCallback(async () => {
+    const root = workspaceDiagnostics?.resolved_path ?? "the active workspace";
+    const ok = await confirm({
+      title: "run release-check",
+      message: `This runs scripts/release-check.sh from ${root}. It executes code from that folder; only continue for a workspace you trust.`,
+      confirmLabel: "run",
+    });
+    if (ok) void runWsAction("release_check", "release-check");
+  }, [confirm, runWsAction, workspaceDiagnostics?.resolved_path]);
   const gitAvailable = status?.git_available === true;
 
   const overview = useInstallationOverview({
@@ -677,7 +688,7 @@ function AppShell() {
     clearOutput: resetTerminalOutput,
     outputText,
     canRunReleaseCheck,
-    runReleaseCheck: () => void runWsAction("release_check", "release-check"),
+    runReleaseCheck: () => void runReleaseCheck(),
     openInstall: install.open,
     rollbackTransactionId,
     requestRollback,
@@ -722,7 +733,7 @@ function AppShell() {
             uninstallPreviewRequested={uninstallPreviewRequested}
             onUninstallPreviewHandled={() => setUninstallPreviewRequested(false)}
             onOpenFolder={openDefaultWorkspaceFolder}
-            onReleaseCheck={() => runWsAction("release_check", "release-check")}
+            onReleaseCheck={() => void runReleaseCheck()}
             backupCount={backups.length}
             onOpenBackupsFolder={openBackupsFolder}
           />
