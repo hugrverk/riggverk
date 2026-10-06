@@ -579,10 +579,10 @@ mod tests {
     }
 
     #[test]
-    fn bundled_workspace_has_exactly_21_skills() {
+    fn bundled_workspace_has_exactly_22_skills() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let catalog = discover_skill_catalog(&repo).expect("bundled catalog");
         validate_bundled_catalog_all_targets(&catalog).expect("bundled targets");
-        assert_eq!(catalog.len(), 21, "expected 21 bundled skills");
+        assert_eq!(catalog.len(), 22, "expected 22 bundled skills");
     }
 }

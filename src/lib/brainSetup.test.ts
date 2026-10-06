@@ -18,6 +18,7 @@ const EXPECTED_SKILLS = [
   "minimal-implementation",
   "prototype",
   "release-check",
+  "retro",
   "screenshot-review",
   "security-review",
   "tdd",
@@ -41,7 +42,7 @@ const REMOVED_SKILLS = [
 ] as const;
 
 describe("buildBrainSetupBlock", () => {
-  it("represents all 21 expected skill names", () => {
+  it("represents all 22 expected skill names", () => {
     const block = buildBrainSetupBlock();
     for (const skill of EXPECTED_SKILLS) {
       expect(block).toContain(`${skill}:`);

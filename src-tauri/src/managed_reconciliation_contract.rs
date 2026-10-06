@@ -781,8 +781,8 @@ mod tests {
         for harness in ["cursor", "claude", "codex"] {
             assert_eq!(
                 fixture.harness_skill_count(harness),
-                21,
-                "{harness} should have 21 skills after reconciliation"
+                22,
+                "{harness} should have 22 skills after reconciliation"
             );
             let dest = agent_global_skills_dest(harness).expect("dest");
             for removed in REMOVED_SKILL_NAMES {
@@ -794,8 +794,8 @@ mod tests {
         }
         assert_eq!(
             fixture.harness_skill_count("opencode"),
-            22,
-            "modified stale OpenCode skill should remain beside 21 current names"
+            23,
+            "modified stale OpenCode skill should remain beside 22 current names"
         );
         assert!(
             agent_global_skills_dest("opencode")
