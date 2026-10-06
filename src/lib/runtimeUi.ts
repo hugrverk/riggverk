@@ -23,14 +23,3 @@ export function runtimeChipLabel(status: string): string {
     default: return "Unknown";
   }
 }
-
-/** Header fact chip for a harness runtime health status. */
-export function runtimeStatusFact(status: string): {
-  label: string;
-  tone: "ok" | "warn" | "fail" | "muted";
-} {
-  return {
-    label: `runtime ${runtimeChipLabel(status).toLowerCase()}`,
-    tone: runtimeChipTone(status),
-  };
-}

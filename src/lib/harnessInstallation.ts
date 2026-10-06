@@ -167,22 +167,3 @@ export function installationChipLabel(state: InstallationState): string {
     case "unavailable": return "unavailable";
   }
 }
-
-export function installationPrimaryAction(state: InstallationState): {
-  label: string;
-  variant: "primary" | "warn" | "default";
-  disabled: boolean;
-} {
-  switch (state) {
-    case "current":
-      return { label: "current", variant: "default", disabled: true };
-    case "update_available":
-      return { label: "update", variant: "primary", disabled: false };
-    case "not_installed":
-      return { label: "install", variant: "primary", disabled: false };
-    case "conflict":
-      return { label: "review conflicts", variant: "warn", disabled: false };
-    case "unavailable":
-      return { label: "unavailable", variant: "default", disabled: true };
-  }
-}
