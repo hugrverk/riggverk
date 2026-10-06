@@ -7,7 +7,7 @@ The workspace is a plain-text directory that can be versioned with Git like any 
 ### Initial setup
 
 ```bash
-# 1. Install the workspace with the app (Workspace → install)
+# 1. Install the workspace with the app (Workspace tab, u, then y)
 # 2. Open a terminal in the workspace directory
 cd /path/to/your/workspace
 
@@ -39,10 +39,12 @@ Workspace files are designed to be versioned:
 - `skills/` — agent skill definitions
 - `templates/` — agent rules and config templates
 - `agents/` — agent prompt definitions
-- `scripts/` — sync and install scripts
-- `metadata/` — agent metadata
-- `.agent-workspace/workspace.json` — workspace marker
+- `scripts/` — CLI installers and helpers
+- `metadata/` — generated manifests and rules history
+- `.agent-workspace/workspace.json` — workspace marker (required for the folder to be valid)
 - `README.md`
+
+Keep `.agent-workspace/managed-state.json` and `.agent-workspace/rules-preferences.json` out of Git. They record which files this machine's installs the app owns and which rules files you chose to leave as is. Do not delete them: a missing `managed-state.json` turns files that are not exact bundled copies into conflicts. On a new machine the first install creates them.
 
 ## What not to commit
 
@@ -55,6 +57,10 @@ Workspace files are designed to be versioned:
 ## Suggested .gitignore
 
 ```gitignore
+# Machine-local app state
+.agent-workspace/managed-state.json
+.agent-workspace/rules-preferences.json
+
 # Secrets and credentials
 **/secrets*
 .env
@@ -78,7 +84,7 @@ Thumbs.db
 - After editing agent rules or config templates
 - After adding or modifying skills
 - After updating docs
-- Before running release checks
+- Before an install or update, so edited files can be compared (an edited bundled file becomes a conflict, see TROUBLESHOOTING)
 - Before sharing workspace state between machines
 
 ## App and Git separation
@@ -89,14 +95,14 @@ The app reads workspace files and displays their state. It does not:
 - Create GitHub remotes or manage auth
 - Push to remotes
 - Run `git pull` or other Git commands for you
-- Detect Git state beyond basic branch information
+- Look at Git state in the workspace (the Repo Dashboard reads other repositories you select, and runs `git fetch` there)
 
 Use your normal Git workflow (CLI, GitHub Desktop, IDE) to manage version history.
 
 ## Suggested workflow pattern
 
 1. Make workspace changes (edit docs, add skills, update templates)
-2. Dry-run sync to verify changes
+2. Preview an install (`p`) to see what the app would change
 3. Run `git status` to review changes
 4. Run `git diff` to inspect what changed
 5. Commit with a descriptive message: `git commit -m "update: add frontend design skill"`

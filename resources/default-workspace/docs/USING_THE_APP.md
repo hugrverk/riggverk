@@ -1,87 +1,156 @@
 # Using the App
 
-A practical walkthrough of each app area.
+The app is keyboard-first. A top line shows the tabs, panes are numbered `[1]` to `[4]`, and the status bar shows the keys that work where the focus is. Press `?` at any time for the full list.
+
+Keys fire only when no text field has focus; Escape leaves a field. `Mod` is Cmd on macOS and Ctrl elsewhere.
+
+## Tabs
+
+`1`-`9` open, in order: workspace, codex, opencode, cursor, claude, library, repo, prompts, settings. A harness you disable in Settings is hidden and the remaining tabs renumber. The same names work as commands (`:codex`, `:library docs`).
+
+## Keyboard reference
+
+| Where | Key | Action |
+| --- | --- | --- |
+| Everywhere | `1`-`9` | Go to a tab |
+| | `h` `l` | Previous or next pane |
+| | `:` or `Mod+k` | Command line |
+| | `?` | Help: every key and command |
+| | `Mod+,` | Settings |
+| | Escape | Leave a text field, dismiss the error line, cancel an open review |
+| Lists | `j` `k`, arrows | Move |
+| | `g g` `G`, Home End | First or last |
+| | PageUp PageDown | Page |
+| | Enter | Open or activate |
+| | Space | Toggle (multi-select lists such as targets) |
+| | `/` | Filter; Escape clears it |
+| Workspace and harness pages | `u` | Review and apply an install or update |
+| | `p` | Preview only |
+| | `r` | Refresh status |
+| Workspace status pane | `R` | Run the release check (when available) |
+| | `o` | Open the workspace folder |
+| | `B` | Open the backups folder |
+| Output pane | `y` | Copy output |
+| | `C` | Clear |
+| | `z` | Roll back the last transaction |
+| | `g g` `G` | Top or bottom |
+| Install review | `y` | Apply the reviewed plan |
+| | `n`, Escape | Cancel (or close a preview) |
+| | `d` | Expand or fold the row's details |
+| | `c` | Jump to the next conflict |
+| | `r` | Preview again after a stale or expired plan |
+| Harness page, targets | Space | Toggle a target (autosaves) |
+| Harness page, rules row | `d` `v` `m` | Diff, Convert, Leave as is |
+| OpenCode runtime pane | `e` `s` `m` | Edit model override, save it, reload models |
+| Library | `[` `]` or `<` `>` | Previous or next source |
+| | `i`, Enter | Edit the open item |
+| | `Mod+s` | Save (also `:w`) |
+| | Escape | Back to the list |
+| | `o` | Open in your editor |
+| | `n` | New doc (Docs source) |
+| Prompt Builder | `[` `]` or `<` `>` | Previous or next prompt group |
+| | `y` | Copy the composed prompt |
+| | `i` | Edit task context |
+| Repo Dashboard | `<` `>` or `[` `]` | Previous or next section |
+| | `r` | Refresh |
+| | `w` | Fold or expand the warnings strip |
+| Settings | `j` `k` | Next or previous setting |
+| | `r` | Reset appearance to defaults |
+| | `s` | Retry a failed save |
+| | `c` | Choose the workspace folder |
+| | `R` | Reset the workspace path to the default |
+
+## Commands
+
+`:` opens the command line; Tab completes. Mutating commands never write directly: they open the same review.
+
+| Command | Effect |
+| --- | --- |
+| `:workspace`, `:codex`, `:opencode`, `:cursor`, `:claude`, `:library [source]`, `:repo`, `:prompts`, `:settings` | Open a tab (aliases `:ws`, `:lib`, `:dashboard`) |
+| `:update <target>`, `:update --all` | Open the install review. Targets: `workspace` and the enabled harnesses |
+| `:preview <target>`, `:preview --all` | Same plan with no apply |
+| `:rollback` | Dry run, then confirm, then restore the last transaction |
+| `:uninstall` | Open the uninstall preview |
+| `:rules ...` | Rules diff, convert, and leave-as-is (see `:help`) |
+| `:release-check` (`:rc`) | Run the release check, when the workspace has the script |
+| `:refresh`, `:clear`, `:copy`, `:open folder`, `:open backups` | Status, output, folders |
+| `:theme <dark, light, system, or toggle>` | Appearance |
+| `:w`, `:q`, `:reset` | Library: save, close (asks before discarding), discard edits |
+| `:help` | Help overlay |
 
 ## Workspace page
 
-The landing page and operations terminal. Shows the managed installation state for the runtime workspace at `~/.config/agent-workspace`.
+Four panes: **harnesses** (the workspace and each enabled harness with its state), **surfaces** (what the one under the cursor installs, plus an installed-state map), **status** (state, verification, uninstall), and **output**.
 
-- **Install or Update** — previews and applies allowlisted workspace and harness artifact changes.
-- **Installed** — Installed State Map summarizing workspace, Codex, OpenCode, Claude, and Cursor surface states. Refreshes after managed actions complete. Read-only status summary, not a second installation control.
-- **refresh** — reload diagnostics and status
-- **open folder** — open the installed workspace in Finder
-- **VERIFY** — release-check and backup management when the workspace is valid
-- **Uninstall** — **preview uninstall** classifies removable app-owned files, preserved modified files, and merge-managed configs left in place; **uninstall everything** applies removal after confirmation and records a rollback-capable transaction.
-- **Recover previous uninstall** — shown for the current app session only after a full uninstall. Run **preview recovery** (read-only dry-run), then **restore workspace** with explicit confirmation. Recovery is not available after app restart.
+States: `current`, `update`, `not installed`, `conflict`, `unavailable`, and `off` for a surface whose target toggle is off. `u` is labelled by what it will do: `install`, `update`, `update safe files` (some rows are conflicts), or `review conflicts`. It is disabled with a reason while a task runs, while target changes save, or when everything is already current (`p` still previews).
 
-Harness pages (Codex, OpenCode, Cursor, Claude) show the same installation model scoped to that harness. Each normal screen has one installation card.
+The cursor row decides what `u` installs: `workspace` installs the workspace bundle; a harness row installs that harness. Harness artifacts are not part of the workspace install.
 
-## Harness pages (Codex, OpenCode, Cursor, Claude)
+Status pane: **release-check** (needs `scripts/release-check.sh` in the workspace, which the bundled workspace does not contain), **backups** (run count and folder), **last tx** (the transaction `z` can roll back). Enter on a harness row opens its page.
 
-Per-tool installation status and runtime health. Open the harness from the top navigation after the workspace is installed.
+## Harness pages
 
-## Library
+Codex, OpenCode, Cursor, and Claude each have **targets** (what that harness may receive), **surfaces** (installation state per surface), **runtime** (health facts from the installed files), and **output**. `u` and `p` review that harness only.
 
-Browse and edit workspace content in a three-panel layout:
+Targets are a multi-select list: Space toggles, the change autosaves, and a target that is off is left out of the plan and shown as `off`. Skills are not a target; they follow the harness. Codex rules, agents, and config are separate targets; `codex_config` starts off.
 
-1. **Source rail** (left) — Docs, Rules, Skills, Agents, Configs, Brain Setup
-2. **Item sidebar** (middle) — browse items by section or filter
-3. **Content pane** (right) — preview or edit selected content
+OpenCode also shows the model override: `e` edits it, `s` saves it to the app-level override file, and the next OpenCode install writes it into the installed config. Deleting the override file returns to the template values (see [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md)).
 
-### Docs
+## Install review
 
-Curated docs grouped under Start, Guides, Reference, Prompt Templates, and Context. Prompt Templates ship as `docs/prompt-templates/*.md` after installation. Use "open" for your system editor or edit in-app.
+`u` (or `:update`) computes a plan without writing and replaces the page's panes with a table: **op**, **file**, **why**, grouped by surface.
 
-### Rules
+- `+ create`, `~ update`, `- remove`, `! conflict`. Conflict rows read `preserved, skipped`. A group header says `unchanged` for a current surface.
+- The footer states the outcome: `apply 7 safe changes, skip 1 conflict?`, the backup folder, and that a transaction is recorded and rollback is available.
+- `y` applies only the safe rows. Conflicts are never written. `n` or Escape cancels with nothing written. `p` and `:preview` show the same table with no apply.
+- A plan is bound to the installed state it saw. If a file changed in between, or ten minutes passed, apply refuses and the review offers `r` to preview again.
+- Backups of existing files and the transaction manifest are written before the first change. If an apply fails midway, it rolls back by itself.
 
-View and edit `templates/global-agent-rules.md`. Synced to agent rule paths from harness pages.
+## Rollback
 
-### Skills
-
-Browse bundled skills in Library. Install or update them through the managed installation card.
-
-### Agents
-
-View and edit `agents/*.md` prompt definitions.
-
-### Configs
-
-View and edit `templates/opencode.json` and related config sources.
-
-## Brain Setup (Library)
-
-Copy a durable instruction block for external assistants (skill routing, security, verification). Does not run agents or change sync targets.
-
-## Settings
-
-**Harnesses** controls which tools appear and may receive new managed writes: Codex, OpenCode, Claude, and Cursor are enabled by default. Disabling a harness hides its navigation, status, and harness-specific Library content while preserving existing files and fine-grained target selections. Re-enabling restores the UI but does not install automatically. This is an explicit preference, not automatic tool detection.
-
-Appearance, global text size, theme colors, **Motion** (reduce pulse, scan, and flash animations), and **Landing page** (workspace, repo dashboard, prompt builder, or library). Settings autosave. Changing appearance clears background and foreground overrides. Full uninstall still covers proven app-owned files from disabled harnesses, and rollback follows the recorded transaction independently of current harness visibility.
-
-## Tools
-
-In-app utilities separate from harness sync:
-
-- **Prompt Builder** — copy/paste prompt templates with skill-weaving for agent runs.
-- **Repo Dashboard** — local git/gh snapshot of a checkout with three pages: Overview (summary, charts, recent activity, contributors), Work (active and done items from docs/gh), and Docs (searchable Markdown reader).
-
-## Install or Update
-
-- Preview issues a short-lived token and artifact fingerprint; apply consumes it only after complete backend preflight and immediately before the first mutation.
-- Conflict review lists preserved files that require manual resolution; safe unrelated operations remain available.
-- Failed apply with a transaction ID remains available for rollback when dry-run shows eligible artifacts.
-- Explicit rollback persists per-artifact `in_flight` before each restore, then `restored` or `failed` after validation; interrupted rollbacks reconcile without double-restoring completed artifacts.
-- Transactions in `rolling_back` or `rollback_failed` can be resumed; already `restored` artifacts are skipped; when none remain eligible the transaction finalizes without further filesystem changes.
-- Rollback dry-run lists already restored, still-required, and conflicted artifacts and performs zero manifest writes.
-- Codex managed apply and rollback preserve same-line inline comments on managed scalar fields via the line-preserving merge script, or refuse safely with zero mutation on conflict.
-- Symlinked parents and dangling symlinks in managed paths are rejected.
+`z` on the output pane, or `:rollback`, restores the files of the last install or uninstall of this session. The app first does a dry run, then asks you to confirm with what would be restored. A rollback that finds nothing to restore, or conflicts, stops there. After a restart the app forgets the transaction; the backups remain (below).
 
 ## Backups
 
-Applying changes that overwrite diverged target files creates backups under the platform-resolved Agent Workspace backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux.
+Anything Install, uninstall, or a Library save would overwrite or remove is copied first, owner-only. Backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` (macOS), `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` (Linux), `%APPDATA%\ai.agentworkspace.app\backups` (Windows), or `AGENT_WORKSPACE_BACKUP_DIR`.
+
+```text
+<backup root>/setup/<transaction id>/manifest.json
+                                    /artifacts/<artifact id>
+                                    /managed-state.previous.json
+<backup root>/docs/<doc id>-<timestamp>/<file>        Library saves
+<backup root>/<YYYYMMDD-HHMMSS>/<label>/<file>        CLI scripts and Cursor operations
+```
+
+New files have no backup. Restore by rollback while the transaction is in this session, otherwise by copying a file out of `artifacts/` by hand (the artifact id names the destination).
+
+## Uninstall
+
+**preview uninstall** (or `:uninstall`) lists what would be removed (files proven to be app-owned), preserved (files you modified or that are not the app's), and left merge-managed (config files and rules files that hold your text). **uninstall everything** applies it after a confirmation and records a transaction. Afterwards **Recover previous uninstall** appears for the current session only: **preview recovery** (read-only), then **restore workspace**, then **confirm restore**.
+
+## Library
+
+Panes: **items**, **editor**, **preview**. Sources: Docs, Rules, Skills, Runtime agents, Configs, Brain Setup (`[` `]` to switch). Docs are grouped Start, Guides, Reference, Prompt Templates, Cursor, Configs, and Context. `i` or Enter edits, `Mod+s` or `:w` saves, `:q` closes and asks before discarding edits.
+
+The Library edits the runtime workspace copy. Saves back up the file first and refuse symlinks. They do not change what harnesses receive, and an edited bundled file becomes a conflict for later updates ([TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts)). A doc that differs from the bundled one shows a stale-doc warning.
+
+Brain Setup is a copy-paste instruction block for external assistants. It runs nothing and changes no targets.
+
+## Settings
+
+Harnesses (which tools appear and may be written), appearance (dark, light, system), text size, motion, landing page (workspace, repo dashboard, prompt loops, library), colors, and the workspace folder. Settings autosave; `r` resets appearance after a confirmation.
+
+Workspace: `c` chooses another folder, which must pass the workspace markers; `R` returns to `~/.config/agent-workspace`. `AGENT_WORKSPACE_PATH` overrides both. Generator scripts the app runs always come from its bundled copy, not from the chosen folder.
+
+Disabling a harness hides it and blocks new writes to it. It does not delete files or forget target choices, and re-enabling does not install.
+
+## Prompt Builder and Repo Dashboard
+
+- **Prompt Builder**: Prompt, Goal Prompt, and Batch Prompt templates composed locally, with optional repository context. `y` copies.
+- **Repo Dashboard**: Overview, Work, and Docs pages for a local git checkout. A refresh runs `git fetch --prune` on the selected repository and, when `gh` is installed and signed in, lists pull requests and issues. This uses your git and `gh` credentials and can change the repository's remote-tracking refs. Open trusted repositories only. Failed fetches or `gh` calls show in the warnings strip (`w`).
 
 ## Release check
 
-Run **release-check** from Workspace VERIFY when the installed workspace includes `scripts/release-check.sh` (the app repo checkout; bundled starter may not include it).
+`R` on the Workspace page, or `:release-check`, runs `scripts/release-check.sh` from the workspace. The bundled workspace does not contain that script, so the action is unavailable unless you add it. Run the app repository's own `./scripts/release-check.sh` from its checkout instead.
 
-See [WORKFLOWS.md](WORKFLOWS.md) for common patterns.
+See [WORKFLOWS.md](WORKFLOWS.md) for recipes.
