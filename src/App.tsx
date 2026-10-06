@@ -738,7 +738,7 @@ function AppShell() {
             // Docs
             docs={docs}
             docsHealth={docsHealth}
-            onGoToWorkspaceRepair={() => setView("start")}
+            onGoToWorkspaceRepair={() => void switchView("start")}
             activeDoc={activeDoc}
             onSelectDoc={selectDoc}
             onOpenDoc={openDocEditor}
