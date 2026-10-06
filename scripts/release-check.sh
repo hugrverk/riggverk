@@ -1597,7 +1597,8 @@ step "backup layout matches app expectations"
 backup_home="$(mktemp -d "${release_tmp_dir}/backup-layout-home.XXXXXX")"
 backup_root="${release_tmp_dir}/backup-layout-backups"
 mkdir -p "$backup_home/.claude/agents" "$backup_home/.codex/agents" \
-  "$backup_home/.config/opencode/agents"
+  "$backup_home/.config/opencode/agents" "$backup_home/.config/opencode/skills/diagnose"
+printf 'user skill\n' >"$backup_home/.config/opencode/skills/diagnose/SKILL.md"
 printf 'user rules\n' >"$backup_home/.claude/CLAUDE.md"
 printf 'user rules\n' >"$backup_home/.codex/AGENTS.md"
 printf 'user rules\n' >"$backup_home/.config/opencode/AGENTS.md"
@@ -1611,7 +1612,8 @@ for backup_script in \
   "install-agent-rules.sh --all --apply --quiet" \
   "install-runtime-agents.sh --all --apply --quiet" \
   "install-codex-agents.sh --apply --quiet" \
-  "install-opencode-config.sh --apply --quiet"; do
+  "install-opencode-config.sh --apply --quiet" \
+  "install-skills.sh --agent opencode --skill diagnose --apply --quiet"; do
   # shellcheck disable=SC2086
   if ! env -i PATH="$PATH" HOME="$backup_home" TMPDIR="${TMPDIR:-/tmp}" \
     AGENT_WORKSPACE_BACKUP_DIR="$backup_root" \
@@ -1629,10 +1631,12 @@ from pathlib import Path
 
 backup_root, backups_rs = Path(sys.argv[1]), Path(sys.argv[2])
 source = backups_rs.read_text(encoding="utf-8")
-block = re.search(r"const ALLOWED_TARGET_IDS:\s*&\[&str\]\s*=\s*&\[(.*?)\];", source, re.DOTALL)
-if not block:
-    raise SystemExit("FAIL: ALLOWED_TARGET_IDS not found in backups.rs")
-allowed = set(re.findall(r'"([^"]+)"', block.group(1)))
+allowed = set()
+for const_name in ("ALLOWED_TARGET_IDS", "SKILL_TARGET_IDS"):
+    block = re.search(rf"const {const_name}:\s*&\[&str\]\s*=\s*&\[(.*?)\];", source, re.DOTALL)
+    if not block:
+        raise SystemExit(f"FAIL: {const_name} not found in backups.rs")
+    allowed |= set(re.findall(r'"([^"]+)"', block.group(1)))
 produced = set()
 for run_dir in backup_root.iterdir():
     if not re.fullmatch(r"\d{8}-\d{6}", run_dir.name):
@@ -1643,16 +1647,16 @@ for run_dir in backup_root.iterdir():
             raise SystemExit(f"FAIL: empty backup directory: {target_dir}")
 expected = {
     "claude-rules", "codex-rules", "opencode-rules",
-    "claude-agents", "opencode-agents", "codex-agents", "opencode-config",
+    "claude-agents", "opencode-agents", "codex-agents", "opencode-config", "opencode-skills",
 }
 if produced != expected:
     raise SystemExit(f"FAIL: installers wrote backup targets {sorted(produced)}; expected {sorted(expected)}")
 unknown = produced - allowed
 if unknown:
     raise SystemExit(
-        f"FAIL: installers write backup targets the app does not list (ALLOWED_TARGET_IDS): {sorted(unknown)}"
+        f"FAIL: installers write backup targets the app does not list (ALLOWED_TARGET_IDS, SKILL_TARGET_IDS): {sorted(unknown)}"
     )
-print(f"  backup layout verified: <timestamp>/<id> with ids {sorted(produced)} (all in ALLOWED_TARGET_IDS)")
+print(f"  backup layout verified: <timestamp>/<id> with ids {sorted(produced)} (all listed by backups.rs)")
 PY
 
 step "tauri app resources config"
