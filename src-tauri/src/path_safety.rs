@@ -245,13 +245,18 @@ mod tests {
         let root = root_under_canonical_temp("escape-parent");
         // Built from components: canonical roots on Windows are verbatim (`\\?\\C:\\...`),
         // where "/" is not a separator.
-        for child in [
+        let mut children = vec![
             root.join("..").join("x"),
             root.join("a").join("..").join("..").join("x"),
-            root.join("a").join("..").join("b"),
             PathBuf::from("..").join("x"),
             PathBuf::from("a").join("..").join("..").join("x"),
-        ] {
+        ];
+        // Unix keeps `..` lexically, so any parent component is refused. Joining onto a
+        // verbatim Windows root normalizes `a\..\b` to `b`, which stays inside the root.
+        if cfg!(not(windows)) {
+            children.push(root.join("a").join("..").join("b"));
+        }
+        for child in children {
             let err = reject_path_escape(&child, &root, "child")
                 .expect_err(&format!("{} must be rejected", child.display()));
             assert!(
