@@ -41,7 +41,19 @@ fi
 
 export AGENT_WORKSPACE_HISTORICAL_FIXTURE_PATH="$fixture"
 echo "==> real source-commit pre-manifest upgrade (isolated profile)"
-cargo test --manifest-path src-tauri/Cargo.toml \
-  real_source_commit_pre_manifest_upgrade_smoke --quiet -- --ignored --test-threads=1 --nocapture
+# cargo exits 0 when the filter matches nothing; require one test that really ran.
+smoke_log="$smoke_root/cargo-test.log"
+if ! cargo test --locked --manifest-path src-tauri/Cargo.toml \
+  real_source_commit_pre_manifest_upgrade_smoke --quiet -- --ignored --test-threads=1 --nocapture >"$smoke_log" 2>&1; then
+  cat "$smoke_log" >&2
+  echo "FAIL: real source-commit pre-manifest upgrade smoke failed" >&2
+  exit 1
+fi
+cat "$smoke_log"
+smoke_passed="$(sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed.*/\1/p' "$smoke_log" | awk '{ total += $1 } END { print total + 0 }')"
+if [ "$smoke_passed" -lt 1 ]; then
+  echo "FAIL: pre-manifest upgrade smoke test filter matched no tests" >&2
+  exit 1
+fi
 
 echo "==> pre-manifest upgrade smoke passed"

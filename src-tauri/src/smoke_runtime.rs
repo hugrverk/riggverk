@@ -1,5 +1,6 @@
 //! End-to-end runtime smoke for Tauri command handlers (no webview).
-//! Run via `scripts/smoke-tauri-runtime.sh`, which sets `AGENT_WORKSPACE_SMOKE=1`.
+//! Run via `scripts/smoke-tauri-runtime.sh`, which prepares a temp HOME and workspace,
+//! sets `AGENT_WORKSPACE_SMOKE=1` and runs the ignored test explicitly.
 
 #[cfg(test)]
 mod tests {
@@ -27,11 +28,33 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "driven by scripts/smoke-tauri-runtime.sh (temp HOME, prepared workspace, AGENT_WORKSPACE_SMOKE=1)"]
     fn runtime_smoke_end_to_end() {
-        if !smoke_enabled() {
-            eprintln!("skip runtime_smoke_end_to_end: AGENT_WORKSPACE_SMOKE not set");
-            return;
-        }
+        assert!(
+            smoke_enabled(),
+            "run this test through scripts/smoke-tauri-runtime.sh (AGENT_WORKSPACE_SMOKE=1)"
+        );
+
+        // The smoke applies setup artifacts under HOME: refuse anything but the
+        // temp HOME the smoke script created.
+        let home = PathBuf::from(std::env::var("HOME").expect("HOME for smoke"))
+            .canonicalize()
+            .expect("canonicalize HOME");
+        let smoke_home = PathBuf::from(
+            std::env::var("SMOKE_HOME").expect("SMOKE_HOME must name the temp HOME"),
+        )
+        .canonicalize()
+        .expect("canonicalize SMOKE_HOME");
+        assert_eq!(home, smoke_home, "HOME must be the smoke script's temp HOME");
+        let temp_root = std::env::temp_dir()
+            .canonicalize()
+            .expect("canonicalize temp dir");
+        assert!(
+            home.starts_with(&temp_root),
+            "smoke HOME {} must live under the temp dir {}",
+            home.display(),
+            temp_root.display()
+        );
 
         let workspace = expected_workspace();
         let workspace_canonical = workspace
@@ -52,9 +75,11 @@ mod tests {
             field(&diagnostics, "resolved_path").as_str(),
             Some(workspace_canonical.to_string_lossy().as_ref())
         );
+        // The bundled default workspace ships no scripts/release-check.sh (that
+        // script lives in the app repository), so it must not be reported.
         assert_eq!(
             field(&diagnostics, "release_check_available"),
-            &Value::Bool(true)
+            &Value::Bool(false)
         );
 
         let status =
@@ -128,12 +153,13 @@ mod tests {
             "private-context must not exist in workspace"
         );
 
-        let home = std::env::var("HOME").expect("HOME for smoke");
-        for forbidden in [".config/opencode", ".claude/agents", ".cursor/agents"] {
-            let path = PathBuf::from(&home).join(forbidden);
+        // The setup above must have written its harness files under the temp HOME.
+        for harness_dir in [".config/opencode/agents", ".claude/agents", ".cursor/agents"] {
+            let path = home.join(harness_dir);
             assert!(
-                path.starts_with(PathBuf::from(&home)),
-                "harness path must stay under smoke HOME"
+                path.is_dir(),
+                "expected harness directory under smoke HOME: {}",
+                path.display()
             );
         }
     }
