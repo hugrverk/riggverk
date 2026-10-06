@@ -243,12 +243,14 @@ mod tests {
     #[test]
     fn reject_path_escape_rejects_parent_dir_components() {
         let root = root_under_canonical_temp("escape-parent");
+        // Built from components: canonical roots on Windows are verbatim (`\\?\\C:\\...`),
+        // where "/" is not a separator.
         for child in [
-            root.join("../x"),
-            root.join("a/../../x"),
-            root.join("a/../b"),
-            PathBuf::from("../x"),
-            PathBuf::from("a/../../x"),
+            root.join("..").join("x"),
+            root.join("a").join("..").join("..").join("x"),
+            root.join("a").join("..").join("b"),
+            PathBuf::from("..").join("x"),
+            PathBuf::from("a").join("..").join("..").join("x"),
         ] {
             let err = reject_path_escape(&child, &root, "child")
                 .expect_err(&format!("{} must be rejected", child.display()));

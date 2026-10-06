@@ -300,12 +300,15 @@ fn write_regular_file_atomic_with(
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_nanos())
         .unwrap_or_default();
-    let file_name = path
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| format!("invalid write destination name: {}", path.display()))?;
+    if path.file_name().is_none() {
+        return Err(format!(
+            "invalid write destination name: {}",
+            path.display()
+        ));
+    }
+    // Short, name-independent temp names keep deep backup paths under Windows MAX_PATH.
     let temp_path = parent.join(format!(
-        ".{file_name}.agent-workspace-{}-{nanos}-{sequence}.tmp",
+        ".aw-{:x}-{nanos:x}-{sequence:x}.tmp",
         std::process::id()
     ));
     validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
@@ -1097,13 +1100,15 @@ mod tests {
         let base = temp("atomic-leftover");
         fs::create_dir_all(&base).unwrap();
         let path = base.join("config.json");
-        // A crashed run named its temporary file by a counter that restarts at 0
-        // in every process; the next run must not collide with it.
+        // A crashed earlier run with the same pid and the same counter values left
+        // temporary files behind; the timestamp in the name keeps this run clear of them.
         let next = TEMP_FILE_SEQUENCE.load(Ordering::Relaxed);
         let leftovers: Vec<_> = (0..64u64)
             .map(|offset| {
                 base.join(format!(
-                    ".config.json.agent-workspace-{}.tmp",
+                    ".aw-{:x}-{:x}-{:x}.tmp",
+                    std::process::id(),
+                    1u128,
                     next + offset
                 ))
             })

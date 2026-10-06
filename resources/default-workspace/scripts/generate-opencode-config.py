@@ -75,7 +75,7 @@ BASE_KEY_ORDER = [
 def load_json(path, label):
     """Load and validate a strict JSON file."""
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -218,7 +218,7 @@ def serialize(config):
 def read_snapshot():
     """Read current snapshot file, returns (string, parsed dict) or None."""
     try:
-        with open(SNAPSHOT_PATH, "r") as f:
+        with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
             content = f.read()
         parsed = json.loads(content)
         return content, parsed
@@ -262,7 +262,7 @@ def cmd_write():
     # Validate by re-parsing
     json.loads(generated_str)
 
-    with open(SNAPSHOT_PATH, "w") as f:
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8", newline="\n") as f:
         f.write(generated_str)
 
     print(f"Written: {SNAPSHOT_PATH}")

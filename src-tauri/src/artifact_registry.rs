@@ -8,7 +8,7 @@
 //! and provides metadata for detection, apply, validation, and rollback.
 //!
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
 use crate::agent_skill_targets::codex_home;
 use crate::setup_lifecycle::SetupSurfaceId;
@@ -85,7 +85,14 @@ impl TryFrom<String> for WorkspaceRelPath {
 impl WorkspaceRelPath {
     pub fn new(rel: impl Into<String>) -> Option<Self> {
         let rel = rel.into();
-        if rel.is_empty() || rel.contains("..") || Path::new(&rel).is_absolute() {
+        // Only plain relative components: on Windows "/etc/passwd" is not `is_absolute()`, yet
+        // joining it onto the workspace root would replace everything but the drive.
+        if rel.is_empty()
+            || rel.contains("..")
+            || Path::new(&rel)
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
+        {
             return None;
         }
         Some(Self(rel))
