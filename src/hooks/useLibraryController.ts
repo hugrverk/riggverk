@@ -81,6 +81,9 @@ export function useLibraryController({
   const [agentSaveResult, setAgentSaveResult] = useState<ActionResult | null>(null);
   const [agentMode, setAgentMode] = useState<"preview" | "edit">("preview");
   const activeAgentIdRef = useRef<string | null>(null);
+  const agentDraftIdRef = useRef<string | null>(null);
+  const agentDirtyRef = useRef(false);
+  agentDirtyRef.current = agentDirty;
 
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
   const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
@@ -137,16 +140,21 @@ export function useLibraryController({
 
   useEffect(() => {
     if (activeAgentContent) {
+      // A reload of the same file (e.g. re-clicking the Library tab) must not discard an unsaved draft.
+      const sameFile = agentDraftIdRef.current === activeAgentContent.id;
+      agentDraftIdRef.current = activeAgentContent.id;
+      if (sameFile && agentDirtyRef.current) return;
       setAgentDraft(activeAgentContent.content);
       setAgentDirty(false);
       setAgentSaveResult(null);
     } else {
+      agentDraftIdRef.current = null;
       setAgentDraft("");
       setAgentDirty(false);
       setAgentSaveResult(null);
       setAgentMode("preview");
     }
-  }, [activeAgentContent]);
+  }, [activeAgentContent?.id, activeAgentContent?.content]);
 
   useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
@@ -183,6 +191,7 @@ export function useLibraryController({
           if (!alreadyLoaded) {
             const content = await invoke<DocumentContent>("read_skill", { id: persistedId });
             if (!isWorkspaceLoadCurrent(generation)) return;
+            if (activeSkillIdRef.current !== persistedId) return;
             activeSkillContentIdRef.current = persistedId;
             setActiveSkillContent(content);
           }
@@ -192,6 +201,7 @@ export function useLibraryController({
           setActiveSkillId(first.id);
           const content = await invoke<DocumentContent>("read_skill", { id: first.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeSkillIdRef.current !== first.id) return;
           activeSkillContentIdRef.current = first.id;
           setActiveSkillContent(content);
         }
@@ -229,12 +239,14 @@ export function useLibraryController({
         if (persistedId && list.some(d => d.id === persistedId)) {
           const doc = await invoke<DocumentContent>("read_doc", { id: persistedId });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeDocIdRef.current !== persistedId) return;
           setActiveDoc(doc);
         } else {
           const first = list[0];
           activeDocIdRef.current = first.id;
           const doc = await invoke<DocumentContent>("read_doc", { id: first.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeDocIdRef.current !== first.id) return;
           setActiveDoc(doc);
         }
       }
@@ -260,12 +272,14 @@ export function useLibraryController({
           setActiveAgentId(persistedId);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: persistedId });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeAgentIdRef.current !== persistedId) return;
           setActiveAgentContent(content);
         } else if (firstExisting) {
           activeAgentIdRef.current = firstExisting.id;
           setActiveAgentId(firstExisting.id);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: firstExisting.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeAgentIdRef.current !== firstExisting.id) return;
           setActiveAgentContent(content);
         } else {
           activeAgentIdRef.current = null;
@@ -516,9 +530,10 @@ export function useLibraryController({
   }, [setError]);
 
   const onSaveAgent = useCallback(async () => {
-    if (!activeAgentId) return;
+    // The draft belongs to the loaded content, which can lag behind the selected id.
+    if (!activeAgentId || activeAgentContent?.id !== activeAgentId) return;
     const saveOpId = agentSaveOpRef.current.capture();
-    const agentId = activeAgentId;
+    const agentId = activeAgentContent.id;
     const generation = workspaceLoadGenerationRef.current;
     setAgentSaving(true);
     setAgentSaveResult(null);
@@ -553,7 +568,7 @@ export function useLibraryController({
     } finally {
       setAgentSaving(false);
     }
-  }, [activeAgentId, agentDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+  }, [activeAgentId, activeAgentContent?.id, agentDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
   const onResetAgent = useCallback(() => {
     if (activeAgentContent) {
