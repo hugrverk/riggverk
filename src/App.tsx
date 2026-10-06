@@ -9,6 +9,7 @@ import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useLandingView } from "./hooks/useLandingView";
 import { EDITABLE_CONFIG_TARGET_IDS, useLibraryController } from "./hooks/useLibraryController";
 import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
 import {
@@ -363,23 +364,6 @@ function AppShell() {
     loadBrainSetupSeed();
   }, [appSettings?.workspace_path, loadBrainSetupSeed]);
 
-  // Apply landing_view on first settings load and whenever the user changes it.
-  const prevLandingViewRef = useRef<string | null>(null);
-  useEffect(() => {
-    if (!appSettings) return;
-    const landing = appSettings.landing_view as View;
-    const prev = prevLandingViewRef.current;
-    if (prev === null) {
-      prevLandingViewRef.current = landing;
-      if (landing !== "start") setView(landing);
-      return;
-    }
-    if (prev !== landing) {
-      prevLandingViewRef.current = landing;
-      setView(landing);
-    }
-  }, [appSettings?.landing_view, appSettings]);
-
   const lastWorkspaceRefreshRef = useRef(0);
   const switchView = useCallback(async (v: View) => {
     const requestedHarness = harnessForView(v);
@@ -407,6 +391,8 @@ function AppShell() {
     else if (v === "library") loadLibraryView();
     else if (v === "settings" && !settingsDirty && !settingsSaving) { loadSettings(); }
   }, [view, librarySourceType, isLibrarySourceDirty, settingsDirty, settingsSaving, loadLibraryView, loadWorkspaceDiagnostics, loadEnabledHarnessHealth, loadSettings, clearSettingsMsg, enabledHarnessKey]);
+
+  useLandingView({ landingView: appSettings?.landing_view, currentView: view, navigate: switchView });
 
   // Shared state for the Prompt Builder + Repo Dashboard tools.
   // Lifted to App so context handoff and saved-repo entry identity stay consistent
