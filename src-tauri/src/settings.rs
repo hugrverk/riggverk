@@ -609,6 +609,7 @@ mod tests {
 
     #[test]
     fn saved_workspace_path_expands_tilde_home() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home()
             .to_string_lossy()
             .into_owned();
