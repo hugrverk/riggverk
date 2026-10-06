@@ -19,6 +19,7 @@ import {
   targetMeta,
   updateActionFor,
 } from "../lib/installationView";
+import { rulesModelFor, rulesOverrideWarning, rulesPageHint, rulesSurfaceOf } from "../lib/rulesView";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
 import type { AppView } from "../shell/views";
 import { Glyph } from "../ui/Glyph";
@@ -26,7 +27,7 @@ import { Kv, type KvItem } from "../ui/Kv";
 import { Pane } from "../ui/Pane";
 import { PaneList } from "../ui/PaneList";
 import { toneClass } from "../ui/tone";
-import type { AppSettings, InstallAgent, WorkspaceDiagnostics } from "../types";
+import type { AppSettings, CodexRuntimeHealth, InstallAgent, WorkspaceDiagnostics } from "../types";
 import { installBindings } from "./installBindings";
 import type { PageInstallProps, PageOutputProps } from "./pageTypes";
 
@@ -34,6 +35,8 @@ export interface StartViewProps extends PageOutputProps, PageInstallProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
   appSettings: AppSettings | null;
   enabledHarnessIds: InstallAgent[];
+  /** Codex runtime health, for the AGENTS.override.md warning. */
+  codexRuntimeHealth?: CodexRuntimeHealth | null;
   /** Enter on a harness row opens its page. */
   onNavigate: (view: AppView) => void;
   onUninstall: (planFingerprint: string, previewToken: string) => void;
@@ -57,6 +60,7 @@ export function StartView({
   workspaceDiagnostics,
   appSettings,
   enabledHarnessIds,
+  codexRuntimeHealth = null,
   onNavigate,
   overview,
   install,
@@ -185,6 +189,11 @@ export function StartView({
   const offCount = surfaceRows.filter(row => row.state === "off").length;
   const onCount = surfaceRows.length - offCount;
   const conflicts = entry?.status?.conflict_details ?? [];
+  // The rules file of the harness under the cursor: its state is told here, the actions live on the harness page.
+  const rulesSurface = selected === "workspace" ? null : rulesSurfaceOf(selected);
+  const rulesModel = selected === "workspace" || !workspaceValid ? null : rulesModelFor(selected, entry?.status);
+  const rulesHint = rulesModel ? rulesPageHint(rulesModel, selectedLabel) : null;
+  const override = selected === "codex" ? rulesOverrideWarning(codexRuntimeHealth) : null;
 
   const statusItems: KvItem[] = [
     { label: "state", value: meta.text, tone: meta.tone },
@@ -192,6 +201,13 @@ export function StartView({
     ...(entry?.error ? [{ label: "error", value: entry.error, tone: "fail" as const, wrap: true }] : []),
     ...(conflicts.length > 0
       ? [{ label: "preserved", value: conflicts.join(", "), tone: "warn" as const, wrap: true }]
+      : []),
+    ...(rulesModel
+      ? [
+          { label: "rules", value: `${rulesModel.headline} · ${rulesModel.refinements === "none" ? "no refinements" : rulesModel.refinements}`, tone: rulesModel.tone, wrap: true },
+          ...(rulesModel.reason ? [{ label: "why", value: rulesModel.reason, tone: "dim" as const, wrap: true }] : []),
+          ...(rulesHint ? [{ label: "", value: rulesHint, tone: "dim" as const, wrap: true, id: "rules-hint" }] : []),
+        ]
       : []),
     ...(selected === "workspace"
       ? [{ label: "path", value: resolvedPath, wrap: true }]
@@ -259,22 +275,31 @@ export function StartView({
           label={`${selectedLabel} surfaces`}
           items={surfaceRows}
           getKey={row => row.surface}
-          renderItem={row => (
-            <>
-              <span className="nm">
-                {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
-              </span>
-              <span className={`meta ${toneClass(row.display.tone)}`.trim()}>
-                <Glyph name={row.display.glyph} tone={row.display.tone} /> {row.display.label}
-              </span>
-            </>
-          )}
+          renderItem={row => {
+            // A rules file the user keeps is not current and not a conflict; the rules model says so.
+            const display = row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
+            return (
+              <>
+                <span className="nm">
+                  {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
+                </span>
+                <span className={`meta ${toneClass(display.tone)}`.trim()}>
+                  <Glyph name={display.glyph} tone={display.tone} /> {display.label}
+                </span>
+              </>
+            );
+          }}
         />
         <div className="group pane-group">installed map</div>
         <SurfaceMatrix rows={matrixModel(overview, targets, appSettings)} selectedId={selected} />
       </Pane>
 
       <Pane id="status" index={3} title="status" label="Status" scrollable meta={`· ${selectedLabel}`}>
+        {override && (
+          <p className="rules-alert" role="alert">
+            <Glyph name="conflict" tone="warn" /> <b>{override.title}.</b> {override.detail}
+          </p>
+        )}
         <Kv items={statusItems} aria-label={`${selectedLabel} status`} />
         <div className="group pane-group">verify</div>
         <Kv items={verifyItems} aria-label="Verification and backups" />

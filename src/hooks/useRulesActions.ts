@@ -159,7 +159,7 @@ export function useRulesActions({
       id: `${harness}.${paneId}.rules-manage`,
       keys: "m",
       title: gates.manage.visible ? "Hand the rules file back to the app" : "Leave the rules file as is",
-      hint: gates.manage.visible ? "app manages" : "leave as is",
+      hint: gates.manage.visible ? "hand back" : "leave as is",
       group: "Rules",
       scope: "pane",
       paneId,

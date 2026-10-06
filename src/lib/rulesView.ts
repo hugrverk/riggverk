@@ -230,6 +230,22 @@ export function rulesGates(model: RulesModel | null, context: RulesGateContext):
   };
 }
 
+/** What the workspace page tells about a rules file it cannot act on: where the actions are. */
+export function rulesPageHint(model: RulesModel, pageLabel: string): string | null {
+  switch (model.kind) {
+    case "update":
+      return `open the ${pageLabel} page: d diff`;
+    case "conflict":
+      return `open the ${pageLabel} page: d diff · v convert · m leave as is`;
+    case "managed":
+      return `open the ${pageLabel} page: d diff · v convert · m hand back`;
+    case "malformed":
+      return "fix the markers by hand; the app never rewrites them";
+    default:
+      return null;
+  }
+}
+
 export interface RulesOverrideWarning {
   title: string;
   detail: string;

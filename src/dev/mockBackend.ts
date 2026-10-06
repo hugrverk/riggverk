@@ -482,7 +482,8 @@ function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
     counts.update_count && `${counts.update_count} to update`,
     counts.conflict_count && `${counts.conflict_count} conflicts`,
   ].filter(Boolean);
-  const conflicts = rows.filter(row => row.state === "conflict").map(row => row.detail);
+  // Like the backend, a rules conflict is named by its artifact label; the reason is in `rules` and `detail`.
+  const conflicts = rows.filter(row => row.state === "conflict").map(row => (row.rules ? row.label : row.detail));
   return {
     state,
     summary: summaryParts.length ? summaryParts.join(", ") : "everything current",

@@ -335,7 +335,7 @@ describe("rules file in the surfaces pane", () => {
     expect(meta.textContent).toContain("you manage");
     expect(meta.className).toContain("c-warn");
     expect(meta.className).not.toContain("c-fail");
-    expect(footerButton(/app manages/)).not.toBeNull();
+    expect(footerButton(/hand back/)).not.toBeNull();
     expect(footerButton(/leave as is/)).toBeNull();
   });
 

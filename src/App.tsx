@@ -688,6 +688,7 @@ function AppShell() {
             workspaceDiagnostics={workspaceDiagnostics}
             appSettings={appSettings}
             enabledHarnessIds={enabledHarnessIds}
+            codexRuntimeHealth={codexRuntimeHealth}
             onNavigate={switchView}
             onUninstall={runWorkspaceUninstall}
             uninstallRecoveryTransactionId={uninstallRecoveryTransactionId}
