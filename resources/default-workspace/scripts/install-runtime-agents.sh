@@ -335,6 +335,15 @@ handle_harness() {
   fi
 }
 
+# Refuse before any write: a run that updates one harness and then refuses the other's
+# agents dir would leave the runtime agents half synced.
+if $opencode; then
+  refuse_unsafe_agents_dir "$(resolve_opencode_dir)" opencode
+fi
+if $claude; then
+  refuse_unsafe_agents_dir "$(resolve_claude_dir)" claude
+fi
+
 exit_code=0
 if $opencode; then
   handle_harness opencode "$(resolve_opencode_dir)" || exit_code=$?

@@ -504,6 +504,27 @@ test_agents_dir_guards() {
   done
 }
 
+# One unsafe agents dir must refuse the whole run before another harness is written.
+test_runtime_agents_refuse_before_any_write() {
+  local home backups
+  home="$(new_home h-rt-order)"
+  backups="$tmp_root/rt-order-backups"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" \
+    OPENCODE_AGENTS_DIR="$home/oc/agents" CLAUDE_AGENTS_DIR="$home" \
+    "$scripts/install-runtime-agents.sh" --all --apply --quiet
+  assert_nonzero "install-runtime-agents.sh must refuse an unsafe CLAUDE_AGENTS_DIR"
+  assert_log "refusing unsafe claude agents dir"
+  [ ! -e "$home/oc" ] || fail "the opencode agents were written before the claude dir was refused"
+  [ ! -e "$backups" ] || fail "a backup was created before the claude dir was refused"
+  # The same holds in the other order.
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" \
+    OPENCODE_AGENTS_DIR="$home" CLAUDE_AGENTS_DIR="$home/cl/agents" \
+    "$scripts/install-runtime-agents.sh" --all --apply --quiet
+  assert_nonzero "install-runtime-agents.sh must refuse an unsafe OPENCODE_AGENTS_DIR"
+  assert_log "refusing unsafe opencode agents dir"
+  [ ! -e "$home/cl" ] || fail "the claude agents were written before the opencode dir was refused"
+}
+
 # HOME (here a symlinked temp path) must be refused as a project target even
 # when it carries a project marker.
 test_broad_project_targets() {
@@ -545,6 +566,7 @@ test_bootstrap_modes
 test_codex_diff_paths
 test_opencode_diff_paths
 test_agents_dir_guards
+test_runtime_agents_refuse_before_any_write
 test_broad_project_targets
 test_playwright_guard_home_paths
 "
