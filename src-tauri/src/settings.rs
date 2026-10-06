@@ -1368,8 +1368,10 @@ mod tests {
         with_temp_home(|dir| {
             std::env::remove_var("AGENT_WORKSPACE_PATH");
             seed_managed_record(Some("codex_config"), "codex-config-record");
-            let mut current = AppSettings::default();
-            current.enabled_target_ids = vec!["codex_rules".into()];
+            let current = AppSettings {
+                enabled_target_ids: vec!["codex_rules".into()],
+                ..AppSettings::default()
+            };
             write_settings_file(dir, &serde_json::to_string(&current).expect("serialize"));
 
             assert_eq!(load().enabled_target_ids, vec!["codex_rules".to_string()]);
@@ -1380,9 +1382,11 @@ mod tests {
     fn saving_stamps_the_marker_so_saved_toggles_are_not_re_migrated() {
         with_temp_home(|_| {
             std::env::remove_var("AGENT_WORKSPACE_PATH");
-            let mut round_tripped = AppSettings::default();
-            round_tripped.enabled_target_ids = vec!["codex_rules".into()];
-            round_tripped.target_defaults_version = 0;
+            let round_tripped = AppSettings {
+                enabled_target_ids: vec!["codex_rules".into()],
+                target_defaults_version: 0,
+                ..AppSettings::default()
+            };
 
             let saved = save_with_revision_check(round_tripped, None).expect("save");
             assert_eq!(saved.target_defaults_version, TARGET_DEFAULTS_VERSION);
