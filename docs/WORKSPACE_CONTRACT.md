@@ -216,7 +216,7 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, and record per-artifact apply, validation, rollback, managed digest, and full digest state. The exact prior managed-state bytes or prior absence are part of the transaction and are restored on rollback. Managed state is published atomically before the transaction becomes completed.
 
-Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, rolling-back, or rollback-failed transactions for the same workspace are reconciled or the new apply is blocked. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
+Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, or rolling-back transactions for the same workspace are reconciled or the new apply is blocked. Rollback-failed transactions (for example an artifact preserved because the user edited it) are not retried automatically: they are reported as a manual step and only an explicit rollback runs them again. Reconcile never restores an artifact that a newer completed transaction wrote. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
 
 ## Full uninstall
 

@@ -30,7 +30,7 @@ Superseded or corrected June items:
 |---|---|
 | AW-RD-001, "Post-audit product change" | Superseded again: history is a single bounded `git log` (limit 100,000 commits, 48 MB, 120 s) instead of 500-record `--skip` pages. A shallow clone is still reported as incomplete. |
 | AW-LOAD-001 | Not true: `App.tsx` loads the Brain Setup seed on mount and when the workspace path changes. |
-| AW-RD-005 | Hardened further: fetch is one of several calls that run with the git hardening above. |
+| AW-RD-005 | Fetch now overrides the upload-pack command, forces the user's own ssh command, allows only https/http/ssh/git transports and neutralizes repo proxy commands. Repo filter drivers, credential helpers and `url.*.insteadOf` still apply, so the dashboard is for trusted repositories (see SECURITY_MODEL.md). |
 | AW-RD-007 | Moot after the single `git log`; per-commit `git show` for file lists is unchanged and still unmeasured. |
 | AW-REL-001 | Gates now live in `scripts/release-check/frontend-gate.sh` and `rust-gate.sh`; `release-check.sh` still holds the contract checks. |
 | Test counts (25, 30, 371, 375) | Historical only. |
