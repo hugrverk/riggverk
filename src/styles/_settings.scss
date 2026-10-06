@@ -1,156 +1,126 @@
-/* ---- settings (full-bleed) ---- */
+/* ---- settings ----
+   Two panes of `key  value` rows (src/views/SettingsView.tsx). Rows come from the Kv primitive; the value
+   column holds a radio group (.setting > .setting-option), a colour field (.setting-color) or plain text.
+   The key column is a fixed 13ch so rows line up across the Kv blocks of one pane. */
 
-.settings-layout {
-  flex: 1;
-  min-height: 0;
+.settings-screen {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.settings-kv {
+  grid-template-columns: 13ch minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Focus rings of the controls in the value column must not be clipped by the Kv ellipsis rule. */
+.settings-kv dd {
+  overflow: visible;
+  white-space: normal;
+}
+
+.settings-kv dt,
+.settings-kv dd {
+  min-height: var(--lh);
+}
+
+.setting {
   display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.settings-body {
-  flex: 1;
-  min-height: 0;
-  width: 100%;
-  max-width: none;
-  overflow-y: auto;
-  padding: 12px 14px 16px;
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.settings-cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 10px;
-  width: 100%;
-}
-
-.settings-cards .harness-action-card {
-  margin-bottom: 0;
-  height: 100%;
-}
-
-@media (max-width: 640px) {
-  .settings-cards {
-    grid-template-columns: 1fr;
-  }
-}
-
-.settings-options {
-  display: flex;
-  gap: 4px;
-}
-
-.settings-input {
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  padding: 5px 10px;
-  font-size: var(--fs);
-  color: var(--text);
-  width: 320px;
-  outline: none;
-  flex: 1;
-}
-
-.settings-input::placeholder { color: var(--text-muted); opacity: 0.5; }
-.settings-input:focus { border-color: rgba(var(--accent-rgb), 0.4); }
-
-.settings-path-hint {
-  margin-top: 10px;
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  line-height: 1.4;
-  opacity: 0.62;
-}
-
-.settings-color-row {
-  margin-top: 10px;
-}
-
-.settings-color-row:first-of-type {
-  margin-top: 4px;
-}
-
-.settings-color-label {
-  font-size: var(--text-sm);
-  font-weight: 500;
-  color: var(--text);
-  margin-bottom: 6px;
-  display: block;
-}
-
-.settings-color-input-group {
-  display: flex;
+  flex-wrap: wrap;
   align-items: center;
+  gap: 0 14px;
+  min-height: var(--lh);
+}
+
+.setting-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--lh);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.setting-option:hover { color: var(--text); }
+.setting-option[aria-checked="true"] { color: var(--text-heading); }
+.setting-option[aria-checked="true"] .mark { color: var(--accent); }
+
+.setting-color {
+  flex-wrap: nowrap;
   gap: 8px;
 }
 
-.settings-color-swatch {
-  width: 14px;
-  height: 14px;
-  border-radius: 3px;
-  border: 1px solid var(--border);
+.setting-picker {
   flex-shrink: 0;
-  background: var(--bg-panel);
-}
-
-.settings-accent-input {
-  width: 130px;
-}
-
-.settings-accent-picker {
-  width: 28px;
-  height: 28px;
-  padding: 2px;
+  width: 2em;
+  height: calc(var(--lh) - 6px);
+  padding: 1px;
   border: 1px solid var(--border-strong);
-  border-radius: 4px;
-  cursor: pointer;
-  flex-shrink: 0;
-  background: transparent;
-}
-
-.settings-accent-picker::-webkit-color-swatch-wrapper {
-  padding: 0;
-}
-
-.settings-accent-picker::-webkit-color-swatch {
-  border: none;
-  border-radius: 2px;
-}
-
-.settings-accent-hint {
-  font-size: var(--fs-sm);
-  margin-top: 4px;
-  color: var(--text-muted);
-  opacity: 0.6;
-}
-
-.settings-accent-hint-invalid {
-  color: var(--fail);
-  opacity: 1;
-}
-
-.settings-msg {
-  margin-top: 12px;
-  font-size: var(--fs);
-  padding: 8px 12px;
   border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
 }
 
-.settings-msg.log-ok {
-  color: var(--ok);
-  background: var(--ok-bg);
-  border: 1px solid var(--ok);
+.setting-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.setting-picker::-webkit-color-swatch { border: none; }
+
+/* Text input shared with the harness pages (OpenCode model fields): inset box, one row tall. */
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--lh) - 2px);
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  color: var(--text);
+  outline: none;
 }
 
-.settings-msg.log-fail {
-  color: var(--fail);
-  background: var(--fail-bg);
-  border: 1px solid var(--fail);
+.settings-input::placeholder { color: var(--text-muted); }
+.settings-input:focus { border-color: var(--accent); }
+.settings-input[aria-invalid="true"] { border-color: var(--fail); }
+
+.setting-hex {
+  flex: 0 0 auto;
+  width: 11ch;
 }
+
+.setting-hint {
+  font-size: var(--fs-sm);
+}
+
+.setting-note {
+  margin-top: var(--lh);
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+}
+
+.setting-note.c-warn { margin-top: 6px; }
+
+.setting-group {
+  margin-top: var(--lh);
+}
+
+.setting-path { overflow-wrap: anywhere; }
+
+.setting-status {
+  margin-top: var(--lh);
+}
+
+@media (max-width: 760px) {
+  .settings-screen {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    overflow-y: auto;
+  }
+}
+
+/* ---- harness target toggles (TargetSettingsPanel, Start) ---- */
 
 .settings-target-list {
   display: flex;

@@ -104,9 +104,9 @@ describe("App", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Settings" }));
     const settings = await screen.findByRole("region", { name: "Settings" });
-    fireEvent.click(await screen.findByRole("button", { name: "library" }));
+    fireEvent.click(await screen.findByRole("radio", { name: "library" }));
 
-    await waitFor(() => expect(screen.getByRole("button", { name: "library" }).getAttribute("aria-pressed")).toBe("true"));
+    await waitFor(() => expect(screen.getByRole("radio", { name: "library" }).getAttribute("aria-checked")).toBe("true"));
     expect(screen.getByRole("region", { name: "Settings" })).toBe(settings);
     expect(commandCount(backend, "list_docs")).toBe(0);
   });
