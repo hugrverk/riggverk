@@ -1870,7 +1870,9 @@ fn attach_plan_preview(
 }
 
 /// Product-level installation status for workspace or harness surfaces.
-#[tauri::command]
+///
+/// Read-only and walks the installed tree, so it runs off the main thread.
+#[tauri::command(async)]
 pub fn get_installation_status(
     surfaces: Vec<String>,
 ) -> Result<crate::installation_status::InstallationStatus, String> {
@@ -1922,7 +1924,10 @@ fn reject_disabled_surfaces(
 }
 
 /// Read-only preview: detect real state for requested surfaces.
-#[tauri::command]
+///
+/// Plans every requested surface and hashes artifacts, so it runs off the
+/// main thread. It takes no mutation guard; apply re-validates the fingerprint.
+#[tauri::command(async)]
 pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
     // Validate all provided surface IDs are known
     let unknown: Vec<&String> = surfaces
@@ -2208,7 +2213,7 @@ fn uninstall_fingerprint(
 /// Read-only preview of a full uninstall: which installed files are proven
 /// app-owned (removable), which diverged copies are preserved, and which
 /// merge-managed configs are left in place.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
