@@ -1182,14 +1182,22 @@ pub struct ListAvailableModelsResult {
     pub warning: Option<String>,
 }
 
+/// `provider/model` where the model part may itself contain slashes (OpenRouter, LM Studio, ...):
+/// at least one `/`, no empty `/`-separated segment, no whitespace or control characters.
+fn is_well_formed_model_id(id: &str) -> bool {
+    id.contains('/')
+        && !id.chars().any(|c| c.is_whitespace() || c.is_control())
+        && id.split('/').all(|segment| !segment.is_empty())
+}
+
 /// Parse `opencode models` stdout into a sorted list of unique `provider/model` strings.
 ///
 /// Extraction rules per line:
 /// - Strip leading/trailing whitespace, skip empty lines.
 /// - Take the first whitespace-delimited token only.
-/// - The token must match `provider/model`: exactly one `/`, both parts non-empty.
-/// - Reject tokens containing quotes, shell metacharacters, control characters,
-///   or a second slash inside the model name part.
+/// - The token must match `provider/model`: the model part may contain further
+///   slashes (`lmstudio/google/gemma-3n-e4b`), but no `/`-separated segment may be empty.
+/// - Reject tokens containing quotes, shell metacharacters, or control characters.
 /// - Deduplicate and sort the result.
 pub fn parse_opencode_models_output(output: &str) -> Vec<String> {
     fn is_valid_token(token: &str) -> bool {
@@ -1211,14 +1219,7 @@ pub fn parse_opencode_models_output(output: &str) -> Vec<String> {
         {
             return false;
         }
-        // Must have exactly one `/` with non-empty provider and model name
-        if let Some(slash_pos) = token.find('/') {
-            let provider = &token[..slash_pos];
-            let model_name = &token[slash_pos + 1..];
-            !provider.is_empty() && !model_name.is_empty() && !model_name.contains('/')
-        } else {
-            false
-        }
+        is_well_formed_model_id(token)
     }
 
     let mut models: BTreeSet<String> = BTreeSet::new();
@@ -1328,14 +1329,9 @@ fn read_stored_opencode_model_selection_from_path(
     if stored.model.is_empty() || stored.small_model.is_empty() {
         return None;
     }
-    if validate_model_id(&stored.model).is_err() || validate_model_id(&stored.small_model).is_err()
-    {
-        return None;
-    }
-    Some(OpenCodeModelSelection {
-        model: stored.model,
-        small_model: stored.small_model,
-    })
+    let model = validate_model_id(&stored.model).ok()?;
+    let small_model = validate_model_id(&stored.small_model).ok()?;
+    Some(OpenCodeModelSelection { model, small_model })
 }
 
 /// List available OpenCode models by running `opencode models --pure`.
@@ -1462,34 +1458,33 @@ pub fn read_opencode_model_selection() -> Result<OpenCodeModelSelection, String>
     Ok(OpenCodeModelSelection { model, small_model })
 }
 
-/// Validate a model ID in `provider/model` format.
-fn validate_model_id(id: &str) -> Result<(), String> {
+/// Validate a model ID in `provider/model` format and return it trimmed.
+///
+/// The model part may contain further slashes (`lmstudio/google/gemma-3n-e4b`);
+/// empty segments and whitespace/control characters are rejected.
+fn validate_model_id(id: &str) -> Result<String, String> {
     let trimmed = id.trim();
     if trimmed.is_empty() {
         return Err("model ID must not be empty".to_string());
     }
-    if let Some(slash_pos) = trimmed.find('/') {
-        let provider = &trimmed[..slash_pos];
-        let model_name = &trimmed[slash_pos + 1..];
-        if provider.is_empty() || model_name.is_empty() {
-            return Err(format!(
-                "invalid model ID '{}': provider and model name must not be empty",
-                trimmed
-            ));
-        }
-        if trimmed[slash_pos + 1..].contains('/') {
-            return Err(format!(
-                "invalid model ID '{}': must be provider/model format with exactly one '/'",
-                trimmed
-            ));
-        }
-        Ok(())
-    } else {
-        Err(format!(
+    if !trimmed.contains('/') {
+        return Err(format!(
             "invalid model ID '{}': must be in provider/model format",
             trimmed
-        ))
+        ));
     }
+    if trimmed.chars().any(|c| c.is_whitespace() || c.is_control()) {
+        return Err(
+            "invalid model ID: must not contain whitespace or control characters".to_string(),
+        );
+    }
+    if !is_well_formed_model_id(trimmed) {
+        return Err(format!(
+            "invalid model ID '{}': provider and model name must not be empty",
+            trimmed
+        ));
+    }
+    Ok(trimmed.to_string())
 }
 
 /// Update `model` and `small_model` in the app-level override file.
@@ -1501,9 +1496,9 @@ pub fn update_opencode_model_selection(
     model: String,
     small_model: String,
 ) -> Result<String, String> {
-    // Validate inputs
-    validate_model_id(&model)?;
-    validate_model_id(&small_model)?;
+    // Validate inputs; persist the trimmed values.
+    let model = validate_model_id(&model)?;
+    let small_model = validate_model_id(&small_model)?;
 
     let override_path = opencode_model_selection_path()?;
 
@@ -1522,12 +1517,35 @@ pub fn update_opencode_model_selection(
     let content =
         serde_json::to_string_pretty(&stored).map_err(|e| format!("serialization error: {}", e))?;
 
-    // Atomic write: write to temp file then rename
-    let tmp_path = override_path.with_extension("json.tmp");
-    std::fs::write(&tmp_path, &content)
-        .map_err(|e| format!("failed to write model override: {}", e))?;
-    std::fs::rename(&tmp_path, &override_path)
-        .map_err(|e| format!("failed to save model override: {}", e))?;
+    // Atomic write: unique temp file next to the target, fsync, then rename.
+    static TMP_SEQUENCE: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+    let tmp_name = format!(
+        ".{}.{}-{}.tmp",
+        override_path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .unwrap_or("opencode-model-selection.json"),
+        std::process::id(),
+        TMP_SEQUENCE.fetch_add(1, std::sync::atomic::Ordering::Relaxed),
+    );
+    let tmp_path = override_path.with_file_name(tmp_name);
+    let write_result = (|| -> std::io::Result<()> {
+        use std::io::Write;
+        let mut file = std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&tmp_path)?;
+        file.write_all(content.as_bytes())?;
+        file.sync_all()
+    })();
+    if let Err(e) = write_result {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("failed to write model override: {}", e));
+    }
+    if let Err(e) = std::fs::rename(&tmp_path, &override_path) {
+        let _ = std::fs::remove_file(&tmp_path);
+        return Err(format!("failed to save model override: {}", e));
+    }
 
     Ok(format!(
         "Model selection saved. Run Install/Update to apply model={}, small_model={}.",
@@ -2685,9 +2703,32 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_model_id_multiple_slashes() {
-        let err = validate_model_id("a/b/c").unwrap_err();
-        assert!(err.contains("exactly one"));
+    fn test_validate_model_id_accepts_nested_model_names() {
+        // OpenRouter / LM Studio / Hugging Face style ids carry extra slashes.
+        assert_eq!(
+            validate_model_id("lmstudio/google/gemma-3n-e4b").as_deref(),
+            Ok("lmstudio/google/gemma-3n-e4b")
+        );
+        assert_eq!(validate_model_id("a/b/c").as_deref(), Ok("a/b/c"));
+    }
+
+    #[test]
+    fn test_validate_model_id_trims_and_rejects_empty_segments_and_whitespace() {
+        assert_eq!(
+            validate_model_id("  provider/model \n").as_deref(),
+            Ok("provider/model")
+        );
+        for bad in [
+            "provider//model",
+            "provider/model/",
+            "/provider/model",
+            "provider/mo del",
+            "provider/mo\tdel",
+            "provider/mo\ndel",
+            "provider/mo\u{0}del",
+        ] {
+            assert!(validate_model_id(bad).is_err(), "must reject {bad:?}");
+        }
     }
 
     #[test]
@@ -2862,10 +2903,16 @@ mod tests {
     }
 
     #[test]
-    fn test_parse_models_rejects_multi_slash() {
-        let output = "a/b/c\nprovider/model/extra\n";
+    fn test_parse_models_accepts_nested_names_and_rejects_empty_segments() {
+        let output = "lmstudio/google/gemma-3n-e4b\nprovider/model/extra\na//b\nprovider/model/\n";
         let models = parse_opencode_models_output(output);
-        assert!(models.is_empty());
+        assert_eq!(
+            models,
+            vec![
+                "lmstudio/google/gemma-3n-e4b".to_string(),
+                "provider/model/extra".to_string()
+            ]
+        );
     }
 
     #[test]
@@ -3585,7 +3632,8 @@ mod tests {
         assert!(validate_model_id("modelonly").is_err());
         assert!(validate_model_id("/model").is_err());
         assert!(validate_model_id("provider/").is_err());
-        assert!(validate_model_id("provider/a/b").is_err());
+        assert!(validate_model_id("provider//b").is_err());
+        assert!(validate_model_id("provider/a/").is_err());
         assert!(validate_model_id("   ").is_err());
     }
 

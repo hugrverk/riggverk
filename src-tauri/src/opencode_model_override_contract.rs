@@ -108,3 +108,81 @@ fn render_expected_opencode_config_applies_saved_model_override() {
         );
     });
 }
+
+fn stored_override_path() -> PathBuf {
+    crate::platform_paths::app_support_dir(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
+    .expect("app support dir")
+    .join("opencode-model-selection.json")
+}
+
+#[test]
+fn update_model_selection_accepts_nested_ids_and_persists_trimmed_values() {
+    with_isolated_home("nested", |_home| {
+        let message = crate::commands::update_opencode_model_selection(
+            "  lmstudio/google/gemma-3n-e4b \n".to_string(),
+            " opencode-go/deepseek-v4-flash ".to_string(),
+        )
+        .expect("nested provider/org/model ids are valid");
+        assert!(message.contains("model=lmstudio/google/gemma-3n-e4b,"));
+
+        let selection = crate::commands::read_opencode_model_selection().expect("read override");
+        assert_eq!(selection.model, "lmstudio/google/gemma-3n-e4b");
+        assert_eq!(selection.small_model, "opencode-go/deepseek-v4-flash");
+
+        let stored: serde_json::Value = serde_json::from_str(
+            &fs::read_to_string(stored_override_path()).expect("read stored override"),
+        )
+        .expect("parse stored override");
+        assert_eq!(stored["model"], "lmstudio/google/gemma-3n-e4b");
+        assert_eq!(stored["small_model"], "opencode-go/deepseek-v4-flash");
+
+        // Repeated saves use no fixed temp name and leave no temp file behind.
+        crate::commands::update_opencode_model_selection("a/b".to_string(), "c/d".to_string())
+            .expect("second save");
+        let leftovers: Vec<_> = fs::read_dir(stored_override_path().parent().expect("parent"))
+            .expect("list app support dir")
+            .flatten()
+            .map(|entry| entry.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        assert!(
+            leftovers.is_empty(),
+            "temp files left behind: {leftovers:?}"
+        );
+    });
+}
+
+#[test]
+fn update_model_selection_rejects_malformed_ids_without_touching_saved_override() {
+    with_isolated_home("reject", |_home| {
+        crate::commands::update_opencode_model_selection(
+            "good/model".to_string(),
+            "good/small".to_string(),
+        )
+        .expect("seed override");
+        let path = stored_override_path();
+        let before = fs::read(&path).expect("read seeded override");
+
+        for (model, small_model) in [
+            ("provider//model", "good/small"),
+            ("good/model", "good/small/"),
+            ("good/mod el", "good/small"),
+            ("good/model", "good/sm\nall"),
+            ("justmodel", "good/small"),
+            ("", "good/small"),
+        ] {
+            assert!(
+                crate::commands::update_opencode_model_selection(
+                    model.to_string(),
+                    small_model.to_string(),
+                )
+                .is_err(),
+                "must reject {model:?} / {small_model:?}",
+            );
+        }
+        assert_eq!(fs::read(&path).expect("read override after"), before);
+    });
+}
