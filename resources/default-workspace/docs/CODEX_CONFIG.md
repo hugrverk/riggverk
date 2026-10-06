@@ -33,4 +33,4 @@ Dry-run is the default. The target is `$CODEX_HOME/config.toml`, or `CODEX_CONFI
 
 - Native agents: `templates/codex/agents/*.toml` install to `$CODEX_HOME/agents`. The CLI helper is `./scripts/install-codex-agents.sh`.
 - Rules: `$CODEX_HOME/AGENTS.md`, merge-managed ([AGENT_RULES.md](AGENT_RULES.md)). A non-empty `AGENTS.override.md` makes Codex ignore it.
-- Skills: `$CODEX_HOME/skills` (typically `~/.codex/skills`), the location the Codex CLI scans. Copies under the older `~/.agents/skills` app location are migrated by the managed update; diverged copies stay conflicts.
+- Skills: the app installs to `$CODEX_HOME/skills` (typically `~/.codex/skills`). Codex's own documentation also names `~/.agents/skills` as a user skills folder; which one your Codex version reads is not verified here, so confirm with Codex if a skill does not show up. Copies under the older `~/.agents/skills` app location are migrated by the managed update; diverged copies stay conflicts and are not removed.
