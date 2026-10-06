@@ -1,7 +1,3 @@
-export function SectionChip({ label, tone }: { label: string; tone: "ok" | "warn" | "fail" | "muted" }) {
-  return <span className={`ws-section-chip ws-section-chip-${tone}`}>{label}</span>;
-}
-
 export function runtimeChipTone(status: string): "ok" | "warn" | "fail" | "muted" {
   switch (status) {
     case "synced": return "ok";
