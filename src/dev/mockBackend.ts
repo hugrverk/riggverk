@@ -743,8 +743,9 @@ function arg<T>(args: Args, key: string): T {
   return (args ?? {})[key] as T;
 }
 
-function unavailable(label: string): never {
-  throw new Error(`${label}: workspace invalid (mock error scenario)`);
+// Callers prefix their own label ("Status error: …"), so the message carries none.
+function unavailable(): never {
+  throw new Error("workspace invalid (mock error scenario)");
 }
 
 async function handle(cmd: string, args: Args): Promise<unknown> {
@@ -769,12 +770,12 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "get_agent_targets":
       return TARGETS;
     case "get_status":
-      return scenario === "error" ? unavailable("Status") : statusData();
+      return scenario === "error" ? unavailable() : statusData();
     case "get_workspace_diagnostics":
       return diagnostics();
     case "get_installation_status":
       await delay(120);
-      return scenario === "error" ? unavailable("Installation status") : installationStatus(arg<SetupSurfaceId[]>(args, "surfaces"));
+      return scenario === "error" ? unavailable() : installationStatus(arg<SetupSurfaceId[]>(args, "surfaces"));
     case "preview_setup":
       await delay(200);
       return setupPlan(arg<SetupSurfaceId[]>(args, "surfaces"));
@@ -820,7 +821,7 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "get_opencode_runtime_health":
       return opencodeHealth();
     case "get_cursor_profile_health":
-      return scenario === "error" ? unavailable("Cursor profile") : cursorHealth();
+      return scenario === "error" ? unavailable() : cursorHealth();
     case "get_claude_runtime_health":
       return claudeHealth();
     case "read_brain_setup_seed":
