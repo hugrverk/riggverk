@@ -1233,29 +1233,35 @@ fn apply_planned_artifacts(
         operation.validation_status = setup_transaction::ValidationStatus::Passed;
         operation.post_apply_digest = Some(post_apply_digest);
         operation.post_apply_full_digest = Some(post_apply_full_digest);
-        if let Err(e) = persist_setup_manifest(
-            &manifest_path,
-            &mut manifest,
-            setup_transaction::TransactionStatus::Applying,
-            &backup_dir,
-        ) {
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed: vec![e.clone()],
-                manual_steps: manual_steps.clone(),
-                message: format!("Cannot persist artifact progress: {e}"),
-            });
-        }
+        // The Applied status and digests are not persisted here: the next
+        // operation's in-flight persist (always before its mutation) and the
+        // persist after the loop write the whole in-memory manifest, so they
+        // are durable before anything else can change on disk. This halves
+        // the number of fsynced manifest writes per apply.
         applied.push(if matches!(p.kind, OperationKind::Remove) {
             format!("removed {}", artifact_label(&p.artifact))
         } else {
             artifact_label(&p.artifact)
+        });
+    }
+
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Applying,
+        &backup_dir,
+    ) {
+        return finish_failed_apply_with_rollback(FailedApplyRollback {
+            manifest_path: &manifest_path,
+            manifest: &mut manifest,
+            backup_dir: &backup_dir,
+            home: &home,
+            workspace_root: &ws_root,
+            transaction_id,
+            applied,
+            failed: vec![e.clone()],
+            manual_steps: manual_steps.clone(),
+            message: format!("Cannot persist artifact progress: {e}"),
         });
     }
 
