@@ -13,7 +13,7 @@ Make the plan clear enough for a coding agent with no project memory to execute 
 
 Scale to the task: for one or two files, a short list (goal, files, verification) is enough; use the full Output sections only for multi-slice or high-risk work.
 
-Done when: every slice has an owner file list and a falsifying verification command, and unknowns are listed as blockers instead of assumptions.
+Done when: every slice lists its files and a falsifying verification command, and unknowns are listed as blockers instead of assumptions.
 
 ## Process
 
