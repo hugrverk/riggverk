@@ -3,6 +3,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog";
+import { ViewFallback } from "./components/ViewFallback";
 import { useBackups } from "./lib/useBackups";
 import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
@@ -22,14 +23,14 @@ import {
   isPromptContextEligibleWorkItem,
   type PromptLoopContextSeed,
 } from "./tools/promptLoops/contextHandoff";
-import { PromptLoopsTool } from "./tools/promptLoops/PromptLoopsTool";
-import { RepoDashboardTool } from "./tools/repoDashboard/RepoDashboardTool";
 import { CodexView } from "./views/CodexView";
 import { CursorView } from "./views/CursorView";
 import { ClaudeView } from "./views/ClaudeView";
 import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
+const PromptLoopsTool = lazy(() => import("./tools/promptLoops/PromptLoopsTool").then(m => ({ default: m.PromptLoopsTool })));
+const RepoDashboardTool = lazy(() => import("./tools/repoDashboard/RepoDashboardTool").then(m => ({ default: m.RepoDashboardTool })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
@@ -828,21 +829,25 @@ function AppShell() {
         )}
 
         {view === "prompts" && (
-          <PromptLoopsTool
-            contextSeed={promptContextSeed}
-            onContextSeedConsumed={handlePromptContextSeedConsumed}
-            savedRepos={savedRepos}
-            savedReposLoading={savedReposLoading}
-          />
+          <Suspense fallback={<ViewFallback title="Prompt Builder" />}>
+            <PromptLoopsTool
+              contextSeed={promptContextSeed}
+              onContextSeedConsumed={handlePromptContextSeedConsumed}
+              savedRepos={savedRepos}
+              savedReposLoading={savedReposLoading}
+            />
+          </Suspense>
         )}
 
         {view === "repo-dashboard" && (
-          <RepoDashboardTool
-            onUsePromptContext={handleUsePromptContext}
-            savedEntries={savedRepos}
-            activeEntryId={savedReposActiveId}
-            mutateSavedEntries={mutateAppSettings}
-          />
+          <Suspense fallback={<ViewFallback title="Repo Dashboard" />}>
+            <RepoDashboardTool
+              onUsePromptContext={handleUsePromptContext}
+              savedEntries={savedRepos}
+              activeEntryId={savedReposActiveId}
+              mutateSavedEntries={mutateAppSettings}
+            />
+          </Suspense>
         )}
 
         {view === "settings" && (

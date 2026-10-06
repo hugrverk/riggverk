@@ -233,6 +233,9 @@
   color: var(--text-muted);
 }
 
+/* Pane-shaped Suspense fallback (ViewFallback) for lazily loaded tool views. */
+.view-fallback-note { padding: 0 10px; }
+
 /* ---- terminal activity loader (kept, D10) ---- */
 
 .terminal-activity {
