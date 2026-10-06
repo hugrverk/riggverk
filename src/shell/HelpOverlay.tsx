@@ -62,12 +62,53 @@ export function HelpOverlay() {
   return helpOpen ? <HelpBody /> : null;
 }
 
+/** Rows a j/k or arrow press scrolls. */
+const SCROLL_STEP_LINES = 3;
+
+/** Scrolls the box for a key the overlay owns while focus sits on the dialog; false: not a scroll key. */
+function scrollHelpBox(box: HTMLElement | null, event: Pick<ReactKeyboardEvent, "key" | "ctrlKey" | "metaKey" | "altKey">): boolean {
+  if (!box || event.ctrlKey || event.metaKey || event.altKey) return false;
+  const line = parseFloat(getComputedStyle(box).lineHeight) || 20;
+  const page = Math.max(line, box.clientHeight * 0.9);
+  const max = Math.max(0, box.scrollHeight - box.clientHeight);
+  let next: number;
+  switch (event.key) {
+    case "ArrowDown":
+    case "j":
+      next = box.scrollTop + line * SCROLL_STEP_LINES;
+      break;
+    case "ArrowUp":
+    case "k":
+      next = box.scrollTop - line * SCROLL_STEP_LINES;
+      break;
+    case "PageDown":
+      next = box.scrollTop + page;
+      break;
+    case "PageUp":
+      next = box.scrollTop - page;
+      break;
+    case "g":
+    case "Home":
+      next = 0;
+      break;
+    case "G":
+    case "End":
+      next = max;
+      break;
+    default:
+      return false;
+  }
+  box.scrollTop = Math.min(max, Math.max(0, next));
+  return true;
+}
+
 function HelpBody() {
   const { closeHelp } = useShellState();
   const entries = useKeymapEntries();
   const commands = useCommandList();
   const platform = usePlatform();
   const dialogRef = useRef<HTMLDivElement>(null);
+  const boxRef = useRef<HTMLDivElement>(null);
   useRestoreFocus();
 
   useEffect(() => {
@@ -80,6 +121,11 @@ function HelpBody() {
     if (event.key === "Escape" || event.key === "?" || event.key === "q") {
       event.preventDefault();
       closeHelp();
+      return;
+    }
+    // Focus stays on the dialog while .help-box is what scrolls, so the browser would not scroll it by itself.
+    if (scrollHelpBox(boxRef.current, event)) {
+      event.preventDefault();
       return;
     }
     trapTab(event, dialogRef.current);
@@ -99,7 +145,7 @@ function HelpBody() {
         if (event.target === event.currentTarget) closeHelp();
       }}
     >
-      <div className="help-box">
+      <div ref={boxRef} className="help-box">
         <h2>keyboard</h2>
         <div className="help-cols">
           {groups.map(group => (

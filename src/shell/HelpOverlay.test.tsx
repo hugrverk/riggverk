@@ -152,6 +152,38 @@ describe("HelpOverlay", () => {
     expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
   });
 
+  it("scrolls the help box from the keyboard while focus is on the dialog", () => {
+    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    const help = openHelp();
+    const box = help.querySelector<HTMLElement>(".help-box")!;
+    // jsdom has no layout: give the box a scrollable extent.
+    Object.defineProperty(box, "clientHeight", { value: 200, configurable: true });
+    Object.defineProperty(box, "scrollHeight", { value: 1000, configurable: true });
+    Object.defineProperty(box, "scrollTop", { value: 0, writable: true, configurable: true });
+    const press = (key: string, init: KeyboardEventInit = {}) => !fireEvent.keyDown(help, { key, ...init });
+
+    expect(press("ArrowDown")).toBe(true);
+    const afterLine = box.scrollTop;
+    expect(afterLine).toBeGreaterThan(0);
+    expect(press("j")).toBe(true);
+    expect(box.scrollTop).toBeGreaterThan(afterLine);
+    expect(press("k")).toBe(true);
+    expect(box.scrollTop).toBe(afterLine);
+    expect(press("PageDown")).toBe(true);
+    expect(box.scrollTop).toBeGreaterThanOrEqual(afterLine + 180);
+    expect(press("G")).toBe(true);
+    expect(box.scrollTop).toBe(800);
+    expect(press("PageDown")).toBe(true);
+    expect(box.scrollTop).toBe(800);
+    expect(press("g")).toBe(true);
+    expect(box.scrollTop).toBe(0);
+    expect(press("ArrowUp")).toBe(true);
+    expect(box.scrollTop).toBe(0);
+    // Shortcuts with a modifier are left alone, and the overlay stays open.
+    expect(press("j", { ctrlKey: true })).toBe(false);
+    expect(screen.queryByRole("dialog", { name: "Keyboard help" })).not.toBeNull();
+  });
+
   it("does not run background bindings while open", () => {
     const run = vi.fn();
     renderInFrame(<Registrar bindings={[{ id: "t.j", keys: "j", title: "J", scope: "global", run }]} />);
