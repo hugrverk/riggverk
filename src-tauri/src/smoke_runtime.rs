@@ -40,12 +40,14 @@ mod tests {
         let home = PathBuf::from(std::env::var("HOME").expect("HOME for smoke"))
             .canonicalize()
             .expect("canonicalize HOME");
-        let smoke_home = PathBuf::from(
-            std::env::var("SMOKE_HOME").expect("SMOKE_HOME must name the temp HOME"),
-        )
-        .canonicalize()
-        .expect("canonicalize SMOKE_HOME");
-        assert_eq!(home, smoke_home, "HOME must be the smoke script's temp HOME");
+        let smoke_home =
+            PathBuf::from(std::env::var("SMOKE_HOME").expect("SMOKE_HOME must name the temp HOME"))
+                .canonicalize()
+                .expect("canonicalize SMOKE_HOME");
+        assert_eq!(
+            home, smoke_home,
+            "HOME must be the smoke script's temp HOME"
+        );
         let temp_root = std::env::temp_dir()
             .canonicalize()
             .expect("canonicalize temp dir");
@@ -154,7 +156,11 @@ mod tests {
         );
 
         // The setup above must have written its harness files under the temp HOME.
-        for harness_dir in [".config/opencode/agents", ".claude/agents", ".cursor/agents"] {
+        for harness_dir in [
+            ".config/opencode/agents",
+            ".claude/agents",
+            ".cursor/agents",
+        ] {
             let path = home.join(harness_dir);
             assert!(
                 path.is_dir(),
