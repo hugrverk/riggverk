@@ -190,6 +190,47 @@ assert_opencode_playwright_rendered() {
   $ok
 }
 
+# Run `cargo test <filter>` and fail unless at least one test passed (cargo exits
+# 0 when a filter matches nothing, so a renamed module would pass silently).
+run_cargo_filter_tests() {
+  local filter="$1" test_log passed
+  test_log="$(mktemp)"
+  if ! cargo test --locked --manifest-path src-tauri/Cargo.toml "$filter" >"$test_log" 2>&1; then
+    cat "$test_log" >&2
+    rm -f "$test_log"
+    printf 'FAIL: cargo test %s\n' "$filter" >&2
+    return 1
+  fi
+  passed="$(sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed.*/\1/p' "$test_log" | awk '{ total += $1 } END { print total + 0 }')"
+  rm -f "$test_log"
+  if [ "$passed" -lt 1 ]; then
+    printf 'FAIL: cargo test %s matched no tests\n' "$filter" >&2
+    return 1
+  fi
+  printf '  cargo test %s: %s passed\n' "$filter" "$passed"
+}
+
+# Run a unittest file and fail when it fails or collects no tests (older Pythons
+# exit 0 for "Ran 0 tests").
+run_python_unittests() {
+  local test_file="$1" test_log
+  test_log="$(mktemp)"
+  if ! python3 -m unittest "$test_file" >"$test_log" 2>&1; then
+    cat "$test_log" >&2
+    rm -f "$test_log"
+    printf 'FAIL: %s\n' "$test_file" >&2
+    return 1
+  fi
+  if grep -q '^Ran 0 tests' "$test_log"; then
+    cat "$test_log" >&2
+    rm -f "$test_log"
+    printf 'FAIL: %s ran no tests\n' "$test_file" >&2
+    return 1
+  fi
+  printf '  %s: %s\n' "$test_file" "$(grep '^Ran ' "$test_log" | head -1)"
+  rm -f "$test_log"
+}
+
 scan_forbidden() {
   local pattern="$1"
   local label="$2"
@@ -225,13 +266,42 @@ step "git status"
 git status --short
 
 step "git diff check"
+# Worktree and staged changes, plus everything committed since the merge base
+# (a clean CI checkout has no worktree changes to check).
 git diff --check
+git diff --cached --check
+diff_base=""
+for diff_base_candidate in origin/main main; do
+  if git rev-parse --verify --quiet "$diff_base_candidate" >/dev/null; then
+    diff_base="$(git merge-base "$diff_base_candidate" HEAD 2>/dev/null || true)"
+    if [ -n "$diff_base" ]; then
+      break
+    fi
+  fi
+done
+if [ "$diff_base" = "$(git rev-parse HEAD)" ]; then
+  diff_base="$(git rev-parse --verify --quiet 'HEAD~1' || true)"
+fi
+if [ -n "$diff_base" ]; then
+  git diff --check "$diff_base" HEAD
+  printf '  whitespace/conflict-marker check covers %s..HEAD, staged and worktree changes\n' "$(printf '%s' "$diff_base" | cut -c1-8)"
+else
+  printf '  no merge base found; committed changes were not checked\n'
+fi
 
 step "pre-manifest ownership semantic coverage"
 python3 scripts/generate-pre-manifest-ownership.py --check
 
 step "release-check syntax"
 bash -n scripts/release-check.sh
+for repo_script in \
+  scripts/check-workspace-script-actions.sh \
+  scripts/check-workspace-script-safety.sh \
+  scripts/run-ts-check.sh \
+  scripts/smoke-tauri-runtime.sh \
+  scripts/smoke-pre-manifest-upgrade.sh; do
+  bash -n "$repo_script"
+done
 
 step "app repo hygiene"
 if grep -q "Matt Poc""ock" LICENSE; then
@@ -285,7 +355,36 @@ bash -n resources/default-workspace/scripts/install-opencode-config.sh
 bash -n resources/default-workspace/scripts/install-codex-config.sh
 bash -n resources/default-workspace/scripts/install-cursor-workspace.sh
 bash -n resources/default-workspace/scripts/install-runtime-agents.sh
+bash -n resources/default-workspace/scripts/install-codex-agents.sh
+bash -n resources/default-workspace/scripts/check-playwright-mcp.sh
+bash -n resources/default-workspace/scripts/playwright-mcp-lib.sh
 bash resources/default-workspace/scripts/test-platform-paths.sh
+
+step "bundled installer scripts: dry-run default, backup-first, fail-fast"
+bash scripts/check-workspace-script-safety.sh
+
+step "bundled merge script unit tests"
+# These test files are plain scripts with their own runner (not unittest/pytest
+# modules): run them directly and require a non-zero test count.
+merge_tests_home="$(mktemp -d "${TMPDIR:-/tmp}/agent-workspace-merge-tests.XXXXXX")"
+for merge_test in test_merge_codex_config.py test_merge_opencode_config.py; do
+  merge_test_log="$merge_tests_home/$merge_test.log"
+  if ! HOME="$merge_tests_home" python3 "resources/default-workspace/scripts/$merge_test" >"$merge_test_log" 2>&1; then
+    cat "$merge_test_log" >&2
+    printf 'FAIL: %s\n' "$merge_test" >&2
+    rm -rf "$merge_tests_home"
+    exit 1
+  fi
+  merge_test_count="$(sed -n 's/^All \([0-9][0-9]*\) test(s) PASSED$/\1/p' "$merge_test_log")"
+  if [ -z "$merge_test_count" ] || [ "$merge_test_count" -lt 1 ]; then
+    cat "$merge_test_log" >&2
+    printf 'FAIL: %s ran no tests\n' "$merge_test" >&2
+    rm -rf "$merge_tests_home"
+    exit 1
+  fi
+  printf '  %s: %s tests passed\n' "$merge_test" "$merge_test_count"
+done
+rm -rf "$merge_tests_home"
 
 step "bundled default workspace opencode generator script"
 if [ ! -f resources/default-workspace/scripts/generate-opencode-config.py ]; then
@@ -449,9 +548,27 @@ for agent in codex opencode claude; do
 done
 
 step "bundled default install-skills.sh rejects unsafe skill names"
-for bad in "" "../../" "../escape" "bad name" "BAD" "-bad" "a..b" "a/b"; do
-  if bash resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run 2>/dev/null; then
+neg_home="$(mktemp -d "${release_tmp_dir}/neg-home.XXXXXX")"
+neg_log="${release_tmp_dir}/neg.log"
+# "<name>|<expected message fragment>": the name must be rejected for this reason.
+for case in \
+  "|invalid skill name (empty)" \
+  "../../|path traversal" \
+  "../escape|path traversal" \
+  "a..b|path traversal" \
+  "a/b|path traversal" \
+  "bad name|invalid skill name" \
+  "BAD|invalid skill name" \
+  "-bad|must start with a-z0-9"; do
+  bad="${case%%|*}"
+  expected="${case#*|}"
+  if HOME="$neg_home" bash resources/default-workspace/scripts/install-skills.sh --skill "$bad" --dry-run >"$neg_log" 2>&1; then
     printf 'FAIL: install-skills.sh accepted unsafe skill name: %s\n' "$bad" >&2
+    exit 1
+  fi
+  if ! grep -qF -- "$expected" "$neg_log"; then
+    printf 'FAIL: install-skills.sh rejected %s for the wrong reason (expected "%s"):\n' "$bad" "$expected" >&2
+    cat "$neg_log" >&2
     exit 1
   fi
 done
@@ -475,7 +592,7 @@ fi
 
 step "bundled default cursor setup"
 python3 resources/default-workspace/scripts/check-cursor-profile.py
-cargo test --manifest-path src-tauri/Cargo.toml cursor_profile_ops:: --quiet
+run_cargo_filter_tests cursor_profile_ops::
 python3 -m json.tool resources/default-workspace/templates/cursor/manifest.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/global-profile.json >/dev/null
 python3 -m json.tool resources/default-workspace/templates/cursor/mcp/mcp.example.json >/dev/null
@@ -615,8 +732,16 @@ if [ ! -d "$fake_project/.cursor/agents" ] || [ ! -d "$fake_project/.cursor/rule
   exit 1
 fi
 rm -rf "$tmpdir"
-if bash resources/default-workspace/scripts/install-cursor-workspace.sh --project --target "$HOME" >/dev/null 2>&1; then
+broad_home="$(mktemp -d "${release_tmp_dir}/cursor-broad-home.XXXXXX")"
+mkdir -p "$broad_home/.git"
+if HOME="$broad_home" AGENT_WORKSPACE_BACKUP_DIR="$broad_home/backups" \
+  bash resources/default-workspace/scripts/install-cursor-workspace.sh --project --target "$broad_home" >"${release_tmp_dir}/cursor-broad.log" 2>&1; then
   printf 'FAIL: Cursor project sync accepted broad HOME target\n' >&2
+  exit 1
+fi
+if ! grep -qF 'refusing broad project target' "${release_tmp_dir}/cursor-broad.log"; then
+  printf 'FAIL: Cursor project sync rejected the broad HOME target for the wrong reason:\n' >&2
+  cat "${release_tmp_dir}/cursor-broad.log" >&2
   exit 1
 fi
 printf '  Cursor setup verified: help, adapters, project install, no shell global agents\n'
@@ -674,15 +799,37 @@ if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --show
   exit 1
 fi
 printf '  --show-user-rules works\n'
-if command -v pbcopy >/dev/null 2>&1; then
-  if ! bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >/dev/null 2>&1; then
-    printf '  --copy-user-rules skipped (pbcopy unavailable to this session)\n'
-  else
-    printf '  --copy-user-rules works\n'
-  fi
-else
-  printf '  --copy-user-rules skipped (no pbcopy)\n'
+# --copy-user-rules runs against a fake pbcopy so the developer's clipboard is
+# never overwritten; the capture proves the right file is piped, and a failing
+# pbcopy must fail the script.
+fake_clip_bin="${release_tmp_dir}/fake-clip-bin"
+mkdir -p "$fake_clip_bin"
+cat >"$fake_clip_bin/pbcopy" <<'PBCOPY'
+#!/bin/sh
+cat > "$PBCOPY_CAPTURE"
+PBCOPY
+chmod +x "$fake_clip_bin/pbcopy"
+clip_capture="${release_tmp_dir}/pbcopy.out"
+if ! PATH="$fake_clip_bin:$PATH" PBCOPY_CAPTURE="$clip_capture" \
+  bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >/dev/null 2>&1; then
+  printf 'FAIL: install-cursor-workspace.sh --copy-user-rules failed\n' >&2
+  exit 1
 fi
+if ! cmp -s "$clip_capture" "$user_rules_file"; then
+  printf 'FAIL: --copy-user-rules did not pipe templates/cursor/user-rules.md to pbcopy\n' >&2
+  exit 1
+fi
+printf '#!/bin/sh\nexit 1\n' >"$fake_clip_bin/pbcopy"
+copy_fail_log="${release_tmp_dir}/copy-fail.log"
+if PATH="$fake_clip_bin:$PATH" bash resources/default-workspace/scripts/install-cursor-workspace.sh --copy-user-rules >"$copy_fail_log" 2>&1; then
+  printf 'FAIL: --copy-user-rules must fail when pbcopy fails\n' >&2
+  exit 1
+fi
+if grep -qF 'copied to clipboard' "$copy_fail_log"; then
+  printf 'FAIL: --copy-user-rules reported success although pbcopy failed\n' >&2
+  exit 1
+fi
+printf '  --copy-user-rules works (fake pbcopy; clipboard untouched)\n'
 
 step "regression: no fake global Cursor User Rules path"
 if search_pruned_ignore_case_has_match '\.cursor/AGENTS\.md|\$HOME/\.cursor/AGENTS\.md|~/.cursor/AGENTS\.md' \
@@ -824,18 +971,22 @@ step "bundled default opencode.json snapshot is current"
 python3 scripts/generate-default-opencode-config.py --check
 
 step "bundled OpenCode permission composition tests"
-python3 -m unittest scripts/test_opencode_policy_compose.py
+run_python_unittests scripts/test_opencode_policy_compose.py
 
 step "bundled OpenCode permission contract"
 python3 scripts/validate_opencode_permissions.py
 
 step "bundled harness skill adapters are current"
-python3 -m unittest scripts/test_generate_skill_adapters.py
+run_python_unittests scripts/test_generate_skill_adapters.py
 python3 scripts/generate-skill-adapters.py --check
 
 step "bundled harness agent adapters are current"
 python3 scripts/generate-agent-adapters.py --check
-if search_quiet 'templates/opencode/agents/.*\\.header\\.yaml' resources/default-workspace; then
+# Tests land with the agent-adapter validation changes; run them once present.
+if [ -f scripts/test_generate_agent_adapters.py ]; then
+  run_python_unittests scripts/test_generate_agent_adapters.py
+fi
+if find resources/default-workspace/templates/opencode/agents -name '*.header.yaml' 2>/dev/null | grep -q .; then
   printf 'FAIL: hand-maintained OpenCode agent header.yaml files must not exist; use role.json + policy compose\n' >&2
   exit 1
 fi
@@ -1002,7 +1153,7 @@ for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verif
     exit 1
   fi
   for deny in 'rm -rf' 'sudo' 'git reset --hard' 'git clean -fdx'; do
-    if ! grep -q "\"$deny" "$file"; then
+    if ! grep -Eq "\"$deny[^\"]*\":[[:space:]]*[\"']?deny" "$file"; then
       printf 'FAIL: bundled %s missing explicit deny for %s\n' "$agent" "$deny" >&2
       exit 1
     fi
@@ -1320,17 +1471,37 @@ fi
 printf '  one managed installation owner verified on each harness page\n'
 
 step "regression: no stale config + agents labels in app UI"
-if search_has_match 'config \\+ agents' src/views src/App.tsx; then
+if search_has_match 'config \+ agents' src/views src/App.tsx; then
   printf 'FAIL: stale config + agents wording in app UI\n' >&2
   exit 1
 fi
 printf '  app UI uses config-only / agents-only labels\n'
 
 step "bundled default install-opencode-config.sh unsafe OPENCODE_AGENTS_DIR rejected"
-if OPENCODE_AGENTS_DIR=/ bash resources/default-workspace/scripts/install-opencode-config.sh --apply 2>/dev/null; then
-  printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=/\n' >&2
-  exit 1
-fi
+guard_home="$(mktemp -d "${release_tmp_dir}/guard-home.XXXXXX")"
+guard_log="${release_tmp_dir}/guard.log"
+for guard_dir in "/" "$guard_home" "$guard_home//" "$guard_home/."; do
+  if HOME="$guard_home" \
+    OPENCODE_CONFIG_PATH="$guard_home/oc/opencode.json" \
+    OPENCODE_TUI_CONFIG_PATH="$guard_home/oc/tui.json" \
+    PLAYWRIGHT_MCP_CONFIG_PATH="$guard_home/pw/config.json" \
+    PLAYWRIGHT_BROWSERS_PATH="$guard_home/ms-playwright" \
+    AGENT_WORKSPACE_BACKUP_DIR="$guard_home/backups" \
+    OPENCODE_AGENTS_DIR="$guard_dir" \
+    bash resources/default-workspace/scripts/install-opencode-config.sh --apply >"$guard_log" 2>&1; then
+    printf 'FAIL: install-opencode-config.sh accepted unsafe OPENCODE_AGENTS_DIR=%s\n' "$guard_dir" >&2
+    exit 1
+  fi
+  if ! grep -qF 'refusing unsafe OPENCODE_AGENTS_DIR' "$guard_log"; then
+    printf 'FAIL: install-opencode-config.sh rejected OPENCODE_AGENTS_DIR=%s for the wrong reason:\n' "$guard_dir" >&2
+    cat "$guard_log" >&2
+    exit 1
+  fi
+  if [ -n "$(find "$guard_home" -mindepth 1 -type f 2>/dev/null)" ]; then
+    printf 'FAIL: install-opencode-config.sh wrote files before refusing OPENCODE_AGENTS_DIR=%s\n' "$guard_dir" >&2
+    exit 1
+  fi
+done
 
 step "bundled default install-opencode-config.sh works with space in workspace path"
 tmpdir="$(mktemp -d)"
@@ -1422,43 +1593,69 @@ rm -rf "$tmpdir"
 if ! $apply_ok; then exit 1; fi
 printf '  install-opencode-config.sh handles space-in-path correctly: 1 config + 1 tui + 6 agents applied from space-containing workspace\n'
 
-step "backup schema matches app expectations"
-tmpdir="$(mktemp -d)"
-# Create timestamp matching YYYYMMDD-HHMMSS (15 chars)
-ts="20260101-120000"
-mkdir -p "$tmpdir/$ts/opencode-config"
-mkdir -p "$tmpdir/$ts/codex-rules"
-mkdir -p "$tmpdir/$ts/opencode-rules"
-mkdir -p "$tmpdir/$ts/opencode-agents"
-mkdir -p "$tmpdir/$ts/claude-agents"
-# Write test files
-echo "config" > "$tmpdir/$ts/opencode-config/opencode.json"
-echo "rules" > "$tmpdir/$ts/codex-rules/AGENTS.md"
-echo "rules" > "$tmpdir/$ts/opencode-rules/AGENTS.md"
-echo "agent" > "$tmpdir/$ts/opencode-agents/architect.md"
-echo "agent" > "$tmpdir/$ts/opencode-agents/repo-scout.md"
-echo "agent" > "$tmpdir/$ts/claude-agents/architect.md"
-
-# Verify the timestamp format is readable by app (via Rust test)
-# We're testing that directories matching YYYYMMDD-HHMMSS are found
-ts_check="$(date -u +%Y%m%d-%H%M%S)"
-if [ ${#ts_check} -ne 15 ]; then
-  printf 'FAIL: timestamp format should be 15 chars YYYYMMDD-HHMMSS\n' >&2
-  rm -rf "$tmpdir"
-  exit 1
-fi
-
-# Test list_backups would find these if we had Rust code to test
-# For now, verify directory structure matches what backups.rs expects
-for target_dir in opencode-config codex-rules opencode-rules opencode-agents claude-agents; do
-  if [ ! -d "$tmpdir/$ts/$target_dir" ]; then
-    printf 'FAIL: backup schema %s dir not found\n' "$target_dir" >&2
-    rm -rf "$tmpdir"
+step "backup layout matches app expectations"
+# Run the real installers against diverged targets in a temp HOME, then compare
+# the backup layout they wrote with what backups.rs lists: <timestamp>/<target id>/.
+backup_home="$(mktemp -d "${release_tmp_dir}/backup-layout-home.XXXXXX")"
+backup_root="${release_tmp_dir}/backup-layout-backups"
+mkdir -p "$backup_home/.claude/agents" "$backup_home/.codex/agents" \
+  "$backup_home/.config/opencode/agents"
+printf 'user rules\n' >"$backup_home/.claude/CLAUDE.md"
+printf 'user rules\n' >"$backup_home/.codex/AGENTS.md"
+printf 'user rules\n' >"$backup_home/.config/opencode/AGENTS.md"
+printf 'user agent\n' >"$backup_home/.claude/agents/inspector.md"
+printf 'user agent\n' >"$backup_home/.config/opencode/agents/architect.md"
+codex_agent_name="$(find resources/default-workspace/templates/codex/agents -name '*.toml' -type f | sort | head -1 | xargs basename)"
+printf 'user agent\n' >"$backup_home/.codex/agents/$codex_agent_name"
+printf '{"model": "user/model"}\n' >"$backup_home/.config/opencode/opencode.json"
+printf '{}\n' >"$backup_home/.config/opencode/tui.json"
+for backup_script in \
+  "install-agent-rules.sh --all --apply --quiet" \
+  "install-runtime-agents.sh --all --apply --quiet" \
+  "install-codex-agents.sh --apply --quiet" \
+  "install-opencode-config.sh --apply --quiet"; do
+  # shellcheck disable=SC2086
+  if ! env -i PATH="$PATH" HOME="$backup_home" TMPDIR="${TMPDIR:-/tmp}" \
+    AGENT_WORKSPACE_BACKUP_DIR="$backup_root" \
+    PLAYWRIGHT_BROWSERS_PATH="$backup_home/ms-playwright" \
+    bash resources/default-workspace/scripts/$backup_script >"${release_tmp_dir}/backup-layout.log" 2>&1; then
+    cat "${release_tmp_dir}/backup-layout.log" >&2
+    printf 'FAIL: %s failed while seeding backups\n' "$backup_script" >&2
     exit 1
   fi
 done
-rm -rf "$tmpdir"
-printf '  backup schema verified: YYYYMMDD-HHMMSS + target IDs (opencode-config, codex-rules, opencode-rules, opencode-agents, claude-agents)\n'
+python3 - "$backup_root" src-tauri/src/commands/backups.rs <<'PY'
+import re
+import sys
+from pathlib import Path
+
+backup_root, backups_rs = Path(sys.argv[1]), Path(sys.argv[2])
+source = backups_rs.read_text(encoding="utf-8")
+block = re.search(r"const ALLOWED_TARGET_IDS:\s*&\[&str\]\s*=\s*&\[(.*?)\];", source, re.DOTALL)
+if not block:
+    raise SystemExit("FAIL: ALLOWED_TARGET_IDS not found in backups.rs")
+allowed = set(re.findall(r'"([^"]+)"', block.group(1)))
+produced = set()
+for run_dir in backup_root.iterdir():
+    if not re.fullmatch(r"\d{8}-\d{6}", run_dir.name):
+        raise SystemExit(f"FAIL: backup run directory is not YYYYMMDD-HHMMSS: {run_dir.name}")
+    for target_dir in run_dir.iterdir():
+        produced.add(target_dir.name)
+        if not any(f.is_file() for f in target_dir.rglob("*")):
+            raise SystemExit(f"FAIL: empty backup directory: {target_dir}")
+expected = {
+    "claude-rules", "codex-rules", "opencode-rules",
+    "claude-agents", "opencode-agents", "codex-agents", "opencode-config",
+}
+if produced != expected:
+    raise SystemExit(f"FAIL: installers wrote backup targets {sorted(produced)}; expected {sorted(expected)}")
+unknown = produced - allowed
+if unknown:
+    raise SystemExit(
+        f"FAIL: installers write backup targets the app does not list (ALLOWED_TARGET_IDS): {sorted(unknown)}"
+    )
+print(f"  backup layout verified: <timestamp>/<id> with ids {sorted(produced)} (all in ALLOWED_TARGET_IDS)")
+PY
 
 step "tauri app resources config"
 if ! search_quiet "default-workspace" src-tauri/tauri.conf.json; then
@@ -1474,6 +1671,9 @@ printf '  main window startup maximize hook verified\n'
 
 step "bundled skill catalog and routing alignment"
 python3 scripts/check-skill-routing.py
+if [ -f scripts/test_check_skill_routing.py ]; then
+  run_python_unittests scripts/test_check_skill_routing.py
+fi
 
 step "managed installation contract guards"
 python3 scripts/check-managed-installation-contract.py
@@ -1520,11 +1720,10 @@ if search_pruned_has_match "$app_project_pattern" src src-tauri >/dev/null 2>&1;
 fi
 printf '  no project-target app surfaces in src/ or src-tauri/\n'
 
-step "regression: Cursor page uses unified installation"
-python3 scripts/check-cursor-action-compat.py
-
 step "forbidden source scans"
-scan_forbidden 'sh[[:space:]]+-c' 'sh -c'
+scan_forbidden '(^|[^[:alnum:]_])(ba|z|da|k)?sh[[:space:]]+-[a-z]*c([^[:alnum:]_-]|$)' 'sh -c / bash -lc in scripts and source text'
+printf '  --> shell command-string spawns in Rust\n'
+python3 scripts/check-shell-spawn.py
 scan_forbidden '(^|[^[:alnum:]_])eval([^[:alnum:]_]|$)' 'eval'
 scan_forbidden 'npx[[:space:]]+skills' 'npx skills'
 scan_forbidden 'skills@latest' 'skills@latest'
