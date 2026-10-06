@@ -17,18 +17,20 @@ The app writes only to these known user-config and app-support paths:
 | OpenCode config | `~/.config/opencode/opencode.json` (managed-key merge) |
 | OpenCode model override | app support dir plus `opencode-model-selection.json` (non-secret model preference) |
 | OpenCode agents | `~/.config/opencode/agents/` |
-| OpenCode rules | `~/.config/opencode/AGENTS.md` |
+| OpenCode rules | `~/.config/opencode/AGENTS.md` (managed block merge) |
 | OpenCode skills | `~/.config/opencode/skills/` |
 | Codex config | `~/.codex/config.toml` (allowlisted Codex model/routing/approval defaults merge only) |
 | Codex agents | `~/.codex/agents/` |
-| Codex rules | `~/.codex/AGENTS.md` |
+| Codex rules | `$CODEX_HOME/AGENTS.md` (typically `~/.codex/AGENTS.md`; managed block merge) |
 | Codex skills | `$CODEX_HOME/skills/` (typically `~/.codex/skills/`) |
-| Claude rules | `~/.claude/CLAUDE.md` |
+| Claude rules | `~/.claude/CLAUDE.md` (managed block merge) |
 | Claude agents | `~/.claude/agents/` |
 | Claude skills | `~/.claude/skills/` |
 | Cursor agents | `~/.cursor/agents/` |
 | Cursor skills | `~/.cursor/skills/` |
 | Cursor MCP | `~/.cursor/mcp.json` (Playwright entry only) |
+
+Rules files are read in full (up to 4 MB) to locate the managed block. Only the bytes between the BEGIN and END markers are written; text outside them is preserved byte-for-byte, and a file with malformed markers, a diverged pre-block file, or an edited block is refused with zero mutation. The only explicit exception is the user-confirmed rules conversion, which previews the exact resulting file and runs as a backed-up transaction. Backups copy the whole file, so user text in a rules file is stored in the backup root like any other backed-up target. The "leave as is" choice is stored as non-secret identities in `<workspace>/.agent-workspace/rules-preferences.json`.
 
 App support and backup roots are platform-resolved:
 

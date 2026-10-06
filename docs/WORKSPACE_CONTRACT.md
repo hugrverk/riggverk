@@ -100,15 +100,37 @@ Deprecated removal creates a transaction backup before deletion. Rollback valida
 
 ## Rules
 
-`templates/global-agent-rules.md` is the editable shared core. Harness appendices live under `templates/rules/`. Generated composed rules live under `templates/sync/`.
+`templates/global-agent-rules.md` is the editable shared core. Harness appendices live under `templates/rules/`. Generated composed rules live under `templates/sync/`. `metadata/rules-history/` holds every base the app shipped, one file per content digest, so a rules file can be compared with the base it started from; `scripts/generate-rules-history.py` keeps it current.
 
 Installed rule targets:
 
-- Codex: `~/.codex/AGENTS.md`
+- Codex: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`)
 - OpenCode: `~/.config/opencode/AGENTS.md`
 - Claude Code: `~/.claude/CLAUDE.md`
 
-Rule writes are explicit, allowlisted, backed up when replacing diverged files, and separate from editing workspace source templates.
+Rule targets are merge-managed. Agent Workspace owns only the content between `<!-- BEGIN AGENT-WORKSPACE BASE` and `<!-- END AGENT-WORKSPACE BASE -->`; bytes outside are user-owned and preserved byte-for-byte, including a BOM, CRLF line endings, and a missing final newline. The markers count only as whole lines at column 0 outside fenced code blocks, and a file holds exactly one BEGIN followed by one END. Instructions after the block are the user's refinements and override the base where they conflict (the base states this in its Priority section).
+
+Detection compares the block body, not the whole file. A body digest ignores CRLF versus LF and a missing final newline, and the managed-state record for a rules file is that digest.
+
+| Installed file | Plan |
+|----------------|------|
+| absent | create a file holding the block |
+| block body equals the bundled base | current |
+| block body equals the recorded digest or a shipped base | update the block body; text before and after is kept |
+| block body edited | conflict `base_block_edited`; left as is |
+| no markers, file equals the recorded digest, a shipped base, or the current source (or holds only whitespace) | update: the file is replaced by a file holding the block, after a full backup |
+| no markers, any other content | conflict `legacy_diverged`; left as is |
+| duplicate, unpaired, or reordered markers; not UTF-8; larger than 4 MB | conflict `malformed_markers`; zero mutation |
+
+Edits inside the block are reported and never replaced without explicit confirmation. A base update that keeps user text is an `update_available`, never a conflict, and reports how many refinement lines it preserves.
+
+For the two conflicts a user can resolve (`base_block_edited`, `legacy_diverged`), the app offers read-only diffs (installed file against the update, or the closest shipped base against the installed file), an explicit conversion, and "leave as is". Conversion writes the current base as the managed block and keeps what the user changed: every `##` section that differs from the closest shipped base, or that the base never had, moves below the END marker under a comment, and text around an edited block stays where it was. The preview shows the exact resulting file, and applying it is an ordinary backed-up transaction. "Leave as is" records the choice in `.agent-workspace/rules-preferences.json`; the file is then reported as "base updates available, you manage this file" instead of a conflict and is never written until the user converts it or clears the choice. Markers that are malformed are never rewritten.
+
+Rollback of a block update restores only the previous block body, so text the user added after the update stays; it refuses when the block itself changed after apply. Creating, wrapping, and converting restore the whole file, and only while it is unchanged since apply.
+
+Runtime health compares the block body with the bundled base. Codex health also warns when a non-empty `$CODEX_HOME/AGENTS.override.md` exists: Codex reads it instead of `AGENTS.md`, which silently drops the base. Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`; the app does not write them.
+
+Rule writes are explicit, allowlisted, backed up before any change, and separate from editing workspace source templates.
 
 ## Agents
 
@@ -184,7 +206,7 @@ Full uninstall previews removable, preserved, and merge-managed artifacts before
 
 - **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, or current bundled source match).
 - **Preserved** — modified or unknown user files that do not match an app-owned proof.
-- **Merge-managed** — user-owned config files where only allowlisted keys were merged; the file is never deleted wholesale.
+- **Merge-managed** — user-owned config files where only allowlisted keys were merged, and rules files that hold the user's own text beside the base block; the file is never deleted wholesale. A rules file that holds nothing but an unedited base block is removable.
 
 Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
 
