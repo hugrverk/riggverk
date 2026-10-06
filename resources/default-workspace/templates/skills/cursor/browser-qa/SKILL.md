@@ -1,6 +1,6 @@
 ---
 name: browser-qa
-description: Verify frontend changes in a live browser or browser automation with route smoke tests, interactions, responsive checks, console/network review, and concise evidence.
+description: Verifies frontend changes in a real browser or automation with route smoke, critical interactions, two or more viewports, console and network checks, and dev-server lifecycle. Use when a user-facing UI change needs proof that it works. Not for critiquing supplied screenshots (screenshot-review).
 category: frontend
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -9,12 +9,7 @@ related: screenshot-review, accessibility-review, frontend-design
 
 # Browser QA
 
-## When To Use
-
-- Frontend UI, routing, layout, form, navigation, checkout, onboarding, admin, search, filter, or interaction changes.
-- CSS/responsive changes where viewport behavior matters.
-- Changes involving client-side data fetching, hydration, routing, or browser-only APIs.
-- Before claiming a user-facing UI flow is fixed.
+Done when: each affected route loaded without unclassified console errors or failed requests, each critical interaction ran at two or more viewports where layout changed, and server lifecycle is reported.
 
 ## Do Not Use When
 
@@ -77,6 +72,4 @@ related: screenshot-review, accessibility-review, frontend-design
 
 ### Cursor Agent
 
-- Keep this skill as short task context for Agent mode.
-- Stay scoped to the open workspace and requested files. Global setup guidance must not write project `.cursor/rules`; `.mdc` files remain templates unless the user explicitly asks for project rules.
-- Use targeted search, edits, and terminal checks. Report changed files and verification results.
+- Cursor User Rules are installed manually and may be absent: keep secrets out of output and report verification evidence regardless.

@@ -64,12 +64,15 @@ Read-only git commands are allowed. Do not perform state-changing git operations
 ## Final report
 Implementation: Changed, Verified, Not verified, Risk, Next.
 Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
+A skill's `## Output` lists content to cover, not a replacement format: keep these headings and fold the skill's items into them.
 
 ## Codex harness
 
 - Custom agents use bundled Codex TOML templates under `~/.codex/agents/`; skills install to `$CODEX_HOME/skills` (typically `~/.codex/skills`).
 - `~/.codex/config.toml` is manual-review only; never assume Agent Workspace owns the full file.
 - Respect Codex sandbox, approval, and config boundaries; do not bypass documented safety settings.
+- For image generation, design mocks, screenshots, browser automation, CDP, or computer-use work, use the available Codex tools when they directly support the task and keep generated assets in scope.
+- Use background agents or separate worktrees only for separable exploration, review, or implementation slices; keep final judgment and integration in the main thread.
 
 ## Codex command handling
 Default to concise shell inspection. Before running a command that may emit large output, rewrite it to a bounded form such as `COMMAND 2>&1 | head -c 4000`.

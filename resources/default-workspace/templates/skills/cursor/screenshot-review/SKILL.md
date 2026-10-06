@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Review static UI screenshots for layout, hierarchy, and responsive risks. Diagnose only—does not choose visual direction or implement unless explicitly asked (`frontend-design`).
+description: Diagnoses supplied UI screenshots for hierarchy, spacing, overflow, alignment, and responsive risks and returns a ranked patch plan without editing files. Use when the user shares screenshots or images of a UI to critique. Not for live-browser verification (browser-qa).
 category: frontend
 risk: low
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: frontend-design, browser-qa, accessibility-review
 # Screenshot Review
 
 Turn screenshots into a bounded diagnosis and patch plan; do not jump straight to code.
+
+Done when: each issue has a root-cause hypothesis, a likely file, and a verification viewport.
 
 ## Process
 
@@ -50,6 +52,4 @@ Turn screenshots into a bounded diagnosis and patch plan; do not jump straight t
 
 ### Cursor Agent
 
-- Keep this skill as short task context for Agent mode.
-- Stay scoped to the open workspace and requested files. Global setup guidance must not write project `.cursor/rules`; `.mdc` files remain templates unless the user explicitly asks for project rules.
-- Use targeted search, edits, and terminal checks. Report changed files and verification results.
+- Cursor User Rules are installed manually and may be absent: keep secrets out of output and report verification evidence regardless.

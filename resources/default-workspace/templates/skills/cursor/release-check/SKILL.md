@@ -1,6 +1,6 @@
 ---
 name: release-check
-description: Run a pre-merge or pre-deploy readiness check covering git state, build/test, migrations, env risk, smoke routes, rollback, and unresolved verification gaps.
+description: Runs a pre-merge or pre-deploy gate with the repo's canonical release script, git state, build and test, migration and env risk, smoke routes, rollback plan, and a go/no-go verdict. Use when asked whether a branch is ready to merge, release, or deploy.
 category: workflow
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: security-review, database-migrations
 # Release Check
 
 Keep the gate short and evidence-based.
+
+Done when: every required check is run or listed with a reason, blockers are separated from residual risk, and a go/no-go verdict is given.
 
 ## Process
 
@@ -35,7 +37,7 @@ Keep the gate short and evidence-based.
 
 ## Guardrails
 
-- Do not say ready unless required checks passed or gaps are explicit.
+- Do not say ready unless required checks passed or gaps are explicit. Verdict is no-go if any required check failed, or was not run without a stated, accepted reason.
 - Do not inspect secrets.
 - Do not hide unverified manual checks.
 - Do not mix deploy execution into release review unless explicitly asked.
@@ -45,6 +47,4 @@ Keep the gate short and evidence-based.
 
 ### Cursor Agent
 
-- Keep this skill as short task context for Agent mode.
-- Stay scoped to the open workspace and requested files. Global setup guidance must not write project `.cursor/rules`; `.mdc` files remain templates unless the user explicitly asks for project rules.
-- Use targeted search, edits, and terminal checks. Report changed files and verification results.
+- Cursor User Rules are installed manually and may be absent: keep secrets out of output and report verification evidence regardless.

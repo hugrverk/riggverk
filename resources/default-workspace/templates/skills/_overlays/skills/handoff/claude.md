@@ -1,3 +1,6 @@
+---
+allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
+---
 ### Claude Handoff
 
 Repository state captured when this skill loaded:

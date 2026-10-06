@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Debug bugs, failures, flakes, slowness, or regressions with reproduce → minimise → hypothesise → instrument → fix. Use before implementation when root cause is unknown. Pair with `tdd` only for a narrow regression test after the failure is understood—not for test-first feature work unless requested.
+description: Finds root cause for bugs, failures, flakes, slowness, or regressions by building a red-capable feedback loop, then reproduce → minimise → hypothesise → instrument → fix. Use when the cause is unknown, before editing code. Not for test-first work on specified behavior (tdd).
 category: diagnosis
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -11,6 +11,12 @@ related: tdd
 
 No blind fixes. Build a feedback loop first, then use it to falsify hypotheses.
 
+Done when: the root cause is stated, the original feedback loop was re-run after the fix (or the gap is stated), and all temporary instrumentation is removed.
+
+## Redact
+
+Commands, outputs, logs, and captured artifacts you show must carry no secrets. Replace any token, password, cookie, or auth header with `<REDACTED>`, drive loops from environment variables so credentials stay out of what you quote, and quote only the lines that carry the signal. If redacted output is not enough to diagnose, say so and ask.
+
 ## Process
 
 1. **Understand the report.**
@@ -18,22 +24,26 @@ No blind fixes. Build a feedback loop first, then use it to falsify hypotheses.
    - Identify the smallest user-visible behavior that proves the bug.
    - Read relevant code and local docs before changing anything.
 
-2. **Build a feedback loop.**
+2. **Build a feedback loop.** This is the skill; everything else consumes it.
    - Prefer the fastest deterministic signal that reaches the bug: failing test, CLI command, HTTP script, browser check, fixture replay, trace replay, or small harness.
-   - Assert the actual symptom, not a nearby crash.
-   - If flaky, increase reproduction rate with repeats, stress, fixed seeds, controlled time, or narrower setup.
-   - If no loop is possible, stop and report what was tried plus the artifact needed from the user.
+   - The loop is ready when you can name one command that you have already run once (show the invocation and its redacted output) and that is:
+     - red-capable: it drives the real code path and asserts the user's exact symptom, not "runs without erroring";
+     - deterministic: same verdict every run;
+     - fast: seconds, not minutes;
+     - agent-runnable: no human in the loop.
+   - If flaky, raise the reproduction rate with repeats, stress, fixed seeds, controlled time, or a narrower setup until it is debuggable.
+   - If no loop is possible, stop and report what was tried plus the artifact needed from the user. Do not hypothesise without a loop.
 
 3. **Reproduce and minimise.**
-   - Run the loop until the failure is observed.
-   - Shrink inputs, setup, and code path until the failing case is small enough to reason about.
+   - Run the loop until the failure is observed and matches the user's symptom, not a nearby one.
+   - Cut inputs, setup, and code path one at a time, re-running after each cut, until every remaining element is load-bearing.
    - Keep the original full-path repro for final verification.
-   - For regressions, find the last known-good commit or version; if the loop is scriptable, let `git bisect run` localize the causing change before instrumenting.
+   - For regressions, find the last known-good commit or version. Bisect only with a scriptable loop, in a clean temporary worktree, and only after the user approves it; `git bisect` moves HEAD and must not run in the user's working tree.
 
 4. **Hypothesise.**
-   - List 3-5 ranked, falsifiable hypotheses before changing code.
+   - List 3-5 ranked, falsifiable hypotheses and show the list before testing any; the user may re-rank it. Do not block on a reply.
    - Format each as: "If X is the cause, then Y should happen when Z changes."
-   - Test one hypothesis at a time.
+   - Test one hypothesis at a time. If three are falsified without narrowing the cause, return to minimise or zoom out instead of guessing on.
 
 5. **Instrument.**
    - Use debugger or REPL inspection when available.
@@ -42,15 +52,13 @@ No blind fixes. Build a feedback loop first, then use it to falsify hypotheses.
    - For performance bugs, measure first: baseline timing, profiler, query plan, or benchmark.
 
 6. **Fix.**
-   - Turn the minimised repro into a regression test when there is a correct seam.
-   - Watch it fail, apply the smallest fix, then watch it pass.
-   - If no correct test seam exists, document that as architecture risk.
+   - If a test seam already exists at the call site (see `tdd`), turn the minimised repro into a failing test first, watch it fail, apply the smallest fix, then watch it pass.
+   - If no such seam or test setup exists, do not build test infrastructure unprompted: fix, verify with the original loop, and record the missing seam as a gap.
 
 7. **Verify and clean up.**
-   - Re-run the minimised regression signal.
-   - Re-run the original feedback loop.
+   - Re-run the minimised signal and the original feedback loop.
    - Remove all tagged debug logs and throwaway harnesses.
-   - State the root cause, fix, commands run, and any unverified risk.
+   - State the root cause, fix, commands run, and any unverified risk. When a commit or PR is requested, name the confirmed hypothesis in its message.
 
 ## Guardrails
 
@@ -61,10 +69,3 @@ No blind fixes. Build a feedback loop first, then use it to falsify hypotheses.
 - Do not claim the bug is fixed unless the original loop was rerun or the gap is stated.
 
 <!-- Generated by scripts/generate-skill-adapters.py. Do not edit directly. -->
-## Harness Adapter
-
-### OpenCode
-
-- Use Plan for multi-step or risky work, Explore or Scout for read-only repository mapping, and Build for implementation.
-- Respect permission prompts and sandbox boundaries. Commands with mutation, network access, dependency changes, or broad output need explicit justification and bounded output.
-- Prefer targeted file reads, exact paths, and small diffs. Reports should include the mode used, changed files, checks run, and remaining risk.

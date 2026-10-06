@@ -1,6 +1,6 @@
 ---
 name: zoom-out
-description: Explain unfamiliar code in broader system context. Use when the user needs module relationships, callers, dependencies, risks, or safe next steps before editing.
+description: Maps unfamiliar code before editing, covering responsibility, callers, dependencies, data and state flow, external effects, risks, and the smallest safe next step. Use when asked how an area fits the system or before changing code you have not yet traced.
 category: architecture
 risk: low
 targets: codex, opencode, claude, cursor
@@ -9,7 +9,9 @@ related: diagnose
 
 # Zoom Out
 
-Give the map before changing code.
+Give the map before changing code. Read-only: do not edit files.
+
+Done when: callers and dependencies are cited as file:line and the next action names exact files.
 
 ## Process
 
@@ -19,10 +21,12 @@ Give the map before changing code.
 4. Note constraints from tests, docs, config, APIs, storage, or deployment.
 5. Identify risks and safe next steps.
 
+Stop once callers, dependencies, and the next action are cited; do not widen into a redesign or a full-repo survey.
+
 ## Output
 
 - Local responsibility.
-- Upstream callers and downstream dependencies.
+- Upstream callers and downstream dependencies, as file:line.
 - Relevant data or state flow.
 - Risk points.
 - Smallest safe next action.
@@ -32,6 +36,4 @@ Give the map before changing code.
 
 ### Cursor Agent
 
-- Keep this skill as short task context for Agent mode.
-- Stay scoped to the open workspace and requested files. Global setup guidance must not write project `.cursor/rules`; `.mdc` files remain templates unless the user explicitly asks for project rules.
-- Use targeted search, edits, and terminal checks. Report changed files and verification results.
+- Cursor User Rules are installed manually and may be absent: keep secrets out of output and report verification evidence regardless.

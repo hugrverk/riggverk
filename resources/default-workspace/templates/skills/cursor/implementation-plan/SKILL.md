@@ -1,6 +1,6 @@
 ---
 name: implementation-plan
-description: Create small verifiable implementation slices with exact files, steps, commands, and risks. Use before multi-step or cross-file work. Does not implement—pair with `minimal-implementation` for the patch.
+description: Breaks multi-step or cross-file work into small, independently verifiable slices with exact files, steps, commands, and risks, without editing code. Use when changes span several files or layers, migrations, or unclear scope. Execute slices with minimal-implementation.
 category: planning
 risk: low
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,10 @@ related: context-budget
 # Implementation Plan
 
 Make the plan clear enough for a coding agent with no project memory to execute safely; optimize for small diffs, verification, and low rework.
+
+Scale to the task: for one or two files, a short list (goal, files, verification) is enough; use the full Output sections only for multi-slice or high-risk work.
+
+Done when: every slice has an owner file list and a falsifying verification command, and unknowns are listed as blockers instead of assumptions.
 
 ## Process
 
@@ -67,6 +71,4 @@ Make the plan clear enough for a coding agent with no project memory to execute 
 
 ### Cursor Agent
 
-- Keep this skill as short task context for Agent mode.
-- Stay scoped to the open workspace and requested files. Global setup guidance must not write project `.cursor/rules`; `.mdc` files remain templates unless the user explicitly asks for project rules.
-- Use targeted search, edits, and terminal checks. Report changed files and verification results.
+- Cursor User Rules are installed manually and may be absent: keep secrets out of output and report verification evidence regardless.

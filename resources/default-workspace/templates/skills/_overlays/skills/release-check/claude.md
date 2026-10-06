@@ -2,6 +2,7 @@
 context: fork
 agent: verifier
 background: false
+allowed-tools: Bash(git status *) Bash(git log *) Bash(git diff *) Bash(head *) Bash(tail *)
 ---
 ### Claude Release Check
 

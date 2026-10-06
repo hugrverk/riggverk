@@ -64,3 +64,4 @@ Read-only git commands are allowed. Do not perform state-changing git operations
 ## Final report
 Implementation: Changed, Verified, Not verified, Risk, Next.
 Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
+A skill's `## Output` lists content to cover, not a replacement format: keep these headings and fold the skill's items into them.
