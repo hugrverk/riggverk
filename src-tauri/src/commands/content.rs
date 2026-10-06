@@ -460,8 +460,23 @@ fn doc_backup_path(
         .and_then(|n| n.to_str())
         .ok_or_else(|| "invalid target file name".to_string())?;
     let backup_dir = root.join("docs").join(format!("{}-{}", safe_id, timestamp));
-    std::fs::create_dir_all(&backup_dir).map_err(|e| format!("create backup dir error: {}", e))?;
+    crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&backup_dir)
+        .map_err(|e| format!("create backup dir error: {}", e))?;
     Ok(backup_dir.join(file_name))
+}
+
+/// Writes the pre-save copy of a doc into the directory `doc_backup_path`
+/// created. The file is owner-only (0600 on unix).
+fn write_doc_backup(backup_path: &Path, existing: &str) -> Result<(), String> {
+    let backup_dir = backup_path
+        .parent()
+        .ok_or_else(|| "backup write error: backup path has no parent".to_string())?;
+    crate::safe_filesystem::write_private_new_regular_file_synced(
+        backup_path,
+        existing.as_bytes(),
+        backup_dir,
+    )
+    .map_err(|e| format!("backup write error: {}", e))
 }
 
 pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<PathBuf, String> {
@@ -561,7 +576,7 @@ fn save_doc_at_root(
     }
 
     let backup_path = doc_backup_path(&resolved_id, &target_path, custom_backup_root)?;
-    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+    write_doc_backup(&backup_path, &existing)?;
 
     write_workspace_file(root, &target_path, content)?;
 
@@ -843,6 +858,32 @@ mod tests {
         let _ = fs::remove_dir_all(&backup_root);
 
         assert_eq!(saved, "# new\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_doc_backup_is_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let root = temp_root("save-private");
+        let backup_root = temp_root("save-private-backup");
+        write_file(&root, "README.md", "# old\n");
+
+        save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root)).expect("save");
+
+        let docs = backup_root.join("docs");
+        assert_eq!(mode_of(&docs), 0o700);
+        let backup_dirs: Vec<_> = fs::read_dir(&docs)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(backup_dirs.len(), 1);
+        assert_eq!(mode_of(&backup_dirs[0]), 0o700);
+        let backup_file = backup_dirs[0].join("README.md");
+        assert_eq!(mode_of(&backup_file), 0o600);
+        assert_eq!(fs::read_to_string(&backup_file).unwrap(), "# old\n");
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
     }
 
     #[test]
@@ -1689,8 +1730,7 @@ mod tests {
             }
 
             let backup_path = doc_backup_path(target_id, &target_path, custom_backup_root)?;
-            std::fs::write(&backup_path, &existing)
-                .map_err(|e| format!("backup write error: {}", e))?;
+            write_doc_backup(&backup_path, &existing)?;
 
             std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
 
@@ -1749,8 +1789,7 @@ mod tests {
         }
 
         let backup_path = doc_backup_path("agent-template", &target_path, custom_backup_root)?;
-        std::fs::write(&backup_path, &existing)
-            .map_err(|e| format!("backup write error: {}", e))?;
+        write_doc_backup(&backup_path, &existing)?;
 
         std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
 
@@ -2051,7 +2090,7 @@ pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
     }
 
     let backup_path = doc_backup_path("agent-template", &target_path, None)?;
-    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+    write_doc_backup(&backup_path, &existing)?;
 
     write_workspace_file(&root, &target_path, &content)?;
 
@@ -2225,8 +2264,7 @@ pub fn save_opencode_config_source(
             &target_path,
             None,
         )?;
-        std::fs::write(&backup_path, &existing)
-            .map_err(|e| format!("backup write error: {}", e))?;
+        write_doc_backup(&backup_path, &existing)?;
 
         write_workspace_file(&root, &target_path, &content)?;
 
@@ -2399,7 +2437,7 @@ pub fn save_agent_source(filename: String, content: String) -> Result<ActionResu
     }
 
     let backup_path = doc_backup_path(&format!("agent-{}", filename), &path, None)?;
-    std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+    write_doc_backup(&backup_path, &existing)?;
 
     write_workspace_file(&root, &path, &content)?;
 
@@ -2843,7 +2881,7 @@ mod agent_metadata_tests {
                 &target_path,
                 custom_backup_root,
             )?;
-            fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
+            write_doc_backup(&backup_path, &existing)?;
             fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
             return Ok(ActionResult::new(
                 true,

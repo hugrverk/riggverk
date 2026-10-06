@@ -60,13 +60,13 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     let dir = root.join("setup").join(transaction_id);
     // The backup root lives under the app-data dir, which may not exist yet
     // on a fresh install (or after an app identifier change).
-    crate::safe_filesystem::create_root_directory_all_no_symlinks(&root)?;
-    crate::safe_filesystem::create_directory_all_no_symlinks(&dir, &root)?;
+    crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&root)?;
+    crate::safe_filesystem::create_private_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
 
 fn write_synced_backup(path: &Path, raw: &[u8], backup_dir: &Path) -> Result<(), String> {
-    crate::safe_filesystem::write_new_regular_file_synced(path, raw, backup_dir)
+    crate::safe_filesystem::write_private_new_regular_file_synced(path, raw, backup_dir)
 }
 
 fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
@@ -3600,6 +3600,41 @@ mod tests {
         assert_eq!(record.hash, crate::stable_digest::bytes(&installed));
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn setup_transaction_backups_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let env = TempSetupEnv::new("private-backups");
+        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(first.success, "{}", first.message);
+
+        // Age the installed file so the next apply backs it up before replacing it.
+        let dest = env.home.join(".codex/AGENTS.md");
+        fs::write(&dest, "older-codex").unwrap();
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state.artifacts.iter_mut() {
+            record.hash = crate::stable_digest::bytes(b"older-codex");
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let second =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(second.success, "{}", second.message);
+
+        let txn_dir = env.setup_root().join(&second.transaction_id);
+        assert_eq!(mode_of(&txn_dir), 0o700);
+        assert_eq!(mode_of(&txn_dir.join("manifest.json")), 0o600);
+        assert_eq!(mode_of(&txn_dir.join("artifacts")), 0o700);
+        let backup = fs::read_dir(txn_dir.join("artifacts"))
+            .unwrap()
+            .next()
+            .expect("artifact backup")
+            .unwrap()
+            .path();
+        assert_eq!(mode_of(&backup), 0o600);
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "older-codex");
+    }
+
     // ── Failure injection and removal safety ──
 
     /// Restores permissions on drop so a failed assertion cannot leave an
@@ -3784,8 +3819,10 @@ mod tests {
 
     #[test]
     fn gate_requested_surfaces_still_rejects_disabled_harness() {
-        let mut settings = crate::settings::AppSettings::default();
-        settings.enabled_harness_ids = vec![crate::agent_targets::HarnessId::Claude];
+        let settings = crate::settings::AppSettings {
+            enabled_harness_ids: vec![crate::agent_targets::HarnessId::Claude],
+            ..Default::default()
+        };
         let err = gate_requested_surfaces(vec![SetupSurfaceId::CodexRules], &settings)
             .expect_err("disabled harness");
         assert!(err.contains("Harness disabled"), "error: {err}");

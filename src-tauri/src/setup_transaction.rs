@@ -1460,7 +1460,11 @@ pub fn persist_manifest_atomic(
         serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {e}"))?;
     let _: ArtifactTransactionManifest =
         serde_json::from_str(&json).map_err(|e| format!("validate manifest json: {e}"))?;
-    crate::safe_filesystem::write_regular_file_atomic(path, json.as_bytes(), allowlisted_root)?;
+    crate::safe_filesystem::write_private_regular_file_atomic(
+        path,
+        json.as_bytes(),
+        allowlisted_root,
+    )?;
     let read_back = fs::read_to_string(path).map_err(|e| format!("re-read manifest: {e}"))?;
     let parsed: ArtifactTransactionManifest =
         serde_json::from_str(&read_back).map_err(|e| format!("parse re-read manifest: {e}"))?;
@@ -1493,13 +1497,17 @@ pub fn backup_artifact(
         home
     };
     if dest.is_dir() {
-        crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path, backup_dir)
+        crate::safe_filesystem::copy_private_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     } else {
         reject_symlink_parent_chain(&dest, source_root, "backup source file")?;
-        crate::safe_filesystem::copy_regular_file_no_symlinks(&dest, &backup_path, backup_dir)
-            .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
+        crate::safe_filesystem::copy_private_regular_file_no_symlinks(
+            &dest,
+            &backup_path,
+            backup_dir,
+        )
+        .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     }
     Ok(Some(rel))

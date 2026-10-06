@@ -140,9 +140,9 @@ fn backup_file_before_write(path: &Path, label: &str) -> Result<(), String> {
     let backup_dir = dest
         .parent()
         .ok_or_else(|| format!("backup destination has no parent: {}", dest.display()))?;
-    crate::safe_filesystem::create_directory_all_no_symlinks(&root, &root)?;
-    crate::safe_filesystem::create_directory_all_no_symlinks(backup_dir, &root)?;
-    crate::safe_filesystem::copy_regular_file_no_symlinks(path, &dest, &root)
+    crate::safe_filesystem::create_private_directory_all_no_symlinks(&root, &root)?;
+    crate::safe_filesystem::create_private_directory_all_no_symlinks(backup_dir, &root)?;
+    crate::safe_filesystem::copy_private_regular_file_no_symlinks(path, &dest, &root)
         .map_err(|e| format!("backup {}: {e}", path.display()))?;
     Ok(())
 }
@@ -707,6 +707,37 @@ mod tests {
             profile_root.parent().unwrap_or(profile_root).to_path_buf(),
             profile_root.to_path_buf(),
         )
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cursor_backups_are_owner_only() {
+        use crate::test_env::guard;
+        use std::os::unix::fs::PermissionsExt;
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let _lock = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let base = temp_root("private-backup");
+        let backups = base.join("backups");
+        unsafe { std::env::set_var("AGENT_WORKSPACE_BACKUP_DIR", &backups) };
+        let source = base.join("mcp.json");
+        fs::write(&source, "{}").unwrap();
+
+        backup_file_before_write(&source, "cursor-mcp").expect("backup");
+
+        assert_eq!(mode_of(&backups), 0o700);
+        let stamp_dir = fs::read_dir(&backups)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        assert_eq!(mode_of(&stamp_dir), 0o700);
+        assert_eq!(mode_of(&stamp_dir.join("cursor-mcp")), 0o700);
+        let backup_file = stamp_dir.join("cursor-mcp").join("mcp.json");
+        assert_eq!(mode_of(&backup_file), 0o600);
+        assert_eq!(fs::read_to_string(&backup_file).unwrap(), "{}");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]

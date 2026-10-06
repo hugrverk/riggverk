@@ -133,13 +133,13 @@ fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> 
 /// the root itself may be missing several levels deep — e.g. the app-data
 /// backup root on a fresh install where `Application Support/<bundle-id>`
 /// has never been created.
+#[cfg(test)]
 pub fn create_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> {
     create_root_directory_all_with(root, false)
 }
 
 /// Like `create_root_directory_all_no_symlinks`; every directory it creates is
 /// owner-only (0700 on unix). For backup roots.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn create_private_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> {
     create_root_directory_all_with(root, true)
 }
@@ -190,6 +190,7 @@ fn create_root_directory_all_with(root: &Path, private: bool) -> Result<(), Stri
     Ok(())
 }
 
+#[cfg(test)]
 pub fn create_directory_all_no_symlinks(
     path: &Path,
     allowlisted_root: &Path,
@@ -199,7 +200,6 @@ pub fn create_directory_all_no_symlinks(
 
 /// Like `create_directory_all_no_symlinks`; every directory it creates is
 /// owner-only (0700 on unix). For backup directories.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn create_private_directory_all_no_symlinks(
     path: &Path,
     allowlisted_root: &Path,
@@ -268,7 +268,6 @@ pub fn write_regular_file_atomic(
 }
 
 /// Like `write_regular_file_atomic`; a new file is owner-only (0600 on unix).
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn write_private_regular_file_atomic(
     path: &Path,
     content: &[u8],
@@ -331,6 +330,7 @@ fn write_regular_file_atomic_with(
     result
 }
 
+#[cfg(test)]
 pub fn write_new_regular_file_synced(
     path: &Path,
     content: &[u8],
@@ -340,7 +340,6 @@ pub fn write_new_regular_file_synced(
 }
 
 /// Like `write_new_regular_file_synced`; the file is owner-only (0600 on unix).
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn write_private_new_regular_file_synced(
     path: &Path,
     content: &[u8],
@@ -380,7 +379,6 @@ pub fn copy_dir_no_symlinks(src: &Path, dst: &Path, allowlisted_root: &Path) -> 
 
 /// Like `copy_dir_no_symlinks`; created directories are 0700 and copied files
 /// 0600 on unix. For backup trees.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn copy_private_dir_no_symlinks(
     src: &Path,
     dst: &Path,
@@ -509,7 +507,6 @@ pub fn copy_regular_file_no_symlinks(
 
 /// Like `copy_regular_file_no_symlinks`; a new destination and its missing
 /// parents are owner-only (0600/0700 on unix). For backup files.
-#[cfg_attr(not(test), allow(dead_code))]
 pub fn copy_private_regular_file_no_symlinks(
     src: &Path,
     dst: &Path,
