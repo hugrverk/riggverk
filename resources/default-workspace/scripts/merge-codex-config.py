@@ -42,6 +42,34 @@ def strip_inline_comment(text: str) -> str:
     return text.rstrip()
 
 
+def split_top_level(text: str) -> list[str]:
+    """Split a TOML array/inline-table body on commas outside strings and brackets."""
+    parts: list[str] = []
+    depth = 0
+    in_double = False
+    escape = False
+    start = 0
+    for i, ch in enumerate(text):
+        if in_double:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_double = False
+        elif ch == '"':
+            in_double = True
+        elif ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
 def parse_compat_value(raw: str) -> Any:
     value = strip_inline_comment(raw).strip()
     if not value:
@@ -61,9 +89,15 @@ def parse_compat_value(raw: str) -> Any:
     if value == "false":
         return False
     if value.startswith("[") and value.endswith("]"):
-        return []
+        return [parse_compat_value(item) for item in split_top_level(value[1:-1])]
     if value.startswith("{") and value.endswith("}"):
-        return {}
+        table: dict[str, Any] = {}
+        for item in split_top_level(value[1:-1]):
+            if "=" not in item:
+                raise ValueError(f"invalid inline table entry: {item!r}")
+            key, raw_item = item.split("=", 1)
+            assign_compat_value(table, key.strip(), parse_compat_value(raw_item))
+        return table
     try:
         return int(value, 10)
     except ValueError:

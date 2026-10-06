@@ -1,0 +1,104 @@
+/* ── output pane: `❯ command`, a status line, `── stdout ──`, then the text ──
+   Markup lives in components/TerminalOutput.tsx and OutputPane.tsx. Glyphs sit in `.g` cells; nothing
+   depends on white-space: pre outside the output text itself. */
+
+.out { padding: 0 10px; }
+
+.tui-cmdline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.tui-cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  color: var(--text-heading);
+}
+
+.tui-when {
+  margin-left: auto;
+  padding-left: 14px;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+
+.tui-caret {
+  display: inline-block;
+  width: 0.6em;
+  height: 1em;
+  align-self: center;
+  background: var(--accent);
+  animation: tui-caret-blink 1s steps(1) infinite;
+}
+
+@keyframes tui-caret-blink {
+  50% { opacity: 0; }
+}
+
+.tui-statusline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tui-bar {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+.tui-bar-rule {
+  flex: 1;
+  height: 0;
+  margin-left: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.tui-out {
+  margin: 0;
+  overflow-x: auto;
+  font: inherit;
+  color: var(--text);
+  white-space: pre;
+}
+
+.tui-noout {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+.tui-idle {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
+.tui-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.tui-progress .terminal-activity { margin-top: 0; }
+
+.tui-progress-label { color: var(--text-muted); }
+
+/* A static, dim row when the loader is idle. */
+.terminal-activity-idle span {
+  height: 5px !important;
+  background: rgba(var(--accent-rgb), 0.18) !important;
+  transition: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tui-caret { animation: none; }
+}
+
+[data-reduce-motion="true"] .tui-caret { animation: none; }

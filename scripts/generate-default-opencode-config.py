@@ -19,24 +19,25 @@ import json
 import os
 import sys
 
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+# Permission composition lives in opencode_policy_compose.py (shared with the agent
+# adapters); the workspace-shipped generate-opencode-config.py is its standalone twin.
+from opencode_policy_compose import (  # noqa: E402
+    build_base_permission,
+    unknown_policy_keys,
+)
+
 REPO_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 BASE_PATH = os.path.join(REPO_ROOT, "resources", "default-workspace", "templates", "opencode.base.json")
 POLICY_PATH = os.path.join(REPO_ROOT, "resources", "default-workspace", "templates", "opencode.policy.json")
 SNAPSHOT_PATH = os.path.join(REPO_ROOT, "resources", "default-workspace", "templates", "opencode.json")
 
-# Stable permission key order (matching the original hand-maintained ordering)
-PERMISSION_KEY_ORDER = [
-    "*", "external_directory", "doom_loop", "todowrite",
-    "read", "glob", "grep", "list", "lsp",
-    "question", "webfetch", "websearch", "task",
-    "skill", "bash", "edit",
-]
-
 
 def load_json(path, label):
     """Load and validate a strict JSON file."""
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -46,82 +47,13 @@ def load_json(path, label):
         sys.exit(1)
 
 
-def build_read_section(policy):
-    """Build read permission section from policy data."""
-    read_policy = policy.get("read", {})
-    result = {}
-    result["*"] = read_policy.get("default", "allow")
-    for pattern in read_policy.get("deny", []):
-        result[pattern] = "deny"
-    for pattern in read_policy.get("allow_override", []):
-        result[pattern] = "allow"
-    return result
-
-
-def build_edit_section(policy):
-    """Build edit permission section from policy data."""
-    edit_policy = policy.get("edit", {})
-    result = {}
-    result["*"] = edit_policy.get("default", "ask")
-    for pattern in edit_policy.get("allow", []):
-        result[pattern] = "allow"
-    for pattern in edit_policy.get("ask", []):
-        result[pattern] = "ask"
-    for pattern in edit_policy.get("deny", []):
-        result[pattern] = "deny"
-    for pattern in edit_policy.get("allow_override", []):
-        result[pattern] = "allow"
-    return result
-
-
-def build_bash_section(policy):
-    """Build bash permission section from policy data, expanding secret content denies."""
-    bash_policy = policy.get("bash", {})
-    result = {}
-
-    # Default
-    result["*"] = bash_policy.get("default", "ask")
-
-    # Explicit allow entries (preserving order from policy)
-    for pattern in bash_policy.get("allow", []):
-        result[pattern] = "allow"
-
-    # Explicit ask entries
-    for pattern in bash_policy.get("ask", []):
-        result[pattern] = "ask"
-
-    # Explicit deny entries
-    for pattern in bash_policy.get("deny", []):
-        result[pattern] = "deny"
-
-    # Generated secret content denies: for each command × each pattern
-    commands = bash_policy.get("secret_content_commands", [])
-    patterns = bash_policy.get("secret_content_patterns", [])
-    for cmd in commands:
-        for pat in patterns:
-            key = f"{cmd} {pat}"
-            result[key] = "deny"
-
-    return result
-
-
-def build_permission(policy):
-    """Build the full permission section with deterministic key ordering."""
-    perm = {}
-
-    for key in PERMISSION_KEY_ORDER:
-        if key == "read":
-            perm["read"] = build_read_section(policy)
-        elif key == "edit":
-            perm["edit"] = build_edit_section(policy)
-        elif key == "bash":
-            perm["bash"] = build_bash_section(policy)
-        elif key == "skill":
-            perm["skill"] = policy.get("skill", {"*": "allow"})
-        elif key in policy.get("top_level", {}):
-            perm[key] = policy["top_level"][key]
-
-    return perm
+# Non-permission keys emitted first, in this order. Unknown keys from
+# opencode.base.json follow them; "permission" is generated from the policy.
+BASE_KEY_ORDER = [
+    "$schema", "share", "autoupdate", "snapshot",
+    "model", "small_model", "default_agent",
+    "provider", "mcp", "compaction", "watcher",
+]
 
 
 def generate_config():
@@ -129,20 +61,26 @@ def generate_config():
     base = load_json(BASE_PATH, "opencode.base.json")
     policy = load_json(POLICY_PATH, "opencode.policy.json")
 
+    unknown = unknown_policy_keys(policy)
+    if unknown:
+        print(f"ERROR: unknown keys in opencode.policy.json would be dropped: {', '.join(unknown)}", file=sys.stderr)
+        sys.exit(1)
+    if "permission" in base:
+        print("ERROR: opencode.base.json must not define 'permission'; it is generated from opencode.policy.json", file=sys.stderr)
+        sys.exit(1)
+
     config = {}
 
-    # Base keys in stable order
-    base_keys = [
-        "$schema", "share", "autoupdate", "snapshot",
-        "model", "small_model", "default_agent",
-        "provider", "mcp", "compaction", "watcher",
-    ]
-    for key in base_keys:
+    # Base keys in stable order, then any unknown keys in file order
+    for key in BASE_KEY_ORDER:
         if key in base:
             config[key] = base[key]
+    for key, value in base.items():
+        if key not in config:
+            config[key] = value
 
     # Build and append permission
-    config["permission"] = build_permission(policy)
+    config["permission"] = build_base_permission(policy)
 
     return config
 
@@ -155,7 +93,7 @@ def serialize(config):
 def read_snapshot():
     """Read current snapshot file, returns (string, parsed dict) or None."""
     try:
-        with open(SNAPSHOT_PATH, "r") as f:
+        with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
             content = f.read()
         parsed = json.loads(content)
         return content, parsed
@@ -199,7 +137,7 @@ def cmd_write():
     # Validate by re-parsing
     json.loads(generated_str)
 
-    with open(SNAPSHOT_PATH, "w") as f:
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8", newline="\n") as f:
         f.write(generated_str)
 
     print(f"Written: {SNAPSHOT_PATH}")

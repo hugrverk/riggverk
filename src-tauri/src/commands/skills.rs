@@ -4,6 +4,7 @@ use std::path::Path;
 use super::content::DocumentContent;
 use super::process::{run_cmd, ActionResult};
 use super::workspace::{path_arg, workspace_root};
+use crate::path_safety::reject_symlink;
 use crate::skills_install::discover_workspace_skills;
 
 #[derive(Serialize)]
@@ -17,18 +18,6 @@ pub struct SkillSummary {
     pub(crate) risk: String,
     pub(crate) targets: Vec<String>,
     pub(crate) related: Vec<String>,
-}
-
-fn reject_symlink_path(path: &Path, label: &str) -> Result<(), String> {
-    if !path.exists() {
-        return Ok(());
-    }
-    let meta = std::fs::symlink_metadata(path)
-        .map_err(|e| format!("cannot inspect {label} {}: {e}", path.display()))?;
-    if meta.file_type().is_symlink() {
-        return Err(format!("refusing symlink {label}: {}", path.display()));
-    }
-    Ok(())
 }
 
 fn skill_summary_from_path(
@@ -109,7 +98,7 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
     let skills_dir = root.join("skills");
     let mut discovered: Vec<SkillSummary> = Vec::new();
 
-    reject_symlink_path(&skills_dir, "skills root")?;
+    reject_symlink(&skills_dir, "skills root")?;
 
     let entries =
         std::fs::read_dir(&skills_dir).map_err(|e| format!("cannot read skills dir: {}", e))?;
@@ -132,7 +121,7 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
         let entry_path = entry.path();
         let entry_name = entry.file_name().to_string_lossy().into_owned();
         let root_skill_md = entry_path.join("SKILL.md");
-        reject_symlink_path(&root_skill_md, "skill file")?;
+        reject_symlink(&root_skill_md, "skill file")?;
         if root_skill_md.is_file() {
             if has_deeper_skill_md(&entry_path) {
                 return Err(format!(
@@ -169,7 +158,7 @@ pub(crate) fn discover_skills(root: &Path) -> Result<Vec<SkillSummary>, String> 
             let sub_path = sub.path();
             let sub_name = sub.file_name().to_string_lossy().into_owned();
             let grouped_skill_md = sub_path.join("SKILL.md");
-            reject_symlink_path(&grouped_skill_md, "skill file")?;
+            reject_symlink(&grouped_skill_md, "skill file")?;
             if grouped_skill_md.is_file() {
                 discovered.push(skill_summary_from_path(
                     root,
@@ -304,6 +293,20 @@ mod tests {
             .expect("system clock before unix epoch")
             .as_nanos();
         std::env::temp_dir().join(format!("agent-workspace-{name}-{nonce}"))
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_skill_file_symlink_is_refused() {
+        let root = temp_root("dangling-skill-md");
+        let skill_dir = root.join("skills/group/skill");
+        fs::create_dir_all(&skill_dir).expect("create skill dir");
+        std::os::unix::fs::symlink(root.join("missing.md"), skill_dir.join("SKILL.md"))
+            .expect("create dangling symlink");
+        let result = discover_skills(&root);
+        let _ = fs::remove_dir_all(&root);
+        let err = result.err().expect("dangling symlink must not be skipped");
+        assert!(err.contains("refusing symlink skill file"), "{err}");
     }
 
     fn write_skill(root: &Path, rel: &str, name: &str) {

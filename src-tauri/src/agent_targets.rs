@@ -1,6 +1,8 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+use crate::setup_lifecycle::SetupSurfaceId;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum HarnessId {
@@ -45,17 +47,6 @@ pub struct AgentSyncTarget {
     pub kind: TargetKind,
     pub target_rel: &'static str,
     pub source_rel: &'static str,
-}
-
-impl AgentSyncTarget {
-    pub fn script_flag(&self) -> Option<&'static str> {
-        match self.id {
-            "codex_rules" => Some("--codex"),
-            "opencode_rules" => Some("--opencode"),
-            "claude_rules" => Some("--claude"),
-            _ => None,
-        }
-    }
 }
 
 #[derive(Serialize)]
@@ -175,18 +166,42 @@ pub fn editable_config_targets() -> Vec<AgentSyncTarget> {
         .collect()
 }
 
-pub fn default_enabled_rule_ids() -> Vec<String> {
-    vec!["codex_rules".into(), "opencode_rules".into()]
-}
-
-pub fn default_enabled_config_ids() -> Vec<String> {
-    vec!["opencode_config".into()]
-}
+/// Targets that stay OFF until the user opts in. `codex_config` rewrites the
+/// user's approval and sandbox posture in `~/.codex/config.toml`.
+const DEFAULT_DISABLED_TARGET_IDS: &[&str] = &["codex_config"];
 
 pub fn default_enabled_ids() -> Vec<String> {
-    let mut ids = default_enabled_rule_ids();
-    ids.extend(default_enabled_config_ids());
-    ids
+    targets()
+        .iter()
+        .map(|target| target.id)
+        .filter(|id| !DEFAULT_DISABLED_TARGET_IDS.contains(id))
+        .map(str::to_string)
+        .collect()
+}
+
+/// Setup surfaces gated by a target toggle. Skills surfaces and the workspace
+/// bundle are not target-gated.
+pub fn target_surfaces(target_id: &str) -> &'static [SetupSurfaceId] {
+    match target_id {
+        "codex_rules" => &[SetupSurfaceId::CodexRules],
+        "codex_agents" => &[SetupSurfaceId::CodexAgents],
+        "codex_config" => &[SetupSurfaceId::CodexConfig],
+        "opencode_rules" => &[SetupSurfaceId::OpenCodeRules],
+        "opencode_agents" => &[SetupSurfaceId::OpenCodeAgents],
+        "opencode_config" => &[SetupSurfaceId::OpenCodeConfig],
+        "claude_rules" => &[SetupSurfaceId::ClaudeRules],
+        "claude_agents" => &[SetupSurfaceId::ClaudeAgents],
+        "cursor_setup" => &[SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
+        _ => &[],
+    }
+}
+
+/// The target whose toggle gates `surface`, or `None` for ungated surfaces.
+pub fn surface_target_id(surface: SetupSurfaceId) -> Option<&'static str> {
+    targets()
+        .iter()
+        .map(|target| target.id)
+        .find(|id| target_surfaces(id).contains(&surface))
 }
 
 pub fn normalize_enabled_ids(raw: &[String]) -> Vec<String> {
@@ -222,94 +237,6 @@ pub fn target_harness(target_id: &str) -> Option<HarnessId> {
 
 pub fn home_dir() -> Result<PathBuf, String> {
     crate::cursor_profile_paths::resolve_user_home()
-}
-
-pub enum ConfigScript {
-    OpenCode,
-    Codex,
-}
-
-#[allow(dead_code)]
-pub struct ConfigSyncTarget {
-    pub id: &'static str,
-    pub label: &'static str,
-    pub source_rel: &'static str,
-    pub target_rel: &'static str,
-    pub script: ConfigScript,
-}
-
-impl ConfigSyncTarget {
-    pub fn script_rel_and_args(&self, mode: ConfigScriptMode) -> (&'static str, Vec<&'static str>) {
-        match self.script {
-            ConfigScript::Codex => (
-                "scripts/install-codex-config.sh",
-                match mode {
-                    ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
-                    ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
-                },
-            ),
-            ConfigScript::OpenCode => (
-                "scripts/install-opencode-config.sh",
-                opencode_install_args(mode, OpenCodeInstallScope::Full),
-            ),
-        }
-    }
-}
-
-#[derive(Clone, Copy)]
-pub enum ConfigScriptMode {
-    Diff,
-    Apply,
-}
-
-#[derive(Clone, Copy)]
-pub enum OpenCodeInstallScope {
-    Full,
-    #[allow(dead_code)]
-    AgentsOnly,
-    ConfigOnly,
-}
-
-pub fn runtime_agents_install_args(mode: ConfigScriptMode) -> Vec<&'static str> {
-    match mode {
-        ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
-        ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
-    }
-}
-
-pub fn opencode_install_args(
-    mode: ConfigScriptMode,
-    scope: OpenCodeInstallScope,
-) -> Vec<&'static str> {
-    let mut args = match mode {
-        ConfigScriptMode::Diff => vec!["--quiet", "--diff"],
-        ConfigScriptMode::Apply => vec!["--quiet", "--apply"],
-    };
-    match scope {
-        OpenCodeInstallScope::Full => {}
-        OpenCodeInstallScope::AgentsOnly => args.push("--agents-only"),
-        OpenCodeInstallScope::ConfigOnly => args.push("--config-only"),
-    }
-    args
-}
-
-pub fn config_sync_targets() -> Vec<ConfigSyncTarget> {
-    vec![
-        ConfigSyncTarget {
-            id: "opencode_config",
-            label: "opencode config",
-            source_rel: "templates/opencode.json",
-            target_rel: ".config/opencode/opencode.json",
-            script: ConfigScript::OpenCode,
-        },
-        ConfigSyncTarget {
-            id: "codex_config",
-            label: "codex config",
-            source_rel: "templates/codex/config.toml",
-            target_rel: ".codex/config.toml",
-            script: ConfigScript::Codex,
-        },
-    ]
 }
 
 #[derive(Serialize, Clone)]
@@ -405,6 +332,62 @@ mod tests {
     }
 
     #[test]
+    fn default_enabled_ids_cover_every_target_except_codex_config() {
+        let mut expected: Vec<String> = targets()
+            .iter()
+            .map(|t| t.id.to_string())
+            .filter(|id| id != "codex_config")
+            .collect();
+        let mut actual = default_enabled_ids();
+        expected.sort();
+        actual.sort();
+        assert_eq!(actual, expected);
+        for id in [
+            "codex_rules",
+            "codex_agents",
+            "opencode_rules",
+            "opencode_agents",
+            "opencode_config",
+            "claude_rules",
+            "claude_agents",
+            "cursor_setup",
+        ] {
+            assert!(actual.contains(&id.to_string()), "{id} must default ON");
+        }
+    }
+
+    #[test]
+    fn every_target_gates_surfaces_of_its_own_harness() {
+        for target in targets() {
+            let surfaces = target_surfaces(target.id);
+            assert!(!surfaces.is_empty(), "{} gates no surface", target.id);
+            for surface in surfaces {
+                assert_eq!(
+                    surface.harness(),
+                    Some(target.harness),
+                    "{} gates a surface of another harness: {surface:?}",
+                    target.id
+                );
+                assert_eq!(surface_target_id(*surface), Some(target.id));
+            }
+        }
+        assert!(target_surfaces("unknown_target").is_empty());
+    }
+
+    #[test]
+    fn skills_and_workspace_surfaces_are_not_target_gated() {
+        for surface in [
+            SetupSurfaceId::ClaudeSkills,
+            SetupSurfaceId::OpenCodeSkills,
+            SetupSurfaceId::CodexSkills,
+            SetupSurfaceId::CursorSkills,
+            SetupSurfaceId::WorkspaceBundle,
+        ] {
+            assert_eq!(surface_target_id(surface), None, "{surface:?}");
+        }
+    }
+
+    #[test]
     fn claude_agents_use_native_adapter_source() {
         let target = targets()
             .into_iter()
@@ -414,45 +397,14 @@ mod tests {
     }
 
     #[test]
-    fn opencode_config_in_config_sync_targets() {
-        let targets = config_sync_targets();
-        let opencode = targets.iter().find(|t| t.id == "opencode_config");
-        assert!(
-            opencode.is_some(),
-            "opencode_config must be in config_sync_targets"
-        );
-        let t = opencode.unwrap();
-        assert_eq!(t.source_rel, "templates/opencode.json");
-        assert_eq!(t.target_rel, ".config/opencode/opencode.json");
-    }
-
-    #[test]
-    fn cursor_setup_not_in_config_sync_targets() {
-        let targets = config_sync_targets();
-        assert!(targets.iter().all(|t| t.id != "cursor_setup"));
-    }
-
-    #[test]
-    fn config_sync_target_ids_are_unique() {
-        let targets = config_sync_targets();
-        let mut seen = HashSet::new();
-        for t in &targets {
-            assert!(
-                seen.insert(t.id),
-                "Duplicate config sync target id '{}'",
-                t.id
-            );
-        }
-    }
-
-    #[test]
-    fn config_sync_paths_are_relative_and_contained() {
-        for t in config_sync_targets() {
-            assert!(!t.source_rel.starts_with('/'));
-            assert!(!t.target_rel.starts_with('/'));
-            assert!(!t.source_rel.contains(".."));
-            assert!(!t.target_rel.contains(".."));
-        }
+    fn opencode_config_target_syncs_generated_opencode_json() {
+        let targets = config_targets();
+        let opencode = targets
+            .iter()
+            .find(|t| t.id == "opencode_config")
+            .expect("opencode_config must be a config target");
+        assert_eq!(opencode.source_rel, "templates/opencode.json");
+        assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");
     }
 
     #[test]
@@ -562,22 +514,6 @@ mod tests {
         .into_iter()
         .collect();
         assert_eq!(ids, expected, "targets() must contain exactly 9 known IDs");
-    }
-
-    #[test]
-    fn opencode_install_args_supports_scoped_sync() {
-        assert_eq!(
-            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::AgentsOnly),
-            vec!["--quiet", "--diff", "--agents-only"]
-        );
-        assert_eq!(
-            opencode_install_args(ConfigScriptMode::Apply, OpenCodeInstallScope::ConfigOnly),
-            vec!["--quiet", "--apply", "--config-only"]
-        );
-        assert_eq!(
-            opencode_install_args(ConfigScriptMode::Diff, OpenCodeInstallScope::Full),
-            vec!["--quiet", "--diff"]
-        );
     }
 
     #[test]

@@ -33,10 +33,6 @@ export interface SkillSummary {
   category: string; risk: string; targets: string[]; related: string[];
 }
 
-export interface AgentSourceSummary {
-  id: string; title: string; path: string; exists: boolean;
-}
-
 export interface AgentMetadataEntry {
   role: string;
   summary: string;
@@ -68,21 +64,6 @@ export const INSTALL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
 
-export interface InstallSkillsRequest {
-  agents: string[]; skills: string[]; dry_run: boolean;
-}
-
-export interface SkillSyncHealthEntry {
-  name: string; group: string; source_path: string; target_path: string;
-  supported: boolean; state: string; next_action: string;
-}
-
-export interface SkillsSyncHealth {
-  expected_count: number; synced_count: number; missing_count: number;
-  diverged_count: number;
-  skills: SkillSyncHealthEntry[];
-}
-
 export type InstallationState = "not_installed" | "update_available" | "current" | "conflict" | "unavailable";
 
 export interface InstallationCounts {
@@ -94,6 +75,80 @@ export interface SurfaceInstallationStatus {
   label: string;
   state: InstallationState;
   detail: string;
+  /** Block details; present for the rules surfaces only. */
+  rules?: RulesStatus;
+}
+
+/** The surfaces that hold a rules file with the managed base block. */
+export type RulesSurfaceId = "claude_rules" | "codex_rules" | "open_code_rules";
+
+/** `absent` (no file), `block` (managed markers), `legacy` (no markers) or `malformed` (markers cannot be split). */
+export type RulesLayout = "absent" | "block" | "legacy" | "malformed";
+
+/** Why the app leaves a rules file alone. */
+export type RulesConflictReason = "base_block_edited" | "legacy_diverged" | "malformed_markers";
+
+export type RulesMalformedReason =
+  | "not_utf8"
+  | "too_large"
+  | "duplicate_begin"
+  | "duplicate_end"
+  | "missing_end"
+  | "missing_begin"
+  | "end_before_begin";
+
+export interface RulesStatus {
+  layout: RulesLayout;
+  /** Non-blank user lines around the block; kept on every base update. */
+  refinement_lines: number;
+  /** The backend omits both reasons when they do not apply. */
+  conflict_reason?: RulesConflictReason;
+  malformed_reason?: RulesMalformedReason;
+  /** The user chose to manage this file: it is reported as base updates available, never as a conflict. */
+  user_managed: boolean;
+}
+
+/** `update`: the installed file against the update. `edits`: the closest shipped base against the installed file. */
+export type RulesDiffMode = "update" | "edits";
+
+export interface RulesDiffView {
+  surface: RulesSurfaceId;
+  mode: RulesDiffMode;
+  from_label: string;
+  to_label: string;
+  /** False when a regular update would refuse this file (the diff is informational) or there is nothing to compare. */
+  applicable: boolean;
+  note: string | null;
+  compared_base: string | null;
+  added: number;
+  removed: number;
+  /** The diff was cut at 64 KB. */
+  truncated: boolean;
+  /** Unified diff; empty when both sides are equal. */
+  diff: string;
+}
+
+export type RulesConversionOrigin = "legacy_file" | "edited_block";
+
+export interface RulesConversionPreview {
+  surface: RulesSurfaceId;
+  /** False when there is nothing to convert or the file cannot be converted. */
+  applicable: boolean;
+  reason: string | null;
+  origin: RulesConversionOrigin | null;
+  compared_base: string | null;
+  compared_base_changed_lines: number | null;
+  /** Sections kept below the END marker. */
+  moved_sections: string[];
+  /** Base sections the file lacked; they return with the new base. */
+  removed_sections: string[];
+  /** The complete file apply writes. */
+  result: string;
+  /** Unified diff of the installed file against `result`. */
+  diff: string;
+  diff_truncated: boolean;
+  plan_fingerprint: string | null;
+  preview_token: string | null;
 }
 
 export interface InstallationStatus {
@@ -130,6 +185,9 @@ export interface AppSettings {
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
   revision?: number;
+  // Marks which enabled-target defaults the file was written under. The backend always emits it and
+  // re-stamps it on every save, so UI-built drafts may omit it.
+  target_defaults_version?: number;
 }
 
 export interface GetSettingsResponse {
@@ -327,50 +385,6 @@ export interface WorkspaceDiagnostics {
   missing_bundled_sample: string[];
 }
 
-export interface DefaultWorkspaceFile {
-  path: string;
-  exists: boolean;
-}
-
-export interface DefaultWorkspaceCategory {
-  label: string;
-  count: number;
-  files: DefaultWorkspaceFile[];
-}
-
-export interface DefaultWorkspaceSummary {
-  root_label: string;
-  description: string;
-  categories: DefaultWorkspaceCategory[];
-}
-
-export interface CreateWorkspacePlan {
-  ok: boolean;
-  status: string;
-  target_path: string;
-  reason: string;
-  warnings: string[];
-  planned_files: string[];
-}
-
-export interface WorkspaceSetupEvaluation {
-  candidate_path: string;
-  setup_phase: string;
-  plan: CreateWorkspacePlan;
-  missing_files_to_add: string[];
-}
-
-export interface CreateWorkspaceResult {
-  success: boolean;
-  status: string;
-  target_path: string;
-  created_dirs: string[];
-  copied_files: string[];
-  skipped_files: string[];
-  warnings: string[];
-  message: string;
-}
-
 export interface ActionResult {
   success: boolean;
   action: string;
@@ -541,9 +555,10 @@ export interface PlannedOperation {
   surface: SetupSurfaceId;
   kind: OperationKind;
   summary: string;
-  details: string[];
-  conflict_description: string | null;
-  manual_step: string | null;
+  // The backend omits these keys when empty (serde skip_serializing_if), so they are `undefined` on the wire.
+  details?: string[];
+  conflict_description?: string | null;
+  manual_step?: string | null;
 }
 
 export interface SetupPlan {
@@ -554,8 +569,9 @@ export interface SetupPlan {
   summary: string;
   has_pending_changes: boolean;
   is_blocked: boolean;
-  plan_fingerprint: string | null;
-  preview_token: string | null;
+  // Omitted by the backend when nothing is pending.
+  plan_fingerprint?: string | null;
+  preview_token?: string | null;
 }
 
 export interface UninstallItem {

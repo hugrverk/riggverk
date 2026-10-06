@@ -105,6 +105,9 @@ def compose_markdown(header_rel: str, body: str) -> str:
 # ── Frontmatter validation for generated Markdown adapters ──
 
 CLAUDE_READONLY_TOOLS = frozenset(["Read", "Grep", "Glob"])
+CLAUDE_READONLY_ROLES = frozenset(["repo-scout", "inspector", "sentinel"])
+CLAUDE_AGENT_MODELS = frozenset(["haiku", "sonnet"])
+CLAUDE_PERMISSION_MODES = frozenset(["default", "acceptEdits", "auto", "dontAsk", "bypassPermissions", "plan"])
 
 
 def _parse_frontmatter_fields(text: str) -> dict[str, str]:
@@ -167,15 +170,45 @@ def _validate_markdown_frontmatter(
         if required not in fields:
             errors.append(f"{rel}: missing required frontmatter field '{required}'")
 
+    # Header values are written as plain YAML scalars; ': ' or ' #' would corrupt them.
+    for key in ("name", "description"):
+        value = fields.get(key, "")
+        if ": " in value or " #" in value or value.endswith(":"):
+            errors.append(f"{rel}: frontmatter '{key}' contains ': ' or ' #' and is not a valid plain YAML scalar")
+
     # Claude-specific checks
     if harness == "claude":
         # No unsupported 'readonly' field
         if "readonly" in fields:
             errors.append(f"{rel}: Claude adapter must not contain unsupported 'readonly' frontmatter")
 
-        # Tool boundary checks for specific roles
-        if role_name in ("repo-scout", "inspector", "sentinel"):
-            tools = _frontmatter_tools(fields)
+        # Every Claude agent declares an explicit tool list; a missing list means all tools.
+        tools = _frontmatter_tools(fields)
+        disallowed = _frontmatter_disallowed(fields)
+        if not tools:
+            errors.append(f"{rel}: Claude agent '{role_name}' must declare an explicit non-empty 'tools:' list")
+
+        # Subagents pin a cost-appropriate model (keeps judgment in the main thread).
+        model = fields.get("model", "")
+        if model not in CLAUDE_AGENT_MODELS:
+            errors.append(
+                f"{rel}: Claude agent '{role_name}' must pin model to one of "
+                f"{', '.join(sorted(CLAUDE_AGENT_MODELS))}, found {model or 'none'!r}"
+            )
+
+        # permissionMode, when present, must be a known value and never bypass permissions.
+        permission_mode = fields.get("permissionMode")
+        if permission_mode is not None:
+            if permission_mode not in CLAUDE_PERMISSION_MODES:
+                errors.append(
+                    f"{rel}: invalid permissionMode {permission_mode!r}; "
+                    f"expected one of {', '.join(sorted(CLAUDE_PERMISSION_MODES))}"
+                )
+            elif permission_mode == "bypassPermissions":
+                errors.append(f"{rel}: permissionMode must not be bypassPermissions")
+
+        # Read-only roles: Read/Grep/Glob only, plan mode, no shell. Reviewers receive the diff in the prompt.
+        if role_name in CLAUDE_READONLY_ROLES:
             unexpected = tools - CLAUDE_READONLY_TOOLS
             if unexpected:
                 errors.append(
@@ -183,30 +216,16 @@ def _validate_markdown_frontmatter(
                     f"({', '.join(sorted(CLAUDE_READONLY_TOOLS))}), "
                     f"but has: {', '.join(sorted(unexpected))}"
                 )
+            if permission_mode != "plan":
+                errors.append(f"{rel}: read-only role '{role_name}' must set permissionMode: plan")
 
+        # Verifier may use Bash for checks but must not be able to write or edit.
         if role_name == "verifier":
-            tools = _frontmatter_tools(fields)
-            disallowed = _frontmatter_disallowed(fields)
-            can_write = "Write" in tools or "Edit" in tools
-            write_disallowed = "Write" in disallowed or "Edit" in disallowed
-            if can_write and write_disallowed:
-                # Both in tools and disallowedTools is inconsistent
-                pass
-            if not can_write and not write_disallowed:
-                # Neither in tools nor disallowedTools -> not explicitly prevented
-                # But the role should have tool access for bash-based verification
-                pass
-            # Verifier may have Bash in tools, which is acceptable for running commands
-            # The key requirement: verifier should not have unrestricted Write/Edit
-            # Having them in disallowedTools is the correct safe state
-            if "Write" in tools and "Write" not in disallowed:
-                errors.append(
-                    f"{rel}: verifier must not have direct Write access without disallowedTools guard"
-                )
-            if "Edit" in tools and "Edit" not in disallowed:
-                errors.append(
-                    f"{rel}: verifier must not have direct Edit access without disallowedTools guard"
-                )
+            for tool in ("Write", "Edit"):
+                if tool in tools:
+                    errors.append(f"{rel}: verifier must not list {tool} in tools")
+                if tool not in disallowed:
+                    errors.append(f"{rel}: verifier must list {tool} in disallowedTools")
 
     return errors
 

@@ -2,58 +2,71 @@
 
 ## What this is
 
-An agent workspace — a directory of docs, skills, templates, and scripts. The Agent Workspace app installs a runtime copy at `~/.config/agent-workspace`, displays its contents, and syncs templates to agent tool folders.
+A directory of docs, skills, templates, and scripts, plus the Agent Workspace app that installs it. The app puts a runtime copy at `~/.config/agent-workspace`, shows what is installed where, and installs rules, agents, skills, and config into Codex, OpenCode, Cursor, and Claude Code. Every write is reviewed first.
 
-## What the app is and is not
+Requirements: Python 3 on `PATH` (config merges and generators). The optional CLI scripts also need Bash on macOS or Linux.
 
-The app helps you:
+## What the app does and does not do
 
-- Browse and edit workspace docs, skills, templates, and rules
-- Preview sync operations (dry-run/diff) before writing files
-- Sync agent rules and safe config targets to tool folders from harness pages
-- Install skills per tool from harness pages
-- Run release verification when the workspace includes release-check
+It does:
 
-The app does not:
+- Install and update the workspace and each harness from its bundled copy, after showing a plan.
+- Keep your own text in rules files, and your own keys in config files.
+- Back up what it overwrites, and roll back the last install.
+- Let you edit workspace docs, rules, agents, and configs in the Library, and build prompts.
 
-- Write files automatically on launch — use **install** or **repair** on Workspace
-- Ask you to choose an arbitrary folder in normal UI
-- Manage GitHub auth or create remotes
-- Encrypt workspace contents
-- Run agents or change tool config from Brain Setup alone
+It does not:
 
-## Mental model
+- Write anything on launch or without a confirmation.
+- Install what you edit in the workspace. Harnesses always receive the bundled version.
+- Manage Git, GitHub auth, or Claude, Codex, or Cursor settings, logins, and trust.
+- Encrypt workspace contents or run agents.
 
-- **The app** manages install, display, and sync operations.
-- **The workspace** is plain-text data at `~/.config/agent-workspace` (or `AGENT_WORKSPACE_PATH` for dev/test).
-- Nothing is overwritten without an explicit action.
+## First install
 
-## Safe first steps
+1. Start the app and press `1` (Workspace). If it says `setup needed`, the cursor is on `workspace`.
+2. Press `u`. A plan table lists every file to create. Nothing is written yet.
+3. Press `d` to expand a row, `j` and `k` to move. `n` or Escape cancels.
+4. Press `y` to apply. A backup and a transaction are recorded first; the output pane shows the result.
+5. Press `2`, `3`, `4`, or `5` for Codex, OpenCode, Cursor, or Claude. Check the targets on the left (Space toggles one), then press `u` and `y` to install that harness.
 
-1. Open **Workspace** — if missing, click **install**.
-2. Open **Library** — read this doc, Concepts, and guides.
-3. Read [CONCEPTS.md](CONCEPTS.md).
-4. Open a harness page (e.g. Codex) — run **Diff Rules** before **Sync Rules**.
-5. Review `templates/global-agent-rules.md` and `templates/opencode.json`.
+`p` previews without any way to apply. `:update --all` reviews the workspace and every enabled harness in one plan; `:preview --all` only looks.
 
-## What to click
+Fresh settings enable every target except `codex_config`, which rewrites your Codex approval and sandbox settings. Turn it on from the Codex page when you want it.
 
-- **Workspace**: install, repair, verify, terminal output
-- **Harness pages**: per-tool diff/sync and skills install
-- **Library**: edit docs, rules, skills, agents, configs; Brain Setup copy block
-- **Settings**: appearance, global text size, and colors
+## Essential keys
 
-## Dry-run before apply
+| Key | Action |
+| --- | --- |
+| `1`-`9` | Go to a tab (workspace, codex, opencode, cursor, claude, library, repo, prompts, settings) |
+| `h` `l` | Previous or next pane |
+| `j` `k` | Move in a list |
+| `u` | Review and apply an install or update |
+| `p` | Preview only |
+| `y` `n` | Apply or cancel in the review |
+| `z` | Roll back the last transaction (output pane) |
+| `:` | Command line (`:help`, `:update codex`, `:rollback`) |
+| `?` | Every key and command |
 
-Always preview before apply. Scripts use `--dry-run`, `--diff`, then `--apply`.
+The full list is in [USING_THE_APP.md](USING_THE_APP.md#keyboard-reference).
 
-## Workspace ownership
+## When a file is a conflict
 
-Edit freely; version with Git if you want. Do not store secrets, tokens, or `.env` values in workspace files.
+A file that is yours, not the app's, is never overwritten. The plan shows it as `preserved, skipped`, and `y` applies only the safe rows. For a rules file (`CLAUDE.md`, `AGENTS.md`) you choose between **Convert**, **Leave as is**, and a diff. For anything else, move or delete your copy and install again. Details in [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
 
-## Next steps
+## Your own rules
 
-- [CONCEPTS.md](CONCEPTS.md)
-- [USING_THE_APP.md](USING_THE_APP.md)
-- [GIT_VERSIONING.md](GIT_VERSIONING.md)
-- Dry-run sync from a harness page before any apply
+Rules files hold the app's base between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE` markers. Write your own instructions below the END marker. They are kept on every update and override the base where they conflict. Do not edit inside the block. See [AGENT_RULES.md](AGENT_RULES.md).
+
+## Where things are
+
+- Workspace: `~/.config/agent-workspace` (change it in Settings, or `AGENT_WORKSPACE_PATH`).
+- Backups: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux, `%APPDATA%\ai.agentworkspace.app\backups` on Windows. `B` on the Workspace page opens the folder.
+- Settings file: `settings.json` in the app support folder, the parent of the default backups folder.
+
+## Next
+
+- [CONCEPTS.md](CONCEPTS.md) - the mental model
+- [USING_THE_APP.md](USING_THE_APP.md) - every page and key
+- [WORKFLOWS.md](WORKFLOWS.md) - recipes
+- [TROUBLESHOOTING.md](TROUBLESHOOTING.md)

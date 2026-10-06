@@ -1,6 +1,6 @@
 ---
 name: screenshot-review
-description: Review static UI screenshots for layout, hierarchy, and responsive risks. Diagnose only—does not choose visual direction or implement unless explicitly asked (`frontend-design`).
+description: Diagnoses supplied UI screenshots for hierarchy, spacing, overflow, alignment, and responsive risks and returns a ranked patch plan without editing files. Use when the user shares screenshots or images of a UI to critique. Not for live-browser verification (browser-qa).
 category: frontend
 risk: low
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: frontend-design, browser-qa, accessibility-review
 # Screenshot Review
 
 Turn screenshots into a bounded diagnosis and patch plan; do not jump straight to code.
+
+Done when: each issue has a root-cause hypothesis, a likely file, and a verification viewport.
 
 ## Process
 

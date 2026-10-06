@@ -8,6 +8,7 @@ Do not duplicate workflow instructions across all surfaces.
 
 - Use bundled Cursor agents, skills, User Rules, and MCP through native setup; Agent Workspace does not own project rules or Auto Review.
 - Manual Auto Review stays user-controlled; do not assume the app can trigger it.
+- Stay scoped to the open workspace and requested files; do not write project `.cursor/rules` unless the user asks.
 
 ## Dev server lifecycle
 

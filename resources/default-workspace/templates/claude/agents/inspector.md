@@ -1,8 +1,7 @@
 ---
 name: inspector
-description: Review changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, and pattern mismatch. Read-only.
+description: Use proactively after non-trivial implementation and before commit to review changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, and pattern mismatch. Read-only with no shell, so include the diff or changed-file list in the prompt.
 model: sonnet
-skills: [minimal-implementation]
 tools: Read, Grep, Glob
 permissionMode: plan
 maxTurns: 12

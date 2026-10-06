@@ -2,7 +2,7 @@
 
 ## Source template
 
-The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly.
+The runtime OpenCode configuration is `templates/opencode.json`. This is a **generated snapshot** — do not edit it directly. The app installs from its bundled copy of these templates; edits to the workspace copy change what the Library shows, not what OpenCode receives.
 
 The maintainable source files are:
 
@@ -15,11 +15,13 @@ To regenerate the snapshot after changing a source file:
 python3 scripts/generate-opencode-config.py --write
 ```
 
-To verify the snapshot is current (used by CI/release checks):
+To verify the snapshot is current (used by CI/release checks and by the OpenCode runtime pane, which runs the bundled copy of the generator):
 
 ```
 python3 scripts/generate-opencode-config.py --check
 ```
+
+Python 3 must be on `PATH`.
 
 The template defines:
 
@@ -35,16 +37,16 @@ Playwright MCP is defined in `templates/opencode.base.json` and included in the 
 
 Defaults:
 
-- Package: `@playwright/mcp@0.0.48` (override with `PLAYWRIGHT_MCP_VERSION` when installing)
-- MCP config: `~/.config/playwright-mcp/config.json` from `templates/playwright-mcp.config.json`
+- Package: `@playwright/mcp@0.0.48` (the CLI script accepts `PLAYWRIGHT_MCP_VERSION`)
+- MCP config: `~/.config/playwright-mcp/config.json` (or `PLAYWRIGHT_MCP_CONFIG_PATH`) from `templates/playwright-mcp.config.json`
 - Browser: **Chromium** via MCP config (`browserName: chromium`, `isolated: true`) — not the Chrome channel
-- Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux)
+- Binaries: shared cache (`~/Library/Caches/ms-playwright` on macOS, `$XDG_CACHE_HOME/ms-playwright` on Linux, `~/AppData/Local/ms-playwright` on Windows; `PLAYWRIGHT_BROWSERS_PATH` overrides)
 
 On macOS, Playwright’s Chromium bundle may still show **Google Chrome for Testing.app** inside the cache. That is expected and is not the same as requiring Chrome Stable/Beta/Dev/Canary.
 
 Do **not** set `PLAYWRIGHT_BROWSERS_PATH=0`. That forces project-local browsers under `node_modules` and defeats the shared-cache default.
 
-`./scripts/install-opencode-config.sh --apply` installs the Playwright MCP config and renders user-specific paths into the OpenCode MCP entry. Use `--apply-cursor` to merge only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; backups are written first).
+The app installs the Playwright MCP config with the OpenCode config target and renders user-specific paths into the OpenCode MCP entry. The Cursor page merges only the `playwright` server into `~/.cursor/mcp.json` (existing servers are preserved; existing files are backed up first). The CLI equivalent is `./scripts/install-opencode-config.sh --apply` (`--apply-cursor` for Cursor).
 
 Security note: Playwright MCP provides privileged browser automation tools. Its documented default tool list includes an unsafe code execution tool, and no stable server-side option to disable only that tool is currently documented. Do not use it on private or authenticated sites unless the runtime agent permissions and prompt scope are appropriate. Isolated sessions do not persist logged-in browser state between runs.
 
@@ -85,7 +87,7 @@ Role boundaries:
 - **verifier** — exact non-destructive test/lint/build/cargo commands only; no source edit, git staging/commits, fix modes, snapshot updates, or arbitrary trailing arguments. Project-owned verification scripts are a deliberate trust boundary: they may create disposable build/test artifacts, but the Verifier profile must not receive arbitrary arguments beyond the reviewed exact command forms.
 - **scribe** — documentation paths only (`README.md`, `docs/**`, and related doc files); no source-code edit or mutating bash
 
-`scripts/validate_opencode_permissions.py` asserts the composed contract. `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters.
+In the app source repository, `scripts/validate_opencode_permissions.py` asserts the composed contract and `scripts/generate-agent-adapters.py --check` verifies deterministic generated adapters; neither ships in the installed workspace.
 
 The default template is conservative:
 
@@ -103,40 +105,39 @@ The default template is conservative:
 
 ## TUI config
 
-`templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It is synced by the same install script as the main config.
+`templates/tui.json` controls TUI-only preferences such as theme, diff layout, mouse, scroll behavior, and leader timeout. It installs to `~/.config/opencode/tui.json` with the OpenCode config target.
 
 ## Managed-key merge
 
-`./scripts/install-opencode-config.sh --apply` does **not** overwrite the entire installed `opencode.json`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved.
+Install does **not** overwrite the entire installed `opencode.json`, in the app or in `./scripts/install-opencode-config.sh --apply`. It merges only the keys listed in `metadata/opencode-managed-keys.json` (model, permissions, Playwright MCP, compaction, watcher, and related settings). User `provider` blocks and non-Playwright MCP servers are preserved. Managed keys are reset to the bundled values on every update, so keep your own settings in unmanaged keys.
 
 Legacy `~/.config/opencode/agents/scout.md` files from the pre-rename Agent Workspace scout are removed on agent sync when frontmatter is `name: scout`.
 
-## Sync workflow
+## Install workflow
 
-1. Review the template at `templates/opencode.json` and `templates/tui.json`
-2. Run `--diff` to see managed-key differences between the bundled template and your installed config
-3. Run `--apply` to write the templates to `~/.config/opencode/opencode.json` and `~/.config/opencode/tui.json`
+1. Open the OpenCode tab. The `opencode_config`, `opencode_agents`, and `opencode_rules` targets decide what is installed (Space toggles).
+2. Press `p` to preview or `u` to review, then `y` to apply.
+3. The install merges the managed keys into `~/.config/opencode/opencode.json`, writes `tui.json`, the Playwright MCP config, and `~/.config/opencode/agents/*.md`. Extra agent files already in that directory are not deleted.
 
-The sync validates both JSON files before applying. It also installs agent files to `~/.config/opencode/agents/*.md`. Extra existing runtime agent files in that directory are not deleted.
-
-A backup is created before overwriting if the current config or agent files differ.
+Both JSON files are validated before and after the write. Existing files that differ are backed up first. The CLI equivalent is `./scripts/install-opencode-config.sh --diff` then `--apply` (dry-run by default).
 
 ## App-level model override
 
-The Agent Workspace app provides a **Model selection** UI in the OpenCode tab. When you select a model and small model, the selection is stored in an app-level override file:
+The OpenCode tab has a model override in its runtime pane (`e` edit, `s` save, `m` reload the model list). A saved selection is stored in an app-level override file:
 
 | Platform | Override file |
 |----------|---------------|
 | macOS | `~/Library/Application Support/ai.agentworkspace.app/opencode-model-selection.json` |
 | Linux | `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/opencode-model-selection.json` |
+| Windows | `%APPDATA%\ai.agentworkspace.app\opencode-model-selection.json` |
 
 This file is **not** part of the workspace templates. It is an app-preference file stored outside the workspace source tree. It does not affect `templates/opencode.base.json` or `templates/opencode.json`.
 
-The override takes effect when you click **Install/Update** in the OpenCode tab. The installed `~/.config/opencode/opencode.json` receives the selected model and small_model from the override file. Workspace templates are not mutated.
+The override takes effect on the next OpenCode install (`u`, `y`). The installed `~/.config/opencode/opencode.json` receives the selected model and small_model from the override file. Workspace templates are not mutated.
 
 If no override exists, the workspace `templates/opencode.base.json` values are used as the source of truth for model selection.
 
-To remove the override, delete the file for your platform and run Install/Update:
+To remove the override, delete the file for your platform and install again:
 
 | Platform | Command |
 |----------|---------|
@@ -147,6 +148,4 @@ The override is safe to delete; the app falls back to workspace template default
 
 ## Customization
 
-The template is user-editable. Add project-specific allow/deny rules as needed. Avoid weakening the secret-file deny rules in the `read`, `edit`, and `bash` sections.
-
-Agent files are also user-editable. Customize agent behavior by editing `agents/*.md` files in the workspace.
+Installed OpenCode config and agent files are yours to change, but managed keys and bundled agent files are reset or reported as conflicts on update. For lasting changes use unmanaged keys (providers, other MCP servers) and your own agent files with different names in `~/.config/opencode/agents/`. To change the bundled policy or agents for everyone, edit the sources (`templates/opencode.base.json`, `templates/opencode.policy.json`, `agent-specs/`) in the app source repository. Avoid weakening the secret-file deny rules in the `read`, `edit`, and `bash` sections.

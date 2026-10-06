@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 import sys
 from pathlib import Path
 
@@ -24,8 +25,17 @@ def fail(message: str) -> None:
 
 def main() -> None:
     content_rs = (ROOT / "src-tauri/src/commands/content.rs").read_text(encoding="utf-8")
+    # Compare against the constant's own list, not "appears anywhere in the file".
+    block = re.search(
+        r"const FORBIDDEN_LIBRARY_DOC_REL_PATHS:\s*&\[&str\]\s*=\s*&\[(.*?)\];",
+        content_rs,
+        re.DOTALL,
+    )
+    if not block:
+        fail("content.rs FORBIDDEN_LIBRARY_DOC_REL_PATHS constant not found")
+    listed = set(re.findall(r'"([^"]+)"', block.group(1)))
     for rel in FORBIDDEN_DOC_REL_PATHS:
-        if rel not in content_rs:
+        if rel not in listed:
             fail(f"content.rs FORBIDDEN_LIBRARY_DOC_REL_PATHS missing {rel}")
     print("Curated Library doc exclusions verified")
 

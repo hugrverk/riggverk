@@ -1,11 +1,13 @@
 import { INSTALL_AGENTS, type AppSettings } from "../types";
+import { DEFAULT_ENABLED_TARGET_IDS } from "./harnessInstallation";
 
 /** AppSettings persistence state for autosave UI. */
 export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
 
 export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
 
-export const DEFAULT_TARGET_IDS = ["codex_rules", "opencode_rules", "opencode_config"];
+/** Mirrors agent_targets::default_enabled_ids (registry order; codex_config stays opt-in). */
+export const DEFAULT_TARGET_IDS: string[] = [...DEFAULT_ENABLED_TARGET_IDS];
 export const DEFAULT_HARNESS_IDS = [...INSTALL_AGENTS];
 export const APP_FONT_SIZE_VALUES = ["small", "medium", "large", "extra-large"] as const;
 
@@ -19,13 +21,13 @@ export const APP_FONT_SIZE_LABELS: Record<AppSettings["app_font_size"], string> 
 export function appFontSizePx(size: AppSettings["app_font_size"]): string {
   switch (size) {
     case "small":
-      return "13px";
+      return "12px";
     case "large":
-      return "17px";
-    case "extra-large":
-      return "19px";
-    default:
       return "15px";
+    case "extra-large":
+      return "17px";
+    default:
+      return "13px";
   }
 }
 
@@ -97,14 +99,33 @@ export function themeColorDefaults(appearance: AppSettings["appearance"]): {
 } {
   switch (appearance) {
     case "light":
-      return { background: "#f5f5f5", foreground: "#1a1a1a" };
+      return { background: "#f7f6f2", foreground: "#1a1a1a" };
     case "dark":
-      return { background: "#212121", foreground: "#e0e0e0" };
+      return { background: "#121314", foreground: "#e4e4e0" };
     case "system":
       return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? { background: "#212121", foreground: "#e0e0e0" }
-        : { background: "#f5f5f5", foreground: "#1a1a1a" };
+        ? { background: "#121314", foreground: "#e4e4e0" }
+        : { background: "#f7f6f2", foreground: "#1a1a1a" };
   }
+}
+
+/**
+ * Accent when no override is set. Mirrors `--accent` in _tokens.scss (the dark `:root` block and the paper
+ * `[data-theme="light"]` block); settingsDraft.test.ts fails when they drift apart.
+ */
+const ACCENT_DEFAULTS = { dark: "#7fb7ff", light: "#0b5fa5" } as const;
+
+export function themeAccentDefault(appearance: AppSettings["appearance"]): string {
+  if (appearance === "light") return ACCENT_DEFAULTS.light;
+  if (appearance === "dark") return ACCENT_DEFAULTS.dark;
+  return window.matchMedia?.("(prefers-color-scheme: light)").matches ? ACCENT_DEFAULTS.light : ACCENT_DEFAULTS.dark;
+}
+
+/** Text colour for surfaces filled with the accent (active tab, mode badge, primary button). */
+export function inverseForeground(accentHex: string): string {
+  return contrastRatio(accentHex, "#ffffff") >= contrastRatio(accentHex, "#111111")
+    ? "#ffffff"
+    : "#111111";
 }
 
 export function hasPoorContrast(foreground: string | null, background: string | null): boolean {
@@ -125,9 +146,11 @@ export function applyThemeSettings(settings: AppSettings): void {
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
     root.style.setProperty("--accent", settings.accent_color);
     root.style.setProperty("--accent-rgb", hexToRgb(settings.accent_color));
+    root.style.setProperty("--inv-fg", inverseForeground(settings.accent_color));
   } else {
     root.style.removeProperty("--accent");
     root.style.removeProperty("--accent-rgb");
+    root.style.removeProperty("--inv-fg");
   }
 
   if (settings.background_color && THEME_HEX_RE.test(settings.background_color)) {

@@ -11,17 +11,9 @@ const toolSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardTool.
 const workSource = readRepoDashboard("src/tools/repoDashboard/RepoWorkWorkspace.tsx");
 const chartsSource = readRepoDashboard("src/tools/repoDashboard/RepoDashboardCharts.tsx");
 const activitySource = readRepoDashboard("src/tools/repoDashboard/RepoActivityInsights.tsx");
-const stylesSource = [
-  "src/styles/_tokens.scss",
-  "src/styles/_shell.scss",
-  "src/styles/_content.scss",
-  "src/styles/_settings-targets.scss",
-  "src/styles/_workspace-library.scss",
-  "src/styles/_tools-prompt.scss",
-  "src/styles/_repo-dashboard.scss",
-  "src/styles/_state-dialogs-terminal.scss",
-]
-  .map(readRepoDashboard)
+// Every partial that src/styles/index.scss pulls in, so the list cannot go stale.
+const stylesSource = [...readRepoDashboard("src/styles/index.scss").matchAll(/^@use "([^"]+)";/gm)]
+  .map(([, name]) => readRepoDashboard(`src/styles/_${name}.scss`))
   .join("\n");
 const rustSource = readRepoDashboard("src-tauri/src/commands/repo_dashboard.rs");
 
@@ -93,10 +85,10 @@ assert.ok(
   "recent activity must own a bounded scroll region",
 );
 assert.ok(
-  /\.repo-dashboard-overview-lower \.repo-dashboard-latest-content \{[^}]*overflow:\s*hidden/.test(
-    stylesSource,
-  ),
-  "latest change card must not scroll inside overview lower row",
+  // Clipping hid the lower rows of a long card (QA 2026-10); the pane body owns a bounded scroll instead.
+  /\.repo-dashboard-latest-body \{[^}]*overflow:\s*auto/.test(stylesSource) &&
+    !/\.repo-dashboard-overview-lower \.repo-dashboard-latest-content \{[^}]*overflow:\s*hidden/.test(stylesSource),
+  "latest change pane must scroll its body instead of clipping the card",
 );
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");

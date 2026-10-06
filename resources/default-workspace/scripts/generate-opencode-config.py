@@ -6,12 +6,15 @@ Reads templates/opencode.base.json (non-permission config) and
 templates/opencode.policy.json (compact policy) and produces the
 templates/opencode.json snapshot.
 
-Paths are relative to the workspace root (inferred from the script location
-under scripts/).
+Paths are relative to the workspace root: inferred from the script location
+under scripts/, or given with --root (the app runs its bundled copy of this
+script against the active workspace, so a script inside that workspace never
+runs).
 
 Usage:
   python3 scripts/generate-opencode-config.py --check   # verify snapshot is current
   python3 scripts/generate-opencode-config.py --write   # regenerate snapshot
+  python3 scripts/generate-opencode-config.py --root DIR --check|--write
   python3 scripts/generate-opencode-config.py --help    # this message
 
 Exit codes:
@@ -24,10 +27,22 @@ import os
 import sys
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-WORKSPACE_ROOT = os.path.abspath(os.path.join(SCRIPT_DIR, ".."))
-BASE_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.base.json")
-POLICY_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.policy.json")
-SNAPSHOT_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.json")
+WORKSPACE_ROOT = ""
+BASE_PATH = ""
+POLICY_PATH = ""
+SNAPSHOT_PATH = ""
+
+
+def set_workspace_root(root):
+    """Point the template paths at a workspace root."""
+    global WORKSPACE_ROOT, BASE_PATH, POLICY_PATH, SNAPSHOT_PATH
+    WORKSPACE_ROOT = os.path.abspath(root)
+    BASE_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.base.json")
+    POLICY_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.policy.json")
+    SNAPSHOT_PATH = os.path.join(WORKSPACE_ROOT, "templates", "opencode.json")
+
+
+set_workspace_root(os.path.join(SCRIPT_DIR, ".."))
 
 # Stable permission key order (matching the original hand-maintained ordering)
 PERMISSION_KEY_ORDER = [
@@ -37,11 +52,30 @@ PERMISSION_KEY_ORDER = [
     "skill", "bash", "edit",
 ]
 
+# Policy keys this generator understands; anything else would be silently dropped
+# from opencode.json, so it is rejected instead.
+POLICY_SECTION_KEYS = {
+    "top_level": None,
+    "skill": None,
+    "read": {"default", "deny", "allow_override"},
+    "edit": {"default", "allow", "ask", "deny", "allow_override"},
+    "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "role_profiles": None,
+}
+
+# Non-permission keys emitted first, in this order. Unknown keys from
+# opencode.base.json follow them; "permission" is generated from the policy.
+BASE_KEY_ORDER = [
+    "$schema", "share", "autoupdate", "snapshot",
+    "model", "small_model", "default_agent",
+    "provider", "mcp", "compaction", "watcher",
+]
+
 
 def load_json(path, label):
     """Load and validate a strict JSON file."""
     try:
-        with open(path, "r") as f:
+        with open(path, "r", encoding="utf-8") as f:
             return json.load(f)
     except FileNotFoundError:
         print(f"ERROR: {label} not found: {path}", file=sys.stderr)
@@ -126,7 +160,25 @@ def build_permission(policy):
         elif key in policy.get("top_level", {}):
             perm[key] = policy["top_level"][key]
 
+    # Unknown permission keys keep their policy order after the known ones.
+    for key, value in policy.get("top_level", {}).items():
+        if key not in PERMISSION_KEY_ORDER:
+            perm[key] = value
+
     return perm
+
+
+def unknown_policy_keys(policy):
+    """Return policy keys that build_permission would silently ignore."""
+    problems = []
+    for key, value in policy.items():
+        if key not in POLICY_SECTION_KEYS:
+            problems.append(key)
+            continue
+        allowed = POLICY_SECTION_KEYS[key]
+        if allowed is not None and isinstance(value, dict):
+            problems.extend(f"{key}.{sub}" for sub in value if sub not in allowed)
+    return problems
 
 
 def generate_config():
@@ -134,17 +186,23 @@ def generate_config():
     base = load_json(BASE_PATH, "opencode.base.json")
     policy = load_json(POLICY_PATH, "opencode.policy.json")
 
+    unknown = unknown_policy_keys(policy)
+    if unknown:
+        print(f"ERROR: unknown keys in opencode.policy.json would be dropped: {', '.join(unknown)}", file=sys.stderr)
+        sys.exit(1)
+    if "permission" in base:
+        print("ERROR: opencode.base.json must not define 'permission'; it is generated from opencode.policy.json", file=sys.stderr)
+        sys.exit(1)
+
     config = {}
 
-    # Base keys in stable order
-    base_keys = [
-        "$schema", "share", "autoupdate", "snapshot",
-        "model", "small_model", "default_agent",
-        "provider", "mcp", "compaction", "watcher",
-    ]
-    for key in base_keys:
+    # Base keys in stable order, then any unknown keys in file order
+    for key in BASE_KEY_ORDER:
         if key in base:
             config[key] = base[key]
+    for key, value in base.items():
+        if key not in config:
+            config[key] = value
 
     # Build and append permission
     config["permission"] = build_permission(policy)
@@ -160,7 +218,7 @@ def serialize(config):
 def read_snapshot():
     """Read current snapshot file, returns (string, parsed dict) or None."""
     try:
-        with open(SNAPSHOT_PATH, "r") as f:
+        with open(SNAPSHOT_PATH, "r", encoding="utf-8") as f:
             content = f.read()
         parsed = json.loads(content)
         return content, parsed
@@ -204,7 +262,7 @@ def cmd_write():
     # Validate by re-parsing
     json.loads(generated_str)
 
-    with open(SNAPSHOT_PATH, "w") as f:
+    with open(SNAPSHOT_PATH, "w", encoding="utf-8", newline="\n") as f:
         f.write(generated_str)
 
     print(f"Written: {SNAPSHOT_PATH}")
@@ -217,10 +275,19 @@ def cmd_help():
 
 
 def main():
-    if len(sys.argv) != 2:
+    args = sys.argv[1:]
+    if "--root" in args:
+        index = args.index("--root")
+        if index + 1 >= len(args):
+            print("--root requires a directory", file=sys.stderr)
+            sys.exit(1)
+        set_workspace_root(args[index + 1])
+        args = args[:index] + args[index + 2:]
+
+    if len(args) != 1:
         cmd_help()
 
-    arg = sys.argv[1]
+    arg = args[0]
     if arg == "--check":
         cmd_check()
     elif arg == "--write":

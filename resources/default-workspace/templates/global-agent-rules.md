@@ -1,7 +1,7 @@
 # Global Agent Rules
 
 ## Priority
-Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe.
+Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.
 
 ## Communication
 Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.
@@ -35,7 +35,6 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
-- WordPress or WooCommerce: `wordpress-woocommerce`, plus relevant generic implementation, QA, accessibility, security, or release skills.
 - Kretsverket editor or canvas: `kretsverket-editor-change`.
 - Kretsverket persistence or file compatibility: `kretsverket-file-compatibility`.
 - Kretsverket symbols: `kretsverket-symbol-system`.
@@ -64,3 +63,4 @@ Read-only git commands are allowed. Do not perform state-changing git operations
 ## Final report
 Implementation: Changed, Verified, Not verified, Risk, Next.
 Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
+A skill's `## Output` lists content to cover, not a replacement format: keep these headings and fold the skill's items into them.

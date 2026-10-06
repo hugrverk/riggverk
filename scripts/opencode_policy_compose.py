@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import re
 from pathlib import Path
 from typing import Any
 
@@ -29,8 +30,36 @@ PERMISSION_KEY_ORDER = [
     "edit",
 ]
 
+# Policy keys this composer understands. Anything else would be silently dropped
+# from the generated permission blocks, so it is rejected instead.
+POLICY_SECTION_KEYS: dict[str, set[str] | None] = {
+    "top_level": None,
+    "skill": None,
+    "read": {"default", "deny", "allow_override"},
+    "edit": {"default", "allow", "ask", "deny", "allow_override"},
+    "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "role_profiles": None,
+}
+
+
+def unknown_policy_keys(policy: dict[str, Any]) -> list[str]:
+    problems: list[str] = []
+    for key, value in policy.items():
+        if key not in POLICY_SECTION_KEYS:
+            problems.append(key)
+            continue
+        allowed = POLICY_SECTION_KEYS[key]
+        if allowed is not None and isinstance(value, dict):
+            problems.extend(f"{key}.{sub}" for sub in value if sub not in allowed)
+    return problems
+
+
 def load_policy() -> dict[str, Any]:
-    return json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    policy = json.loads(POLICY_PATH.read_text(encoding="utf-8"))
+    unknown = unknown_policy_keys(policy)
+    if unknown:
+        raise ValueError(f"unknown keys in opencode.policy.json would be dropped: {', '.join(unknown)}")
+    return policy
 
 
 def build_read_section(policy: dict[str, Any]) -> dict[str, str]:
@@ -116,6 +145,9 @@ def build_base_permission(policy: dict[str, Any]) -> dict[str, Any]:
             perm["skill"] = policy.get("skill", {"*": "allow"})
         elif key in policy.get("top_level", {}):
             perm[key] = policy["top_level"][key]
+    for key, value in policy.get("top_level", {}).items():
+        if key not in PERMISSION_KEY_ORDER:
+            perm[key] = value
     return perm
 
 
@@ -183,28 +215,51 @@ def _yaml_quote(value: str) -> str:
     return json.dumps(value)
 
 
+# Plain YAML 1.1/1.2 scalars that would be read back as something other than a string.
+_YAML_RESERVED_WORDS = {"true", "false", "yes", "no", "on", "off", "y", "n", "null", "~"}
+_PLAIN_YAML_KEY = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_PLAIN_YAML_NUMBER = re.compile(r"[-+]?[\d._]+([eE][-+]?\d+)?|0[xob][0-9a-fA-F_]+")
+_YAML_INDICATORS = "-?:,[]{}#&*!|>'\"%@`"
+
+
+def _yaml_key(key: str) -> str:
+    """Emit a mapping key; anything that is not a plain identifier is quoted (`*` is a YAML alias)."""
+    if _PLAIN_YAML_KEY.match(key) and key.lower() not in _YAML_RESERVED_WORDS:
+        return key
+    return _yaml_quote(key)
+
+
+def _yaml_scalar(value: Any) -> str:
+    """Emit a scalar value; strings that plain YAML would misparse are quoted."""
+    if not isinstance(value, str):
+        return str(value)
+    needs_quote = (
+        value == ""
+        or value != value.strip()
+        or value[0] in _YAML_INDICATORS
+        or ": " in value
+        or " #" in value
+        or value.endswith(":")
+        or any(ord(ch) < 32 for ch in value)
+        or value.lower() in _YAML_RESERVED_WORDS
+        or _PLAIN_YAML_NUMBER.fullmatch(value) is not None
+    )
+    return _yaml_quote(value) if needs_quote else value
+
+
 def permission_to_yaml(permission: dict[str, Any], indent: int = 0) -> str:
     lines: list[str] = []
     pad = "  " * indent
-    for key in PERMISSION_KEY_ORDER:
-        if key not in permission:
-            continue
+    known = [key for key in PERMISSION_KEY_ORDER if key in permission]
+    unknown = [key for key in permission if key not in PERMISSION_KEY_ORDER]
+    for key in known + unknown:
         value = permission[key]
         if isinstance(value, dict):
-            lines.append(f"{pad}{key}:")
+            lines.append(f"{pad}{_yaml_key(key)}:")
             for sub_key, sub_val in value.items():
-                lines.append(f"{pad}  {_yaml_quote(sub_key)}: {sub_val}")
+                lines.append(f"{pad}  {_yaml_quote(sub_key)}: {_yaml_scalar(sub_val)}")
         else:
-            lines.append(f"{pad}{key}: {value}")
-    for key, value in permission.items():
-        if key in PERMISSION_KEY_ORDER:
-            continue
-        if isinstance(value, dict):
-            lines.append(f"{pad}{key}:")
-            for sub_key, sub_val in value.items():
-                lines.append(f"{pad}  {_yaml_quote(sub_key)}: {sub_val}")
-        else:
-            lines.append(f"{pad}{key}: {value}")
+            lines.append(f"{pad}{_yaml_key(key)}: {_yaml_scalar(value)}")
     return "\n".join(lines) + "\n"
 
 
@@ -212,9 +267,9 @@ def compose_opencode_header(role_path: Path) -> str:
     role = json.loads(role_path.read_text(encoding="utf-8"))
     permission = compose_role_permission(role)
     lines = [
-        f"name: {role['name']}",
-        f"description: {role['description']}",
-        f"mode: {role['mode']}",
+        f"name: {_yaml_scalar(role['name'])}",
+        f"description: {_yaml_scalar(role['description'])}",
+        f"mode: {_yaml_scalar(role['mode'])}",
         f"temperature: {role['temperature']}",
         f"steps: {role['steps']}",
     ]

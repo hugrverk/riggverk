@@ -37,7 +37,6 @@ export PATH="$CARGO_HOME/bin:$PATH"
 WORKSPACE="$SMOKE_ROOT/workspace"
 step "prepare temp workspace"
 cp -R resources/default-workspace "$WORKSPACE"
-cp scripts/release-check.sh "$WORKSPACE/scripts/release-check.sh"
 export AGENT_WORKSPACE_PATH="$WORKSPACE"
 
 # Guard: refuse if harness env vars point outside smoke HOME
@@ -84,14 +83,31 @@ CARGO_BIN="$CARGO_HOME/bin/cargo"
 if [ ! -x "$CARGO_BIN" ]; then
   fail "cargo not found at $CARGO_BIN (set CARGO_HOME or install rust)"
 fi
+
+# cargo exits 0 when a test filter matches nothing, so a renamed or removed test
+# would pass silently. Run one filter and fail unless at least one test passed.
+run_cargo_smoke() {
+  local log="$SMOKE_ROOT/cargo-test.log" passed
+  if ! "$CARGO_BIN" test --locked "$@" >"$log" 2>&1; then
+    cat "$log" >&2
+    fail "cargo test $* failed"
+  fi
+  cat "$log"
+  passed="$(sed -n 's/^test result: ok\. \([0-9][0-9]*\) passed.*/\1/p' "$log" | awk '{ total += $1 } END { print total + 0 }')"
+  if [ "$passed" -lt 1 ]; then
+    fail "cargo test $* ran no tests (stale test filter?)"
+  fi
+  printf '  %s test(s) passed for: %s\n' "$passed" "$*"
+}
+
 (
   cd src-tauri
   export RUSTUP_HOME
   export CARGO_HOME
   export PATH="$CARGO_HOME/bin:$PATH"
-  "$CARGO_BIN" test smoke_runtime::tests::runtime_smoke_end_to_end -- --exact --nocapture
-  "$CARGO_BIN" test script_action_smoke::tests::harness_diff_actions_return_successful_previews -- --exact --nocapture
-  "$CARGO_BIN" test setup_lifecycle_smoke::tests -- --nocapture
+  # The smoke test is #[ignore]d so plain `cargo test` cannot pass it vacuously;
+  # it is run explicitly here, against the temp HOME and workspace above.
+  run_cargo_smoke smoke_runtime::tests::runtime_smoke_end_to_end -- --ignored --exact --nocapture
 )
 
 printf '\nsmoke-tauri-runtime passed\n'

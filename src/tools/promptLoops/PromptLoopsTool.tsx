@@ -2,8 +2,12 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CopyButton } from "../../components/CopyButton";
 import { ToolSectionTabs } from "../../components/ToolSectionTabs";
-import { isEditableEventTarget } from "../../lib/isEditableEventTarget";
+import { focusPaneById } from "../../keyboard/focus";
+import type { Binding } from "../../keyboard/registry";
+import { useKeymap } from "../../keyboard/useKeymap";
 import { useTransientStatus } from "../../lib/useTransientStatus";
+import { Pane } from "../../ui/Pane";
+import { PaneList } from "../../ui/PaneList";
 import type { RepoDashboardEntry } from "../../types";
 import type { RepoPromptContext } from "../../types";
 import {
@@ -30,17 +34,21 @@ function filterItems(group: PromptLoopGroup, query: string): PromptLoopItem[] {
 
 interface PromptLoopsToolProps {
   contextSeed?: PromptLoopContextSeed | null;
+  /** Called once a seed has been applied so the owner can drop it instead of re-applying it on the next visit. */
+  onContextSeedConsumed?: (seedId: string) => void;
   savedRepos?: RepoDashboardEntry[];
   savedReposLoading?: boolean;
 }
 
 export function PromptLoopsTool({
   contextSeed = null,
+  onContextSeedConsumed,
   savedRepos = [],
   savedReposLoading = false,
 }: PromptLoopsToolProps) {
   const [groupIndex, setGroupIndex] = useState(0);
-  const [itemIndex, setItemIndex] = useState(0);
+  // The list cursor; falls back to the first prompt when it is unset or filtered out.
+  const [itemId, setItemId] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const { status, showStatus } = useTransientStatus(1200);
   const [repoEntryId, setRepoEntryId] = useState(NO_REPO_CONTEXT_VALUE);
@@ -50,13 +58,14 @@ export function PromptLoopsTool({
   const [repoPromptContext, setRepoPromptContext] = useState<PromptRepoContextSection | null>(null);
   const [repoContextLoading, setRepoContextLoading] = useState(false);
   const [repoContextWarning, setRepoContextWarning] = useState<string | null>(null);
-  const searchRef = useRef<HTMLInputElement>(null);
+  const taskContextRef = useRef<HTMLTextAreaElement>(null);
   const repoContextSeqRef = useRef(0);
   const appliedContextSeedIdRef = useRef<string | null>(null);
 
   const group = PROMPT_LOOP_GROUPS[groupIndex] ?? PROMPT_LOOP_GROUPS[0];
   const items = useMemo(() => filterItems(group, query), [group, query]);
-  const activeItem = items[itemIndex] ?? items[0] ?? null;
+  const activeItem = items.find(item => item.id === itemId) ?? items[0] ?? null;
+  const itemNumbers = useMemo(() => new Map(items.map((item, index) => [item.id, index + 1])), [items]);
 
   const selectedRepoEntry = useMemo(
     () => savedRepos.find(e => e.id === repoEntryId) ?? null,
@@ -145,10 +154,6 @@ export function PromptLoopsTool({
   });
 
   useEffect(() => {
-    if (itemIndex >= items.length) setItemIndex(0);
-  }, [items.length, itemIndex]);
-
-  useEffect(() => {
     if (!contextSeed) return;
     if (appliedContextSeedIdRef.current === contextSeed.id) return;
     appliedContextSeedIdRef.current = contextSeed.id;
@@ -157,7 +162,8 @@ export function PromptLoopsTool({
       setRepoEntryId(contextSeed.repoEntryId);
     }
     showStatus("context loaded from Repo Dashboard");
-  }, [contextSeed, showStatus]);
+    onContextSeedConsumed?.(contextSeed.id);
+  }, [contextSeed, onContextSeedConsumed, showStatus]);
 
   const clearComposer = useCallback(() => {
     setRepoEntryId(NO_REPO_CONTEXT_VALUE);
@@ -171,48 +177,87 @@ export function PromptLoopsTool({
     setSelectedOptions(prev => togglePromptOption(prev, optionId));
   }, []);
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.metaKey || event.ctrlKey || event.altKey) return;
-      if (isEditableEventTarget(event.target)) return;
-      if (event.key === "/" && document.activeElement !== searchRef.current) {
-        event.preventDefault();
-        searchRef.current?.focus();
-        return;
-      }
-      if (document.activeElement === searchRef.current) return;
-      if (!items.length) return;
-
-      if (event.key === "ArrowDown") {
-        event.preventDefault();
-        setItemIndex(i => Math.min(items.length - 1, i + 1));
-      }
-      if (event.key === "ArrowUp") {
-        event.preventDefault();
-        setItemIndex(i => Math.max(0, i - 1));
-      }
-      if (event.key >= "1" && event.key <= "4") {
-        const next = Number(event.key) - 1;
-        if (PROMPT_LOOP_GROUPS[next]) {
-          setGroupIndex(next);
-          setItemIndex(0);
-        }
-      }
-    };
-    document.addEventListener("keydown", onKeyDown);
-    return () => document.removeEventListener("keydown", onKeyDown);
-  }, [items.length]);
 
   const selectPromptGroup = useCallback((index: number) => {
     setGroupIndex(index);
-    setItemIndex(0);
+    setItemId(null);
   }, []);
+
+  const cycleGroup = (delta: number) => {
+    const count = PROMPT_LOOP_GROUPS.length;
+    selectPromptGroup((groupIndex + delta + count) % count);
+  };
+
+  const copyPrompt = async () => {
+    try {
+      await navigator.clipboard.writeText(composedPrompt);
+      showStatus("prompt copied");
+    } catch {
+      showStatus("copy failed");
+    }
+  };
+
+  // Tab numbers and `h`/`l` belong to the shell; row movement, `/` and Enter come from the PaneList.
+  // Group keys come in two spellings: `<`/`>` (the Nordic Mac `<>` key) and `[`/`]`, which need Option there and
+  // Alt is never bound. The first spelling is the one shown in the hints.
+  const bindings: Binding[] = [
+    {
+      id: "prompts.group.prev",
+      keys: ["<", "["],
+      title: "Previous prompt group",
+      group: "Prompt Builder",
+      hint: "prev",
+      scope: "global",
+      run: () => cycleGroup(-1),
+    },
+    {
+      id: "prompts.group.next",
+      keys: [">", "]"],
+      title: "Next prompt group",
+      group: "Prompt Builder",
+      hint: "next group",
+      scope: "global",
+      run: () => cycleGroup(1),
+    },
+    {
+      id: "prompts.copy",
+      keys: "y",
+      title: "Copy composed prompt",
+      group: "Prompt Builder",
+      hint: "copy",
+      scope: "global",
+      when: () => activeItem !== null,
+      run: () => void copyPrompt(),
+    },
+    {
+      id: "prompts.context",
+      keys: "i",
+      title: "Edit task context",
+      group: "Prompt Builder",
+      hint: "context",
+      scope: "global",
+      when: () => activeItem !== null,
+      run: () => {
+        if (!taskContextRef.current) return false;
+        taskContextRef.current.focus();
+      },
+    },
+  ];
+  useKeymap(bindings);
 
   return (
     <div className="prompt-loops-tool">
-      <section className="prompt-loops-main">
-        <header className="prompt-loops-topbar">
-          <div className="prompt-loops-topbar-start">
+      <div className="screen prompt-loops-main">
+        <Pane
+          id="prompt-list"
+          index={1}
+          title="prompts"
+          meta={`· ${group.group} · ${items.length}`}
+          className="prompt-loops-list-pane"
+          bodyClassName="prompt-loops-list-body"
+          defaultFocus
+        >
+          <div className="prompt-loops-group-bar">
             <ToolSectionTabs
               className="prompt-loops-section-tabs"
               items={PROMPT_LOOP_GROUPS.map(g => ({
@@ -227,69 +272,55 @@ export function PromptLoopsTool({
               }}
               ariaLabel="Prompt groups"
             />
+            <label className="prompt-loops-group-select-wrap font-mono">
+              <select
+                className="tool-field prompt-loops-group-select"
+                value={groupIndex}
+                onChange={e => selectPromptGroup(Number(e.target.value))}
+                aria-label="Prompt group"
+              >
+                {PROMPT_LOOP_GROUPS.map((g, index) => (
+                  <option key={g.key} value={index}>{g.group}</option>
+                ))}
+              </select>
+            </label>
           </div>
-          <label className="prompt-loops-group-select-wrap font-mono">
-            <select
-              className="tool-field prompt-loops-group-select"
-              value={groupIndex}
-              onChange={e => selectPromptGroup(Number(e.target.value))}
-              aria-label="Prompt group"
-            >
-              {PROMPT_LOOP_GROUPS.map((g, index) => (
-                <option key={g.key} value={index}>{g.group}</option>
-              ))}
-            </select>
-          </label>
-          <div className="prompt-loops-titleline font-mono">
-            <strong>{group.group}</strong>
-            <span className="text-muted"> / {items.length} prompt{items.length === 1 ? "" : "s"}</span>
-          </div>
-          <div className="prompt-loops-search">
-            <input
-              ref={searchRef}
-              type="search"
-              value={query}
-              onChange={e => {
-                setQuery(e.target.value);
-                setItemIndex(0);
-              }}
-              placeholder="filter prompts"
-              aria-label="Filter prompts"
-            />
-          </div>
-        </header>
-
-        <div className="prompt-loops-workspace">
-          <div className="prompt-loops-list-pane">
-            {items.length === 0 ? (
-              <div className="prompt-loops-empty font-mono">no matching prompts</div>
-            ) : (
-              items.map((item, index) => (
-                <button
-                  key={item.id}
-                  type="button"
-                  className={`prompt-loops-card${index === itemIndex ? " prompt-loops-card-active" : ""}`}
-                  onClick={() => setItemIndex(index)}
-                  aria-current={index === itemIndex ? "true" : undefined}
-                >
-                  <div className="prompt-loops-card-head">
-                    <div className="prompt-loops-card-title">{item.title}</div>
-                    <div className="prompt-loops-card-id font-mono">{String(index + 1).padStart(2, "0")}</div>
-                  </div>
-                  <div className="prompt-loops-card-meta">{item.meta}</div>
-                </button>
-              ))
-            )}
-          </div>
-
-          <div className="prompt-loops-detail-pane">
-            {activeItem ? (
+          <PaneList
+            label="Prompts"
+            items={items}
+            getKey={item => item.id}
+            cursorKey={activeItem?.id ?? null}
+            onCursorChange={key => setItemId(key)}
+            onActivate={() => focusPaneById("prompt-detail")}
+            activateHint="compose"
+            filter={{ value: query, onChange: setQuery, label: "Filter prompts", placeholder: "filter prompts" }}
+            empty="no matching prompts"
+            renderItem={item => (
               <>
-                <div className="prompt-loops-detail-head">
-                  <div>
-                    <h2 className="prompt-loops-detail-title">{activeItem.title}</h2>
-                    <p className="prompt-loops-detail-meta text-muted">{activeItem.meta}</p>
-                  </div>
+                <span className="nm">{item.title}</span>
+                <span className="meta">{String(itemNumbers.get(item.id) ?? 0).padStart(2, "0")}</span>
+              </>
+            )}
+          />
+        </Pane>
+
+        <Pane
+          id="prompt-detail"
+          index={2}
+          title="detail"
+          label="Prompt detail"
+          className="prompt-loops-detail-pane"
+          bodyClassName="prompt-loops-detail-body"
+        >
+          {activeItem ? (
+            <>
+              <div className="prompt-loops-detail-head">
+                <div className="prompt-loops-detail-text">
+                  <h2 className="prompt-loops-detail-title">{activeItem.title}</h2>
+                  <p className="prompt-loops-detail-meta text-muted">{activeItem.meta}</p>
+                </div>
+                <div className="prompt-loops-detail-aside">
+                  <span className="prompt-loops-status" role="status">{status}</span>
                   {composerActive ? (
                     <button
                       type="button"
@@ -300,112 +331,114 @@ export function PromptLoopsTool({
                     </button>
                   ) : null}
                 </div>
+              </div>
 
-                <div className="prompt-loops-composer font-mono">
-                  <label className="prompt-loops-composer-field">
-                    <span className="prompt-loops-composer-label">Repo context</span>
-                    <select
-                      className="tool-field prompt-loops-composer-select"
-                      value={repoEntryId}
-                      onChange={e => setRepoEntryId(e.target.value)}
-                      aria-label="Repository context"
-                      disabled={savedReposLoading}
-                    >
-                      <option value={NO_REPO_CONTEXT_VALUE}>No repo context</option>
-                      {savedRepos.map(entry => (
-                        <option key={entry.id} value={entry.id}>{entry.label}</option>
-                      ))}
-                    </select>
-                  </label>
-                  {!savedReposLoading && savedRepos.length === 0 ? (
-                    <p className="prompt-loops-composer-note text-muted small">
-                      No saved repos yet. Add entries in Repo Dashboard; templates still copy as-is without context.
-                    </p>
-                  ) : null}
-                  {repoContextLoading ? (
-                    <p className="prompt-loops-composer-note text-muted small" role="status">
-                      Reading git repository context…
-                    </p>
-                  ) : null}
-                  {repoContextWarning ? (
-                    <p className="prompt-loops-composer-note text-muted small" role="status">
-                      {repoContextWarning}
-                    </p>
-                  ) : null}
-
-                  <label className="prompt-loops-composer-field">
-                    <span className="prompt-loops-composer-label">Task / context (optional)</span>
-                    <textarea
-                      className="prompt-loops-composer-textarea"
-                      value={taskContext}
-                      onChange={e => setTaskContext(e.target.value)}
-                      placeholder="Add bounded task context visible in the preview"
-                      rows={2}
-                      aria-label="Optional task or context"
-                    />
-                  </label>
-
-                  <details
-                    className="prompt-loops-options-panel"
-                    open={optionsOpen}
-                    onToggle={e => setOptionsOpen((e.target as HTMLDetailsElement).open)}
+              <div className="prompt-loops-composer font-mono">
+                <label className="prompt-loops-composer-field">
+                  <span className="prompt-loops-composer-label">Repo context</span>
+                  <select
+                    className="tool-field prompt-loops-composer-select"
+                    value={repoEntryId}
+                    onChange={e => setRepoEntryId(e.target.value)}
+                    aria-label="Repository context"
+                    disabled={savedReposLoading}
                   >
-                    <summary className="prompt-loops-options-summary">Prompt options</summary>
-                    {optionsOpen ? (
-                    <div
-                      className="prompt-loops-options-chips"
-                      role="group"
-                      aria-label="Prompt options"
-                    >
-                      {PROMPT_OPTION_DEFS.map(def => {
-                        const pressed = selectedOptions.has(def.id);
-                        const { disabled, reason } = isOptionDisabled(selectedOptions, def.id);
-                        return (
-                          <button
-                            key={def.id}
-                            type="button"
-                            className={`prompt-loops-option-chip${pressed ? " prompt-loops-option-chip-active" : ""}`}
-                            aria-pressed={pressed}
-                            disabled={disabled}
-                            title={disabled ? reason : undefined}
-                            onClick={() => toggleOption(def.id)}
-                          >
-                            {def.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                    ) : null}
-                  </details>
-                </div>
+                    <option value={NO_REPO_CONTEXT_VALUE}>No repo context</option>
+                    {savedRepos.map(entry => (
+                      <option key={entry.id} value={entry.id}>{entry.label}</option>
+                    ))}
+                  </select>
+                </label>
+                {!savedReposLoading && savedRepos.length === 0 ? (
+                  <p className="prompt-loops-composer-note text-muted small">
+                    No saved repos yet. Add entries in Repo Dashboard; templates still copy as-is without context.
+                  </p>
+                ) : null}
+                {repoContextLoading ? (
+                  <p className="prompt-loops-composer-note text-muted small" role="status">
+                    Reading git repository context…
+                  </p>
+                ) : null}
+                {repoContextWarning ? (
+                  <p className="prompt-loops-composer-note text-muted small" role="status">
+                    {repoContextWarning}
+                  </p>
+                ) : null}
 
-                <div className="prompt-loops-prompt-wrap">
-                  <CopyButton
-                    getText={() => composedPrompt}
-                    copyLabel="Copy prompt"
-                    copiedLabel="Prompt copied"
-                    className="prompt-loops-prompt-copy"
-                    fallbackElementId="prompt-loops-active-prompt"
-                    onCopySuccess={() => showStatus("prompt copied")}
-                    onCopyFailure={() => showStatus("copy failed")}
+                <label className="prompt-loops-composer-field">
+                  <span className="prompt-loops-composer-label">Task / context (optional)</span>
+                  <textarea
+                    ref={taskContextRef}
+                    className="prompt-loops-composer-textarea"
+                    value={taskContext}
+                    onChange={e => setTaskContext(e.target.value)}
+                    placeholder="Add bounded task context visible in the preview"
+                    rows={2}
+                    aria-label="Optional task or context"
                   />
-                  <pre id="prompt-loops-active-prompt" className="prompt-loops-prompt font-mono">
-                    {composedPrompt}
-                  </pre>
-                </div>
-              </>
-            ) : (
-              <div className="prompt-loops-empty font-mono">select a prompt</div>
-            )}
-          </div>
-        </div>
-      </section>
+                </label>
 
-      {status && (
-        <div className="prompt-loops-status font-mono prompt-loops-status-show" role="status">
-          {status}
-        </div>
-      )}
+                <details
+                  className="prompt-loops-options-panel"
+                  open={optionsOpen}
+                  onToggle={e => setOptionsOpen((e.target as HTMLDetailsElement).open)}
+                >
+                  <summary className="prompt-loops-options-summary">Prompt options</summary>
+                  {optionsOpen ? (
+                  <div
+                    className="prompt-loops-options-chips"
+                    role="group"
+                    aria-label="Prompt options"
+                  >
+                    {PROMPT_OPTION_DEFS.map(def => {
+                      const pressed = selectedOptions.has(def.id);
+                      const { disabled, reason } = isOptionDisabled(selectedOptions, def.id);
+                      return (
+                        <button
+                          key={def.id}
+                          type="button"
+                          className={`prompt-loops-option-chip${pressed ? " prompt-loops-option-chip-active" : ""}`}
+                          aria-pressed={pressed}
+                          disabled={disabled}
+                          title={disabled ? reason : undefined}
+                          onClick={() => toggleOption(def.id)}
+                        >
+                          {def.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  ) : null}
+                </details>
+              </div>
+
+              <div className="prompt-loops-prompt-wrap">
+                <CopyButton
+                  getText={() => composedPrompt}
+                  copyLabel="Copy prompt"
+                  copiedLabel="Prompt copied"
+                  className="prompt-loops-prompt-copy"
+                  fallbackElementId="prompt-loops-active-prompt"
+                  onCopySuccess={() => showStatus("prompt copied")}
+                  onCopyFailure={() => showStatus("copy failed")}
+                />
+                <pre
+                  id="prompt-loops-active-prompt"
+                  className="prompt-loops-prompt font-mono"
+                  role="region"
+                  aria-label="Composed prompt"
+                  tabIndex={0}
+                  data-pane-primary=""
+                >
+                  {composedPrompt}
+                </pre>
+              </div>
+            </>
+          ) : (
+            <div className="prompt-loops-empty font-mono">select a prompt</div>
+          )}
+        </Pane>
+      </div>
     </div>
   );
 }

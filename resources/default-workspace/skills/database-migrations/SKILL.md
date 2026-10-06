@@ -1,6 +1,6 @@
 ---
 name: database-migrations
-description: Plan and review safe database schema or data changes across common stacks, with explicit migration, rollback, and DB push reporting.
+description: Plans and reviews schema and data changes (migrations, backfills, constraints, indexes, policies) for compatibility, lock risk, and rollback, and reports DB-push status explicitly. Use when a change touches schema, migrations, seeds, backfills, or RLS and policies.
 category: database
 risk: high
 targets: codex, opencode, claude, cursor
@@ -11,12 +11,7 @@ related: security-review, release-check
 
 Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, and common ORMs.
 
-## When To Use
-
-- Schema changes: tables, columns, constraints, indexes, enums, views, triggers, functions, policies, or relations.
-- Data migrations, seed changes, large backfills, cleanup scripts, or operational database changes.
-- ORM migration generation, raw SQL migration review, plugin activation schema changes, or DB deployment planning.
-- Any implementation prompt or report that includes "DB push", "migration", "schema", or "backfill" status.
+Done when: migration, backfill, and rollback paths are stated, and DB execution state (generated, applied locally, applied remotely) is reported without guessing.
 
 ## Do Not Use When
 
@@ -55,7 +50,8 @@ Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, 
    - Code rollback path.
    - Forward fix path.
    - Backup/restore or point-in-time recovery expectation when destructive changes are possible.
-12. Report DB execution state explicitly:
+12. Stop and ask before running any migration against a non-local database, or applying destructive DDL (drop, rename, type narrowing) without backup evidence.
+13. Report DB execution state explicitly:
    - DB push before running this slice: YES/NO/UNKNOWN.
    - Migration generated: YES/NO.
    - Migration applied locally: YES/NO.
@@ -77,4 +73,4 @@ Works across Postgres/Supabase, SQLite, MySQL, WordPress/WooCommerce databases, 
 - Do not encourage manual production DB edits.
 - Do not claim a migration was applied unless the command was run and reported.
 - Do not mix large data backfills into schema migration files unless the stack explicitly requires it and risk is accepted.
-- Do not inspect secrets or print connection strings.
+- Do not print connection strings.

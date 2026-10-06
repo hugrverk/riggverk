@@ -1,0 +1,29 @@
+/* ── harness pages: runtime pane rows (the OpenCode model override) ── */
+
+.runtime-edit { padding-top: 6px; }
+
+.kv-edit dt label { color: inherit; }
+
+.kv-edit dd { overflow: visible; }
+
+.kv-edit select,
+.kv-edit input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: var(--lh);
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  color: var(--text);
+}
+
+.kv-edit select:disabled,
+.kv-edit input:disabled { opacity: 0.5; }
+
+.kv-edit [aria-invalid="true"] { border-color: var(--warn); }
+
+.runtime-note {
+  padding: 4px 10px 0;
+  overflow-wrap: anywhere;
+}

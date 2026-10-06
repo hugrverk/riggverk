@@ -4,6 +4,10 @@
 This script patches only the explicit model/routing/approval defaults listed in
 MANAGED_PATHS. It never prints full config contents so private user settings and
 credential-bearing MCP entries do not leak through previews or failures.
+
+The model and reasoning effort are create-only: they are written only while the
+config has no value for them, then stay user-owned (never overwritten, never
+reported as drift). Every other managed path is kept aligned with the template.
 """
 
 from __future__ import annotations
@@ -17,15 +21,20 @@ from typing import Any
 
 MISSING = object()
 
-MANAGED_PATHS: tuple[tuple[str, ...], ...] = (
+CREATE_ONLY_PATHS: tuple[tuple[str, ...], ...] = (
     ("model",),
     ("model_reasoning_effort",),
+)
+
+ENFORCED_PATHS: tuple[tuple[str, ...], ...] = (
     ("approval_policy",),
     ("approvals_reviewer",),
     ("sandbox_mode",),
     ("apps", "_default", "approvals_reviewer"),
     ("apps", "_default", "default_tools_approval_mode"),
 )
+
+MANAGED_PATHS: tuple[tuple[str, ...], ...] = CREATE_ONLY_PATHS + ENFORCED_PATHS
 
 
 def strip_inline_comment(text: str) -> str:
@@ -50,6 +59,34 @@ def strip_inline_comment(text: str) -> str:
     return text.rstrip()
 
 
+def split_top_level(text: str) -> list[str]:
+    """Split a TOML array/inline-table body on commas outside strings and brackets."""
+    parts: list[str] = []
+    depth = 0
+    in_double = False
+    escape = False
+    start = 0
+    for i, ch in enumerate(text):
+        if in_double:
+            if escape:
+                escape = False
+            elif ch == "\\":
+                escape = True
+            elif ch == '"':
+                in_double = False
+        elif ch == '"':
+            in_double = True
+        elif ch in "[{":
+            depth += 1
+        elif ch in "]}":
+            depth -= 1
+        elif ch == "," and depth == 0:
+            parts.append(text[start:i])
+            start = i + 1
+    parts.append(text[start:])
+    return [part.strip() for part in parts if part.strip()]
+
+
 def parse_compat_value(raw: str) -> Any:
     value = strip_inline_comment(raw).strip()
     if not value:
@@ -69,9 +106,15 @@ def parse_compat_value(raw: str) -> Any:
     if value == "false":
         return False
     if value.startswith("[") and value.endswith("]"):
-        return []
+        return [parse_compat_value(item) for item in split_top_level(value[1:-1])]
     if value.startswith("{") and value.endswith("}"):
-        return {}
+        table: dict[str, Any] = {}
+        for item in split_top_level(value[1:-1]):
+            if "=" not in item:
+                raise ValueError(f"invalid inline table entry: {item!r}")
+            key, raw_item = item.split("=", 1)
+            assign_compat_value(table, key.strip(), parse_compat_value(raw_item))
+        return table
     try:
         return int(value, 10)
     except ValueError:
@@ -196,7 +239,11 @@ def differing_paths(installed: dict[str, Any], managed: dict[str, Any]) -> list[
     desired = managed_values(managed)
     diffs: list[tuple[str, ...]] = []
     for path, expected in desired.items():
-        if get_path(installed, path) != expected:
+        current = get_path(installed, path)
+        if path in CREATE_ONLY_PATHS:
+            if current is MISSING:
+                diffs.append(path)
+        elif current != expected:
             diffs.append(path)
     return diffs
 
@@ -399,6 +446,8 @@ def patch_toml_text(text: str, installed: dict[str, Any], managed: dict[str, Any
     changed = False
 
     for path, value in desired.items():
+        if path in CREATE_ONLY_PATHS and get_path(installed, path) is not MISSING:
+            continue
         assert_path_prefix_is_table(installed, path)
         if len(path) == 1:
             changed = patch_top_level(lines, path[0], value) or changed
@@ -493,7 +542,8 @@ def main() -> None:
         if diffs:
             print("--- codex-config routing-default diffs")
             for path in diffs:
-                print(f'  managed path "{display_path(path)}" would change')
+                verb = "would be set" if path in CREATE_ONLY_PATHS else "would change"
+                print(f'  managed path "{display_path(path)}" {verb}')
         else:
             print("codex-config routing defaults synced")
         return

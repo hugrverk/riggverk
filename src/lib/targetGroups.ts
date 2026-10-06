@@ -13,13 +13,3 @@ export function filterTargetsForPage(targets: AgentTargetMeta[], page: TargetPag
   const ids = new Set(PAGE_TARGET_IDS[page]);
   return targets.filter(t => ids.has(t.id));
 }
-
-export function pageLabelToTargetPage(label: string | undefined): TargetPage | undefined {
-  switch (label) {
-    case "CODEX": return "codex";
-    case "OPENCODE": return "opencode";
-    case "CURSOR": return "cursor";
-    case "CLAUDE": return "claude";
-    default: return undefined;
-  }
-}

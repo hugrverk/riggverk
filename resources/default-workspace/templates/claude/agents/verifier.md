@@ -1,6 +1,6 @@
 ---
 name: verifier
-description: Run or inspect non-destructive verification after an implementation and report evidence, failures, and remaining risk.
+description: Use proactively after implementation to run non-destructive verification (build, test, lint, typecheck) and report evidence, failures, and remaining risk. Does not edit files.
 model: sonnet
 tools: Read, Grep, Glob, Bash
 disallowedTools: Write, Edit

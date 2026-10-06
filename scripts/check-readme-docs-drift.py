@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 APP_README = ROOT / "README.md"
 WORKSPACE_README = ROOT / "resources/default-workspace/README.md"
 SETTINGS_DEFAULTS = ROOT / "src/lib/settingsDraft.ts"
+HARNESS_INSTALLATION = ROOT / "src" / "lib" / "harnessInstallation.ts"
 
 README_PATHS = (APP_README, WORKSPACE_README)
 
@@ -55,15 +56,16 @@ def main() -> None:
     app_text = read(APP_README)
     settings_text = read(SETTINGS_DEFAULTS)
 
-    default_match = re.search(
-        r'export const DEFAULT_TARGET_IDS = (\[[^\]]+\]);',
-        settings_text,
+    if "export const DEFAULT_TARGET_IDS: string[] = [...DEFAULT_ENABLED_TARGET_IDS];" not in settings_text:
+        fail("settingsDraft.ts DEFAULT_TARGET_IDS must derive from DEFAULT_ENABLED_TARGET_IDS")
+    disabled_match = re.search(
+        r"const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId\[\] = (\[[^\]]*\]);",
+        read(HARNESS_INSTALLATION),
     )
-    if not default_match:
-        fail("settingsDraft.ts missing DEFAULT_TARGET_IDS")
-    default_ids = default_match.group(1)
-    if "codex_config" in default_ids:
-        fail("DEFAULT_TARGET_IDS must not include codex_config by default")
+    if not disabled_match:
+        fail("harnessInstallation.ts missing DEFAULT_DISABLED_TARGET_IDS")
+    if '"codex_config"' not in disabled_match.group(1):
+        fail("codex_config must be disabled by default (DEFAULT_DISABLED_TARGET_IDS)")
 
     settings_table = re.search(
         r"\| `enabled_target_ids` \|.*?\|",

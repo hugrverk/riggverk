@@ -21,6 +21,8 @@ export function mergePendingLocalOntoAcknowledged(
     accent_color: local.accent_color,
     background_color: local.background_color,
     foreground_color: local.foreground_color,
+    reduce_motion: local.reduce_motion,
+    landing_view: local.landing_view,
     revision: acknowledged.revision ?? 0,
   };
 }
@@ -46,5 +48,7 @@ export function applyMutationPreservingPendingLocal(
     accent_color: local.accent_color,
     background_color: local.background_color,
     foreground_color: local.foreground_color,
+    reduce_motion: local.reduce_motion,
+    landing_view: local.landing_view,
   };
 }

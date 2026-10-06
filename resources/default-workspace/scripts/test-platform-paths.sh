@@ -99,11 +99,66 @@ broad_root_rejected() {
   fi
 }
 
+windows_shell_message() {
+  local message
+  if message="$(
+    unset AGENT_WORKSPACE_BACKUP_DIR
+    HOME=/home/example
+    agent_workspace_backup_root 2>&1
+  )"; then
+    fail "Windows shell backup root was accepted without an override"
+  fi
+  case "$message" in
+    *"not supported by the Agent Workspace CLI scripts"*"AGENT_WORKSPACE_BACKUP_DIR"*) ;;
+    *) fail "Windows shell message does not explain the override: $message" ;;
+  esac
+}
+
+windows_shell_override() {
+  local actual
+  actual="$(
+    AGENT_WORKSPACE_BACKUP_DIR=/c/aw-backups
+    HOME=/home/example
+    agent_workspace_backup_root
+  )"
+  assert_eq "Windows shell env override" "$actual" "/c/aw-backups"
+}
+
+normalize_path_cases() {
+  assert_eq "normalize //" "$(agent_workspace_normalize_path "//")" "/"
+  assert_eq "normalize trailing slashes" "$(agent_workspace_normalize_path "/home/example//")" "/home/example"
+  assert_eq "normalize dot" "$(agent_workspace_normalize_path "/home/example/.")" "/home/example"
+  assert_eq "normalize dotdot" "$(agent_workspace_normalize_path "/home/example/a/../b")" "/home/example/b"
+  assert_eq "normalize past root" "$(agent_workspace_normalize_path "/../..")" "/"
+  assert_eq "normalize relative untouched" "$(agent_workspace_normalize_path "agents/x")" "agents/x"
+}
+
+unsafe_agents_dir_rejected() {
+  local dir
+  for dir in "/" "//" "/home/example" "/home/example/" "/home/example//" "/home/example/." \
+    "/home/example/sub/.." "/home/example/.config" "/home/example/.config/opencode" \
+    "/home/example/.claude" "/home/example/.codex" "/home/example/.cursor" ""; do
+    if HOME=/home/example agent_workspace_refuse_unsafe_agents_dir "$dir" "TEST_AGENTS_DIR" test-platform-paths.sh >/dev/null 2>&1; then
+      fail "unsafe agents dir was accepted: '$dir'"
+    fi
+  done
+  for dir in "/home/example/.config/opencode/agents" "/home/example/.claude/agents" "/tmp/aw-agents" "/home/example/agents//"; do
+    if ! HOME=/home/example agent_workspace_refuse_unsafe_agents_dir "$dir" "TEST_AGENTS_DIR" test-platform-paths.sh >/dev/null 2>&1; then
+      fail "dedicated agents dir was refused: '$dir'"
+    fi
+  done
+}
+
 with_uname Darwin mac_default
 with_uname Linux linux_xdg_default
 with_uname Linux linux_home_fallback
 with_uname Linux env_override
 with_uname Linux empty_override_rejected
+with_uname MINGW64_NT-10.0-22631 windows_shell_message
+with_uname MSYS_NT-10.0-22631 windows_shell_message
+with_uname MINGW64_NT-10.0-22631 windows_shell_override
 broad_root_rejected
+normalize_path_cases
+unsafe_agents_dir_rejected
 
 printf 'test-platform-paths.sh: ok\n'

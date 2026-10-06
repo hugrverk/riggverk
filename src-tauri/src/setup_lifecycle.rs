@@ -307,7 +307,10 @@ pub fn plan_setup(
                 conflicts.push(op);
             }
             OperationKind::Manual => {
-                let step = format!("{} requires manual setup. See docs.", surface.label());
+                let step = format!(
+                    "{} is managed by you, so base updates are not applied. Review the diff or hand it back from the harness page.",
+                    surface.label()
+                );
                 let op = PlannedOperation {
                     surface: *surface,
                     kind,
@@ -362,6 +365,23 @@ pub fn plan_setup(
         summary,
         has_pending_changes,
         is_blocked,
+        plan_fingerprint: None,
+        preview_token: None,
+    }
+}
+
+/// A plan over zero surfaces. `plan_setup` reads an empty request as "all
+/// surfaces", so callers whose surface list was gated down to nothing use
+/// this instead.
+pub fn empty_plan() -> SetupPlan {
+    SetupPlan {
+        operations: Vec::new(),
+        synced: Vec::new(),
+        conflicts: Vec::new(),
+        manual_steps: Vec::new(),
+        summary: "No enabled surfaces requested".to_string(),
+        has_pending_changes: false,
+        is_blocked: false,
         plan_fingerprint: None,
         preview_token: None,
     }

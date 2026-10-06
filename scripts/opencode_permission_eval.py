@@ -27,7 +27,8 @@ def wildcard_match(value: str, pattern: str) -> bool:
     escaped = escaped.replace("*", ".*").replace("?", ".")
     if escaped.endswith(" .*"):
         escaped = escaped[:-3] + "( .*)?"
-    flags = re.IGNORECASE if _is_windows() else 0
+    # Upstream compiles with the "s" flag (dot matches newline), plus "i" on win32.
+    flags = re.DOTALL | (re.IGNORECASE if _is_windows() else 0)
     return re.fullmatch(escaped, value, flags=flags) is not None
 
 
@@ -92,6 +93,14 @@ def effective_edit_action(permission: dict[str, Any], path: str) -> Action:
         return edit
     rules = ruleset_from_section("edit", edit) if edit is not None else []
     return evaluate("edit", path, rules).action
+
+
+def effective_read_action(permission: dict[str, Any], path: str) -> Action:
+    read = permission.get("read")
+    if isinstance(read, str):
+        return read
+    rules = ruleset_from_section("read", read) if read is not None else []
+    return evaluate("read", path, rules).action
 
 
 def bash_is_allowed(permission: dict[str, Any], command: str) -> bool:

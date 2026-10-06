@@ -1,7 +1,7 @@
 # Global Agent Rules
 
 ## Priority
-Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe.
+Repository reality overrides assumptions. Explicit user instructions override these defaults. Project-local guidance overrides these defaults unless unsafe. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.
 
 ## Communication
 Be direct, dense, technical, and concise. No filler, praise, motivation, or beginner explanations unless requested. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts. Use Swedish for Swedish user-facing copy. State uncertainty clearly.
@@ -35,7 +35,6 @@ Use skills as routing and workflow guidance, not boilerplate. Select only task-r
 - Security, auth, permissions, uploads, shell, or sensitive data: `security-review`.
 - Database or persisted data changes: `database-migrations`; add `security-review` where access control or sensitive data is involved.
 - Fast-moving APIs, SDKs, CLIs, frameworks, or dependencies: `current-docs`; add `security-review` when trusted surface expands.
-- WordPress or WooCommerce: `wordpress-woocommerce`, plus relevant generic implementation, QA, accessibility, security, or release skills.
 - Kretsverket editor or canvas: `kretsverket-editor-change`.
 - Kretsverket persistence or file compatibility: `kretsverket-file-compatibility`.
 - Kretsverket symbols: `kretsverket-symbol-system`.
@@ -64,13 +63,15 @@ Read-only git commands are allowed. Do not perform state-changing git operations
 ## Final report
 Implementation: Changed, Verified, Not verified, Risk, Next.
 Audit-only: Finding, Severity, Evidence, Recommendation, Confidence.
+A skill's `## Output` lists content to cover, not a replacement format: keep these headings and fold the skill's items into them.
 
 ## Claude harness
 
 - Shared subagents install from bundled Claude agent templates; do not add an architect subagent unless official docs and repository design require it. Subagents pin cost-appropriate models (haiku/sonnet); keep top-model judgment in the main thread.
-- Skills install to `~/.claude/skills`. Prefer built-in Claude Code commands where they are stronger: `/code-review` for review passes, `skill-creator` for skill authoring; workspace skills own routing and domain invariants.
+- Skills install to `~/.claude/skills`. Prefer built-in Claude Code commands where they are stronger: `/code-review` for review passes, `/simplify` for post-diff cleanup, `skill-creator` for skill authoring; workspace skills own routing and domain invariants.
+- Use forked context and subagents for bounded exploration or specialist review only; pass explicit scope, tool boundaries, and expected evidence, and keep final synthesis in the parent context. Do not rely on mutating hooks by default.
 - Persistent memory holds durable user/project facts; skills hold procedures; do not duplicate either in CLAUDE.md.
 - Respect Claude settings, permissions, and MCP boundaries; keep subagent workflows in agents, not duplicated in rules.
 
 ## Codex delegation
-Codex CLI is installed and authed (`codex exec`, non-interactive only; the TUI needs a TTY). Default model `gpt-5.6-sol` at `high` reasoning is configured in `~/.codex/config.toml` — Sol is cheap, so prefer delegating well-specified code tasks to it instead of spending Claude usage, including large mechanical refactors when the brief pre-decides every judgement call. Codex can run up to two subagents per thread; exploit that for parallelizable simple work. Run long delegations in the background and review the resulting diff like a PR — verification and final quality stay with Claude; re-run the checks yourself rather than trusting the reported results. `codex exec resume --last` accepts neither `-s` nor `-C`: pass `-c sandbox_mode="workspace-write"` and rely on the shell's cwd. Never delegate while the owner's GPT computer-use agent is mid-session (shared account limits). Codex cannot drive a GUI; UI testing stays with the computer-use agent.
+Codex CLI is installed and authed (`codex exec`, non-interactive only; the TUI needs a TTY). The default model and reasoning effort are configured in `~/.codex/config.toml`; Codex is cheap, so prefer delegating well-specified code tasks to it instead of spending Claude usage, including large mechanical refactors when the brief pre-decides every judgement call. Codex can run up to two subagents per thread; exploit that for parallelizable simple work. Run long delegations in the background and review the resulting diff like a PR — verification and final quality stay with Claude; re-run the checks yourself rather than trusting the reported results. `codex exec resume --last` accepts neither `-s` nor `-C`: pass `-c sandbox_mode="workspace-write"` and rely on the shell's cwd. Never delegate while the owner's GPT computer-use agent is mid-session (shared account limits). Codex cannot drive a GUI; UI testing stays with the computer-use agent.

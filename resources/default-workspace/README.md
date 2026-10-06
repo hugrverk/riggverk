@@ -1,45 +1,52 @@
 # Agent Workspace
 
-Your workspace for managing agent skills, rules, configuration, and scripts.
+Your workspace for agent skills, rules, configuration, and scripts.
 
-This directory stores docs, skills, templates, config, and scripts that the app can read, display, and sync to agent tool folders. It is user-owned and can be versioned with git.
+This directory holds the docs, skills, templates, config, and scripts that the Agent Workspace app displays and installs into agent tool folders. It is user-owned and can be versioned with Git. Installs always come from the app's bundled copy; edits you make here do not change what the tools receive (see [docs/CONCEPTS.md](docs/CONCEPTS.md)).
 
-Workspace files are plain text. The app does not encrypt them. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed/private URLs, or `.env` values in this workspace, and do not commit those values to GitHub.
+Workspace files are plain text and not encrypted. Do not store secrets, tokens, passwords, private keys, cookies, auth headers, signed or private URLs, or `.env` values here, and do not commit them.
+
+Requires Python 3 on `PATH` (config merges and generators). The CLI scripts also need Bash and run on macOS and Linux only.
 
 ## What lives here
 
-- **docs/** — documentation about workspace concepts, skills, rules, config, and troubleshooting. **docs/prompt-templates/** holds Standard, Masterprompt, and Batchprompt templates; they appear in the app under Library → Docs after installation.
-- **skills/** — canonical semantic skill sources. 21 bundled skills ship with the default workspace.
-- **templates/skills/** — generated harness-specific skill adapters and overlay sources.
-- **templates/** — source templates for agent rules (`global-agent-rules.md`), OpenCode config (`opencode.json`), Codex config (`templates/codex/`), and Cursor setup assets (`templates/cursor/`). Cursor global setup is applied from the app via native Rust operations; `install-cursor-workspace.sh` remains a small CLI helper for User Rules and optional project-target installs.
-- **scripts/** — real workspace sync and install scripts that the app calls. All scripts default to dry-run; use `--apply` to write files and `--diff` to preview changes.
-- **.agent-workspace/** — workspace identity marker (do not delete)
+- **docs/** - guides and reference. **docs/prompt-templates/** holds the Prompt, Goal Prompt, and Batch Prompt templates; they appear under Library -> Docs.
+- **skills/** - canonical skill sources. 22 skills ship with the default workspace.
+- **templates/skills/** - generated harness-specific skill adapters and overlay sources.
+- **templates/** - source templates for agent rules (`global-agent-rules.md`, composed under `sync/`), OpenCode config, Codex config (`codex/`), and Cursor assets (`cursor/`).
+- **agents/**, **agent-specs/** - OpenCode agents and the shared agent bodies.
+- **metadata/** - generated manifests and the history of shipped rules bases.
+- **scripts/** - CLI installers and helpers for use outside the app.
+- **.agent-workspace/** - identity marker and ownership records (`workspace.json`, `managed-state.json`, `rules-preferences.json`). Do not delete. They describe this machine's installs, so leave `managed-state.json` and `rules-preferences.json` out of Git.
 
 ## Scripts
 
-All scripts default to safe dry-run mode. Pass `--apply` to write, `--diff` to see changes, `--quiet` for compact output, and `--help` for usage.
+The app does not call the installer scripts; it installs natively and uses only its own bundled Python helpers. The scripts are a command-line alternative for operators.
 
-The bundled installer scripts are macOS/Linux POSIX-style shell scripts run with Bash. Windows app-path logic exists in the native Rust app backend, but native Windows script support is not currently covered.
+All installer scripts default to dry-run. `--apply` writes, `--diff` shows differences, `--quiet` gives compact output, `--help` shows usage. Before overwriting an existing target they copy it to the backup root and stop when that copy fails. They refuse a rules file that holds the app's managed block, and broad backup or agents directories. Run them from the workspace root.
 
-- **`generate-opencode-config.py`** — generates `templates/opencode.json` from `templates/opencode.base.json` and `templates/opencode.policy.json`. Supports `--check` (verify snapshot currency) and `--write` (regenerate snapshot). Paths are workspace-relative.
-- **`install-agent-rules.sh`** — syncs `templates/global-agent-rules.md` to Codex, OpenCode, and Claude rule paths. Supports per-target flags (`--codex`, `--opencode`, etc.) and `--all`.
-- **`install-opencode-config.sh`** — syncs `templates/opencode.json` to the OpenCode config path, installs `~/.config/playwright-mcp/config.json`, and optionally merges Playwright MCP into `~/.cursor/mcp.json` (`--apply-cursor`). Uses pinned `@playwright/mcp@0.0.48`, Chromium (not Chrome channel), and a shared user-global browser cache — not `@latest` or `PLAYWRIGHT_BROWSERS_PATH=0`.
-- **`install-codex-config.sh`** — syncs Codex config with managed-section merge that enforces the bundled model/routing/approval defaults while preserving user personality, MCP settings, and unrelated tables. `--apply` performs safe merge; `--force-overwrite` replaces the full file after backup (advanced).
-- **`install-cursor-workspace.sh`** — manual Cursor helpers and CLI-only project installs. Global setup (agents, managed skills, Playwright MCP) is handled by the Agent Workspace app via native Rust operations. The script never writes `~/.cursor/agents`.
-- **`install-skills.sh`** — installs generated skill adapters to native agent skill folders. App uses `--global` only.
-- **`bootstrap.sh`** — runs rules, config, and skills steps together. Supports `--skip-*`, `--*-only`, and narrow rule/skill agent flags.
+macOS and Linux only. On Windows use the app; Git Bash and MSYS are refused unless `AGENT_WORKSPACE_BACKUP_DIR` is set, and the scripts are not tested there.
 
-All writes are explicit, previewed, and allowlisted. Existing managed targets are backed up before replacement under the platform backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux. The Agent Workspace app manages global/home config only. Cursor installation never writes project `.cursor/*`, `.cursorignore`, or `AGENTS.md`.
+- `generate-opencode-config.py` - builds `templates/opencode.json` from `opencode.base.json` and `opencode.policy.json`. `--check` verifies, `--write` regenerates.
+- `install-agent-rules.sh` - copies composed rules to Codex, OpenCode, and Claude paths (`--codex`, `--opencode`, `--claude`, `--all`).
+- `install-opencode-config.sh` - managed-key merge into the OpenCode config, `tui.json`, agents, and the Playwright MCP config. `--apply-cursor` also merges the Playwright server into `~/.cursor/mcp.json`. Pinned `@playwright/mcp@0.0.48`, Chromium, shared browser cache.
+- `install-codex-config.sh` - managed-key merge into the Codex config. `--force-overwrite` replaces the whole file after backup (advanced).
+- `install-codex-agents.sh`, `install-runtime-agents.sh` - Codex TOML agents, and OpenCode or Claude Markdown agents.
+- `install-cursor-workspace.sh` - Cursor User Rules helper and project installs. It never writes `~/.cursor/agents`.
+- `install-skills.sh` - installs generated skill adapters (`--agent`, `--global`, `--dry-run`, `--apply`).
+- `bootstrap.sh` - runs rules, config, and skills together.
+
+Backups: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux, or `AGENT_WORKSPACE_BACKUP_DIR`. Layout in [docs/USING_THE_APP.md](docs/USING_THE_APP.md#backups).
 
 ## Separation
 
-This workspace folder is separate from the app source code. The app operates on a workspace folder; the workspace does not need to contain the app.
+This folder is separate from the app source. The app operates on a workspace folder; the workspace does not contain the app.
 
 ## Start here
 
-- [docs/START_HERE.md](docs/START_HERE.md) — first 5 minutes, safe first actions, what the app can and cannot do
-- [docs/CONCEPTS.md](docs/CONCEPTS.md) — core terms and mental model
-- [docs/USING_THE_APP.md](docs/USING_THE_APP.md) — practical walkthrough of each tab
-- [docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md) — how to version the workspace with Git and GitHub
-- [docs/WORKFLOWS.md](docs/WORKFLOWS.md) — common workflow recipes
-- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) — help when things go wrong
+- [docs/START_HERE.md](docs/START_HERE.md) - first install, the essential keys, what the app does and does not do
+- [docs/CONCEPTS.md](docs/CONCEPTS.md) - terms and the mental model
+- [docs/USING_THE_APP.md](docs/USING_THE_APP.md) - pages, keyboard reference, install review, backups
+- [docs/WORKFLOWS.md](docs/WORKFLOWS.md) - recipes
+- [docs/GIT_VERSIONING.md](docs/GIT_VERSIONING.md) - versioning the workspace
+- [docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) - when something goes wrong

@@ -3,7 +3,10 @@
 
 from __future__ import annotations
 
+import contextlib
 import importlib.util
+import io
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -26,9 +29,16 @@ class SkillAdapterGeneratorTests(unittest.TestCase):
     def setUpClass(cls) -> None:
         cls.generator = load_generator()
 
+    def assert_refused(self, func, *args) -> str:
+        """Assert the generator calls fail() and return the message it printed."""
+        stderr = io.StringIO()
+        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit):
+            func(*args)
+        return stderr.getvalue()
+
     def test_generates_all_target_skill_adapters(self) -> None:
         outputs, manifest = self.generator.generated_outputs()
-        self.assertEqual(len(outputs), 84)
+        self.assertEqual(len(outputs), 4 * len(manifest["skills"]))
         self.assertEqual(set(manifest["targets"]), {"codex", "opencode", "claude", "cursor"})
         for path in outputs:
             rel = path.relative_to(ROOT / "resources/default-workspace").as_posix()
@@ -50,22 +60,77 @@ class SkillAdapterGeneratorTests(unittest.TestCase):
         self.assertIn("### Codex Frontend Design", output)
 
     def test_claude_adapter_hoists_when_to_use(self) -> None:
-        outputs, _manifest = self.generator.generated_outputs()
-        claude = outputs[
-            ROOT
-            / "resources/default-workspace/templates/skills/claude/security-review/SKILL.md"
-        ]
-        codex = outputs[
-            ROOT
-            / "resources/default-workspace/templates/skills/codex/security-review/SKILL.md"
-        ]
-        claude_frontmatter = claude.split("---\n")[1]
-        self.assertIn('when_to_use: "', claude_frontmatter)
-        claude_body = claude.split("## Harness Adapter")[0]
-        self.assertNotIn("## When To Use", claude_body)
-        self.assertIn("## Do Not Use When", claude_body)
-        self.assertIn("## When To Use", codex)
-        self.assertNotIn("when_to_use:", codex)
+        fm_lines = ["name: demo\n", "description: Demo skill.\n", "targets: claude\n"]
+        body = "# Demo\n\n## When To Use\n\n- First trigger\n- Second trigger.\n\n## Do Not Use When\n\n- Never.\n"
+        new_fm, new_body = self.generator.hoist_when_to_use(ROOT / "demo/SKILL.md", fm_lines, body)
+        self.assertEqual(
+            new_fm,
+            [
+                "name: demo\n",
+                "description: Demo skill.\n",
+                'when_to_use: "First trigger. Second trigger."\n',
+                "targets: claude\n",
+            ],
+        )
+        self.assertNotIn("## When To Use", new_body)
+        self.assertIn("## Do Not Use When", new_body)
+
+    def test_hoist_keeps_block_scalar_description_intact(self) -> None:
+        for indicator in (">", "|", ">-", "|+"):
+            with self.subTest(indicator=indicator):
+                fm_lines = [
+                    "name: demo\n",
+                    f"description: {indicator}\n",
+                    "  First line of the description.\n",
+                    "  Second line of the description.\n",
+                    "targets: claude\n",
+                ]
+                body = "# Demo\n\n## When To Use\n\n- A trigger.\n"
+                new_fm, _new_body = self.generator.hoist_when_to_use(ROOT / "demo/SKILL.md", fm_lines, body)
+                self.assertEqual(new_fm[:4], fm_lines[:4])
+                self.assertEqual(new_fm[4], 'when_to_use: "A trigger."\n')
+                self.assertEqual(new_fm[5], "targets: claude\n")
+                try:
+                    import yaml  # type: ignore[import-not-found]
+                except ImportError:
+                    continue
+                parsed = yaml.safe_load("".join(new_fm))
+                self.assertEqual(parsed["when_to_use"], "A trigger.")
+                self.assertIn("Second line", parsed["description"])
+
+    def test_block_scalar_description_counts_toward_cap(self) -> None:
+        fm_lines = ["name: demo\n", "description: >\n", "  " + "x" * 1500 + "\n"]
+        body = "# Demo\n\n## When To Use\n\n- " + "y" * 100 + "\n"
+        self.assertIn("cap 1536", self.assert_refused(self.generator.hoist_when_to_use, ROOT / "demo/SKILL.md", fm_lines, body))
+
+    def test_hoist_refuses_existing_when_to_use(self) -> None:
+        fm_lines = ["name: demo\n", "description: Demo.\n", "when_to_use: already\n"]
+        body = "# Demo\n\n## When To Use\n\n- A trigger.\n"
+        self.assertIn("already has when_to_use", self.assert_refused(self.generator.hoist_when_to_use, ROOT / "demo/SKILL.md", fm_lines, body))
+
+    def test_read_source_refuses_crlf_and_bom(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            good = Path(tmp) / "good.md"
+            good.write_bytes(b"---\nname: demo\n---\nbody\n")
+            self.assertEqual(self.generator.read_source(good), "---\nname: demo\n---\nbody\n")
+
+            crlf = Path(tmp) / "crlf.md"
+            crlf.write_bytes(b"---\r\nname: demo\r\n---\r\nbody\r\n")
+            self.assertIn("LF line endings", self.assert_refused(self.generator.read_source, crlf))
+
+            bom = Path(tmp) / "bom.md"
+            bom.write_bytes(b"\xef\xbb\xbf---\nname: demo\n---\nbody\n")
+            self.assertIn("BOM", self.assert_refused(self.generator.read_source, bom))
+
+    def test_adapter_without_overlays_has_no_harness_section(self) -> None:
+        text = "---\nname: demo\ndescription: Demo.\ntargets: codex\n---\n\n# Demo\n"
+        fm_lines, body = self.generator.split_canonical(ROOT / "demo/SKILL.md", text)
+        info = {"path": ROOT / "demo/SKILL.md", "text": text, "fm_lines": fm_lines, "body": body, "targets": ("codex",)}
+        output = self.generator.compose_adapter(info, "codex", "demo", {})
+        self.assertTrue(output.startswith(text + "\n<!-- Generated by "))
+        self.assertNotIn("## Harness Adapter", output)
+        with_overlay = self.generator.compose_adapter(info, "codex", "demo", {("codex", "demo"): ([], "### Codex Demo\n")})
+        self.assertIn("## Harness Adapter\n\n### Codex Demo", with_overlay)
 
     def test_overlay_frontmatter_merges_into_claude_adapter(self) -> None:
         outputs, _manifest = self.generator.generated_outputs()

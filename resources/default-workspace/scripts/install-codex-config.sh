@@ -104,6 +104,7 @@ if [ "$quiet" -eq 1 ] && [ "$apply" -eq 0 ] && [ "$show_diff" -eq 0 ]; then
 fi
 
 if [ "$show_diff" -eq 1 ]; then
+  diff_failed=0
   if [ -f "$target_config" ]; then
     if codex_config_managed_match; then
       printf 'codex-config managed sections synced\n'
@@ -112,7 +113,7 @@ if [ "$show_diff" -eq 1 ]; then
         printf '%s\n' '--- codex-config legacy managed-section diffs'
         printf '  legacy approval/sandbox fields synced\n'
       else
-        python3 -c "
+        python3 - "$repo_root" "$target_config" "$source_config" <<'PY' || diff_failed=1
 import json, sys
 from pathlib import Path
 try:
@@ -130,7 +131,7 @@ except ModuleNotFoundError:
                 if not s or s.startswith('#'):
                     continue
                 if s.startswith('[') and s.endswith(']'):
-                    parts = [p.strip().strip('\"') for p in s[1:-1].split('.')]
+                    parts = [p.strip().strip('"') for p in s[1:-1].split('.')]
                     if not parts or any(not p for p in parts):
                         continue
                     c = root
@@ -147,12 +148,12 @@ except ModuleNotFoundError:
                 esc = False
                 for i, ch in enumerate(v):
                     if esc: esc = False; continue
-                    if ch == '\\\\': esc = True; continue
-                    if ch == '\"': in_q = not in_q; continue
+                    if ch == '\\': esc = True; continue
+                    if ch == '"': in_q = not in_q; continue
                     if ch == '#' and not in_q: v = v[:i].rstrip(); break
                 if v == 'true': val = True
                 elif v == 'false': val = False
-                elif v.startswith('\"'): val = _ast.literal_eval(v)
+                elif v.startswith('"'): val = _ast.literal_eval(v)
                 else:
                     try: val = int(v)
                     except ValueError:
@@ -160,7 +161,7 @@ except ModuleNotFoundError:
                         except ValueError: val = v
                 kk = k.strip()
                 if '.' in kk:
-                    ks = [p.strip().strip('\"') for p in kk.split('.')]
+                    ks = [p.strip().strip('"') for p in kk.split('.')]
                     c = root
                     for p in ks[:-1]:
                         c = c.setdefault(p, {})
@@ -168,39 +169,43 @@ except ModuleNotFoundError:
                 else:
                     current[kk] = val
             return root
-ws = Path('$repo_root')
+repo_root, target_config, source_config = sys.argv[1:4]
+ws = Path(repo_root)
 managed = json.loads((ws / 'metadata/codex-managed-keys.json').read_text())
 top = set(managed.get('top_level_keys', []))
 profiles = set(managed.get('managed_profiles', []))
 fields = set(managed.get('managed_profile_fields', []))
-installed = tomllib.loads(Path('$target_config').read_text())
-source = tomllib.loads(Path('$source_config').read_text())
+installed = tomllib.loads(Path(target_config).read_text())
+source = tomllib.loads(Path(source_config).read_text())
 diff_items = []
 for k in top:
     iv = installed.get(k)
     sv = source.get(k)
     if iv != sv:
-        diff_items.append(f'managed key \"{k}\" would change')
+        diff_items.append(f'managed key "{k}" would change')
 for p in profiles:
     ip = installed.get('profiles', {}).get(p, {})
     sp = source.get('profiles', {}).get(p, {})
     for f in fields:
         if ip.get(f) != sp.get(f):
-            diff_items.append(f'managed profile \"{p}.{f}\" would change')
+            diff_items.append(f'managed profile "{p}.{f}" would change')
 if diff_items:
     print('--- codex-config legacy managed-section diffs')
     for d in diff_items:
         print(f'  {d}')
 else:
     print('  codex-config legacy managed sections differ (structural change)')
-" || true
+PY
       fi
-      python3 "$ROUTING_DEFAULTS_SCRIPT" --diff "$target_config" "$source_config" || true
+      python3 "$ROUTING_DEFAULTS_SCRIPT" --diff "$target_config" "$source_config" || diff_failed=1
     fi
   else
     printf 'Codex config missing: %s\n' "$target_config"
   fi
-  exit 0
+  if [ "$diff_failed" -ne 0 ]; then
+    printf 'install-codex-config.sh: could not compute the managed-section diff (see errors above)\n' >&2
+  fi
+  exit "$diff_failed"
 fi
 
 if [ "$apply" -eq 1 ]; then

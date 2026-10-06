@@ -8,8 +8,9 @@
 //! and provides metadata for detection, apply, validation, and rollback.
 //!
 use serde::{Deserialize, Serialize};
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 
+use crate::agent_skill_targets::codex_home;
 use crate::setup_lifecycle::SetupSurfaceId;
 
 // ── Artifact identity ──
@@ -67,14 +68,31 @@ pub enum ArtifactId {
     WorkspaceFile(WorkspaceRelPath),
 }
 
-/// Workspace-relative path for bundled files. Validated at construction.
+/// Workspace-relative path for bundled files. Validated at construction and on
+/// deserialization, so a manifest cannot smuggle in a path `new` would refuse.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct WorkspaceRelPath(String);
+
+impl TryFrom<String> for WorkspaceRelPath {
+    type Error = String;
+
+    fn try_from(rel: String) -> Result<Self, Self::Error> {
+        Self::new(rel.as_str()).ok_or_else(|| format!("invalid workspace-relative path: {rel:?}"))
+    }
+}
 
 impl WorkspaceRelPath {
     pub fn new(rel: impl Into<String>) -> Option<Self> {
         let rel = rel.into();
-        if rel.is_empty() || rel.contains("..") || Path::new(&rel).is_absolute() {
+        // Only plain relative components: on Windows "/etc/passwd" is not `is_absolute()`, yet
+        // joining it onto the workspace root would replace everything but the drive.
+        if rel.is_empty()
+            || rel.contains("..")
+            || Path::new(&rel)
+                .components()
+                .any(|component| !matches!(component, Component::Normal(_) | Component::CurDir))
+        {
             return None;
         }
         Some(Self(rel))
@@ -85,9 +103,18 @@ impl WorkspaceRelPath {
     }
 }
 
-/// Agent file name without extension. Validated at construction.
+/// Agent file name without extension. Validated at construction and on deserialization.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct AgentName(String);
+
+impl TryFrom<String> for AgentName {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::new(name.as_str()).ok_or_else(|| format!("invalid agent name: {name:?}"))
+    }
+}
 
 impl AgentName {
     pub fn new(name: impl Into<String>) -> Option<Self> {
@@ -118,9 +145,18 @@ impl AgentName {
     }
 }
 
-/// Skill directory name. Validated at construction.
+/// Skill directory name. Validated at construction and on deserialization.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 pub struct SkillName(String);
+
+impl TryFrom<String> for SkillName {
+    type Error = String;
+
+    fn try_from(name: String) -> Result<Self, Self::Error> {
+        Self::new(name.as_str()).ok_or_else(|| format!("invalid skill name: {name:?}"))
+    }
+}
 
 impl SkillName {
     pub fn new(name: impl Into<String>) -> Option<Self> {
@@ -155,6 +191,20 @@ pub enum ArtifactKind {
     McpConfig,
 }
 
+/// `CODEX_HOME` (or `~/.codex`). A relative value is rejected: file operations would resolve
+/// it against the process working directory while the allowlist check resolves it against home.
+fn absolute_codex_home(home: &Path) -> Result<PathBuf, String> {
+    let dir = codex_home(home);
+    if dir.is_absolute() {
+        Ok(dir)
+    } else {
+        Err(format!(
+            "CODEX_HOME must be an absolute path (got {})",
+            dir.display()
+        ))
+    }
+}
+
 impl ArtifactId {
     /// Resolve the destination path for this artifact.
     pub fn resolve_dest(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
@@ -172,15 +222,20 @@ impl ArtifactId {
                 .join(".config/opencode/skills")
                 .join(name.as_str())
                 .join("SKILL.md")),
-            ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
-            ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
-            ArtifactId::CodexAgent(name) => Ok(home
-                .join(".codex/agents")
+            ArtifactId::CodexConfig => Ok(absolute_codex_home(home)?.join("config.toml")),
+            ArtifactId::CodexRules => Ok(absolute_codex_home(home)?.join("AGENTS.md")),
+            ArtifactId::CodexAgent(name) => Ok(absolute_codex_home(home)?
+                .join("agents")
                 .join(name.file_name_with_extension("toml"))),
             ArtifactId::CodexSkill(name) => {
-                Ok(crate::agent_skill_targets::codex_global_skills_dest(home)
-                    .join(name.as_str())
-                    .join("SKILL.md"))
+                let skills = crate::agent_skill_targets::codex_global_skills_dest(home);
+                if !skills.is_absolute() {
+                    return Err(format!(
+                        "Codex skills destination must be an absolute path (check CODEX_HOME and CODEX_SKILLS_PATH): {}",
+                        skills.display()
+                    ));
+                }
+                Ok(skills.join(name.as_str()).join("SKILL.md"))
             }
             ArtifactId::ClaudeRules => Ok(home.join(".claude/CLAUDE.md")),
             ArtifactId::ClaudeAgent(name) => Ok(home.join(".claude/agents").join(name.file_name())),
@@ -206,6 +261,32 @@ impl ArtifactId {
                     .join("SKILL.md"))
             }
             ArtifactId::WorkspaceFile(rel) => Ok(workspace_root.join(rel.as_str())),
+        }
+    }
+
+    /// Directory the destination must stay inside when it is written, backed up, restored, or
+    /// removed: the workspace for workspace files, `CODEX_HOME` for Codex artifacts when it lies
+    /// outside `home`, and `home` otherwise (which keeps the symlink-chain check from `home` down
+    /// for the default `~/.codex`).
+    pub fn allowlist_root(&self, home: &Path, workspace_root: &Path) -> Result<PathBuf, String> {
+        match self {
+            ArtifactId::WorkspaceFile(_) => Ok(workspace_root.to_path_buf()),
+            ArtifactId::CodexConfig
+            | ArtifactId::CodexRules
+            | ArtifactId::CodexAgent(_)
+            | ArtifactId::CodexSkill(_) => {
+                let dest = self.resolve_dest(home, workspace_root)?;
+                if dest.starts_with(home) {
+                    return Ok(home.to_path_buf());
+                }
+                let codex_root = absolute_codex_home(home)?;
+                Ok(if dest.starts_with(&codex_root) {
+                    codex_root
+                } else {
+                    home.to_path_buf()
+                })
+            }
+            _ => Ok(home.to_path_buf()),
         }
     }
 
@@ -262,6 +343,15 @@ impl ArtifactId {
             }
             ArtifactId::WorkspaceFile(rel) => Some(workspace_root.join(rel.as_str())),
         }
+    }
+
+    /// Rules files hold the managed base in a marked block; the rest of the
+    /// file belongs to the user (see `rules_block`).
+    pub fn is_rules_block(&self) -> bool {
+        matches!(
+            self,
+            ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules
+        )
     }
 
     /// Returns the parent SetupSurfaceId for this artifact.
@@ -873,5 +963,108 @@ mod tests {
         assert_eq!(artifacts.len(), 1);
         assert_eq!(artifacts[0], ArtifactId::CursorMcp);
         assert_eq!(artifacts[0].surface(), SetupSurfaceId::CursorMcp);
+    }
+
+    // ── Deserialization validation ──
+
+    #[test]
+    fn deserializing_artifact_ids_applies_name_validation() {
+        for json in [
+            r#"{"type":"CodexAgent","name":"../x"}"#,
+            r#"{"type":"OpenCodeAgent","name":"a/b"}"#,
+            r#"{"type":"ClaudeAgent","name":"Upper"}"#,
+            r#"{"type":"CodexSkill","name":"../x"}"#,
+            r#"{"type":"CursorSkill","name":""}"#,
+            r#"{"type":"WorkspaceFile","name":"../x"}"#,
+            r#"{"type":"WorkspaceFile","name":"/etc/passwd"}"#,
+            r#"{"type":"WorkspaceFile","name":""}"#,
+        ] {
+            let parsed = serde_json::from_str::<ArtifactId>(json);
+            assert!(parsed.is_err(), "{json} must not deserialize: {parsed:?}");
+        }
+    }
+
+    #[test]
+    fn deserialized_names_report_what_was_rejected() {
+        let err = serde_json::from_str::<AgentName>(r#""../x""#).expect_err("agent name");
+        assert!(err.to_string().contains("invalid agent name"), "{err}");
+        let err = serde_json::from_str::<SkillName>(r#""../x""#).expect_err("skill name");
+        assert!(err.to_string().contains("invalid skill name"), "{err}");
+        let err = serde_json::from_str::<WorkspaceRelPath>(r#""a/../x""#).expect_err("rel path");
+        assert!(
+            err.to_string().contains("invalid workspace-relative path"),
+            "{err}"
+        );
+    }
+
+    #[test]
+    fn valid_names_still_roundtrip_through_serde() {
+        let agent = AgentName::new("repo-scout").unwrap();
+        assert_eq!(serde_json::to_string(&agent).unwrap(), r#""repo-scout""#);
+        assert_eq!(
+            serde_json::from_str::<AgentName>(r#""repo-scout""#).unwrap(),
+            agent
+        );
+        let rel = WorkspaceRelPath::new("scripts/merge-codex-config.py").unwrap();
+        let json = serde_json::to_string(&ArtifactId::WorkspaceFile(rel.clone())).unwrap();
+        assert_eq!(
+            serde_json::from_str::<ArtifactId>(&json).unwrap(),
+            ArtifactId::WorkspaceFile(rel)
+        );
+    }
+
+    // ── CODEX_HOME ──
+
+    #[test]
+    fn codex_destinations_honor_codex_home_like_skills() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("codex-home-user");
+        let codex_home_dir = temp_dir("codex-home-override");
+        let ws = temp_dir("codex-home-ws");
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        std::env::set_var("CODEX_HOME", &codex_home_dir);
+
+        let agent = AgentName::new("repo-scout").unwrap();
+        let skill = SkillName::new("diagnose").unwrap();
+        let cases = [
+            (ArtifactId::CodexConfig, "config.toml"),
+            (ArtifactId::CodexRules, "AGENTS.md"),
+            (ArtifactId::CodexAgent(agent), "agents/repo-scout.toml"),
+            (ArtifactId::CodexSkill(skill), "skills/diagnose/SKILL.md"),
+        ];
+        for (artifact, rel) in cases {
+            let dest = artifact.resolve_dest(&home, &ws).expect("resolve dest");
+            assert_eq!(dest, codex_home_dir.join(rel), "{artifact:?}");
+        }
+    }
+
+    #[test]
+    fn codex_destinations_default_to_dot_codex_without_codex_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("codex-default-user");
+        let ws = temp_dir("codex-default-ws");
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        for value in [None, Some("   ")] {
+            match value {
+                Some(blank) => std::env::set_var("CODEX_HOME", blank),
+                None => std::env::remove_var("CODEX_HOME"),
+            }
+            assert_eq!(
+                ArtifactId::CodexConfig.resolve_dest(&home, &ws).unwrap(),
+                home.join(".codex/config.toml")
+            );
+            assert_eq!(
+                ArtifactId::CodexRules.resolve_dest(&home, &ws).unwrap(),
+                home.join(".codex/AGENTS.md")
+            );
+            assert_eq!(
+                ArtifactId::CodexAgent(AgentName::new("repo-scout").unwrap())
+                    .resolve_dest(&home, &ws)
+                    .unwrap(),
+                home.join(".codex/agents/repo-scout.toml")
+            );
+        }
     }
 }

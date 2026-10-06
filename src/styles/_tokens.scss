@@ -1,39 +1,95 @@
+/* ---- fonts ----
+   IBM Plex Mono, vendored unmodified from @fontsource/ibm-plex-mono 5.3.0 (latin subset,
+   OFL-1.1 — see src/assets/fonts/ibm-plex-mono/OFL.txt and NOTICE.md). The latin subset
+   covers å ä ö; glyphs outside it (▸ ● ◐ ✓ ✗ ❯) fall back to the system mono font, so
+   render them in `.g` cells (fixed 1ch width) rather than relying on white-space: pre. */
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/ibm-plex-mono/ibm-plex-mono-latin-400-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 500;
+  font-display: swap;
+  src: url("../assets/fonts/ibm-plex-mono/ibm-plex-mono-latin-500-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: normal;
+  font-weight: 600;
+  font-display: swap;
+  src: url("../assets/fonts/ibm-plex-mono/ibm-plex-mono-latin-600-normal.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+@font-face {
+  font-family: "IBM Plex Mono";
+  font-style: italic;
+  font-weight: 400;
+  font-display: swap;
+  src: url("../assets/fonts/ibm-plex-mono/ibm-plex-mono-latin-400-italic.woff2") format("woff2");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+/* ---- tokens ----
+   Dark palette lives in :root; the paper (light) palette is repeated in
+   [data-theme="light"] and the system-light media block below (applyThemeSettings always
+   sets data-theme=dark|light|system). --bg-panel/--bg-inset derive from --bg via
+   color-mix so the custom background setting re-tints every surface; --surface/--inset
+   are aliases for them. Semantic colours: --ok (success, green) is distinct from --accent
+   (interactive, blue). --inv-bg/--inv-fg are the inverse pair for the active tab and the
+   mode badge; applyThemeSettings overrides --inv-fg when a custom accent is set.
+   Contrast is asserted by src/styles.palette.test.ts (4.5:1 text, 3:1 strong borders). */
+
 :root {
-  --bg: #212121;
-  --bg-panel: color-mix(in srgb, var(--bg) 97%, white);
-  --bg-inset: color-mix(in srgb, var(--bg) 79%, black);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --text: #e0e0e0;
-  --text-muted: #909090;
-  --text-heading: #ededed;
-  --accent-rgb: 110, 168, 254;
-  --accent: #6ea8fe;
-  --accent-dim: rgba(var(--accent-rgb), 0.12);
-  --accent-bg: rgba(var(--accent-rgb), 0.16);
+  color-scheme: dark;
+  --bg: #121314;
+  --bg-panel: color-mix(in srgb, var(--bg) 96.5%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 67%, black);
+  --surface: var(--bg-panel);
+  --inset: var(--bg-inset);
+  --border: #3a3c40;
+  --border-strong: #6b6e75;
+  --text: #e4e4e0;
+  --text-muted: #9ea2a6;
+  --text-heading: #f5f5f2;
+  --accent-rgb: 127, 183, 255;
+  --accent: #7fb7ff;
   --active-bg: rgba(var(--accent-rgb), 0.10);
   --active-border: rgba(var(--accent-rgb), 0.24);
-  --active-border-strong: rgba(var(--accent-rgb), 0.34);
-  --focus-ring: rgba(var(--accent-rgb), 0.5);
-  --fail: #f87171;
-  --warn: #fbbf24;
-  --ok: #6ea8fe;
-  --dirty: #f59e0b;
-  --radius: 4px;
-  --font-ui: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "SF Mono", "Menlo", "Monaco", "Courier New", monospace;
-  --app-font-size: 15px;
+  --sel: rgba(var(--accent-rgb), 0.16);
+  --focus-ring: var(--accent);
+  --inv-bg: var(--accent);
+  --inv-fg: #0b1220;
+  --ok: #6bd08e;
+  --ok-bg: rgba(107, 208, 142, 0.12);
+  --warn: #e9c05a;
+  --warn-bg: rgba(233, 192, 90, 0.12);
+  --fail: #f0847f;
+  --fail-bg: rgba(240, 132, 127, 0.12);
+  --dirty: var(--warn);
+  --backdrop: rgba(0, 0, 0, 0.55);
+  --radius: 0;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  --font-ui: var(--font-mono);
+  --app-font-size: 13px;
   --app-font-scale: 1;
-  --text-xs: 0.667rem;
-  --text-sm: 0.8rem;
-  --text-base: 1rem;
-  --text-lg: 1.133rem;
-  --font-size-heading: 1.067rem;
-  --text-display: 1.2rem;
-  --header-height: 44px;
+  --fs: var(--app-font-size);
+  --fs-sm: max(12px, calc(var(--fs) - 1px));
+  --lh: calc(var(--fs) * 1.54);
+  --font-size-heading: 1rem;
+  --topline-height: 28px;
+  --statusbar-height: 24px;
   --traffic-light-reserve: 80px;
-  --nav-leading-gap: 10px;
-  --nav-icon-size: 32px;
   --repo-chart-series-1: #e4ed42;
   --repo-chart-series-2: #f1f1f1;
   --repo-chart-series-3: #cdd63b;
@@ -44,18 +100,29 @@
   --repo-chart-series-8: #b4b4b4;
   --repo-chart-gridline: rgba(255, 255, 255, 0.06);
   --repo-chart-axis: rgba(255, 255, 255, 0.12);
-  --repo-chart-text: rgba(255, 255, 255, 0.42);
 }
 
 [data-theme="light"] {
-  --bg: #f5f5f5;
-  --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
-  --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
-  --border: rgba(0, 0, 0, 0.08);
-  --border-strong: rgba(0, 0, 0, 0.14);
+  color-scheme: light;
+  --bg: #f7f6f2;
+  --bg-panel: color-mix(in srgb, var(--bg) 25%, white);
+  --bg-inset: color-mix(in srgb, var(--bg) 95.5%, black);
+  --border: #c9c7bd;
+  --border-strong: #807e74;
   --text: #1a1a1a;
-  --text-muted: #666666;
-  --text-heading: #111111;
+  --text-muted: #595d5f;
+  --text-heading: #0f0f0f;
+  --accent-rgb: 11, 95, 165;
+  --accent: #0b5fa5;
+  --sel: rgba(var(--accent-rgb), 0.14);
+  --inv-fg: #ffffff;
+  --ok: #1b6f33;
+  --ok-bg: rgba(27, 111, 51, 0.10);
+  --warn: #7a4d00;
+  --warn-bg: rgba(122, 77, 0, 0.12);
+  --fail: #b01e1e;
+  --fail-bg: rgba(176, 30, 30, 0.10);
+  --backdrop: rgba(30, 30, 28, 0.35);
   --repo-chart-series-1: #7a830f;
   --repo-chart-series-2: #6e737a;
   --repo-chart-series-3: #6a720d;
@@ -66,19 +133,30 @@
   --repo-chart-series-8: #5c6167;
   --repo-chart-gridline: rgba(0, 0, 0, 0.07);
   --repo-chart-axis: rgba(0, 0, 0, 0.14);
-  --repo-chart-text: rgba(0, 0, 0, 0.45);
 }
 
 @media (prefers-color-scheme: light) {
   [data-theme="system"] {
-    --bg: #f5f5f5;
-    --bg-panel: color-mix(in srgb, var(--bg) 70%, white);
-    --bg-inset: color-mix(in srgb, var(--bg) 96%, black);
-    --border: rgba(0, 0, 0, 0.08);
-    --border-strong: rgba(0, 0, 0, 0.14);
+    color-scheme: light;
+    --bg: #f7f6f2;
+    --bg-panel: color-mix(in srgb, var(--bg) 25%, white);
+    --bg-inset: color-mix(in srgb, var(--bg) 95.5%, black);
+    --border: #c9c7bd;
+    --border-strong: #807e74;
     --text: #1a1a1a;
-    --text-muted: #666666;
-    --text-heading: #111111;
+    --text-muted: #595d5f;
+    --text-heading: #0f0f0f;
+    --accent-rgb: 11, 95, 165;
+    --accent: #0b5fa5;
+    --sel: rgba(var(--accent-rgb), 0.14);
+    --inv-fg: #ffffff;
+    --ok: #1b6f33;
+    --ok-bg: rgba(27, 111, 51, 0.10);
+    --warn: #7a4d00;
+    --warn-bg: rgba(122, 77, 0, 0.12);
+    --fail: #b01e1e;
+    --fail-bg: rgba(176, 30, 30, 0.10);
+    --backdrop: rgba(30, 30, 28, 0.35);
     --repo-chart-series-1: #7a830f;
     --repo-chart-series-2: #6e737a;
     --repo-chart-series-3: #6a720d;
@@ -89,19 +167,15 @@
     --repo-chart-series-8: #5c6167;
     --repo-chart-gridline: rgba(0, 0, 0, 0.07);
     --repo-chart-axis: rgba(0, 0, 0, 0.14);
-    --repo-chart-text: rgba(0, 0, 0, 0.45);
   }
 }
 
+/* ---- base ---- */
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
-/* Focus-visible for keyboard navigation */
+/* Solid focus ring for keyboard navigation (pane focus uses border-color instead). */
 :focus-visible {
-  outline: 2px solid var(--accent);
-  outline-offset: 2px;
-}
-
-.nav-icon:focus-visible, .btn:focus-visible, .copy-btn:focus-visible, .settings-accent-picker:focus-visible, .settings-target-row:focus-visible, .tool-section-tab:focus-visible, .prompt-loops-card:focus-visible, .prompt-loops-search input:focus-visible, .prompt-loops-composer-select:focus-visible, .prompt-loops-composer-textarea:focus-visible, .prompt-loops-option-chip:focus-visible, .prompt-loops-options-summary:focus-visible, .prompt-loops-composer-reset:focus-visible, .tool-field:focus-visible, .repo-dashboard-field:focus-visible, .repo-dashboard-btn:focus-visible, .repo-dashboard-kpi:focus-visible, .repo-dashboard-seg:focus-visible, .settings-input:focus-visible, .docs-create-input:focus-visible, .lib-search-input:focus-visible, .docs-search:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 1px;
 }
@@ -119,7 +193,8 @@ html, body, #root {
   color: var(--text);
   font-family: var(--font-ui);
   font-size: var(--app-font-size);
-  line-height: 1.5;
+  line-height: var(--lh);
+  font-variant-ligatures: none;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -135,4 +210,27 @@ textarea {
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
+}
+
+/* ---- motion ----
+   Blinking carets and the activity loader are the only animations left (D10). Both the
+   OS preference and the in-app reduce_motion setting stop them. */
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+[data-reduce-motion="true"] *,
+[data-reduce-motion="true"] *::before,
+[data-reduce-motion="true"] *::after {
+  animation-duration: 0.01ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01ms !important;
 }

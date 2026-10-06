@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
 
@@ -125,8 +126,19 @@ def main() -> None:
         path.relative_to(ROOT / "resources" / "default-workspace").as_posix()
         for path in (ROOT / "resources/default-workspace/templates/skills/_overlays").rglob("*.md")
     }
-    if len(generated_skill_adapters) != 84:
-        fail(f"expected 84 generated skill adapters, found {len(generated_skill_adapters)}")
+    # The adapter count is derived from the canonical skills and the generator's
+    # target list instead of being pinned: every skill needs one adapter per target.
+    adapter_metadata = json.loads(
+        (ROOT / "resources/default-workspace/metadata/skill-adapters.json").read_text(encoding="utf-8")
+    )
+    canonical_skills = list((ROOT / "resources/default-workspace/skills").rglob("SKILL.md"))
+    expected_adapters = len(canonical_skills) * len(adapter_metadata.get("targets", []))
+    if not canonical_skills or len(generated_skill_adapters) != expected_adapters:
+        fail(
+            f"expected {expected_adapters} generated skill adapters "
+            f"({len(canonical_skills)} skills x {len(adapter_metadata.get('targets', []))} targets), "
+            f"found {len(generated_skill_adapters)}"
+        )
     expected_skill_adapter_paths = generated_skill_adapters | skill_overlay_sources
     missing_skill_adapter_paths = expected_skill_adapter_paths - skill_adapters
     extra_skill_adapter_paths = skill_adapters - expected_skill_adapter_paths
@@ -138,6 +150,18 @@ def main() -> None:
         fail("Metadata section missing: metadata/skill-adapters.json")
     if not (ROOT / "resources/default-workspace/metadata/skill-adapters.json").is_file():
         fail("skill adapter metadata missing on disk")
+
+    workspace_root = ROOT / "resources" / "default-workspace"
+    for label, listed in (
+        ("Scripts", scripts),
+        ("Templates", templates),
+        ("Skill adapters", skill_adapters),
+        ("Docs", docs),
+        ("Metadata", metadata),
+    ):
+        for rel in sorted(listed):
+            if not (workspace_root / rel).is_file():
+                fail(f"{label} section lists a file that does not exist: {rel}")
 
     user_owned_prefixes = ("docs/", "skills/", "agents/")
     for rel in sorted(refresh):

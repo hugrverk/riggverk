@@ -1,0 +1,123 @@
+/* ---- settings ----
+   Two panes of `key  value` rows (src/views/SettingsView.tsx). Rows come from the Kv primitive; the value
+   column holds a radio group (.setting > .setting-option), a colour field (.setting-color) or plain text.
+   The key column is a fixed 13ch so rows line up across the Kv blocks of one pane. */
+
+.settings-screen {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: minmax(0, 1fr);
+}
+
+.settings-kv {
+  grid-template-columns: 13ch minmax(0, 1fr);
+  align-items: start;
+}
+
+/* Focus rings of the controls in the value column must not be clipped by the Kv ellipsis rule. */
+.settings-kv dd {
+  overflow: visible;
+  white-space: normal;
+}
+
+.settings-kv dt,
+.settings-kv dd {
+  min-height: var(--lh);
+}
+
+.setting {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 14px;
+  min-height: var(--lh);
+}
+
+.setting-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: var(--lh);
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.setting-option:hover { color: var(--text); }
+.setting-option[aria-checked="true"] { color: var(--text-heading); }
+.setting-option[aria-checked="true"] .mark { color: var(--accent); }
+
+.setting-color {
+  flex-wrap: nowrap;
+  gap: 8px;
+}
+
+.setting-picker {
+  flex-shrink: 0;
+  width: 2em;
+  height: calc(var(--lh) - 6px);
+  padding: 1px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: transparent;
+  cursor: pointer;
+}
+
+.setting-picker::-webkit-color-swatch-wrapper { padding: 0; }
+.setting-picker::-webkit-color-swatch { border: none; }
+
+/* Text input shared with the harness pages (OpenCode model fields): inset box, one row tall. */
+.settings-input {
+  flex: 1;
+  min-width: 0;
+  height: calc(var(--lh) - 2px);
+  padding: 0 8px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  color: var(--text);
+  outline: none;
+}
+
+.settings-input::placeholder { color: var(--text-muted); }
+.settings-input:focus { border-color: var(--accent); }
+.settings-input[aria-invalid="true"] { border-color: var(--fail); }
+
+.setting-hex {
+  flex: 0 0 auto;
+  width: 11ch;
+}
+
+.setting-hint {
+  font-size: var(--fs-sm);
+}
+
+.setting-note {
+  margin-top: var(--lh);
+  padding: 0 10px;
+  font-size: var(--fs-sm);
+}
+
+.setting-note.c-warn { margin-top: 6px; }
+
+.setting-group {
+  margin-top: var(--lh);
+}
+
+.setting-path { overflow-wrap: anywhere; }
+
+.setting-status {
+  margin-top: var(--lh);
+}
+
+@media (max-width: 760px) {
+  .settings-screen {
+    grid-template-columns: minmax(0, 1fr);
+    grid-auto-rows: auto;
+    overflow-y: auto;
+  }
+}
+
+/* ---- harness target toggles (TargetSettingsPanel, Start) ---- */

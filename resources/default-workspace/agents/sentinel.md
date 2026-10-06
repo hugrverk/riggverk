@@ -6,7 +6,7 @@ temperature: 0.1
 steps: 45
 hidden: true
 permission:
-  *: ask
+  "*": ask
   external_directory: ask
   doom_loop: ask
   todowrite: allow
@@ -58,6 +58,11 @@ permission:
     "**/*.ppk": deny
     "**/*.jks": deny
     "**/Pulumi.*.yaml": deny
+    "**/mcp.json": deny
+    "**/.claude.json": deny
+    "**/.codex/config.toml": deny
+    "**/.git-credentials": deny
+    "**/.git/config": deny
     "**/.env.example": allow
     "**/.env.sample": allow
     "**/.env.template": allow

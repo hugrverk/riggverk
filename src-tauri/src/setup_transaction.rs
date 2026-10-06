@@ -20,6 +20,10 @@ use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const MAX_MANIFEST_OPERATIONS: usize = 500;
 
+/// Error reported when rollback finds user changes made after apply. Callers
+/// compare against it to tell a preserved user edit from a real failure.
+pub const CHANGED_SINCE_APPLY: &str = "artifact changed since apply";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PreviousState {
@@ -60,6 +64,22 @@ pub enum TransactionStatus {
     RollingBack,
     RolledBack,
     RollbackFailed,
+}
+
+impl TransactionStatus {
+    /// Completed and rolled-back transactions are finished. A rollback-failed one is
+    /// terminal for automatic reconciliation: its leftover artifacts were preserved on
+    /// purpose (user edits) or need a person to look at them, and re-running it on every apply
+    /// could restore an old backup over newer state. An explicit rollback can still retry it.
+    /// Every other status may have left artifacts half-applied and needs reconciliation.
+    pub fn needs_reconciliation(self) -> bool {
+        !matches!(
+            self,
+            TransactionStatus::Completed
+                | TransactionStatus::RolledBack
+                | TransactionStatus::RollbackFailed
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -148,6 +168,31 @@ pub struct ArtifactTransactionManifest {
     pub operations: Vec<ArtifactManifestOperation>,
 }
 
+/// The part of a stored manifest needed to decide whether its transaction can
+/// still need reconciliation, readable even when the full manifest no longer
+/// validates (older schema, damaged operations).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestHeader {
+    pub workspace_key: Option<String>,
+    pub status: TransactionStatus,
+}
+
+pub fn read_manifest_header(raw: &str) -> Result<ManifestHeader, String> {
+    #[derive(Deserialize)]
+    struct Header {
+        #[serde(default)]
+        workspace_key: Option<String>,
+        #[serde(default)]
+        transaction_status: TransactionStatus,
+    }
+    let header: Header =
+        serde_json::from_str(raw).map_err(|e| format!("unreadable manifest header: {e}"))?;
+    Ok(ManifestHeader {
+        workspace_key: header.workspace_key,
+        status: header.transaction_status,
+    })
+}
+
 #[derive(Debug, Clone)]
 pub struct PlannedArtifact {
     pub artifact: ArtifactId,
@@ -155,6 +200,20 @@ pub struct PlannedArtifact {
     pub kind: OperationKind,
     pub previous_state: PreviousState,
     pub rollback_action: RollbackAction,
+    /// Block classification for rules artifacts; `None` for every other artifact.
+    pub rules: Option<crate::rules_block::RulesAssessment>,
+    /// Exact content for an explicit rules conversion; `None` for every
+    /// regular plan.
+    pub rules_rewrite: Option<RulesRewrite>,
+}
+
+/// A rules file the user chose to convert: the complete new content, and the
+/// digest of the file it was computed from. Apply refuses to write when the
+/// file changed since.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RulesRewrite {
+    pub content: String,
+    pub expected_installed_digest: String,
 }
 
 const MAX_PREVIEW_TOKENS: usize = 64;
@@ -406,13 +465,9 @@ pub fn validate_artifact_source_dest(
     }
     let ws_root = workspace_root.to_path_buf();
     let dest = artifact.resolve_dest(home, &ws_root)?;
-    let dest_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-        &ws_root
-    } else {
-        home
-    };
-    crate::path_safety::reject_path_escape(&dest, dest_root, "destination")?;
-    reject_symlink_parent_chain(&dest, dest_root, "destination")?;
+    let dest_root = artifact.allowlist_root(home, &ws_root)?;
+    crate::path_safety::reject_path_escape(&dest, &dest_root, "destination")?;
+    reject_symlink_parent_chain(&dest, &dest_root, "destination")?;
     reject_symlink(&dest, "destination")?;
     let bundled_root = crate::setup_roots::bundled_root_for(&ws_root)?
         .canonicalize()
@@ -485,7 +540,11 @@ pub fn detect_surface_state(
         OperationKind::Create => format!("{} not installed", surface.label()),
         OperationKind::Update => format!("{} differs from source", surface.label()),
         OperationKind::Conflict => format!("{} has conflicts", surface.label()),
-        OperationKind::Manual => format!("{} requires manual action", surface.label()),
+        // Only a rules file the user chose to manage plans as Manual.
+        OperationKind::Manual => format!(
+            "{}: you manage this file; base updates are skipped",
+            surface.label()
+        ),
         OperationKind::Unavailable => format!("{} unavailable", surface.label()),
         OperationKind::Remove => format!("{} has old app files to remove", surface.label()),
     };
@@ -594,6 +653,15 @@ pub fn detect_artifact_state(
         return (OperationKind::Unavailable, PreviousState::Unavailable);
     }
 
+    if artifact.is_rules_block() {
+        // Without a managed record only the exact outcomes are known: absent,
+        // or a block that already carries the current base.
+        return match assess_rules(artifact, &dest, &source, None) {
+            Some(assessment) => rules_outcome(assessment.plan),
+            None => (OperationKind::Unavailable, PreviousState::Unavailable),
+        };
+    }
+
     match artifact_kind(artifact) {
         ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
         ArtifactKind::TuiConfig | ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
@@ -647,6 +715,194 @@ pub fn detect_artifact_state(
                 _ => (OperationKind::Unavailable, PreviousState::Unavailable),
             }
         }
+    }
+}
+
+/// Classify a rules artifact's installed file against its bundled source.
+/// `None` means the source cannot be read.
+fn assess_rules(
+    artifact: &ArtifactId,
+    dest: &Path,
+    source: &Path,
+    managed_hash: Option<&str>,
+) -> Option<crate::rules_block::RulesAssessment> {
+    use crate::rules_block::{MalformedReason, RulesAssessment, RulesConflict, RulesLayout};
+    let source_text = fs::read_to_string(source).ok()?;
+    let unusable = |reason| {
+        Some(RulesAssessment {
+            plan: crate::rules_block::RulesPlan::Conflict(RulesConflict::MalformedMarkers),
+            layout: RulesLayout::Malformed,
+            malformed: Some(reason),
+            refinement_lines: 0,
+        })
+    };
+    let installed = match fs::symlink_metadata(dest) {
+        Ok(meta) if meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES => {
+            return unusable(MalformedReason::TooLarge);
+        }
+        Ok(_) => match fs::read(dest) {
+            Ok(bytes) => Some(bytes),
+            // Present but unreadable (a directory, no permission): never replaced.
+            Err(_) => return unusable(MalformedReason::NotUtf8),
+        },
+        Err(_) => None,
+    };
+    Some(crate::rules_block::assess(
+        installed.as_deref(),
+        &source_text,
+        managed_hash,
+        &|digest| crate::managed_bootstrap::approved_rules_base_digest(artifact, digest),
+    ))
+}
+
+/// Block classification for the plan, or `None` for non-rules artifacts and
+/// rules artifacts whose source or destination cannot be used.
+fn plan_rules_artifact(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> Option<crate::rules_block::RulesAssessment> {
+    if !artifact.is_rules_block() {
+        return None;
+    }
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
+    let source = artifact.resolve_source(&bundled_root)?;
+    if reject_symlink(&dest, "destination").is_err() || reject_symlink(&source, "source").is_err() {
+        return None;
+    }
+    assess_rules(artifact, &dest, &source, managed_hash)
+}
+
+/// Conflicts the user may resolve by converting the file onto the base block.
+/// Malformed markers are never rewritten: the file is not understood.
+pub fn is_convertible(plan: crate::rules_block::RulesPlan) -> bool {
+    use crate::rules_block::{RulesConflict, RulesPlan};
+    matches!(
+        plan,
+        RulesPlan::Conflict(RulesConflict::LegacyDiverged | RulesConflict::BaseBlockEdited)
+    )
+}
+
+/// Installed state and classification of a rules artifact, for previews and
+/// explicit conversion.
+pub struct RulesContext {
+    pub source_text: String,
+    pub bundled_root: PathBuf,
+    pub installed: Option<Vec<u8>>,
+    pub assessment: crate::rules_block::RulesAssessment,
+}
+
+pub fn rules_context(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<RulesContext, String> {
+    if !artifact.is_rules_block() {
+        return Err("not a rules artifact".to_string());
+    }
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let identity = crate::managed_state::artifact_identity(artifact);
+    let managed_hash = managed_hash_for(&identity, &records);
+    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
+        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
+    let source = artifact
+        .resolve_source(&bundled_root)
+        .ok_or_else(|| "rules source is unavailable".to_string())?;
+    let source_text = fs::read_to_string(&source).map_err(|e| format!("read rules source: {e}"))?;
+    let dest = artifact.resolve_dest(home, workspace_root)?;
+    let installed = match fs::symlink_metadata(&dest) {
+        Ok(meta) if meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES => {
+            return Err("rules file is too large".to_string());
+        }
+        Ok(_) => Some(fs::read(&dest).map_err(|e| format!("read rules file: {e}"))?),
+        Err(_) => None,
+    };
+    Ok(RulesContext {
+        source_text,
+        bundled_root,
+        installed,
+        assessment,
+    })
+}
+
+/// The transaction operation for converting a rules file with `rewrite`.
+pub fn conversion_operation(
+    artifact: &ArtifactId,
+    assessment: crate::rules_block::RulesAssessment,
+    rewrite: RulesRewrite,
+) -> PlannedArtifact {
+    PlannedArtifact {
+        artifact: artifact.clone(),
+        surface: artifact.surface(),
+        kind: OperationKind::Update,
+        previous_state: PreviousState::ManagedFile,
+        rollback_action: rollback_action_for(OperationKind::Update, PreviousState::ManagedFile),
+        rules: Some(assessment),
+        rules_rewrite: Some(rewrite),
+    }
+}
+
+/// Fingerprint of an explicit rules conversion: the regular plan fingerprint
+/// plus the exact content to be written.
+pub fn conversion_fingerprint(
+    workspace_root: &Path,
+    home: &Path,
+    operation: &PlannedArtifact,
+) -> Result<String, String> {
+    let rewrite = operation
+        .rules_rewrite
+        .as_ref()
+        .ok_or_else(|| "conversion without content".to_string())?;
+    let base = compute_plan_fingerprint(
+        workspace_root,
+        &[operation.surface],
+        std::slice::from_ref(operation),
+        home,
+    )?;
+    stable_fingerprint(&[
+        base,
+        rewrite.expected_installed_digest.clone(),
+        crate::stable_digest::bytes(rewrite.content.as_bytes()),
+    ])
+}
+
+/// Re-checks, at apply time, that a rules file may still be written: the plan
+/// came from an earlier read, and a diverged or malformed file must never be
+/// replaced.
+pub fn ensure_rules_apply_allowed(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let identity = crate::managed_state::artifact_identity(artifact);
+    let managed_hash = managed_hash_for(&identity, &records);
+    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
+        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    match assessment.plan {
+        crate::rules_block::RulesPlan::Conflict(conflict) => Err(format!(
+            "refusing to change rules file: {}",
+            conflict.message()
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn rules_outcome(plan: crate::rules_block::RulesPlan) -> (OperationKind, PreviousState) {
+    use crate::rules_block::RulesPlan;
+    match plan {
+        RulesPlan::Create => (OperationKind::Create, PreviousState::Absent),
+        RulesPlan::NoChange => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
+        // Only the block body changes; the user's text around it is merged.
+        RulesPlan::UpdateBlock => (OperationKind::Update, PreviousState::MergeableConfigFile),
+        // A pristine pre-block file is replaced whole after a full backup.
+        RulesPlan::WrapLegacy => (OperationKind::Update, PreviousState::ManagedFile),
+        RulesPlan::Conflict(_) => (OperationKind::Conflict, PreviousState::Conflict),
     }
 }
 
@@ -810,22 +1066,7 @@ pub fn plan_artifacts_for_uninstall(
     home: &Path,
 ) -> Result<UninstallArtifactPlan, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
-    let bootstrap_records = if workspace_root.join("skills").is_dir() {
-        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
-        .as_ref()
-        .map(|s| s.artifacts.clone())
-        .unwrap_or_default();
-    let known: std::collections::HashSet<String> =
-        records.iter().map(|r| r.identity.clone()).collect();
-    records.extend(
-        bootstrap_records
-            .into_iter()
-            .filter(|record| !known.contains(&record.identity)),
-    );
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
 
     let artifacts = expand_surfaces_to_artifacts(SetupSurfaceId::ALL, workspace_root)?;
@@ -849,6 +1090,12 @@ pub fn plan_artifacts_for_uninstall(
             if exists {
                 merged.push(artifact);
             }
+            continue;
+        }
+        if rules_block_has_user_content(&artifact, workspace_root, home) {
+            // The file holds the user's own text beside the base block;
+            // deleting it would destroy that content.
+            merged.push(artifact);
             continue;
         }
         let installed = crate::setup_fingerprint::artifact_installed_managed_digest(
@@ -880,6 +1127,8 @@ pub fn plan_artifacts_for_uninstall(
                     OperationKind::Remove,
                     PreviousState::ManagedFile,
                 ),
+                rules: None,
+                rules_rewrite: None,
             });
         } else {
             preserved.push(artifact);
@@ -913,6 +1162,8 @@ pub fn plan_artifacts_for_uninstall(
                     kind,
                     previous_state,
                     rollback_action,
+                    rules: None,
+                    rules_rewrite: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -927,31 +1178,80 @@ pub fn plan_artifacts_for_uninstall(
     })
 }
 
+/// Whether a rules file carries user text around its managed block.
+fn rules_block_has_user_content(artifact: &ArtifactId, workspace_root: &Path, home: &Path) -> bool {
+    if !artifact.is_rules_block() {
+        return false;
+    }
+    let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
+        return false;
+    };
+    if fs::metadata(&dest).is_ok_and(|meta| meta.len() > crate::rules_block::MAX_RULES_FILE_BYTES) {
+        return false;
+    }
+    let Ok(bytes) = fs::read(&dest) else {
+        return false;
+    };
+    matches!(
+        crate::rules_block::parse_bytes(&bytes),
+        Ok(Some(file)) if !file.user_region_is_blank()
+    )
+}
+
+/// Managed records plus historical-ownership records for pre-manifest copies.
+///
+/// Pre-manifest copies stay adoptable after the first apply: explicit managed
+/// records win, historical-ownership records fill the gaps for artifacts an
+/// earlier app version installed but no apply has touched. Artifacts that
+/// already have a record are not inspected again, and one that cannot be
+/// inspected only loses its own adoption.
+fn records_with_bootstrap(
+    workspace_root: &Path,
+    home: &Path,
+    managed: Option<&crate::managed_state::ManagedState>,
+) -> Vec<crate::managed_state::ManagedArtifactRecord> {
+    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
+        .map(|state| state.artifacts.clone())
+        .unwrap_or_default();
+    if !workspace_root.join("skills").is_dir() {
+        return records;
+    }
+    let known: HashSet<String> = records.iter().map(|r| r.identity.clone()).collect();
+    match crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home, &known) {
+        Ok(inference) => {
+            log_skipped_bootstrap(&inference.skipped);
+            records.extend(
+                inference
+                    .records
+                    .into_iter()
+                    .filter(|record| !known.contains(&record.identity)),
+            );
+        }
+        Err(error) => log_skipped_bootstrap(&[error]),
+    }
+    records
+}
+
+/// Plans run several times per preview or apply; report each reason once.
+fn log_skipped_bootstrap(skipped: &[String]) {
+    static LOGGED: OnceLock<Mutex<HashSet<String>>> = OnceLock::new();
+    let Ok(mut logged) = LOGGED.get_or_init(Mutex::default).lock() else {
+        return;
+    };
+    for reason in skipped {
+        if logged.insert(reason.clone()) {
+            eprintln!("agent-workspace: skipped historical-ownership check: {reason}");
+        }
+    }
+}
+
 pub fn plan_artifacts_for_surfaces(
     surfaces: &[SetupSurfaceId],
     workspace_root: &Path,
     home: &Path,
 ) -> Result<Vec<PlannedArtifact>, String> {
     let managed = crate::managed_state::read_managed_state(workspace_root);
-    let bootstrap_records = if workspace_root.join("skills").is_dir() {
-        crate::managed_bootstrap::infer_bootstrap_records(workspace_root, home).unwrap_or_default()
-    } else {
-        Vec::new()
-    };
-    let mut records: Vec<crate::managed_state::ManagedArtifactRecord> = managed
-        .as_ref()
-        .map(|s| s.artifacts.clone())
-        .unwrap_or_default();
-    // Pre-manifest copies stay adoptable after the first apply: explicit
-    // managed records win, historical-ownership records fill the gaps for
-    // artifacts an earlier app version installed but no apply has touched.
-    let known: std::collections::HashSet<String> =
-        records.iter().map(|r| r.identity.clone()).collect();
-    records.extend(
-        bootstrap_records
-            .into_iter()
-            .filter(|record| !known.contains(&record.identity)),
-    );
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
 
     let bundled_root = crate::setup_roots::bundled_root_for(workspace_root)?;
     let canonical_identities =
@@ -971,25 +1271,43 @@ pub fn plan_artifacts_for_surfaces(
         let surface = artifact.surface();
         let identity = crate::managed_state::artifact_identity(&artifact);
         let managed_hash = managed_hash_for(&identity, &records);
-        let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
-        let (kind, previous_state) = refine_with_managed_hash(
-            kind,
-            previous_state,
-            &artifact,
-            workspace_root,
-            home,
-            managed_hash.as_deref(),
-        );
-        // Updates without proven ownership are preserved as conflicts, except
-        // mergeable configs: their merge rewrites only managed keys and
-        // preserves user-owned content by construction.
-        let (kind, previous_state) = if managed_hash.is_none()
-            && matches!(kind, OperationKind::Update)
-            && !matches!(previous_state, PreviousState::MergeableConfigFile)
-        {
-            (OperationKind::Conflict, PreviousState::Conflict)
-        } else {
-            (kind, previous_state)
+        let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
+        let (kind, previous_state) = match &rules {
+            Some(assessment) => {
+                let (kind, previous_state) = rules_outcome(assessment.plan);
+                // A hand-edited file the user chose to manage stays untouched
+                // and reports no conflict; it needs their own action.
+                if kind == OperationKind::Conflict
+                    && is_convertible(assessment.plan)
+                    && crate::rules_preferences::is_user_managed(workspace_root, &artifact)
+                {
+                    (OperationKind::Manual, previous_state)
+                } else {
+                    (kind, previous_state)
+                }
+            }
+            None => {
+                let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
+                let (kind, previous_state) = refine_with_managed_hash(
+                    kind,
+                    previous_state,
+                    &artifact,
+                    workspace_root,
+                    home,
+                    managed_hash.as_deref(),
+                );
+                // Updates without proven ownership are preserved as conflicts,
+                // except mergeable configs: their merge rewrites only managed
+                // keys and preserves user-owned content by construction.
+                if managed_hash.is_none()
+                    && matches!(kind, OperationKind::Update)
+                    && !matches!(previous_state, PreviousState::MergeableConfigFile)
+                {
+                    (OperationKind::Conflict, PreviousState::Conflict)
+                } else {
+                    (kind, previous_state)
+                }
+            }
         };
         let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
@@ -998,6 +1316,8 @@ pub fn plan_artifacts_for_surfaces(
             kind,
             previous_state,
             rollback_action,
+            rules,
+            rules_rewrite: None,
         });
     }
 
@@ -1034,6 +1354,8 @@ pub fn plan_artifacts_for_surfaces(
             kind,
             previous_state,
             rollback_action,
+            rules: None,
+            rules_rewrite: None,
         });
     }
     Ok(planned)
@@ -1202,10 +1524,10 @@ pub fn artifact_matches_post_apply_state(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<bool, String> {
-    let expected_full = op
-        .post_apply_full_digest
-        .as_deref()
-        .ok_or_else(|| "missing post-apply full digest".to_string())?;
+    let Some(expected_full) = op.post_apply_full_digest.as_deref() else {
+        // Apply was interrupted before digests were recorded.
+        return artifact_matches_unrecorded_apply_output(op, workspace_root, home);
+    };
     let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
         &op.artifact,
         workspace_root,
@@ -1225,6 +1547,29 @@ pub fn artifact_matches_post_apply_state(
         }
     }
     Ok(true)
+}
+
+/// Whether the artifact currently holds what this operation would have
+/// written. Used for operations whose post-apply digests were never recorded
+/// (apply failed or was interrupted mid-operation), where the planned content
+/// is the only proof the app produced the current state.
+fn artifact_matches_unrecorded_apply_output(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<bool, String> {
+    let current = crate::setup_fingerprint::artifact_installed_managed_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if matches!(op.kind, OperationKind::Remove) {
+        return Ok(current == crate::setup_fingerprint::ABSENT_DIGEST);
+    }
+    let expected = crate::setup_roots::bundled_root_for(workspace_root).and_then(|bundled| {
+        crate::setup_fingerprint::artifact_source_digest(&op.artifact, &bundled, home)
+    });
+    Ok(expected.is_ok_and(|expected| expected == current))
 }
 
 fn backup_path_for_op(
@@ -1383,7 +1728,11 @@ pub fn persist_manifest_atomic(
         serde_json::to_string_pretty(manifest).map_err(|e| format!("serialize manifest: {e}"))?;
     let _: ArtifactTransactionManifest =
         serde_json::from_str(&json).map_err(|e| format!("validate manifest json: {e}"))?;
-    crate::safe_filesystem::write_regular_file_atomic(path, json.as_bytes(), allowlisted_root)?;
+    crate::safe_filesystem::write_private_regular_file_atomic(
+        path,
+        json.as_bytes(),
+        allowlisted_root,
+    )?;
     let read_back = fs::read_to_string(path).map_err(|e| format!("re-read manifest: {e}"))?;
     let parsed: ArtifactTransactionManifest =
         serde_json::from_str(&read_back).map_err(|e| format!("parse re-read manifest: {e}"))?;
@@ -1410,19 +1759,19 @@ pub fn backup_artifact(
     let backup_path = backup_dir.join(&rel);
     reject_path_within_transaction_root(&backup_path, backup_dir)?;
     // Validate source parent chain against the appropriate root.
-    let source_root = if matches!(artifact, ArtifactId::WorkspaceFile(_)) {
-        workspace_root
-    } else {
-        home
-    };
+    let source_root = artifact.allowlist_root(home, workspace_root)?;
     if dest.is_dir() {
-        crate::safe_filesystem::copy_dir_no_symlinks(&dest, &backup_path, backup_dir)
+        crate::safe_filesystem::copy_private_dir_no_symlinks(&dest, &backup_path, backup_dir)
             .map_err(|e| format!("backup dir {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     } else {
-        reject_symlink_parent_chain(&dest, source_root, "backup source file")?;
-        crate::safe_filesystem::copy_regular_file_no_symlinks(&dest, &backup_path, backup_dir)
-            .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
+        reject_symlink_parent_chain(&dest, &source_root, "backup source file")?;
+        crate::safe_filesystem::copy_private_regular_file_no_symlinks(
+            &dest,
+            &backup_path,
+            backup_dir,
+        )
+        .map_err(|e| format!("backup file {}: {e}", dest.display()))?;
         validate_backup_copy(artifact, &dest, &backup_path, backup_dir)?;
     }
     Ok(Some(rel))
@@ -1603,7 +1952,7 @@ pub fn artifact_unchanged_since_apply(
         home,
     )?;
     if current_managed != expected_managed {
-        return Err("artifact changed since apply".into());
+        return Err(CHANGED_SINCE_APPLY.into());
     }
     Ok(())
 }
@@ -1628,7 +1977,7 @@ fn rollback_restore_mode(
     } else if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
         Ok(RollbackRestoreMode::ManagedProjectionMerge)
     } else {
-        Err("artifact changed since apply".into())
+        Err(CHANGED_SINCE_APPLY.into())
     }
 }
 
@@ -1656,7 +2005,7 @@ pub fn validate_create_target_unchanged(
         home,
     )?;
     if current_full != expected_full {
-        return Err("artifact changed since apply".into());
+        return Err(CHANGED_SINCE_APPLY.into());
     }
     Ok(())
 }
@@ -1725,19 +2074,50 @@ pub fn validate_artifact_after_apply(
     Ok(())
 }
 
+/// Restore for automatic rollback (failed apply or interrupted-apply
+/// reconciliation). Never overwrites content the transaction did not produce:
+/// an artifact the user changed after apply fails with [`CHANGED_SINCE_APPLY`]
+/// and is left untouched.
 pub fn restore_artifact_from_backup(
     op: &ArtifactManifestOperation,
     backup_dir: &Path,
     home: &Path,
     workspace_root: &Path,
 ) -> Result<(), String> {
-    restore_artifact_from_backup_with_mode(
-        op,
-        backup_dir,
-        home,
-        RollbackRestoreMode::FullBackup,
-        Some(workspace_root),
-    )
+    match automatic_restore_mode(op, backup_dir, home, workspace_root)? {
+        Some(mode) => {
+            restore_artifact_from_backup_with_mode(op, backup_dir, home, mode, Some(workspace_root))
+        }
+        None => Ok(()),
+    }
+}
+
+/// `None` means the artifact already matches its pre-apply state.
+fn automatic_restore_mode(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<Option<RollbackRestoreMode>, String> {
+    if artifact_matches_previous_backup_state(op, backup_dir, home, workspace_root)? {
+        return Ok(None);
+    }
+    if op.post_apply_digest.is_some() && op.post_apply_full_digest.is_some() {
+        return rollback_restore_mode(op, workspace_root, home).map(Some);
+    }
+    if artifact_matches_unrecorded_apply_output(op, workspace_root, home)? {
+        // Without a recorded full digest the file may carry user edits outside
+        // the managed keys, so merge-managed configs restore only their managed
+        // projection.
+        return Ok(Some(
+            if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
+                RollbackRestoreMode::ManagedProjectionMerge
+            } else {
+                RollbackRestoreMode::FullBackup
+            },
+        ));
+    }
+    Err(CHANGED_SINCE_APPLY.into())
 }
 
 pub fn restore_artifact_from_backup_for_explicit_rollback(
@@ -1761,10 +2141,8 @@ fn restore_artifact_from_backup_with_mode(
         workspace_root.ok_or_else(|| "workspace root required for rollback".to_string())?;
     let dest = op.artifact.resolve_dest(home, ws_root)?;
     reject_symlink(&dest, "rollback destination")?;
-    let allowlist_root = match &op.artifact {
-        ArtifactId::WorkspaceFile(_) => ws_root,
-        _ => home,
-    };
+    let allowlist_root = op.artifact.allowlist_root(home, ws_root)?;
+    let allowlist_root = allowlist_root.as_path();
 
     let restore_dest = dest.clone();
 
@@ -1779,13 +2157,8 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
-            if restore_dest.exists() {
-                crate::safe_filesystem::remove_regular_file_no_symlinks(
-                    &restore_dest,
-                    allowlist_root,
-                )
-                .map_err(|e| format!("remove restore dest file: {e}"))?;
-            }
+            // The copy replaces the destination atomically; removing it first
+            // would lose the file if the copy then fails.
             crate::safe_filesystem::copy_regular_file_no_symlinks(
                 &backup_path,
                 &restore_dest,
@@ -1841,8 +2214,9 @@ fn restore_artifact_from_backup_with_mode(
                         let workspace_root = workspace_root.ok_or_else(|| {
                             "workspace root required for codex managed rollback".to_string()
                         })?;
+                        // The merge scripts come from the bundled root, never from the runtime workspace.
                         let rendered = crate::commands::render_codex_config_managed_projection(
-                            workspace_root,
+                            &crate::setup_roots::bundled_root_for(workspace_root)?,
                             &dest,
                             &backup_path,
                         )?;
@@ -1884,6 +2258,32 @@ fn restore_artifact_from_backup_with_mode(
                             allowlist_root,
                         )
                         .map_err(|e| format!("write cursor mcp: {e}"))?;
+                    } else if op.artifact.is_rules_block() {
+                        // Put the previous base back inside the block; the
+                        // user's text around it is whatever it is now.
+                        let backup_bytes = fs::read(&backup_path)
+                            .map_err(|e| format!("read backup rules file: {e}"))?;
+                        let backup_file = crate::rules_block::parse_bytes(&backup_bytes)
+                            .map_err(|reason| {
+                                format!("backup rules file is unusable: {}", reason.message())
+                            })?
+                            .ok_or_else(|| "backup rules file has no managed block".to_string())?;
+                        let installed_bytes = fs::read(&dest)
+                            .map_err(|e| format!("read installed rules file: {e}"))?;
+                        let installed_file = crate::rules_block::parse_bytes(&installed_bytes)
+                            .map_err(|reason| {
+                                format!("installed rules file is unusable: {}", reason.message())
+                            })?
+                            .ok_or_else(|| {
+                                "installed rules file has no managed block".to_string()
+                            })?;
+                        let rendered = installed_file.render_with_body(backup_file.body);
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
+                        )
+                        .map_err(|e| format!("write rules file: {e}"))?;
                     } else {
                         return Err("unsupported managed config artifact".into());
                     }
@@ -1935,7 +2335,7 @@ mod tests {
     fn expand_bundled_opencode_skills_count() {
         let repo = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace");
         let artifacts = expand_surface_fail_closed(SetupSurfaceId::OpenCodeSkills, &repo).unwrap();
-        assert_eq!(artifacts.len(), 21);
+        assert_eq!(artifacts.len(), 22);
     }
 
     #[test]
@@ -2167,6 +2567,9 @@ mod tests {
     fn validate_artifact_source_dest_rejects_dangling_destination() {
         #[cfg(unix)]
         {
+            let _guard = crate::test_env::guard::lock();
+            let _restore = crate::test_env::guard::EnvRestore::capture();
+            unsafe { std::env::remove_var("CODEX_HOME") };
             let base = temp("dangling-dest");
             let _ = fs::remove_dir_all(&base);
             let ws = base.join("ws");
@@ -2182,6 +2585,97 @@ mod tests {
             assert!(err.contains("symlink"), "{err}");
             let _ = fs::remove_dir_all(&base);
         }
+    }
+
+    fn codex_agent_artifact() -> ArtifactId {
+        ArtifactId::CodexAgent(crate::artifact_registry::AgentName::new("repo-scout").unwrap())
+    }
+
+    #[test]
+    fn validate_artifact_source_dest_allows_codex_home_outside_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-outside");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        let codex = base.join("elsewhere/codex");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(&codex).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", &codex) };
+
+        for artifact in [
+            ArtifactId::CodexRules,
+            ArtifactId::CodexConfig,
+            codex_agent_artifact(),
+        ] {
+            let (_, dest) = validate_artifact_source_dest(&artifact, &ws, &home)
+                .unwrap_or_else(|e| panic!("{artifact:?}: {e}"));
+            assert!(dest.starts_with(&codex), "{artifact:?}: {dest:?}");
+        }
+        // Surfaces that live under home keep their home allowlist.
+        let (_, dest) =
+            validate_artifact_source_dest(&ArtifactId::ClaudeRules, &ws, &home).unwrap();
+        assert!(dest.starts_with(&home), "{dest:?}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn validate_artifact_source_dest_rejects_relative_codex_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-relative");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", "relative/codex") };
+
+        let err = validate_artifact_source_dest(&ArtifactId::CodexRules, &ws, &home)
+            .expect_err("relative CODEX_HOME must be rejected");
+        assert!(err.contains("CODEX_HOME must be an absolute path"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn explicit_rollback_restores_codex_artifact_under_codex_home_outside_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("codex-home-restore");
+        let ws = base.join("ws");
+        let home = base.join("home");
+        let codex = base.join("elsewhere/codex");
+        let backup_dir = base.join("backup");
+        fs::create_dir_all(&ws).unwrap();
+        fs::create_dir_all(&home).unwrap();
+        fs::create_dir_all(codex.join("agents")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
+        unsafe { std::env::set_var("CODEX_HOME", &codex) };
+        let dest = codex.join("agents/repo-scout.toml");
+        fs::write(&dest, "applied").unwrap();
+        fs::write(backup_dir.join("artifacts/agent"), "before").unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: codex_agent_artifact(),
+            surface: SetupSurfaceId::CodexAgents,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::ManagedFile,
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/agent".into()),
+            apply_status: ApplyStatus::Applied,
+            ..Default::default()
+        };
+
+        restore_artifact_from_backup_with_mode(
+            &op,
+            &backup_dir,
+            &home,
+            RollbackRestoreMode::FullBackup,
+            Some(&ws),
+        )
+        .expect("restore under CODEX_HOME");
+
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "before");
+        let _ = fs::remove_dir_all(&base);
     }
 
     #[test]
@@ -2260,13 +2754,259 @@ mod tests {
         let home = temp("val-home");
         let ws = temp("val-ws");
         fs::create_dir_all(home.join(".codex")).unwrap();
-        fs::create_dir_all(ws.join("templates/sync")).unwrap();
-        fs::write(ws.join("templates/sync/codex-rules.md"), "a").unwrap();
-        fs::write(home.join(".codex/AGENTS.md"), "b").unwrap();
         let artifact = ArtifactId::CodexRules;
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let installed = home.join(".codex/AGENTS.md");
+        // An unwrapped file that equals the source still shows a pending update:
+        // apply was supposed to put the base in a managed block.
+        fs::write(&installed, &source).unwrap();
         let err = validate_artifact_after_apply(&artifact, &ws, &home).unwrap_err();
-        assert!(err.contains("Update"));
+        assert!(err.contains("Update"), "{err}");
+        // A block that differs from the source is no valid outcome either.
+        fs::write(&installed, crate::rules_block::render_new("# other base\n")).unwrap();
+        assert!(validate_artifact_after_apply(&artifact, &ws, &home).is_err());
+        // The source in a block, with user text around it, is.
+        fs::write(
+            &installed,
+            format!("mine\n{}tail\n", crate::rules_block::render_new(&source)),
+        )
+        .unwrap();
+        assert!(validate_artifact_after_apply(&artifact, &ws, &home).is_ok());
         let _ = fs::remove_dir_all(&home);
         let _ = fs::remove_dir_all(&ws);
+    }
+
+    // ── Automatic rollback safety ──
+
+    /// Update of the Codex rules file with a backup holding `original`.
+    /// Returns (op, backup_dir, home, ws).
+    fn automatic_restore_fixture(
+        label: &str,
+        original: &str,
+        installed: &str,
+    ) -> (ArtifactManifestOperation, PathBuf, PathBuf, PathBuf) {
+        let base = temp(label);
+        let home = base.join("home");
+        let ws = base.join("ws");
+        let backup_dir = base.join("txn");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
+        fs::write(backup_dir.join("artifacts/codex-rules"), original).unwrap();
+        fs::write(home.join(".codex/AGENTS.md"), installed).unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::CodexRules,
+            surface: SetupSurfaceId::CodexRules,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::ManagedFile,
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/codex-rules".into()),
+            apply_status: ApplyStatus::InFlight,
+            ..Default::default()
+        };
+        (op, backup_dir, home, ws)
+    }
+
+    #[test]
+    fn automatic_restore_keeps_user_edit_when_digests_were_never_recorded() {
+        let (op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-user-edit", "original", "user edit");
+        let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
+        assert_eq!(err, CHANGED_SINCE_APPLY);
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "user edit"
+        );
+    }
+
+    #[test]
+    fn automatic_restore_restores_planned_content_and_skips_original() {
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let (op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-planned", "original", &source);
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("restore");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "original"
+        );
+        // Restoring again is a no-op: the artifact is at its pre-apply state.
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("idempotent");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "original"
+        );
+    }
+
+    #[test]
+    fn automatic_restore_keeps_edit_made_after_recorded_apply() {
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-recorded", "original", "applied");
+        let dest = home.join(".codex/AGENTS.md");
+        op.apply_status = ApplyStatus::Applied;
+        op.post_apply_digest = Some(crate::stable_digest::bytes(b"applied"));
+        op.post_apply_full_digest = Some(crate::stable_digest::bytes(b"applied"));
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("unchanged restores");
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+
+        fs::write(&dest, "edited later").unwrap();
+        let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
+        assert_eq!(err, CHANGED_SINCE_APPLY);
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "edited later");
+    }
+
+    #[test]
+    fn restore_file_failure_keeps_the_destination() {
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("restore-keeps-dest", "original", "current");
+        // A backup that is not a regular file makes the copy fail.
+        fs::remove_file(backup_dir.join("artifacts/codex-rules")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts/codex-rules")).unwrap();
+        op.apply_status = ApplyStatus::Applied;
+        let err = restore_artifact_from_backup_with_mode(
+            &op,
+            &backup_dir,
+            &home,
+            RollbackRestoreMode::FullBackup,
+            Some(&ws),
+        )
+        .expect_err("directory backup cannot be restored");
+        assert!(err.contains("restore file"), "{err}");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "current",
+            "failed restore must not delete the destination"
+        );
+    }
+
+    #[test]
+    fn refreshed_record_turns_the_next_source_change_into_update_not_conflict() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("stale-record-plan");
+        let home = base.join("home");
+        let ws = base.join("ws");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let artifact = ArtifactId::CodexRules;
+        let identity = crate::managed_state::artifact_identity(&artifact);
+
+        // Installed == current source, record stale: planned as no change.
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        fs::write(
+            home.join(".codex/AGENTS.md"),
+            crate::rules_block::render_new(&source),
+        )
+        .unwrap();
+        let stale = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                identity: identity.clone(),
+                hash: crate::stable_digest::bytes(b"older shipped version"),
+                surface: None,
+            }],
+        };
+        let (kind, _) = detect_artifact_state(&artifact, &ws, &home);
+        assert_eq!(kind, OperationKind::NoChange);
+
+        // The next apply refreshes the record from the installed content.
+        let refreshed = crate::managed_state::next_state_from_operations(
+            Some(&stale),
+            &bundled,
+            &ws,
+            &home,
+            &[],
+            &[],
+        )
+        .unwrap();
+
+        // Once the source moves on, the installed file differs from it. Only the
+        // refreshed record still proves ownership, so only it yields an update.
+        let installed = fs::read(home.join(".codex/AGENTS.md")).unwrap();
+        let decide = |state: &crate::managed_state::ManagedState| {
+            crate::rules_block::assess(
+                Some(&installed),
+                "# a newer base\n",
+                managed_hash_for(&identity, &state.artifacts).as_deref(),
+                &|_| false,
+            )
+            .plan
+        };
+        assert_eq!(
+            decide(&stale),
+            crate::rules_block::RulesPlan::Conflict(
+                crate::rules_block::RulesConflict::BaseBlockEdited
+            )
+        );
+        assert_eq!(
+            decide(&refreshed),
+            crate::rules_block::RulesPlan::UpdateBlock
+        );
+        let _ = fs::remove_dir_all(base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn managed_codex_rollback_never_runs_workspace_scripts() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+
+        let home = temp("codex-rollback-home");
+        let ws = temp("codex-rollback-ws");
+        let backups = temp("codex-rollback-backups");
+        let sentinel = temp("codex-rollback-sentinel");
+        let malicious = format!(
+            "#!/usr/bin/env python3\nopen('{}', 'w').write('executed')\n",
+            sentinel.display()
+        );
+        for script in ["merge-codex-config.py", "ensure-codex-routing-defaults.py"] {
+            fs::create_dir_all(ws.join("scripts")).unwrap();
+            fs::write(ws.join("scripts").join(script), &malicious).unwrap();
+        }
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::write(
+            home.join(".codex/config.toml"),
+            "approval_policy = \"never\"\n",
+        )
+        .unwrap();
+        fs::create_dir_all(backups.join("artifacts")).unwrap();
+        fs::write(
+            backups.join("artifacts/codex-config"),
+            "approval_policy = \"on-request\"\n",
+        )
+        .unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::CodexConfig,
+            surface: SetupSurfaceId::CodexConfig,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::MergeableConfigFile,
+            rollback_action: RollbackAction::RestoreManagedConfigFile,
+            backup_rel: Some("artifacts/codex-config".into()),
+            ..Default::default()
+        };
+
+        let result = restore_artifact_from_backup_with_mode(
+            &op,
+            &backups,
+            &home,
+            RollbackRestoreMode::ManagedProjectionMerge,
+            Some(&ws),
+        );
+        let sentinel_created = sentinel.exists();
+        let restored = fs::read_to_string(home.join(".codex/config.toml")).unwrap_or_default();
+        for dir in [&home, &ws, &backups] {
+            let _ = fs::remove_dir_all(dir);
+        }
+        let _ = fs::remove_file(&sentinel);
+
+        assert!(
+            !sentinel_created,
+            "a merge script inside the workspace must never run"
+        );
+        result.expect("the bundled merge scripts render the rollback");
+        assert!(restored.contains("approval_policy"), "{restored}");
     }
 }

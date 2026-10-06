@@ -3,8 +3,12 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -15,12 +19,40 @@ from opencode_permission_eval import (  # noqa: E402
     bash_is_allowed,
     edit_is_allowed,
     effective_bash_action,
+    effective_read_action,
     wildcard_match,
     winning_rule,
 )
-from opencode_policy_compose import compose_role_permission  # noqa: E402
+import opencode_policy_compose  # noqa: E402
+from opencode_policy_compose import (  # noqa: E402
+    build_base_permission,
+    compose_opencode_header,
+    compose_role_permission,
+    load_policy,
+    permission_to_yaml,
+    unknown_policy_keys,
+)
+from validate_opencode_permissions import (  # noqa: E402
+    ARCHITECT_BASH_ACTIONS,
+    CREDENTIAL_CONFIG_READ,
+    READ_ACTIONS,
+    SECRET_READ,
+    _architect_bash_errors,
+    _secret_read_errors,
+    _top_level_action_errors,
+    lexical_frontmatter_errors,
+    validate_agent_frontmatter,
+)
 
-ROLES_DIR = REPO_ROOT / "resources" / "default-workspace" / "templates" / "opencode" / "agents"
+try:
+    import yaml
+except ImportError:  # PyYAML is optional; the lexical check still runs
+    yaml = None
+
+TEMPLATES_DIR = REPO_ROOT / "resources" / "default-workspace" / "templates"
+ROLES_DIR = TEMPLATES_DIR / "opencode" / "agents"
+SHIPPED_GENERATOR = REPO_ROOT / "resources" / "default-workspace" / "scripts" / "generate-opencode-config.py"
+REPO_GENERATOR = REPO_ROOT / "scripts" / "generate-default-opencode-config.py"
 
 READONLY_ROLES = ("repo-scout", "inspector", "sentinel")
 
@@ -206,6 +238,13 @@ class TestWildcardSemantics(unittest.TestCase):
         }
         self.assertEqual(effective_bash_action(perm, "git diff > changed.txt"), "deny")
 
+    def test_dot_matches_newline_like_upstream(self) -> None:
+        # Upstream compiles with the "s" flag, so `*` spans newlines.
+        self.assertTrue(wildcard_match("git diff --stat\ntouch changed.txt", "git diff *"))
+        self.assertTrue(wildcard_match("a\rb", "a*b"))
+        perm = {"bash": {"*": "deny", "git diff *": "allow"}}
+        self.assertEqual(effective_bash_action(perm, "git diff --stat\ntouch changed.txt"), "allow")
+
     def test_newline_deny_pattern(self) -> None:
         perm = {"bash": {"*": "deny", "*\n*": "deny", "git status": "allow"}}
         self.assertEqual(effective_bash_action(perm, "git status\ntouch changed.txt"), "deny")
@@ -314,6 +353,41 @@ class TestArchitect(unittest.TestCase):
         self.assertIsInstance(task, dict)
         self.assertEqual(task.get("repo-scout"), "allow")
 
+    def test_question_tool_allowed_for_architect_only(self) -> None:
+        self.assertEqual(self.perm.get("question"), "allow")
+        for role in ("repo-scout", "inspector", "sentinel", "scribe", "verifier"):
+            with self.subTest(role=role):
+                self.assertEqual(compose_role_permission(load_role(role)).get("question"), "deny")
+
+    def test_broad_allows_do_not_cover_dangerous_variants(self) -> None:
+        for command, expected in ARCHITECT_BASH_ACTIONS:
+            with self.subTest(command=command):
+                action = effective_bash_action(self.perm, command)
+                self.assertEqual(
+                    action,
+                    expected,
+                    f"{command!r}: expected {expected}, got {action} ({winning_rule(self.perm, 'bash', command)})",
+                )
+
+    def test_gated_commands_and_top_level_actions_match_the_contract(self) -> None:
+        self.assertEqual(_architect_bash_errors(self.perm), [])
+        for role in ("architect",) + READONLY_ROLES + ("scribe", "verifier"):
+            with self.subTest(role=role):
+                perm = compose_role_permission(load_role(role))
+                self.assertEqual(_top_level_action_errors(role, perm), [])
+
+    def test_no_override_allow_follows_redirect_guard(self) -> None:
+        # Last match wins: an allow placed after the `*>*` ask would let `cmd > file` through.
+        bash = list(self.perm["bash"].items())
+        guard = next(i for i, (pattern, _) in enumerate(bash) if pattern == "*>*")
+        late_allows = [pattern for pattern, action in bash[guard + 1 :] if action == "allow"]
+        self.assertEqual(late_allows, [])
+
+    def test_read_denies_credential_config(self) -> None:
+        for path, expected in READ_ACTIONS:
+            with self.subTest(path=path):
+                self.assertEqual(effective_read_action(self.perm, path), expected)
+
 
 class TestSecretDenials(unittest.TestCase):
     ROLES = ("architect", "repo-scout", "inspector", "sentinel", "scribe", "verifier")
@@ -367,12 +441,48 @@ class TestMutationRejection(unittest.TestCase):
         )
         self.assertEqual(action, "allow")
 
-    def test_remove_credential_deny(self) -> None:
-        perm = compose_role_permission(load_role("repo-scout"))
-        read = perm.setdefault("read", {})
-        assert isinstance(read, dict)
-        read.pop("**/.env*", None)
-        self.assertNotEqual(read.get("**/.env*"), "deny")
+    def test_remove_credential_deny_is_detected(self) -> None:
+        for pattern in SECRET_READ + CREDENTIAL_CONFIG_READ:
+            with self.subTest(pattern=pattern):
+                perm = compose_role_permission(load_role("repo-scout"))
+                self.assertEqual(_secret_read_errors("repo-scout", perm), [])
+                read = perm["read"]
+                assert isinstance(read, dict)
+                read.pop(pattern)
+                self.assertTrue(any(pattern in err for err in _secret_read_errors("repo-scout", perm)))
+
+    def test_widening_any_ask_gated_architect_command_is_detected(self) -> None:
+        gated = [command for command, expected in ARCHITECT_BASH_ACTIONS if expected == "ask"]
+        self.assertGreater(len(gated), 20)
+        for command in gated:
+            with self.subTest(command=command):
+                perm = compose_role_permission(load_role("architect"))
+                pattern, action = winning_rule(perm, "bash", command)
+                if pattern == "*":
+                    continue  # gated by the bash default; covered by the other cases
+                perm["bash"][pattern] = "allow"
+                errors = _architect_bash_errors(perm)
+                self.assertTrue(any(repr(command) in error for error in errors), errors)
+
+    def test_widening_a_gated_top_level_action_or_edit_default_is_detected(self) -> None:
+        for role in ("architect", "scribe", "verifier"):
+            for key in ("external_directory", "webfetch", "websearch", "doom_loop"):
+                with self.subTest(role=role, key=key):
+                    perm = compose_role_permission(load_role(role))
+                    perm[key] = "allow"
+                    self.assertTrue(
+                        any(key in error for error in _top_level_action_errors(role, perm))
+                    )
+        for role, default in (("architect", "allow"), ("scribe", "allow")):
+            with self.subTest(role=role, edit_default=default):
+                perm = compose_role_permission(load_role(role))
+                perm["edit"]["*"] = default
+                self.assertTrue(
+                    any("edit default" in error for error in _top_level_action_errors(role, perm))
+                )
+        perm = compose_role_permission(load_role("verifier"))
+        perm["edit"] = "allow"
+        self.assertTrue(any("edit default" in error for error in _top_level_action_errors("verifier", perm)))
 
     def test_scribe_agents_edit_would_allow(self) -> None:
         perm = compose_role_permission(load_role("scribe"))
@@ -384,6 +494,205 @@ class TestMutationRejection(unittest.TestCase):
     def test_restore_git_diff_wildcard_allows_ext_diff(self) -> None:
         action = self._mutated_action("repo-scout", {"git diff *": "allow"}, "git diff --ext-diff")
         self.assertEqual(action, "allow")
+
+
+# Output of the emitter before keys were quoted: a bare `*` starts a YAML alias.
+OLD_STYLE_HEADER = """name: verifier
+description: Run verification.
+mode: subagent
+temperature: 0.1
+steps: 50
+permission:
+  *: ask
+  read:
+    "*": allow
+"""
+
+
+class TestAgentFrontmatter(unittest.TestCase):
+    ROLES = ("architect", "repo-scout", "inspector", "sentinel", "scribe", "verifier")
+    AGENTS_DIR = REPO_ROOT / "resources" / "default-workspace" / "agents"
+
+    def test_generated_agents_parse_back_to_composed_role(self) -> None:
+        for role in self.ROLES:
+            with self.subTest(role=role):
+                role_def = load_role(role)
+                text = (self.AGENTS_DIR / f"{role}.md").read_text(encoding="utf-8")
+                self.assertEqual(
+                    validate_agent_frontmatter(role, text, role_def, compose_role_permission(role_def)), []
+                )
+
+    @unittest.skipIf(yaml is None, "PyYAML not installed")
+    def test_composed_header_round_trips_through_yaml_in_order(self) -> None:
+        for role in self.ROLES:
+            with self.subTest(role=role):
+                role_def = load_role(role)
+                parsed = yaml.safe_load(compose_opencode_header(ROLES_DIR / f"{role}.role.json"))
+                self.assertEqual(parsed["mode"], role_def["mode"])
+                self.assertEqual(
+                    json.dumps(parsed["permission"]), json.dumps(compose_role_permission(role_def))
+                )
+
+    def test_unquoted_star_key_is_rejected(self) -> None:
+        self.assertTrue(any("'*'" in err for err in lexical_frontmatter_errors(OLD_STYLE_HEADER)))
+        role_def = {"name": "verifier", "description": "Run verification.", "mode": "subagent"}
+        errors = validate_agent_frontmatter("verifier", f"---\n{OLD_STYLE_HEADER}---\n\nbody\n", role_def, {})
+        self.assertTrue(errors)
+
+    @unittest.skipIf(yaml is None, "PyYAML not installed")
+    def test_old_style_header_is_invalid_yaml(self) -> None:
+        with self.assertRaises(yaml.YAMLError):
+            yaml.safe_load(OLD_STYLE_HEADER)
+
+    def test_lexical_check_accepts_quoted_keys_and_rejects_other_indicators(self) -> None:
+        self.assertEqual(lexical_frontmatter_errors('permission:\n  "*": ask\n  read:\n    "a: b": deny\n'), [])
+        for bad in ("  &anchor: ask", "  !tag: ask", "  %x: ask", "  @x: ask", "  `x: ask", "  [x]: ask", '  "*: ask'):
+            with self.subTest(line=bad):
+                self.assertTrue(lexical_frontmatter_errors(f"permission:\n{bad}\n"))
+
+    def test_emitter_quotes_non_identifier_keys(self) -> None:
+        permission = {
+            "*": "ask",
+            "read": {"*": "allow", "a: b": "deny"},
+            "my-tool": {"*": "deny"},
+            "on": "allow",
+            "custom_tool": "ask",
+        }
+        text = permission_to_yaml(permission)
+        self.assertEqual(lexical_frontmatter_errors(text), [])
+        self.assertIn('\n"my-tool":\n', text)
+        self.assertIn("\ncustom_tool: ask\n", text)
+        if yaml is not None:
+            self.assertEqual(yaml.safe_load(text), permission)
+
+    def test_emitter_quotes_awkward_name_and_description(self) -> None:
+        role = load_role("verifier")
+        role["description"] = "Use this: now # really"
+        with tempfile.TemporaryDirectory() as tmp:
+            role_path = Path(tmp) / "verifier.role.json"
+            role_path.write_text(json.dumps(role), encoding="utf-8")
+            header = compose_opencode_header(role_path)
+        self.assertEqual(lexical_frontmatter_errors(header), [])
+        if yaml is not None:
+            self.assertEqual(yaml.safe_load(header)["description"], role["description"])
+
+
+class TestUnknownKeyHandling(unittest.TestCase):
+    def test_unknown_permission_key_is_preserved_after_known_keys(self) -> None:
+        policy = load_policy()
+        policy["top_level"]["codesearch"] = "deny"
+        perm = build_base_permission(policy)
+        self.assertEqual(perm["codesearch"], "deny")
+        self.assertEqual(list(perm)[-1], "codesearch")
+        self.assertIn("codesearch:", permission_to_yaml(perm))
+
+    def test_unknown_policy_keys_are_reported(self) -> None:
+        self.assertEqual(unknown_policy_keys(load_policy()), [])
+        policy = load_policy()
+        policy["plugin"] = {}
+        policy["bash"]["allow_override"] = ["x"]
+        self.assertEqual(sorted(unknown_policy_keys(policy)), ["bash.allow_override", "plugin"])
+
+    def test_load_policy_fails_loudly_on_unknown_keys(self) -> None:
+        policy = load_policy()
+        policy["bash"]["allow_override"] = ["x"]
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "opencode.policy.json"
+            path.write_text(json.dumps(policy), encoding="utf-8")
+            original = opencode_policy_compose.POLICY_PATH
+            opencode_policy_compose.POLICY_PATH = path
+            try:
+                with self.assertRaisesRegex(ValueError, "bash.allow_override"):
+                    load_policy()
+            finally:
+                opencode_policy_compose.POLICY_PATH = original
+
+
+def _load_generator(path: Path, name: str):
+    spec = importlib.util.spec_from_file_location(name, path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+class TestGeneratorParity(unittest.TestCase):
+    def test_both_generators_match_compose_and_the_snapshot(self) -> None:
+        snapshot = json.dumps(json.loads((TEMPLATES_DIR / "opencode.json").read_text(encoding="utf-8")))
+        composed = json.dumps(build_base_permission(load_policy()))
+        for name, path in (("shipped", SHIPPED_GENERATOR), ("repo", REPO_GENERATOR)):
+            with self.subTest(generator=name):
+                config = _load_generator(path, f"opencode_generator_{name}").generate_config()
+                self.assertEqual(json.dumps(config), snapshot)
+                self.assertEqual(json.dumps(config["permission"]), composed)
+
+
+class TestGeneratorUnknownKeys(unittest.TestCase):
+    """Generators must emit unknown keys (or fail), and --check must notice the snapshot lacks them."""
+
+    def setUp(self) -> None:
+        self.tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
+        (self.tmp / "scripts").mkdir()
+        (self.tmp / "templates").mkdir()
+        self.script = self.tmp / "scripts" / "generate-opencode-config.py"
+        shutil.copy(SHIPPED_GENERATOR, self.script)
+        for name in ("opencode.base.json", "opencode.policy.json", "opencode.json"):
+            shutil.copy(TEMPLATES_DIR / name, self.tmp / "templates" / name)
+
+    def run_generator(self, flag: str) -> subprocess.CompletedProcess:
+        return subprocess.run([sys.executable, str(self.script), flag], capture_output=True, text=True)
+
+    def edit_template(self, name: str, mutate) -> None:
+        path = self.tmp / "templates" / name
+        data = json.loads(path.read_text(encoding="utf-8"))
+        mutate(data)
+        path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+
+    def snapshot(self) -> dict:
+        return json.loads((self.tmp / "templates" / "opencode.json").read_text(encoding="utf-8"))
+
+    def test_pristine_copy_checks_clean(self) -> None:
+        self.assertEqual(self.run_generator("--check").returncode, 0)
+
+    def test_unknown_permission_key_is_emitted_and_check_detects_missing_key(self) -> None:
+        self.edit_template("opencode.policy.json", lambda d: d["top_level"].update({"codesearch": "deny"}))
+        self.assertEqual(self.run_generator("--check").returncode, 1)
+        self.assertEqual(self.run_generator("--write").returncode, 0)
+        self.assertEqual(self.snapshot()["permission"]["codesearch"], "deny")
+        self.assertEqual(self.run_generator("--check").returncode, 0)
+
+    def test_unknown_base_key_is_emitted_before_permission(self) -> None:
+        self.edit_template("opencode.base.json", lambda d: d.update({"plugin": ["example"]}))
+        self.assertEqual(self.run_generator("--check").returncode, 1)
+        self.assertEqual(self.run_generator("--write").returncode, 0)
+        keys = list(self.snapshot())
+        self.assertEqual(self.snapshot()["plugin"], ["example"])
+        self.assertEqual(keys[-2:], ["plugin", "permission"])
+        self.assertEqual(self.run_generator("--check").returncode, 0)
+
+    def test_unknown_policy_key_fails_loudly(self) -> None:
+        before = (self.tmp / "templates" / "opencode.json").read_text(encoding="utf-8")
+        self.edit_template("opencode.policy.json", lambda d: d["bash"].update({"allow_override": ["x"]}))
+        for flag in ("--check", "--write"):
+            with self.subTest(flag=flag):
+                result = self.run_generator(flag)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("bash.allow_override", result.stderr)
+        self.assertEqual((self.tmp / "templates" / "opencode.json").read_text(encoding="utf-8"), before)
+
+    def test_permission_in_base_fails_loudly(self) -> None:
+        self.edit_template("opencode.base.json", lambda d: d.update({"permission": {"*": "allow"}}))
+        result = self.run_generator("--check")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("permission", result.stderr)
+
+    def test_repo_generator_emits_unknown_policy_key(self) -> None:
+        module = _load_generator(REPO_GENERATOR, "opencode_generator_repo_unknown")
+        module.BASE_PATH = str(self.tmp / "templates" / "opencode.base.json")
+        module.POLICY_PATH = str(self.tmp / "templates" / "opencode.policy.json")
+        module.SNAPSHOT_PATH = str(self.tmp / "templates" / "opencode.json")
+        self.edit_template("opencode.policy.json", lambda d: d["top_level"].update({"codesearch": "deny"}))
+        self.assertEqual(module.generate_config()["permission"]["codesearch"], "deny")
 
 
 if __name__ == "__main__":

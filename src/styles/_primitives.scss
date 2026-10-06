@@ -1,0 +1,464 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   TUI primitives — the class contract between these styles and src/ui/*, src/shell/*
+   and the pane-based views. Reference: design mockup "02 · TUI-native".
+   Every row is var(--lh) tall (20px at the 13px default); panes are bordered boxes
+   with the title sitting on the top border; focus is shown by border colour only.
+
+   Layout
+     .screen                 grid container for a view's panes (padding leaves room for titles)
+     .pane                   <section data-pane-id data-keyscope>; .pane:focus-within → accent border
+       .pane-title           absolutely positioned on the border; <b> name, .k = "[1]" key hint
+       .pane-body            scrollable body (tabIndex=0 when it is the primary target); shows an edge cue
+                             where content continues. .scroll-cue gives any other scrolling box the same cue
+       .pane-foot            key hints row: <ActionKey> buttons or <span><kbd>j</kbd> move</span>
+   Lists
+     .rows                   <ul role="listbox">; .row = <li role="option" aria-selected>
+       .row .cur             16px cursor cell (▸ on the active row)
+       .row .nm              name cell (ellipsis); .row .meta right cell (muted)
+     .group                  uppercase muted group header inside .rows or a pane body
+     .filter                 pane filter row: <div class="filter"><span class="c-acc">/</span><input></div>
+   Key/value
+     .kv                     <dl class="kv"><dt>key</dt><dd>value</dd></dl>; dd.wrap allows wrapping
+   Keys and glyphs
+     kbd                     key cap; .action-key = <button class="action-key"><kbd>u</kbd> update</button>
+     .g                      fixed-width glyph cell (▸ ● ◐ ✓ ✗ ❯ + ~ − !), inline-block 1ch, centred; never a <tr>
+     .c-ok .c-warn .c-fail .c-acc .c-dim .c-head   semantic text colours
+   Tables
+     .matrix-grid            surface matrix: display:grid, columns from --matrix-cols (inline style);
+                             header cells .h, body cells .cell = <span class="g">●</span><span class="visually-hidden">label</span>
+     .plan                   install plan <table>; tr.g group row, tr.conf conflict row,
+                             tr[aria-selected="true"] cursor row, td.op op column, td.note why column
+     .confirm                y/n line under a plan: .q question, .bk backup/transaction note
+   Overlays
+     .cmdline-overlay        absolute strip above the status bar; .cmdbox = role=dialog box
+       .cmdbox .line         <span class="colon">:</span><input> row; .cmdbox .sug suggestion list
+       .cmdbox .sug > *      one suggestion (button or li role=option); [aria-selected="true"] highlight; .d description
+     .help-overlay           fixed modal backdrop (role=dialog aria-modal); .help-box inside holds
+                             <h2>, sections with .group headers and .kv rows (<dt><kbd>j</kbd></dt><dd>move</dd>)
+     .visually-hidden        screen-reader-only text
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+
+/* ---- semantic colours and glyph cell ---- */
+
+.c-ok { color: var(--ok); }
+.c-warn { color: var(--warn); }
+.c-fail { color: var(--fail); }
+.c-acc { color: var(--accent); }
+.c-dim { color: var(--text-muted); }
+.c-head { color: var(--text-heading); }
+
+/* `tr.g` is the plan table's group row (see .plan), not a glyph cell: it keeps table layout. */
+.g:not(tr) {
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+}
+
+/* ---- keys ---- */
+
+kbd {
+  display: inline-block;
+  min-width: 1.4em;
+  text-align: center;
+  padding: 0 4px;
+  border: 1px solid var(--border-strong);
+  border-radius: 3px;
+  font-family: inherit;
+  font-size: var(--fs-sm);
+  line-height: 16px;
+  color: var(--text-heading);
+  background: var(--surface);
+  vertical-align: baseline;
+}
+
+.action-key {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.action-key:hover:not(:disabled, [aria-disabled="true"]) { color: var(--text); }
+.action-key:hover:not(:disabled, [aria-disabled="true"]) kbd { border-color: var(--accent); color: var(--accent); }
+.action-key:disabled,
+.action-key[aria-disabled="true"] { cursor: default; opacity: 0.5; }
+.action-key:focus-visible { outline-offset: 2px; }
+
+/* ---- screen + pane ---- */
+
+.screen {
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+  padding: 14px 10px 10px;
+}
+
+.pane {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  transition: border-color 0.1s ease;
+}
+
+.pane:focus-within { border-color: var(--accent); }
+.pane:focus-within > .pane-title b { color: var(--accent); }
+
+.pane-title {
+  position: absolute;
+  top: 0;
+  left: 10px;
+  z-index: 1;
+  transform: translateY(-50%);
+  max-width: calc(100% - 20px);
+  padding: 0 6px;
+  background: var(--surface);
+  font-size: var(--fs-sm);
+  line-height: 16px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pane-title b { color: var(--text-heading); font-weight: 500; }
+.pane-title .k { color: var(--accent); }
+
+.pane-body {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  padding: 10px 0 6px;
+}
+
+.pane-body:focus-visible { outline-offset: -2px; }
+
+/* A scrollable body shows a soft edge on each side that still has content behind it. The `local` covers move
+   with the content and hide the edge at the ends, so nothing shows when everything fits. */
+.pane-body[tabindex="0"],
+.scroll-cue {
+  background:
+    linear-gradient(var(--surface) 30%, transparent) 0 0 / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--surface) 70%) 0 100% / 100% 20px no-repeat local,
+    linear-gradient(color-mix(in srgb, var(--text-muted) 45%, transparent), transparent) 0 0 / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, color-mix(in srgb, var(--text-muted) 45%, transparent)) 0 100% / 100% 8px no-repeat scroll;
+}
+
+.pane-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+.pane-foot > * { white-space: nowrap; }
+
+/* ---- rows ---- */
+
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+/* The pane border + cursor row show focus; a second ring around the whole list is noise. */
+.rows:focus-visible { outline: none; }
+
+.row {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 0 8px;
+  align-items: center;
+  height: var(--lh);
+  padding: 0 10px 0 8px;
+  white-space: nowrap;
+  cursor: default;
+}
+
+.row .cur { color: var(--accent); text-align: center; }
+.row .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.row .meta { color: var(--text-muted); font-size: var(--fs-sm); }
+.row:hover { background: var(--inset); }
+.row[aria-selected="true"] { background: var(--sel); }
+.row[aria-selected="true"] .nm { color: var(--text-heading); font-weight: 500; }
+
+.group {
+  padding: 2px 10px 0;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+  padding: 0 10px 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+.filter:focus-within { border-bottom-color: var(--accent); }
+
+.filter input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.filter input::placeholder { color: var(--text-muted); }
+
+/* ---- key/value ---- */
+
+.kv {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 0 14px;
+  margin: 0;
+  padding: 0 10px;
+}
+
+.kv dt { color: var(--text-muted); }
+
+.kv dd {
+  min-width: 0;
+  margin: 0;
+  color: var(--text);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kv dd.wrap { white-space: normal; }
+
+/* ---- surface matrix ---- */
+
+.matrix-grid {
+  display: grid;
+  grid-template-columns: max-content repeat(var(--matrix-cols, 6), max-content);
+  gap: 0 14px;
+  align-items: center;
+  padding: 0 10px;
+  white-space: nowrap;
+  overflow-x: auto;
+}
+
+.matrix-grid > * { height: var(--lh); line-height: var(--lh); }
+.matrix-grid .h { color: var(--text-muted); font-size: var(--fs-sm); }
+.matrix-grid .cell { text-align: center; }
+
+.matrix-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  padding: 0 10px;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+}
+
+/* ---- plan table ---- */
+
+.plan {
+  width: calc(100% - 20px);
+  margin: 0 10px;
+  border-collapse: collapse;
+  white-space: nowrap;
+}
+
+.plan th {
+  height: var(--lh);
+  padding: 0 12px 0 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-muted);
+  font-weight: 400;
+  text-align: left;
+}
+
+.plan td {
+  height: var(--lh);
+  max-width: 420px;
+  padding: 0 12px 0 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.plan td:first-child, .plan th:first-child { width: 16px; padding: 0; text-align: center; }
+
+.plan tr.g td {
+  padding-top: 6px;
+  text-align: left;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.plan tr[aria-selected="true"] td { background: var(--sel); }
+.plan .op { font-weight: 600; }
+.plan .note { color: var(--text-muted); }
+.plan tr.conf td { background: var(--warn-bg); }
+
+.confirm {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 18px;
+  align-items: center;
+  padding: 6px 10px;
+  border-top: 1px solid var(--border);
+  background: var(--inset);
+}
+
+.confirm .q { color: var(--text-heading); font-weight: 500; }
+
+.confirm .bk {
+  width: 100%;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ---- command line ---- */
+
+.cmdline-overlay {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: calc(var(--statusbar-height) + 8px);
+  z-index: 20;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.cmdbox {
+  pointer-events: auto;
+  width: min(720px, calc(100% - 40px));
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+}
+
+.cmdbox .line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.cmdbox .line input {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--text);
+  outline: none;
+}
+
+.cmdbox .line .colon { color: var(--accent); font-weight: 600; }
+
+.cmdbox .sug {
+  max-height: 40vh;
+  margin: 0;
+  padding: 4px 0;
+  overflow: auto;
+  list-style: none;
+}
+
+.cmdbox .sug > * {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  width: 100%;
+  height: var(--lh);
+  padding: 0 10px;
+  border: 0;
+  background: none;
+  color: var(--text);
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.cmdbox .sug [aria-selected="true"] { background: var(--sel); color: var(--text-heading); }
+.cmdbox .sug .d { color: var(--text-muted); font-size: var(--fs-sm); overflow: hidden; text-overflow: ellipsis; }
+.cmdbox .err { height: var(--lh); padding: 0 10px; color: var(--fail); }
+
+/* ---- help overlay ---- */
+
+.help-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: var(--backdrop);
+}
+
+.help-box {
+  width: min(900px, 100%);
+  max-height: 100%;
+  overflow: auto;
+  border: 1px solid var(--accent);
+  background: var(--surface);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.25);
+  padding: 10px 0 6px;
+}
+
+.help-overlay h2 {
+  padding: 0 10px 4px;
+  margin: 0 0 6px;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-heading);
+  font-size: var(--fs);
+  font-weight: 600;
+}
+
+.help-cols {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 6px 20px;
+}
+
+.help-overlay section { min-width: 0; }
+.help-overlay .kv { grid-template-columns: minmax(64px, max-content) minmax(0, 1fr); }
+.help-overlay .kv dt { white-space: nowrap; }
+.help-overlay .kv dd { white-space: normal; }
+.help-overlay .foot { padding: 6px 10px 0; color: var(--text-muted); font-size: var(--fs-sm); }

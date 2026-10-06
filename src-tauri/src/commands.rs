@@ -17,9 +17,11 @@ pub(crate) use opencode_runtime::{
     render_expected_opencode_config,
 };
 pub(crate) use status::file_eq;
+pub(crate) use workspace::configured_workspace_path;
 mod repo_dashboard;
 mod repo_dashboard_commands;
 mod repo_dashboard_history;
+mod rules;
 mod settings_commands;
 mod skills;
 mod status;
@@ -44,6 +46,9 @@ pub use opencode_runtime::{
 pub use repo_dashboard_commands::{
     discover_local_git_repos, get_repo_dashboard_snapshot, get_repo_prompt_context,
 };
+pub use rules::{
+    apply_rules_conversion, preview_rules_conversion, preview_rules_diff, set_rules_user_managed,
+};
 pub use settings_commands::{get_agent_targets, get_settings, update_settings};
 pub use setup::{
     apply_setup, apply_uninstall, get_installation_status, preview_setup, preview_uninstall,
@@ -53,5 +58,5 @@ pub use skills::{list_skills, open_skill, read_skill};
 pub use status::get_status;
 pub use workspace::{
     get_workspace_diagnostics, open_default_workspace_folder, read_brain_setup_seed,
-    try_set_active_workspace_path,
+    reset_active_workspace_path, try_set_active_workspace_path,
 };

@@ -18,13 +18,17 @@ function read(rel: string): string {
 function readStyles(): string {
   return [
     "src/styles/_tokens.scss",
+    "src/styles/_primitives.scss",
     "src/styles/_shell.scss",
     "src/styles/_content.scss",
-    "src/styles/_settings-targets.scss",
-    "src/styles/_workspace-library.scss",
+    "src/styles/_settings.scss",
+    "src/styles/_targets.scss",
+    "src/styles/_workspace.scss",
+    "src/styles/_library.scss",
     "src/styles/_tools-prompt.scss",
     "src/styles/_repo-dashboard.scss",
-    "src/styles/_state-dialogs-terminal.scss",
+    "src/styles/_dialogs.scss",
+    "src/styles/_terminal.scss",
   ]
     .map(read)
     .join("\n");

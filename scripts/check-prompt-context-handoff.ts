@@ -79,9 +79,7 @@ const seed = createPromptLoopContextSeed(canonicalVerify, {
   savedEntries: [
     {
       id: "agent-workspace",
-      label: "agent-workspace",
       path: "/Users/demo/agent-workspace/",
-      default_branch: "main",
     },
   ],
   seedNonce: 1,
@@ -92,7 +90,7 @@ assert(seed.id.endsWith("|1"), "stable seed id");
 
 const unmatched = createPromptLoopContextSeed(canonicalVerify, {
   repoPath: "/other/path",
-  savedEntries: [{ id: "x", label: "x", path: "/nope" }],
+  savedEntries: [{ id: "x", path: "/nope" }],
   seedNonce: 2,
 });
 assert(unmatched.repoEntryId === undefined, "no repo entry when path unmatched");

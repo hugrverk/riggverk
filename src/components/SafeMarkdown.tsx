@@ -1,7 +1,7 @@
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import type { Components } from "react-markdown";
-import { Children, isValidElement } from "react";
+import { Children, isValidElement, memo } from "react";
 import { classifyMarkdownHref } from "../lib/markdownLinks";
 import { CopyableBlock } from "./CopyableBlock";
 
@@ -73,7 +73,8 @@ const MARKDOWN_COMPONENTS: Components = {
   },
 };
 
-export function SafeMarkdown({
+/** Memoized: parsing large documents is expensive and parents re-render on unrelated state (filters, drafts). */
+export const SafeMarkdown = memo(function SafeMarkdown({
   content,
   className = "markdown-body",
 }: {
@@ -87,4 +88,4 @@ export function SafeMarkdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

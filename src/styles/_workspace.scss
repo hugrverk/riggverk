@@ -1,0 +1,209 @@
+/* ═══════════════════════════════════════════════════════════════════════════════════
+   Workspace page, harness pages and the install review: layouts and the pieces the shared
+   primitives (_primitives.scss) do not cover. Panes are `section.pane` inside `.screen`.
+
+     .screen.quad      Start and harness pages: four panes in DOM order
+                       [1] list  [2] list  [3] facts  [4] output, laid out 2 x 2
+     .screen.install   the install review: [1] plan  [2] output
+
+   Below 700px of height, or with large text, the panes stack in one column and the screen scrolls.
+   ═══════════════════════════════════════════════════════════════════════════════════ */
+
+@mixin stacked-panes($pane-min-height) {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: none;
+  grid-auto-rows: minmax($pane-min-height, auto);
+  overflow-y: auto;
+  align-content: start;
+
+  /* :nth-child(n) matches the specificity of the 2 x 2 placement rules, so these (later) rules win. */
+  > .pane:nth-child(n) {
+    grid-column: auto;
+    grid-row: auto;
+    max-height: max(320px, 78vh);
+  }
+}
+
+.screen.quad {
+  grid-template-columns: minmax(300px, 2fr) minmax(0, 3fr);
+  grid-template-rows: minmax(0, 1fr) minmax(0, 1.2fr);
+}
+
+.screen.quad > .pane:nth-child(1) { grid-column: 1; grid-row: 1; }
+.screen.quad > .pane:nth-child(2) { grid-column: 1; grid-row: 2; }
+.screen.quad > .pane:nth-child(3) { grid-column: 2; grid-row: 1; }
+.screen.quad > .pane:nth-child(4) { grid-column: 2; grid-row: 2; }
+
+.screen.install {
+  grid-template-columns: minmax(0, 3fr) minmax(300px, 2fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+
+@media (max-width: 960px) {
+  .screen.quad { @include stacked-panes(220px); }
+
+  .screen.install {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+@media (max-height: 700px) {
+  .screen.quad { @include stacked-panes(240px); }
+
+  .screen.install {
+    @include stacked-panes(260px);
+  }
+}
+
+[data-app-font-size="large"] .screen.quad,
+[data-app-font-size="extra-large"] .screen.quad {
+  @include stacked-panes(260px);
+}
+
+[data-app-font-size="extra-large"] .screen.install {
+  @include stacked-panes(280px);
+}
+
+/* ---- pane content ---- */
+
+.pane-note {
+  padding: 6px 10px 0;
+  overflow-wrap: anywhere;
+}
+
+.pane-group {
+  margin-top: 8px;
+}
+
+.pane-body > .kv + .pane-group { margin-top: 10px; }
+
+/* ---- surface matrix ---- */
+
+.matrix-row { display: contents; }
+
+.matrix-grid .matrix-row > * {
+  height: var(--lh);
+  line-height: var(--lh);
+}
+
+/* ---- install review ---- */
+
+/* The pane border shows focus; a second ring around the whole table is noise (same as the list boxes). */
+.plan:focus-visible { outline: none; }
+
+/* The group row carries the `.g` class of the glyph cell; keep its text left-aligned. */
+.plan tr.g td { text-align: left; }
+
+.plan tr.detail td {
+  height: auto;
+  max-width: none;
+  padding-top: 2px;
+  padding-bottom: 4px;
+  overflow: visible;
+  color: var(--text-muted);
+  font-size: var(--fs-sm);
+  white-space: normal;
+}
+
+.plan tr.detail td > div { overflow-wrap: anywhere; }
+
+.plan-state {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 10px;
+}
+
+.plan-state > div { display: flex; align-items: center; gap: 10px; }
+
+/* The question leads the footer row, the backup note takes a line of its own below the key hints. */
+.pane-foot .q {
+  order: -1;
+  min-width: 0;
+  color: var(--text-heading);
+  font-weight: 500;
+  white-space: normal;
+}
+
+.pane-foot .bk {
+  order: 2;
+  flex: 1 1 100%;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* ---- rules review ---- */
+
+/* Codex reads AGENTS.override.md instead of AGENTS.md: the base is silently off, so this stays above the surfaces. */
+.rules-alert {
+  margin: 0 0 6px;
+  padding: 4px 10px 4px 7px;
+  border-left: 3px solid var(--warn);
+  background: var(--warn-bg);
+  overflow-wrap: anywhere;
+}
+
+.rules-alert b { color: var(--warn); font-weight: 600; }
+
+/* A unified diff: the sign sits in its own column, so the tint is never the only signal. */
+.diff {
+  padding: 4px 0;
+  font-size: var(--fs-sm);
+}
+
+.diff-line {
+  display: grid;
+  grid-template-columns: 2ch minmax(0, 1fr);
+  gap: 0 1ch;
+  padding: 0 10px;
+  line-height: var(--lh);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.diff-mark { text-align: center; }
+.diff-line.context { color: var(--text-muted); }
+.diff-line.file { color: var(--text-heading); font-weight: 500; }
+.diff-line.hunk { color: var(--accent); }
+.diff-line.note { color: var(--text-muted); font-style: italic; }
+
+.diff-line.add { background: var(--ok-bg); }
+.diff-line.add .diff-mark { color: var(--ok); font-weight: 600; }
+
+.diff-line.remove { background: var(--fail-bg); }
+.diff-line.remove .diff-mark { color: var(--fail); font-weight: 600; }
+
+.diff-empty { padding: 4px 10px; }
+
+/* The exact file a conversion writes. */
+.rules-file {
+  margin: 0;
+  padding: 2px 10px;
+  font: inherit;
+  font-size: var(--fs-sm);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* ---- uninstall and recovery ---- */
+
+.lifecycle {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 4px 10px 6px;
+}
+
+.lifecycle p { overflow-wrap: break-word; }
+.lifecycle-kv { padding: 0; }
+
+.lifecycle-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+}
+
+.lifecycle .action-key:disabled { opacity: 0.5; cursor: default; }

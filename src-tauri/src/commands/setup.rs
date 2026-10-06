@@ -60,13 +60,13 @@ fn setup_backup_dir(transaction_id: &str) -> Result<PathBuf, String> {
     let dir = root.join("setup").join(transaction_id);
     // The backup root lives under the app-data dir, which may not exist yet
     // on a fresh install (or after an app identifier change).
-    crate::safe_filesystem::create_root_directory_all_no_symlinks(&root)?;
-    crate::safe_filesystem::create_directory_all_no_symlinks(&dir, &root)?;
+    crate::safe_filesystem::create_private_root_directory_all_no_symlinks(&root)?;
+    crate::safe_filesystem::create_private_directory_all_no_symlinks(&dir, &root)?;
     Ok(dir)
 }
 
 fn write_synced_backup(path: &Path, raw: &[u8], backup_dir: &Path) -> Result<(), String> {
-    crate::safe_filesystem::write_new_regular_file_synced(path, raw, backup_dir)
+    crate::safe_filesystem::write_private_new_regular_file_synced(path, raw, backup_dir)
 }
 
 fn artifact_label(artifact: &crate::artifact_registry::ArtifactId) -> String {
@@ -88,13 +88,16 @@ fn finalize_persisted_rollback(
     persist_setup_manifest(manifest_path, manifest, final_status, backup_dir).err()
 }
 
+/// Rolls back transactions an interrupted apply left half-done. Returns notes for transactions
+/// that stay unresolved on purpose (rollback-failed ones are never retried automatically).
 fn reconcile_interrupted_setup_transactions(
     workspace_root: &Path,
     home: &Path,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+    let mut notes = Vec::new();
     let setup_root = backup_root()?.join("setup");
     if !setup_root.exists() {
-        return Ok(());
+        return Ok(notes);
     }
     crate::path_safety::reject_symlink(&setup_root, "setup transaction root")?;
     let workspace_key = setup_transaction::workspace_key(workspace_root)?;
@@ -119,24 +122,30 @@ fn reconcile_interrupted_setup_transactions(
         }
         crate::path_safety::reject_symlink(&manifest_path, "setup manifest")?;
         let raw = fs::read_to_string(&manifest_path)
-            .map_err(|e| format!("read interrupted setup manifest: {e}"))?;
+            .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
+        // Decide from the header alone whether this transaction can still need
+        // reconciliation. Finished transactions (completed or rolled back) must
+        // never block a new apply, even when their manifest is old-schema or
+        // damaged, so they are skipped before any full validation.
+        let header = setup_transaction::read_manifest_header(&raw)
+            .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
+        if header.workspace_key.as_deref() != Some(workspace_key.as_str()) {
+            continue;
+        }
+        if header.status == setup_transaction::TransactionStatus::RollbackFailed {
+            notes.push(format!(
+                "Setup transaction {transaction_id} was not fully rolled back and is left as is; review it and roll it back explicitly if needed"
+            ));
+            continue;
+        }
+        if !header.status.needs_reconciliation() {
+            continue;
+        }
         let mut manifest: ArtifactTransactionManifest = serde_json::from_str(&raw)
-            .map_err(|e| format!("parse interrupted setup manifest: {e}"))?;
-        if manifest.workspace_key != workspace_key {
-            continue;
-        }
-        setup_transaction::validate_manifest(&manifest, workspace_root)?;
-        if !matches!(
-            manifest.transaction_status,
-            setup_transaction::TransactionStatus::Prepared
-                | setup_transaction::TransactionStatus::Applying
-                | setup_transaction::TransactionStatus::Failed
-                | setup_transaction::TransactionStatus::RollingBack
-                | setup_transaction::TransactionStatus::RollbackFailed
-        ) {
-            continue;
-        }
-        let (_, errors, persist_error) = run_persisted_rollback(
+            .map_err(|e| format!("parse interrupted setup {transaction_id} manifest: {e}"))?;
+        setup_transaction::validate_manifest(&manifest, workspace_root)
+            .map_err(|e| format!("validate interrupted setup {transaction_id}: {e}"))?;
+        let run = run_persisted_rollback(
             &manifest_path,
             &mut manifest,
             &backup_dir,
@@ -144,21 +153,157 @@ fn reconcile_interrupted_setup_transactions(
             workspace_root,
             RollbackExecutionMode::Automatic,
         );
-        if let Some(error) = persist_error {
+        if let Some(error) = run.persist_error {
             return Err(format!(
                 "resume interrupted setup {transaction_id}: {error}"
             ));
         }
-        if !errors.is_empty()
-            || manifest.transaction_status != setup_transaction::TransactionStatus::RolledBack
-        {
+        if !run.errors.is_empty() {
             return Err(format!(
                 "interrupted setup {transaction_id} could not be restored: {}",
-                errors.join("; ")
+                run.errors.join("; ")
             ));
         }
+        if manifest.transaction_status != setup_transaction::TransactionStatus::RolledBack {
+            // Only artifacts the user changed after the interruption remain.
+            // They are preserved on purpose; their edits must not block setup.
+            eprintln!(
+                "agent-workspace: interrupted setup {transaction_id} left user-changed artifacts untouched: {}",
+                run.preserved.join("; ")
+            );
+        }
     }
-    Ok(())
+    Ok(notes)
+}
+
+/// What newer completed transactions for the same workspace wrote. An older transaction must
+/// not restore its backup over an artifact one of them wrote, because the current content
+/// belongs to the newer transaction.
+#[derive(Default)]
+struct NewerCompletedWrites {
+    /// (transaction id, artifact) for every operation a newer completed transaction applied.
+    written: Vec<(String, crate::artifact_registry::ArtifactId)>,
+    /// A newer completed manifest could not be read, so what it wrote is unknown and every
+    /// artifact counts as written.
+    unreadable: Option<String>,
+}
+
+impl NewerCompletedWrites {
+    fn owner_of(&self, artifact: &crate::artifact_registry::ArtifactId) -> Option<&str> {
+        if let Some(id) = &self.unreadable {
+            return Some(id);
+        }
+        self.written
+            .iter()
+            .find(|(_, written)| written == artifact)
+            .map(|(id, _)| id.as_str())
+    }
+}
+
+fn newer_completed_writes(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<NewerCompletedWrites, String> {
+    let mut writes = NewerCompletedWrites::default();
+    let (Some(setup_root), Some(transaction_id)) = (
+        backup_dir.parent(),
+        backup_dir.file_name().and_then(|name| name.to_str()),
+    ) else {
+        return Ok(writes);
+    };
+    let entries = fs::read_dir(setup_root).map_err(|e| format!("read setup transactions: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read setup transaction entry: {e}"))?;
+        let candidate = entry.file_name().to_string_lossy().into_owned();
+        if !validate_transaction_id_format(&candidate)
+            || !transaction_id_is_newer(&candidate, transaction_id)
+            || !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+        {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        if crate::path_safety::reject_symlink(&manifest_path, "setup manifest").is_err() {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
+            continue;
+        };
+        if header.workspace_key.as_deref() != Some(workspace_key)
+            || header.status != setup_transaction::TransactionStatus::Completed
+        {
+            continue;
+        }
+        match serde_json::from_str::<ArtifactTransactionManifest>(&raw) {
+            Ok(manifest) => writes.written.extend(
+                manifest
+                    .operations
+                    .into_iter()
+                    .filter(|op| {
+                        setup_transaction::operation_may_have_been_modified(op.apply_status)
+                    })
+                    .map(|op| (candidate.clone(), op.artifact)),
+            ),
+            Err(_) => writes.unreadable = Some(candidate),
+        }
+    }
+    Ok(writes)
+}
+
+/// Id of a newer completed transaction for the same workspace, if one exists.
+///
+/// A completed transaction owns the managed state written after it, so older
+/// transactions must not restore their managed-state snapshot over it.
+fn newer_completed_transaction(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<Option<String>, String> {
+    let (Some(setup_root), Some(transaction_id)) = (
+        backup_dir.parent(),
+        backup_dir.file_name().and_then(|name| name.to_str()),
+    ) else {
+        return Ok(None);
+    };
+    let entries = fs::read_dir(setup_root).map_err(|e| format!("read setup transactions: {e}"))?;
+    let mut newest = None::<String>;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read setup transaction entry: {e}"))?;
+        let candidate = entry.file_name().to_string_lossy().into_owned();
+        if !validate_transaction_id_format(&candidate)
+            || !transaction_id_is_newer(&candidate, transaction_id)
+            || !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+        {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        if crate::path_safety::reject_symlink(&manifest_path, "setup manifest").is_err() {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
+            continue;
+        };
+        if header.workspace_key.as_deref() == Some(workspace_key)
+            && header.status == setup_transaction::TransactionStatus::Completed
+            && newest
+                .as_deref()
+                .is_none_or(|current| transaction_id_is_newer(&candidate, current))
+        {
+            newest = Some(candidate);
+        }
+    }
+    Ok(newest)
+}
+
+/// Transaction ids are decimal timestamps; compare them numerically.
+fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
+    let candidate = candidate.trim_start_matches('0');
+    let base = base.trim_start_matches('0');
+    (candidate.len(), candidate) > (base.len(), base)
 }
 
 fn restore_previous_managed_state(
@@ -200,6 +345,32 @@ fn restore_previous_managed_state(
     Ok(())
 }
 
+/// Outcome of one persisted rollback pass.
+struct RollbackRun {
+    rolled_back: Vec<String>,
+    /// Failures that need attention (I/O, missing or invalid backups, ...).
+    errors: Vec<String>,
+    /// Artifacts the user changed after apply; left untouched on purpose.
+    preserved: Vec<String>,
+    persist_error: Option<String>,
+}
+
+impl RollbackRun {
+    fn persist_failed(
+        rolled_back: Vec<String>,
+        errors: Vec<String>,
+        preserved: Vec<String>,
+        error: String,
+    ) -> Self {
+        Self {
+            rolled_back,
+            errors,
+            preserved,
+            persist_error: Some(error),
+        }
+    }
+}
+
 fn run_persisted_rollback(
     manifest_path: &Path,
     manifest: &mut ArtifactTransactionManifest,
@@ -207,7 +378,7 @@ fn run_persisted_rollback(
     home: &Path,
     workspace_root: &Path,
     mode: RollbackExecutionMode,
-) -> (Vec<String>, Vec<String>, Option<String>) {
+) -> RollbackRun {
     let indices = setup_transaction::rollback_eligible_indices(&manifest.operations);
     if let Err(e) = persist_setup_manifest(
         manifest_path,
@@ -215,12 +386,39 @@ fn run_persisted_rollback(
         setup_transaction::TransactionStatus::RollingBack,
         backup_dir,
     ) {
-        return (vec![], vec![], Some(e));
+        return RollbackRun::persist_failed(vec![], vec![], vec![], e);
     }
 
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
+    let mut preserved = Vec::new();
+    // An explicit rollback is refused earlier when a newer completed transaction exists.
+    let newer_writes = match mode {
+        RollbackExecutionMode::Automatic => {
+            match newer_completed_writes(backup_dir, &manifest.workspace_key) {
+                Ok(writes) => writes,
+                Err(e) => return RollbackRun::persist_failed(rolled_back, errors, preserved, e),
+            }
+        }
+        RollbackExecutionMode::Explicit => NewerCompletedWrites::default(),
+    };
     for index in indices.into_iter().rev() {
+        if let Some(owner) = newer_writes.owner_of(&manifest.operations[index].artifact) {
+            manifest.operations[index].rollback_status = setup_transaction::RollbackStatus::Failed;
+            preserved.push(format!(
+                "{}: newer completed transaction {owner} wrote this artifact; current content kept",
+                artifact_label(&manifest.operations[index].artifact)
+            ));
+            if let Err(e) = persist_setup_manifest(
+                manifest_path,
+                manifest,
+                setup_transaction::TransactionStatus::RollingBack,
+                backup_dir,
+            ) {
+                return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
+            }
+            continue;
+        }
         if matches!(
             manifest.operations[index].rollback_status,
             setup_transaction::RollbackStatus::InFlight
@@ -240,7 +438,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -257,7 +455,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -275,7 +473,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -289,7 +487,7 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollingBack,
             backup_dir,
         ) {
-            return (rolled_back, errors, Some(e));
+            return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
         }
 
         let op = &mut manifest.operations[index];
@@ -325,6 +523,13 @@ fn run_persisted_rollback(
                     rolled_back.push(artifact_label(&artifact));
                 }
             }
+            Err(e) if e == setup_transaction::CHANGED_SINCE_APPLY => {
+                op.rollback_status = setup_transaction::RollbackStatus::Failed;
+                preserved.push(format!(
+                    "{}: {e}; current content kept",
+                    artifact_label(&artifact)
+                ));
+            }
             Err(e) => {
                 op.rollback_status = setup_transaction::RollbackStatus::Failed;
                 errors.push(format!("{}: {e}", artifact_label(&artifact)));
@@ -336,11 +541,19 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollingBack,
             backup_dir,
         ) {
-            return (rolled_back, errors, Some(e));
+            return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
         }
     }
 
-    if let Err(error) = restore_previous_managed_state(manifest, backup_dir, workspace_root) {
+    // A newer completed transaction owns the managed state now; restoring this
+    // transaction's snapshot would erase its ownership records.
+    let managed_state_restore =
+        match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root),
+            Err(e) => Err(e),
+        };
+    if let Err(error) = managed_state_restore {
         errors.push(error);
         manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
         let _ = persist_setup_manifest(
@@ -349,13 +562,21 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollbackFailed,
             backup_dir,
         );
-        return (rolled_back, errors, None);
+        return RollbackRun {
+            rolled_back,
+            errors,
+            preserved,
+            persist_error: None,
+        };
     }
 
-    if let Some(e) = finalize_persisted_rollback(manifest_path, manifest, backup_dir) {
-        return (rolled_back, errors, Some(e));
+    let persist_error = finalize_persisted_rollback(manifest_path, manifest, backup_dir);
+    RollbackRun {
+        rolled_back,
+        errors,
+        preserved,
+        persist_error,
     }
-    (rolled_back, errors, None)
 }
 
 struct RollbackDryRunPlan {
@@ -439,14 +660,8 @@ fn remove_single_artifact(
     if !dest.exists() {
         return Ok(());
     }
-    let root = if matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-    ) {
-        workspace_root
-    } else {
-        home
-    };
+    let root = artifact.allowlist_root(home, workspace_root)?;
+    let root = root.as_path();
 
     if dest.is_dir() {
         crate::safe_filesystem::remove_dir_no_symlinks(&dest, root)
@@ -504,22 +719,86 @@ fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<
     Ok(())
 }
 
+/// Write the managed base block into a rules file. The user's text before and
+/// after the block is kept byte for byte; a pristine pre-block file is
+/// replaced by a file holding only the block.
+fn apply_rules_artifact(
+    artifact: &crate::artifact_registry::ArtifactId,
+    source: &Path,
+    dest: &Path,
+    workspace_root: &Path,
+    home: &Path,
+    rewrite: Option<&setup_transaction::RulesRewrite>,
+) -> Result<(), String> {
+    let root = artifact.allowlist_root(home, workspace_root)?;
+    if let Some(rewrite) = rewrite {
+        // An explicit conversion writes exactly the previewed content, and only
+        // over the file the preview was computed from.
+        let installed =
+            fs::read(dest).map_err(|e| format!("read rules file {}: {e}", dest.display()))?;
+        if crate::stable_digest::bytes(&installed) != rewrite.expected_installed_digest {
+            return Err("rules file changed since preview; preview the conversion again".into());
+        }
+        return crate::safe_filesystem::write_regular_file_atomic(
+            dest,
+            rewrite.content.as_bytes(),
+            &root,
+        )
+        .map_err(|e| format!("write rules file {}: {e}", dest.display()));
+    }
+    setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
+    let source_text = fs::read_to_string(source)
+        .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
+    let rendered = if dest.exists() {
+        let installed =
+            fs::read(dest).map_err(|e| format!("read rules file {}: {e}", dest.display()))?;
+        match crate::rules_block::parse_bytes(&installed) {
+            Ok(Some(file)) => file.render_with_body(&source_text),
+            Ok(None) => crate::rules_block::render_new(&source_text),
+            Err(reason) => {
+                return Err(format!(
+                    "refusing to change rules file {}: {}",
+                    dest.display(),
+                    reason.message()
+                ));
+            }
+        }
+    } else {
+        crate::rules_block::render_new(&source_text)
+    };
+    crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), &root)
+        .map_err(|e| format!("write rules file {}: {e}", dest.display()))
+}
+
 fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
     home: &Path,
+    rules_rewrite: Option<&setup_transaction::RulesRewrite>,
 ) -> Result<(), String> {
     let (source, dest) =
         setup_transaction::validate_artifact_source_dest(artifact, workspace_root, home)?;
+    let root = artifact.allowlist_root(home, workspace_root)?;
 
     if source.is_dir() {
         if dest.exists() {
-            crate::safe_filesystem::remove_dir_no_symlinks(&dest, home)
+            crate::safe_filesystem::remove_dir_no_symlinks(&dest, &root)
                 .map_err(|e| format!("replace dir: {e}"))?;
         }
-        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
+        crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, &root)
             .map_err(|e| format!("apply dir: {e}"))?;
         return Ok(());
+    }
+
+    if artifact.is_rules_block() {
+        return apply_rules_artifact(
+            artifact,
+            &source,
+            &dest,
+            workspace_root,
+            home,
+            rules_rewrite,
+        );
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
@@ -561,7 +840,7 @@ fn apply_single_artifact(
                 .map_err(|e| format!("serialize opencode config: {e}"))?
                 + "\n")
                 .as_bytes(),
-            home,
+            &root,
         )
         .map_err(|e| format!("write opencode config {}: {e}", dest.display()))?;
         return Ok(());
@@ -577,23 +856,15 @@ fn apply_single_artifact(
             return crate::safe_filesystem::write_regular_file_atomic(
                 &dest,
                 rendered.as_bytes(),
-                home,
+                &root,
             );
         }
-        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, home)
+        crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
             .map_err(|e| format!("write codex config {}: {e}", dest.display()))?;
         return Ok(());
     }
 
-    let root = if matches!(
-        artifact,
-        crate::artifact_registry::ArtifactId::WorkspaceFile(_)
-    ) {
-        workspace_root
-    } else {
-        home
-    };
-    crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, root)
+    crate::safe_filesystem::copy_regular_file_no_symlinks(&source, &dest, &root)
         .map_err(|e| format!("create {}: {e}", dest.display()))?;
     Ok(())
 }
@@ -610,7 +881,7 @@ fn run_persisted_automatic_rollback(
     backup_dir: &Path,
     home: &Path,
     workspace_root: &Path,
-) -> (Vec<String>, Vec<String>, Option<String>) {
+) -> RollbackRun {
     run_persisted_rollback(
         manifest_path,
         manifest,
@@ -637,17 +908,23 @@ struct FailedApplyRollback<'a> {
 fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResult {
     let mut failed = ctx.failed;
     let mut message = ctx.message;
-    let (rolled_back, rb_errors, persist_err) = run_persisted_automatic_rollback(
+    let run = run_persisted_automatic_rollback(
         ctx.manifest_path,
         ctx.manifest,
         ctx.backup_dir,
         ctx.home,
         ctx.workspace_root,
     );
-    if !rb_errors.is_empty() {
-        message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+    if !run.errors.is_empty() {
+        message.push_str(&format!(". Rollback errors: {}", run.errors.join("; ")));
     }
-    if let Some(persist_err) = persist_err {
+    if !run.preserved.is_empty() {
+        message.push_str(&format!(
+            ". Changed since apply, left as is: {}",
+            run.preserved.join("; ")
+        ));
+    }
+    if let Some(persist_err) = run.persist_error {
         failed.push(persist_err);
     }
     SetupResult {
@@ -655,7 +932,7 @@ fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResul
         transaction_id: ctx.transaction_id,
         applied: ctx.applied,
         failed,
-        rolled_back,
+        rolled_back: run.rolled_back,
         manual_steps: ctx.manual_steps,
         message,
     }
@@ -671,9 +948,9 @@ fn user_home() -> Result<PathBuf, String> {
 // ── Apply ──
 
 /// Apply artifact-level operations using artifact-owned transactions.
-fn apply_planned_artifacts(
+pub(super) fn apply_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
-    manual_steps: Vec<String>,
+    mut manual_steps: Vec<String>,
     preview_token: Option<&str>,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
@@ -751,16 +1028,19 @@ fn apply_planned_artifacts(
             };
         }
     };
-    if let Err(e) = reconcile_interrupted_setup_transactions(&ws_root, &home) {
-        return SetupResult {
-            success: false,
-            transaction_id,
-            applied: vec![],
-            failed: vec![e.clone()],
-            rolled_back: vec![],
-            manual_steps,
-            message: format!("Cannot reconcile interrupted setup: {e}"),
-        };
+    match reconcile_interrupted_setup_transactions(&ws_root, &home) {
+        Ok(notes) => manual_steps.extend(notes),
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps,
+                message: format!("Cannot reconcile interrupted setup: {e}"),
+            };
+        }
     }
 
     let mut surfaces: Vec<SetupSurfaceId> = pending.iter().map(|p| p.surface).collect();
@@ -992,18 +1272,14 @@ fn apply_planned_artifacts(
         };
     }
 
-    for p in &pending {
+    // `manifest.operations` was built from `pending` in order.
+    for (operation_index, p) in pending.iter().enumerate() {
         if !matches!(
             p.kind,
             OperationKind::Create | OperationKind::Update | OperationKind::Remove
         ) {
             continue;
         }
-        let operation_index = manifest
-            .operations
-            .iter()
-            .position(|operation| operation.artifact == p.artifact)
-            .expect("planned operation must exist in transaction manifest");
         manifest.operations[operation_index].apply_status =
             setup_transaction::ApplyStatus::InFlight;
         if let Err(e) = persist_setup_manifest(
@@ -1029,7 +1305,7 @@ fn apply_planned_artifacts(
         let mutation = if matches!(p.kind, OperationKind::Remove) {
             remove_single_artifact(&p.artifact, &ws_root, &home)
         } else {
-            apply_single_artifact(&p.artifact, &ws_root, &home)
+            apply_single_artifact(&p.artifact, &ws_root, &home, p.rules_rewrite.as_ref())
         };
         if let Err(e) = mutation {
             manifest.operations[operation_index].apply_status =
@@ -1069,73 +1345,87 @@ fn apply_planned_artifacts(
                 })
         } else {
             setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
-        };
-        if let Err(e) = validation {
-            manifest.operations[operation_index].apply_status =
-                setup_transaction::ApplyStatus::Failed;
-            manifest.operations[operation_index].validation_status =
-                setup_transaction::ValidationStatus::Failed;
-            let err = format!("{}: {e}", artifact_label(&p.artifact));
-            let mut failed = vec![err.clone()];
-            if let Err(persist_err) = persist_setup_manifest(
-                &manifest_path,
-                &mut manifest,
-                setup_transaction::TransactionStatus::Failed,
-                &backup_dir,
-            ) {
-                failed.push(persist_err);
-            }
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed,
-                manual_steps: manual_steps.clone(),
-                message: format!("Artifact validation failed: {err}"),
-            });
         }
-
-        let post_apply_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
-            &p.artifact,
-            &ws_root,
-            &home,
-        )
-        .expect("validated artifact must have a managed digest");
-        let post_apply_full_digest =
-            crate::setup_fingerprint::artifact_installed_full_digest(&p.artifact, &ws_root, &home)
-                .expect("validated artifact must have a full digest");
+        .and_then(|()| {
+            let managed = crate::setup_fingerprint::artifact_installed_managed_digest(
+                &p.artifact,
+                &ws_root,
+                &home,
+            )
+            .map_err(|e| format!("post-apply managed digest: {e}"))?;
+            let full = crate::setup_fingerprint::artifact_installed_full_digest(
+                &p.artifact,
+                &ws_root,
+                &home,
+            )
+            .map_err(|e| format!("post-apply full digest: {e}"))?;
+            Ok((managed, full))
+        });
+        let (post_apply_digest, post_apply_full_digest) = match validation {
+            Ok(digests) => digests,
+            Err(e) => {
+                manifest.operations[operation_index].apply_status =
+                    setup_transaction::ApplyStatus::Failed;
+                manifest.operations[operation_index].validation_status =
+                    setup_transaction::ValidationStatus::Failed;
+                let err = format!("{}: {e}", artifact_label(&p.artifact));
+                let mut failed = vec![err.clone()];
+                if let Err(persist_err) = persist_setup_manifest(
+                    &manifest_path,
+                    &mut manifest,
+                    setup_transaction::TransactionStatus::Failed,
+                    &backup_dir,
+                ) {
+                    failed.push(persist_err);
+                }
+                return finish_failed_apply_with_rollback(FailedApplyRollback {
+                    manifest_path: &manifest_path,
+                    manifest: &mut manifest,
+                    backup_dir: &backup_dir,
+                    home: &home,
+                    workspace_root: &ws_root,
+                    transaction_id,
+                    applied,
+                    failed,
+                    manual_steps: manual_steps.clone(),
+                    message: format!("Artifact validation failed: {err}"),
+                });
+            }
+        };
         let operation = &mut manifest.operations[operation_index];
         operation.apply_status = setup_transaction::ApplyStatus::Applied;
         operation.validation_status = setup_transaction::ValidationStatus::Passed;
         operation.post_apply_digest = Some(post_apply_digest);
         operation.post_apply_full_digest = Some(post_apply_full_digest);
-        if let Err(e) = persist_setup_manifest(
-            &manifest_path,
-            &mut manifest,
-            setup_transaction::TransactionStatus::Applying,
-            &backup_dir,
-        ) {
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed: vec![e.clone()],
-                manual_steps: manual_steps.clone(),
-                message: format!("Cannot persist artifact progress: {e}"),
-            });
-        }
+        // The Applied status and digests are not persisted here: the next
+        // operation's in-flight persist (always before its mutation) and the
+        // persist after the loop write the whole in-memory manifest, so they
+        // are durable before anything else can change on disk. This halves
+        // the number of fsynced manifest writes per apply.
         applied.push(if matches!(p.kind, OperationKind::Remove) {
             format!("removed {}", artifact_label(&p.artifact))
         } else {
             artifact_label(&p.artifact)
+        });
+    }
+
+    if let Err(e) = persist_setup_manifest(
+        &manifest_path,
+        &mut manifest,
+        setup_transaction::TransactionStatus::Applying,
+        &backup_dir,
+    ) {
+        return finish_failed_apply_with_rollback(FailedApplyRollback {
+            manifest_path: &manifest_path,
+            manifest: &mut manifest,
+            backup_dir: &backup_dir,
+            home: &home,
+            workspace_root: &ws_root,
+            transaction_id,
+            applied,
+            failed: vec![e.clone()],
+            manual_steps: manual_steps.clone(),
+            message: format!("Cannot persist artifact progress: {e}"),
         });
     }
 
@@ -1404,6 +1694,35 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         }
     }
 
+    match newer_completed_transaction(&backup_dir, &manifest.workspace_key) {
+        Ok(None) => {}
+        Ok(Some(newer)) => {
+            let message = format!(
+                "cannot roll back transaction {transaction_id}: newer completed transaction {newer} exists; roll that one back first"
+            );
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![message.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message,
+            };
+        }
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Cannot check for newer transactions: {e}"),
+            };
+        }
+    }
+
     let eligible: Vec<ArtifactManifestOperation> = manifest
         .operations
         .iter()
@@ -1610,7 +1929,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     };
 
     let mut manifest_mut = manifest;
-    let (restored, rollback_failures, persist_err) = run_persisted_rollback(
+    let run = run_persisted_rollback(
         &manifest_path,
         &mut manifest_mut,
         &backup_dir,
@@ -1618,9 +1937,12 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         &ws_root,
         RollbackExecutionMode::Explicit,
     );
+    let restored = run.rolled_back;
+    let mut rollback_failures = run.errors;
+    rollback_failures.extend(run.preserved);
     let restored_count = restored.len();
     let success = rollback_failures.is_empty();
-    if let Some(persist_err) = persist_err {
+    if let Some(persist_err) = run.persist_error {
         return SetupResult {
             success: false,
             transaction_id: transaction_id.to_string(),
@@ -1712,12 +2034,14 @@ fn attach_plan_preview(
 }
 
 /// Product-level installation status for workspace or harness surfaces.
-#[tauri::command]
+///
+/// Read-only and walks the installed tree, so it runs off the main thread.
+#[tauri::command(async)]
 pub fn get_installation_status(
     surfaces: Vec<String>,
 ) -> Result<crate::installation_status::InstallationStatus, String> {
     let settings = crate::settings::load();
-    let surface_ids: Vec<SetupSurfaceId> = if surfaces.is_empty() {
+    let surface_ids = if surfaces.is_empty() {
         crate::settings::enabled_setup_surfaces(&settings)
     } else {
         let parsed: Vec<SetupSurfaceId> = surfaces
@@ -1727,8 +2051,7 @@ pub fn get_installation_status(
                     .map_err(|_| format!("Unknown surface ID: {s}"))
             })
             .collect::<Result<_, _>>()?;
-        reject_disabled_surfaces(&parsed, &settings)?;
-        parsed
+        gate_requested_surfaces(parsed, &settings)?
     };
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
@@ -1763,8 +2086,48 @@ fn reject_disabled_surfaces(
     }
 }
 
+/// Surfaces an explicit request may act on. Harness-disabled surfaces are
+/// rejected; target-disabled surfaces are dropped silently. The result may be
+/// empty, and an empty result must stay an empty plan, never "all surfaces".
+fn gate_requested_surfaces(
+    requested: Vec<SetupSurfaceId>,
+    settings: &crate::settings::AppSettings,
+) -> Result<Vec<SetupSurfaceId>, String> {
+    reject_disabled_surfaces(&requested, settings)?;
+    Ok(requested
+        .into_iter()
+        .filter(|surface| crate::settings::surface_enabled(settings, *surface))
+        .collect())
+}
+
+/// Plans exactly `surface_ids`. `plan_setup` treats an empty list as "all
+/// surfaces", so an empty list returns an explicit empty plan instead.
+fn plan_surfaces(
+    surface_ids: Vec<SetupSurfaceId>,
+    ws_root: &Path,
+    home: &Path,
+) -> Result<SetupPlan, String> {
+    if surface_ids.is_empty() {
+        return Ok(crate::setup_lifecycle::empty_plan());
+    }
+    let states: Vec<_> = surface_ids
+        .iter()
+        .map(|s| detect_surface_state(*s, ws_root, home))
+        .collect();
+    let request = SetupRequest {
+        surfaces: surface_ids,
+        skip_manual: true,
+    };
+    let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
+    attach_plan_preview(&mut plan, ws_root, home)?;
+    Ok(plan)
+}
+
 /// Read-only preview: detect real state for requested surfaces.
-#[tauri::command]
+///
+/// Plans every requested surface and hashes artifacts, so it runs off the
+/// main thread. It takes no mutation guard; apply re-validates the fingerprint.
+#[tauri::command(async)]
 pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
     // Validate all provided surface IDs are known
     let unknown: Vec<&String> = surfaces
@@ -1787,56 +2150,19 @@ pub fn preview_setup(surfaces: Vec<String>) -> Result<SetupPlan, String> {
         })
         .collect();
     let settings = crate::settings::load();
-    reject_disabled_surfaces(&requested_surface_ids, &settings)?;
     let surface_ids = if requested_surface_ids.is_empty() {
         crate::settings::enabled_setup_surfaces(&settings)
     } else {
-        requested_surface_ids
+        gate_requested_surfaces(requested_surface_ids, &settings)?
     };
 
-    if surfaces.is_empty() {
-        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
-        let home = crate::platform_paths::resolve_user_home(
-            &crate::platform_paths::PlatformEnv::from_process_env(),
-            crate::platform_paths::Platform::current(),
-        )
-        .map_err(|e| format!("user home: {e}"))?;
-
-        let states: Vec<_> = surface_ids
-            .iter()
-            .map(|s| detect_surface_state(*s, &ws_root, &home))
-            .collect();
-
-        let request = SetupRequest {
-            surfaces: surface_ids,
-            skip_manual: true,
-        };
-
-        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        attach_plan_preview(&mut plan, &ws_root, &home)?;
-        Ok(plan)
-    } else {
-        let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
-        let home = crate::platform_paths::resolve_user_home(
-            &crate::platform_paths::PlatformEnv::from_process_env(),
-            crate::platform_paths::Platform::current(),
-        )
-        .map_err(|e| format!("user home: {e}"))?;
-
-        let states: Vec<_> = surface_ids
-            .iter()
-            .map(|s| detect_surface_state(*s, &ws_root, &home))
-            .collect();
-
-        let request = SetupRequest {
-            surfaces: surface_ids,
-            skip_manual: true,
-        };
-
-        let mut plan = crate::setup_lifecycle::plan_setup(&request, &states);
-        attach_plan_preview(&mut plan, &ws_root, &home)?;
-        Ok(plan)
-    }
+    let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
+    let home = crate::platform_paths::resolve_user_home(
+        &crate::platform_paths::PlatformEnv::from_process_env(),
+        crate::platform_paths::Platform::current(),
+    )
+    .map_err(|e| format!("user home: {e}"))?;
+    plan_surfaces(surface_ids, &ws_root, &home)
 }
 
 #[tauri::command]
@@ -1872,7 +2198,12 @@ pub fn apply_setup(
         return Err("At least one surface ID is required".to_string());
     }
     let settings = crate::settings::load();
-    reject_disabled_surfaces(&surface_ids, &settings)?;
+    let surface_ids = gate_requested_surfaces(surface_ids, &settings)?;
+    if surface_ids.is_empty() {
+        // Every requested surface is target-disabled: nothing to apply.
+        let plan = crate::setup_lifecycle::empty_plan();
+        return Ok(apply_setup_plan_with_token(&plan, None));
+    }
 
     // Use real detection instead of synthetic all-Create states
     let ws_root = setup_workspace_target_path().map_err(|e| format!("workspace root: {e}"))?;
@@ -2050,7 +2381,7 @@ fn uninstall_fingerprint(
 /// Read-only preview of a full uninstall: which installed files are proven
 /// app-owned (removable), which diverged copies are preserved, and which
 /// merge-managed configs are left in place.
-#[tauri::command]
+#[tauri::command(async)]
 pub fn preview_uninstall() -> Result<UninstallPlanView, String> {
     let ws_root = setup_workspace_target_path()?;
     let home = user_home()?;
@@ -2216,6 +2547,8 @@ mod tests {
 
     #[test]
     fn skill_update_preserves_unknown_sibling_files() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
         let base = std::env::temp_dir().join(format!(
             "aw-setup-skill-sibling-{}",
             std::time::SystemTime::now()
@@ -2246,7 +2579,15 @@ mod tests {
         let artifact = ArtifactId::OpenCodeSkill(
             crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
         );
-        apply_single_artifact(&artifact, &ws, &resolved_home).expect("apply skill");
+        apply_single_artifact(&artifact, &ws, &resolved_home, None).expect("apply skill");
+        let source = artifact
+            .resolve_source(&crate::setup_roots::bundled_root().expect("bundled root"))
+            .expect("skill source");
+        assert_eq!(
+            fs::read(&dest).unwrap(),
+            fs::read(source).unwrap(),
+            "managed SKILL.md must be updated to the bundled source"
+        );
         assert_eq!(
             fs::read_to_string(
                 resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md")
@@ -2254,6 +2595,71 @@ mod tests {
             .unwrap(),
             "keep me"
         );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn codex_artifacts_apply_and_remove_under_codex_home_outside_home() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let base = std::env::temp_dir().join(format!(
+            "aw-setup-codex-home-outside-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        let codex = base.join("elsewhere/codex");
+        fs::create_dir_all(&home).expect("home");
+        fs::create_dir_all(&codex).expect("codex home");
+        copy_dir_all(&bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        std::env::set_var("CODEX_HOME", &codex);
+
+        let agent = crate::artifact_registry::AgentName::new("inspector").unwrap();
+        let cases = [
+            (ArtifactId::CodexRules, "AGENTS.md"),
+            (ArtifactId::CodexConfig, "config.toml"),
+            (ArtifactId::CodexAgent(agent), "agents/inspector.toml"),
+        ];
+        let planned = setup_transaction::plan_artifacts_for_surfaces(
+            &[
+                SetupSurfaceId::CodexRules,
+                SetupSurfaceId::CodexConfig,
+                SetupSurfaceId::CodexAgents,
+            ],
+            &ws,
+            &home,
+        )
+        .expect("preview under CODEX_HOME outside home");
+        assert!(
+            planned
+                .iter()
+                .all(|p| p.kind == crate::setup_lifecycle::OperationKind::Create),
+            "{:?}",
+            planned
+                .iter()
+                .map(|p| (&p.artifact, p.kind))
+                .collect::<Vec<_>>()
+        );
+        for (artifact, rel) in &cases {
+            apply_single_artifact(artifact, &ws, &home, None)
+                .unwrap_or_else(|e| panic!("apply {artifact:?}: {e}"));
+            assert!(codex.join(rel).is_file(), "{artifact:?} not written");
+            // A second apply replaces the installed file.
+            apply_single_artifact(artifact, &ws, &home, None)
+                .unwrap_or_else(|e| panic!("re-apply {artifact:?}: {e}"));
+        }
+        assert!(!home.join(".codex").exists());
+        for (artifact, rel) in &cases {
+            remove_single_artifact(artifact, &ws, &home)
+                .unwrap_or_else(|e| panic!("remove {artifact:?}: {e}"));
+            assert!(!codex.join(rel).exists(), "{artifact:?} not removed");
+        }
         let _ = fs::remove_dir_all(&base);
     }
 
@@ -2340,7 +2746,7 @@ mod tests {
         std::os::unix::fs::symlink(&real_config, &config_link).unwrap();
         // No need to create source - validate_artifact_source_dest will reject first
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base)
+        let err = apply_single_artifact(&artifact, &base, &base, None)
             .expect_err("symlinked parent apply must be rejected");
         assert!(err.contains("symlink") || err.contains("parent"), "{err}");
         let _ = fs::remove_dir_all(&base);
@@ -2367,7 +2773,7 @@ mod tests {
         )
         .unwrap();
         let artifact = ArtifactId::OpenCodeRules;
-        let err = apply_single_artifact(&artifact, &base, &base)
+        let err = apply_single_artifact(&artifact, &base, &base, None)
             .expect_err("dangling destination must be rejected");
         assert!(err.contains("symlink"), "{err}");
         let _ = fs::remove_dir_all(&base);
@@ -2408,27 +2814,33 @@ mod tests {
     }
 
     #[test]
-    fn rollback_dry_run_does_not_restore() {
-        let _guard = guard::lock();
-        let home = std::env::temp_dir().join("aw-setup-dry-run");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        let _restore = guard::EnvRestore::capture();
-        set_test_user_dirs(&home);
-        unsafe {
-            std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
-                home.join("backups").to_string_lossy().as_ref(),
-            );
-        }
+    fn rollback_dry_run_leaves_a_real_transaction_untouched() {
+        let env = TempSetupEnv::new("dry-run-real");
+        let applied =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(applied.success, "{}", applied.message);
+        let codex = env.home.join(".codex/AGENTS.md");
+        assert!(codex.is_file());
+        let manifest_path = env
+            .setup_root()
+            .join(&applied.transaction_id)
+            .join("manifest.json");
+        let manifest_before = fs::read(&manifest_path).unwrap();
 
-        let result = rollback_transaction("nonexistent", true);
-        // Dry-run on nonexistent should still fail — dry-run only affects
-        // the existence check stage
-        assert!(
-            !result.success,
-            "dry-run should still validate transaction exists"
+        let dry = rollback_transaction(&applied.transaction_id, true);
+        assert!(dry.success, "{}", dry.message);
+        assert_eq!(dry.applied.len(), 1, "dry run lists what would be restored");
+        assert!(dry.applied[0].contains("CodexRules"), "{:?}", dry.applied);
+        assert!(codex.is_file(), "dry run must not remove the created file");
+        assert_eq!(
+            fs::read(&manifest_path).unwrap(),
+            manifest_before,
+            "dry run must not write the manifest"
         );
+
+        let real = rollback_transaction(&applied.transaction_id, false);
+        assert!(real.success, "{}", real.message);
+        assert!(!codex.exists(), "real rollback removes the created file");
     }
 
     #[test]
@@ -3129,5 +3541,670 @@ mod tests {
         let after_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
         assert_eq!(before_raw, after_raw);
         let _ = fs::remove_dir_all(&base);
+    }
+
+    // ── Reconciliation safety ──
+
+    /// Hermetic HOME, runtime workspace, and backup root for tests that run
+    /// real transactions. Holds the process-wide env lock for its lifetime.
+    struct TempSetupEnv {
+        base: PathBuf,
+        home: PathBuf,
+        ws: PathBuf,
+        _restore: guard::EnvRestore,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl TempSetupEnv {
+        fn new(label: &str) -> Self {
+            let lock = guard::lock();
+            let restore = guard::EnvRestore::capture();
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let base = std::env::temp_dir().join(format!("aw-setup-{label}-{nanos}"));
+            let _ = fs::remove_dir_all(&base);
+            fs::create_dir_all(base.join("home")).expect("home");
+            set_test_user_dirs(&base.join("home"));
+            unsafe {
+                std::env::set_var(
+                    "AGENT_WORKSPACE_PATH",
+                    base.join("workspace").to_string_lossy().as_ref(),
+                );
+                std::env::set_var(
+                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    base.join("backups").to_string_lossy().as_ref(),
+                );
+            }
+            let home = user_home().expect("resolved home");
+            let ws = setup_workspace_target_path().expect("workspace target");
+            Self {
+                base,
+                home,
+                ws,
+                _restore: restore,
+                _lock: lock,
+            }
+        }
+
+        fn setup_root(&self) -> PathBuf {
+            backup_root().expect("backup root").join("setup")
+        }
+
+        fn plan(&self, surfaces: &[SetupSurfaceId]) -> Vec<setup_transaction::PlannedArtifact> {
+            setup_transaction::plan_artifacts_for_surfaces(surfaces, &self.ws, &self.home)
+                .expect("plan")
+        }
+    }
+
+    impl Drop for TempSetupEnv {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.base);
+        }
+    }
+
+    fn write_raw_manifest(setup_root: &Path, transaction_id: &str, manifest: serde_json::Value) {
+        let dir = setup_root.join(transaction_id);
+        fs::create_dir_all(&dir).expect("transaction dir");
+        fs::write(dir.join("manifest.json"), manifest.to_string()).expect("raw manifest");
+    }
+
+    #[test]
+    fn reconcile_skips_unreadable_terminal_manifests_and_apply_still_succeeds() {
+        let env = TempSetupEnv::new("reconcile-terminal");
+        let setup_root = env.setup_root();
+        let key = env.ws.to_string_lossy().into_owned();
+        // An old-schema completed manifest and a rolled-back one with damaged
+        // operations: both are finished transactions.
+        write_raw_manifest(
+            &setup_root,
+            "1000",
+            serde_json::json!({
+                "schema_version": 1, "workspace_key": key,
+                "transaction_status": "completed", "operations": []
+            }),
+        );
+        write_raw_manifest(
+            &setup_root,
+            "1001",
+            serde_json::json!({
+                "schema_version": 5, "workspace_key": key,
+                "transaction_status": "rolled_back", "operations": [{"bogus": true}]
+            }),
+        );
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+            .expect("finished transactions must not block reconciliation");
+
+        // An unreadable transaction that may be half-applied still blocks, and
+        // the error names it.
+        write_raw_manifest(
+            &setup_root,
+            "1002",
+            serde_json::json!({
+                "schema_version": 1, "workspace_key": key,
+                "transaction_status": "failed", "operations": []
+            }),
+        );
+        let err = reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+            .expect_err("unreadable interrupted transaction must block");
+        assert!(
+            err.contains("1002"),
+            "error must name the transaction: {err}"
+        );
+        fs::remove_dir_all(setup_root.join("1002")).expect("remove blocking transaction");
+
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        let result = apply_planned_artifacts(&planned, vec![], None);
+        assert!(result.success, "apply: {}", result.message);
+        assert!(env.home.join(".codex/AGENTS.md").is_file());
+    }
+
+    #[test]
+    fn reconcile_preserves_user_edit_made_after_interrupted_apply() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, txn_id) = rollback_test_fixture();
+        seed_two_artifact_transaction(&txn_id);
+        // The user edits one applied artifact before the next app launch.
+        fs::write(home.join(".codex/AGENTS.md"), "user-edit-after-crash").unwrap();
+
+        reconcile_interrupted_setup_transactions(&ws, &home)
+            .expect("a preserved user edit must not block setup");
+        // A second pass stays non-blocking and still preserves the edit.
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("second reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "user-edit-after-crash"
+        );
+        assert_eq!(
+            fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
+            "opencode-rules-backup",
+            "untouched artifact is still restored"
+        );
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.operations[0].rollback_status,
+            setup_transaction::RollbackStatus::Failed
+        );
+        assert_eq!(
+            manifest.operations[1].rollback_status,
+            setup_transaction::RollbackStatus::Restored
+        );
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// Marks a seeded transaction as completed, keeping only operations on `artifacts`.
+    fn complete_seeded_transaction_for(txn_id: &str, artifacts: &[ArtifactId]) {
+        let backup_dir = backup_root().unwrap().join("setup").join(txn_id);
+        let mut manifest = read_manifest(txn_id);
+        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        manifest
+            .operations
+            .retain(|op| artifacts.contains(&op.artifact));
+        manifest.surface_ids = manifest.operations.iter().map(|op| op.surface).collect();
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn reconcile_does_not_rerun_a_rollback_failed_transaction_over_newer_state() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        // The interrupted transaction keeps the user's edit and ends rollback-failed.
+        fs::write(home.join(".codex/AGENTS.md"), "user-edit-after-crash").unwrap();
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("first reconcile");
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+
+        // A newer apply installs the same managed content over it and completes.
+        fs::write(home.join(".codex/AGENTS.md"), "codex-applied").unwrap();
+        seed_two_artifact_transaction(newer);
+        complete_seeded_transaction_for(newer, &[ArtifactId::CodexRules]);
+
+        let notes = reconcile_interrupted_setup_transactions(&ws, &home).expect("second reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied",
+            "the older backup must not be restored over the newer install"
+        );
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert!(
+            notes.iter().any(|note| note.contains(&older)),
+            "the unresolved transaction must be surfaced: {notes:?}"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reconcile_skips_artifacts_a_newer_completed_transaction_wrote() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        seed_two_artifact_transaction(newer);
+        // The newer transaction only wrote the Codex rules.
+        complete_seeded_transaction_for(newer, &[ArtifactId::CodexRules]);
+
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied",
+            "an artifact the newer transaction wrote keeps its content"
+        );
+        assert_eq!(
+            fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
+            "opencode-rules-backup",
+            "an artifact only the older transaction wrote is still restored"
+        );
+        let manifest = read_manifest(&older);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert_eq!(
+            manifest.operations[0].rollback_status,
+            setup_transaction::RollbackStatus::Failed
+        );
+        assert_eq!(
+            manifest.operations[1].rollback_status,
+            setup_transaction::RollbackStatus::Restored
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reconcile_keeps_managed_state_owned_by_a_newer_completed_transaction() {
+        let env = TempSetupEnv::new("reconcile-newer");
+        fs::create_dir_all(env.home.join(".codex")).unwrap();
+        fs::create_dir_all(env.home.join(".config/opencode")).unwrap();
+        fs::write(env.home.join(".codex/AGENTS.md"), "codex-applied").unwrap();
+        fs::write(
+            env.home.join(".config/opencode/AGENTS.md"),
+            "opencode-applied",
+        )
+        .unwrap();
+        let older = "9876543210987654321";
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(older);
+        seed_two_artifact_transaction(newer);
+        // The newer transaction wrote no artifact the older one covers, so the older one is
+        // still rolled back; it only owns the managed state.
+        complete_seeded_transaction_for(newer, &[]);
+        // The newer transaction published this managed state.
+        let state = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![],
+        };
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+
+        assert_eq!(
+            crate::managed_state::read_managed_state(&env.ws),
+            Some(state),
+            "older rollback must not erase the newer transaction's managed state"
+        );
+        assert_eq!(
+            read_manifest(older).transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+    }
+
+    #[test]
+    fn explicit_rollback_refuses_when_a_newer_completed_transaction_exists() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, _ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        let backup_dir = seed_two_artifact_transaction(newer);
+        let mut manifest = read_manifest(newer);
+        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+
+        for dry_run in [true, false] {
+            let result = rollback_transaction(&older, dry_run);
+            assert!(!result.success, "dry_run={dry_run}");
+            assert!(
+                result.message.contains("newer completed transaction")
+                    && result.message.contains(newer),
+                "unclear refusal: {}",
+                result.message
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied"
+        );
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::Failed,
+            "refused rollback must not touch the older manifest"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn transaction_ids_compare_numerically() {
+        assert!(transaction_id_is_newer("10", "9"));
+        assert!(!transaction_id_is_newer("9", "10"));
+        assert!(!transaction_id_is_newer("0005", "5"));
+        assert!(transaction_id_is_newer(
+            "1788000000000000001",
+            "1788000000000000000"
+        ));
+    }
+
+    #[test]
+    fn apply_refreshes_stale_record_of_unchanged_artifact_outside_the_selection() {
+        let env = TempSetupEnv::new("refresh-stale");
+        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(first.success, "{}", first.message);
+        let codex = ArtifactId::CodexRules;
+        let identity = crate::managed_state::artifact_identity(&codex);
+        let installed = fs::read(env.home.join(".codex/AGENTS.md")).unwrap();
+
+        // The record drifts, e.g. the file was synced by the legacy script.
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state
+            .artifacts
+            .iter_mut()
+            .filter(|r| r.identity == identity)
+        {
+            record.hash = crate::stable_digest::bytes(b"older shipped version");
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        assert_eq!(planned[0].kind, OperationKind::NoChange);
+
+        // Any later apply, even of another surface, refreshes it.
+        let second =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::OpenCodeRules]), vec![], None);
+        assert!(second.success, "{}", second.message);
+        let state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        let record = state
+            .artifacts
+            .iter()
+            .find(|r| r.identity == identity)
+            .expect("codex record");
+        assert_eq!(
+            record.hash,
+            crate::rules_block::installed_managed_digest(&installed)
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn setup_transaction_backups_are_owner_only() {
+        use std::os::unix::fs::PermissionsExt;
+        let mode_of = |path: &Path| fs::metadata(path).unwrap().permissions().mode() & 0o777;
+        let env = TempSetupEnv::new("private-backups");
+        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(first.success, "{}", first.message);
+
+        // Age the installed file so the next apply backs it up before replacing it.
+        let dest = env.home.join(".codex/AGENTS.md");
+        fs::write(&dest, "older-codex").unwrap();
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state.artifacts.iter_mut() {
+            record.hash = crate::stable_digest::bytes(b"older-codex");
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let second =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(second.success, "{}", second.message);
+
+        let txn_dir = env.setup_root().join(&second.transaction_id);
+        assert_eq!(mode_of(&txn_dir), 0o700);
+        assert_eq!(mode_of(&txn_dir.join("manifest.json")), 0o600);
+        assert_eq!(mode_of(&txn_dir.join("artifacts")), 0o700);
+        let backup = fs::read_dir(txn_dir.join("artifacts"))
+            .unwrap()
+            .next()
+            .expect("artifact backup")
+            .unwrap()
+            .path();
+        assert_eq!(mode_of(&backup), 0o600);
+        assert_eq!(fs::read_to_string(&backup).unwrap(), "older-codex");
+    }
+
+    // ── Failure injection and removal safety ──
+
+    /// Restores permissions on drop so a failed assertion cannot leave an
+    /// undeletable directory behind.
+    #[cfg(unix)]
+    struct PermissionGuard {
+        path: PathBuf,
+        mode: u32,
+    }
+
+    #[cfg(unix)]
+    impl Drop for PermissionGuard {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(self.mode));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_apply_rolls_back_completed_artifacts_and_restores_state() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = TempSetupEnv::new("auto-rollback");
+        let codex_dest = env.home.join(".codex/AGENTS.md");
+        let opencode_dest = env.home.join(".config/opencode/AGENTS.md");
+        let surfaces = [SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules];
+
+        // Install both, then age them: installed content differs from the
+        // source but matches the managed record, so the next plan updates both.
+        let first = apply_planned_artifacts(&env.plan(&surfaces), vec![], None);
+        assert!(first.success, "{}", first.message);
+        fs::write(&codex_dest, "old-codex").unwrap();
+        fs::write(&opencode_dest, "old-opencode").unwrap();
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state.artifacts.iter_mut() {
+            let old = if record.identity
+                == crate::managed_state::artifact_identity(&ArtifactId::CodexRules)
+            {
+                b"old-codex".as_slice()
+            } else {
+                b"old-opencode".as_slice()
+            };
+            record.hash = crate::stable_digest::bytes(old);
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let state_before = fs::read(crate::managed_state::managed_state_path(&env.ws)).unwrap();
+        let planned = env.plan(&surfaces);
+        assert!(
+            planned.iter().all(|p| p.kind == OperationKind::Update),
+            "{planned:?}"
+        );
+
+        // The second artifact cannot be written: its directory is read-only.
+        let opencode_dir = opencode_dest.parent().unwrap().to_path_buf();
+        fs::set_permissions(&opencode_dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let _restore_permissions = PermissionGuard {
+            path: opencode_dir.clone(),
+            mode: 0o755,
+        };
+        if fs::write(opencode_dir.join(".probe"), "x").is_ok() {
+            return; // permissions are not enforced (running as root)
+        }
+
+        let result = apply_planned_artifacts(&planned, vec![], None);
+
+        assert!(!result.success, "second artifact must fail the apply");
+        assert!(
+            result
+                .rolled_back
+                .iter()
+                .any(|label| label.contains("CodexRules")),
+            "first artifact must be rolled back: {result:?}"
+        );
+        assert_eq!(fs::read_to_string(&codex_dest).unwrap(), "old-codex");
+        assert_eq!(fs::read_to_string(&opencode_dest).unwrap(), "old-opencode");
+        assert_eq!(
+            fs::read(crate::managed_state::managed_state_path(&env.ws)).unwrap(),
+            state_before,
+            "managed state must be untouched by a rolled-back apply"
+        );
+        let manifest = read_manifest(&result.transaction_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+    }
+
+    #[test]
+    fn stale_removal_never_deletes_a_user_modified_file() {
+        let env = TempSetupEnv::new("stale-removal");
+        let stale_skill = |name: &str| {
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(name).unwrap())
+        };
+        let (untouched, edited) = (stale_skill("grill-me"), stale_skill("caveman"));
+        let mut records = Vec::new();
+        for (artifact, installed_by_app) in [(&untouched, "app copy"), (&edited, "app copy")] {
+            let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, installed_by_app).unwrap();
+            records.push(crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(artifact),
+                hash: crate::stable_digest::bytes(installed_by_app.as_bytes()),
+                surface: None,
+            });
+        }
+        // The user edits one skill the app once installed and has since retired.
+        let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
+        fs::write(&edited_dest, "my own changes").unwrap();
+        crate::managed_state::write_managed_state_atomic(
+            &env.ws,
+            &crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: records,
+            },
+        )
+        .unwrap();
+
+        let planned = env.plan(&[SetupSurfaceId::ClaudeSkills]);
+        let kind_of = |artifact: &ArtifactId| {
+            planned
+                .iter()
+                .find(|p| &p.artifact == artifact)
+                .map(|p| p.kind)
+        };
+        assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+
+        let stale: Vec<_> = planned
+            .iter()
+            .filter(|p| p.artifact == untouched || p.artifact == edited)
+            .cloned()
+            .collect();
+        let result = apply_planned_artifacts(&stale, vec![], None);
+        assert!(result.success, "{}", result.message);
+        assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert_eq!(
+            fs::read_to_string(&edited_dest).unwrap(),
+            "my own changes",
+            "a user-modified retired skill must be preserved"
+        );
+    }
+
+    // ── Target gating ──
+
+    fn disable_targets(ids: &[&str]) {
+        let mut settings = crate::settings::load();
+        settings
+            .enabled_target_ids
+            .retain(|id| !ids.contains(&id.as_str()));
+        crate::settings::save_with_revision_check(settings, None).expect("save settings");
+    }
+
+    #[test]
+    fn gate_requested_surfaces_drops_target_disabled_and_may_empty() {
+        let mut settings = crate::settings::AppSettings::default();
+        settings
+            .enabled_target_ids
+            .retain(|id| id != "cursor_setup");
+        let kept = gate_requested_surfaces(
+            vec![
+                SetupSurfaceId::CursorAgents,
+                SetupSurfaceId::ClaudeRules,
+                SetupSurfaceId::CursorMcp,
+            ],
+            &settings,
+        )
+        .expect("gate");
+        assert_eq!(kept, vec![SetupSurfaceId::ClaudeRules]);
+
+        let emptied = gate_requested_surfaces(
+            vec![SetupSurfaceId::CursorAgents, SetupSurfaceId::CursorMcp],
+            &settings,
+        )
+        .expect("gate");
+        assert!(emptied.is_empty());
+    }
+
+    #[test]
+    fn gate_requested_surfaces_still_rejects_disabled_harness() {
+        let settings = crate::settings::AppSettings {
+            enabled_harness_ids: vec![crate::agent_targets::HarnessId::Claude],
+            ..Default::default()
+        };
+        let err = gate_requested_surfaces(vec![SetupSurfaceId::CodexRules], &settings)
+            .expect_err("disabled harness");
+        assert!(err.contains("Harness disabled"), "error: {err}");
+    }
+
+    #[test]
+    fn preview_with_only_target_disabled_surfaces_is_an_empty_plan() {
+        let _env = TempSetupEnv::new("gate-preview");
+        disable_targets(&["cursor_setup"]);
+        let plan =
+            preview_setup(vec!["cursor_agents".into(), "cursor_mcp".into()]).expect("preview");
+        assert!(plan.operations.is_empty(), "{:?}", plan.operations);
+        assert!(plan.synced.is_empty());
+        assert!(!plan.has_pending_changes);
+        assert!(!plan.is_blocked);
+        assert!(plan.plan_fingerprint.is_none());
+        assert!(plan.preview_token.is_none());
+    }
+
+    #[test]
+    fn preview_drops_target_disabled_surfaces_from_a_mixed_request() {
+        let _env = TempSetupEnv::new("gate-preview-mixed");
+        disable_targets(&["cursor_setup"]);
+        let plan =
+            preview_setup(vec!["cursor_agents".into(), "claude_rules".into()]).expect("preview");
+        let surfaces: Vec<SetupSurfaceId> = plan.operations.iter().map(|op| op.surface).collect();
+        assert_eq!(surfaces, vec![SetupSurfaceId::ClaudeRules]);
+    }
+
+    #[test]
+    fn apply_with_only_target_disabled_surfaces_is_a_no_op() {
+        let env = TempSetupEnv::new("gate-apply");
+        disable_targets(&["cursor_setup"]);
+        let result = apply_setup(vec!["cursor_mcp".into()], false, None, None)
+            .expect("apply must not fail for gated-out surfaces");
+        assert!(result.success);
+        assert!(result.applied.is_empty());
+        assert!(
+            !env.home.join(".cursor").exists(),
+            "a disabled target must not be written"
+        );
+    }
+
+    #[test]
+    fn installation_status_does_not_count_target_disabled_surfaces() {
+        let _env = TempSetupEnv::new("gate-status");
+        let both = vec!["claude_rules".to_string(), "cursor_agents".to_string()];
+        let enabled = get_installation_status(both.clone()).expect("status");
+        assert_eq!(enabled.surfaces.len(), 2);
+
+        disable_targets(&["cursor_setup"]);
+        let gated = get_installation_status(both).expect("status");
+        let surfaces: Vec<SetupSurfaceId> = gated.surfaces.iter().map(|s| s.surface).collect();
+        assert_eq!(surfaces, vec![SetupSurfaceId::ClaudeRules]);
+        assert!(gated.counts.create_count < enabled.counts.create_count);
+
+        let emptied = get_installation_status(vec!["cursor_agents".into()]).expect("status");
+        assert!(emptied.surfaces.is_empty());
+        assert_eq!(emptied.counts.create_count, 0);
+        assert_eq!(
+            emptied.state,
+            crate::installation_status::InstallationState::Current
+        );
     }
 }

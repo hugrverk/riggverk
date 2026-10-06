@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useRef, useState, type MutableRefObject } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { LEAVE_DIRTY_MESSAGE } from "../lib/editorGuards";
+import { invokeOpen } from "../lib/invokeOpen";
 import { useConfirm } from "../components/ConfirmDialog";
 import {
   createSaveOperationTracker,
@@ -81,6 +82,9 @@ export function useLibraryController({
   const [agentSaveResult, setAgentSaveResult] = useState<ActionResult | null>(null);
   const [agentMode, setAgentMode] = useState<"preview" | "edit">("preview");
   const activeAgentIdRef = useRef<string | null>(null);
+  const agentDraftIdRef = useRef<string | null>(null);
+  const agentDirtyRef = useRef(false);
+  agentDirtyRef.current = agentDirty;
 
   const [configTemplateContent, setConfigTemplateContent] = useState<DocumentContent | null>(null);
   const [activeConfigTargetId, setActiveConfigTargetId] = useState<string>("");
@@ -100,6 +104,8 @@ export function useLibraryController({
   const agentSaveOpRef = useRef(createSaveOperationTracker());
   const agentTemplateSaveOpRef = useRef(createSaveOperationTracker());
   const configSaveOpRef = useRef(createSaveOperationTracker());
+  // Bumped when a workspace switch reloads the Library, so the config source effects refetch for the new workspace.
+  const [libraryReloadEpoch, setLibraryReloadEpoch] = useState(0);
 
   const invalidateEditorSaveOperations = useCallback(() => {
     docSaveOpRef.current.invalidate();
@@ -137,16 +143,21 @@ export function useLibraryController({
 
   useEffect(() => {
     if (activeAgentContent) {
+      // A reload of the same file (e.g. re-clicking the Library tab) must not discard an unsaved draft.
+      const sameFile = agentDraftIdRef.current === activeAgentContent.id;
+      agentDraftIdRef.current = activeAgentContent.id;
+      if (sameFile && agentDirtyRef.current) return;
       setAgentDraft(activeAgentContent.content);
       setAgentDirty(false);
       setAgentSaveResult(null);
     } else {
+      agentDraftIdRef.current = null;
       setAgentDraft("");
       setAgentDirty(false);
       setAgentSaveResult(null);
       setAgentMode("preview");
     }
-  }, [activeAgentContent]);
+  }, [activeAgentContent?.id, activeAgentContent?.content]);
 
   useEffect(() => {
     activeConfigSourceTypeRef.current = activeConfigSourceType;
@@ -183,6 +194,7 @@ export function useLibraryController({
           if (!alreadyLoaded) {
             const content = await invoke<DocumentContent>("read_skill", { id: persistedId });
             if (!isWorkspaceLoadCurrent(generation)) return;
+            if (activeSkillIdRef.current !== persistedId) return;
             activeSkillContentIdRef.current = persistedId;
             setActiveSkillContent(content);
           }
@@ -192,6 +204,7 @@ export function useLibraryController({
           setActiveSkillId(first.id);
           const content = await invoke<DocumentContent>("read_skill", { id: first.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeSkillIdRef.current !== first.id) return;
           activeSkillContentIdRef.current = first.id;
           setActiveSkillContent(content);
         }
@@ -229,12 +242,14 @@ export function useLibraryController({
         if (persistedId && list.some(d => d.id === persistedId)) {
           const doc = await invoke<DocumentContent>("read_doc", { id: persistedId });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeDocIdRef.current !== persistedId) return;
           setActiveDoc(doc);
         } else {
           const first = list[0];
           activeDocIdRef.current = first.id;
           const doc = await invoke<DocumentContent>("read_doc", { id: first.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeDocIdRef.current !== first.id) return;
           setActiveDoc(doc);
         }
       }
@@ -260,12 +275,14 @@ export function useLibraryController({
           setActiveAgentId(persistedId);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: persistedId });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeAgentIdRef.current !== persistedId) return;
           setActiveAgentContent(content);
         } else if (firstExisting) {
           activeAgentIdRef.current = firstExisting.id;
           setActiveAgentId(firstExisting.id);
           const content = await invoke<AgentSourceContent>("read_agent_source", { filename: firstExisting.id });
           if (!isWorkspaceLoadCurrent(generation)) return;
+          if (activeAgentIdRef.current !== firstExisting.id) return;
           setActiveAgentContent(content);
         } else {
           activeAgentIdRef.current = null;
@@ -302,8 +319,10 @@ export function useLibraryController({
       loadSkills(generation).catch(() => {}),
       loadDocs(generation).catch(() => {}),
       loadAgentSources(generation).catch(() => {}),
+      loadAgentTemplate(generation),
     ]);
-  }, [loadAgentSources, loadDocs, loadSkills, workspaceLoadGenerationRef]);
+    setLibraryReloadEpoch(epoch => epoch + 1);
+  }, [loadAgentSources, loadAgentTemplate, loadDocs, loadSkills, workspaceLoadGenerationRef]);
 
   const loadLibraryView = useCallback(() => {
     void loadDocs();
@@ -331,7 +350,19 @@ export function useLibraryController({
     setActiveAgentId(null);
     setActiveAgentContent(null);
     setAgentTemplate(null);
+
+    // The config editor draft belongs to the old workspace: a stale dirty draft must never reach the next one.
+    configSourceLoadSeqRef.current += 1;
+    configDraftIdentityRef.current = null;
     setConfigTemplateContent(null);
+    setConfigEditorSources([]);
+    setConfigEditorSourceContent(null);
+    setConfigEditorSourceSaveMessage("");
+    setConfigDraft("");
+    setConfigDirty(false);
+    setConfigSaving(false);
+    setConfigSaveResult(null);
+    setConfigMode("preview");
   }, [invalidateEditorSaveOperations]);
 
   const selectDoc = useCallback(async (id: string) => {
@@ -354,9 +385,10 @@ export function useLibraryController({
     }
   }, [activeDoc?.id, docDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
-  const openDocEditor = useCallback(async (id: string) => {
-    try { await invoke<ActionResult>("open_doc", { id }); } catch (e) { setError(`Open doc: ${e}`); }
-  }, [setError]);
+  const openDocEditor = useCallback(
+    (id: string) => invokeOpen("open_doc", { id }, "Open doc", setError),
+    [setError],
+  );
 
   const onSaveDoc = useCallback(async () => {
     if (!activeDoc) return;
@@ -511,14 +543,16 @@ export function useLibraryController({
     }
   }, [activeAgentId, agentDirty, isWorkspaceLoadCurrent, setError, workspaceLoadGenerationRef, confirm]);
 
-  const openAgent = useCallback(async (id: string) => {
-    try { await invoke<ActionResult>("open_agent_source", { filename: id }); } catch (e) { setError(`Open agent: ${e}`); }
-  }, [setError]);
+  const openAgent = useCallback(
+    (id: string) => invokeOpen("open_agent_source", { filename: id }, "Open agent", setError),
+    [setError],
+  );
 
   const onSaveAgent = useCallback(async () => {
-    if (!activeAgentId) return;
+    // The draft belongs to the loaded content, which can lag behind the selected id.
+    if (!activeAgentId || activeAgentContent?.id !== activeAgentId) return;
     const saveOpId = agentSaveOpRef.current.capture();
-    const agentId = activeAgentId;
+    const agentId = activeAgentContent.id;
     const generation = workspaceLoadGenerationRef.current;
     setAgentSaving(true);
     setAgentSaveResult(null);
@@ -553,7 +587,7 @@ export function useLibraryController({
     } finally {
       setAgentSaving(false);
     }
-  }, [activeAgentId, agentDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
+  }, [activeAgentId, activeAgentContent?.id, agentDraft, isWorkspaceLoadCurrent, workspaceLoadGenerationRef]);
 
   const onResetAgent = useCallback(() => {
     if (activeAgentContent) {
@@ -743,7 +777,7 @@ export function useLibraryController({
   }, [activeConfigSourceType, configDirty, confirm]);
 
   const openSkill = useCallback((id: string) => {
-    invoke<ActionResult>("open_skill", { id }).catch(err => setError(`Open: ${err}`));
+    void invokeOpen("open_skill", { id }, "Open", setError);
   }, [setError]);
 
   const readSkill = useCallback(async (id: string) => {
@@ -776,13 +810,13 @@ export function useLibraryController({
         void loadConfigTemplate(activeConfigTargetId);
       }
     }
-  }, [view, librarySourceType, activeConfigTargetId, loadConfigTemplate, loadConfigEditorSources]);
+  }, [view, librarySourceType, activeConfigTargetId, libraryReloadEpoch, loadConfigTemplate, loadConfigEditorSources]);
 
   useEffect(() => {
     if (activeConfigTargetId === "opencode_config" && activeConfigSourceType && view === "library" && librarySourceType === "configs") {
       void loadConfigEditorSourceContent(activeConfigSourceType);
     }
-  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, loadConfigEditorSourceContent]);
+  }, [activeConfigTargetId, activeConfigSourceType, view, librarySourceType, libraryReloadEpoch, loadConfigEditorSourceContent]);
 
   useEffect(() => {
     if (activeConfigTargetId === "opencode_config" && configEditorSourceContent) {

@@ -1,8 +1,9 @@
 ---
 name: scribe
-description: Write README, docs, runbooks, changelogs, and operator documentation when code changes require them.
+description: Use proactively when code changes require README, docs, runbook, changelog, or operator documentation updates. Edits documentation only.
 model: sonnet
 skills: [current-docs]
+tools: Read, Grep, Glob, Edit, Write
 ---
 
 You are a documentation maintainer.

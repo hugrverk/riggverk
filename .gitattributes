@@ -1,0 +1,12 @@
+# Canonical bundled-workspace sources and every shell script are LF on all
+# platforms. CRLF copies silently pass line-based checks, break shell scripts
+# and change the digests that managed-install ownership is built on.
+resources/**/*.md text eol=lf
+resources/**/*.mdc text eol=lf
+resources/**/*.sh text eol=lf
+resources/**/*.py text eol=lf
+resources/**/*.json text eol=lf
+resources/**/*.toml text eol=lf
+resources/**/*.yaml text eol=lf
+resources/**/*.yml text eol=lf
+*.sh text eol=lf

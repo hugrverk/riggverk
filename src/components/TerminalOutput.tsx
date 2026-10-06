@@ -1,12 +1,12 @@
+import { Fragment, useEffect, useMemo, useState, type ReactNode } from "react";
+import { applyOutputLineTone } from "../lib/installPlan";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
+import { Glyph } from "../ui/Glyph";
+import { toneClass } from "../ui/tone";
+import type { ActionResult } from "../types";
 
-export interface ActionResult {
-  success: boolean;
-  action: string;
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-}
+// Re-exported so existing component-level imports keep working; the type lives in `types.ts`.
+export type { ActionResult };
 
 function relativeTime(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000);
@@ -17,44 +17,91 @@ function relativeTime(ts: number): string {
   return "earlier";
 }
 
-export function ActivityLoader({
-  activityIndex,
-  activityCellClass,
-  idle = false,
-}: {
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
-  idle?: boolean;
-}) {
-  void activityIndex;
+/** "08:29:04 · 2m ago": the clock time of the run and how long ago it was. */
+export function completedLabel(ts: number): string {
+  const clock = new Date(ts).toLocaleTimeString("sv-SE", { hour12: false });
+  return `${clock} · ${relativeTime(ts)}`;
+}
+
+const ACTIVITY_CELLS = 8;
+const ACTIVITY_STEP_MS = 110;
+
+function activityCellClass(index: number, activeIndex: number): string {
+  const distance = (index - activeIndex + ACTIVITY_CELLS) % ACTIVITY_CELLS;
+  if (distance === 0) return "terminal-activity-cell terminal-activity-cell-active";
+  if (distance === 1 || distance === ACTIVITY_CELLS - 1) return "terminal-activity-cell terminal-activity-cell-mid";
+  if (distance === 2 || distance === ACTIVITY_CELLS - 2) return "terminal-activity-cell terminal-activity-cell-low";
+  return "terminal-activity-cell";
+}
+
+/** Owns its animation tick so only this small component re-renders while a task runs. */
+export function ActivityLoader({ idle = false }: { idle?: boolean }) {
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    if (idle) return;
+    const id = window.setInterval(() => setActiveIndex(i => (i + 1) % ACTIVITY_CELLS), ACTIVITY_STEP_MS);
+    return () => window.clearInterval(id);
+  }, [idle]);
+
   return (
     <div
       className={`terminal-activity${idle ? " terminal-activity-idle" : ""}`}
       aria-hidden="true"
     >
-      {Array.from({ length: 8 }, (_, i) => <span key={i} className={activityCellClass(i)} />)}
+      {Array.from({ length: ACTIVITY_CELLS }, (_, i) => <span key={i} className={activityCellClass(i, activeIndex)} />)}
     </div>
   );
 }
 
-export function RunningState({
-  label,
-  activityIndex,
-  activityCellClass,
-}: {
-  label: string;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
-}) {
+/** `── stdout ──────`: a labelled rule. The rule is drawn by CSS; the label stays text. */
+function OutputBar({ label, tone }: { label: string; tone?: "fail" }) {
+  return (
+    <div className={`tui-bar${tone ? ` ${toneClass(tone)}` : ""}`}>
+      <span aria-hidden="true">── </span>
+      <span>{label}</span>
+      <span className="tui-bar-rule" aria-hidden="true" />
+    </div>
+  );
+}
+
+/** Lines written by an apply get a tone per leading word; other output stays plain. */
+function OutputText({ text, action, className }: { text: string; action: string; className?: string }) {
+  const toned = action.startsWith("apply_setup");
+  const lines = text.split("\n");
+  return (
+    <pre className={`tui-out${className ? ` ${className}` : ""}`}>
+      {lines.map((line, index) => {
+        const tone = toned ? applyOutputLineTone(line) : null;
+        const content: ReactNode = tone ? <span className={toneClass(tone)}>{line}</span> : line;
+        return (
+          <Fragment key={index}>
+            {content}
+            {index < lines.length - 1 ? "\n" : null}
+          </Fragment>
+        );
+      })}
+    </pre>
+  );
+}
+
+function CommandLine({ label, caret, when }: { label: string; caret?: boolean; when?: string }) {
+  return (
+    <div className="tui-cmdline">
+      <Glyph name="prompt" tone="acc" />
+      <span className="tui-cmd">{label}</span>
+      {caret && <span className="tui-caret" aria-hidden="true" />}
+      {when && <span className="tui-when">{when}</span>}
+    </div>
+  );
+}
+
+export function RunningState({ label }: { label: string }) {
   return (
     <>
-      <div className="tui-cmdline tui-running">
-        <span className="log-prompt">❯</span>
-        <span className="tui-cmd">{label}</span>
-        <span className="tui-caret" aria-hidden="true" />
-      </div>
+      <CommandLine label={label} caret />
       <div className="tui-progress" role="status" aria-label={`${label} running`}>
-        <ActivityLoader activityIndex={activityIndex} activityCellClass={activityCellClass} />
+        <ActivityLoader />
         <span className="tui-progress-label">working…</span>
       </div>
     </>
@@ -62,12 +109,7 @@ export function RunningState({
 }
 
 export function ReadyState({ label }: { label: string }) {
-  return (
-    <div className="tui-cmdline log-empty">
-      <span className="log-prompt">❯</span>
-      <span className="tui-cmd">{label}</span>
-    </div>
-  );
+  return <CommandLine label={label} caret />;
 }
 
 export function ActionResultOutput({
@@ -81,23 +123,17 @@ export function ActionResultOutput({
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
-  const safeStdout = redactTerminalOutput(result.stdout);
-  const safeStderr = redactTerminalOutput(result.stderr);
+  const [safeStdout, safeStderr] = useMemo(
+    () => [redactTerminalOutput(result.stdout), redactTerminalOutput(result.stderr)],
+    [result.stdout, result.stderr],
+  );
   const redacted = safeStdout !== result.stdout || safeStderr !== result.stderr;
 
   return (
     <>
-      <div className="tui-cmdline">
-        <span className="log-prompt">❯</span>
-        <span className="tui-cmd">{result.action}</span>
-        {completedAt !== undefined && (
-          <span className="tui-when">{relativeTime(completedAt)}</span>
-        )}
-      </div>
-      <div
-        className={`tui-statusline ${result.success ? "tui-statusline-ok" : "tui-statusline-fail"}`}
-      >
-        <span className="tui-status-mark" aria-hidden="true">{result.success ? "✓" : "✗"}</span>
+      <CommandLine label={result.action} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />
+      <div className={`tui-statusline ${result.success ? "c-ok" : "c-fail"}`}>
+        <Glyph name={result.success ? "check" : "fail"} />
         <span className="tui-status-text">
           {result.success ? "completed" : "failed"}
           {result.exit_code !== null && ` · exit ${result.exit_code}`}
@@ -107,22 +143,22 @@ export function ActionResultOutput({
       {sectioned ? (
         <>
           {result.stdout ? (
-            <div className="tui-block">
-              <span className="tui-block-label">stdout</span>
-              <pre className="log-output">{safeStdout}</pre>
-            </div>
+            <>
+              <OutputBar label="stdout" />
+              <OutputText text={safeStdout} action={result.action} />
+            </>
           ) : null}
           {result.stderr ? (
-            <div className="tui-block tui-block-fail">
-              <span className="tui-block-label">stderr</span>
-              <pre className="log-output log-stderr">{safeStderr}</pre>
-            </div>
+            <>
+              <OutputBar label="stderr" tone="fail" />
+              <OutputText text={safeStderr} action={result.action} className="c-fail" />
+            </>
           ) : null}
         </>
       ) : (
         <>
-          {result.stdout && <pre className="log-output">{safeStdout}</pre>}
-          {result.stderr && <pre className="log-output log-stderr">{safeStderr}</pre>}
+          {result.stdout && <OutputText text={safeStdout} action={result.action} />}
+          {result.stderr && <OutputText text={safeStderr} action={result.action} className="c-fail" />}
         </>
       )}
       {showNoOutput && !result.stdout && !result.stderr && (
@@ -138,8 +174,6 @@ export function TerminalState({
   completedAt,
   readyLabel,
   idleContent,
-  activityIndex,
-  activityCellClass,
   sectioned = true,
   showNoOutput = true,
 }: {
@@ -147,14 +181,12 @@ export function TerminalState({
   result?: ActionResult | null;
   completedAt?: number;
   readyLabel: string;
-  idleContent?: React.ReactNode;
-  activityIndex: number;
-  activityCellClass: (index: number) => string;
+  idleContent?: ReactNode;
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {
   if (runningLabel) {
-    return <RunningState label={runningLabel} activityIndex={activityIndex} activityCellClass={activityCellClass} />;
+    return <RunningState label={runningLabel} />;
   }
 
   if (result) {

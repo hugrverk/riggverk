@@ -34,4 +34,4 @@ Return:
 - Manual checks still needed.
 - Whether the implementation is safe to commit or needs another patch.
 """
-sandbox_mode = "read-only"
+sandbox_mode = "workspace-write"

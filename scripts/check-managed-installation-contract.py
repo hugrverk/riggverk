@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import json
 import re
-import subprocess
 import sys
 from pathlib import Path
 
@@ -27,14 +26,179 @@ def read(path: Path) -> str:
 
 def require(path: Path, *needles: str) -> str:
     text = read(path)
+    # Markers must be present in code or string literals, not only in comments.
+    searchable = blank_rust(text, comments=True, strings=False) if path.suffix == ".rs" else text
     for needle in needles:
-        if needle not in text:
+        if needle not in searchable:
             fail(f"{path.relative_to(ROOT)} missing contract marker: {needle}")
     return text
 
 
+def _skip_non_code(text: str, i: int) -> int:
+    """Return the index just past a comment, string or char literal starting at i, else i."""
+    n = len(text)
+    two = text[i : i + 2]
+    if two == "//":
+        end = text.find("\n", i)
+        return n if end == -1 else end
+    if two == "/*":
+        depth = 0
+        j = i
+        while j < n:
+            pair = text[j : j + 2]
+            if pair == "/*":
+                depth += 1
+                j += 2
+            elif pair == "*/":
+                depth -= 1
+                j += 2
+                if depth == 0:
+                    return j
+            else:
+                j += 1
+        return n
+    raw = re.compile(r'b?r(#*)"').match(text, i)
+    if raw and (i == 0 or not (text[i - 1].isalnum() or text[i - 1] == "_")):
+        close = '"' + raw.group(1)
+        end = text.find(close, raw.end())
+        return n if end == -1 else end + len(close)
+    if text[i] == '"':
+        j = i + 1
+        while j < n:
+            if text[j] == "\\":
+                j += 2
+            elif text[j] == '"':
+                return j + 1
+            else:
+                j += 1
+        return n
+    if text[i] == "'":
+        if text[i + 1 : i + 4] == "\\''":
+            return i + 4
+        if text[i + 1 : i + 2] == "\\":
+            end = text.find("'", i + 2)
+            return n if end == -1 else end + 1
+        if text[i + 2 : i + 3] == "'":
+            return i + 3
+    return i
+
+
+def blank_rust(text: str, *, comments: bool, strings: bool) -> str:
+    """Blank out comments and/or string and char literals, keeping line structure."""
+    out: list[str] = []
+    i = 0
+    while i < len(text):
+        j = _skip_non_code(text, i)
+        if j == i:
+            out.append(text[i])
+            i += 1
+            continue
+        segment = text[i:j]
+        is_comment = segment.startswith("//") or segment.startswith("/*")
+        if (is_comment and comments) or (not is_comment and strings):
+            out.append(re.sub(r"[^\n]", " ", segment))
+        else:
+            out.append(segment)
+        i = j
+    return "".join(out)
+
+
+def _match_brace(text: str, open_idx: int) -> int:
+    depth = 0
+    i = open_idx
+    while i < len(text):
+        j = _skip_non_code(text, i)
+        if j != i:
+            i = j
+            continue
+        if text[i] == "{":
+            depth += 1
+        elif text[i] == "}":
+            depth -= 1
+            if depth == 0:
+                return i
+        i += 1
+    fail("unbalanced braces while scanning Rust source")
+    raise AssertionError("unreachable")
+
+
+_ITEM_START = re.compile(
+    r"(?:pub(?:\([^)]*\))?\s+)?(?:const\s+|async\s+|unsafe\s+|extern\s+(?:\"[^\"]*\"\s+)?)*"
+    r"(?:fn|mod|impl|struct|enum|trait|const|static|use|type)\b"
+)
+_CFG_TEST = re.compile(r"#\[cfg\(\s*test\s*\)\]")
+
+
+def _cfg_test_item_end(text: str, start: int) -> int:
+    """End index of the item/arm/statement guarded by a #[cfg(test)] attribute."""
+    i = start
+    while True:  # skip whitespace and any further attributes
+        while i < len(text) and text[i].isspace():
+            i += 1
+        if text.startswith("#[", i):
+            i = text.index("]", i) + 1
+            continue
+        break
+    item = _ITEM_START.match(text, i)
+    keyword = item.group(0).split()[-1] if item else ""
+    depth = 0
+    j = i
+    while j < len(text):
+        k = _skip_non_code(text, j)
+        if k != j:
+            j = k
+            continue
+        ch = text[j]
+        if ch in "([":
+            depth += 1
+        elif ch in ")]":
+            depth -= 1
+        elif ch == "{" and depth == 0 and keyword not in ("use", "const", "static", "type"):
+            end = _match_brace(text, j) + 1
+            while end < len(text) and text[end] in " \t":
+                end += 1
+            return end + 1 if text[end : end + 1] == "," else end
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            if depth == 0:
+                return j  # end of the enclosing block (arm without trailing comma)
+            depth -= 1
+        elif depth == 0 and ch in ";,":
+            if ch == "," and item:
+                j += 1
+                continue
+            return j + 1
+        j += 1
+    return len(text)
+
+
 def production_rust(path: Path) -> str:
-    return read(path).split("#[cfg(test)]", 1)[0]
+    """Rust source with every #[cfg(test)] item, arm and statement blanked out."""
+    text = read(path)
+    if "#![cfg(test)]" in text:
+        return re.sub(r"[^\n]", " ", text)
+    out: list[str] = []
+    i = 0
+    while True:
+        match = _CFG_TEST.search(text, i)
+        if not match:
+            out.append(text[i:])
+            break
+        out.append(text[i : match.start()])
+        end = _cfg_test_item_end(text, match.end())
+        out.append(re.sub(r"[^\n]", " ", text[match.start() : end]))
+        i = end
+    return "".join(out)
+
+
+def function_body(code: str, name: str) -> str:
+    """Body of `fn name(...)` in comment/string-free code, or fail."""
+    match = re.search(rf"\bfn\s+{re.escape(name)}\b", code)
+    if not match:
+        fail(f"function not found: {name}")
+    brace = code.index("{", match.end())
+    return code[brace : _match_brace(code, brace) + 1]
 
 
 def forbid_in_tree(root: Path, patterns: tuple[str, ...]) -> None:
@@ -49,23 +213,25 @@ def forbid_in_tree(root: Path, patterns: tuple[str, ...]) -> None:
 
 
 def main() -> None:
-    semantic = subprocess.run(
-        [sys.executable, str(ROOT / "scripts/generate-pre-manifest-ownership.py"), "--check"],
-        cwd=ROOT,
-        check=False,
-    )
-    if semantic.returncode:
-        fail("semantic pre-manifest ownership coverage failed")
-
+    # The semantic pre-manifest ownership coverage runs once, as its own
+    # release-check step (checked for presence below), not again from here.
     generated_python = list(
         (ROOT / "resources/default-workspace").rglob("__pycache__")
     ) + list((ROOT / "resources/default-workspace").rglob("*.pyc"))
     if generated_python:
         fail("bundled default workspace contains generated Python cache files")
 
+    # The catalog size is not pinned here: the canonical tree is the source of
+    # truth and must agree with the generated adapter metadata.
     skills = list((ROOT / "resources/default-workspace/skills").rglob("SKILL.md"))
-    if len(skills) != 21:
-        fail(f"expected 21 bundled skills, found {len(skills)}")
+    adapter_metadata = json.loads(
+        read(ROOT / "resources/default-workspace/metadata/skill-adapters.json")
+    )
+    if not skills or len(skills) != len(adapter_metadata.get("skills", {})):
+        fail(
+            f"bundled skills ({len(skills)}) must match metadata/skill-adapters.json "
+            f"({len(adapter_metadata.get('skills', {}))}); run scripts/generate-skill-adapters.py --write"
+        )
 
     ownership_path = (
         ROOT
@@ -141,19 +307,33 @@ def main() -> None:
         "fs::remove_file",
         "fs::remove_dir",
         "fs::remove_dir_all",
+        "fs::create_dir",
         "fs::create_dir_all",
         "fs::rename",
+        "fs::hard_link",
+        "fs::set_permissions",
         "fs::OpenOptions",
+        "File::create",
+        "OpenOptions",
+        "set_permissions",
     )
+    production_code: dict[Path, str] = {}
     for path in (TAURI / "commands/setup.rs", TAURI / "setup_transaction.rs"):
-        production = production_rust(path)
+        # Whole production file, minus #[cfg(test)] items; comments and string
+        # literals are blanked so only real calls count.
+        production = blank_rust(production_rust(path), comments=True, strings=True)
+        production_code[path] = production
         for mutation in direct_mutations:
             if mutation in production:
                 fail(
                     f"{path.relative_to(ROOT)} bypasses safe_filesystem with {mutation}"
                 )
-    if setup.find("consume_preview_token") < setup.find("apply_planned_artifacts"):
-        fail("preview token consumption must remain inside the apply owner")
+    # The preview token is consumed exactly once, inside the apply owner.
+    setup_code = production_code[TAURI / "commands/setup.rs"]
+    if len(re.findall(r"\bconsume_preview_token\b", setup_code)) != 1:
+        fail("preview token must be consumed in exactly one place (the apply owner)")
+    if "consume_preview_token" not in function_body(setup_code, "apply_planned_artifacts"):
+        fail("preview token consumption must remain inside apply_planned_artifacts")
 
     require(
         TAURI / "setup_transaction.rs",
@@ -224,6 +404,7 @@ def main() -> None:
     release = read(ROOT / "scripts/release-check.sh")
     for command in (
         "python3 scripts/generate-pre-manifest-ownership.py --check",
+        "python3 scripts/generate-rules-history.py --check",
         "python3 scripts/generate-skill-adapters.py --check",
         "bash scripts/smoke-pre-manifest-upgrade.sh",
     ):
@@ -267,26 +448,37 @@ def main() -> None:
         if "allow(dead_code)" in read(path):
             fail(f"{path.relative_to(ROOT)} must not hide obsolete code")
 
-    card = require(
-        FRONTEND / "components/HarnessInstallationCard.tsx",
-        "installationPrimaryAction",
-        "showModal",
-        "conflict",
+    # Apply only ever receives the reviewed plan's fingerprint and one-time token.
+    flow = require(
+        FRONTEND / "hooks/useInstallFlow.ts",
+        '"apply_setup"',
+        "planFingerprint: review.plan.plan_fingerprint",
+        "previewToken: review.plan.preview_token",
     )
-    if card.count("<dialog") != 1:
-        fail("installation conflict review must have one dialog owner")
+    if flow.count('"apply_setup"') != 1:
+        fail("useInstallFlow must be the only apply_setup caller in the install flow")
+    require(FRONTEND / "hooks/useInstallScreen.ts", "useInstallFlow()")
+    require(FRONTEND / "components/InstallPlanPane.tsx", "conflict")
 
+    # One install owner per page: Start and the shared HarnessPage each render one plan pane;
+    # the harness views are thin configs around HarnessPage.
+    for path in (FRONTEND / "views/StartView.tsx", FRONTEND / "views/HarnessPage.tsx"):
+        if read(path).count("<InstallPlanPane") != 1:
+            fail(f"{path.relative_to(ROOT)} must render exactly one InstallPlanPane")
     for path in (
-        FRONTEND / "views/StartView.tsx",
         FRONTEND / "views/CodexView.tsx",
         FRONTEND / "views/OpenCodeView.tsx",
         FRONTEND / "views/CursorView.tsx",
         FRONTEND / "views/ClaudeView.tsx",
     ):
-        text = read(path)
-        if text.count("<HarnessInstallationCard") != 1:
-            fail(f"{path.relative_to(ROOT)} must render exactly one installation card")
-        if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", text, re.I):
+        if read(path).count("<HarnessPage") != 1:
+            fail(f"{path.relative_to(ROOT)} must render exactly one HarnessPage")
+    for path in (
+        FRONTEND / "views/StartView.tsx",
+        FRONTEND / "views/HarnessPage.tsx",
+        FRONTEND / "components/InstallPlanPane.tsx",
+    ):
+        if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", read(path), re.I):
             fail(f"{path.relative_to(ROOT)} exposes obsolete installation terminology")
 
     print("managed installation contract checks passed")

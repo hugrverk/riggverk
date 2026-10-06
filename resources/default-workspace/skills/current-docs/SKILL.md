@@ -1,6 +1,6 @@
 ---
 name: current-docs
-description: Check official or primary current documentation when implementation depends on version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior.
+description: Checks official, version-matched documentation before relying on recalled API, SDK, CLI, config, hook, or platform behavior. Use when a decision depends on a specific version, an error suggests a renamed or removed option, or a dependency or tool is added or upgraded.
 category: docs
 risk: low
 targets: codex, opencode, claude, cursor
@@ -8,13 +8,7 @@ targets: codex, opencode, claude, cursor
 
 # Current Docs
 
-## When To Use
-
-- The task depends on framework/library APIs, SDK methods, CLIs, config formats, hooks, plugin APIs, package versions, model/tool docs, or platform behavior.
-- You are unsure whether recalled behavior is current.
-- The codebase version is newer than your known baseline.
-- An error suggests changed flags, deprecated APIs, renamed options, or altered defaults.
-- Adding or upgrading dependencies, plugins, SDKs, MCP servers, tools, or platform integrations.
+Done when: each load-bearing claim cites a primary source with version and retrieval date, or is marked unverified.
 
 ## Do Not Use When
 
@@ -43,7 +37,9 @@ targets: codex, opencode, claude, cursor
    - Runtime/environment constraints.
 6. Apply the smallest implementation impact from the docs.
 7. Cite the source and the exact behavior that matters.
-8. State uncertainty when current docs are unavailable or version alignment cannot be proven.
+8. If docs and the installed source or types disagree, the installed source wins; record the version and retrieval date.
+9. Confirm load-bearing facts relayed by a subagent or summary against the primary page before acting.
+10. State uncertainty when current docs are unavailable or version alignment cannot be proven.
 
 ## Output
 

@@ -3,16 +3,20 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
-use crate::commands::process::{run_cmd, run_cmd_bounded, BoundedCmdOptions};
+use crate::commands::process::{
+    run_cmd_bounded, run_cmd_with_timeout, run_git_bounded, BoundedCmdOptions,
+};
 use crate::path_utils::normalize_user_workspace_path_for_save;
 use std::time::Duration;
 
 const GIT_FETCH_TIMEOUT: Duration = Duration::from_secs(60);
-const GIT_NONINTERACTIVE_ENV: [(&str, &str); 3] = [
-    ("GIT_TERMINAL_PROMPT", "0"),
-    ("GCM_INTERACTIVE", "never"),
-    ("GIT_ASKPASS", ""),
-];
+const GIT_LOCAL_TIMEOUT: Duration = Duration::from_secs(30);
+const TOOL_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(15);
+const GH_LIST_TIMEOUT: Duration = Duration::from_secs(60);
+const GH_LIST_STDOUT_BYTES: usize = 16 * 1024 * 1024;
+const GIT_NONINTERACTIVE_ENV: [(&str, &str); 2] =
+    [("GCM_INTERACTIVE", "never"), ("GIT_ASKPASS", "")];
 
 const MAX_GIT_OUTPUT_BYTES: usize = 512 * 1024;
 /// Documented commit history cap (README contract).
@@ -23,7 +27,6 @@ const MAX_DOC_CONTENT_BYTES: usize = 512 * 1024;
 const MAX_CHANGED_FILES: usize = 200;
 const MAX_GH_MERGED_PRS: usize = 2000;
 const MAX_GH_OPEN_ISSUES: usize = 2000;
-const GH_LIST_PAGE_LIMIT: &str = "100";
 
 const CORE_DOC_PATHS: [&str; 6] = [
     "README.md",
@@ -141,11 +144,11 @@ fn truncate_doc_content(content: String) -> (String, bool) {
 }
 
 fn git_run(repo: &Path, args: &[&str], stdout_cap: usize) -> (bool, String, String, bool) {
-    let result = run_cmd_bounded(
-        "git",
+    let result = run_git_bounded(
         args,
         repo,
         BoundedCmdOptions {
+            timeout: Some(GIT_LOCAL_TIMEOUT),
             stdout_cap,
             stderr_cap: MAX_GIT_OUTPUT_BYTES,
             ..BoundedCmdOptions::default()
@@ -197,8 +200,51 @@ fn is_git_repo(repo: &Path) -> bool {
     ok && out.trim() == "true"
 }
 
+/// True only when `dir` is itself the top level of a work tree, not a subfolder of one.
+fn is_git_toplevel(dir: &Path) -> bool {
+    let (ok, out, _) = git_in_repo(dir, &["rev-parse", "--show-toplevel"]);
+    if !ok {
+        return false;
+    }
+    match (fs::canonicalize(out.trim()), fs::canonicalize(dir)) {
+        (Ok(toplevel), Ok(dir)) => toplevel == dir,
+        _ => false,
+    }
+}
+
+/// Conservative subset of `git check-ref-format` for a branch name that is passed to git
+/// as a refspec: rejects option-like, revision-syntax, whitespace, and traversal forms.
+fn is_safe_branch_name(branch: &str) -> bool {
+    if branch.is_empty()
+        || branch.starts_with(['-', '/'])
+        || branch.ends_with(['/', '.'])
+        || branch.ends_with(".lock")
+        || branch.contains("..")
+        || branch.contains("//")
+        || branch.contains("@{")
+        || branch == "@"
+    {
+        return false;
+    }
+    !branch
+        .chars()
+        .any(|c| c.is_whitespace() || c.is_control() || ":?*[\\^~".contains(c))
+}
+
+fn warn_invalid_configured_branch(configured: Option<&str>, warnings: &mut Vec<String>) {
+    if let Some(branch) = configured.map(str::trim).filter(|b| !b.is_empty()) {
+        if !is_safe_branch_name(branch) {
+            warnings.push("configured default branch name is invalid and was ignored".into());
+        }
+    }
+}
+
+/// `unknown` when git failed or timed out, so it is not mistaken for a detached HEAD.
 fn current_branch(repo: &Path) -> String {
-    let (_, out, _) = git_in_repo(repo, &["branch", "--show-current"]);
+    let (ok, out, _) = git_in_repo(repo, &["branch", "--show-current"]);
+    if !ok {
+        return "unknown".into();
+    }
     let branch = out.trim().to_string();
     if branch.is_empty() {
         "detached".into()
@@ -207,14 +253,30 @@ fn current_branch(repo: &Path) -> String {
     }
 }
 
-fn is_dirty(repo: &Path) -> bool {
-    let (_, out, _) = git_in_repo(repo, &["status", "--short"]);
-    !out.trim().is_empty()
+/// `None` when `git status` failed or timed out: the tree was never seen, so it is not clean.
+fn is_dirty(repo: &Path) -> Option<bool> {
+    let (ok, out, _) = git_in_repo(repo, &["status", "--short"]);
+    ok.then(|| !out.trim().is_empty())
+}
+
+/// Snapshot `dirty` flag. The IPC field is a plain bool, so an unknown state is reported as a
+/// warning and shown as not dirty.
+fn dirty_with_warning(repo: &Path, warnings: &mut Vec<String>) -> bool {
+    is_dirty(repo).unwrap_or_else(|| {
+        warnings.push(
+            "Could not determine whether the working tree is clean (git status failed or timed out)."
+                .into(),
+        );
+        false
+    })
 }
 
 fn detect_default_branch(repo: &Path, configured: Option<&str>) -> Option<String> {
-    if let Some(branch) = configured.filter(|b| !b.trim().is_empty()) {
-        return Some(branch.trim().to_string());
+    if let Some(branch) = configured
+        .map(str::trim)
+        .filter(|b| !b.is_empty() && is_safe_branch_name(b))
+    {
+        return Some(branch.to_string());
     }
 
     let (_, out, _) = git_in_repo(
@@ -283,32 +345,20 @@ pub(crate) fn parse_commit_line(line: &str) -> Option<RepoCommitEntry> {
     })
 }
 
-fn load_commits(repo: &Path) -> (Vec<RepoCommitEntry>, bool) {
+/// Bounded recent-commit list; only the fallback when the full history cannot be loaded.
+pub(super) fn load_commits(repo: &Path) -> (Vec<RepoCommitEntry>, bool) {
     let format = "%H|%h|%an|%ae|%at|%s";
     let max_count = (MAX_COMMITS_LOADED + 1).to_string();
-    let (ok, stdout, _, _) = {
-        let result = run_cmd_bounded(
-            "git",
-            &[
-                "log",
-                &format!("--pretty=format:{}", format),
-                "-n",
-                &max_count,
-            ],
-            repo,
-            BoundedCmdOptions {
-                stdout_cap: MAX_COMMIT_LOG_OUTPUT_BYTES,
-                stderr_cap: MAX_GIT_OUTPUT_BYTES,
-                ..BoundedCmdOptions::default()
-            },
-        );
-        (
-            result.success,
-            result.stdout,
-            result.stderr,
-            result.exit_code,
-        )
-    };
+    let (ok, stdout, _, _) = git_run(
+        repo,
+        &[
+            "log",
+            &format!("--pretty=format:{}", format),
+            "-n",
+            &max_count,
+        ],
+        MAX_COMMIT_LOG_OUTPUT_BYTES,
+    );
     if !ok {
         return (Vec::new(), false);
     }
@@ -737,19 +787,90 @@ fn git_ref_exists(repo: &Path, git_ref: &str) -> bool {
     ok
 }
 
+/// Transports a dashboard fetch may use. `GIT_ALLOW_PROTOCOL` beats every `protocol.*.allow`
+/// key in repo config, so a repository cannot re-enable `ext::` (runs a command) or `file`.
+/// Consequence: a local-path or helper-based (`hg::`, `codecommit::`) origin is not fetched
+/// and the dashboard falls back to the cached ref or the local checkout.
+const GIT_FETCH_ALLOWED_PROTOCOLS: &str = "https:http:ssh:git";
+
+/// Env for the fetch: non-interactive auth, restricted transports, no `core.gitProxy`.
+/// A value the user already exports is kept, because the environment outranks repo config.
+fn fetch_env() -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = GIT_NONINTERACTIVE_ENV
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
+    for (key, value) in [
+        ("GIT_ALLOW_PROTOCOL", GIT_FETCH_ALLOWED_PROTOCOLS),
+        ("GIT_PROXY_COMMAND", ""),
+    ] {
+        if std::env::var_os(key).is_none() {
+            env.push((key.to_string(), value.to_string()));
+        }
+    }
+    env
+}
+
+/// `core.sshCommand` for the fetch: the system or global value (so a personal `ssh -i key`
+/// keeps working), else a quoted `GIT_SSH`, else plain `ssh`. Forcing it with `-c` stops a
+/// repository-local `core.sshCommand` from running; `GIT_SSH_COMMAND` in the environment
+/// still outranks it. `scoped` is `git config --show-scope --get-all core.sshcommand`.
+fn trusted_ssh_command_from(scoped: &str, git_ssh: Option<&str>) -> String {
+    scoped
+        .lines()
+        .rev()
+        .find_map(|line| {
+            let (scope, value) = line.split_once('\t')?;
+            (matches!(scope, "system" | "global") && !value.trim().is_empty())
+                .then(|| value.to_string())
+        })
+        .or_else(|| {
+            git_ssh
+                .filter(|path| !path.is_empty())
+                .map(|path| format!("'{}'", path.replace('\'', "'\\''")))
+        })
+        .unwrap_or_else(|| "ssh".to_string())
+}
+
+fn trusted_ssh_command(repo: &Path) -> String {
+    let (_, scoped, _) = git_in_repo(
+        repo,
+        &["config", "--show-scope", "--get-all", "core.sshcommand"],
+    );
+    trusted_ssh_command_from(&scoped, std::env::var("GIT_SSH").ok().as_deref())
+}
+
+/// `--upload-pack` is passed explicitly: `remote.origin.uploadpack` from repo config beats
+/// `-c` (git keeps the first value), while the option outranks the config.
+fn fetch_git_args(branch: &str, ssh_command: &str) -> Vec<String> {
+    vec![
+        "-c".into(),
+        format!("core.sshCommand={ssh_command}"),
+        "fetch".into(),
+        "--quiet".into(),
+        "--prune".into(),
+        "--upload-pack=git-upload-pack".into(),
+        "--".into(),
+        "origin".into(),
+        branch.into(),
+    ]
+}
+
 fn fetch_origin_branch(repo: &Path, branch: &str) -> bool {
-    let result = run_cmd_bounded(
-        "git",
-        &["fetch", "--quiet", "--prune", "origin", branch],
+    if !is_safe_branch_name(branch) {
+        return false;
+    }
+    let args = fetch_git_args(branch, &trusted_ssh_command(repo));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let result = run_git_bounded(
+        &args,
         repo,
         BoundedCmdOptions {
             timeout: Some(GIT_FETCH_TIMEOUT),
             stdout_cap: MAX_GIT_OUTPUT_BYTES,
             stderr_cap: MAX_GIT_OUTPUT_BYTES,
-            extra_env: GIT_NONINTERACTIVE_ENV
-                .iter()
-                .map(|(key, value)| (key.to_string(), value.to_string()))
-                .collect(),
+            extra_env: fetch_env(),
+            ..BoundedCmdOptions::default()
         },
     );
     result.success && !result.timed_out
@@ -804,7 +925,17 @@ fn load_repository_docs(
 }
 
 fn gh_available() -> bool {
-    let (ok, _, _, _) = run_cmd("gh", &["--version"], &repo_root_fallback());
+    let (ok, _, _, _) = run_cmd_with_timeout(
+        "gh",
+        &["--version"],
+        &repo_root_fallback(),
+        TOOL_PROBE_TIMEOUT,
+    );
+    ok
+}
+
+fn git_cli_available(cwd: &Path) -> bool {
+    let (ok, _, _, _) = run_cmd_with_timeout("git", &["--version"], cwd, TOOL_PROBE_TIMEOUT);
     ok
 }
 
@@ -816,7 +947,12 @@ fn gh_auth_status() -> (bool, Option<String>) {
     if !gh_available() {
         return (false, Some("gh CLI not found".into()));
     }
-    let (ok, stdout, stderr, _) = run_cmd("gh", &["auth", "status"], &repo_root_fallback());
+    let (ok, stdout, stderr, _) = run_cmd_with_timeout(
+        "gh",
+        &["auth", "status"],
+        &repo_root_fallback(),
+        GH_AUTH_TIMEOUT,
+    );
     if ok {
         (true, None)
     } else {
@@ -842,7 +978,67 @@ fn redact_gh_status(raw: String) -> String {
         .join("\n")
 }
 
-fn gh_merged_prs(repo: &Path) -> (Vec<RepoGhPullRequest>, bool) {
+/// Well-formed JSON whose top level is an array (`IgnoredAny` validates without building values).
+fn is_json_array(raw: &str) -> bool {
+    raw.trim_start().starts_with('[') && serde_json::from_str::<serde::de::IgnoredAny>(raw).is_ok()
+}
+
+/// Runs a bounded `gh ... list` and returns its stdout. A non-zero exit, timeout, cut-off
+/// output, or output that is not a JSON list is reported through `warnings` instead of
+/// silently producing an empty list.
+fn run_gh_list(
+    repo: &Path,
+    args: &[&str],
+    what: &str,
+    warnings: &mut Vec<String>,
+) -> Option<String> {
+    let result = run_cmd_bounded(
+        "gh",
+        args,
+        repo,
+        BoundedCmdOptions {
+            timeout: Some(GH_LIST_TIMEOUT),
+            stdout_cap: GH_LIST_STDOUT_BYTES,
+            ..BoundedCmdOptions::default()
+        },
+    );
+    if result.success {
+        if result.stdout_truncated {
+            warnings.push(format!(
+                "gh {what} output exceeded {} MB and was cut; the list is not shown",
+                GH_LIST_STDOUT_BYTES / (1024 * 1024)
+            ));
+            return None;
+        }
+        if !is_json_array(&result.stdout) {
+            warnings.push(format!(
+                "gh {what} returned output that is not a JSON list; the list is not shown"
+            ));
+            return None;
+        }
+        return Some(result.stdout);
+    }
+    if result.timed_out {
+        warnings.push(format!(
+            "gh {what} timed out after {}s",
+            GH_LIST_TIMEOUT.as_secs()
+        ));
+        return None;
+    }
+    let detail: String = redact_gh_status(result.stderr)
+        .lines()
+        .find(|line| !line.trim().is_empty())
+        .map(|line| line.trim().chars().take(200).collect())
+        .unwrap_or_default();
+    warnings.push(if detail.is_empty() {
+        format!("gh {what} failed (exit {:?})", result.exit_code)
+    } else {
+        format!("gh {what} failed (exit {:?}): {detail}", result.exit_code)
+    });
+    None
+}
+
+fn gh_merged_prs(repo: &Path, warnings: &mut Vec<String>) -> (Vec<RepoGhPullRequest>, bool) {
     let (ok, out, _) = git_in_repo(repo, &["remote", "get-url", "origin"]);
     if !ok {
         return (Vec::new(), false);
@@ -853,8 +1049,10 @@ fn gh_merged_prs(repo: &Path) -> (Vec<RepoGhPullRequest>, bool) {
         return (Vec::new(), false);
     };
 
-    let (ok, stdout, _, _) = run_cmd(
-        "gh",
+    // One extra record detects truncation. `gh pr list` has no `--paginate`; `--limit` pages internally.
+    let limit = (MAX_GH_MERGED_PRS + 1).to_string();
+    let Some(stdout) = run_gh_list(
+        repo,
         &[
             "pr",
             "list",
@@ -862,17 +1060,16 @@ fn gh_merged_prs(repo: &Path) -> (Vec<RepoGhPullRequest>, bool) {
             &slug,
             "--state",
             "merged",
-            "--paginate",
             "--limit",
-            GH_LIST_PAGE_LIMIT,
+            &limit,
             "--json",
             "number,title,mergedAt,author,body",
         ],
-        repo,
-    );
-    if !ok {
+        "pr list",
+        warnings,
+    ) else {
         return (Vec::new(), false);
-    }
+    };
     let mut prs = parse_gh_prs(&stdout);
     let truncated = prs.len() > MAX_GH_MERGED_PRS;
     if truncated {
@@ -937,10 +1134,7 @@ pub fn inspect_repo_prompt_context(
     let path = resolve_repo_path(repo_path)?;
     let mut warnings = Vec::new();
 
-    let git_on_path = {
-        let (ok, _, _, _) = run_cmd("git", &["--version"], &path);
-        ok
-    };
+    let git_on_path = git_cli_available(&path);
     if !git_on_path {
         warnings.push("git CLI not found on PATH".into());
         return Ok(RepoPromptContext {
@@ -971,6 +1165,7 @@ pub fn inspect_repo_prompt_context(
 
     let branch = current_branch(&path);
     let current_branch = Some(branch);
+    warn_invalid_configured_branch(configured_default_branch, &mut warnings);
     let default_branch = detect_default_branch(&path, configured_default_branch);
 
     let repo_slug = {
@@ -1023,7 +1218,7 @@ fn parse_gh_prs(raw: &str) -> Vec<RepoGhPullRequest> {
         .collect()
 }
 
-fn gh_open_issues(repo: &Path) -> (Vec<RepoGhIssue>, bool) {
+fn gh_open_issues(repo: &Path, warnings: &mut Vec<String>) -> (Vec<RepoGhIssue>, bool) {
     let (ok, out, _) = git_in_repo(repo, &["remote", "get-url", "origin"]);
     if !ok {
         return (Vec::new(), false);
@@ -1031,8 +1226,9 @@ fn gh_open_issues(repo: &Path) -> (Vec<RepoGhIssue>, bool) {
     let Some(slug) = parse_github_slug(out.trim()) else {
         return (Vec::new(), false);
     };
-    let (ok, stdout, _, _) = run_cmd(
-        "gh",
+    let limit = (MAX_GH_OPEN_ISSUES + 1).to_string();
+    let Some(stdout) = run_gh_list(
+        repo,
         &[
             "issue",
             "list",
@@ -1040,17 +1236,16 @@ fn gh_open_issues(repo: &Path) -> (Vec<RepoGhIssue>, bool) {
             &slug,
             "--state",
             "open",
-            "--paginate",
             "--limit",
-            GH_LIST_PAGE_LIMIT,
+            &limit,
             "--json",
             "number,title,state,labels",
         ],
-        repo,
-    );
-    if !ok {
+        "issue list",
+        warnings,
+    ) else {
         return (Vec::new(), false);
-    }
+    };
     let mut issues = parse_gh_issues(&stdout);
     let truncated = issues.len() > MAX_GH_OPEN_ISSUES;
     if truncated {
@@ -1097,10 +1292,7 @@ pub fn inspect_repo(
     let path = resolve_repo_path(repo_path)?;
     let mut warnings = Vec::new();
 
-    let git_on_path = {
-        let (ok, _, _, _) = run_cmd("git", &["--version"], &path);
-        ok
-    };
+    let git_on_path = git_cli_available(&path);
 
     if !git_on_path {
         warnings.push("git CLI not found on PATH".into());
@@ -1164,21 +1356,14 @@ pub fn inspect_repo(
     }
 
     let branch = current_branch(&path);
-    let dirty = is_dirty(&path);
+    let dirty = dirty_with_warning(&path, &mut warnings);
+    warn_invalid_configured_branch(configured_default_branch, &mut warnings);
     let default_branch = detect_default_branch(&path, configured_default_branch);
     let (ahead, behind) = default_branch
         .as_deref()
         .map(|b| ahead_behind(&path, b))
         .unwrap_or((None, None));
 
-    let (commits, commits_truncated) = load_commits(&path);
-    if commits_truncated {
-        warnings.push(format!(
-            "local git commit log truncated at {} MB — sync or shallow clone may hide older history",
-            MAX_COMMIT_LOG_OUTPUT_BYTES / (1024 * 1024)
-        ));
-    }
-    let latest_commit = commits.first().cloned();
     let changed_files = load_changed_files(&path);
     let docs_load = load_repository_docs(&path, configured_default_branch, &mut warnings);
     let docs = docs_load.docs;
@@ -1205,7 +1390,7 @@ pub fn inspect_repo(
     };
 
     let (merged_prs, gh_prs_truncated) = if include_gh && gh_available_flag && gh_authenticated {
-        gh_merged_prs(&path)
+        gh_merged_prs(&path, &mut warnings)
     } else {
         (Vec::new(), false)
     };
@@ -1217,7 +1402,7 @@ pub fn inspect_repo(
     }
     let (open_issues, gh_issues_truncated) = if include_gh && gh_available_flag && gh_authenticated
     {
-        gh_open_issues(&path)
+        gh_open_issues(&path, &mut warnings)
     } else {
         (Vec::new(), false)
     };
@@ -1237,9 +1422,9 @@ pub fn inspect_repo(
         dirty,
         ahead,
         behind,
-        latest_commit,
-        commits,
-        commits_truncated,
+        latest_commit: None,
+        commits: Vec::new(),
+        commits_truncated: false,
         changed_files,
         docs,
         docs_source: docs_load.source,
@@ -1314,7 +1499,7 @@ fn discovered_repo_path_string(path: &Path) -> Option<String> {
 }
 
 fn build_discovered_repo(path: &Path) -> Option<DiscoveredLocalGitRepo> {
-    if !is_git_repo(path) {
+    if !is_git_toplevel(path) {
         return None;
     }
     let path_str = discovered_repo_path_string(path)?;
@@ -1390,7 +1575,7 @@ fn scan_directory_for_git_repos(
         }
         *dirs_scanned += 1;
         let child = entry.path();
-        if is_git_repo(&child) {
+        if is_git_toplevel(&child) {
             push_discovered_repo(&child, repos, seen_paths);
             continue;
         }
@@ -2010,5 +2195,532 @@ mod tests {
         assert_eq!(result.repos[0].label, "solo");
 
         let _ = fs::remove_dir_all(&parent);
+    }
+
+    fn temp_dir_for(label: &str) -> PathBuf {
+        use std::time::{SystemTime, UNIX_EPOCH};
+        let stamp = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("time")
+            .as_nanos();
+        let dir = std::env::temp_dir().join(format!("agent-workspace-dash-{label}-{stamp}"));
+        fs::create_dir_all(&dir).expect("mkdir");
+        dir
+    }
+
+    fn git_init(dir: &Path) {
+        let status = std::process::Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(dir)
+            .status()
+            .expect("git init");
+        assert!(status.success());
+    }
+
+    #[test]
+    fn is_safe_branch_name_accepts_normal_branches() {
+        for branch in [
+            "main",
+            "master",
+            "release/1.2",
+            "feat/hugrverk-overhaul",
+            "v1.0",
+        ] {
+            assert!(is_safe_branch_name(branch), "{branch}");
+        }
+    }
+
+    #[test]
+    fn is_safe_branch_name_rejects_option_and_revision_syntax() {
+        for branch in [
+            "",
+            "-x",
+            "--upload-pack=touch /tmp/pwned",
+            "a:b",
+            "main one",
+            "main\tone",
+            "a..b",
+            "a//b",
+            "/main",
+            "main/",
+            "main.",
+            "main.lock",
+            "main@{1}",
+            "@",
+            "a~1",
+            "a^",
+            "a?b",
+            "a*b",
+            "a[b",
+            "a\\b",
+            "a\nb",
+        ] {
+            assert!(!is_safe_branch_name(branch), "{branch:?}");
+        }
+    }
+
+    #[test]
+    fn fetch_origin_branch_refuses_option_like_branch_names() {
+        let repo = temp_dir_for("fetch-reject");
+        git_init(&repo);
+        let marker = repo.join("pwned");
+        let branch = format!("--upload-pack=touch {}", marker.display());
+        assert!(!fetch_origin_branch(&repo, &branch));
+        assert!(!marker.exists());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn detect_default_branch_ignores_invalid_configured_name() {
+        let repo = temp_dir_for("branch-ignore");
+        git_init(&repo);
+        assert_eq!(detect_default_branch(&repo, Some("-x")), None);
+        assert_eq!(
+            detect_default_branch(&repo, Some(" develop ")),
+            Some("develop".to_string())
+        );
+        let mut warnings = Vec::new();
+        warn_invalid_configured_branch(Some("-x"), &mut warnings);
+        warn_invalid_configured_branch(Some("main"), &mut warnings);
+        assert_eq!(warnings.len(), 1);
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn discover_ignores_subfolders_of_a_repository() {
+        let repo = temp_dir_for("discover-subfolders");
+        git_init(&repo);
+        fs::create_dir_all(repo.join("packages/a")).expect("mkdir a");
+        fs::create_dir_all(repo.join("packages/b")).expect("mkdir b");
+
+        assert!(is_git_repo(&repo.join("packages/a")));
+        assert!(!is_git_toplevel(&repo.join("packages/a")));
+        assert!(is_git_toplevel(&repo));
+
+        let result =
+            discover_local_git_repos(repo.to_string_lossy().as_ref()).expect("discover repo");
+        assert!(result.repos.is_empty(), "{:?}", result.repos);
+
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[cfg(unix)]
+    fn install_fake_gh(label: &str, script: &str) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let dir = temp_dir_for(label);
+        let gh = dir.join("gh");
+        fs::write(&gh, format!("#!/bin/sh\n{script}\n")).expect("write fake gh");
+        fs::set_permissions(&gh, fs::Permissions::from_mode(0o755)).expect("chmod");
+        let old = std::env::var("PATH").unwrap_or_default();
+        std::env::set_var("PATH", format!("{}:{old}", dir.display()));
+        dir
+    }
+
+    #[cfg(unix)]
+    fn repo_with_github_origin(label: &str) -> PathBuf {
+        let repo = temp_dir_for(label);
+        git_init(&repo);
+        let status = std::process::Command::new("git")
+            .args([
+                "remote",
+                "add",
+                "origin",
+                "https://github.com/owner/repo.git",
+            ])
+            .current_dir(&repo)
+            .status()
+            .expect("git remote add");
+        assert!(status.success());
+        repo
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_merged_prs_uses_limit_not_paginate_and_parses_output() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let bin = install_fake_gh(
+            "gh-ok",
+            r#"printf '%s\n' "$@" > "$(dirname "$0")/args.txt"
+echo '[{"number":7,"title":"t","mergedAt":"2026-01-01T00:00:00Z","author":{"login":"a"},"body":"b"}]'"#,
+        );
+        let repo = repo_with_github_origin("gh-ok-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, truncated) = gh_merged_prs(&repo, &mut warnings);
+
+        let args = fs::read_to_string(bin.join("args.txt")).expect("recorded args");
+        let args: Vec<&str> = args.lines().collect();
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(prs.len(), 1);
+        assert!(!truncated);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!args.contains(&"--paginate"), "{args:?}");
+        let limit_at = args.iter().position(|a| *a == "--limit").expect("--limit");
+        assert_eq!(args[limit_at + 1], (MAX_GH_MERGED_PRS + 1).to_string());
+        assert_eq!(&args[..2], &["pr", "list"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_list_failure_is_reported_as_a_warning() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let bin = install_fake_gh("gh-fail", "echo 'unknown flag: --boom' >&2\nexit 1");
+        let repo = repo_with_github_origin("gh-fail-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, _) = gh_merged_prs(&repo, &mut warnings);
+        let (issues, _) = gh_open_issues(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert!(prs.is_empty());
+        assert!(issues.is_empty());
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].contains("gh pr list failed"), "{warnings:?}");
+        assert!(warnings[0].contains("unknown flag"), "{warnings:?}");
+        assert!(warnings[1].contains("gh issue list failed"), "{warnings:?}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_issue_list_uses_limit_not_paginate() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let bin = install_fake_gh(
+            "gh-issues",
+            r#"printf '%s\n' "$@" > "$(dirname "$0")/args.txt"
+echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
+        );
+        let repo = repo_with_github_origin("gh-issues-repo");
+
+        let mut warnings = Vec::new();
+        let (issues, truncated) = gh_open_issues(&repo, &mut warnings);
+
+        let args = fs::read_to_string(bin.join("args.txt")).expect("recorded args");
+        let args: Vec<&str> = args.lines().collect();
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].labels, vec!["bug".to_string()]);
+        assert!(!truncated);
+        assert!(warnings.is_empty(), "{warnings:?}");
+        assert!(!args.contains(&"--paginate"), "{args:?}");
+        let limit_at = args.iter().position(|a| *a == "--limit").expect("--limit");
+        assert_eq!(args[limit_at + 1], (MAX_GH_OPEN_ISSUES + 1).to_string());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_list_that_is_not_json_is_reported_instead_of_hidden() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let bin = install_fake_gh("gh-not-json", "echo 'Welcome to a gh that prints prose'");
+        let repo = repo_with_github_origin("gh-not-json-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, truncated) = gh_merged_prs(&repo, &mut warnings);
+        let (issues, _) = gh_open_issues(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert!(prs.is_empty() && issues.is_empty() && !truncated);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].contains("gh pr list") && warnings[0].contains("not a JSON list"));
+        assert!(warnings[1].contains("gh issue list") && warnings[1].contains("not a JSON list"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_list_output_over_the_cap_is_reported_instead_of_parsed_as_empty() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        // A JSON array that starts fine and runs past the stdout cap.
+        let bin = install_fake_gh(
+            "gh-huge",
+            "printf '['\nhead -c 17000000 /dev/zero | tr '\\0' 'x'",
+        );
+        let repo = repo_with_github_origin("gh-huge-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, _) = gh_merged_prs(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert!(prs.is_empty());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("gh pr list") && warnings[0].contains("was cut"),
+            "{warnings:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_git_status_is_unknown_not_clean() {
+        let _guard = crate::test_env::guard::lock();
+        let repo = temp_dir_for("dirty-unknown");
+        git_init(&repo);
+        fs::write(repo.join("file.txt"), "x").expect("write file");
+        git_ok(&repo, &["add", "-A"]);
+        git_ok(&repo, &["commit", "--quiet", "-m", "init"]);
+        assert_eq!(is_dirty(&repo), Some(false));
+        // A damaged index makes `git status` exit non-zero; its empty output must not read as clean.
+        fs::write(repo.join(".git/index"), b"not an index").expect("corrupt index");
+
+        let state = is_dirty(&repo);
+        let mut warnings = Vec::new();
+        let flag = dirty_with_warning(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(state, None);
+        assert!(!flag);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("working tree is clean"),
+            "{warnings:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn current_branch_is_unknown_when_git_fails() {
+        let _guard = crate::test_env::guard::lock();
+        let repo = temp_dir_for("branch-unknown");
+        git_init(&repo);
+        assert_ne!(current_branch(&repo), "unknown");
+        fs::write(repo.join(".git/HEAD"), b"garbage").expect("corrupt HEAD");
+
+        let branch = current_branch(&repo);
+
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(branch, "unknown");
+    }
+
+    #[test]
+    fn is_dirty_does_not_take_the_index_lock() {
+        let repo = temp_dir_for("dirty-no-lock");
+        git_init(&repo);
+        fs::write(repo.join("file.txt"), "x").expect("write file");
+        assert_eq!(is_dirty(&repo), Some(true));
+        assert!(!repo.join(".git/index.lock").exists());
+        let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[cfg(unix)]
+    fn git_ok(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    /// An executable that records its own run in `sentinel`, then exits non-zero so it never
+    /// stands in for a working transport.
+    #[cfg(unix)]
+    fn sentinel_script(dir: &Path, name: &str, sentinel: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join(name);
+        fs::write(
+            &script,
+            format!("#!/bin/sh\ntouch '{}'\nexit 1\n", sentinel.display()),
+        )
+        .expect("write script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        script
+    }
+
+    /// A bare origin with one commit on `main`, and a clone-less work repo pointing at it.
+    #[cfg(unix)]
+    fn work_repo_with_local_origin(label: &str) -> (PathBuf, PathBuf) {
+        let root = temp_dir_for(label);
+        let origin = root.join("origin.git");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_ok(
+            &root,
+            &["init", "--quiet", "--bare", "-b", "main", "origin.git"],
+        );
+        git_ok(&work, &["init", "--quiet", "-b", "main"]);
+        fs::write(work.join("README.md"), "hello").expect("write readme");
+        git_ok(&work, &["add", "-A"]);
+        git_ok(&work, &["commit", "--quiet", "-m", "init"]);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", origin.to_string_lossy().as_ref()],
+        );
+        git_ok(&work, &["push", "--quiet", "origin", "main"]);
+        (root, work)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_args_do_not_run_repo_config_uploadpack() {
+        let _guard = crate::test_env::guard::lock();
+        let (root, work) = work_repo_with_local_origin("fetch-uploadpack");
+        let sentinel = root.join("uploadpack-ran");
+        let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.uploadpack",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        // Same args as the dashboard fetch, without the transport allowlist, so a local
+        // remote can actually connect and the upload-pack choice is what gets tested.
+        let args = fetch_git_args("main", "ssh");
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let result = run_git_bounded(&args, &work, BoundedCmdOptions::default());
+
+        let ran = sentinel.exists();
+        let fetched = git_ref_exists(&work, "refs/remotes/origin/main");
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config uploadpack was executed");
+        assert!(result.success, "{result:?}");
+        assert!(fetched, "fetch should succeed with the stock upload-pack");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_does_not_use_local_path_remotes() {
+        let _guard = crate::test_env::guard::lock();
+        let (root, work) = work_repo_with_local_origin("fetch-file-transport");
+        let sentinel = root.join("uploadpack-ran");
+        let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.uploadpack",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config uploadpack was executed");
+        assert!(
+            !fetched,
+            "local-path origins are outside the allowed transports"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_refuses_ext_transport_enabled_by_repo_config() {
+        let _guard = crate::test_env::guard::lock();
+        let root = temp_dir_for("fetch-ext");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("ext-ran");
+        let script = sentinel_script(&root, "ext-helper", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.url",
+                &format!("ext::{}", script.display()),
+            ],
+        );
+        git_ok(&work, &["config", "protocol.ext.allow", "always"]);
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "ext:: transport command was executed");
+        assert!(!fetched);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_ignores_repo_core_ssh_command() {
+        let _guard = crate::test_env::guard::lock();
+        let root = temp_dir_for("fetch-ssh");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("ssh-ran");
+        let script = sentinel_script(&root, "ssh-wrapper", &sentinel);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", "ssh://git@example.invalid/x.git"],
+        );
+        git_ok(
+            &work,
+            &[
+                "config",
+                "core.sshCommand",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config core.sshCommand was executed");
+        assert!(!fetched);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_ignores_repo_core_git_proxy() {
+        let _guard = crate::test_env::guard::lock();
+        let root = temp_dir_for("fetch-gitproxy");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("proxy-ran");
+        let script = sentinel_script(&root, "git-proxy", &sentinel);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", "git://example.invalid/x.git"],
+        );
+        git_ok(
+            &work,
+            &["config", "core.gitProxy", script.to_string_lossy().as_ref()],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config core.gitProxy was executed");
+        assert!(!fetched);
+    }
+
+    #[test]
+    fn trusted_ssh_command_prefers_the_last_system_or_global_value() {
+        let scoped = "system\tssh -F /etc/ssh_sys\nglobal\tssh -i ~/.ssh/work\nlocal\t./evil.sh\n";
+        assert_eq!(
+            trusted_ssh_command_from(scoped, Some("/usr/bin/other-ssh")),
+            "ssh -i ~/.ssh/work"
+        );
+    }
+
+    #[test]
+    fn trusted_ssh_command_never_returns_a_local_value() {
+        assert_eq!(trusted_ssh_command_from("local\t./evil.sh\n", None), "ssh");
+        assert_eq!(trusted_ssh_command_from("", None), "ssh");
+    }
+
+    #[test]
+    fn trusted_ssh_command_quotes_git_ssh_when_nothing_else_is_configured() {
+        assert_eq!(
+            trusted_ssh_command_from("", Some("/opt/my ssh/it's")),
+            "'/opt/my ssh/it'\\''s'"
+        );
     }
 }

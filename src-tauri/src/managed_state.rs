@@ -249,6 +249,7 @@ pub fn next_state_from_operations(
             },
         );
     }
+    refresh_records_matching_source(&mut records, bundled_root, runtime_root, home);
     let mut artifacts: Vec<_> = records.into_values().collect();
     artifacts.sort_by(|a, b| a.identity.cmp(&b.identity));
     Ok(ManagedState {
@@ -256,6 +257,40 @@ pub fn next_state_from_operations(
         bundled_version: compute_bundled_version(bundled_root, home, bundled_root)?,
         artifacts,
     })
+}
+
+/// Refresh records whose installed artifact already equals the current
+/// bundled source. That equality proves the app owns the content even when the
+/// file was synced by other means, so the record must follow it; a stale hash
+/// would turn the next source change into a false conflict. Artifacts that
+/// differ from both the record and the source are user-modified and keep their
+/// record untouched.
+fn refresh_records_matching_source(
+    records: &mut HashMap<String, ManagedArtifactRecord>,
+    bundled_root: &Path,
+    runtime_root: &Path,
+    home: &Path,
+) {
+    for record in records.values_mut() {
+        let Ok(artifact) = crate::managed_bootstrap::artifact_from_identity(&record.identity)
+        else {
+            continue;
+        };
+        let Ok(installed) =
+            setup_fingerprint::artifact_installed_managed_digest(&artifact, runtime_root, home)
+        else {
+            continue;
+        };
+        if installed == setup_fingerprint::ABSENT_DIGEST || installed == record.hash {
+            continue;
+        }
+        let matches_source =
+            setup_fingerprint::artifact_source_digest(&artifact, bundled_root, home)
+                .is_ok_and(|source| source == installed);
+        if matches_source {
+            record.hash = installed;
+        }
+    }
 }
 
 /// Collect canonical harness artifact IDs for all managed surfaces.
@@ -387,5 +422,61 @@ mod tests {
             .unwrap_err()
             .contains("symlink"));
         let _ = fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn stale_record_follows_installed_content_that_matches_source() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp_dir("stale-record");
+        let home = base.join("home");
+        let ws = base.join("ws");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::create_dir_all(home.join(".config/opencode")).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+
+        // Codex rules were synced by other means: installed == current source,
+        // but the record still holds an older hash.
+        let source = fs::read(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        fs::write(home.join(".codex/AGENTS.md"), &source).unwrap();
+        // OpenCode rules were edited by the user: differs from record and source.
+        fs::write(home.join(".config/opencode/AGENTS.md"), "user edit").unwrap();
+        let stale_hash = crate::stable_digest::bytes(b"older shipped version");
+        let record = |artifact: &ArtifactId| ManagedArtifactRecord {
+            identity: artifact_identity(artifact),
+            hash: stale_hash.clone(),
+            surface: None,
+        };
+        let previous = ManagedState {
+            schema_version: MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![
+                record(&ArtifactId::CodexRules),
+                record(&ArtifactId::OpenCodeRules),
+            ],
+        };
+
+        let next = next_state_from_operations(Some(&previous), &bundled, &ws, &home, &[], &[])
+            .expect("next state");
+
+        let hash_of = |artifact: &ArtifactId| {
+            next.artifacts
+                .iter()
+                .find(|r| r.identity == artifact_identity(artifact))
+                .map(|r| r.hash.clone())
+                .expect("record kept")
+        };
+        assert_eq!(
+            hash_of(&ArtifactId::CodexRules),
+            crate::stable_digest::bytes(&source),
+            "record must follow installed content that equals the source"
+        );
+        assert_eq!(
+            hash_of(&ArtifactId::OpenCodeRules),
+            stale_hash,
+            "user-modified artifact keeps its record"
+        );
+        let _ = fs::remove_dir_all(base);
     }
 }

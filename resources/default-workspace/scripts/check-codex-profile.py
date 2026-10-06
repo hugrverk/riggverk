@@ -79,9 +79,11 @@ CODEX = ROOT / "templates" / "codex"
 TOKENISH = re.compile(r"(sk-[A-Za-z0-9_-]{12,}|Bearer\s+\S+|Basic\s+\S+|gh[pousr]_[A-Za-z0-9_]{12,}|xox[baprs]-)", re.I)
 
 
+# `model` and `model_reasoning_effort` are create-only seeds: the installer writes
+# them only while config.toml has no value, so the template must still carry them.
 EXPECTED_TOP_LEVEL = {
-    "model": "gpt-5.6-sol",
-    "model_reasoning_effort": "high",
+    "model": "gpt-6.1-sol",
+    "model_reasoning_effort": "xhigh",
     "approval_policy": "on-request",
     "approvals_reviewer": "user",
     "sandbox_mode": "workspace-write",

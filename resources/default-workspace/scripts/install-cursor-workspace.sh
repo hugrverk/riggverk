@@ -61,7 +61,8 @@ validate_project_target() {
   [ -d "$raw" ] || die "project target does not exist or is not a directory: $raw"
   local resolved home tmp_root slash_tmp
   resolved="$(cd "$raw" && pwd -P)"
-  home="${HOME:?}"
+  # Resolve HOME the same way as the target so a symlinked home still matches.
+  home="$(cd "${HOME:?}" 2>/dev/null && pwd -P || printf '%s' "$HOME")"
   tmp_root="$(cd "${TMPDIR:-/tmp}" 2>/dev/null && pwd -P || printf '%s' "${TMPDIR:-/tmp}")"
   slash_tmp="$(cd /tmp 2>/dev/null && pwd -P || printf '%s' /tmp)"
   for broad in / /Users "$home" "$home/Projects" "$tmp_root" "$slash_tmp"; do

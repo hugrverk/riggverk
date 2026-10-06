@@ -16,6 +16,7 @@ from opencode_permission_eval import (  # noqa: E402
     edit_is_allowed,
     effective_bash_action,
     effective_edit_action,
+    effective_read_action,
     winning_rule,
 )
 from opencode_policy_compose import compose_opencode_header, compose_role_permission, load_policy  # noqa: E402
@@ -29,6 +30,27 @@ ALL_ROLES = ("architect", "repo-scout", "inspector", "sentinel", "scribe", "veri
 RESTRICTIVE_ROLES = READONLY_ROLES + ("scribe", "verifier")
 
 SECRET_READ = ["**/.env*", "**/id_rsa"]
+# Credential-bearing config: read-denied only (edit stays path-relative, see opencode.policy.json).
+CREDENTIAL_CONFIG_READ = [
+    "**/mcp.json",
+    "**/.claude.json",
+    "**/.codex/config.toml",
+    "**/.git-credentials",
+    "**/.git/config",
+]
+# Effective read action per absolute path (last match wins, like OpenCode).
+READ_ACTIONS = [
+    ("/repo/.env", "deny"),
+    ("/repo/src/.env.local", "deny"),
+    ("/home/u/.ssh/id_rsa", "deny"),
+    ("/home/u/.cursor/mcp.json", "deny"),
+    ("/home/u/.claude.json", "deny"),
+    ("/home/u/.codex/config.toml", "deny"),
+    ("/home/u/.git-credentials", "deny"),
+    ("/repo/.git/config", "deny"),
+    ("/repo/.env.example", "allow"),
+    ("/repo/src/App.tsx", "allow"),
+]
 DESTRUCTIVE_BASH = ["rm -rf*", "sudo*", "git reset --hard*", "git push --force*"]
 
 READONLY_BASH_DENY = [
@@ -171,6 +193,82 @@ RESTRICTIVE_BROAD_ALLOW_PATTERNS = [
     "cargo test *",
 ]
 
+# Effective bash action for the primary architect: broad allows must not cover dangerous variants.
+ARCHITECT_BASH_ACTIONS = [
+    ("git status", "allow"),
+    ("git diff --stat", "allow"),
+    ("git log --oneline -5", "allow"),
+    ("git add .", "allow"),
+    ("git commit -m test", "allow"),
+    ("git branch", "allow"),
+    ("git branch --list", "allow"),
+    ("git branch --show-current", "allow"),
+    ("find . -name '*.ts'", "allow"),
+    ("npm test", "allow"),
+    ("npm run build", "allow"),
+    ("echo hello", "ask"),
+    ("echo x > .env.local", "ask"),
+    ("echo x >> notes.txt", "ask"),
+    ("ls > out.txt", "ask"),
+    ("npm test > out.txt", "ask"),
+    ("git status > out.txt", "ask"),
+    ("find . -delete", "ask"),
+    ("find . -exec cat {} ;", "ask"),
+    ("find . -execdir sh ;", "ask"),
+    ("find . -ok rm {} ;", "ask"),
+    ("find . -fprint out.txt", "ask"),
+    ("git branch -D feature", "ask"),
+    ("git branch -m old new", "ask"),
+    ("git branch newbranch", "ask"),
+    ("git commit --amend", "ask"),
+    ("git commit -m test --amend", "ask"),
+    ("git push origin main", "ask"),
+    # Branch, history, and working-tree changes beyond add/commit stay ask-gated.
+    ("git checkout main", "ask"),
+    ("git checkout -b feature", "ask"),
+    ("git switch main", "ask"),
+    ("git restore .", "ask"),
+    ("git pull", "ask"),
+    ("git pull origin main", "ask"),
+    ("git rebase main", "ask"),
+    ("git merge feature", "ask"),
+    ("git stash", "ask"),
+    ("git stash pop", "ask"),
+    ("git tag v1", "ask"),
+    # Long-running, installing, networked, and removing commands.
+    ("npm run dev", "ask"),
+    ("npm run start", "ask"),
+    ("npm install", "ask"),
+    ("pnpm install", "ask"),
+    ("npx vitest", "ask"),
+    ("curl https://example.com", "ask"),
+    ("wget https://example.com", "ask"),
+    ("rm notes.txt", "ask"),
+    ("node scripts/build.js", "ask"),
+    ("node other.js", "ask"),
+    ("cat .env", "deny"),
+    ("git push --force-with-lease", "deny"),
+    ("git push --force origin main", "deny"),
+    ("git push -f", "deny"),
+    ("git reset --hard HEAD~1", "deny"),
+    ("git clean -fdx", "deny"),
+    ("rm -rf node_modules", "deny"),
+    ("sudo ls", "deny"),
+]
+
+# Top-level permission keys every role must keep gated, and the edit default per role.
+# `edit` is a bare action for the read-only roles and a pattern map elsewhere; the map's `*`
+# entry is its default.
+GATED_TOP_LEVEL_KEYS = ("external_directory", "webfetch", "websearch", "doom_loop")
+EDIT_DEFAULT = {
+    "architect": "ask",
+    "repo-scout": "deny",
+    "inspector": "deny",
+    "sentinel": "deny",
+    "scribe": "deny",
+    "verifier": "deny",
+}
+
 MUTATION_CASES = [
     ("repo-scout", {"bash": {"*&*": "allow"}}, "bash", "git status & touch changed.txt", "allow"),
     ("verifier", {"bash": {"cargo clippy *": "allow"}}, "bash", "cargo clippy --fix", "allow"),
@@ -222,6 +320,130 @@ def _apply_mutation(perm: dict, mutation: dict) -> dict:
         else:
             mutated[key] = section
     return mutated
+
+
+def _architect_bash_errors(perm: dict) -> list[str]:
+    errors: list[str] = []
+    for cmd, expected in ARCHITECT_BASH_ACTIONS:
+        action = effective_bash_action(perm, cmd)
+        if action != expected:
+            pattern, _ = winning_rule(perm, "bash", cmd)
+            errors.append(f"architect: bash {cmd!r} must be {expected}, got {action} (via {pattern!r})")
+    return errors
+
+
+def _top_level_action_errors(role: str, perm: dict) -> list[str]:
+    errors: list[str] = []
+    for key in GATED_TOP_LEVEL_KEYS:
+        if perm.get(key) != "ask":
+            errors.append(f"{role}: {key} must be ask, got {perm.get(key)!r}")
+    edit = perm.get("edit")
+    default = edit.get("*") if isinstance(edit, dict) else edit
+    if default != EDIT_DEFAULT[role]:
+        errors.append(f"{role}: edit default must be {EDIT_DEFAULT[role]}, got {default!r}")
+    return errors
+
+
+def _secret_read_errors(role: str, perm: dict) -> list[str]:
+    errors: list[str] = []
+    read = perm.get("read", {})
+    if isinstance(read, dict):
+        for pat in SECRET_READ + CREDENTIAL_CONFIG_READ:
+            if read.get(pat) != "deny":
+                errors.append(f"{role}: missing read deny {pat}")
+    for path, expected in READ_ACTIONS:
+        action = effective_read_action(perm, path)
+        if action != expected:
+            errors.append(f"{role}: read {path!r} must be {expected}, got {action}")
+    return errors
+
+
+# YAML indicator characters. An unquoted mapping key starting with one of them is
+# not a plain key (`*` starts an alias), and OpenCode silently drops the whole
+# frontmatter when it fails to parse.
+_YAML_KEY_INDICATORS = "*&!|>'\"%@`#,[]{}?:-"
+_YAML_VALUE_INDICATORS = "*&!|>%@`"
+
+
+def _extract_frontmatter(text: str) -> str | None:
+    if not text.startswith("---\n"):
+        return None
+    end = text.find("\n---", 4)
+    return None if end == -1 else text[4:end]
+
+
+def lexical_frontmatter_errors(frontmatter: str) -> list[str]:
+    """Strict lexical check for the one-line `key: value` frontmatter these agents use."""
+    errors: list[str] = []
+    for number, line in enumerate(frontmatter.split("\n"), start=1):
+        body = line.lstrip(" ")
+        if not body or body.startswith("#"):
+            continue
+        if body[0] == '"':
+            try:
+                _, end = json.JSONDecoder().raw_decode(body)
+            except ValueError:
+                errors.append(f"line {number}: malformed quoted key {body[:40]!r}")
+                continue
+            if not body[end:].startswith(":"):
+                errors.append(f"line {number}: quoted key not followed by ':' {body[:40]!r}")
+                continue
+            value = body[end + 1 :].strip()
+        elif body[0] in _YAML_KEY_INDICATORS:
+            errors.append(f"line {number}: unquoted key starts with YAML indicator {body[0]!r}: {body[:40]!r}")
+            continue
+        elif body.endswith(":"):
+            value = ""
+        else:
+            key, sep, value = body.partition(": ")
+            if not sep:
+                errors.append(f"line {number}: not a 'key: value' line {body[:40]!r}")
+                continue
+            value = value.strip()
+        if not value:
+            continue
+        if value[0] in _YAML_VALUE_INDICATORS:
+            errors.append(f"line {number}: unquoted value starts with YAML indicator {value[0]!r}: {body[:40]!r}")
+        elif value[0] == '"':
+            try:
+                _, end = json.JSONDecoder().raw_decode(value)
+            except ValueError:
+                end = -1
+            if end != len(value):
+                errors.append(f"line {number}: malformed quoted value {body[:40]!r}")
+        elif ": " in value or " #" in value:
+            errors.append(f"line {number}: unquoted value contains ': ' or ' #' {body[:40]!r}")
+    return errors
+
+
+def validate_agent_frontmatter(role: str, text: str, role_def: dict, expected_permission: dict) -> list[str]:
+    """Check the frontmatter is real YAML that parses back to the composed role."""
+    frontmatter = _extract_frontmatter(text)
+    if frontmatter is None:
+        return [f"{role}: generated agent has no YAML frontmatter"]
+    lexical = lexical_frontmatter_errors(frontmatter)
+    if lexical:
+        return [f"{role}: frontmatter is not valid YAML, OpenCode would drop it ({problem})" for problem in lexical]
+    try:
+        import yaml
+    except ImportError:
+        return []
+    try:
+        parsed = yaml.safe_load(frontmatter)
+    except yaml.YAMLError as exc:
+        return [f"{role}: frontmatter is not valid YAML, OpenCode would drop it ({str(exc).splitlines()[0]})"]
+    if not isinstance(parsed, dict):
+        return [f"{role}: frontmatter does not parse to a mapping"]
+    errors: list[str] = []
+    for key in ("name", "description", "mode", "temperature", "steps"):
+        if parsed.get(key) != role_def.get(key):
+            errors.append(f"{role}: parsed frontmatter {key} differs from role definition")
+    if bool(parsed.get("hidden")) != bool(role_def.get("hidden")):
+        errors.append(f"{role}: parsed frontmatter hidden differs from role definition")
+    # json.dumps keeps dict order, and permission order is semantic (last match wins).
+    if json.dumps(parsed.get("permission")) != json.dumps(expected_permission):
+        errors.append(f"{role}: parsed frontmatter permission differs (content or order) from composed permission")
+    return errors
 
 
 def validate() -> list[str]:
@@ -286,14 +508,14 @@ def validate() -> list[str]:
     task = architect.get("task", {})
     if not isinstance(task, dict) or task.get("repo-scout") != "allow":
         errors.append("architect: must allow repo-scout delegation")
+    if architect.get("question") != "allow":
+        errors.append("architect: must allow the question tool (body asks when a choice is material)")
+    errors.extend(_architect_bash_errors(architect))
 
     for role in ALL_ROLES:
         perm = compose_role_permission(load_role(role))
-        read = perm.get("read", {})
-        if isinstance(read, dict):
-            for pat in SECRET_READ:
-                if read.get(pat) != "deny":
-                    errors.append(f"{role}: missing read deny {pat}")
+        errors.extend(_top_level_action_errors(role, perm))
+        errors.extend(_secret_read_errors(role, perm))
         bash = perm.get("bash", {})
         if isinstance(bash, dict):
             for pat in DESTRUCTIVE_BASH:
@@ -315,6 +537,11 @@ def validate() -> list[str]:
         actual = agent_path.read_text(encoding="utf-8")
         if not actual.startswith(f"---\n{expected_header}---"):
             errors.append(f"{role}: generated adapter drift (run generate-agent-adapters.py --write)")
+        errors.extend(
+            validate_agent_frontmatter(
+                role, actual, load_role(role), compose_role_permission(load_role(role))
+            )
+        )
 
     baseline = {role: compose_role_permission(load_role(role)) for role in RESTRICTIVE_ROLES}
     for role, mutation, perm_key, pattern, expected_action in MUTATION_CASES:
@@ -334,13 +561,15 @@ def validate() -> list[str]:
     if not edit_is_allowed(scribe_mut, "agents/architect.md"):
         errors.append("mutation sanity: scribe agents/** allow should permit agents/architect.md")
 
+    # Removing a credential read deny must be reported by the contract check itself.
     repo_scout_base = compose_role_permission(load_role("repo-scout"))
-    repo_scout_mut = copy.deepcopy(repo_scout_base)
-    read = repo_scout_mut.setdefault("read", {})
-    if isinstance(read, dict):
-        read.pop("**/.env*", None)
-    if read.get("**/.env*") == "deny":
-        errors.append("mutation sanity: removing credential deny should drop read deny for **/.env*")
+    for pattern in SECRET_READ + CREDENTIAL_CONFIG_READ:
+        repo_scout_mut = copy.deepcopy(repo_scout_base)
+        read = repo_scout_mut.get("read")
+        if isinstance(read, dict):
+            read.pop(pattern, None)
+        if not any(pattern in err for err in _secret_read_errors("repo-scout", repo_scout_mut)):
+            errors.append(f"mutation sanity: removing read deny {pattern} was not detected")
 
     return errors
 

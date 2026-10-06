@@ -4,6 +4,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
+use crate::rules_block::{MalformedReason, RulesConflict, RulesLayout, RulesPlan};
 use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 use crate::setup_transaction;
 
@@ -43,6 +44,27 @@ pub struct SurfaceInstallationStatus {
     pub label: String,
     pub state: InstallationState,
     pub detail: String,
+    /// Block details for rules surfaces; absent for every other surface.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub rules: Option<RulesStatus>,
+}
+
+/// How a rules file relates to the managed base block.
+#[derive(Debug, Clone, Serialize)]
+pub struct RulesStatus {
+    /// `absent`, `block`, `legacy` (no markers), or `malformed`.
+    pub layout: RulesLayout,
+    /// Non-blank user lines around the block; kept on every base update.
+    pub refinement_lines: usize,
+    /// Why the file is left alone, when it is a conflict.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub conflict_reason: Option<RulesConflict>,
+    /// Which marker rule failed, for `malformed_markers`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub malformed_reason: Option<MalformedReason>,
+    /// The user chose to manage this hand-edited file themselves: it is not
+    /// reported as a conflict and Agent Workspace leaves it alone.
+    pub user_managed: bool,
 }
 
 fn aggregate_state(
@@ -187,11 +209,68 @@ fn surface_status(
         InstallationState::Conflict => format!("{} conflicts preserved", counts.conflict_count),
         InstallationState::Unavailable => "unavailable".to_string(),
     };
+    let assessment = own.iter().find_map(|p| {
+        p.rules
+            .map(|rules| (rules, p.kind == OperationKind::Manual))
+    });
+    let detail = assessment
+        .and_then(|(a, user_managed)| rules_detail(&a, user_managed))
+        .unwrap_or(detail);
+    let rules = assessment.map(|(a, user_managed)| RulesStatus {
+        layout: a.layout,
+        refinement_lines: a.refinement_lines,
+        conflict_reason: match a.plan {
+            RulesPlan::Conflict(reason) => Some(reason),
+            _ => None,
+        },
+        malformed_reason: a.malformed,
+        user_managed,
+    });
     SurfaceInstallationStatus {
         surface,
         label: surface.label().to_string(),
         state,
         detail,
+        rules,
+    }
+}
+
+/// Status line for a rules surface. A base update that keeps the user's text
+/// is an update, never a conflict; only edits the app cannot merge are.
+fn rules_detail(
+    assessment: &crate::rules_block::RulesAssessment,
+    user_managed: bool,
+) -> Option<String> {
+    if user_managed {
+        return Some(
+            "base updates available; you manage this file, so none are applied".to_string(),
+        );
+    }
+    let kept = match assessment.refinement_lines {
+        0 => String::new(),
+        1 => "; refinements: 1 line preserved".to_string(),
+        lines => format!("; refinements: {lines} lines preserved"),
+    };
+    match assessment.plan {
+        RulesPlan::Create => None,
+        RulesPlan::NoChange => Some(format!("installed and current{kept}")),
+        RulesPlan::UpdateBlock => Some(format!("base update available{kept}")),
+        RulesPlan::WrapLegacy => {
+            Some("unmodified file will move into the managed base block".to_string())
+        }
+        RulesPlan::Conflict(RulesConflict::BaseBlockEdited) => {
+            Some(format!("base block was edited, left as is{kept}"))
+        }
+        RulesPlan::Conflict(RulesConflict::LegacyDiverged) => {
+            Some("file differs from every shipped base, left as is".to_string())
+        }
+        RulesPlan::Conflict(RulesConflict::MalformedMarkers) => Some(format!(
+            "base block markers are malformed ({}), left as is",
+            assessment
+                .malformed
+                .map(MalformedReason::message)
+                .unwrap_or("unreadable")
+        )),
     }
 }
 
@@ -232,6 +311,8 @@ mod tests {
             kind,
             previous_state: PreviousState::Absent,
             rollback_action: RollbackAction::NoAction,
+            rules: None,
+            rules_rewrite: None,
         }
     }
 

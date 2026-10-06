@@ -1,10 +1,10 @@
 # Skills
 
-The bundled default workspace contains **21 skills**: 21 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
+The bundled default workspace contains **22 skills**: 22 canonical semantic skill sources. Source layout may be root-level (`skills/<skill>/SKILL.md`) or grouped one level deep (`skills/<group>/<skill>/SKILL.md`). Harness-specific adapters are generated under `templates/skills/<harness>/<skill>/SKILL.md`. Installed harness skills are always flat (`<harness-skill-root>/<name>/SKILL.md`).
 
 Do not duplicate full `SKILL.md` content here. This file is an index for choosing the right skill.
 
-## General Skills (16)
+## General Skills (17)
 
 | Skill | Use When |
 | --- | --- |
@@ -13,12 +13,13 @@ Do not duplicate full `SKILL.md` content here. This file is an index for choosin
 | `context-budget` | Reducing duplicated rules, docs, prompts, skills, and token overhead without removing essential safety guidance. |
 | `current-docs` | Checking official/current docs for version-specific APIs, SDKs, CLIs, config, hooks, or platform behavior. |
 | `database-migrations` | Planning or reviewing schema/data changes with migration, rollback, and DB push reporting. |
-| `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a reproduce-to-regression-test loop. |
+| `diagnose` | Debugging bugs, failures, flakes, slowness, and regressions with a red-capable feedback loop and falsifiable hypotheses. |
 | `frontend-design` | Designing or improving frontend UI across repositories with coherent aesthetic direction, accessibility, and verification. |
 | `handoff` | Reviewing executor evidence or compacting paused work into a trustworthy handoff with verified state and next action. |
 | `implementation-plan` | Creating small verifiable implementation slices with exact files, steps, commands, and risks. |
 | `minimal-implementation` | Implementing or refactoring with the smallest complete diff that fits existing ownership. |
 | `prototype` | Validating throwaway UI variants, state-machine/data-model checks, and interaction experiments before production implementation. |
+| `retro` | User-invoked only (`/retro`): reviewing a named coding session and proposing ranked, evidence-traced improvements to steering files, checks, and tooling. Proposals only. |
 | `release-check` | Running pre-merge or pre-deploy readiness checks, including tests, migrations, env risk, smoke routes, and rollback. |
 | `screenshot-review` | Reviewing supplied UI screenshots before implementation or for responsive/layout critique. |
 | `security-review` | Reviewing auth, authorization, input, secrets, uploads, API endpoints, payments, shell execution, or sensitive data. |
@@ -52,7 +53,8 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 | `frontend-design` / `accessibility-review` | Frontend-design includes baseline a11y during implementation; accessibility-review is a specialist audit. |
 | `frontend-design` / `browser-qa` | Frontend-design owns visual direction; browser-qa supplies runtime verification evidence. |
 | `handoff` / `release-check` | Handoff compacts session state; release-check validates merge/deploy readiness. |
-| `security-review` / `sentinel` (agent) | Skill guides implementation-time review; sentinel agent performs read-only specialist security review. |
+| `security-review` / `sentinel` (agent) | Skill guides the review in the current context; sentinel agent performs an independent read-only review of a finished diff. |
+| `retro` / `context-budget` | Retro mines one named session for environment fixes; context-budget audits instruction surfaces without a session. |
 | `zoom-out` / repo-scout (agent) | Zoom-out explains code context in chat; repo-scout agent maps unfamiliar repos read-only before implementation. |
 | Kretsverket quartet | `kretsverket-editor-change` (editor layers), `kretsverket-file-compatibility` (persistence), `kretsverket-symbol-system` (symbols), `kretsverket-electrical-drawing` (wiring semantics)—kept separate because triggers and invariants differ. |
 
@@ -73,17 +75,26 @@ Grouped source: `skills/kretsverket/<skill>/SKILL.md`.
 - Pausing, executor reports, or context transfer: `handoff`; add `context-budget` for large reports.
 - Release readiness: `release-check`.
 - Docs, rules, or prompt consolidation: `context-budget`; add `implementation-plan` for explicit maps.
+- Session retrospective: `retro`, only when the user invokes `/retro` (it is not routed by the rules).
+- Review passes: Claude Code uses the built-in `/code-review` and `/simplify`; other harnesses use the `inspector` agent.
 
 ## Skill Metadata
 
-Each `SKILL.md` frontmatter may include optional metadata fields:
+Each `SKILL.md` frontmatter has `name` and `description` plus these fields:
 
 - `category` — functional area or `kretsverket`.
 - `risk` — low, medium, or high.
 - `targets` — comma-separated supported tools: codex, opencode, claude, cursor.
-- `related` — comma-separated related skill names.
+- `related` — comma-separated related skill names; the routing check verifies each name exists.
+- `disable-model-invocation` — optional `true` for user-invoked skills (currently `retro`). Claude Code and Cursor then hide the skill from the model; Codex and OpenCode ignore the flag, so such a skill must not be referenced in routing bullets and its description says it is user-invoked.
+
+Adapter overlays may add harness-only frontmatter that is merged into the generated adapter and must not collide with canonical fields: `context`, `agent`, `background`, and `allowed-tools` (for example `release-check` runs in a forked `verifier` context on Claude Code, and `handoff` and `release-check` pre-approve the read-only commands behind their `!` state injection).
 
 `targets` drives generated adapter output under `templates/skills/<harness>/` and expands the managed skill surface for each harness. Destination paths remain fixed per harness: generated adapters install flat to each harness skill root as `<harness-skill-root>/<name>/SKILL.md`. Other metadata fields are operator guidance only.
+
+## Description standard
+
+The `description` is the only selection signal Codex, OpenCode, and Cursor see, so it carries the triggers. Format: one plain line of at most 300 characters, `<what>. Use when <concrete triggers>. Not for <nearest sibling> (<sibling-name>).` The `Not for` clause is optional. Avoid `: ` and ` #` in the text, since the value is written as a plain YAML scalar. Each skill also states a one-line `Done when:` exit criterion in its body. `scripts/check-skill-routing.py` lints these rules.
 
 ## Generated Adapters
 
@@ -96,18 +107,26 @@ Generated adapter files are not hand-maintained. In the source repository, run `
 
 Two harness-specific transforms apply during generation:
 
-- Claude adapters hoist a canonical `## When To Use` section into `when_to_use` frontmatter (Claude Code appends it to the description in the skill listing, where invocation decisions happen; combined description + when_to_use is capped at 1,536 characters).
-- An overlay file may open with a `---` frontmatter block whose `key: value` lines merge into the adapter frontmatter (for example `release-check`'s Claude overlay sets `context: fork`, `agent: verifier`, `background: false`). Collisions with canonical fields fail generation.
+- Claude adapters hoist an optional canonical `## When To Use` section into `when_to_use` frontmatter (Claude Code appends it to the description in the skill listing; combined description + when_to_use is capped at 1,536 characters). Prefer folding triggers into the description; use the section only for extra Claude-only triggers.
+- An overlay file may open with a `---` frontmatter block whose `key: value` lines merge into the adapter frontmatter (for example `release-check`'s Claude overlay sets `context: fork`, `agent: verifier`, `background: false`, `allowed-tools`). Collisions with canonical fields fail generation.
+
+Harness-wide guidance lives in `templates/rules/<harness>.md`, not in per-skill overlays. Global overlays under `_overlays/global/` stay at two lines or fewer, and an adapter with no overlay carries no `## Harness Adapter` section. The generator refuses canonical or overlay sources with CRLF line endings or a BOM.
 
 ## Agent Metadata
 
 - `metadata/agents.json` — sidecar metadata for agents under `agents/`. Does not modify agent runtime frontmatter.
+- `default_skills` mirrors the skills each Claude agent header preloads (`templates/claude/agents/<role>.header.yaml`), and `targets` mirrors `metadata/agent-adapters.json`; `scripts/check-skill-routing.py` enforces both.
+- Claude `repo-scout`, `inspector`, and `sentinel` have no shell (`Read, Grep, Glob`, plan mode), so the parent passes the diff or changed-file list in the prompt. The OpenCode variants read git state through their read-only bash profile.
 
 ## Installing skills
 
+In the app, press `u` on a harness page and confirm with `y`. The install covers the generated adapters for the whole bundled catalog of that harness, globally, in flat single-file layout. Skills are not gated by target toggles and always come from the app's bundle: a skill you add to the runtime workspace is not installed, and a personal skill belongs directly in the harness skill folder, where unknown skills are preserved.
+
+The CLI equivalent installs from this workspace's adapters and is dry-run by default:
+
 ```bash
 ./scripts/install-skills.sh --dry-run --agent opencode --global
-./scripts/install-skills.sh --dry-run --agent cursor --global
+./scripts/install-skills.sh --apply --agent cursor --global   # backs up a differing SKILL.md first
 ```
 
-Agent Workspace syncs generated adapters for the canonical bundled skill set to every enabled harness. Skills install globally to harness-native skill roots in flat single-file layout.
+Some harnesses also scan other harnesses' skill folders (for example OpenCode and Cursor read `~/.claude/skills`). If you install for several harnesses, a skill can be listed more than once there; check the harness's own documentation for precedence.

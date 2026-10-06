@@ -58,13 +58,11 @@ pub struct CodexRuntimeHealth {
     pub next_action: String,
 }
 
-const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
-    "model",
-    "model_reasoning_effort",
-    "approval_policy",
-    "approvals_reviewer",
-    "sandbox_mode",
-];
+/// Top-level keys the app keeps aligned with the bundled template on every update.
+const ENFORCED_TOP_LEVEL_KEYS: &[&str] = &["approval_policy", "approvals_reviewer", "sandbox_mode"];
+/// Written from the template only while `config.toml` has no value for the key.
+/// Afterwards they are user-owned: never overwritten and never counted as drift.
+const CREATE_ONLY_TOP_LEVEL_KEYS: &[&str] = &["model", "model_reasoning_effort"];
 const MANAGED_APP_DEFAULT_KEYS: &[&str] = &["approvals_reviewer", "default_tools_approval_mode"];
 // Pre-0.134 profile scheme this app used to write. Codex now rejects the
 // top-level `profile` selector and ignores `[profiles.*]` tables, so
@@ -115,7 +113,7 @@ fn is_app_shaped_legacy_profile(profile: &toml::map::Map<String, toml::Value>) -
 pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
     let mut managed = toml::map::Map::new();
     if let Some(table) = config.as_table() {
-        for key in MANAGED_TOP_LEVEL_KEYS {
+        for key in ENFORCED_TOP_LEVEL_KEYS {
             if let Some(value) = table.get(*key) {
                 managed.insert(key.to_string(), value.clone());
             }
@@ -167,8 +165,14 @@ pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value 
     toml::Value::Table(managed)
 }
 
+/// True when `installed` needs no update from `managed` (the bundled template).
+/// Create-only keys count as drift only while the template sets them and
+/// `installed` has no value; any user value matches.
 pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::Value) -> bool {
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
+        && CREATE_ONLY_TOP_LEVEL_KEYS
+            .iter()
+            .all(|key| managed.get(*key).is_none() || installed.get(*key).is_some())
 }
 
 fn unique_render_temp_dir() -> PathBuf {
@@ -188,19 +192,23 @@ fn cleanup_temp_dir(path: &Path) {
 
 /// Render Codex managed config fields from `managed_source` into `dest` via the
 /// line-preserving Python owners. Refuses on malformed TOML or ambiguous structure.
+///
+/// `bundled_root` is the app's bundled, read-only resource root (`setup_roots::bundled_root_for`):
+/// the scripts run from there and never from the active workspace, which is user-chosen and untrusted.
+/// The workspace-owned files reach the scripts only as path arguments.
 pub(crate) fn render_codex_config_managed_projection(
-    workspace_root: &Path,
+    bundled_root: &Path,
     dest: &Path,
     managed_source: &Path,
 ) -> Result<String, String> {
-    let legacy_script = workspace_root.join("scripts/merge-codex-config.py");
+    let legacy_script = bundled_root.join("scripts/merge-codex-config.py");
     if !legacy_script.is_file() {
         return Err(format!(
             "missing Codex merge script: {}",
             legacy_script.display()
         ));
     }
-    let routing_script = workspace_root.join("scripts/ensure-codex-routing-defaults.py");
+    let routing_script = bundled_root.join("scripts/ensure-codex-routing-defaults.py");
     if !routing_script.is_file() {
         return Err(format!(
             "missing Codex routing defaults script: {}",
@@ -219,7 +227,7 @@ pub(crate) fn render_codex_config_managed_projection(
             &managed_source_str,
             "--render-rollback-managed",
         ],
-        workspace_root,
+        bundled_root,
     );
     if !ok {
         return Err(format!(
@@ -253,7 +261,7 @@ pub(crate) fn render_codex_config_managed_projection(
                 "--backup-dir",
                 &temp_backup_str,
             ],
-            workspace_root,
+            bundled_root,
         );
         if !routing_ok {
             return Err(format!(
@@ -323,7 +331,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     } else if !rules_installed_path.is_file() {
         has_warn = true;
         "missing".into()
-    } else if file_eq(&rules_source_path, &rules_installed_path) {
+    } else if std::fs::read(&rules_source_path)
+        .ok()
+        .zip(std::fs::read(&rules_installed_path).ok())
+        .is_some_and(|(source, installed)| {
+            crate::rules_block::installed_matches_source(&installed, &source)
+        })
+    {
         "synced".into()
     } else {
         has_warn = true;
@@ -340,6 +354,26 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         .into(),
         detail: rules_installed_path_str.clone(),
     });
+
+    // Codex reads AGENTS.override.md instead of AGENTS.md when it has content,
+    // which silently drops the Agent Workspace base.
+    let override_path = codex_dir.join("AGENTS.override.md");
+    if std::fs::read(&override_path)
+        .is_ok_and(|content| content.iter().any(|byte| !byte.is_ascii_whitespace()))
+    {
+        has_warn = true;
+        let detail = format!(
+            "{} exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied",
+            override_path.display()
+        );
+        checks.push(CodexRuntimeCheck {
+            id: "rules_override".into(),
+            label: "AGENTS.override.md replaces AGENTS.md".into(),
+            status: "warn".into(),
+            detail: detail.clone(),
+        });
+        warnings.push(detail);
+    }
 
     let mut skills_synced_count = 0usize;
     let mut skills_missing_count = 0usize;
@@ -696,8 +730,8 @@ mod tests {
 
     fn managed_codex_config() -> &'static str {
         r#"
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
 approvals_reviewer = "user"
 sandbox_mode = "workspace-write"
@@ -709,6 +743,77 @@ apps._default.default_tools_approval_mode = "prompt"
     fn add_rules(ws: &Path, home: &Path) {
         write_file(&ws.join("templates/sync/codex-rules.md"), "# rules");
         write_file(&home.join(".codex/AGENTS.md"), "# rules");
+    }
+
+    #[test]
+    fn rules_in_a_managed_block_with_user_text_are_synced() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+        let ws = temp_root("rules-block");
+        let home = temp_root("rules-block-home");
+        write_file(&ws.join("templates/sync/codex-rules.md"), "# rules\n");
+        write_file(
+            &home.join(".codex/AGENTS.md"),
+            &format!(
+                "mine\n{}after\n",
+                crate::rules_block::render_new("# rules\n")
+            ),
+        );
+        let health = compute_health(&ws, &home);
+        assert_eq!(health.rules_status, "synced");
+
+        write_file(
+            &home.join(".codex/AGENTS.md"),
+            &crate::rules_block::render_new("# older rules\n"),
+        );
+        assert_eq!(compute_health(&ws, &home).rules_status, "diverged");
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_non_empty_agents_override_is_reported_because_it_replaces_agents_md() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+        let ws = temp_root("override");
+        let home = temp_root("override-home");
+        add_rules(&ws, &home);
+
+        let clean = compute_health(&ws, &home);
+        assert!(clean
+            .checks
+            .iter()
+            .all(|check| check.id != "rules_override"));
+
+        write_file(&home.join(".codex/AGENTS.override.md"), "\n  \n");
+        let blank = compute_health(&ws, &home);
+        assert!(blank
+            .checks
+            .iter()
+            .all(|check| check.id != "rules_override"));
+
+        write_file(&home.join(".codex/AGENTS.override.md"), "# my override\n");
+        let health = compute_health(&ws, &home);
+        let check = health
+            .checks
+            .iter()
+            .find(|check| check.id == "rules_override")
+            .expect("override check");
+        assert_eq!(check.status, "warn");
+        assert!(
+            check.detail.contains("replaces AGENTS.md"),
+            "{}",
+            check.detail
+        );
+        assert!(health
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("AGENTS.override.md")));
+        assert_ne!(health.status, "synced");
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     fn add_skill(ws: &Path, home: &Path, name: &str) {
@@ -789,11 +894,11 @@ command = "echo"
         write_file(
             &home.join(".codex/config.toml"),
             r#"
-model = "gpt-5.4"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 apps._default.approvals_reviewer = "user"
 apps._default.default_tools_approval_mode = "prompt"
 "#,
@@ -812,11 +917,138 @@ apps._default.default_tools_approval_mode = "prompt"
     #[test]
     fn test_diverged_when_app_default_approval_differs() {
         let installed = toml::from_str::<toml::Value>(
-            "model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+            "model = \"gpt-6.1-sol\"\nmodel_reasoning_effort = \"xhigh\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
         )
         .expect("installed");
         let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
         assert!(!managed_codex_keys_match(&installed, &template));
+    }
+
+    fn without_model_keys(config: &str) -> String {
+        config
+            .lines()
+            .filter(|line| !line.starts_with("model"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn test_user_model_and_effort_are_preserved_and_not_drift() {
+        let ws = temp_root("cfg-user-model");
+        let home = temp_root("cfg-user-model-home");
+        add_rules(&ws, &home);
+        write_file(
+            &ws.join("templates/codex/config.toml"),
+            managed_codex_config(),
+        );
+        write_file(
+            &home.join(".codex/config.toml"),
+            &managed_codex_config()
+                .replace("gpt-6.1-sol", "gpt-5.4")
+                .replace("xhigh", "low"),
+        );
+        add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
+        add_skill(&ws, &home, "diagnose");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.config_status, "synced");
+        assert_eq!(health.model.as_deref(), Some("gpt-5.4"));
+        assert_eq!(health.model_reasoning_effort.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn test_absent_model_or_effort_reads_as_drift() {
+        let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
+        let no_model = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("installed");
+        assert!(!managed_codex_keys_match(&no_model, &template));
+
+        let only_model = toml::from_str::<toml::Value>(&format!(
+            "model = \"gpt-5.4\"\n{}",
+            without_model_keys(managed_codex_config())
+        ))
+        .expect("installed");
+        assert!(
+            !managed_codex_keys_match(&only_model, &template),
+            "an absent reasoning effort is still seeded from the template"
+        );
+    }
+
+    #[test]
+    fn test_template_without_model_keys_never_reports_them_as_drift() {
+        let template = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("template");
+        let installed = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("installed");
+        assert!(managed_codex_keys_match(&installed, &template));
+    }
+
+    #[test]
+    fn test_create_only_keys_are_not_part_of_the_managed_projection() {
+        let config = toml::from_str::<toml::Value>(managed_codex_config()).expect("config");
+        let projection = extract_managed_codex_config(&config);
+        let table = projection.as_table().expect("projection table");
+        assert!(!table.contains_key("model"));
+        assert!(!table.contains_key("model_reasoning_effort"));
+        assert_eq!(
+            table.get("approval_policy").and_then(|v| v.as_str()),
+            Some("on-request")
+        );
+    }
+
+    fn bundled_workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    #[test]
+    fn test_render_projection_keeps_user_model_and_updates_enforced_keys() {
+        let dir = temp_root("render-user-model");
+        let dest = dir.join("config.toml");
+        write_file(
+            &dest,
+            "model = \"gpt-5.4\"\nmodel_reasoning_effort = \"low\"\napproval_policy = \"never\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"user\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+        );
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+
+        let rendered =
+            render_codex_config_managed_projection(&bundled_workspace_root(), &dest, &source);
+        cleanup(&dir);
+        let rendered = rendered.expect("render");
+
+        let parsed = rendered.parse::<toml::Value>().expect("valid toml");
+        assert_eq!(parsed["model"].as_str(), Some("gpt-5.4"));
+        assert_eq!(parsed["model_reasoning_effort"].as_str(), Some("low"));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("on-request"));
+    }
+
+    #[test]
+    fn test_render_projection_seeds_absent_model_and_effort() {
+        let dir = temp_root("render-absent-model");
+        let dest = dir.join("config.toml");
+        write_file(
+            &dest,
+            "approval_policy = \"never\"\n\n[mcp_servers.custom]\ncommand = \"echo\"\n",
+        );
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+
+        let rendered =
+            render_codex_config_managed_projection(&bundled_workspace_root(), &dest, &source);
+        cleanup(&dir);
+        let rendered = rendered.expect("render");
+
+        let parsed = rendered.parse::<toml::Value>().expect("valid toml");
+        assert_eq!(parsed["model"].as_str(), Some("gpt-6.1-sol"));
+        assert_eq!(parsed["model_reasoning_effort"].as_str(), Some("xhigh"));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("on-request"));
+        assert_eq!(
+            parsed["mcp_servers"]["custom"]["command"].as_str(),
+            Some("echo")
+        );
     }
 
     #[test]

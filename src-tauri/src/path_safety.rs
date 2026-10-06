@@ -163,7 +163,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        std::env::temp_dir().join(format!("aw-path-safety-{label}-{n}"))
+        // Canonical base: on macOS /var is a symlink to /private/var and would
+        // mask symlink-ancestor bugs behind an unrelated rejection.
+        fs::canonicalize(std::env::temp_dir())
+            .unwrap_or_else(|_| std::env::temp_dir())
+            .join(format!("aw-path-safety-{label}-{n}"))
     }
 
     #[test]
@@ -228,5 +232,132 @@ mod tests {
         let root = PathBuf::from(r"C:\Users\runneradmin\AppData\Local\Temp\aw-root");
         let child = PathBuf::from(r"c:\users\runneradmin\AppData\Local\Temp\aw-root\child");
         assert!(reject_path_escape(&child, &root, "child").is_ok());
+    }
+
+    fn root_under_canonical_temp(label: &str) -> PathBuf {
+        let root = temp(label).join("root");
+        fs::create_dir_all(&root).unwrap();
+        root
+    }
+
+    #[test]
+    fn reject_path_escape_rejects_parent_dir_components() {
+        let root = root_under_canonical_temp("escape-parent");
+        // Built from components: canonical roots on Windows are verbatim (`\\?\\C:\\...`),
+        // where "/" is not a separator.
+        let mut children = vec![
+            root.join("..").join("x"),
+            root.join("a").join("..").join("..").join("x"),
+            PathBuf::from("..").join("x"),
+            PathBuf::from("a").join("..").join("..").join("x"),
+        ];
+        // Unix keeps `..` lexically, so any parent component is refused. Joining onto a
+        // verbatim Windows root normalizes `a\..\b` to `b`, which stays inside the root.
+        if cfg!(not(windows)) {
+            children.push(root.join("a").join("..").join("b"));
+        }
+        for child in children {
+            let err = reject_path_escape(&child, &root, "child")
+                .expect_err(&format!("{} must be rejected", child.display()));
+            assert!(
+                err.contains("child escapes allowlisted root"),
+                "{}: {err}",
+                child.display()
+            );
+        }
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reject_path_escape_rejects_paths_outside_the_root() {
+        let root = root_under_canonical_temp("escape-foreign");
+        let sibling_with_shared_prefix = root.with_file_name("root-evil").join("file");
+        for child in [
+            root.parent().unwrap().join("outside/file"),
+            sibling_with_shared_prefix,
+            PathBuf::from("/etc/passwd"),
+            PathBuf::from("/"),
+        ] {
+            let err = reject_path_escape(&child, &root, "child")
+                .expect_err(&format!("{} must be rejected", child.display()));
+            assert!(
+                err.contains("child escapes allowlisted root"),
+                "{}: {err}",
+                child.display()
+            );
+        }
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[test]
+    fn reject_path_escape_accepts_descendants_and_the_root_itself() {
+        let root = root_under_canonical_temp("escape-ok");
+        for child in [
+            root.clone(),
+            root.join("a"),
+            root.join("a/b/c.txt"),
+            PathBuf::from("a/b"),
+        ] {
+            reject_path_escape(&child, &root, "child")
+                .unwrap_or_else(|e| panic!("{} rejected: {e}", child.display()));
+        }
+        let _ = fs::remove_dir_all(root.parent().unwrap());
+    }
+
+    #[test]
+    fn relative_allowlisted_root_is_rejected() {
+        let err = reject_path_escape(Path::new("a/b"), Path::new("a"), "child")
+            .expect_err("relative root");
+        assert!(err.contains("allowlisted root must be absolute"), "{err}");
+        let err = reject_symlink_parent_chain(Path::new("a/b"), Path::new("a"), "child")
+            .expect_err("relative root");
+        assert!(err.contains("allowlisted root must be absolute"), "{err}");
+    }
+
+    #[test]
+    fn parent_chain_walk_reaching_the_filesystem_root_is_an_escape() {
+        // The temp base is canonical, so no symlink ancestor can end the walk
+        // early: only the escape rule can reject this path.
+        let base = temp("chain-escape");
+        let root = base.join("root");
+        let outside = base.join("outside/child");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        let err = reject_symlink_parent_chain(&outside, &root, "outside")
+            .expect_err("path outside the root");
+        assert!(err.contains("outside escapes allowlisted root"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn reject_symlink_reports_inspection_errors_other_than_not_found() {
+        let base = temp("inspect-error");
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("file"), b"x").unwrap();
+        let err = reject_symlink(&base.join("file/child"), "child").expect_err("ENOTDIR");
+        assert!(err.contains("cannot inspect child"), "{err}");
+        assert!(reject_symlink(&base.join("missing"), "child").is_ok());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ensure_within_root_rejects_existing_child_reached_through_symlinked_parent() {
+        let base = temp("within-canonical");
+        let root = base.join("root");
+        let outside = base.join("outside");
+        fs::create_dir_all(&root).unwrap();
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("secret.txt"), b"x").unwrap();
+        std::os::unix::fs::symlink(&outside, root.join("link")).unwrap();
+        // Lexically inside the root and not itself a symlink: only the
+        // canonical comparison can see that it resolves outside.
+        let err = ensure_within_root(&root.join("link/secret.txt"), &root, "child")
+            .expect_err("resolves outside the root");
+        assert!(err.contains("child escapes destination root"), "{err}");
+        ensure_within_root(&root, &root, "root").expect("root contains itself");
+        let _ = fs::remove_dir_all(&base);
     }
 }

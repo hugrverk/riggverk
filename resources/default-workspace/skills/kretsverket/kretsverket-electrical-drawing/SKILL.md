@@ -1,6 +1,6 @@
 ---
 name: kretsverket-electrical-drawing
-description: Protect wire semantics, terminal bindings, crossings, references, transforms, and the boundary between drawing data and a future netlist.
+description: Protects Kretsverket wire semantics, terminal bindings, junctions and crossings, cross-sheet references, and transforms, keeping drawing data separate from any netlist. Use when Kretsverket work touches wires, connection points, references, or BOM and Dellista derivation.
 category: kretsverket
 risk: high
 targets: codex, opencode, claude, cursor
@@ -10,6 +10,8 @@ related: kretsverket-editor-change, kretsverket-symbol-system, tdd, minimal-impl
 # Kretsverket Electrical Drawing
 
 Use for wire semantics, terminal bindings, crossings, references, transforms, and drawing-versus-netlist boundaries.
+
+Done when: each required surface is marked affected or unaffected, `npm run test` and `npm run build` pass, and a browser smoke covers changed wire or binding behavior.
 
 ## Required surfaces
 
@@ -36,3 +38,16 @@ Kretsverket has drawing data and explicit bindings. It does not currently have a
 - hidden endpoint mutation
 - conflation of Wire and Line
 - persisted derived BOM data without an approved model change
+
+## Verification
+
+- Run `npm run test` and `npm run build`; add focused checks for each changed surface.
+- Smoke wire, binding, and crossing behavior in the browser, including save and reload and a move, rotate, or duplicate where relevant.
+- Build alone does not prove canvas behavior.
+
+## Output
+
+- Required surfaces affected or unaffected.
+- Invariant checks against the drawing-versus-netlist boundary.
+- Commands and browser smoke run, with results.
+- Not verified and residual risk.

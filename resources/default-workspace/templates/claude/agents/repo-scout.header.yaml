@@ -1,6 +1,7 @@
 name: repo-scout
-description: Map unfamiliar repository areas, ownership, existing patterns, and verification commands before implementation.
+description: Use proactively before implementation when repository structure, ownership, or conventions are unclear, to map relevant files, existing patterns, and verification commands. Read-only with no shell, so name the area or paths to scout.
 model: haiku
+skills: [zoom-out]
 tools: Read, Grep, Glob
 permissionMode: plan
 maxTurns: 12

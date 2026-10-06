@@ -2,73 +2,60 @@
 
 ## Workspace
 
-A workspace is a user-owned directory containing docs, skills, templates, and scripts. The app identifies a workspace by the presence of `.agent-workspace/workspace.json` and a set of required files.
+A user-owned directory of docs, skills, templates, and scripts, identified by `.agent-workspace/workspace.json` and a set of required files (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md#missing-markers)). It is plain text, user-editable, and can be versioned with Git.
 
-The workspace is plain-text, user-editable, and can be versioned with Git. The app operates on a workspace but does not modify it without explicit action.
+The app creates it from its bundled copy and never writes it without a confirmed install or an explicit save. It does not run the workspace's scripts.
 
-## Mental model summary
+## Bundle versus workspace
+
+The app ships a read-only bundled copy of this workspace. Everything the app installs comes from the bundle, never from the runtime workspace:
+
+- **Install to the workspace**: bundle -> `~/.config/agent-workspace`.
+- **Install to a harness**: bundle -> `~/.claude`, `~/.codex`, `~/.config/opencode`, `~/.cursor`.
+
+So editing a file in the workspace changes what the Library shows, not what Claude, Codex, OpenCode, or Cursor receive. It also means the app can no longer prove it owns that file, so it becomes a conflict on later updates and is left alone. See [TROUBLESHOOTING.md](TROUBLESHOOTING.md#conflicts).
+
+## Mental model
 
 | Concept | Location | Purpose |
 |---------|----------|---------|
-| Docs | `docs/` | Workspace documentation and guides |
+| Docs | `docs/` | Guides and reference |
 | Skills | `skills/`, `templates/skills/` | Canonical skill sources and generated harness adapters |
 | Templates | `templates/` | Source templates for rules and config |
-| Scripts | `scripts/` | Sync, install, and bootstrap operations |
-| Shared runtime agents | `agents/` | OpenCode runtime agent prompts (six bundled agents) |
+| Scripts | `scripts/` | CLI installers and helpers, optional |
+| Runtime agents | `agents/`, `agent-specs/` | OpenCode agents and shared agent bodies |
+| Ownership records | `.agent-workspace/` | Identity, managed-state digests, "leave as is" choices |
 
 ## Skills
 
-Skills are reusable agent instruction files. Canonical semantic skills live under `skills/` with a `SKILL.md` file. Generated harness adapters live under `templates/skills/<harness>/<skill>/SKILL.md` and are what managed setup installs.
+Reusable agent instruction files. Canonical skills live under `skills/` (22 in the bundle, all for Codex, OpenCode, Claude, and Cursor). Generated adapters under `templates/skills/<harness>/<skill>/SKILL.md` are what gets installed, flat, to each harness's global skills folder. Skills follow their harness and are never gated by target toggles. See [SKILLS.md](SKILLS.md).
 
-The app installs skills globally (system-wide). The bundled workspace includes 21 canonical skills at `skills/<skill>/SKILL.md` or `skills/<group>/<skill>/SKILL.md`, all targeting Codex, OpenCode, Claude, and Cursor through generated adapters.
+## Rules and the managed block
 
-See [SKILLS.md](SKILLS.md) for the full skill directory contract.
+Rules define default behavior for coding agents. The source is `templates/global-agent-rules.md` plus a harness appendix. Installed rules files are shared: the app owns only the text between `BEGIN AGENT-WORKSPACE BASE` and `END AGENT-WORKSPACE BASE`, and everything outside is yours. Instructions below the block are your refinements and override the base. An edited block or an unmarked pre-existing file is a conflict you resolve with a diff, **Convert**, or **Leave as is**. See [AGENT_RULES.md](AGENT_RULES.md).
 
-## Agent Rules
+## Tool configuration
 
-Agent rules define default behavior for coding agents: communication style, modification boundaries, security rules, and verification requirements. The source template is `templates/global-agent-rules.md`.
+Config files hold tool settings such as permissions, models, and MCP servers. The app merges only allowlisted keys and preserves everything else: OpenCode via `templates/opencode.json`, `templates/tui.json`, and `templates/playwright-mcp.config.json`; Codex via `templates/codex/config.toml`. Codex `model` and `model_reasoning_effort` are written only when your config has none; after that they are yours. See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md) and [CODEX_CONFIG.md](CODEX_CONFIG.md).
 
-Rules are synced to tool-specific global rule paths. Each agent tool (OpenCode, Codex, Claude) stores rules at a different filesystem path. The `install-agent-rules.sh` script maps rules to each tool.
+## Targets and surfaces
 
-See [AGENT_RULES.md](AGENT_RULES.md).
+A **surface** is one installable group (for example `claude_rules`, `open_code_config`, `cursor_mcp`, `workspace_bundle`). A **target** is a toggle that gates one or more surfaces: rules, agents, and config per harness, and `cursor_setup`. A target that is off is excluded from preview, apply, and status. Fresh settings enable every target except `codex_config`. Skills and the workspace bundle are never gated. Harness enablement (Settings) is separate: a disabled harness is hidden and cannot be written.
 
-## Tool Configuration
+## Install review and transactions
 
-Tool configuration files define tool-specific settings such as permissions, model preferences, and runtime behavior. The workspace manages OpenCode configuration via `templates/opencode.json`, `templates/tui.json`, and `templates/playwright-mcp.config.json`. Codex managed fields in `templates/codex/config.toml` are merged into `~/.codex/config.toml` while user model, personality, MCP entries, and unknown tables remain user-owned.
-
-See [OPENCODE_CONFIG.md](OPENCODE_CONFIG.md).
+Install is a two-step action. Preview computes a plan and the review shows every create, update, remove, and conflict; apply runs only after you confirm, and only for the plan you saw. Before the first write the app backs up the files it will replace and records a transaction. A failed apply rolls back by itself, and `z` or `:rollback` restores the last transaction of the session after a dry run and a confirm.
 
 ## Scripts
 
-Required scripts handle sync, install, and bootstrap operations:
+`scripts/` holds optional CLI installers and helpers. The app does not call the installers. They default to dry-run, back up before overwriting, and need Python 3 and Bash (macOS and Linux). The app itself runs only its own bundled Python helpers, never scripts from the workspace. See the [workspace README](../README.md).
 
-- `bootstrap.sh` — run all sync and install steps together
-- `install-skills.sh` — install skills to agent tool directories
-- `install-agent-rules.sh` — sync agent rules to tool paths
-- `install-opencode-config.sh` — sync OpenCode config and agents
-- `install-codex-config.sh` — merge Codex managed fields with user-owned TOML preserved
-- `install-cursor-workspace.sh` — manual Cursor helpers and CLI-only project installs (global setup is app-native)
-
-All scripts support `--help`. Install operations support `--dry-run`; rule/config sync operations support `--diff` and `--apply`. Safe preview is the default.
-
-Selecting a workspace is a trust decision. The app exposes allowlisted actions only, but these scripts are read from and run inside the selected workspace when you trigger sync, install, or release actions. No scripts run automatically on launch, and workspace creation copies starter files without executing scripts.
-
-## Sync operation pattern
-
-1. **Dry-run** — preview what would happen (no files written)
-2. **Diff** — show differences between template and target
-3. **Apply** — write template to target (backups created before overwrite)
-
-## Targets
-
-A target is an installed agent tool the workspace can sync to. Each target has a type (rules or config) and a filesystem path. The app manages which targets are enabled for sync.
+Selecting a workspace folder is still a trust decision: do not run scripts from a folder you did not create.
 
 ## Backups
 
-When apply mode overwrites an existing diverged file, a backup is created first. Backups live under the platform backup root: `~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux. Dry-run and diff modes never create backups.
+Before overwriting or removing a file, Install, uninstall, and Library saves copy it to the backup root, owner-only: `<root>/setup/<transaction id>/...` for installs, `<root>/docs/<id>-<timestamp>/` for Library saves. Previews and dry runs write nothing. Layout and locations: [USING_THE_APP.md](USING_THE_APP.md#backups).
 
 ## Brain Setup
 
-Brain Setup is a copy-paste instruction surface for external AI assistants. It teaches skill routing discipline, model/tool recommendation habits, security rules, and verification expectations. It does not run agents, change enabled sync targets, or mutate OpenCode/Codex/Claude config.
-
-Use Settings for appearance, global text size, and theme colors. Use each harness page to choose rule/config targets for that tool.
+A copy-paste instruction block for external AI assistants covering skill routing, security rules, and verification. It runs no agents and changes no targets or config.

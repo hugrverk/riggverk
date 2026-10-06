@@ -1,6 +1,6 @@
 ---
 description: Frontend UI design and implementation constraints.
-globs: **/*.tsx, **/*.css, **/*.scss
+globs: "**/*.tsx, **/*.css, **/*.scss"
 alwaysApply: false
 ---
 

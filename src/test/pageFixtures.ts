@@ -1,0 +1,131 @@
+import { vi } from "vitest";
+import type { InstallationOverview, OverviewEntry, OverviewId } from "../hooks/useInstallationOverview";
+import { buildInstallReview, type InstallFlow, type InstallFlowRequest } from "../hooks/useInstallFlow";
+import type { InstallScreen } from "../hooks/useInstallScreen";
+import type { AppView } from "../shell/views";
+import type {
+  AppSettings,
+  InstallationState,
+  InstallationStatus,
+  PlannedOperation,
+  SetupPlan,
+  SetupSurfaceId,
+  StatusData,
+  SurfaceInstallationStatus,
+  WorkspaceDiagnostics,
+} from "../types";
+import { defaultSettings } from "../lib/settingsDraft";
+
+export const VALID_DIAGNOSTICS: WorkspaceDiagnostics = {
+  candidate_path: "/tmp/workspace",
+  resolved_path: "/tmp/workspace",
+  valid: true,
+  error: null,
+  markers: [],
+  enabled_rule_targets: 3,
+  total_rule_targets: 3,
+  enabled_config_targets: 1,
+  total_config_targets: 2,
+  backup_root: "/tmp/backups",
+  backup_root_exists: true,
+  release_check_available: true,
+  bundled_resources_status: "current",
+  missing_bundled_count: 0,
+  missing_bundled_sample: [],
+};
+
+export const INVALID_DIAGNOSTICS: WorkspaceDiagnostics = {
+  ...VALID_DIAGNOSTICS,
+  resolved_path: null,
+  valid: false,
+  error: "workspace missing",
+  release_check_available: false,
+  bundled_resources_status: "missing",
+};
+
+export const STATUS_DATA = {
+  repo_path: "/tmp/workspace",
+  git_available: true,
+  branch: "main",
+  dirty: false,
+  latest_commit: "abc123",
+  enabled_rule_target_ids: ["codex_rules", "claude_rules", "opencode_rules"],
+  enabled_config_target_ids: ["opencode_config"],
+} as unknown as StatusData;
+
+export function surfaceStatus(surface: SetupSurfaceId, state: InstallationState, detail = `${state} detail`): SurfaceInstallationStatus {
+  return { surface, label: surface, state, detail };
+}
+
+export function installationStatus(
+  state: InstallationState,
+  surfaces: SurfaceInstallationStatus[] = [],
+  counts: Partial<InstallationStatus["counts"]> = {},
+  extra: Partial<InstallationStatus> = {},
+): InstallationStatus {
+  return {
+    state,
+    summary: state === "current" ? "Current" : `${state} summary`,
+    counts: { create_count: 0, update_count: 0, remove_count: 0, conflict_count: 0, ...counts },
+    surfaces,
+    ...extra,
+  };
+}
+
+export function overviewOf(statuses: Partial<Record<OverviewId, InstallationStatus | null>>): InstallationOverview {
+  const entries: Partial<Record<OverviewId, OverviewEntry>> = {};
+  for (const [id, status] of Object.entries(statuses) as Array<[OverviewId, InstallationStatus | null]>) {
+    entries[id] = { id, status, loading: false, error: null };
+  }
+  return { entries, loading: false, refresh: vi.fn(async () => {}) };
+}
+
+export function settingsOf(overrides: Partial<AppSettings> = {}): AppSettings {
+  return { ...defaultSettings(), workspace_path: "/tmp/workspace", ...overrides };
+}
+
+export function op(surface: SetupSurfaceId, kind: PlannedOperation["kind"], extra: Partial<PlannedOperation> = {}): PlannedOperation {
+  return { surface, kind, summary: `${kind} ${surface}`, ...extra };
+}
+
+export function planOf(operations: PlannedOperation[]): SetupPlan {
+  const pending = operations.some(o => o.kind === "create" || o.kind === "update" || o.kind === "remove");
+  return {
+    operations,
+    synced: [],
+    conflicts: operations.filter(o => o.kind === "conflict"),
+    manual_steps: [],
+    summary: "",
+    has_pending_changes: pending,
+    is_blocked: false,
+    plan_fingerprint: pending ? "fp-1" : null,
+    preview_token: pending ? "tok-1" : null,
+  };
+}
+
+/** An idle install flow, or one in `review` for `operations`. */
+export function flowOf(operations?: PlannedOperation[], request: InstallFlowRequest = { label: "update claude", surfaces: ["claude_rules"] }): InstallFlow {
+  const review = operations ? buildInstallReview(request, planOf(operations)) : null;
+  return {
+    status: review ? "review" : "idle",
+    request: review ? request : null,
+    review,
+    error: null,
+    outcome: null,
+    start: vi.fn(async () => null),
+    apply: vi.fn(async () => null),
+    cancel: vi.fn(),
+    repreview: vi.fn(async () => null),
+  };
+}
+
+/** An `InstallScreen` whose review shows on `openOn` when the flow is not idle. */
+export function installScreenOf(flow: InstallFlow = flowOf(), openOn: AppView | null = null): InstallScreen {
+  return {
+    flow,
+    scope: openOn === "start" ? "start" : openOn === null ? null : (openOn as InstallScreen["scope"]),
+    isOpenOn: (view: AppView) => openOn === view && flow.status !== "idle",
+    open: vi.fn(async () => {}),
+    apply: vi.fn(),
+  };
+}

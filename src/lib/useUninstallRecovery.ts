@@ -5,7 +5,8 @@ export function useUninstallRecovery() {
   const [transactionId, setTransactionId] = useState<string | null>(null);
 
   const captureFromUninstallResult = useCallback((result: SetupResult | null) => {
-    if (result?.transaction_id) {
+    // Failed or no-op runs return a transaction id without a persisted backup, which cannot be rolled back.
+    if (result?.success && result.applied.length > 0 && result.transaction_id) {
       setTransactionId(result.transaction_id);
     }
   }, []);

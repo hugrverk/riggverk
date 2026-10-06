@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { RepoCommitEntry } from "../src/types";
+import type { RepoCommitEntry, RepoDashboardWorkItem } from "../src/types";
 import {
   buildActivityActorMap,
   buildActivityLegend,
-  buildDocSourceSummaries,
   buildHeatmapCells,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
@@ -42,7 +41,6 @@ import {
   buildRemainingByType,
   workItemDocLane,
   buildWorkStatusCounts,
-  isCanonicalWorkMode,
   partitionCanonicalWorkItems,
   buildCanonicalWorkSummary,
   filterWorkItemsByCanonicalSource,
@@ -323,10 +321,10 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
-  const items = [
-    { source: "docs" as const, path: "a", text: "open", type: "todo" as const, status: "open" as const, needsPlan: false },
-    { source: "docs" as const, path: "b", text: "started", type: "todo" as const, status: "started" as const, needsPlan: true },
-    { source: "docs" as const, path: "c", text: "done", type: "todo" as const, status: "done" as const, needsPlan: false },
+  const items: RepoDashboardWorkItem[] = [
+    { source: "docs", path: "a", text: "open", type: "todo", status: "open", needsPlan: false },
+    { source: "docs", path: "b", text: "started", type: "todo", status: "started", needsPlan: true },
+    { source: "docs", path: "c", text: "done", type: "todo", status: "done", needsPlan: false },
   ];
   const partition = partitionWorkItems(items);
   assert.equal(partition.activeStarted.length, 1);
@@ -509,17 +507,10 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
-  const stylesSource = [
-    "../src/styles/_tokens.scss",
-    "../src/styles/_shell.scss",
-    "../src/styles/_content.scss",
-    "../src/styles/_settings-targets.scss",
-    "../src/styles/_workspace-library.scss",
-    "../src/styles/_tools-prompt.scss",
-    "../src/styles/_repo-dashboard.scss",
-    "../src/styles/_state-dialogs-terminal.scss",
-  ]
-    .map(path => readFileSync(new URL(path, import.meta.url), "utf8"))
+  // Every partial that src/styles/index.scss pulls in, so the list cannot go stale.
+  const stylesIndex = readFileSync(new URL("../src/styles/index.scss", import.meta.url), "utf8");
+  const stylesSource = [...stylesIndex.matchAll(/^@use "([^"]+)";/gm)]
+    .map(([, name]) => readFileSync(new URL(`../src/styles/_${name}.scss`, import.meta.url), "utf8"))
     .join("\n");
   assert.ok(
     stylesSource.includes("--repo-chart-series-1: #e4ed42"),

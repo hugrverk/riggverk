@@ -4,7 +4,11 @@
 
 A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and allowlisted scripts. It is separate from the Agent Workspace source repository.
 
-The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`; `AGENT_WORKSPACE_PATH` may override it for development and tests.
+The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`. The path resolves in this order: `AGENT_WORKSPACE_PATH` (development and tests), a valid custom path saved in Settings, the default.
+
+Requirements on the machine: Python 3 (Codex, OpenCode, and Cursor merge and generator helpers) and Bash (CLI scripts only). Missing `python3` surfaces as an error when a helper runs.
+
+Install reads the bundled copy, never the runtime workspace. The runtime workspace is a user-owned copy that the app displays and the Library edits; editing it does not change what harnesses receive.
 
 ## Required runtime markers
 
@@ -12,36 +16,46 @@ A valid workspace contains:
 
 - `.agent-workspace/workspace.json`
 - `README.md`
-- `skills/`
+- `skills/` (directory)
 - `templates/global-agent-rules.md`
 - `templates/opencode.json`
 - `templates/codex/config.toml`
-- `templates/cursor/manifest.json`
-- `templates/cursor/agents/`
-- `templates/cursor/rules/`
-- `templates/cursor/mcp/mcp.example.json`
+- `templates/cursor/agents/` (directory)
+- `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
 - `scripts/bootstrap.sh`
 - `scripts/install-agent-rules.sh`
-- `scripts/install-runtime-agents.sh`
 - `scripts/install-opencode-config.sh`
 - `scripts/install-codex-config.sh`
 - `scripts/install-skills.sh`
 - `scripts/install-cursor-workspace.sh`
 
-Validation is read-only. It does not run scripts, install files, or inspect credential-bearing state.
+Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace.
 
 ## Bundled resources
 
-The default workspace currently contains 21 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
+The default workspace currently contains 22 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
-Bundled resources are immutable installation input. The explicit **Install or Update** action:
+Bundled resources are immutable installation input. The explicit **Install or Update** action (`u`, review, `y`):
 
-- write only below the resolved workspace root
-- previews artifact-level creates, updates, removals, and conflicts
+- writes the workspace bundle below the resolved workspace root and harness artifacts below the user's home (or `$CODEX_HOME`)
+- previews artifact-level creates, updates, removals, and conflicts, and writes only after confirmation
+- skips surfaces whose target toggle or harness is off
 - updates only allowlisted managed projections
 - preserves unknown and diverged unowned files
-- never execute copied scripts
-- reject unsafe paths and symlink escapes
+- never executes workspace copies of scripts
+- rejects unsafe paths and symlink escapes
+
+### Conflicts
+
+A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file (for example in the Library) therefore freezes that file against future updates. To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so do not delete it. It describes this machine's installs and should not be copied to another machine or committed. Rules files have their own conflict handling (below).
+
+### Target toggles
+
+`enabled_target_ids` selects which target surfaces Install may touch: rules, agents, and config per harness, plus Cursor agents and MCP (`cursor_setup`). Defaults enable every target except `codex_config`. Skills and the workspace bundle are never gated. Settings files that predate gating are migrated once: defaults, plus every target already enabled or already holding managed records, so no installed surface is dropped.
+
+### Custom workspace
+
+Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder is used only when it passes the markers above. `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
 
 ## Skill source layout
 
@@ -73,7 +87,7 @@ Global destinations:
 - Claude Code: `~/.claude/skills`
 - Cursor: `~/.cursor/skills`
 
-All 21 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
+All 22 current bundled skills target Codex, OpenCode, Claude, and Cursor. Sync-all derives expected skills from the same compatibility metadata used by health checks.
 
 ## Skill adapters
 
@@ -84,7 +98,7 @@ templates/skills/<harness>/<skill>/SKILL.md
 metadata/skill-adapters.json
 ```
 
-Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
+Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. The generators themselves live in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
 
 ## Skill ownership and cleanup
 
@@ -100,15 +114,37 @@ Deprecated removal creates a transaction backup before deletion. Rollback valida
 
 ## Rules
 
-`templates/global-agent-rules.md` is the editable shared core. Harness appendices live under `templates/rules/`. Generated composed rules live under `templates/sync/`.
+`templates/global-agent-rules.md` is the editable shared core. Harness appendices live under `templates/rules/`. Generated composed rules live under `templates/sync/`. `metadata/rules-history/` holds every base the app shipped, one file per content digest, so a rules file can be compared with the base it started from; `scripts/generate-rules-history.py` keeps it current.
 
 Installed rule targets:
 
-- Codex: `~/.codex/AGENTS.md`
+- Codex: `$CODEX_HOME/AGENTS.md` (default `~/.codex/AGENTS.md`)
 - OpenCode: `~/.config/opencode/AGENTS.md`
 - Claude Code: `~/.claude/CLAUDE.md`
 
-Rule writes are explicit, allowlisted, backed up when replacing diverged files, and separate from editing workspace source templates.
+Rule targets are merge-managed. Agent Workspace owns only the content between `<!-- BEGIN AGENT-WORKSPACE BASE` and `<!-- END AGENT-WORKSPACE BASE -->`; bytes outside are user-owned and preserved byte-for-byte, including a BOM, CRLF line endings, and a missing final newline. The markers count only as whole lines at column 0 outside fenced code blocks, and a file holds exactly one BEGIN followed by one END. Instructions after the block are the user's refinements and override the base where they conflict (the base states this in its Priority section).
+
+Detection compares the block body, not the whole file. A body digest ignores CRLF versus LF and a missing final newline, and the managed-state record for a rules file is that digest.
+
+| Installed file | Plan |
+|----------------|------|
+| absent | create a file holding the block |
+| block body equals the bundled base | current |
+| block body equals the recorded digest or a shipped base | update the block body; text before and after is kept |
+| block body edited | conflict `base_block_edited`; left as is |
+| no markers, file equals the recorded digest, a shipped base, or the current source (or holds only whitespace) | update: the file is replaced by a file holding the block, after a full backup |
+| no markers, any other content | conflict `legacy_diverged`; left as is |
+| duplicate, unpaired, or reordered markers; not UTF-8; larger than 4 MB | conflict `malformed_markers`; zero mutation |
+
+Edits inside the block are reported and never replaced without explicit confirmation. A base update that keeps user text is an `update_available`, never a conflict, and reports how many refinement lines it preserves.
+
+For the two conflicts a user can resolve (`base_block_edited`, `legacy_diverged`), the app offers read-only diffs (installed file against the update, or the closest shipped base against the installed file), an explicit conversion, and "leave as is". Conversion writes the current base as the managed block and keeps what the user changed: every `##` section that differs from the closest shipped base, or that the base never had, moves below the END marker under a comment, and text around an edited block stays where it was. The preview shows the exact resulting file, and applying it is an ordinary backed-up transaction. "Leave as is" records the choice in `.agent-workspace/rules-preferences.json`; the file is then reported as "base updates available, you manage this file" instead of a conflict and is never written until the user converts it or clears the choice. Markers that are malformed are never rewritten.
+
+Rollback of a block update restores only the previous block body, so text the user added after the update stays; it refuses when the block itself changed after apply. Creating, wrapping, and converting restore the whole file, and only while it is unchanged since apply.
+
+Runtime health compares the block body with the bundled base. Codex health also warns when a non-empty `$CODEX_HOME/AGENTS.override.md` exists: Codex reads it instead of `AGENTS.md`, which silently drops the base. Cursor User Rules stay a manual copy of `templates/cursor/user-rules.md`; the app does not write them.
+
+Rule writes are explicit, allowlisted, backed up before any change, and separate from editing workspace source templates.
 
 ## Agents
 
@@ -142,7 +178,7 @@ The editable sources are:
 
 ### Codex
 
-Agent Workspace manages only allowlisted Codex config defaults in `~/.codex/config.toml`: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
+Agent Workspace manages only allowlisted Codex config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), and only while the `codex_config` target is on (off by default). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode` follow the template. `model` and `model_reasoning_effort` are create-only: written from the template (`gpt-6.1-sol`, `xhigh`) only while the file has no value, then user-owned, never overwritten and never reported as drift. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
 
 App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Agent Workspace does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
 
@@ -156,15 +192,19 @@ Cursor global agents, generated skill adapters, and the named Playwright MCP ent
 
 ## Backups and writes
 
-Writes use allowlisted targets and explicit arguments. Existing managed files are backed up before replacement. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes.
+Writes use allowlisted targets and explicit arguments. Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first (new files are not). Install backups live in `<backup root>/setup/<transaction id>/artifacts/<artifact id>` with a `manifest.json` and `managed-state.previous.json`; Library saves in `<backup root>/docs/<doc id>-<timestamp>/`. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes. See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for the full write table and modes.
 
 The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
+
+## Library edits
+
+The Library edits the runtime workspace copy only. Saves are atomic, refuse symlinks and paths outside the workspace root, and back up the existing file first (`<backup root>/docs/<doc id>-<timestamp>/`). A saved edit changes what the app displays and what a later bundled update sees as a conflict; it does not change what harness installs write, which always come from the bundle. `templates/opencode.json` is generated and read-only in the Library.
 
 ## Managed installation
 
 Surface status in the app is derived from artifact-level detection. OpenCode Config aggregates `opencode.json`, `tui.json`, and the Playwright MCP artifact; agents and skills surfaces aggregate every managed artifact for that harness.
 
-Preview issues a bounded in-memory token scoped to workspace, pending surfaces, and fingerprint. Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply consumes the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
+The UI runs preview, shows the plan table, and calls apply only after the user confirms (`y`); `p` and `:preview` show a plan with no apply path. Preview issues a bounded in-memory token scoped to workspace, pending surfaces, and fingerprint. Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply consumes the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
 
 Filesystem-mutating installation and rollback commands acquire a process-wide non-blocking mutation guard. A second mutation returns `setup operation already in progress` without filesystem changes or misleading transaction evidence. Preview, health, discovery, planning, and rollback dry-run remain available.
 
@@ -176,7 +216,7 @@ OpenCode agent permissions are composed from `templates/opencode.policy.json` pl
 
 Transactions persist manifest status fail-closed, validate backups before mutation, reject symlink parent chains, and record per-artifact apply, validation, rollback, managed digest, and full digest state. The exact prior managed-state bytes or prior absence are part of the transaction and are restored on rollback. Managed state is published atomically before the transaction becomes completed.
 
-Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, rolling-back, or rollback-failed transactions for the same workspace are reconciled or the new apply is blocked. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
+Automatic rollback uses the workspace root validated at transaction start, not the process working directory. Before a new apply, interrupted prepared, applying, failed, or rolling-back transactions for the same workspace are reconciled or the new apply is blocked. Rollback-failed transactions (for example an artifact preserved because the user edited it) are not retried automatically: they are reported as a manual step and only an explicit rollback runs them again. Reconcile never restores an artifact that a newer completed transaction wrote. Explicit rollback sets per-artifact `in_flight` before mutation, persists progress after each artifact, and refuses to overwrite content changed after apply.
 
 ## Full uninstall
 
@@ -184,11 +224,11 @@ Full uninstall previews removable, preserved, and merge-managed artifacts before
 
 - **Removable** — installed files with proven app ownership (managed-state digest, historical ownership, or current bundled source match).
 - **Preserved** — modified or unknown user files that do not match an app-owned proof.
-- **Merge-managed** — user-owned config files where only allowlisted keys were merged; the file is never deleted wholesale.
+- **Merge-managed** — user-owned config files where only allowlisted keys were merged, and rules files that hold the user's own text beside the base block; the file is never deleted wholesale. A rules file that holds nothing but an unedited base block is removable.
 
 Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
 
-The frontend retains only the most recent uninstall transaction ID for the current app session. **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
+The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
 ## Harness enablement
 

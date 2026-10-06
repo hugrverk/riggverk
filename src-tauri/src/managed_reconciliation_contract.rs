@@ -383,9 +383,13 @@ mod tests {
                     base.join("backups").to_string_lossy().as_ref(),
                 );
             }
-            let bootstrap =
-                crate::managed_bootstrap::infer_bootstrap_records(&ws_canon, &resolved_home)
-                    .expect("bootstrap records");
+            let bootstrap = crate::managed_bootstrap::infer_bootstrap_records(
+                &ws_canon,
+                &resolved_home,
+                &std::collections::HashSet::new(),
+            )
+            .expect("bootstrap records")
+            .records;
             assert!(
                 bootstrap.iter().any(|record| {
                     record.identity.contains("\"scout\"")
@@ -624,7 +628,7 @@ mod tests {
             discover_skill_catalog(&workspace)
                 .expect("installed catalog")
                 .len(),
-            21
+            22
         );
         assert!(read_managed_state(&workspace).is_some());
         let current = crate::installation_status::status_for_surfaces(
@@ -649,7 +653,7 @@ mod tests {
             discover_skill_catalog(&fixture.ws)
                 .expect("runtime catalog")
                 .len(),
-            33
+            34
         );
         assert_eq!(
             fs::read_dir(fixture.ws.join("agents"))
@@ -761,7 +765,7 @@ mod tests {
         let catalog = discover_skill_catalog(&fixture.ws).expect("catalog");
         assert_eq!(
             catalog.len(),
-            22,
+            23,
             "modified stale runtime skill is preserved"
         );
         assert!(
@@ -781,8 +785,8 @@ mod tests {
         for harness in ["cursor", "claude", "codex"] {
             assert_eq!(
                 fixture.harness_skill_count(harness),
-                21,
-                "{harness} should have 21 skills after reconciliation"
+                22,
+                "{harness} should have 22 skills after reconciliation"
             );
             let dest = agent_global_skills_dest(harness).expect("dest");
             for removed in REMOVED_SKILL_NAMES {
@@ -794,8 +798,8 @@ mod tests {
         }
         assert_eq!(
             fixture.harness_skill_count("opencode"),
-            22,
-            "modified stale OpenCode skill should remain beside 21 current names"
+            23,
+            "modified stale OpenCode skill should remain beside 22 current names"
         );
         assert!(
             agent_global_skills_dest("opencode")
@@ -980,6 +984,110 @@ mod tests {
             "scout skill dir should not be auto-removed unless in REMOVED_SKILL_NAMES"
         );
         fixture.cleanup();
+    }
+
+    #[test]
+    fn unreadable_artifact_does_not_discard_other_bootstrap_adoptions() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("bootstrap-partial");
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        copy_dir_all(&current_bundled_workspace_src(), &ws).expect("copy workspace");
+        set_test_user_dirs(&home);
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+        let ws = ws.canonicalize().expect("canonical workspace");
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        // An exact historical scout agent is adoptable.
+        let scout_dest = resolved_home.join(".config/opencode/agents/scout.md");
+        fs::create_dir_all(scout_dest.parent().unwrap()).expect("agents dir");
+        fs::write(&scout_dest, historical_scout_bytes()).expect("scout agent");
+        // The user's OpenCode config has comments, so it does not parse as JSON.
+        fs::write(
+            resolved_home.join(".config/opencode/opencode.json"),
+            "// my own notes\n{ \"theme\": \"dark\" }\n",
+        )
+        .expect("commented config");
+        // One artifact that cannot be read at all.
+        let skill = discover_skill_catalog(&current_bundled_workspace_src())
+            .expect("catalog")
+            .into_iter()
+            .next()
+            .expect("skill");
+        let unreadable = agent_global_skills_dest("claude")
+            .expect("claude skills")
+            .join(&skill.name)
+            .join("SKILL.md");
+        fs::create_dir_all(unreadable.parent().unwrap()).expect("skill dir");
+        fs::write(&unreadable, "unreadable").expect("skill file");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o000)).expect("chmod");
+        }
+        let can_read = fs::read(&unreadable).is_ok();
+
+        let scout = ArtifactId::OpenCodeAgent(AgentName::new(LEGACY_SCOUT_AGENT).expect("scout"));
+        let scout_identity = artifact_identity(&scout);
+        let inference = crate::managed_bootstrap::infer_bootstrap_records(
+            &ws,
+            &resolved_home,
+            &std::collections::HashSet::new(),
+        )
+        .expect("inference survives per-artifact failures");
+        assert!(
+            inference
+                .records
+                .iter()
+                .any(|r| r.identity == scout_identity),
+            "scout adoption must survive: {inference:?}"
+        );
+        if !can_read {
+            assert!(
+                inference
+                    .skipped
+                    .iter()
+                    .any(|reason| reason.contains(&skill.name)),
+                "unreadable artifact must be reported: {:?}",
+                inference.skipped
+            );
+        }
+        // Artifacts that already have a managed record are not inspected again.
+        let known = std::collections::HashSet::from([scout_identity.clone()]);
+        let again = crate::managed_bootstrap::infer_bootstrap_records(&ws, &resolved_home, &known)
+            .expect("inference with known records");
+        assert!(again.records.iter().all(|r| r.identity != scout_identity));
+
+        // End to end: the adoption still turns the old scout into a removal.
+        let planned = setup_transaction::plan_artifacts_for_surfaces(
+            &[
+                SetupSurfaceId::OpenCodeAgents,
+                SetupSurfaceId::OpenCodeConfig,
+            ],
+            &ws,
+            &resolved_home,
+        )
+        .expect("plan");
+        assert_planned_kind(&planned, scout, OperationKind::Remove);
+
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&unreadable, fs::Permissions::from_mode(0o644));
+        }
+        let _ = fs::remove_dir_all(base);
     }
 
     #[test]
@@ -1469,6 +1577,112 @@ mod tests {
             "second rollback attempt must not mutate scoped runtime state"
         );
 
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    /// File of the app repository at a commit (rules history fixtures).
+    fn rules_at_commit(commit: &str, rel: &str) -> String {
+        let output = Command::new("git")
+            .args([
+                "show",
+                &format!("{commit}:resources/default-workspace/{rel}"),
+            ])
+            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
+            .output()
+            .expect("run git show");
+        assert!(
+            output.status.success(),
+            "{commit}:{rel}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("utf-8 rules")
+    }
+
+    /// The state the owner's `~/.claude/CLAUDE.md` is in: the managed record
+    /// holds an old shipped template, and the file is a newer shipped base with
+    /// one line of "Codex delegation" edited by hand.
+    #[test]
+    fn owner_refined_claude_rules_are_a_legacy_conflict_and_stay_untouched() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("owner-rules");
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        fs::create_dir_all(&ws).expect("workspace");
+        set_test_user_dirs(&home);
+        let ws = ws.canonicalize().expect("workspace");
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+
+        let rel = "templates/sync/claude-rules.md";
+        let recorded_template = rules_at_commit("0f2eac13", rel);
+        let installed_base = rules_at_commit("0e042154", rel);
+        let refined = installed_base.replace("`gpt-5.6-sol` at `high`", "`gpt-6.1-sol` at `xhigh`");
+        assert_ne!(refined, installed_base, "fixture must hold the edited line");
+        let installed_path = resolved_home.join(".claude/CLAUDE.md");
+        fs::create_dir_all(installed_path.parent().unwrap()).expect("claude dir");
+        fs::write(&installed_path, &refined).expect("refined rules");
+        crate::managed_state::write_managed_state_atomic(
+            &ws,
+            &crate::managed_state::ManagedState {
+                schema_version: MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                    identity: artifact_identity(&ArtifactId::ClaudeRules),
+                    hash: crate::stable_digest::bytes(recorded_template.as_bytes()),
+                    surface: None,
+                }],
+            },
+        )
+        .expect("managed state");
+
+        let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
+            &[SetupSurfaceId::ClaudeRules],
+            &ws,
+            &resolved_home,
+        )
+        .expect("plan");
+        assert_planned_kind(&planned, ArtifactId::ClaudeRules, OperationKind::Conflict);
+        assert_eq!(
+            planned[0].rules.expect("rules assessment").plan,
+            crate::rules_block::RulesPlan::Conflict(
+                crate::rules_block::RulesConflict::LegacyDiverged
+            )
+        );
+        let status = crate::installation_status::status_for_surfaces(
+            &[SetupSurfaceId::ClaudeRules],
+            &ws,
+            &resolved_home,
+        )
+        .expect("status");
+        assert_eq!(
+            status.state,
+            crate::installation_status::InstallationState::Conflict
+        );
+        assert_eq!(
+            status.surfaces[0]
+                .rules
+                .as_ref()
+                .and_then(|rules| rules.conflict_reason),
+            Some(crate::rules_block::RulesConflict::LegacyDiverged)
+        );
+
+        let plan = preview_setup(vec!["claude_rules".into()]).expect("preview");
+        assert!(!plan.has_pending_changes);
+        assert!(apply_setup(vec!["claude_rules".into()], false, None, None).is_err());
+        assert_eq!(fs::read_to_string(&installed_path).unwrap(), refined);
         let _ = fs::remove_dir_all(&base);
     }
 }

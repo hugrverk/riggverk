@@ -15,8 +15,6 @@ export function createSaveOperationTracker() {
   };
 }
 
-export type SaveOperationTracker = ReturnType<typeof createSaveOperationTracker>;
-
 export function shouldApplyOpenCodeSourceSave(
   activeTargetId: string,
   activeSourceType: string,

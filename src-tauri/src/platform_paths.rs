@@ -26,11 +26,7 @@ pub struct PlatformEnv {
     pub homedrive: Option<String>,
     pub homepath: Option<String>,
     pub appdata: Option<String>,
-    #[allow(dead_code)]
-    pub local_appdata: Option<String>,
     pub xdg_config_home: Option<String>,
-    #[allow(dead_code)]
-    pub xdg_data_home: Option<String>,
 }
 
 impl PlatformEnv {
@@ -41,9 +37,7 @@ impl PlatformEnv {
             homedrive: non_empty_env("HOMEDRIVE"),
             homepath: non_empty_env("HOMEPATH"),
             appdata: non_empty_env("APPDATA"),
-            local_appdata: non_empty_env("LOCALAPPDATA"),
             xdg_config_home: non_empty_env("XDG_CONFIG_HOME"),
-            xdg_data_home: non_empty_env("XDG_DATA_HOME"),
         }
     }
 }
@@ -240,9 +234,7 @@ mod tests {
             homedrive: None,
             homepath: None,
             appdata: Some(r"C:\Users\Example\AppData\Roaming".into()),
-            local_appdata: Some(r"C:\Users\Example\AppData\Local".into()),
             xdg_config_home: None,
-            xdg_data_home: None,
         }
     }
 
@@ -253,9 +245,7 @@ mod tests {
             homedrive: None,
             homepath: None,
             appdata: None,
-            local_appdata: None,
             xdg_config_home: None,
-            xdg_data_home: None,
         }
     }
 
@@ -266,9 +256,7 @@ mod tests {
             homedrive: None,
             homepath: None,
             appdata: None,
-            local_appdata: None,
             xdg_config_home: None,
-            xdg_data_home: None,
         }
     }
 

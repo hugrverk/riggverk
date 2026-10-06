@@ -1,6 +1,6 @@
 ---
 name: frontend-design
-description: Choose and implement frontend visual direction for web and product UI across repositories. Use when building or improving interfaces with repository-aware design discipline, accessibility, rendered verification, and clear boundaries from screenshot-review, browser-qa, and accessibility-review.
+description: Chooses and implements visual direction for web and product UI, preserving an existing design system or committing to one coherent direction for greenfield work. Use when building or restyling screens, layouts, or components. Not for screenshot-only critique, accessibility audits, or runtime QA.
 category: frontend
 risk: medium
 targets: codex, opencode, claude, cursor
@@ -8,6 +8,8 @@ related: screenshot-review, browser-qa, accessibility-review, prototype
 ---
 
 # Frontend Design
+
+Done when: the design thesis is stated, every listed state was rendered and checked at two or more viewports, and body-text contrast was verified.
 
 ## Mode
 

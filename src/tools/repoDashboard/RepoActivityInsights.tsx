@@ -9,6 +9,7 @@ import {
   type MouseEvent,
 } from "react";
 import type { RepoCommitEntry } from "../../types";
+import { Pane } from "../../ui/Pane";
 import {
   ACTIVITY_INSIGHTS_RANGE_DAYS,
   activityChartDayX,
@@ -212,8 +213,8 @@ function ActivityInsightsChart({
           <title id={chartTitleId}>{activityInsightsChartTitle(rangeDays)}</title>
           <desc id={chartDescId}>{activityInsightsChartDescription(rangeDays, mode)}</desc>
 
-          {[0, Math.ceil(max / 2), max].map(v => (
-            <g key={v} aria-hidden="true">
+          {[0, Math.ceil(max / 2), max].map((v, tickIndex) => (
+            <g key={`${tickIndex}-${v}`} aria-hidden="true">
               {v > 0 ? (
                 <line
                   className="repo-dashboard-activity-gridline"
@@ -342,6 +343,7 @@ function ActivityInsightsChart({
             width={CHART_W - CHART_L - CHART_R}
             height={CHART_H - CHART_T - CHART_B}
             tabIndex={0}
+            data-pane-primary=""
             role="application"
             aria-label="Activity chart date navigator. Arrow keys move between dates. Escape clears selection."
             aria-controls={liveStatusId}
@@ -411,11 +413,14 @@ function ActivityInsightsChart({
 function ContributorVisibilityRow({
   stat,
   visible,
+  active,
   colorIndex,
   onToggle,
 }: {
   stat: ContributorStat;
   visible: boolean;
+  /** False when the contributor has no commits in the selected range, so there is nothing to chart. */
+  active: boolean;
   colorIndex: number;
   onToggle: () => void;
 }) {
@@ -425,7 +430,13 @@ function ContributorVisibilityRow({
       type="button"
       className={`repo-dashboard-contributor-visibility${visible ? " repo-dashboard-contributor-visibility-on" : ""}`}
       aria-pressed={visible}
-      aria-label={`${visible ? "Hide" : "Show"} ${stat.displayName} on chart`}
+      aria-label={
+        active
+          ? `${visible ? "Hide" : "Show"} ${stat.displayName} on chart`
+          : `${stat.displayName} has no commits in this range`
+      }
+      disabled={!active}
+      title={active ? undefined : "No commits in the selected range"}
       onClick={onToggle}
     >
       <span
@@ -434,7 +445,7 @@ function ContributorVisibilityRow({
         aria-hidden="true"
       />
       <span className="repo-dashboard-contributor-visibility-state" aria-hidden="true">
-        {visible ? "Shown" : "Hidden"}
+        {!active ? "Idle" : visible ? "Shown" : "Hidden"}
       </span>
       <span className="repo-dashboard-contributor-visibility-name">{stat.displayName}</span>
       <span className="repo-dashboard-contributor-visibility-stat">{stat.commitCount}</span>
@@ -522,13 +533,16 @@ export function RepoActivityInsights({
   const [visibleContributorIds, setVisibleContributorIds] = useState<string[]>([]);
 
   const allStats = useMemo(() => buildContributorStats(commits), [commits]);
+  // Range windows are anchored to the moment this snapshot's commits were loaded, so switching ranges
+  // after midnight cannot mix two different "today" values.
+  const windowNow = useMemo(() => new Date(), [commits]);
   const rangeCommits = useMemo(
-    () => filterCommitsForActivityInsights(commits, rangeDays),
-    [commits, rangeDays],
+    () => filterCommitsForActivityInsights(commits, rangeDays, windowNow),
+    [commits, rangeDays, windowNow],
   );
   const allSeries = useMemo(
-    () => buildContributorActivitySeries(rangeCommits, rangeDays),
-    [rangeCommits, rangeDays],
+    () => buildContributorActivitySeries(rangeCommits, rangeDays, windowNow),
+    [rangeCommits, rangeDays, windowNow],
   );
 
   const colorIndexById = useMemo(() => {
@@ -551,9 +565,10 @@ export function RepoActivityInsights({
   );
 
   const visibleIdSet = useMemo(() => new Set(visibleContributorIds), [visibleContributorIds]);
+  // Only contributors with commits in the range can be charted, so "Show all" is judged against those.
   const allContributorsVisible = useMemo(
-    () => allStats.length > 0 && allStats.every(stat => visibleIdSet.has(stat.id)),
-    [allStats, visibleIdSet],
+    () => allSeries.every(entry => visibleIdSet.has(entry.id)),
+    [allSeries, visibleIdSet],
   );
 
   const toggleContributor = useCallback((id: string) => {
@@ -581,9 +596,16 @@ export function RepoActivityInsights({
         </p>
       ) : (
         <div className="repo-dashboard-activity-insights-body">
-          <div className="repo-dashboard-activity-insights-chart">
+          <Pane
+            id="contributions"
+            index={2}
+            title="contributions"
+            label="Contributions"
+            className="repo-dashboard-activity-insights-chart"
+            bodyClassName="repo-dashboard-pane-body repo-dashboard-chart-body"
+            defaultFocus
+          >
             <div className="repo-dashboard-activity-chart-header">
-              <h3 className="repo-dashboard-activity-chart-title font-mono">Contributions</h3>
               <div className="repo-dashboard-activity-chart-header-controls">
                 <div className="repo-dashboard-toolbar" role="group" aria-label="Activity range">
                   {ACTIVITY_INSIGHTS_RANGE_DAYS.map(days => (
@@ -623,12 +645,18 @@ export function RepoActivityInsights({
               mode={chartMode}
               rangeDays={rangeDays}
             />
-          </div>
+          </Pane>
           <div className="repo-dashboard-activity-sidebar">
             {allStats.length ? (
-              <div className="repo-dashboard-contributor-panel">
+              <Pane
+                id="contributors"
+                index={3}
+                title="contributors"
+                meta={`· ${allStats.length}`}
+                className="repo-dashboard-contributor-panel"
+                bodyClassName="repo-dashboard-pane-body repo-dashboard-contributor-body"
+              >
                 <div className="repo-dashboard-contributor-panel-head">
-                  <h3 className="font-mono repo-dashboard-contributor-panel-title">Contributors</h3>
                   <button
                     type="button"
                     className={`repo-dashboard-contributor-show-all font-mono${allContributorsVisible ? " repo-dashboard-contributor-show-all-inactive" : ""}`}
@@ -639,7 +667,7 @@ export function RepoActivityInsights({
                     Show all
                   </button>
                 </div>
-                <div className="repo-dashboard-contributor-visibility-list font-mono">
+                <div className="repo-dashboard-contributor-visibility-list font-mono scroll-cue">
                   <div
                     className="repo-dashboard-contributor-visibility-header"
                     aria-hidden="true"
@@ -656,15 +684,21 @@ export function RepoActivityInsights({
                       key={stat.id}
                       stat={stat}
                       visible={visibleIdSet.has(stat.id)}
+                      active={colorIndexById.has(stat.id)}
                       colorIndex={colorIndexById.get(stat.id) ?? 0}
                       onToggle={() => toggleContributor(stat.id)}
                     />
                   ))}
                 </div>
-              </div>
+              </Pane>
             ) : null}
-            <div className="repo-dashboard-heatmap-panel">
-              <h3 className="font-mono repo-dashboard-heatmap-panel-title">Commit activity</h3>
+            <Pane
+              id="commit-activity"
+              index={allStats.length ? 4 : 3}
+              title="commit activity"
+              className="repo-dashboard-heatmap-panel"
+              bodyClassName="repo-dashboard-pane-body repo-dashboard-heatmap-body scroll-cue"
+            >
               {heatmapCells.length ? (
                 <ActivityHeatmap cells={heatmapCells} density="default" layout="embedded" />
               ) : (
@@ -672,7 +706,7 @@ export function RepoActivityInsights({
                   No activity data.
                 </p>
               )}
-            </div>
+            </Pane>
           </div>
         </div>
       )}

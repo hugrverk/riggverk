@@ -4,19 +4,25 @@ use std::path::{Path, PathBuf};
 use crate::agent_targets;
 use crate::settings;
 
-use super::process::run_cmd;
+use super::process::{run_cmd_with_timeout, run_git_bounded, BoundedCmdOptions};
 use super::workspace::workspace_root;
 
+use std::time::Duration;
+
+const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(15);
+const HOST_NAME_TIMEOUT: Duration = Duration::from_secs(5);
+
 fn host_name() -> String {
-    let output = std::process::Command::new("scutil")
-        .args(["--get", "ComputerName"])
-        .output();
-    if let Ok(out) = output {
-        if out.status.success() {
-            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !name.is_empty() {
-                return name;
-            }
+    let (ok, stdout, _, _) = run_cmd_with_timeout(
+        "scutil",
+        &["--get", "ComputerName"],
+        Path::new("/"),
+        HOST_NAME_TIMEOUT,
+    );
+    if ok {
+        let name = stdout.trim().to_string();
+        if !name.is_empty() {
+            return name;
         }
     }
     match std::env::var("HOSTNAME").or_else(|_| std::env::var("HOST")) {
@@ -237,8 +243,24 @@ pub struct StatusData {
     enabled_target_ids: Vec<String>,
 }
 
+/// Read-only git for the status panel: no repo hooks or fsmonitor, no optional locks, bounded
+/// runtime. For trusted repositories only; see `run_git_bounded`.
+fn git_output(root: &Path, args: &[&str]) -> (bool, String) {
+    let result = run_git_bounded(
+        args,
+        root,
+        BoundedCmdOptions {
+            timeout: Some(GIT_STATUS_TIMEOUT),
+            stdout_cap: 256 * 1024,
+            stderr_cap: 64 * 1024,
+            ..BoundedCmdOptions::default()
+        },
+    );
+    (result.success, result.stdout)
+}
+
 fn git_available(root: &Path) -> bool {
-    let (ok, out, _, _) = run_cmd("git", &["rev-parse", "--is-inside-work-tree"], root);
+    let (ok, out) = git_output(root, &["rev-parse", "--is-inside-work-tree"]);
     ok && out.trim() == "true"
 }
 
@@ -247,19 +269,27 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
         return (false, "not git".into(), false, "not git".into());
     }
 
-    let (_, out, _, _) = run_cmd("git", &["branch", "--show-current"], root);
-    let branch = out.trim().to_string();
+    // A failed or timed-out call has empty output; that must not read as "detached" or "clean".
+    // The IPC `dirty` is a plain bool, so a status that could not be read counts as dirty
+    // (not provably clean); the branch says `unknown`.
+    let (branch_ok, out) = git_output(root, &["branch", "--show-current"]);
+    let branch = if branch_ok {
+        out.trim().to_string()
+    } else {
+        "unknown".to_string()
+    };
 
-    let (_, dirty_out, _, _) = run_cmd("git", &["status", "--short"], root);
-    let dirty = !dirty_out.trim().is_empty();
+    let (dirty_ok, dirty_out) = git_output(root, &["status", "--short"]);
+    let dirty = !dirty_ok || !dirty_out.trim().is_empty();
 
-    let (_, commit_out, _, _) = run_cmd("git", &["log", "-1", "--pretty=%h %s"], root);
+    // `git log` also fails on a repository without commits, so its empty output stays "no commit".
+    let (_, commit_out) = git_output(root, &["log", "-1", "--pretty=%h %s"]);
     let latest_commit = commit_out.trim().to_string();
 
     (true, branch, dirty, latest_commit)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;
@@ -666,6 +696,40 @@ mod tests {
     }
 
     // ── git tests ──
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_git_status_is_not_reported_as_clean() {
+        let _guard = crate::test_env::guard::lock();
+        let root = temp_root("git-status-unreadable");
+        fs::create_dir_all(&root).expect("create temp dir");
+        for args in [
+            vec!["init", "--quiet"],
+            vec!["add", "-A"],
+            vec!["commit", "--quiet", "--allow-empty", "-m", "init"],
+        ] {
+            let status = std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+                .args(&args)
+                .current_dir(&root)
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {args:?}");
+        }
+        let (_, _, clean_dirty, _) = git_status(&root);
+        assert!(!clean_dirty, "a fresh repository is clean");
+        // A damaged index makes `git status` fail with empty output.
+        fs::write(root.join(".git/index"), b"not an index").expect("corrupt index");
+
+        let (available, _, dirty, _) = git_status(&root);
+
+        let _ = fs::remove_dir_all(&root);
+        assert!(available);
+        assert!(
+            dirty,
+            "a status that could not be read must not read as clean"
+        );
+    }
 
     #[test]
     fn non_git_workspace_is_reported_as_not_git() {

@@ -1,3 +1,4 @@
+use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 
 /// Resolve an executable without invoking a shell or running the candidate.
@@ -96,6 +97,53 @@ pub(crate) fn is_executable_file(path: &Path, pathext: Option<&str>) -> bool {
         path.is_file()
     }
 }
+
+/// Returns `current` with every existing directory from `fallbacks` that is not already on it
+/// appended, or `None` when nothing changes. Append-only so system tools earlier on the path
+/// are never shadowed. An unset or empty `current` is left alone.
+// Only the unix startup path calls this; tests exercise it on every platform.
+#[cfg_attr(not(unix), allow(dead_code))]
+pub(crate) fn append_missing_path_dirs(current: &OsStr, fallbacks: &[PathBuf]) -> Option<OsString> {
+    if current.is_empty() {
+        return None;
+    }
+    let mut dirs: Vec<PathBuf> = std::env::split_paths(current).collect();
+    let mut changed = false;
+    for dir in fallbacks {
+        if dir.is_dir() && !dirs.contains(dir) {
+            dirs.push(dir.clone());
+            changed = true;
+        }
+    }
+    if changed {
+        std::env::join_paths(dirs).ok()
+    } else {
+        None
+    }
+}
+
+/// A GUI launch (Finder/launchd) starts with a minimal `PATH` that lacks Homebrew and the
+/// per-user bin directory, so `gh`, `python3`, and `claude` would not resolve. Call once at
+/// startup before other threads exist.
+#[cfg(unix)]
+pub fn extend_path_with_tool_dirs() {
+    let Some(current) = std::env::var_os("PATH") else {
+        return;
+    };
+    let mut fallbacks = vec![
+        PathBuf::from("/opt/homebrew/bin"),
+        PathBuf::from("/usr/local/bin"),
+    ];
+    if let Ok(home) = crate::cursor_profile_paths::resolve_user_home() {
+        fallbacks.push(home.join(".local/bin"));
+    }
+    if let Some(updated) = append_missing_path_dirs(&current, &fallbacks) {
+        std::env::set_var("PATH", updated);
+    }
+}
+
+#[cfg(not(unix))]
+pub fn extend_path_with_tool_dirs() {}
 
 #[cfg(test)]
 mod tests {
@@ -212,6 +260,42 @@ mod tests {
                 .map(|n| n.to_string_lossy().to_ascii_lowercase())
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    fn path_list(dirs: &[&Path]) -> OsString {
+        std::env::join_paths(dirs).expect("join paths")
+    }
+
+    #[test]
+    fn path_merge_appends_existing_missing_dirs_after_current_entries() {
+        let first = temp_bin_dir("merge-first");
+        let extra = temp_bin_dir("merge-extra");
+        let current = path_list(&[Path::new("/usr/bin"), &first]);
+        let merged = append_missing_path_dirs(&current, std::slice::from_ref(&extra))
+            .expect("extra dir appended");
+        let dirs: Vec<PathBuf> = std::env::split_paths(&merged).collect();
+        assert_eq!(
+            dirs,
+            vec![PathBuf::from("/usr/bin"), first.clone(), extra.clone()]
+        );
+        let _ = fs::remove_dir_all(&first);
+        let _ = fs::remove_dir_all(&extra);
+    }
+
+    #[test]
+    fn path_merge_skips_missing_and_already_present_dirs() {
+        let present = temp_bin_dir("merge-present");
+        let missing = std::env::temp_dir().join("aw-exec-merge-does-not-exist-xyz");
+        let current = path_list(&[&present]);
+        assert!(append_missing_path_dirs(&current, &[present.clone(), missing]).is_none());
+        let _ = fs::remove_dir_all(&present);
+    }
+
+    #[test]
+    fn path_merge_leaves_empty_path_untouched() {
+        let extra = temp_bin_dir("merge-empty");
+        assert!(append_missing_path_dirs(OsStr::new(""), std::slice::from_ref(&extra)).is_none());
+        let _ = fs::remove_dir_all(&extra);
     }
 
     #[test]

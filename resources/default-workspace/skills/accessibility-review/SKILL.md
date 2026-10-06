@@ -1,6 +1,6 @@
 ---
 name: accessibility-review
-description: Review user interfaces for practical WCAG 2.2 AA accessibility risks around semantics, controls, keyboard, focus, labels, contrast, and responsive usability.
+description: Audits UI code or a running app for WCAG 2.2 AA risks in semantics, names, keyboard, focus, labels, contrast, and reflow. Use when an accessibility review is requested or custom controls, modals, menus, live status, or dynamic validation change. Not for visual direction (frontend-design).
 category: accessibility
 risk: low
 targets: codex, opencode, claude, cursor
@@ -9,16 +9,11 @@ related: frontend-design, browser-qa
 
 # Accessibility Review
 
-## When To Use
-
-- UI components, forms, navigation, menus, modals, dropdowns, tables, dashboards, checkout, onboarding, or admin screens change.
-- A review asks whether controls are usable by keyboard, screen readers, touch, or text scaling.
-- Adding custom controls, dynamic validation, async status, live updates, drag/drop, or complex interactive widgets.
-- Before accepting frontend changes that affect user input or task completion.
+Done when: every changed interactive control is checked for name, role, state, keyboard operation, and visible focus, and each finding states its evidence type (observed or code-inferred) and a fix.
 
 ## Do Not Use When
 
-- The task is primarily visual style, brand, or layout polish; use `frontend-design`.
+- The task is primarily visual style, brand, or layout polish, or baseline accessibility while building UI; use `frontend-design`.
 - The task is runtime browser verification; use `browser-qa` as well.
 - The task requires formal legal certification or a full WCAG audit.
 - The UI cannot be inspected in code, screenshots, or browser output.
@@ -59,7 +54,7 @@ related: frontend-design, browser-qa
 ## Output
 
 - Scope reviewed.
-- Findings with severity, evidence, and affected users.
+- Findings with severity (blocker, serious, moderate, minor by effect on users), evidence type (`observed` when keyboard or assistive tech was exercised, `code-inferred` otherwise), and affected users.
 - Recommended fix for each issue.
 - Checks run: code, browser, keyboard, automated scan, screenshot, or manual inspection.
 - Not verified.
