@@ -18,6 +18,7 @@ function read(rel: string): string {
 function readStyles(): string {
   return [
     "src/styles/_tokens.scss",
+    "src/styles/_primitives.scss",
     "src/styles/_shell.scss",
     "src/styles/_content.scss",
     "src/styles/_settings.scss",

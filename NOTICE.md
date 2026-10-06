@@ -43,4 +43,8 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 
-The root LICENSE applies to this repository. This notice preserves attribution for adapted third-party skill material included in the bundled starter workspace.
+## Fonts
+
+IBM Plex Mono — Copyright 2017 IBM Corp. All rights reserved. Licensed under the SIL Open Font License, Version 1.1 (reserved font name "Plex"); the full licence text is at `src/assets/fonts/ibm-plex-mono/OFL.txt`. The bundled files are the unmodified latin-subset woff2 builds from the Fontsource package `@fontsource/ibm-plex-mono` 5.3.0.
+
+The root LICENSE applies to this repository. This notice preserves attribution for adapted third-party skill material included in the bundled starter workspace and for the bundled font.

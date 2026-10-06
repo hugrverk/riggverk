@@ -25,7 +25,7 @@
   border: none;
   border-radius: 0;
   padding: 12px 18px;
-  font-size: calc(var(--text-base) * 0.867);
+  font-size: var(--fs);
   line-height: 1.6;
   color: var(--text);
   resize: none;
@@ -46,7 +46,7 @@
 }
 
 .editor-save-status {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 500;
   margin-left: auto;
 }
@@ -88,7 +88,7 @@
 }
 
 .docs-create-label span {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   width: 36px;
   flex-shrink: 0;
@@ -99,7 +99,7 @@
   border: 1px solid var(--border);
   border-radius: 3px;
   padding: 2px 8px;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text);
   flex: 1;
   outline: none;
@@ -123,7 +123,7 @@
 }
 
 .docs-create-error {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--fail);
   white-space: nowrap;
   overflow: hidden;
@@ -133,7 +133,7 @@
 /* ---- markdown ---- */
 
 .markdown-body {
-  font-size: calc(var(--text-base) * 0.933);
+  font-size: var(--fs);
   line-height: 1.7;
 }
 
@@ -146,8 +146,8 @@
 }
 .markdown-body h1 { font-size: var(--font-size-heading); }
 .markdown-body h2 { font-size: var(--text-base); }
-.markdown-body h3 { font-size: calc(var(--text-base) * 0.933); }
-.markdown-body h4 { font-size: calc(var(--text-base) * 0.867); }
+.markdown-body h3 { font-size: var(--fs); }
+.markdown-body h4 { font-size: var(--fs); }
 
 .markdown-body p { margin: 0 0 10px; line-height: 1.7; }
 

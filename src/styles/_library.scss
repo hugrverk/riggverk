@@ -66,7 +66,7 @@
 }
 
 .lib-docs-stale-hint {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin: 0 0 8px;
   line-height: 1.4;
@@ -165,7 +165,7 @@
 
 .lib-sidebar-item-tag {
   display: inline-block;
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   padding: 1px 5px;
   border-radius: 2px;
   background: var(--accent-dim);
@@ -240,7 +240,7 @@
 
 .lib-search-clear {
   flex-shrink: 0;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   padding: 2px 8px;
   opacity: 0.7;
 }
@@ -262,7 +262,7 @@
   display: flex;
   align-items: center;
   padding: 20px;
-  font-size: calc(var(--text-base) * 0.867);
+  font-size: var(--fs);
   color: var(--text-muted);
   opacity: 0.7;
 }
@@ -293,7 +293,7 @@
 }
 
 .lib-editor-meta-title {
-  font-size: calc(var(--text-base) * 0.933);
+  font-size: var(--fs);
   font-weight: 600;
   color: var(--text-heading);
   white-space: nowrap;
@@ -302,7 +302,7 @@
 }
 
 .lib-editor-meta-path {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   opacity: 0.7;
   white-space: nowrap;
@@ -423,7 +423,7 @@
 .configs-bundle-item {
   display: flex;
   gap: 6px;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   line-height: 1.5;
 }
 
@@ -440,11 +440,11 @@
 }
 
 .configs-bundle-val-sm {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
 }
 
 .configs-bundle-val-note {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   opacity: 0.75;
 }
 
@@ -487,14 +487,14 @@
 }
 
 .config-source-tab-label {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
 }
 
 .config-source-tab-helper {
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   opacity: 0.6;
   white-space: nowrap;
@@ -517,7 +517,7 @@
 
 .config-snapshot-notice {
   padding: 6px 14px;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   background: var(--bg-inset);
   border-bottom: 1px solid var(--border);

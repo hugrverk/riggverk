@@ -69,7 +69,7 @@
   transition: background 0.4s ease;
 }
 
-.installed-map-cell-ok { color: var(--accent); border-color: var(--active-border); }
+.installed-map-cell-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
 .installed-map-cell-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
 .installed-map-cell-fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 30%, transparent); }
 .installed-map-cell-muted { color: var(--text-muted); }
@@ -170,7 +170,7 @@
 }
 
 .tui-statusline-ok .tui-status-mark,
-.tui-statusline-ok .tui-status-text { color: var(--accent); }
+.tui-statusline-ok .tui-status-text { color: var(--ok); }
 .tui-statusline-fail .tui-status-mark,
 .tui-statusline-fail .tui-status-text { color: var(--fail); }
 

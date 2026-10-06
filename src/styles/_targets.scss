@@ -102,7 +102,7 @@
 
 .target-page-warning {
   margin: 6px 0 0;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   line-height: 1.4;
   color: var(--dirty);
 }
@@ -133,7 +133,7 @@
 
 .target-panel-title {
   margin: 0;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -142,7 +142,7 @@
 
 .target-page-layout .ws-section-title,
 .target-page-layout .target-panel-title {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -157,7 +157,7 @@
 }
 
 .target-panel-group-label {
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -177,7 +177,7 @@
 }
 
 .target-settings-dirty {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--dirty);
   padding: 6px 10px;
   margin: 8px 14px 0;
@@ -188,7 +188,7 @@
 
 .settings-target-path {
   color: var(--text-muted);
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   margin-left: auto;
 }
 

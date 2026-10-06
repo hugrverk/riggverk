@@ -73,7 +73,7 @@
 
 .tool-section-tab-count {
   color: var(--text-muted);
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   flex-shrink: 0;
 }
 
@@ -223,13 +223,13 @@
 }
 
 .prompt-loops-card-title {
-  font-size: calc(var(--text-base) * 0.867);
+  font-size: var(--fs);
   font-weight: 500;
   color: var(--text-heading);
 }
 
 .prompt-loops-card-id {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
@@ -273,7 +273,7 @@
   border: 1px solid var(--border);
   background: var(--bg-inset);
   color: var(--text-muted);
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   padding: 4px 8px;
   cursor: pointer;
   border-radius: var(--radius);
@@ -357,7 +357,7 @@
 
 .prompt-loops-options-summary {
   cursor: pointer;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   list-style: none;
   user-select: none;
@@ -388,7 +388,7 @@
   background: var(--bg-inset);
   color: var(--text-muted);
   font-family: var(--font-mono);
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   padding: 4px 8px;
   cursor: pointer;
   border-radius: var(--radius);

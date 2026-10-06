@@ -5,6 +5,7 @@ import { applyThemeSettings, defaultSettings } from "./lib/settingsDraft";
 
 const stylePartials = [
   "_tokens.scss",
+  "_primitives.scss",
   "_shell.scss",
   "_content.scss",
   "_settings.scss",

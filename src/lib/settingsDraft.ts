@@ -19,13 +19,13 @@ export const APP_FONT_SIZE_LABELS: Record<AppSettings["app_font_size"], string> 
 export function appFontSizePx(size: AppSettings["app_font_size"]): string {
   switch (size) {
     case "small":
-      return "13px";
+      return "12px";
     case "large":
-      return "17px";
-    case "extra-large":
-      return "19px";
-    default:
       return "15px";
+    case "extra-large":
+      return "17px";
+    default:
+      return "13px";
   }
 }
 
@@ -97,14 +97,21 @@ export function themeColorDefaults(appearance: AppSettings["appearance"]): {
 } {
   switch (appearance) {
     case "light":
-      return { background: "#f5f5f5", foreground: "#1a1a1a" };
+      return { background: "#f7f6f2", foreground: "#1a1a1a" };
     case "dark":
-      return { background: "#212121", foreground: "#e0e0e0" };
+      return { background: "#121314", foreground: "#e4e4e0" };
     case "system":
       return window.matchMedia("(prefers-color-scheme: dark)").matches
-        ? { background: "#212121", foreground: "#e0e0e0" }
-        : { background: "#f5f5f5", foreground: "#1a1a1a" };
+        ? { background: "#121314", foreground: "#e4e4e0" }
+        : { background: "#f7f6f2", foreground: "#1a1a1a" };
   }
+}
+
+/** Text colour for surfaces filled with the accent (active tab, mode badge, primary button). */
+export function inverseForeground(accentHex: string): string {
+  return contrastRatio(accentHex, "#ffffff") >= contrastRatio(accentHex, "#111111")
+    ? "#ffffff"
+    : "#111111";
 }
 
 export function hasPoorContrast(foreground: string | null, background: string | null): boolean {
@@ -125,9 +132,11 @@ export function applyThemeSettings(settings: AppSettings): void {
   if (settings.accent_color && THEME_HEX_RE.test(settings.accent_color)) {
     root.style.setProperty("--accent", settings.accent_color);
     root.style.setProperty("--accent-rgb", hexToRgb(settings.accent_color));
+    root.style.setProperty("--inv-fg", inverseForeground(settings.accent_color));
   } else {
     root.style.removeProperty("--accent");
     root.style.removeProperty("--accent-rgb");
+    root.style.removeProperty("--inv-fg");
   }
 
   if (settings.background_color && THEME_HEX_RE.test(settings.background_color)) {

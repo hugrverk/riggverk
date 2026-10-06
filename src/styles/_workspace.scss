@@ -87,7 +87,7 @@
 }
 
 .ws-terminal-title {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   color: var(--text-heading);
@@ -137,7 +137,7 @@
 }
 
 .ws-path-status-detail {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   color: var(--text-muted);
   margin-top: 6px;
 }
@@ -222,7 +222,7 @@
 
 .start-block-copy {
   margin: 0 0 8px;
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   line-height: 1.45;
   color: var(--text-muted);
   max-width: 58ch;
@@ -233,7 +233,7 @@
 }
 
 .start-verify-backup-chip {
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
@@ -243,9 +243,9 @@
 }
 
 .start-verify-backup-chip-ok {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: var(--accent-dim);
+  color: var(--ok);
+  border-color: var(--ok);
+  background: var(--ok-bg);
 }
 
 .start-verify-backup-chip-muted {
@@ -260,13 +260,13 @@
 
 /* ── colour helpers ── */
 
-.ws-color-ok { color: var(--accent); }
+.ws-color-ok { color: var(--ok); }
 .ws-color-warn { color: var(--warn); }
 .ws-color-fail { color: var(--fail); }
 .ws-color-dim { color: var(--text-muted); opacity: 0.5; }
 
 .ws-dot {
-  font-size: calc(var(--text-base) * 0.467);
+  font-size: var(--fs-sm);
   margin-right: 5px;
   flex-shrink: 0;
 }
@@ -355,7 +355,7 @@
 }
 
 .ws-section-title {
-  font-size: calc(var(--text-base) * 0.733);
+  font-size: var(--fs-sm);
   font-weight: 600;
   letter-spacing: 0.06em;
   text-transform: uppercase;
@@ -432,21 +432,21 @@
 }
 
 .ws-section-chip-ok {
-  color: var(--accent);
-  border-color: rgba(var(--accent-rgb), 0.25);
-  background: var(--accent-dim);
+  color: var(--ok);
+  border-color: var(--ok);
+  background: var(--ok-bg);
 }
 
 .ws-section-chip-warn {
   color: var(--warn);
-  border-color: rgba(251, 191, 36, 0.25);
-  background: rgba(251, 191, 36, 0.08);
+  border-color: var(--warn);
+  background: var(--warn-bg);
 }
 
 .ws-section-chip-fail {
   color: var(--fail);
-  border-color: rgba(248, 113, 113, 0.25);
-  background: rgba(248, 113, 113, 0.08);
+  border-color: var(--fail);
+  background: var(--fail-bg);
 }
 
 .ws-section-chip-muted {
@@ -475,7 +475,7 @@
   min-width: 48px;
   flex-shrink: 0;
   text-transform: uppercase;
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   letter-spacing: 0.04em;
 }
 
@@ -489,7 +489,7 @@
 
 .ws-runtime-row-detail {
   color: var(--text-muted);
-  font-size: calc(var(--text-base) * 0.6);
+  font-size: var(--fs-sm);
   opacity: 0.7;
 }
 
@@ -500,7 +500,7 @@
 }
 
 .ws-runtime-next-action-ok {
-  color: var(--accent);
+  color: var(--ok);
 }
 
 .ws-runtime-next-action-warn {
@@ -511,43 +511,16 @@
   color: var(--fail);
 }
 
-/* ---- motion (subtle; disabled when user prefers reduced motion) ---- */
-
-@keyframes view-enter {
-  from {
-    opacity: 0;
-    transform: translateY(5px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
+/* ---- transitions (the global reduced-motion rules live in _tokens.scss) ---- */
 
 .ws-panel, .ws-section, .target-panel {
   transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
 .ws-panel:focus-within, .ws-section:focus-within, .target-panel:focus-within, .settings-target-row:focus-visible {
-  border-color: rgba(var(--accent-rgb), 0.28);
+  border-color: var(--accent);
 }
 
 .settings-target-row {
   transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .view-area > section,
-  .view-area > * > section {
-    animation: none;
-  }
-
-  *,
-  *::before,
-  *::after {
-    animation-duration: 0.01ms !important;
-    animation-iteration-count: 1 !important;
-    transition-duration: 0.01ms !important;
-    scroll-behavior: auto !important;
-  }
 }
