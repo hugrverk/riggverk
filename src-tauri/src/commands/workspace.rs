@@ -476,14 +476,70 @@ pub fn get_workspace_diagnostics() -> Result<WorkspaceDiagnostics, String> {
     })
 }
 
+/// `AGENT_WORKSPACE_PATH` wins over any saved workspace (see `configured_workspace_path`), so a
+/// workspace chosen in the app would silently not take effect while it is set.
+fn ensure_no_workspace_env_override() -> Result<(), String> {
+    let overridden = std::env::var("AGENT_WORKSPACE_PATH")
+        .map(|value| !value.trim().is_empty())
+        .unwrap_or(false);
+    if overridden {
+        return Err(
+            "AGENT_WORKSPACE_PATH is set and overrides the workspace chosen in the app; unset it to switch workspaces"
+                .to_string(),
+        );
+    }
+    Ok(())
+}
+
+/// Adds what is missing to the generic invalid-workspace error, for the folder picker.
+fn explain_invalid_workspace(path: &Path, error: String) -> String {
+    let missing = if !path.is_dir() {
+        "folder not found".to_string()
+    } else if let Some(def) = workspace_marker_defs()
+        .iter()
+        .find(|def| !def.kind.exists(path, def.rel_path))
+    {
+        format!("missing {}", def.rel_path)
+    } else if !workspace_has_cursor_mdc_rule(path) {
+        "missing templates/cursor/rules/*.mdc".to_string()
+    } else {
+        return error;
+    };
+    format!("{error} ({missing})")
+}
+
 #[tauri::command]
 pub fn try_set_active_workspace_path(path: String) -> Result<settings::AppSettings, String> {
     let normalized = normalize_user_workspace_path_for_save(&path)?
         .ok_or_else(|| "workspace path must be absolute or start with ~/".to_string())?;
-    let canonical = validate_workspace_root(PathBuf::from(&normalized))?;
+    let canonical = validate_workspace_root(PathBuf::from(&normalized))
+        .map_err(|error| explain_invalid_workspace(Path::new(&normalized), error))?;
+    ensure_no_workspace_env_override()?;
+    // The default folder is stored as "no custom workspace", so it reads as the default afterwards.
+    let is_default = default_installed_workspace_path()
+        .ok()
+        .and_then(|default| default.canonicalize().ok())
+        .is_some_and(|default| default == canonical);
     let canonical_path = canonical.to_string_lossy().into_owned();
     settings::mutate_settings(|current| {
-        current.workspace_path = Some(canonical_path);
+        current.workspace_path = if is_default {
+            None
+        } else {
+            Some(canonical_path)
+        };
+        Ok(settings::MutationOutcome::Changed)
+    })
+}
+
+/// Back to the default workspace (`~/.config/agent-workspace`): no custom path saved.
+#[tauri::command]
+pub fn reset_active_workspace_path() -> Result<settings::AppSettings, String> {
+    ensure_no_workspace_env_override()?;
+    settings::mutate_settings(|current| {
+        if current.workspace_path.is_none() {
+            return Ok(settings::MutationOutcome::Unchanged);
+        }
+        current.workspace_path = None;
         Ok(settings::MutationOutcome::Changed)
     })
 }
@@ -564,8 +620,9 @@ pub fn read_brain_setup_seed() -> Result<BrainSetupSeedResult, String> {
 #[cfg(test)]
 mod tests {
     use super::{
-        configured_workspace_path, persisted_workspace_path_is_valid,
-        read_brain_setup_seed_under_root, repair_workspace_target_path, scrub_stale_workspace_path,
+        configured_workspace_path, default_installed_workspace_path,
+        persisted_workspace_path_is_valid, read_brain_setup_seed_under_root,
+        repair_workspace_target_path, reset_active_workspace_path, scrub_stale_workspace_path,
         try_set_active_workspace_path, validate_workspace_root,
         workspace_diagnostics_for_unconfigured, BRAIN_SETUP_SEED_REL, NO_WORKSPACE_SELECTED,
     };
@@ -1086,6 +1143,105 @@ mod tests {
             .into_owned();
         let result = try_set_active_workspace_path(path);
         assert!(result.is_err(), "invalid path must not become active");
+    }
+
+    /// Runs `test` with HOME and the settings file under a temp dir and no `AGENT_WORKSPACE_PATH`,
+    /// so the commands that persist settings never touch the real ones.
+    fn with_isolated_settings<F: FnOnce(&Path)>(name: &str, test: F) {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_root(name);
+        fs::create_dir_all(&home).expect("create temp home");
+        crate::test_env::set_test_user_dirs(&home);
+        unsafe { std::env::remove_var("AGENT_WORKSPACE_PATH") };
+        test(&home);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn try_set_active_workspace_path_names_what_is_missing() {
+        let empty = temp_root("activate-empty");
+        mkdir(&empty, "");
+        let path = empty.to_string_lossy().into_owned();
+        let error = try_set_active_workspace_path(path).expect_err("empty folder is invalid");
+        cleanup(&empty);
+
+        assert!(error.contains("invalid workspace path"), "{error}");
+        assert!(
+            error.contains("missing .agent-workspace/workspace.json"),
+            "{error}"
+        );
+    }
+
+    #[test]
+    fn try_set_active_workspace_path_persists_a_valid_workspace_and_reset_clears_it() {
+        with_isolated_settings("activate-persist-home", |_| {
+            let root = setup_valid_workspace("activate-persist");
+            let saved = try_set_active_workspace_path(root.to_string_lossy().into_owned())
+                .expect("valid workspace activates");
+            let canonical = root
+                .canonicalize()
+                .expect("canonical root")
+                .to_string_lossy()
+                .into_owned();
+            assert_eq!(saved.workspace_path.as_deref(), Some(canonical.as_str()));
+            assert_eq!(
+                crate::settings::load().workspace_path.as_deref(),
+                Some(canonical.as_str())
+            );
+
+            let reset = reset_active_workspace_path().expect("reset");
+            assert_eq!(reset.workspace_path, None);
+            assert_eq!(crate::settings::load().workspace_path, None);
+            cleanup(&root);
+        });
+    }
+
+    #[test]
+    fn choosing_the_default_folder_stores_no_custom_path() {
+        with_isolated_settings("activate-default-home", |_| {
+            let default = default_installed_workspace_path().expect("default path");
+            for rel in [
+                ".agent-workspace/workspace.json",
+                "scripts/bootstrap.sh",
+                "scripts/install-agent-rules.sh",
+                "scripts/install-opencode-config.sh",
+                "scripts/install-codex-config.sh",
+                "scripts/install-cursor-workspace.sh",
+                "scripts/install-skills.sh",
+                "templates/global-agent-rules.md",
+                "templates/opencode.json",
+                "templates/codex/config.toml",
+                "templates/cursor/rules/workspace.mdc",
+                "README.md",
+            ] {
+                write_file(&default, rel, "x");
+            }
+            mkdir(&default, "templates/cursor/agents");
+            mkdir(&default, "skills");
+
+            let saved = try_set_active_workspace_path(default.to_string_lossy().into_owned())
+                .expect("default workspace activates");
+            assert_eq!(saved.workspace_path, None);
+        });
+    }
+
+    #[test]
+    fn workspace_choice_is_refused_while_the_env_override_is_set() {
+        with_isolated_settings("activate-env-home", |_| {
+            let root = setup_valid_workspace("activate-env");
+            unsafe { std::env::set_var("AGENT_WORKSPACE_PATH", "/somewhere/else") };
+
+            let chosen = try_set_active_workspace_path(root.to_string_lossy().into_owned());
+            let reset = reset_active_workspace_path();
+            cleanup(&root);
+
+            for result in [chosen, reset] {
+                let error = result.expect_err("the env override must be reported");
+                assert!(error.contains("AGENT_WORKSPACE_PATH"), "{error}");
+            }
+            assert_eq!(crate::settings::load().workspace_path, None);
+        });
     }
 
     #[test]

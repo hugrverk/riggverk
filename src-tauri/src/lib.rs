@@ -51,9 +51,9 @@ use commands::{
     preview_rules_conversion, preview_rules_diff, preview_setup, preview_uninstall,
     read_agent_source, read_agent_template, read_brain_setup_seed, read_config_template, read_doc,
     read_opencode_config_source, read_opencode_model_selection, read_skill,
-    rollback_setup_transaction, run_action, save_agent_source, save_agent_template, save_doc,
-    save_opencode_config_source, set_rules_user_managed, try_set_active_workspace_path,
-    update_opencode_model_selection, update_settings,
+    reset_active_workspace_path, rollback_setup_transaction, run_action, save_agent_source,
+    save_agent_template, save_doc, save_opencode_config_source, set_rules_user_managed,
+    try_set_active_workspace_path, update_opencode_model_selection, update_settings,
 };
 use tauri::Manager;
 
@@ -78,6 +78,7 @@ pub fn run() {
             get_workspace_diagnostics,
             open_default_workspace_folder,
             try_set_active_workspace_path,
+            reset_active_workspace_path,
             run_action,
             get_claude_runtime_health,
             get_codex_runtime_health,
