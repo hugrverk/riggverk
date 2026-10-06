@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# Preview/apply smoke for the CLI rule and runtime-agent scripts. The app no
+# longer runs these as actions (release_check is the only app action); the
+# scripts stay as an optional CLI, so their diff/apply behaviour is still checked
+# here. Backup-first and fail-fast behaviour: scripts/check-workspace-script-safety.sh.
 set -euo pipefail
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
