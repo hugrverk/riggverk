@@ -10,12 +10,21 @@ shell for a following `-c`-style flag literal in the same item.
 
 from __future__ import annotations
 
+import importlib.util
 import re
 import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SOURCE = ROOT / "src-tauri" / "src"
+
+# Reuse the contract checker's #[cfg(test)] stripper: test fixtures may start
+# shells on purpose (e.g. timeout tests); only production code is scanned.
+_spec = importlib.util.spec_from_file_location(
+    "managed_installation_contract", ROOT / "scripts" / "check-managed-installation-contract.py"
+)
+_contract = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_contract)
 
 STRING_LITERAL = re.compile(r'"([^"\n\\]*)"')
 SHELL_NAMES = {"sh", "bash", "zsh", "dash", "ksh", "csh", "fish"}
@@ -34,7 +43,7 @@ def shell_literal_names(text: str):
 
 
 def scan(path: Path, root: Path) -> list[str]:
-    text = path.read_text(encoding="utf-8", errors="replace")
+    text = _contract.production_rust(path)
     hits: list[str] = []
     for match in shell_literal_names(text):
         window = text[match.end() : match.end() + WINDOW]
