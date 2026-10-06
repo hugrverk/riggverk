@@ -246,7 +246,7 @@ fn list_custom_docs(root: &Path) -> Vec<(String, String, String, PathBuf)> {
     if let Ok(entries) = std::fs::read_dir(&context_dir) {
         for entry in entries.flatten() {
             let path = entry.path();
-            if !path.is_file() {
+            if !entry.file_type().is_ok_and(|ft| ft.is_file()) {
                 continue;
             }
             if path.extension().is_none_or(|e| e != "md") {
@@ -290,10 +290,10 @@ fn read_custom_doc(root: &Path, slug: &str) -> Result<DocumentContent, String> {
     }
     let rel = custom_doc_rel_path(slug);
     let path = root.join(&rel);
-    if !path.exists() {
+    if std::fs::symlink_metadata(&path).is_err() {
         return Err(format!("unknown doc: custom:{}", slug));
     }
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let content = read_workspace_file(root, &path)?;
     let title = doc_title_from_content_or_slug(&content, slug);
     Ok(DocumentContent {
         id: format!("custom:{}", slug),
@@ -374,15 +374,18 @@ pub fn list_docs() -> Result<Vec<DocSummary>, String> {
 #[tauri::command]
 pub fn read_doc(id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
+    read_doc_at_root(&root, &id)
+}
+
+fn read_doc_at_root(root: &Path, id: &str) -> Result<DocumentContent, String> {
     if let Some(slug) = id.strip_prefix("custom:") {
-        return read_custom_doc(&root, slug);
+        return read_custom_doc(root, slug);
     }
-    let docs = existing_curated_docs(&root);
-    let found = docs.iter().find(|(i, _, _, _)| i == &id);
+    let docs = existing_curated_docs(root);
+    let found = docs.iter().find(|(i, _, _, _)| i == id);
     match found {
         Some((i, section, title, path)) => {
-            let content =
-                std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))?;
+            let content = read_workspace_file(root, path)?;
             Ok(DocumentContent {
                 id: i.clone(),
                 title: title.clone(),
@@ -506,6 +509,20 @@ pub(crate) fn safe_canonical_target(root: &Path, target_path: &Path) -> Result<P
     Ok(canonical_target)
 }
 
+/// Reads a workspace file after checking containment and that neither the file nor any
+/// parent below the workspace root is a symlink.
+fn read_workspace_file(root: &Path, path: &Path) -> Result<String, String> {
+    safe_canonical_target(root, path)?;
+    crate::path_safety::reject_symlink_parent_chain(path, root, "workspace file")?;
+    std::fs::read_to_string(path).map_err(|e| format!("read error: {}", e))
+}
+
+/// Atomic, symlink-refusing write of a workspace file (temp file + rename inside `root`).
+fn write_workspace_file(root: &Path, path: &Path, content: &str) -> Result<(), String> {
+    crate::safe_filesystem::write_regular_file_atomic(path, content.as_bytes(), root)
+        .map_err(|e| format!("write error: {e}"))
+}
+
 fn save_doc_at_root(
     root: &Path,
     id: &str,
@@ -546,7 +563,7 @@ fn save_doc_at_root(
     let backup_path = doc_backup_path(&resolved_id, &target_path, custom_backup_root)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
-    std::fs::write(&target_path, content).map_err(|e| format!("write error: {}", e))?;
+    write_workspace_file(root, &target_path, content)?;
 
     Ok(ActionResult::new(
         true,
@@ -578,15 +595,17 @@ fn create_doc_at_root(
     let rel = custom_doc_rel_path(slug);
     let target_path = root.join(&rel);
 
-    if target_path.exists() {
-        return Err(format!("doc already exists: custom:{}", slug));
+    // `exists()` follows symlinks and is false for a dangling one, which a write would then follow.
+    match std::fs::symlink_metadata(&target_path) {
+        Ok(meta) if meta.file_type().is_symlink() => {
+            return Err(format!("refusing symlink doc path: custom:{}", slug));
+        }
+        Ok(_) => return Err(format!("doc already exists: custom:{}", slug)),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+        Err(e) => return Err(format!("cannot inspect doc path: {}", e)),
     }
 
     safe_canonical_target(root, &target_path)?;
-
-    if let Some(parent) = target_path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| format!("create dir error: {}", e))?;
-    }
 
     let trimmed_title = title.trim();
     let initial_content = if let Some(c) = content {
@@ -599,7 +618,7 @@ fn create_doc_at_root(
     if initial_content.len() > MAX_DOC_SIZE {
         return Err("content exceeds 512 KB limit".to_string());
     }
-    std::fs::write(&target_path, &initial_content).map_err(|e| format!("write error: {}", e))?;
+    write_workspace_file(root, &target_path, &initial_content)?;
 
     Ok(DocumentContent {
         id: format!("custom:{}", slug),
@@ -975,6 +994,226 @@ mod tests {
         assert!(!is_valid_slug("has space"));
         assert!(!is_valid_slug("has_underscore"));
         assert!(!is_valid_slug("has@special"));
+    }
+
+    #[test]
+    fn save_doc_replaces_atomically_without_temp_leftovers() {
+        let root = temp_root("save-atomic");
+        let backup_root = temp_root("save-atomic-backup");
+        write_file(&root, "README.md", "# old\n");
+
+        save_doc_at_root(&root, "README.md", "# new\n", Some(&backup_root)).expect("save");
+
+        let leftovers: Vec<String> = fs::read_dir(&root)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .filter(|name| name.ends_with(".tmp"))
+            .collect();
+        let saved = fs::read_to_string(root.join("README.md")).unwrap();
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+        assert!(leftovers.is_empty(), "{leftovers:?}");
+        assert_eq!(saved, "# new\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn save_doc_refuses_symlinked_doc_and_leaves_target_untouched() {
+        let root = temp_root("save-symlink");
+        let backup_root = temp_root("save-symlink-backup");
+        write_file(&root, "docs/real.md", "# real\n");
+        std::os::unix::fs::symlink(root.join("docs/real.md"), root.join("README.md")).unwrap();
+
+        let result = save_doc_at_root(&root, "README.md", "# changed\n", Some(&backup_root));
+
+        let real = fs::read_to_string(root.join("docs/real.md")).unwrap();
+        let link_still_symlink = fs::symlink_metadata(root.join("README.md"))
+            .unwrap()
+            .file_type()
+            .is_symlink();
+        cleanup(&root);
+        let _ = fs::remove_dir_all(&backup_root);
+        let err = result.expect_err("symlinked doc must be refused");
+        assert!(err.contains("symlink"), "{err}");
+        assert_eq!(real, "# real\n");
+        assert!(link_still_symlink);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_doc_refuses_symlink_to_file_outside_workspace() {
+        let root = temp_root("read-doc-outside");
+        let outside_dir = temp_root("read-doc-outside-target");
+        write_file(&outside_dir, "secret.md", "secret");
+        fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(outside_dir.join("secret.md"), root.join("README.md")).unwrap();
+
+        let result = read_doc_at_root(&root, "README.md");
+
+        cleanup(&root);
+        cleanup(&outside_dir);
+        let err = result.expect_err("outside symlink must be refused");
+        assert!(err.contains("outside workspace"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_doc_refuses_symlink_inside_workspace() {
+        let root = temp_root("read-doc-inside");
+        write_file(&root, "docs/real.md", "# real\n");
+        std::os::unix::fs::symlink(root.join("docs/real.md"), root.join("README.md")).unwrap();
+
+        let result = read_doc_at_root(&root, "README.md");
+
+        cleanup(&root);
+        let err = result.expect_err("symlinked doc must be refused");
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_custom_doc_refuses_symlink() {
+        let root = temp_root("read-custom-symlink");
+        write_file(&root, "docs/real.md", "# real\n");
+        fs::create_dir_all(root.join("docs/context")).unwrap();
+        std::os::unix::fs::symlink(
+            root.join("docs/real.md"),
+            root.join("docs/context/notes.md"),
+        )
+        .unwrap();
+
+        let result = read_doc_at_root(&root, "custom:notes");
+
+        cleanup(&root);
+        let err = result.expect_err("symlinked custom doc must be refused");
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn list_custom_docs_skips_symlinked_docs() {
+        let root = temp_root("list-custom-symlink");
+        write_file(&root, "docs/context/real.md", "# Real\n");
+        std::os::unix::fs::symlink(
+            root.join("docs/context/real.md"),
+            root.join("docs/context/linked.md"),
+        )
+        .unwrap();
+
+        let docs = list_custom_docs(&root);
+
+        cleanup(&root);
+        let ids: Vec<&str> = docs.iter().map(|(id, _, _, _)| id.as_str()).collect();
+        assert_eq!(ids, &["custom:real"]);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_agent_template_refuses_symlink() {
+        let root = temp_root("read-agent-template-symlink");
+        write_file(&root, "templates/real.md", "# rules\n");
+        std::os::unix::fs::symlink(
+            root.join("templates/real.md"),
+            root.join("templates/global-agent-rules.md"),
+        )
+        .unwrap();
+
+        let result = read_agent_template_at_root(&root);
+
+        cleanup(&root);
+        let err = result.expect_err("symlinked template must be refused");
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_agent_template_refuses_symlink_outside_workspace() {
+        let root = temp_root("read-agent-template-outside");
+        let outside_dir = temp_root("read-agent-template-outside-target");
+        write_file(&outside_dir, "secret.md", "secret");
+        fs::create_dir_all(root.join("templates")).unwrap();
+        std::os::unix::fs::symlink(
+            outside_dir.join("secret.md"),
+            root.join("templates/global-agent-rules.md"),
+        )
+        .unwrap();
+
+        let result = read_agent_template_at_root(&root);
+
+        cleanup(&root);
+        cleanup(&outside_dir);
+        let err = result.expect_err("outside symlink must be refused");
+        assert!(err.contains("outside workspace"), "{err}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn read_config_template_refuses_symlink() {
+        let root = temp_root("read-config-template-symlink");
+        write_file(&root, "templates/real.json", "{}\n");
+        std::os::unix::fs::symlink(
+            root.join("templates/real.json"),
+            root.join("templates/opencode.json"),
+        )
+        .unwrap();
+
+        let result = read_config_template_at_root(&root, "opencode_config");
+
+        cleanup(&root);
+        let err = result.expect_err("symlinked config template must be refused");
+        assert!(err.contains("symlink"), "{err}");
+    }
+
+    #[test]
+    fn read_regular_templates_still_works() {
+        let root = temp_root("read-templates-ok");
+        write_file(&root, "templates/global-agent-rules.md", "# rules\n");
+        write_file(&root, "templates/opencode.json", "{}\n");
+
+        let agent = read_agent_template_at_root(&root).expect("agent template");
+        let config = read_config_template_at_root(&root, "opencode_config").expect("config");
+
+        cleanup(&root);
+        assert_eq!(agent.content, "# rules\n");
+        assert_eq!(config.content, "{}\n");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_doc_refuses_dangling_symlink_inside_workspace() {
+        let root = temp_root("create-dangling-inside");
+        fs::create_dir_all(root.join("docs/context")).unwrap();
+        let dangling_target = root.join("elsewhere.md");
+        std::os::unix::fs::symlink(&dangling_target, root.join("docs/context/notes.md")).unwrap();
+
+        let result = create_doc_at_root(&root, "Notes", "notes", None);
+
+        let created = dangling_target.exists();
+        cleanup(&root);
+        let err = result.expect_err("dangling symlink must be refused");
+        assert!(err.contains("symlink"), "{err}");
+        assert!(!created, "write must not follow the dangling symlink");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_doc_refuses_dangling_symlink_to_outside_workspace() {
+        let root = temp_root("create-dangling-outside");
+        let outside_dir = temp_root("create-dangling-outside-target");
+        fs::create_dir_all(root.join("docs/context")).unwrap();
+        fs::create_dir_all(&outside_dir).unwrap();
+        let outside_target = outside_dir.join("created.md");
+        std::os::unix::fs::symlink(&outside_target, root.join("docs/context/notes.md")).unwrap();
+
+        let result = create_doc_at_root(&root, "Notes", "notes", None);
+
+        let created = outside_target.exists();
+        cleanup(&root);
+        cleanup(&outside_dir);
+        let err = result.expect_err("dangling symlink must be refused");
+        assert!(err.contains("symlink"), "{err}");
+        assert!(!created, "write must not escape the workspace");
     }
 
     #[test]
@@ -1756,8 +1995,12 @@ mod tests {
 #[tauri::command]
 pub fn read_agent_template() -> Result<DocumentContent, String> {
     let root = workspace_root()?;
+    read_agent_template_at_root(&root)
+}
+
+fn read_agent_template_at_root(root: &Path) -> Result<DocumentContent, String> {
     let path = root.join("templates/global-agent-rules.md");
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let content = read_workspace_file(root, &path)?;
     Ok(DocumentContent {
         id: "agent-template".into(),
         title: "Agent Rules".into(),
@@ -1810,7 +2053,7 @@ pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
     let backup_path = doc_backup_path("agent-template", &target_path, None)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
-    std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+    write_workspace_file(&root, &target_path, &content)?;
 
     Ok(ActionResult::new(
         true,
@@ -1824,12 +2067,16 @@ pub fn save_agent_template(content: String) -> Result<ActionResult, String> {
 #[tauri::command]
 pub fn read_config_template(target_id: String) -> Result<DocumentContent, String> {
     let root = workspace_root()?;
+    read_config_template_at_root(&root, &target_id)
+}
+
+fn read_config_template_at_root(root: &Path, target_id: &str) -> Result<DocumentContent, String> {
     let target = agent_targets::editable_config_targets()
         .into_iter()
         .find(|t| t.id == target_id)
         .ok_or_else(|| format!("unknown editable config target: {}", target_id))?;
     let path = root.join(target.source_rel);
-    let content = std::fs::read_to_string(&path).map_err(|e| format!("read error: {}", e))?;
+    let content = read_workspace_file(root, &path)?;
     Ok(DocumentContent {
         id: format!("config-template:{}", target_id),
         title: format!("{}.json", target_id),
@@ -1981,7 +2228,7 @@ pub fn save_opencode_config_source(
         std::fs::write(&backup_path, &existing)
             .map_err(|e| format!("backup write error: {}", e))?;
 
-        std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+        write_workspace_file(&root, &target_path, &content)?;
 
         return Ok(regenerate_opencode_snapshot_result(
             &root,
@@ -1989,7 +2236,7 @@ pub fn save_opencode_config_source(
         ));
     }
 
-    std::fs::write(&target_path, &content).map_err(|e| format!("write error: {}", e))?;
+    write_workspace_file(&root, &target_path, &content)?;
 
     Ok(regenerate_opencode_snapshot_result(&root, "saved"))
 }
@@ -2154,7 +2401,7 @@ pub fn save_agent_source(filename: String, content: String) -> Result<ActionResu
     let backup_path = doc_backup_path(&format!("agent-{}", filename), &path, None)?;
     std::fs::write(&backup_path, &existing).map_err(|e| format!("backup write error: {}", e))?;
 
-    std::fs::write(&path, &content).map_err(|e| format!("write error: {}", e))?;
+    write_workspace_file(&root, &path, &content)?;
 
     Ok(ActionResult::new(
         true,
