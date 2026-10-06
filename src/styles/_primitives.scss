@@ -8,7 +8,8 @@
      .screen                 grid container for a view's panes (padding leaves room for titles)
      .pane                   <section data-pane-id data-keyscope>; .pane:focus-within → accent border
        .pane-title           absolutely positioned on the border; <b> name, .k = "[1]" key hint
-       .pane-body            scrollable body (tabIndex=0 when it is the primary target)
+       .pane-body            scrollable body (tabIndex=0 when it is the primary target); shows an edge cue
+                             where content continues. .scroll-cue gives any other scrolling box the same cue
        .pane-foot            key hints row: <ActionKey> buttons or <span><kbd>j</kbd> move</span>
    Lists
      .rows                   <ul role="listbox">; .row = <li role="option" aria-selected>
@@ -151,6 +152,17 @@ kbd {
 }
 
 .pane-body:focus-visible { outline-offset: -2px; }
+
+/* A scrollable body shows a soft edge on each side that still has content behind it. The `local` covers move
+   with the content and hide the edge at the ends, so nothing shows when everything fits. */
+.pane-body[tabindex="0"],
+.scroll-cue {
+  background:
+    linear-gradient(var(--surface) 30%, transparent) 0 0 / 100% 20px no-repeat local,
+    linear-gradient(transparent, var(--surface) 70%) 0 100% / 100% 20px no-repeat local,
+    linear-gradient(color-mix(in srgb, var(--text-muted) 45%, transparent), transparent) 0 0 / 100% 8px no-repeat scroll,
+    linear-gradient(transparent, color-mix(in srgb, var(--text-muted) 45%, transparent)) 0 100% / 100% 8px no-repeat scroll;
+}
 
 .pane-foot {
   display: flex;
