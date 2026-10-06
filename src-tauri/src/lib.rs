@@ -29,8 +29,6 @@ mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;
 #[cfg(test)]
-mod script_action_smoke;
-#[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]
 mod test_env;

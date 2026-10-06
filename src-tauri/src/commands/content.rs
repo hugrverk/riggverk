@@ -2787,7 +2787,7 @@ mod agent_metadata_tests {
     #[test]
     fn opencode_config_runtime_sync_still_uses_opencode_json() {
         // Runtime sync target must still point to generated opencode.json
-        let targets = agent_targets::config_sync_targets();
+        let targets = agent_targets::config_targets();
         let opencode = targets.iter().find(|t| t.id == "opencode_config").unwrap();
         assert_eq!(opencode.source_rel, "templates/opencode.json");
         assert_eq!(opencode.target_rel, ".config/opencode/opencode.json");

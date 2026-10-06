@@ -338,6 +338,7 @@ struct GlobalProfilePlan {
     permissions_cleanup: Option<String>,
 }
 
+#[cfg(test)]
 fn install_agents(
     workspace_root: &Path,
     paths: &CursorProfilePaths,
@@ -566,28 +567,6 @@ pub fn run_global_profile(
         stdout,
         stderr: String::new(),
         exit_code: 0,
-    }
-}
-
-pub fn run_global_agents_only(
-    workspace_root: &Path,
-    paths: &CursorProfilePaths,
-    apply: bool,
-) -> ProfileRunOutput {
-    let mut stdout = String::new();
-    match install_agents(workspace_root, paths, apply, "global-agents", &mut stdout) {
-        Ok(()) => ProfileRunOutput {
-            success: true,
-            stdout,
-            stderr: String::new(),
-            exit_code: 0,
-        },
-        Err(err) => ProfileRunOutput {
-            success: false,
-            stdout,
-            stderr: err,
-            exit_code: 1,
-        },
     }
 }
 
