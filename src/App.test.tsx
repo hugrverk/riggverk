@@ -118,7 +118,9 @@ describe("App", () => {
     await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
 
     // The Start view exposes the default workspace folder action.
-    const openButton = await screen.findByRole("button", { name: /open folder/i });
+    const openButton = await screen.findByRole("button", { name: /open folder/i }) as HTMLButtonElement;
+    // The action stays disabled until workspace diagnostics report a valid workspace.
+    await waitFor(() => expect(openButton.disabled).toBe(false));
     await act(async () => {
       fireEvent.click(openButton);
     });
