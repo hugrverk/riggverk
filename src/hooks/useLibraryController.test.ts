@@ -181,7 +181,7 @@ describe("useLibraryController save operation identity", () => {
     const { deps } = createDeps();
     const { result } = renderHook(() => useLibraryController(deps));
 
-    invoke.mockImplementation((cmd: string, args?: { id?: string }) => {
+    invoke.mockImplementation((cmd: string) => {
       if (cmd === "read_doc") return Promise.resolve(docA);
       if (cmd === "save_doc") return Promise.resolve(successResult("save_doc", "unchanged"));
       return Promise.reject(new Error(`unexpected invoke: ${cmd}`));

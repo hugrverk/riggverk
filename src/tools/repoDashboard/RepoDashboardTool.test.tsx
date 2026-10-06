@@ -312,16 +312,13 @@ describe("RepoWorkWorkspace gh enrichment", () => {
       workId: "GH-42",
       type: "todo",
       text: "Fix pagination edge case",
-      source: "github",
+      source: "issue",
       path: "issues/42",
-      line: null,
-      area: null,
       priority: "high",
       status: "open",
-      nextAction: null,
-      verification: null,
+      needsPlan: false,
     };
-    render(
+    const { container } = render(
       <RepoWorkWorkspace
         items={[ghIssue]}
         totalItemCount={1}
@@ -346,6 +343,7 @@ describe("RepoWorkWorkspace gh enrichment", () => {
       />,
     );
     expect(screen.getByText("Fix pagination edge case")).not.toBeNull();
-    expect(screen.getByText("GitHub")).not.toBeNull();
+    // The source badge on the card (the filter dropdown also lists "GitHub").
+    expect(container.querySelector(".repo-dashboard-chip.todo")?.textContent).toBe("GitHub");
   });
 });

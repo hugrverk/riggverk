@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
-import type { RepoCommitEntry } from "../src/types";
+import type { RepoCommitEntry, RepoDashboardWorkItem } from "../src/types";
 import {
   buildActivityActorMap,
   buildActivityLegend,
-  buildDocSourceSummaries,
   buildHeatmapCells,
   buildHeatmapMonthLabels,
   buildHeatmapWeeks,
@@ -42,7 +41,6 @@ import {
   buildRemainingByType,
   workItemDocLane,
   buildWorkStatusCounts,
-  isCanonicalWorkMode,
   partitionCanonicalWorkItems,
   buildCanonicalWorkSummary,
   filterWorkItemsByCanonicalSource,
@@ -323,10 +321,10 @@ assert.equal(ghIssuesKpiLabel(false, false), "gh issues (n/a)");
 }
 
 {
-  const items = [
-    { source: "docs" as const, path: "a", text: "open", type: "todo" as const, status: "open" as const, needsPlan: false },
-    { source: "docs" as const, path: "b", text: "started", type: "todo" as const, status: "started" as const, needsPlan: true },
-    { source: "docs" as const, path: "c", text: "done", type: "todo" as const, status: "done" as const, needsPlan: false },
+  const items: RepoDashboardWorkItem[] = [
+    { source: "docs", path: "a", text: "open", type: "todo", status: "open", needsPlan: false },
+    { source: "docs", path: "b", text: "started", type: "todo", status: "started", needsPlan: true },
+    { source: "docs", path: "c", text: "done", type: "todo", status: "done", needsPlan: false },
   ];
   const partition = partitionWorkItems(items);
   assert.equal(partition.activeStarted.length, 1);

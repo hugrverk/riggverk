@@ -16,9 +16,12 @@ describe("harnessInstallation", () => {
         { surface: "codex_skills", kind: "remove", summary: "stale" },
         { surface: "codex_rules", kind: "no_change", summary: "synced" },
       ],
-      manual_steps: [],
-      is_blocked: false,
+      synced: [],
       conflicts: [],
+      manual_steps: [],
+      summary: "1 pending",
+      has_pending_changes: true,
+      is_blocked: false,
     };
     expect(surfacesNeedingApply(plan)).toEqual(["codex_skills"]);
   });

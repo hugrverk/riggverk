@@ -180,7 +180,7 @@ describe("ConfirmDialog", () => {
     );
 
     fireEvent.click(screen.getByRole("button", { name: /show confirm/i }));
-    const dialog = await screen.findByRole("dialog");
+    const dialog = (await screen.findByRole("dialog")) as HTMLDialogElement;
 
     // What a browser does for Escape on a modal dialog: key press, `cancel`, then close (which fires `close`).
     fireEvent.keyDown(dialog, { key: "Escape" });

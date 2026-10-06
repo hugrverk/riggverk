@@ -158,7 +158,7 @@ describe("useAppSettingsController mutateAppSettings", () => {
     });
 
     expect(result.current.appSettings?.enabled_target_ids).toContain("opencode_config");
-    expect(result.current.appSettings?.repo_dashboard_entries[0]?.id).toBe("imported");
+    expect(result.current.appSettings?.repo_dashboard_entries?.[0]?.id).toBe("imported");
   });
 
   it("ignores out-of-order mutation responses", async () => {
@@ -203,7 +203,7 @@ describe("useAppSettingsController mutateAppSettings", () => {
     });
 
     expect(result.current.appSettings?.appearance).toBe("light");
-    expect(result.current.appSettings?.repo_dashboard_entries).toHaveLength(0);
+    expect(result.current.appSettings?.repo_dashboard_entries ?? []).toHaveLength(0);
 
     await act(async () => {
       resolveFirst?.({

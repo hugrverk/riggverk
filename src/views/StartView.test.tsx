@@ -1,7 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { StartView } from "./StartView";
-import type { WorkspaceDiagnostics } from "../types";
+import type { InstallAgent, WorkspaceDiagnostics } from "../types";
 
 vi.mock("../components/HarnessInstallationCard", () => ({
   HarnessInstallationCard: () => <div data-testid="harness-installation-card" />,
@@ -24,11 +24,21 @@ vi.mock("../components/WorkspaceTerminal", () => ({
 }));
 
 const invalidDiagnostics: WorkspaceDiagnostics = {
-  valid: false,
   candidate_path: "/tmp/workspace",
   resolved_path: null,
+  valid: false,
+  error: "workspace missing",
+  markers: [],
+  enabled_rule_targets: 0,
+  total_rule_targets: 0,
+  enabled_config_targets: 0,
+  total_config_targets: 0,
+  backup_root: "/tmp/backups",
+  backup_root_exists: false,
   release_check_available: false,
-  issues: ["workspace missing"],
+  bundled_resources_status: "missing",
+  missing_bundled_count: 0,
+  missing_bundled_sample: [],
 };
 
 const baseProps = {
@@ -48,6 +58,7 @@ const baseProps = {
   backupCount: 0,
   onRefreshBackups: vi.fn(),
   onOpenBackupsFolder: vi.fn(),
+  enabledHarnessIds: ["codex", "opencode", "claude", "cursor"] as InstallAgent[],
 };
 
 describe("StartView uninstall recovery", () => {
