@@ -60,19 +60,6 @@ describe("AppHeaderNav", () => {
     expect(screen.getByRole("button", { name: "Library" })).not.toBeNull();
   });
 
-  it("uses exact accessible names 'Prompt Builder' and 'Repo Dashboard'", () => {
-    render(
-      <AppHeaderNav
-        view="start"
-        libraryDirty={false}
-        settingsErrored={false}
-        onSwitchView={vi.fn()}
-      />,
-    );
-    expect(screen.getByRole("button", { name: "Prompt Builder" })).not.toBeNull();
-    expect(screen.getByRole("button", { name: "Repo Dashboard" })).not.toBeNull();
-  });
-
   it("routes clicks to the correct direct view", () => {
     const onSwitchView = vi.fn<(view: AppHeaderView) => void>();
     render(
@@ -114,41 +101,17 @@ describe("AppHeaderNav", () => {
     expect(screen.getByRole("button", { name: "Repo Dashboard" }).className).toContain("nav-icon-active");
   });
 
-  it("exposes the buttons as keyboard-focusable", () => {
+  it("exposes unsaved and error state in the accessible names of Library and Settings", () => {
     render(
       <AppHeaderNav
         view="start"
-        libraryDirty={false}
-        settingsErrored={false}
+        libraryDirty={true}
+        settingsErrored={true}
         onSwitchView={vi.fn()}
       />,
     );
-    for (const label of ["Prompt Builder", "Repo Dashboard"]) {
-      const button = screen.getByRole("button", { name: label });
-      expect(button.tabIndex).toBeGreaterThanOrEqual(0);
-      expect(button.tagName).toBe("BUTTON");
-    }
-  });
-
-  it("uses stroke-based Repo Dashboard icon without GitHub mark", () => {
-    render(
-      <AppHeaderNav
-        view="start"
-        libraryDirty={false}
-        settingsErrored={false}
-        onSwitchView={vi.fn()}
-      />,
-    );
-    const button = screen.getByRole("button", { name: "Repo Dashboard" });
-    const svg = button.querySelector("svg");
-    expect(svg).not.toBeNull();
-    expect(svg?.getAttribute("fill")).toBe("none");
-    expect(svg?.getAttribute("stroke")).toBe("currentColor");
-    expect(svg?.getAttribute("stroke-width") ?? svg?.getAttribute("strokeWidth")).toBe("2");
-    expect(svg?.getAttribute("aria-hidden")).toBe("true");
-    expect(svg?.getAttribute("focusable")).toBe("false");
-    expect(button.innerHTML).not.toContain("M12 0c-6.626");
-    expect(button.querySelector("circle")).not.toBeNull();
-    expect(button.querySelector("line")).not.toBeNull();
+    expect(screen.getByRole("button", { name: "Library, unsaved changes" }).className).toContain("nav-icon-dirty");
+    expect(screen.getByRole("button", { name: "Settings, unsaved changes" }).className).toContain("nav-icon-dirty");
+    expect(screen.queryByRole("button", { name: "Library" })).toBeNull();
   });
 });

@@ -70,7 +70,6 @@ function successResult(action: string, stdout = "saved"): ActionResult {
 describe("useLibraryController save operation identity", () => {
   beforeEach(() => {
     invoke.mockReset();
-    vi.stubGlobal("confirm", () => true);
   });
 
   it("does not apply document A save after selecting document B", async () => {
@@ -123,6 +122,8 @@ describe("useLibraryController save operation identity", () => {
     expect(result.current.docDraft).toBe("beta");
     expect(result.current.docDirty).toBe(false);
     expect(result.current.docSaving).toBe(false);
+    // A stale "saved" banner for document A must not show up on document B.
+    expect(result.current.docSaveResult).toBeNull();
   });
 
   it("does not apply agent A save after selecting agent B", async () => {
@@ -173,6 +174,7 @@ describe("useLibraryController save operation identity", () => {
     expect(result.current.agentDraft).toBe("agent beta");
     expect(result.current.agentDirty).toBe(false);
     expect(result.current.agentSaving).toBe(false);
+    expect(result.current.agentSaveResult).toBeNull();
   });
 
   it("clears dirty on unchanged document save when still current", async () => {

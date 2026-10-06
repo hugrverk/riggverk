@@ -76,7 +76,11 @@ describe("RepoDashboardTool", () => {
       if (command === "get_repo_dashboard_snapshot") {
         return Promise.resolve(snapshot);
       }
-      return Promise.resolve({ repos: [], warnings: [] });
+      if (command === "discover_local_git_repos") {
+        return Promise.resolve({ repos: [], warnings: [] });
+      }
+      // Anything else is a contract drift: fail loudly instead of answering with a made-up shape.
+      return Promise.reject(new Error(`unexpected invoke: ${command}`));
     });
   });
 
@@ -111,11 +115,6 @@ describe("RepoDashboardTool", () => {
     const docsTab = screen.getByRole("tab", { name: /Docs/ });
     fireEvent.click(docsTab);
     expect(docsTab.getAttribute("aria-selected")).toBe("true");
-  });
-
-  it("renders default branch override input", () => {
-    render(<RepoDashboardTool />);
-    expect(screen.getByLabelText("Default branch override")).not.toBeNull();
   });
 
   it("editing branch state changes the input", () => {
@@ -173,11 +172,6 @@ describe("RepoDashboardTool", () => {
       const branchInput = screen.getByLabelText("Default branch override") as HTMLInputElement;
       expect(branchInput.value).toBe("develop");
     });
-  });
-
-  it("renders discover action", () => {
-    render(<RepoDashboardTool />);
-    expect(screen.getByRole("button", { name: /Discover local git repositories/i })).not.toBeNull();
   });
 
   it("discover invokes the folder picker and opens the panel", async () => {

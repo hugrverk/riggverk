@@ -65,10 +65,21 @@ describe("StartView uninstall recovery", () => {
     expect(screen.queryByRole("region", { name: /recover previous uninstall/i })).toBeNull();
   });
 
-  it("renders recovery when workspace is invalid and a candidate exists", () => {
+  it("renders recovery when a transaction candidate exists", () => {
     render(
       <StartView
         {...baseProps}
+        uninstallRecoveryTransactionId="1710000000000"
+      />,
+    );
+    expect(screen.getByRole("region", { name: /recover previous uninstall/i })).toBeTruthy();
+  });
+
+  it("keeps showing recovery after the workspace became valid again", () => {
+    render(
+      <StartView
+        {...baseProps}
+        workspaceValid={true}
         uninstallRecoveryTransactionId="1710000000000"
       />,
     );

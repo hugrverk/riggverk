@@ -24,7 +24,8 @@ describe("useTransientStatus", () => {
     act(() => {
       result.current.showStatus("again");
     });
+    expect(vi.getTimerCount()).toBe(1);
     unmount();
-    vi.advanceTimersByTime(500);
+    expect(vi.getTimerCount()).toBe(0);
   });
 });

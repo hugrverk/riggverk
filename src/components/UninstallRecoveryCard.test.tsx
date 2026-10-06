@@ -37,6 +37,9 @@ function renderCard(overrides: Partial<Parameters<typeof UninstallRecoveryCard>[
   return { onRollback, ...utils };
 }
 
+const originalShowModal = HTMLDialogElement.prototype.showModal;
+const originalClose = HTMLDialogElement.prototype.close;
+
 describe("UninstallRecoveryCard", () => {
   beforeEach(() => {
     invokeMock.mockReset();
@@ -51,6 +54,8 @@ describe("UninstallRecoveryCard", () => {
 
   afterEach(() => {
     cleanup();
+    HTMLDialogElement.prototype.showModal = originalShowModal;
+    HTMLDialogElement.prototype.close = originalClose;
   });
 
   it("does not render without a transaction candidate", () => {
@@ -60,7 +65,7 @@ describe("UninstallRecoveryCard", () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it("renders recovery when workspace is invalid", () => {
+  it("renders the recovery card for a transaction candidate", () => {
     renderCard();
     expect(screen.getByRole("region", { name: /recover previous uninstall/i })).toBeTruthy();
   });
@@ -176,7 +181,7 @@ describe("UninstallRecoveryCard", () => {
     });
   });
 
-  it("retains recovery after failed rollback and allows another preview", async () => {
+  it("keeps the card and allows another preview after a rollback attempt finishes", async () => {
     invokeMock
       .mockResolvedValueOnce(dryRunResult({ applied: ["rules"] }))
       .mockResolvedValueOnce(dryRunResult({ applied: ["rules"] }));
@@ -233,12 +238,14 @@ describe("UninstallRecoveryCard", () => {
     fireEvent.click(restoreButton);
 
     const dialog = screen.getByRole("dialog") as HTMLDialogElement;
+    expect(dialog.hasAttribute("open")).toBe(true);
+    // What a browser does for Escape on a modal dialog: key press, `cancel`, then close (which fires `close`).
     fireEvent.keyDown(dialog, { key: "Escape", code: "Escape" });
+    fireEvent(dialog, new Event("cancel", { cancelable: true }));
     dialog.close();
 
-    await waitFor(() => {
-      expect(onRollback).not.toHaveBeenCalled();
-    });
-    expect(restoreButton).toHaveFocus();
+    await waitFor(() => expect(restoreButton).toHaveFocus());
+    expect(dialog.hasAttribute("open")).toBe(false);
+    expect(onRollback).not.toHaveBeenCalled();
   });
 });
