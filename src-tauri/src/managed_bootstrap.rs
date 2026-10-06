@@ -482,7 +482,7 @@ fn stale_workspace_artifacts(workspace_root: &Path) -> Result<Vec<ArtifactId>, S
         .collect())
 }
 
-fn artifact_from_identity(identity: &str) -> Result<ArtifactId, String> {
+pub(crate) fn artifact_from_identity(identity: &str) -> Result<ArtifactId, String> {
     if let Some(rel) = identity.strip_prefix("workspace:file:") {
         let wrel = WorkspaceRelPath::new(rel)
             .ok_or_else(|| format!("invalid workspace id: {identity}"))?;

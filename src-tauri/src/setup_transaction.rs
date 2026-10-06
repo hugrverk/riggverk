@@ -2460,4 +2460,61 @@ mod tests {
             "failed restore must not delete the destination"
         );
     }
+
+    #[test]
+    fn refreshed_record_turns_the_next_source_change_into_update_not_conflict() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let base = temp("stale-record-plan");
+        let home = base.join("home");
+        let ws = base.join("ws");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        crate::test_env::set_test_user_dirs(&home);
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let artifact = ArtifactId::CodexRules;
+        let identity = crate::managed_state::artifact_identity(&artifact);
+
+        // Installed == current source, record stale: planned as no change.
+        let source = fs::read(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        fs::write(home.join(".codex/AGENTS.md"), &source).unwrap();
+        let stale = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                identity: identity.clone(),
+                hash: crate::stable_digest::bytes(b"older shipped version"),
+                surface: None,
+            }],
+        };
+        let (kind, _) = detect_artifact_state(&artifact, &ws, &home);
+        assert_eq!(kind, OperationKind::NoChange);
+
+        // The next apply refreshes the record from the installed content.
+        let refreshed = crate::managed_state::next_state_from_operations(
+            Some(&stale),
+            &bundled,
+            &ws,
+            &home,
+            &[],
+            &[],
+        )
+        .unwrap();
+
+        // Once the source moves on, the installed file differs from it. Only the
+        // refreshed record still proves ownership, so only it yields an update.
+        let decide = |state: &crate::managed_state::ManagedState| {
+            refine_with_managed_hash(
+                OperationKind::Update,
+                PreviousState::ManagedFile,
+                &artifact,
+                &ws,
+                &home,
+                managed_hash_for(&identity, &state.artifacts).as_deref(),
+            )
+            .0
+        };
+        assert_eq!(decide(&stale), OperationKind::Conflict);
+        assert_eq!(decide(&refreshed), OperationKind::Update);
+        let _ = fs::remove_dir_all(base);
+    }
 }

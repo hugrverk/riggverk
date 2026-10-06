@@ -3533,4 +3533,39 @@ mod tests {
             "1788000000000000000"
         ));
     }
+
+    #[test]
+    fn apply_refreshes_stale_record_of_unchanged_artifact_outside_the_selection() {
+        let env = TempSetupEnv::new("refresh-stale");
+        let first = apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(first.success, "{}", first.message);
+        let codex = ArtifactId::CodexRules;
+        let identity = crate::managed_state::artifact_identity(&codex);
+        let installed = fs::read(env.home.join(".codex/AGENTS.md")).unwrap();
+
+        // The record drifts, e.g. the file was synced by the legacy script.
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state
+            .artifacts
+            .iter_mut()
+            .filter(|r| r.identity == identity)
+        {
+            record.hash = crate::stable_digest::bytes(b"older shipped version");
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        assert_eq!(planned[0].kind, OperationKind::NoChange);
+
+        // Any later apply, even of another surface, refreshes it.
+        let second =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::OpenCodeRules]), vec![], None);
+        assert!(second.success, "{}", second.message);
+        let state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        let record = state
+            .artifacts
+            .iter()
+            .find(|r| r.identity == identity)
+            .expect("codex record");
+        assert_eq!(record.hash, crate::stable_digest::bytes(&installed));
+    }
 }
