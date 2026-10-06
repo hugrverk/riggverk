@@ -292,9 +292,15 @@ pub(super) fn run_cmd_bounded(
     }
 }
 
-/// `git` hardened for untrusted repositories: no fsmonitor or hooks from repo config, no
-/// credential prompts, and no optional locks (`git status` must not take `index.lock`
-/// while the user works in the same repository).
+/// `git` for repositories the user trusts, with a few repo-config execution paths turned off:
+/// no fsmonitor or hooks from repo config, no credential prompts, and no optional locks
+/// (`git status` must not take `index.lock` while the user works in the same repository).
+///
+/// This is not a sandbox for untrusted repositories. Still honored from repo config:
+/// filter drivers (`filter.<name>.clean`/`process`, run by `git status` for modified
+/// files), credential helpers, URL rewrites, and any other key not listed above. Transport
+/// hardening (upload-pack, ssh command, protocols) is applied by the fetch caller. See
+/// `docs/SECURITY_MODEL.md`.
 pub(super) fn run_git_bounded(
     args: &[&str],
     cwd: &Path,

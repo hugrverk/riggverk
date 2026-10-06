@@ -72,7 +72,20 @@ The Repo Dashboard is the one feature that is not read-only and touches the netw
 - `git rev-parse`, `status`, and `log` (local),
 - `gh auth status`, `gh pr list`, and `gh issue list` (optional enrichment, bounded by `--limit`).
 
-Fetch and `gh` use your own git credential helpers, SSH agent, and `gh` login; the app never reads those credentials. Hardening: every git call runs with `core.fsmonitor=false` and an empty `core.hooksPath`, `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, branch names validated and passed after `--`, the repository top level required, a timeout, a process-group kill, and capped output. Other repository config, such as remotes, `core.sshCommand`, and credential helpers, is still honored, so open only trusted repositories.
+Fetch and `gh` use your own git credential helpers, SSH agent, and `gh` login; the app never reads those credentials.
+
+The dashboard is for repositories you trust. It reduces, but does not remove, what a repository can run through its own `.git/config` and `.gitattributes`.
+
+Neutralized for every git call: `core.fsmonitor` (forced off), `core.hooksPath` (empty), `GIT_OPTIONAL_LOCKS=0`, `GIT_TERMINAL_PROMPT=0`, branch names validated and passed after `--`, the repository top level required, a timeout, a process-group kill, and capped output.
+
+Neutralized for the fetch only:
+
+- `remote.origin.uploadpack` (the fetch passes `--upload-pack=git-upload-pack`; `-c` does not beat repository config for this key),
+- `core.sshCommand` (forced to your system or global value, else `GIT_SSH`, else `ssh`; a `GIT_SSH_COMMAND` you export still wins),
+- `core.gitProxy` (`GIT_PROXY_COMMAND` is set empty unless you export one),
+- transports (`GIT_ALLOW_PROTOCOL=https:http:ssh:git` unless you export one), which blocks `ext::` and local-path origins. A local-path or helper-based origin is not fetched; the dashboard shows the cached ref or the local checkout with a warning.
+
+Still honored from repository config: filter drivers (`filter.<name>.clean` and `process`, which `git status` runs for modified files that a `.gitattributes` rule selects; no filter-free dirty check gives the same answer), credential helpers (`credential.helper`), `url.<base>.insteadOf` rewrites, `core.alternateRefsCommand`, and any other key not listed above. Open only trusted repositories.
 
 ## Scripts
 

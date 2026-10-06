@@ -243,7 +243,8 @@ pub struct StatusData {
     enabled_target_ids: Vec<String>,
 }
 
-/// Read-only git for the status panel: hardened config, no optional locks, bounded runtime.
+/// Read-only git for the status panel: no repo hooks or fsmonitor, no optional locks, bounded
+/// runtime. For trusted repositories only; see `run_git_bounded`.
 fn git_output(root: &Path, args: &[&str]) -> (bool, String) {
     let result = run_git_bounded(
         args,

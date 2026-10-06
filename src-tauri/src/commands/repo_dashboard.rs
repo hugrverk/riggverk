@@ -769,21 +769,89 @@ fn git_ref_exists(repo: &Path, git_ref: &str) -> bool {
     ok
 }
 
+/// Transports a dashboard fetch may use. `GIT_ALLOW_PROTOCOL` beats every `protocol.*.allow`
+/// key in repo config, so a repository cannot re-enable `ext::` (runs a command) or `file`.
+/// Consequence: a local-path or helper-based (`hg::`, `codecommit::`) origin is not fetched
+/// and the dashboard falls back to the cached ref or the local checkout.
+const GIT_FETCH_ALLOWED_PROTOCOLS: &str = "https:http:ssh:git";
+
+/// Env for the fetch: non-interactive auth, restricted transports, no `core.gitProxy`.
+/// A value the user already exports is kept, because the environment outranks repo config.
+fn fetch_env() -> Vec<(String, String)> {
+    let mut env: Vec<(String, String)> = GIT_NONINTERACTIVE_ENV
+        .iter()
+        .map(|(key, value)| (key.to_string(), value.to_string()))
+        .collect();
+    for (key, value) in [
+        ("GIT_ALLOW_PROTOCOL", GIT_FETCH_ALLOWED_PROTOCOLS),
+        ("GIT_PROXY_COMMAND", ""),
+    ] {
+        if std::env::var_os(key).is_none() {
+            env.push((key.to_string(), value.to_string()));
+        }
+    }
+    env
+}
+
+/// `core.sshCommand` for the fetch: the system or global value (so a personal `ssh -i key`
+/// keeps working), else a quoted `GIT_SSH`, else plain `ssh`. Forcing it with `-c` stops a
+/// repository-local `core.sshCommand` from running; `GIT_SSH_COMMAND` in the environment
+/// still outranks it. `scoped` is `git config --show-scope --get-all core.sshcommand`.
+fn trusted_ssh_command_from(scoped: &str, git_ssh: Option<&str>) -> String {
+    scoped
+        .lines()
+        .rev()
+        .find_map(|line| {
+            let (scope, value) = line.split_once('\t')?;
+            (matches!(scope, "system" | "global") && !value.trim().is_empty())
+                .then(|| value.to_string())
+        })
+        .or_else(|| {
+            git_ssh
+                .filter(|path| !path.is_empty())
+                .map(|path| format!("'{}'", path.replace('\'', "'\\''")))
+        })
+        .unwrap_or_else(|| "ssh".to_string())
+}
+
+fn trusted_ssh_command(repo: &Path) -> String {
+    let (_, scoped, _) = git_in_repo(
+        repo,
+        &["config", "--show-scope", "--get-all", "core.sshcommand"],
+    );
+    trusted_ssh_command_from(&scoped, std::env::var("GIT_SSH").ok().as_deref())
+}
+
+/// `--upload-pack` is passed explicitly: `remote.origin.uploadpack` from repo config beats
+/// `-c` (git keeps the first value), while the option outranks the config.
+fn fetch_git_args(branch: &str, ssh_command: &str) -> Vec<String> {
+    vec![
+        "-c".into(),
+        format!("core.sshCommand={ssh_command}"),
+        "fetch".into(),
+        "--quiet".into(),
+        "--prune".into(),
+        "--upload-pack=git-upload-pack".into(),
+        "--".into(),
+        "origin".into(),
+        branch.into(),
+    ]
+}
+
 fn fetch_origin_branch(repo: &Path, branch: &str) -> bool {
     if !is_safe_branch_name(branch) {
         return false;
     }
+    let args = fetch_git_args(branch, &trusted_ssh_command(repo));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
     let result = run_git_bounded(
-        &["fetch", "--quiet", "--prune", "--", "origin", branch],
+        &args,
         repo,
         BoundedCmdOptions {
             timeout: Some(GIT_FETCH_TIMEOUT),
             stdout_cap: MAX_GIT_OUTPUT_BYTES,
             stderr_cap: MAX_GIT_OUTPUT_BYTES,
-            extra_env: GIT_NONINTERACTIVE_ENV
-                .iter()
-                .map(|(key, value)| (key.to_string(), value.to_string()))
-                .collect(),
+            extra_env: fetch_env(),
             ..BoundedCmdOptions::default()
         },
     );
@@ -2314,5 +2382,215 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
         assert!(is_dirty(&repo));
         assert!(!repo.join(".git/index.lock").exists());
         let _ = fs::remove_dir_all(&repo);
+    }
+
+    #[cfg(unix)]
+    fn git_ok(dir: &Path, args: &[&str]) {
+        let status = std::process::Command::new("git")
+            .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+            .args(args)
+            .current_dir(dir)
+            .status()
+            .expect("run git");
+        assert!(status.success(), "git {args:?}");
+    }
+
+    /// An executable that records its own run in `sentinel`, then exits non-zero so it never
+    /// stands in for a working transport.
+    #[cfg(unix)]
+    fn sentinel_script(dir: &Path, name: &str, sentinel: &Path) -> PathBuf {
+        use std::os::unix::fs::PermissionsExt;
+        let script = dir.join(name);
+        fs::write(
+            &script,
+            format!("#!/bin/sh\ntouch '{}'\nexit 1\n", sentinel.display()),
+        )
+        .expect("write script");
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).expect("chmod");
+        script
+    }
+
+    /// A bare origin with one commit on `main`, and a clone-less work repo pointing at it.
+    #[cfg(unix)]
+    fn work_repo_with_local_origin(label: &str) -> (PathBuf, PathBuf) {
+        let root = temp_dir_for(label);
+        let origin = root.join("origin.git");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_ok(
+            &root,
+            &["init", "--quiet", "--bare", "-b", "main", "origin.git"],
+        );
+        git_ok(&work, &["init", "--quiet", "-b", "main"]);
+        fs::write(work.join("README.md"), "hello").expect("write readme");
+        git_ok(&work, &["add", "-A"]);
+        git_ok(&work, &["commit", "--quiet", "-m", "init"]);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", origin.to_string_lossy().as_ref()],
+        );
+        git_ok(&work, &["push", "--quiet", "origin", "main"]);
+        (root, work)
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_args_do_not_run_repo_config_uploadpack() {
+        let (root, work) = work_repo_with_local_origin("fetch-uploadpack");
+        let sentinel = root.join("uploadpack-ran");
+        let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.uploadpack",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        // Same args as the dashboard fetch, without the transport allowlist, so a local
+        // remote can actually connect and the upload-pack choice is what gets tested.
+        let args = fetch_git_args("main", "ssh");
+        let args: Vec<&str> = args.iter().map(String::as_str).collect();
+        let result = run_git_bounded(&args, &work, BoundedCmdOptions::default());
+
+        let ran = sentinel.exists();
+        let fetched = git_ref_exists(&work, "refs/remotes/origin/main");
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config uploadpack was executed");
+        assert!(result.success, "{result:?}");
+        assert!(fetched, "fetch should succeed with the stock upload-pack");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_does_not_use_local_path_remotes() {
+        let (root, work) = work_repo_with_local_origin("fetch-file-transport");
+        let sentinel = root.join("uploadpack-ran");
+        let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.uploadpack",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config uploadpack was executed");
+        assert!(
+            !fetched,
+            "local-path origins are outside the allowed transports"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_refuses_ext_transport_enabled_by_repo_config() {
+        let root = temp_dir_for("fetch-ext");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("ext-ran");
+        let script = sentinel_script(&root, "ext-helper", &sentinel);
+        git_ok(
+            &work,
+            &[
+                "config",
+                "remote.origin.url",
+                &format!("ext::{}", script.display()),
+            ],
+        );
+        git_ok(&work, &["config", "protocol.ext.allow", "always"]);
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "ext:: transport command was executed");
+        assert!(!fetched);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_ignores_repo_core_ssh_command() {
+        let root = temp_dir_for("fetch-ssh");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("ssh-ran");
+        let script = sentinel_script(&root, "ssh-wrapper", &sentinel);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", "ssh://git@example.invalid/x.git"],
+        );
+        git_ok(
+            &work,
+            &[
+                "config",
+                "core.sshCommand",
+                script.to_string_lossy().as_ref(),
+            ],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config core.sshCommand was executed");
+        assert!(!fetched);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn fetch_origin_branch_ignores_repo_core_git_proxy() {
+        let root = temp_dir_for("fetch-gitproxy");
+        let work = root.join("work");
+        fs::create_dir_all(&work).expect("mkdir work");
+        git_init(&work);
+        let sentinel = root.join("proxy-ran");
+        let script = sentinel_script(&root, "git-proxy", &sentinel);
+        git_ok(
+            &work,
+            &["remote", "add", "origin", "git://example.invalid/x.git"],
+        );
+        git_ok(
+            &work,
+            &["config", "core.gitProxy", script.to_string_lossy().as_ref()],
+        );
+
+        let fetched = fetch_origin_branch(&work, "main");
+
+        let ran = sentinel.exists();
+        let _ = fs::remove_dir_all(&root);
+        assert!(!ran, "repo-config core.gitProxy was executed");
+        assert!(!fetched);
+    }
+
+    #[test]
+    fn trusted_ssh_command_prefers_the_last_system_or_global_value() {
+        let scoped = "system\tssh -F /etc/ssh_sys\nglobal\tssh -i ~/.ssh/work\nlocal\t./evil.sh\n";
+        assert_eq!(
+            trusted_ssh_command_from(scoped, Some("/usr/bin/other-ssh")),
+            "ssh -i ~/.ssh/work"
+        );
+    }
+
+    #[test]
+    fn trusted_ssh_command_never_returns_a_local_value() {
+        assert_eq!(trusted_ssh_command_from("local\t./evil.sh\n", None), "ssh");
+        assert_eq!(trusted_ssh_command_from("", None), "ssh");
+    }
+
+    #[test]
+    fn trusted_ssh_command_quotes_git_ssh_when_nothing_else_is_configured() {
+        assert_eq!(
+            trusted_ssh_command_from("", Some("/opt/my ssh/it's")),
+            "'/opt/my ssh/it'\\''s'"
+        );
     }
 }
