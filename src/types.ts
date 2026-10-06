@@ -111,6 +111,9 @@ export interface AppSettings {
   repo_dashboard_entries?: RepoDashboardEntry[];
   active_repo_dashboard_id?: string | null;
   revision?: number;
+  // Marks which enabled-target defaults the file was written under. The backend always emits it and
+  // re-stamps it on every save, so UI-built drafts may omit it.
+  target_defaults_version?: number;
 }
 
 export interface GetSettingsResponse {
