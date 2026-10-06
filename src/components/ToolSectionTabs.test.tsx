@@ -29,6 +29,17 @@ describe("ToolSectionTabs", () => {
     expect(tabs[1]?.getAttribute("tabindex")).toBe("0");
   });
 
+  it("keeps the accessible name on the tab and the bracketed look purely visual", () => {
+    render(<ToolSectionTabs items={ITEMS} activeId="b" onSelect={() => {}} ariaLabel="Sections" />);
+    const active = screen.getByRole("tab", { name: "Beta, 2" });
+    // `[beta 2]` is drawn with CSS brackets on the active class; the visible text nodes are decoration for the aria-label.
+    expect(active.className).toContain("tool-section-tab-active");
+    expect(screen.getByRole("tab", { name: "Alpha, 1" }).className).not.toContain("tool-section-tab-active");
+    expect(active.querySelector(".tool-section-tab-label")?.getAttribute("aria-hidden")).toBe("true");
+    expect(active.querySelector(".tool-section-tab-count")?.getAttribute("aria-hidden")).toBe("true");
+    expect(active.textContent).toBe("Beta2");
+  });
+
   it("moves selection with arrow keys", () => {
     const onSelect = vi.fn();
     render(
