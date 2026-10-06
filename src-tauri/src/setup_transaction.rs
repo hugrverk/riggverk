@@ -20,6 +20,10 @@ use crate::setup_lifecycle::{OperationKind, SetupSurfaceId};
 pub const ARTIFACT_MANIFEST_SCHEMA_VERSION: u32 = 5;
 const MAX_MANIFEST_OPERATIONS: usize = 500;
 
+/// Error reported when rollback finds user changes made after apply. Callers
+/// compare against it to tell a preserved user edit from a real failure.
+pub const CHANGED_SINCE_APPLY: &str = "artifact changed since apply";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PreviousState {
@@ -60,6 +64,17 @@ pub enum TransactionStatus {
     RollingBack,
     RolledBack,
     RollbackFailed,
+}
+
+impl TransactionStatus {
+    /// Completed and rolled-back transactions are finished; every other status
+    /// may have left artifacts half-applied and needs reconciliation.
+    pub fn needs_reconciliation(self) -> bool {
+        !matches!(
+            self,
+            TransactionStatus::Completed | TransactionStatus::RolledBack
+        )
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -146,6 +161,31 @@ pub struct ArtifactTransactionManifest {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub previous_managed_state_backup_rel: Option<String>,
     pub operations: Vec<ArtifactManifestOperation>,
+}
+
+/// The part of a stored manifest needed to decide whether its transaction can
+/// still need reconciliation, readable even when the full manifest no longer
+/// validates (older schema, damaged operations).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ManifestHeader {
+    pub workspace_key: Option<String>,
+    pub status: TransactionStatus,
+}
+
+pub fn read_manifest_header(raw: &str) -> Result<ManifestHeader, String> {
+    #[derive(Deserialize)]
+    struct Header {
+        #[serde(default)]
+        workspace_key: Option<String>,
+        #[serde(default)]
+        transaction_status: TransactionStatus,
+    }
+    let header: Header =
+        serde_json::from_str(raw).map_err(|e| format!("unreadable manifest header: {e}"))?;
+    Ok(ManifestHeader {
+        workspace_key: header.workspace_key,
+        status: header.transaction_status,
+    })
 }
 
 #[derive(Debug, Clone)]
@@ -1202,10 +1242,10 @@ pub fn artifact_matches_post_apply_state(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<bool, String> {
-    let expected_full = op
-        .post_apply_full_digest
-        .as_deref()
-        .ok_or_else(|| "missing post-apply full digest".to_string())?;
+    let Some(expected_full) = op.post_apply_full_digest.as_deref() else {
+        // Apply was interrupted before digests were recorded.
+        return artifact_matches_unrecorded_apply_output(op, workspace_root, home);
+    };
     let current_full = crate::setup_fingerprint::artifact_installed_full_digest(
         &op.artifact,
         workspace_root,
@@ -1225,6 +1265,29 @@ pub fn artifact_matches_post_apply_state(
         }
     }
     Ok(true)
+}
+
+/// Whether the artifact currently holds what this operation would have
+/// written. Used for operations whose post-apply digests were never recorded
+/// (apply failed or was interrupted mid-operation), where the planned content
+/// is the only proof the app produced the current state.
+fn artifact_matches_unrecorded_apply_output(
+    op: &ArtifactManifestOperation,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<bool, String> {
+    let current = crate::setup_fingerprint::artifact_installed_managed_digest(
+        &op.artifact,
+        workspace_root,
+        home,
+    )?;
+    if matches!(op.kind, OperationKind::Remove) {
+        return Ok(current == crate::setup_fingerprint::ABSENT_DIGEST);
+    }
+    let expected = crate::setup_roots::bundled_root_for(workspace_root).and_then(|bundled| {
+        crate::setup_fingerprint::artifact_source_digest(&op.artifact, &bundled, home)
+    });
+    Ok(expected.is_ok_and(|expected| expected == current))
 }
 
 fn backup_path_for_op(
@@ -1603,7 +1666,7 @@ pub fn artifact_unchanged_since_apply(
         home,
     )?;
     if current_managed != expected_managed {
-        return Err("artifact changed since apply".into());
+        return Err(CHANGED_SINCE_APPLY.into());
     }
     Ok(())
 }
@@ -1628,7 +1691,7 @@ fn rollback_restore_mode(
     } else if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
         Ok(RollbackRestoreMode::ManagedProjectionMerge)
     } else {
-        Err("artifact changed since apply".into())
+        Err(CHANGED_SINCE_APPLY.into())
     }
 }
 
@@ -1656,7 +1719,7 @@ pub fn validate_create_target_unchanged(
         home,
     )?;
     if current_full != expected_full {
-        return Err("artifact changed since apply".into());
+        return Err(CHANGED_SINCE_APPLY.into());
     }
     Ok(())
 }
@@ -1725,19 +1788,50 @@ pub fn validate_artifact_after_apply(
     Ok(())
 }
 
+/// Restore for automatic rollback (failed apply or interrupted-apply
+/// reconciliation). Never overwrites content the transaction did not produce:
+/// an artifact the user changed after apply fails with [`CHANGED_SINCE_APPLY`]
+/// and is left untouched.
 pub fn restore_artifact_from_backup(
     op: &ArtifactManifestOperation,
     backup_dir: &Path,
     home: &Path,
     workspace_root: &Path,
 ) -> Result<(), String> {
-    restore_artifact_from_backup_with_mode(
-        op,
-        backup_dir,
-        home,
-        RollbackRestoreMode::FullBackup,
-        Some(workspace_root),
-    )
+    match automatic_restore_mode(op, backup_dir, home, workspace_root)? {
+        Some(mode) => {
+            restore_artifact_from_backup_with_mode(op, backup_dir, home, mode, Some(workspace_root))
+        }
+        None => Ok(()),
+    }
+}
+
+/// `None` means the artifact already matches its pre-apply state.
+fn automatic_restore_mode(
+    op: &ArtifactManifestOperation,
+    backup_dir: &Path,
+    home: &Path,
+    workspace_root: &Path,
+) -> Result<Option<RollbackRestoreMode>, String> {
+    if artifact_matches_previous_backup_state(op, backup_dir, home, workspace_root)? {
+        return Ok(None);
+    }
+    if op.post_apply_digest.is_some() && op.post_apply_full_digest.is_some() {
+        return rollback_restore_mode(op, workspace_root, home).map(Some);
+    }
+    if artifact_matches_unrecorded_apply_output(op, workspace_root, home)? {
+        // Without a recorded full digest the file may carry user edits outside
+        // the managed keys, so merge-managed configs restore only their managed
+        // projection.
+        return Ok(Some(
+            if matches!(op.rollback_action, RollbackAction::RestoreManagedConfigFile) {
+                RollbackRestoreMode::ManagedProjectionMerge
+            } else {
+                RollbackRestoreMode::FullBackup
+            },
+        ));
+    }
+    Err(CHANGED_SINCE_APPLY.into())
 }
 
 pub fn restore_artifact_from_backup_for_explicit_rollback(
@@ -1779,13 +1873,8 @@ fn restore_artifact_from_backup_with_mode(
                 return Err("backup missing".into());
             }
             reject_symlink(&backup_path, "backup")?;
-            if restore_dest.exists() {
-                crate::safe_filesystem::remove_regular_file_no_symlinks(
-                    &restore_dest,
-                    allowlist_root,
-                )
-                .map_err(|e| format!("remove restore dest file: {e}"))?;
-            }
+            // The copy replaces the destination atomically; removing it first
+            // would lose the file if the copy then fails.
             crate::safe_filesystem::copy_regular_file_no_symlinks(
                 &backup_path,
                 &restore_dest,
@@ -2268,5 +2357,107 @@ mod tests {
         assert!(err.contains("Update"));
         let _ = fs::remove_dir_all(&home);
         let _ = fs::remove_dir_all(&ws);
+    }
+
+    // ── Automatic rollback safety ──
+
+    /// Update of the Codex rules file with a backup holding `original`.
+    /// Returns (op, backup_dir, home, ws).
+    fn automatic_restore_fixture(
+        label: &str,
+        original: &str,
+        installed: &str,
+    ) -> (ArtifactManifestOperation, PathBuf, PathBuf, PathBuf) {
+        let base = temp(label);
+        let home = base.join("home");
+        let ws = base.join("ws");
+        let backup_dir = base.join("txn");
+        fs::create_dir_all(home.join(".codex")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts")).unwrap();
+        fs::write(backup_dir.join("artifacts/codex-rules"), original).unwrap();
+        fs::write(home.join(".codex/AGENTS.md"), installed).unwrap();
+        let op = ArtifactManifestOperation {
+            artifact: ArtifactId::CodexRules,
+            surface: SetupSurfaceId::CodexRules,
+            kind: OperationKind::Update,
+            previous_state: PreviousState::ManagedFile,
+            rollback_action: RollbackAction::RestoreFile,
+            backup_rel: Some("artifacts/codex-rules".into()),
+            apply_status: ApplyStatus::InFlight,
+            ..Default::default()
+        };
+        (op, backup_dir, home, ws)
+    }
+
+    #[test]
+    fn automatic_restore_keeps_user_edit_when_digests_were_never_recorded() {
+        let (op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-user-edit", "original", "user edit");
+        let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
+        assert_eq!(err, CHANGED_SINCE_APPLY);
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "user edit"
+        );
+    }
+
+    #[test]
+    fn automatic_restore_restores_planned_content_and_skips_original() {
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let (op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-planned", "original", &source);
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("restore");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "original"
+        );
+        // Restoring again is a no-op: the artifact is at its pre-apply state.
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("idempotent");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "original"
+        );
+    }
+
+    #[test]
+    fn automatic_restore_keeps_edit_made_after_recorded_apply() {
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("auto-recorded", "original", "applied");
+        let dest = home.join(".codex/AGENTS.md");
+        op.apply_status = ApplyStatus::Applied;
+        op.post_apply_digest = Some(crate::stable_digest::bytes(b"applied"));
+        op.post_apply_full_digest = Some(crate::stable_digest::bytes(b"applied"));
+        restore_artifact_from_backup(&op, &backup_dir, &home, &ws).expect("unchanged restores");
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "original");
+
+        fs::write(&dest, "edited later").unwrap();
+        let err = restore_artifact_from_backup(&op, &backup_dir, &home, &ws).unwrap_err();
+        assert_eq!(err, CHANGED_SINCE_APPLY);
+        assert_eq!(fs::read_to_string(&dest).unwrap(), "edited later");
+    }
+
+    #[test]
+    fn restore_file_failure_keeps_the_destination() {
+        let (mut op, backup_dir, home, ws) =
+            automatic_restore_fixture("restore-keeps-dest", "original", "current");
+        // A backup that is not a regular file makes the copy fail.
+        fs::remove_file(backup_dir.join("artifacts/codex-rules")).unwrap();
+        fs::create_dir_all(backup_dir.join("artifacts/codex-rules")).unwrap();
+        op.apply_status = ApplyStatus::Applied;
+        let err = restore_artifact_from_backup_with_mode(
+            &op,
+            &backup_dir,
+            &home,
+            RollbackRestoreMode::FullBackup,
+            Some(&ws),
+        )
+        .expect_err("directory backup cannot be restored");
+        assert!(err.contains("restore file"), "{err}");
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "current",
+            "failed restore must not delete the destination"
+        );
     }
 }

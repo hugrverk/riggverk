@@ -119,24 +119,24 @@ fn reconcile_interrupted_setup_transactions(
         }
         crate::path_safety::reject_symlink(&manifest_path, "setup manifest")?;
         let raw = fs::read_to_string(&manifest_path)
-            .map_err(|e| format!("read interrupted setup manifest: {e}"))?;
+            .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
+        // Decide from the header alone whether this transaction can still need
+        // reconciliation. Finished transactions (completed or rolled back) must
+        // never block a new apply, even when their manifest is old-schema or
+        // damaged, so they are skipped before any full validation.
+        let header = setup_transaction::read_manifest_header(&raw)
+            .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
+        if header.workspace_key.as_deref() != Some(workspace_key.as_str()) {
+            continue;
+        }
+        if !header.status.needs_reconciliation() {
+            continue;
+        }
         let mut manifest: ArtifactTransactionManifest = serde_json::from_str(&raw)
-            .map_err(|e| format!("parse interrupted setup manifest: {e}"))?;
-        if manifest.workspace_key != workspace_key {
-            continue;
-        }
-        setup_transaction::validate_manifest(&manifest, workspace_root)?;
-        if !matches!(
-            manifest.transaction_status,
-            setup_transaction::TransactionStatus::Prepared
-                | setup_transaction::TransactionStatus::Applying
-                | setup_transaction::TransactionStatus::Failed
-                | setup_transaction::TransactionStatus::RollingBack
-                | setup_transaction::TransactionStatus::RollbackFailed
-        ) {
-            continue;
-        }
-        let (_, errors, persist_error) = run_persisted_rollback(
+            .map_err(|e| format!("parse interrupted setup {transaction_id} manifest: {e}"))?;
+        setup_transaction::validate_manifest(&manifest, workspace_root)
+            .map_err(|e| format!("validate interrupted setup {transaction_id}: {e}"))?;
+        let run = run_persisted_rollback(
             &manifest_path,
             &mut manifest,
             &backup_dir,
@@ -144,21 +144,81 @@ fn reconcile_interrupted_setup_transactions(
             workspace_root,
             RollbackExecutionMode::Automatic,
         );
-        if let Some(error) = persist_error {
+        if let Some(error) = run.persist_error {
             return Err(format!(
                 "resume interrupted setup {transaction_id}: {error}"
             ));
         }
-        if !errors.is_empty()
-            || manifest.transaction_status != setup_transaction::TransactionStatus::RolledBack
-        {
+        if !run.errors.is_empty() {
             return Err(format!(
                 "interrupted setup {transaction_id} could not be restored: {}",
-                errors.join("; ")
+                run.errors.join("; ")
             ));
+        }
+        if manifest.transaction_status != setup_transaction::TransactionStatus::RolledBack {
+            // Only artifacts the user changed after the interruption remain.
+            // They are preserved on purpose; their edits must not block setup.
+            eprintln!(
+                "agent-workspace: interrupted setup {transaction_id} left user-changed artifacts untouched: {}",
+                run.preserved.join("; ")
+            );
         }
     }
     Ok(())
+}
+
+/// Id of a newer completed transaction for the same workspace, if one exists.
+///
+/// A completed transaction owns the managed state written after it, so older
+/// transactions must not restore their managed-state snapshot over it.
+fn newer_completed_transaction(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<Option<String>, String> {
+    let (Some(setup_root), Some(transaction_id)) = (
+        backup_dir.parent(),
+        backup_dir.file_name().and_then(|name| name.to_str()),
+    ) else {
+        return Ok(None);
+    };
+    let entries = fs::read_dir(setup_root).map_err(|e| format!("read setup transactions: {e}"))?;
+    let mut newest = None::<String>;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read setup transaction entry: {e}"))?;
+        let candidate = entry.file_name().to_string_lossy().into_owned();
+        if !validate_transaction_id_format(&candidate)
+            || !transaction_id_is_newer(&candidate, transaction_id)
+            || !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+        {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        if crate::path_safety::reject_symlink(&manifest_path, "setup manifest").is_err() {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
+            continue;
+        };
+        if header.workspace_key.as_deref() == Some(workspace_key)
+            && header.status == setup_transaction::TransactionStatus::Completed
+            && newest
+                .as_deref()
+                .is_none_or(|current| transaction_id_is_newer(&candidate, current))
+        {
+            newest = Some(candidate);
+        }
+    }
+    Ok(newest)
+}
+
+/// Transaction ids are decimal timestamps; compare them numerically.
+fn transaction_id_is_newer(candidate: &str, base: &str) -> bool {
+    let candidate = candidate.trim_start_matches('0');
+    let base = base.trim_start_matches('0');
+    (candidate.len(), candidate) > (base.len(), base)
 }
 
 fn restore_previous_managed_state(
@@ -200,6 +260,32 @@ fn restore_previous_managed_state(
     Ok(())
 }
 
+/// Outcome of one persisted rollback pass.
+struct RollbackRun {
+    rolled_back: Vec<String>,
+    /// Failures that need attention (I/O, missing or invalid backups, ...).
+    errors: Vec<String>,
+    /// Artifacts the user changed after apply; left untouched on purpose.
+    preserved: Vec<String>,
+    persist_error: Option<String>,
+}
+
+impl RollbackRun {
+    fn persist_failed(
+        rolled_back: Vec<String>,
+        errors: Vec<String>,
+        preserved: Vec<String>,
+        error: String,
+    ) -> Self {
+        Self {
+            rolled_back,
+            errors,
+            preserved,
+            persist_error: Some(error),
+        }
+    }
+}
+
 fn run_persisted_rollback(
     manifest_path: &Path,
     manifest: &mut ArtifactTransactionManifest,
@@ -207,7 +293,7 @@ fn run_persisted_rollback(
     home: &Path,
     workspace_root: &Path,
     mode: RollbackExecutionMode,
-) -> (Vec<String>, Vec<String>, Option<String>) {
+) -> RollbackRun {
     let indices = setup_transaction::rollback_eligible_indices(&manifest.operations);
     if let Err(e) = persist_setup_manifest(
         manifest_path,
@@ -215,11 +301,12 @@ fn run_persisted_rollback(
         setup_transaction::TransactionStatus::RollingBack,
         backup_dir,
     ) {
-        return (vec![], vec![], Some(e));
+        return RollbackRun::persist_failed(vec![], vec![], vec![], e);
     }
 
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
+    let mut preserved = Vec::new();
     for index in indices.into_iter().rev() {
         if matches!(
             manifest.operations[index].rollback_status,
@@ -240,7 +327,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -257,7 +344,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -275,7 +362,7 @@ fn run_persisted_rollback(
                         setup_transaction::TransactionStatus::RollingBack,
                         backup_dir,
                     ) {
-                        return (rolled_back, errors, Some(e));
+                        return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
                     }
                     continue;
                 }
@@ -289,7 +376,7 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollingBack,
             backup_dir,
         ) {
-            return (rolled_back, errors, Some(e));
+            return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
         }
 
         let op = &mut manifest.operations[index];
@@ -325,6 +412,13 @@ fn run_persisted_rollback(
                     rolled_back.push(artifact_label(&artifact));
                 }
             }
+            Err(e) if e == setup_transaction::CHANGED_SINCE_APPLY => {
+                op.rollback_status = setup_transaction::RollbackStatus::Failed;
+                preserved.push(format!(
+                    "{}: {e}; current content kept",
+                    artifact_label(&artifact)
+                ));
+            }
             Err(e) => {
                 op.rollback_status = setup_transaction::RollbackStatus::Failed;
                 errors.push(format!("{}: {e}", artifact_label(&artifact)));
@@ -336,11 +430,19 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollingBack,
             backup_dir,
         ) {
-            return (rolled_back, errors, Some(e));
+            return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
         }
     }
 
-    if let Err(error) = restore_previous_managed_state(manifest, backup_dir, workspace_root) {
+    // A newer completed transaction owns the managed state now; restoring this
+    // transaction's snapshot would erase its ownership records.
+    let managed_state_restore =
+        match newer_completed_transaction(backup_dir, &manifest.workspace_key) {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) => restore_previous_managed_state(manifest, backup_dir, workspace_root),
+            Err(e) => Err(e),
+        };
+    if let Err(error) = managed_state_restore {
         errors.push(error);
         manifest.transaction_status = setup_transaction::TransactionStatus::RollbackFailed;
         let _ = persist_setup_manifest(
@@ -349,13 +451,21 @@ fn run_persisted_rollback(
             setup_transaction::TransactionStatus::RollbackFailed,
             backup_dir,
         );
-        return (rolled_back, errors, None);
+        return RollbackRun {
+            rolled_back,
+            errors,
+            preserved,
+            persist_error: None,
+        };
     }
 
-    if let Some(e) = finalize_persisted_rollback(manifest_path, manifest, backup_dir) {
-        return (rolled_back, errors, Some(e));
+    let persist_error = finalize_persisted_rollback(manifest_path, manifest, backup_dir);
+    RollbackRun {
+        rolled_back,
+        errors,
+        preserved,
+        persist_error,
     }
-    (rolled_back, errors, None)
 }
 
 struct RollbackDryRunPlan {
@@ -610,7 +720,7 @@ fn run_persisted_automatic_rollback(
     backup_dir: &Path,
     home: &Path,
     workspace_root: &Path,
-) -> (Vec<String>, Vec<String>, Option<String>) {
+) -> RollbackRun {
     run_persisted_rollback(
         manifest_path,
         manifest,
@@ -637,17 +747,23 @@ struct FailedApplyRollback<'a> {
 fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResult {
     let mut failed = ctx.failed;
     let mut message = ctx.message;
-    let (rolled_back, rb_errors, persist_err) = run_persisted_automatic_rollback(
+    let run = run_persisted_automatic_rollback(
         ctx.manifest_path,
         ctx.manifest,
         ctx.backup_dir,
         ctx.home,
         ctx.workspace_root,
     );
-    if !rb_errors.is_empty() {
-        message.push_str(&format!(". Rollback errors: {}", rb_errors.join("; ")));
+    if !run.errors.is_empty() {
+        message.push_str(&format!(". Rollback errors: {}", run.errors.join("; ")));
     }
-    if let Some(persist_err) = persist_err {
+    if !run.preserved.is_empty() {
+        message.push_str(&format!(
+            ". Changed since apply, left as is: {}",
+            run.preserved.join("; ")
+        ));
+    }
+    if let Some(persist_err) = run.persist_error {
         failed.push(persist_err);
     }
     SetupResult {
@@ -655,7 +771,7 @@ fn finish_failed_apply_with_rollback(ctx: FailedApplyRollback<'_>) -> SetupResul
         transaction_id: ctx.transaction_id,
         applied: ctx.applied,
         failed,
-        rolled_back,
+        rolled_back: run.rolled_back,
         manual_steps: ctx.manual_steps,
         message,
     }
@@ -992,18 +1108,14 @@ fn apply_planned_artifacts(
         };
     }
 
-    for p in &pending {
+    // `manifest.operations` was built from `pending` in order.
+    for (operation_index, p) in pending.iter().enumerate() {
         if !matches!(
             p.kind,
             OperationKind::Create | OperationKind::Update | OperationKind::Remove
         ) {
             continue;
         }
-        let operation_index = manifest
-            .operations
-            .iter()
-            .position(|operation| operation.artifact == p.artifact)
-            .expect("planned operation must exist in transaction manifest");
         manifest.operations[operation_index].apply_status =
             setup_transaction::ApplyStatus::InFlight;
         if let Err(e) = persist_setup_manifest(
@@ -1069,45 +1181,53 @@ fn apply_planned_artifacts(
                 })
         } else {
             setup_transaction::validate_artifact_after_apply(&p.artifact, &ws_root, &home)
-        };
-        if let Err(e) = validation {
-            manifest.operations[operation_index].apply_status =
-                setup_transaction::ApplyStatus::Failed;
-            manifest.operations[operation_index].validation_status =
-                setup_transaction::ValidationStatus::Failed;
-            let err = format!("{}: {e}", artifact_label(&p.artifact));
-            let mut failed = vec![err.clone()];
-            if let Err(persist_err) = persist_setup_manifest(
-                &manifest_path,
-                &mut manifest,
-                setup_transaction::TransactionStatus::Failed,
-                &backup_dir,
-            ) {
-                failed.push(persist_err);
-            }
-            return finish_failed_apply_with_rollback(FailedApplyRollback {
-                manifest_path: &manifest_path,
-                manifest: &mut manifest,
-                backup_dir: &backup_dir,
-                home: &home,
-                workspace_root: &ws_root,
-                transaction_id,
-                applied,
-                failed,
-                manual_steps: manual_steps.clone(),
-                message: format!("Artifact validation failed: {err}"),
-            });
         }
-
-        let post_apply_digest = crate::setup_fingerprint::artifact_installed_managed_digest(
-            &p.artifact,
-            &ws_root,
-            &home,
-        )
-        .expect("validated artifact must have a managed digest");
-        let post_apply_full_digest =
-            crate::setup_fingerprint::artifact_installed_full_digest(&p.artifact, &ws_root, &home)
-                .expect("validated artifact must have a full digest");
+        .and_then(|()| {
+            let managed = crate::setup_fingerprint::artifact_installed_managed_digest(
+                &p.artifact,
+                &ws_root,
+                &home,
+            )
+            .map_err(|e| format!("post-apply managed digest: {e}"))?;
+            let full = crate::setup_fingerprint::artifact_installed_full_digest(
+                &p.artifact,
+                &ws_root,
+                &home,
+            )
+            .map_err(|e| format!("post-apply full digest: {e}"))?;
+            Ok((managed, full))
+        });
+        let (post_apply_digest, post_apply_full_digest) = match validation {
+            Ok(digests) => digests,
+            Err(e) => {
+                manifest.operations[operation_index].apply_status =
+                    setup_transaction::ApplyStatus::Failed;
+                manifest.operations[operation_index].validation_status =
+                    setup_transaction::ValidationStatus::Failed;
+                let err = format!("{}: {e}", artifact_label(&p.artifact));
+                let mut failed = vec![err.clone()];
+                if let Err(persist_err) = persist_setup_manifest(
+                    &manifest_path,
+                    &mut manifest,
+                    setup_transaction::TransactionStatus::Failed,
+                    &backup_dir,
+                ) {
+                    failed.push(persist_err);
+                }
+                return finish_failed_apply_with_rollback(FailedApplyRollback {
+                    manifest_path: &manifest_path,
+                    manifest: &mut manifest,
+                    backup_dir: &backup_dir,
+                    home: &home,
+                    workspace_root: &ws_root,
+                    transaction_id,
+                    applied,
+                    failed,
+                    manual_steps: manual_steps.clone(),
+                    message: format!("Artifact validation failed: {err}"),
+                });
+            }
+        };
         let operation = &mut manifest.operations[operation_index];
         operation.apply_status = setup_transaction::ApplyStatus::Applied;
         operation.validation_status = setup_transaction::ValidationStatus::Passed;
@@ -1404,6 +1524,35 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         }
     }
 
+    match newer_completed_transaction(&backup_dir, &manifest.workspace_key) {
+        Ok(None) => {}
+        Ok(Some(newer)) => {
+            let message = format!(
+                "cannot roll back transaction {transaction_id}: newer completed transaction {newer} exists; roll that one back first"
+            );
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![message.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message,
+            };
+        }
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id: transaction_id.to_string(),
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps: vec![],
+                message: format!("Cannot check for newer transactions: {e}"),
+            };
+        }
+    }
+
     let eligible: Vec<ArtifactManifestOperation> = manifest
         .operations
         .iter()
@@ -1610,7 +1759,7 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
     };
 
     let mut manifest_mut = manifest;
-    let (restored, rollback_failures, persist_err) = run_persisted_rollback(
+    let run = run_persisted_rollback(
         &manifest_path,
         &mut manifest_mut,
         &backup_dir,
@@ -1618,9 +1767,12 @@ pub fn rollback_transaction(transaction_id: &str, dry_run: bool) -> SetupResult 
         &ws_root,
         RollbackExecutionMode::Explicit,
     );
+    let restored = run.rolled_back;
+    let mut rollback_failures = run.errors;
+    rollback_failures.extend(run.preserved);
     let restored_count = restored.len();
     let success = rollback_failures.is_empty();
-    if let Some(persist_err) = persist_err {
+    if let Some(persist_err) = run.persist_error {
         return SetupResult {
             success: false,
             transaction_id: transaction_id.to_string(),
@@ -3129,5 +3281,256 @@ mod tests {
         let after_raw = fs::read_to_string(backup_dir.join("manifest.json")).unwrap();
         assert_eq!(before_raw, after_raw);
         let _ = fs::remove_dir_all(&base);
+    }
+
+    // ── Reconciliation safety ──
+
+    /// Hermetic HOME, runtime workspace, and backup root for tests that run
+    /// real transactions. Holds the process-wide env lock for its lifetime.
+    struct TempSetupEnv {
+        base: PathBuf,
+        home: PathBuf,
+        ws: PathBuf,
+        _restore: guard::EnvRestore,
+        _lock: std::sync::MutexGuard<'static, ()>,
+    }
+
+    impl TempSetupEnv {
+        fn new(label: &str) -> Self {
+            let lock = guard::lock();
+            let restore = guard::EnvRestore::capture();
+            let nanos = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let base = std::env::temp_dir().join(format!("aw-setup-{label}-{nanos}"));
+            let _ = fs::remove_dir_all(&base);
+            fs::create_dir_all(base.join("home")).expect("home");
+            set_test_user_dirs(&base.join("home"));
+            unsafe {
+                std::env::set_var(
+                    "AGENT_WORKSPACE_PATH",
+                    base.join("workspace").to_string_lossy().as_ref(),
+                );
+                std::env::set_var(
+                    "AGENT_WORKSPACE_BACKUP_DIR",
+                    base.join("backups").to_string_lossy().as_ref(),
+                );
+            }
+            let home = user_home().expect("resolved home");
+            let ws = setup_workspace_target_path().expect("workspace target");
+            Self {
+                base,
+                home,
+                ws,
+                _restore: restore,
+                _lock: lock,
+            }
+        }
+
+        fn setup_root(&self) -> PathBuf {
+            backup_root().expect("backup root").join("setup")
+        }
+
+        fn plan(&self, surfaces: &[SetupSurfaceId]) -> Vec<setup_transaction::PlannedArtifact> {
+            setup_transaction::plan_artifacts_for_surfaces(surfaces, &self.ws, &self.home)
+                .expect("plan")
+        }
+    }
+
+    impl Drop for TempSetupEnv {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir_all(&self.base);
+        }
+    }
+
+    fn write_raw_manifest(setup_root: &Path, transaction_id: &str, manifest: serde_json::Value) {
+        let dir = setup_root.join(transaction_id);
+        fs::create_dir_all(&dir).expect("transaction dir");
+        fs::write(dir.join("manifest.json"), manifest.to_string()).expect("raw manifest");
+    }
+
+    #[test]
+    fn reconcile_skips_unreadable_terminal_manifests_and_apply_still_succeeds() {
+        let env = TempSetupEnv::new("reconcile-terminal");
+        let setup_root = env.setup_root();
+        let key = env.ws.to_string_lossy().into_owned();
+        // An old-schema completed manifest and a rolled-back one with damaged
+        // operations: both are finished transactions.
+        write_raw_manifest(
+            &setup_root,
+            "1000",
+            serde_json::json!({
+                "schema_version": 1, "workspace_key": key,
+                "transaction_status": "completed", "operations": []
+            }),
+        );
+        write_raw_manifest(
+            &setup_root,
+            "1001",
+            serde_json::json!({
+                "schema_version": 5, "workspace_key": key,
+                "transaction_status": "rolled_back", "operations": [{"bogus": true}]
+            }),
+        );
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+            .expect("finished transactions must not block reconciliation");
+
+        // An unreadable transaction that may be half-applied still blocks, and
+        // the error names it.
+        write_raw_manifest(
+            &setup_root,
+            "1002",
+            serde_json::json!({
+                "schema_version": 1, "workspace_key": key,
+                "transaction_status": "failed", "operations": []
+            }),
+        );
+        let err = reconcile_interrupted_setup_transactions(&env.ws, &env.home)
+            .expect_err("unreadable interrupted transaction must block");
+        assert!(
+            err.contains("1002"),
+            "error must name the transaction: {err}"
+        );
+        fs::remove_dir_all(setup_root.join("1002")).expect("remove blocking transaction");
+
+        let planned = env.plan(&[SetupSurfaceId::CodexRules]);
+        let result = apply_planned_artifacts(&planned, vec![], None);
+        assert!(result.success, "apply: {}", result.message);
+        assert!(env.home.join(".codex/AGENTS.md").is_file());
+    }
+
+    #[test]
+    fn reconcile_preserves_user_edit_made_after_interrupted_apply() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, txn_id) = rollback_test_fixture();
+        seed_two_artifact_transaction(&txn_id);
+        // The user edits one applied artifact before the next app launch.
+        fs::write(home.join(".codex/AGENTS.md"), "user-edit-after-crash").unwrap();
+
+        reconcile_interrupted_setup_transactions(&ws, &home)
+            .expect("a preserved user edit must not block setup");
+        // A second pass stays non-blocking and still preserves the edit.
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("second reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "user-edit-after-crash"
+        );
+        assert_eq!(
+            fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
+            "opencode-rules-backup",
+            "untouched artifact is still restored"
+        );
+        let manifest = read_manifest(&txn_id);
+        assert_eq!(
+            manifest.operations[0].rollback_status,
+            setup_transaction::RollbackStatus::Failed
+        );
+        assert_eq!(
+            manifest.operations[1].rollback_status,
+            setup_transaction::RollbackStatus::Restored
+        );
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reconcile_keeps_managed_state_owned_by_a_newer_completed_transaction() {
+        let env = TempSetupEnv::new("reconcile-newer");
+        fs::create_dir_all(env.home.join(".codex")).unwrap();
+        fs::create_dir_all(env.home.join(".config/opencode")).unwrap();
+        fs::write(env.home.join(".codex/AGENTS.md"), "codex-applied").unwrap();
+        fs::write(
+            env.home.join(".config/opencode/AGENTS.md"),
+            "opencode-applied",
+        )
+        .unwrap();
+        let older = "9876543210987654321";
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(older);
+        seed_two_artifact_transaction(newer);
+        let backup_dir = env.setup_root().join(newer);
+        let mut manifest = read_manifest(newer);
+        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+        // The newer transaction published this managed state.
+        let state = crate::managed_state::ManagedState {
+            schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+            bundled_version: crate::stable_digest::bytes(b"bundle"),
+            artifacts: vec![],
+        };
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+
+        reconcile_interrupted_setup_transactions(&env.ws, &env.home).expect("reconcile");
+
+        assert_eq!(
+            crate::managed_state::read_managed_state(&env.ws),
+            Some(state),
+            "older rollback must not erase the newer transaction's managed state"
+        );
+        assert_eq!(
+            read_manifest(older).transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+    }
+
+    #[test]
+    fn explicit_rollback_refuses_when_a_newer_completed_transaction_exists() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, _ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        let backup_dir = seed_two_artifact_transaction(newer);
+        let mut manifest = read_manifest(newer);
+        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+
+        for dry_run in [true, false] {
+            let result = rollback_transaction(&older, dry_run);
+            assert!(!result.success, "dry_run={dry_run}");
+            assert!(
+                result.message.contains("newer completed transaction")
+                    && result.message.contains(newer),
+                "unclear refusal: {}",
+                result.message
+            );
+        }
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied"
+        );
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::Failed,
+            "refused rollback must not touch the older manifest"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn transaction_ids_compare_numerically() {
+        assert!(transaction_id_is_newer("10", "9"));
+        assert!(!transaction_id_is_newer("9", "10"));
+        assert!(!transaction_id_is_newer("0005", "5"));
+        assert!(transaction_id_is_newer(
+            "1788000000000000001",
+            "1788000000000000000"
+        ));
     }
 }
