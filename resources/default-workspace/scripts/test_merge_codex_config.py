@@ -621,6 +621,36 @@ enabled = true
     assert result["mcp_servers"]["enabled"] is True
 
 
+def test_fallback_parser_inline_table() -> None:
+    text = 'custom_server = { url = "https://example.com", token = "t#1", nested = { a = 1 } } # c\n'
+    result = parse_minimal_toml(text)
+    assert result["custom_server"] == {
+        "url": "https://example.com",
+        "token": "t#1",
+        "nested": {"a": 1},
+    }
+
+
+def test_fallback_parser_inline_table_inside_table() -> None:
+    text = """
+[mcp.servers]
+custom_server = { url = "https://example.com", enabled = true }
+""".strip()
+    result = parse_minimal_toml(text)
+    assert result["mcp"]["servers"]["custom_server"] == {
+        "url": "https://example.com",
+        "enabled": True,
+    }
+
+
+def test_fallback_parser_array_values() -> None:
+    text = 'args = ["-y", "pkg, with comma", 3]\nmixed = [{ a = 1 }, [true]]\nempty = {}\n'
+    result = parse_minimal_toml(text)
+    assert result["args"] == ["-y", "pkg, with comma", 3]
+    assert result["mixed"] == [{"a": 1}, [True]]
+    assert result["empty"] == {}
+
+
 # ── Main guard ──
 
 if __name__ == "__main__":
