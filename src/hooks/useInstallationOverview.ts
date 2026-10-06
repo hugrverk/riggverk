@@ -1,6 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HARNESS_NAV_ORDER, HARNESS_SURFACES, WORKSPACE_SURFACES } from "../lib/harnessInstallation";
+import {
+  enabledSurfacesForHarness,
+  HARNESS_NAV_ORDER,
+  HARNESS_SURFACES,
+  WORKSPACE_SURFACES,
+} from "../lib/harnessInstallation";
 import type { InstallationState, InstallationStatus, InstallAgent, SetupSurfaceId } from "../types";
 
 export type OverviewId = "workspace" | InstallAgent;
@@ -27,30 +32,39 @@ export interface UseInstallationOverviewOptions {
   /** A workspace task (apply, uninstall, rollback) is running; the overview re-fetches when it ends. */
   busy: boolean;
   enabledHarnessIds: readonly InstallAgent[];
+  /**
+   * Enabled target toggles. When given, surfaces whose target is off are not requested (the pages list them as
+   * "off"), so the state shown matches what an update would touch. Omit to request every surface of a harness.
+   */
+  enabledTargetIds?: readonly string[];
   /** Bump to force a re-fetch (e.g. after a model save). */
   refreshKey?: number;
 }
 
-export function surfacesForOverview(id: OverviewId): SetupSurfaceId[] {
-  return id === "workspace" ? WORKSPACE_SURFACES : HARNESS_SURFACES[id];
+export function surfacesForOverview(id: OverviewId, enabledTargetIds?: readonly string[]): SetupSurfaceId[] {
+  if (id === "workspace") return WORKSPACE_SURFACES;
+  if (!enabledTargetIds) return HARNESS_SURFACES[id];
+  return enabledSurfacesForHarness(id, { enabled_target_ids: [...enabledTargetIds], enabled_harness_ids: [id] });
 }
 
 /**
- * Single source for installation state across the shell (tab status dots, `:update` suggestions) and,
- * from S2 on, the Start page lists and surface matrix. Same fetch as HarnessInstallationCard
- * (`get_installation_status` per target), minus the card's dialog and rendering. Failures stay in the entry;
- * they never reach the global error line.
+ * Single source for installation state: the shell (tab status dots, `:update` suggestions) and the Start and
+ * harness pages (lists, surface matrix). One `get_installation_status` per target and refresh. Failures stay in
+ * the entry; they never reach the global error line.
  */
 export function useInstallationOverview({
   workspaceValid,
   busy,
   enabledHarnessIds,
+  enabledTargetIds,
   refreshKey,
 }: UseInstallationOverviewOptions): InstallationOverview {
   const [entries, setEntries] = useState<Partial<Record<OverviewId, OverviewEntry>>>({});
   const [loading, setLoading] = useState(false);
   const generationRef = useRef(0);
   const harnessKey = HARNESS_NAV_ORDER.filter(harness => enabledHarnessIds.includes(harness)).join(",");
+  // A string key keeps `refresh` stable while the toggles are unchanged (the array identity changes every render).
+  const targetKey = enabledTargetIds ? [...enabledTargetIds].sort().join(",") : null;
 
   const refresh = useCallback(async () => {
     const generation = ++generationRef.current;
@@ -61,6 +75,7 @@ export function useInstallationOverview({
     }
     const harnesses = harnessKey ? (harnessKey.split(",") as InstallAgent[]) : [];
     const ids: OverviewId[] = ["workspace", ...harnesses];
+    const targetIds = targetKey === null ? undefined : targetKey === "" ? [] : targetKey.split(",");
     setLoading(true);
     setEntries(previous => {
       const next: Partial<Record<OverviewId, OverviewEntry>> = {};
@@ -72,7 +87,9 @@ export function useInstallationOverview({
     const results = await Promise.all(
       ids.map(async (id): Promise<OverviewEntry> => {
         try {
-          const status = await invoke<InstallationStatus>("get_installation_status", { surfaces: surfacesForOverview(id) });
+          const status = await invoke<InstallationStatus>("get_installation_status", {
+            surfaces: surfacesForOverview(id, targetIds),
+          });
           return { id, status, loading: false, error: null };
         } catch (error) {
           return { id, status: null, loading: false, error: error instanceof Error ? error.message : String(error) };
@@ -82,7 +99,7 @@ export function useInstallationOverview({
     if (generation !== generationRef.current) return;
     setEntries(Object.fromEntries(results.map(entry => [entry.id, entry])));
     setLoading(false);
-  }, [workspaceValid, harnessKey]);
+  }, [workspaceValid, harnessKey, targetKey]);
 
   useEffect(() => {
     if (!busy) void refresh();

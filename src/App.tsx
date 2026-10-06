@@ -9,6 +9,8 @@ import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
+import { useInstallScreen } from "./hooks/useInstallScreen";
+import { useRollbackRequest } from "./hooks/useRollbackRequest";
 import { useLandingView } from "./hooks/useLandingView";
 import { EDITABLE_CONFIG_TARGET_IDS, useLibraryController } from "./hooks/useLibraryController";
 import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
@@ -29,11 +31,11 @@ import { OpenCodeView } from "./views/OpenCodeView";
 import { StartView } from "./views/StartView";
 const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ default: m.LibraryView })));
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
-import { harnessForView, surfacesNeedingApply } from "./lib/harnessInstallation";
+import { harnessForView } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
 import { redactTerminalOutput } from "./lib/redactTerminalOutput";
-import { AppFrame, ShellProviders, useAppCommands, type AppView } from "./shell";
-import type { InstallAgent, RepoDashboardWorkItem, SetupPlan, SetupResult } from "./types";
+import { AppFrame, ShellProviders, useAppCommands, useShellState, type AppView } from "./shell";
+import type { InstallAgent, RepoDashboardWorkItem, SetupResult } from "./types";
 
 type View = AppView;
 
@@ -214,6 +216,12 @@ function AppShell() {
     captureFromUninstallResult,
     clearRecovery: clearUninstallRecovery,
   } = useUninstallRecovery();
+  // Transaction the last successful install left; `z` and `:rollback` restore it from its backup.
+  const [applyTransactionId, setApplyTransactionId] = useState<string | null>(null);
+  const rollbackTransactionId = applyTransactionId ?? uninstallRecoveryTransactionId;
+  const [uninstallPreviewRequested, setUninstallPreviewRequested] = useState(false);
+  const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
+  const { beginConfirm } = useShellState();
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -240,6 +248,7 @@ function AppShell() {
     workspaceActionRequestIdRef.current += 1;
     resetTerminalOutput();
     clearUninstallRecovery();
+    setApplyTransactionId(null);
     resetWorkspaceHealthState();
     resetLibraryState();
   }, [workspaceActionRequestIdRef, resetTerminalOutput, clearUninstallRecovery, resetWorkspaceHealthState, resetLibraryState]);
@@ -378,6 +387,7 @@ function AppShell() {
       }
     }
     setView(v);
+    viewRef.current = v;
     if (v !== "settings") clearSettingsMsg();
     if (isWorkspaceLoadView(v)) {
       // Diagnostics and health hash many files backend-side; refreshing on
@@ -427,51 +437,30 @@ function AppShell() {
     [savedRepos],
   );
 
-  const runHarnessSetupUpdate = useCallback((surfaces: string[], label: string) => {
-    void runWsTask({
-      label,
-      action: "apply_setup",
-      task: async () => {
-        const plan = await invoke<SetupPlan>("preview_setup", { surfaces });
-        const applySurfaces = surfacesNeedingApply(plan);
-        if (!plan.plan_fingerprint || !plan.preview_token || applySurfaces.length === 0) {
-          throw new Error("Nothing to apply for harness update");
-        }
-        return invoke<SetupResult>("apply_setup", {
-          surfaces: applySurfaces,
-          skipManual: true,
-          planFingerprint: plan.plan_fingerprint,
-          previewToken: plan.preview_token,
-        });
-      },
-      toActionResult: (r) => ({
-        success: r.success,
-        action: "apply_setup",
-        stdout: r.message,
-        stderr: r.failed.length > 0 ? r.failed.join("; ") : "",
-        exit_code: r.success ? 0 : 1,
-      }),
-      refresh: async () => {
-        const gen = workspaceLoadGenerationRef.current;
-        await Promise.all([
-          loadWorkspaceDiagnostics(gen),
-          loadDocs(gen),
-          fetchStatus(),
-          loadEnabledHarnessHealth(gen),
-        ]);
-      },
-    }).then((result) => {
-      if (result?.success) clearUninstallRecovery();
-    });
-  }, [
-    runWsTask,
-    clearUninstallRecovery,
-    loadWorkspaceDiagnostics,
-    loadDocs,
-    fetchStatus,
-    loadEnabledHarnessHealth,
-    workspaceLoadGenerationRef,
-  ]);
+  // Reload what an install or rollback may have changed on disk.
+  const refreshAfterApply = useCallback(async () => {
+    const gen = workspaceLoadGenerationRef.current;
+    await Promise.all([
+      loadWorkspaceDiagnostics(gen),
+      loadDocs(gen),
+      fetchStatus(),
+      loadEnabledHarnessHealth(gen),
+    ]);
+  }, [loadWorkspaceDiagnostics, loadDocs, fetchStatus, loadEnabledHarnessHealth, workspaceLoadGenerationRef]);
+
+  // `u`, `p`, `:update` and `:preview` open the review on the page; only `y` there applies it.
+  const install = useInstallScreen({
+    view,
+    getView: () => viewRef.current,
+    switchView,
+    settings: appSettings,
+    runWorkspaceTask: runWsTask,
+    refresh: refreshAfterApply,
+    onApplied: result => {
+      clearUninstallRecovery();
+      setApplyTransactionId(result.applied.length > 0 ? result.transaction_id : null);
+    },
+  });
 
   const runWorkspaceUninstall = useCallback((planFingerprint: string, previewToken: string) => {
     void runWsTask({
@@ -494,7 +483,10 @@ function AppShell() {
           loadEnabledHarnessHealth(gen),
         ]);
       },
-    }).then(captureFromUninstallResult);
+    }).then(result => {
+      captureFromUninstallResult(result);
+      if (result?.success && result.applied.length > 0) setApplyTransactionId(null);
+    });
   }, [
     runWsTask,
     captureFromUninstallResult,
@@ -504,9 +496,7 @@ function AppShell() {
     workspaceLoadGenerationRef,
   ]);
 
-  const runUninstallRollback = useCallback(() => {
-    const transactionId = uninstallRecoveryTransactionId;
-    if (!transactionId) return Promise.resolve(false);
+  const runRollbackTransaction = useCallback((transactionId: string) => {
     return runWsTask({
       label: "rollback",
       action: "rollback_setup_transaction",
@@ -529,11 +519,13 @@ function AppShell() {
         ]);
       },
     }).then((result) => {
-      if (result?.success) clearUninstallRecovery();
+      if (result?.success) {
+        clearUninstallRecovery();
+        setApplyTransactionId(null);
+      }
       return result?.success === true;
     });
   }, [
-    uninstallRecoveryTransactionId,
     runWsTask,
     clearUninstallRecovery,
     loadWorkspaceDiagnostics,
@@ -542,6 +534,27 @@ function AppShell() {
     loadEnabledHarnessHealth,
     workspaceLoadGenerationRef,
   ]);
+
+  /** The recovery card's path: always the transaction the last uninstall left. */
+  const runUninstallRollback = useCallback(() => {
+    if (!uninstallRecoveryTransactionId) return Promise.resolve(false);
+    return runRollbackTransaction(uninstallRecoveryTransactionId);
+  }, [uninstallRecoveryTransactionId, runRollbackTransaction]);
+
+  /** `z` and `:rollback`: a dry run first, then the existing confirm, then the rollback itself. */
+  const requestRollback = useRollbackRequest({
+    transactionId: rollbackTransactionId,
+    confirm,
+    beginConfirm,
+    runRollback: runRollbackTransaction,
+    setError,
+  });
+
+  /** `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. */
+  const requestUninstallPreview = useCallback(async () => {
+    await switchView("start");
+    if (viewRef.current === "start") setUninstallPreviewRequested(true);
+  }, [switchView]);
 
   const configTargets = useMemo(
     () => agentTargets.filter(t =>
@@ -584,7 +597,38 @@ function AppShell() {
     workspaceValid,
     busy: wsRunning !== null,
     enabledHarnessIds,
+    enabledTargetIds: appSettings?.enabled_target_ids,
+    refreshKey: overviewRefreshKey,
   });
+
+  const refreshAll = useCallback(async () => {
+    await Promise.all([loadWorkspaceDiagnostics(), loadWorkspaceResources(), loadBackups(), overview.refresh()]);
+  }, [loadWorkspaceDiagnostics, loadWorkspaceResources, loadBackups, overview.refresh]);
+
+  // What the Start and harness pages share: the output pane, the install review and the rollback path.
+  const pageProps = {
+    wsLog,
+    wsLogCompletedAt,
+    wsRunning,
+    status,
+    workspaceValid,
+    gitAvailable,
+    canRunReleaseCheck,
+    onClearOutput: resetTerminalOutput,
+    overview,
+    install,
+    backupRoot: workspaceDiagnostics?.backup_root ?? null,
+    rollbackTransactionId,
+    onRollback: () => void requestRollback(),
+    onRefresh: () => void refreshAll(),
+  };
+  const harnessPageProps = {
+    ...pageProps,
+    appSettings,
+    agentTargets: visibleAgentTargets,
+    settingsSaveStatus,
+    onToggleTarget: toggleTarget,
+  };
 
   const outputText = useMemo(() => {
     if (!wsLog) return null;
@@ -601,19 +645,17 @@ function AppShell() {
     setLibrarySource: setGuardedLibrarySourceType,
     appearance: appSettings?.appearance,
     setAppearance,
-    refresh: async () => {
-      await Promise.all([loadWorkspaceDiagnostics(), loadWorkspaceResources(), loadBackups(), overview.refresh()]);
-    },
+    refresh: refreshAll,
     openFolder: openDefaultWorkspaceFolder,
     openBackups: openBackupsFolder,
     clearOutput: resetTerminalOutput,
     outputText,
     canRunReleaseCheck,
     runReleaseCheck: () => void runWsAction("release_check", "release-check"),
-    previewSetup: surfaces => invoke<SetupPlan>("preview_setup", { surfaces }),
-    runUpdate: runHarnessSetupUpdate,
-    rollbackTransactionId: uninstallRecoveryTransactionId,
-    runRollback: runUninstallRollback,
+    openInstall: install.open,
+    rollbackTransactionId,
+    requestRollback,
+    requestUninstallPreview,
     setError,
   });
 
@@ -636,98 +678,44 @@ function AppShell() {
       >
         {view === "start" && (
           <StartView
+            {...pageProps}
             workspaceDiagnostics={workspaceDiagnostics}
-            onManagedUpdate={runHarnessSetupUpdate}
+            appSettings={appSettings}
+            enabledHarnessIds={enabledHarnessIds}
+            onNavigate={switchView}
             onUninstall={runWorkspaceUninstall}
             uninstallRecoveryTransactionId={uninstallRecoveryTransactionId}
             onUninstallRollback={runUninstallRollback}
+            uninstallPreviewRequested={uninstallPreviewRequested}
+            onUninstallPreviewHandled={() => setUninstallPreviewRequested(false)}
             onOpenFolder={openDefaultWorkspaceFolder}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            canRunReleaseCheck={canRunReleaseCheck}
             onReleaseCheck={() => runWsAction("release_check", "release-check")}
             backupCount={backups.length}
-            onRefreshBackups={loadBackups}
             onOpenBackupsFolder={openBackupsFolder}
-            enabledHarnessIds={enabledHarnessIds}
           />
         )}
 
         {view === "codex" && enabledHarnessIds.includes("codex") && (
-          <CodexView
-            appSettings={appSettings}
-            agentTargets={visibleAgentTargets}
-            settingsSaveStatus={settingsSaveStatus}
-            onToggleTarget={toggleTarget}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            canRunReleaseCheck={canRunReleaseCheck}
-            onHarnessSetupUpdate={runHarnessSetupUpdate}
-            runtimeHealth={codexRuntimeHealth}
-          />
+          <CodexView {...harnessPageProps} runtimeHealth={codexRuntimeHealth} />
         )}
 
         {view === "opencode" && enabledHarnessIds.includes("opencode") && (
           <OpenCodeView
-            appSettings={appSettings}
-            agentTargets={agentTargets}
-            settingsSaveStatus={settingsSaveStatus}
-            onToggleTarget={toggleTarget}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            canRunReleaseCheck={canRunReleaseCheck}
-            onHarnessSetupUpdate={runHarnessSetupUpdate}
+            {...harnessPageProps}
             runtimeHealth={opencodeRuntimeHealth}
-            onModelUpdated={loadOpenCodeRuntimeHealth}
+            onModelUpdated={() => {
+              void loadOpenCodeRuntimeHealth();
+              setOverviewRefreshKey(key => key + 1);
+            }}
           />
         )}
 
         {view === "cursor" && enabledHarnessIds.includes("cursor") && (
-          <CursorView
-            appSettings={appSettings}
-            agentTargets={agentTargets}
-            settingsSaveStatus={settingsSaveStatus}
-            onToggleTarget={toggleTarget}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            canRunReleaseCheck={canRunReleaseCheck}
-            onHarnessSetupUpdate={runHarnessSetupUpdate}
-            runtimeHealth={cursorProfileHealth}
-          />
+          <CursorView {...harnessPageProps} runtimeHealth={cursorProfileHealth} />
         )}
 
         {view === "claude" && enabledHarnessIds.includes("claude") && (
-          <ClaudeView
-            appSettings={appSettings}
-            agentTargets={agentTargets}
-            settingsSaveStatus={settingsSaveStatus}
-            onToggleTarget={toggleTarget}
-            wsLog={wsLog}
-            wsLogCompletedAt={wsLogCompletedAt}
-            wsRunning={wsRunning}
-            status={status}
-            workspaceValid={workspaceValid}
-            gitAvailable={gitAvailable}
-            canRunReleaseCheck={canRunReleaseCheck}
-            onHarnessSetupUpdate={runHarnessSetupUpdate}
-            runtimeHealth={claudeRuntimeHealth}
-          />
+          <ClaudeView {...harnessPageProps} runtimeHealth={claudeRuntimeHealth} />
         )}
 
         {view === "library" && (

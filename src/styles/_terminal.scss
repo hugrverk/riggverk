@@ -1,223 +1,96 @@
-/* ---- installed-state map ---- */
+/* ── output pane: `❯ command`, a status line, `── stdout ──`, then the text ──
+   Markup lives in components/TerminalOutput.tsx and OutputPane.tsx. Glyphs sit in `.g` cells; nothing
+   depends on white-space: pre outside the output text itself. */
 
-.installed-map .ws-section-header {
-  margin-bottom: 8px;
-}
-
-.installed-map-beacon {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  background: var(--accent);
-  opacity: 0.55;
-  transition: opacity 0.3s ease;
-}
-
-.installed-map-beacon-busy {
-  animation: installed-map-pulse 1.1s ease-in-out infinite;
-}
-
-@keyframes installed-map-pulse {
-  0%, 100% { opacity: 0.35; transform: scale(0.9); }
-  50% { opacity: 1; transform: scale(1.15); }
-}
-
-.installed-map-grid {
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-}
-
-.installed-map-row {
-  display: grid;
-  grid-template-columns: 76px 1fr;
-  align-items: baseline;
-  gap: 8px;
-}
-
-.installed-map-row-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.installed-map-cells {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-}
-
-.installed-map-cell {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  background: var(--bg-inset);
-  color: var(--text-muted);
-  transition: border-color 0.4s ease, color 0.4s ease;
-}
-
-.installed-map-dot {
-  width: 6px;
-  height: 6px;
-  border-radius: 50%;
-  background: currentColor;
-  transition: background 0.4s ease;
-}
-
-.installed-map-cell-ok { color: var(--ok); border-color: color-mix(in srgb, var(--ok) 30%, transparent); }
-.installed-map-cell-warn { color: var(--warn); border-color: color-mix(in srgb, var(--warn) 30%, transparent); }
-.installed-map-cell-fail { color: var(--fail); border-color: color-mix(in srgb, var(--fail) 30%, transparent); }
-.installed-map-cell-muted { color: var(--text-muted); }
-
-.installed-map-cell-flash {
-  animation: installed-map-flash 1.2s ease;
-}
-
-@keyframes installed-map-flash {
-  0% { background: var(--accent-bg); }
-  100% { background: var(--bg-inset); }
-}
-
-.installed-map-busy .installed-map-cell {
-  animation: installed-map-scan 1.4s ease-in-out infinite;
-}
-
-@keyframes installed-map-scan {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.45; }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .installed-map-beacon-busy,
-  .installed-map-cell-flash,
-  .installed-map-busy .installed-map-cell {
-    animation: none;
-  }
-}
-
-/* ---- TUI terminal output ---- */
+.out { padding: 0 10px; }
 
 .tui-cmdline {
   display: flex;
   align-items: baseline;
-  gap: 8px;
-  font-family: var(--font-mono);
-  color: var(--text);
+  gap: 6px;
+  white-space: nowrap;
 }
 
 .tui-cmd {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-weight: 600;
-  letter-spacing: 0.01em;
+  color: var(--text-heading);
 }
 
 .tui-when {
   margin-left: auto;
-  font-size: var(--text-xs);
+  padding-left: 14px;
+  font-size: var(--fs-sm);
   color: var(--text-muted);
 }
 
 .tui-caret {
   display: inline-block;
-  width: 8px;
+  width: 0.6em;
   height: 1em;
-  margin-left: 2px;
-  background: var(--accent);
-  opacity: 0.8;
-  animation: tui-caret-blink 1s steps(1) infinite;
   align-self: center;
+  background: var(--accent);
+  animation: tui-caret-blink 1s steps(1) infinite;
 }
 
 @keyframes tui-caret-blink {
   50% { opacity: 0; }
 }
 
+.tui-statusline {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tui-bar {
+  display: flex;
+  align-items: center;
+  margin-top: 6px;
+  color: var(--text-muted);
+  white-space: pre;
+}
+
+.tui-bar-rule {
+  flex: 1;
+  height: 0;
+  margin-left: 6px;
+  border-top: 1px solid var(--border);
+}
+
+.tui-out {
+  margin: 0;
+  overflow-x: auto;
+  font: inherit;
+  color: var(--text);
+  white-space: pre;
+}
+
+.tui-noout {
+  margin-top: 6px;
+  color: var(--text-muted);
+}
+
+.tui-idle {
+  display: flex;
+  flex-direction: column;
+  margin-top: 6px;
+}
+
 .tui-progress {
   display: flex;
   align-items: center;
   gap: 10px;
-  margin-top: 12px;
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-  width: fit-content;
-}
-
-.tui-progress .terminal-activity {
-  margin-top: 0;
-}
-
-.tui-progress-label {
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  color: var(--text-muted);
-}
-
-.tui-statusline {
-  display: flex;
-  align-items: baseline;
-  gap: 8px;
   margin-top: 6px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--border);
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
 }
 
-.tui-statusline-ok .tui-status-mark,
-.tui-statusline-ok .tui-status-text { color: var(--ok); }
-.tui-statusline-fail .tui-status-mark,
-.tui-statusline-fail .tui-status-text { color: var(--fail); }
+.tui-progress .terminal-activity { margin-top: 0; }
 
-.tui-block {
-  margin-top: 10px;
-  padding-left: 10px;
-  border-left: 2px solid var(--active-border);
-}
+.tui-progress-label { color: var(--text-muted); }
 
-.tui-block-fail {
-  border-left-color: color-mix(in srgb, var(--fail) 45%, transparent);
-}
-
-.tui-block-label {
-  display: block;
-  font-family: var(--font-mono);
-  font-size: var(--text-xs);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin-bottom: 4px;
-}
-
-.tui-noout {
-  margin-top: 10px;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-  color: var(--text-muted);
-}
-
-/* header loader: compact; static dim row when idle */
-.ws-terminal-header-right {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.ws-terminal-header-right .terminal-activity {
-  margin-top: 0;
-  height: 10px;
-}
-
-.ws-terminal-header-right .terminal-activity span {
-  width: 5px;
-}
-
+/* A static, dim row when the loader is idle. */
 .terminal-activity-idle span {
   height: 5px !important;
   background: rgba(var(--accent-rgb), 0.18) !important;

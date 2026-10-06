@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
@@ -117,10 +117,9 @@ describe("App", () => {
     render(<App />);
     await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
 
-    // The Start view exposes the default workspace folder action.
-    const openButton = await screen.findByRole("button", { name: /open folder/i }) as HTMLButtonElement;
-    // The action stays disabled until workspace diagnostics report a valid workspace.
-    await waitFor(() => expect(openButton.disabled).toBe(false));
+    // The Start view's status pane offers the default workspace folder action once diagnostics report a valid workspace.
+    const status = await screen.findByRole("region", { name: "Status" });
+    const openButton = await within(status).findByRole("button", { name: /open folder/i });
     await act(async () => {
       fireEvent.click(openButton);
     });

@@ -1,42 +1,78 @@
-import { HarnessInstallationCard } from "../components/HarnessInstallationCard";
-import { InstalledStateMap } from "../components/InstalledStateMap";
+import { useState } from "react";
+import { InstallPlanPane } from "../components/InstallPlanPane";
+import { OutputPane } from "../components/OutputPane";
+import { SurfaceMatrix } from "../components/SurfaceMatrix";
+import { completedLabel } from "../components/TerminalOutput";
 import { UninstallCard } from "../components/UninstallCard";
 import { UninstallRecoveryCard } from "../components/UninstallRecoveryCard";
-import { WorkspaceVerify } from "../components/WorkspaceVerify";
-import type { ActionResult } from "../components/TerminalOutput";
-import { WorkspaceTerminal } from "../components/WorkspaceTerminal";
-import { WORKSPACE_SURFACES } from "../lib/harnessInstallation";
+import type { OverviewId } from "../hooks/useInstallationOverview";
+import { focusPaneById } from "../keyboard/focus";
+import type { Binding } from "../keyboard/registry";
+import { useKeymap } from "../keyboard/useKeymap";
+import { harnessForView } from "../lib/harnessInstallation";
+import {
+  matrixModel,
+  overviewLabel,
+  overviewTargets,
+  previewDisabledFor,
+  surfaceRowsFor,
+  targetMeta,
+  updateActionFor,
+} from "../lib/installationView";
 import { DEFAULT_WORKSPACE_PATH } from "../lib/settingsDraft";
-import type { InstallAgent, StatusData, WorkspaceDiagnostics } from "../types";
+import type { AppView } from "../shell/views";
+import { Glyph } from "../ui/Glyph";
+import { Kv, type KvItem } from "../ui/Kv";
+import { Pane } from "../ui/Pane";
+import { PaneList } from "../ui/PaneList";
+import { toneClass } from "../ui/tone";
+import type { AppSettings, InstallAgent, WorkspaceDiagnostics } from "../types";
+import { installBindings } from "./installBindings";
+import type { PageInstallProps, PageOutputProps } from "./pageTypes";
 
-interface StartViewProps {
+export interface StartViewProps extends PageOutputProps, PageInstallProps {
   workspaceDiagnostics: WorkspaceDiagnostics | null;
-  onManagedUpdate: (surfaces: string[], label: string) => void;
+  appSettings: AppSettings | null;
+  enabledHarnessIds: InstallAgent[];
+  /** Enter on a harness row opens its page. */
+  onNavigate: (view: AppView) => void;
   onUninstall: (planFingerprint: string, previewToken: string) => void;
   uninstallRecoveryTransactionId: string | null;
   onUninstallRollback: () => Promise<boolean>;
+  /** `:uninstall` asks for the preview dialog. */
+  uninstallPreviewRequested: boolean;
+  onUninstallPreviewHandled: () => void;
   onOpenFolder: () => void;
-  wsLog: ActionResult | null;
-  wsLogCompletedAt: number | null;
-  wsRunning: string | null;
-  status: StatusData | null;
-  workspaceValid: boolean;
-  gitAvailable: boolean;
-  canRunReleaseCheck: boolean;
   onReleaseCheck: () => void;
   backupCount: number;
-  onRefreshBackups: () => void;
   onOpenBackupsFolder: () => void;
-  enabledHarnessIds: InstallAgent[];
 }
 
+/**
+ * The workspace page: [1] the workspace and the enabled harnesses with their installation state, [2] the
+ * surfaces of the one under the cursor plus the installed-state matrix, [3] its status, verification and the
+ * uninstall and recovery actions, [4] output. `u` and `p` open the install review in place of the panes.
+ */
 export function StartView({
   workspaceDiagnostics,
-  onManagedUpdate,
+  appSettings,
+  enabledHarnessIds,
+  onNavigate,
+  overview,
+  install,
+  backupRoot,
+  rollbackTransactionId,
+  onRollback,
+  onRefresh,
   onUninstall,
   uninstallRecoveryTransactionId,
   onUninstallRollback,
+  uninstallPreviewRequested,
+  onUninstallPreviewHandled,
   onOpenFolder,
+  onReleaseCheck,
+  backupCount,
+  onOpenBackupsFolder,
   wsLog,
   wsLogCompletedAt,
   wsRunning,
@@ -44,88 +80,224 @@ export function StartView({
   workspaceValid,
   gitAvailable,
   canRunReleaseCheck,
-  onReleaseCheck,
-  backupCount,
-  onRefreshBackups,
-  onOpenBackupsFolder,
-  enabledHarnessIds,
+  onClearOutput,
 }: StartViewProps) {
-  const resolvedPath =
-    workspaceDiagnostics?.resolved_path
-    ?? workspaceDiagnostics?.candidate_path
-    ?? DEFAULT_WORKSPACE_PATH;
+  const targets = overviewTargets(enabledHarnessIds);
+  const [cursor, setCursor] = useState<OverviewId>("workspace");
+  const selected: OverviewId = targets.includes(cursor) ? cursor : "workspace";
+  const entry = overview.entries[selected];
   const busy = wsRunning !== null;
+  const resolvedPath =
+    workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? DEFAULT_WORKSPACE_PATH;
+
+  const update = updateActionFor(selected, entry, { workspaceValid, busyLabel: wsRunning, settingsSaving: false });
+  const previewDisabled = previewDisabledFor(selected, { workspaceValid, busyLabel: wsRunning });
+  const showPlan = install.isOpenOn("start");
+
+  const releaseCheckState = !workspaceValid
+    ? false
+    : busy
+      ? `${wsRunning} is running`
+      : canRunReleaseCheck
+        ? true
+        : "release-check is not available in this workspace";
+  const statusBindings: Binding[] = [
+    {
+      id: "start.status.release-check",
+      keys: "R",
+      title: "Run the release check",
+      hint: "release-check",
+      group: "Verify",
+      scope: "pane",
+      paneId: "status",
+      when: () => releaseCheckState,
+      run: () => onReleaseCheck(),
+    },
+    {
+      id: "start.status.open-folder",
+      keys: "o",
+      title: "Open the workspace folder",
+      hint: "open folder",
+      group: "Verify",
+      scope: "pane",
+      paneId: "status",
+      when: () => (!workspaceValid ? false : busy ? `${wsRunning} is running` : true),
+      run: () => onOpenFolder(),
+    },
+    {
+      id: "start.status.backups",
+      keys: "B",
+      title: "Open the backups folder",
+      hint: "backups",
+      group: "Verify",
+      scope: "pane",
+      paneId: "status",
+      when: () => (busy ? `${wsRunning} is running` : true),
+      run: () => onOpenBackupsFolder(),
+    },
+  ];
+  useKeymap(
+    [
+      ...installBindings({
+        idPrefix: "start",
+        paneIds: ["harnesses", "surfaces", "status"],
+        update,
+        previewDisabled,
+        // The review of the harness under the cursor stays on this page.
+        onUpdate: () => void install.open(selected, { scope: "start" }),
+        onPreview: () => void install.open(selected, { readOnly: true, scope: "start" }),
+        onRefresh: () => void onRefresh(),
+      }),
+      ...statusBindings,
+    ],
+    { enabled: !showPlan },
+  );
+
+  const outputPane = (index: number) => (
+    <OutputPane
+      index={index}
+      wsRunning={wsRunning}
+      wsLog={wsLog}
+      wsLogCompletedAt={wsLogCompletedAt}
+      status={status}
+      workspaceValid={workspaceValid}
+      gitAvailable={gitAvailable}
+      canRunReleaseCheck={canRunReleaseCheck}
+      onClear={onClearOutput}
+      onRefresh={onRefresh}
+      rollbackTransactionId={rollbackTransactionId}
+      onRollback={onRollback}
+    />
+  );
+
+  if (showPlan) {
+    return (
+      <section className="screen install" aria-label="Workspace install review">
+        <InstallPlanPane flow={install.flow} index={1} busyLabel={wsRunning} backupRoot={backupRoot} onApply={install.apply} />
+        {outputPane(2)}
+      </section>
+    );
+  }
+
+  const selectedLabel = overviewLabel(selected);
+  const surfaceRows = surfaceRowsFor(selected, entry, appSettings);
+  const meta = targetMeta(entry, { workspaceValid, id: selected });
+  const offCount = surfaceRows.filter(row => row.state === "off").length;
+  const onCount = surfaceRows.length - offCount;
+  const conflicts = entry?.status?.conflict_details ?? [];
+
+  const statusItems: KvItem[] = [
+    { label: "state", value: meta.text, tone: meta.tone },
+    ...(entry?.status ? [{ label: "summary", value: entry.status.summary, wrap: true }] : []),
+    ...(entry?.error ? [{ label: "error", value: entry.error, tone: "fail" as const, wrap: true }] : []),
+    ...(conflicts.length > 0
+      ? [{ label: "preserved", value: conflicts.join(", "), tone: "warn" as const, wrap: true }]
+      : []),
+    ...(selected === "workspace"
+      ? [{ label: "path", value: resolvedPath, wrap: true }]
+      : [{ label: "surfaces", value: `${onCount} on${offCount > 0 ? `, ${offCount} off (target toggles)` : ""}` }]),
+  ];
+
+  const lastCheck = wsLog?.action === "release_check" ? wsLog : null;
+  const verifyItems: KvItem[] = [
+    {
+      label: "release-check",
+      value: lastCheck
+        ? `${lastCheck.success ? "ok" : "failed"}${wsLogCompletedAt ? ` · ${completedLabel(wsLogCompletedAt)}` : ""}`
+        : canRunReleaseCheck
+          ? "not run this session"
+          : "not available",
+      tone: lastCheck ? (lastCheck.success ? "ok" : "fail") : "dim",
+    },
+    {
+      label: "backups",
+      value: `${backupCount} run${backupCount === 1 ? "" : "s"}${backupRoot ? ` · ${backupRoot}` : ""}`,
+      tone: backupCount > 0 ? undefined : "dim",
+      wrap: true,
+    },
+    {
+      label: "last tx",
+      value: rollbackTransactionId ? `${rollbackTransactionId} · rollback available` : "none this session",
+      tone: rollbackTransactionId ? "ok" : "dim",
+      wrap: true,
+    },
+  ];
 
   return (
-    <section className="ws-layout ws-layout-start">
-      <div className="ws-shell">
-        <div className="ws-left start-left" role="region" aria-label="Workspace start">
-          <div className="start-overview" role="region" aria-label="About Agent Workspace">
-            <h1 className="start-overview-title">Agent Workspace</h1>
-            <div className="start-overview-body">
-              <p className="start-overview-copy">
-                Install and update one local workspace for rules, skills, agents, configs, and
-                documentation. Unknown or modified files are preserved for review.
-              </p>
-            </div>
-          </div>
-
-          <HarnessInstallationCard
-            surfaces={WORKSPACE_SURFACES}
-            title="Workspace installation"
-            description="Installs or updates the managed runtime workspace from this application bundle."
-            workspaceValid
-            busy={busy}
-            onUpdate={onManagedUpdate}
-            path={resolvedPath}
-            secondaryAction={{
-              label: "open folder",
-              onClick: onOpenFolder,
-              disabled: !workspaceValid || busy,
-            }}
-          />
-
-          <WorkspaceVerify
-            workspaceValid={workspaceValid}
-            wsRunning={wsRunning}
-            canRunReleaseCheck={canRunReleaseCheck}
-            backupCount={backupCount}
-            onReleaseCheck={onReleaseCheck}
-            onRefreshBackups={onRefreshBackups}
-            onOpenBackupsFolder={onOpenBackupsFolder}
-          />
-
-          <InstalledStateMap
-            workspaceValid={workspaceValid}
-            busy={busy}
-            refreshToken={wsLogCompletedAt}
-            enabledHarnessIds={enabledHarnessIds}
-          />
-
-          <UninstallCard
-            workspaceValid={workspaceValid}
-            busy={busy}
-            onApply={onUninstall}
-          />
-
-          <UninstallRecoveryCard
-            transactionId={uninstallRecoveryTransactionId}
-            busy={busy}
-            onRollback={onUninstallRollback}
-          />
-        </div>
-
-        <WorkspaceTerminal
-          wsRunning={wsRunning}
-          wsLog={wsLog}
-          wsLogCompletedAt={wsLogCompletedAt}
-          status={status}
-          workspaceValid={workspaceValid}
-          gitAvailable={gitAvailable}
-          canRunReleaseCheck={canRunReleaseCheck}
-          statusText={workspaceValid ? "current workspace available" : "workspace installation required"}
+    <section className="screen quad" aria-label="Workspace">
+      <Pane id="harnesses" index={1} title="harnesses" label="Harnesses" defaultFocus meta={`· ${targets.length}`}>
+        <PaneList
+          label="Harnesses"
+          items={targets}
+          getKey={id => id}
+          cursorKey={selected}
+          onCursorChange={key => setCursor(key as OverviewId)}
+          activateHint="open"
+          onActivate={id => {
+            const harness = harnessForView(id);
+            if (harness) onNavigate(harness);
+            else focusPaneById("surfaces");
+          }}
+          renderItem={id => {
+            const row = targetMeta(overview.entries[id], { workspaceValid, id });
+            return (
+              <>
+                <span className="nm">{overviewLabel(id)}</span>
+                <span className={`meta ${toneClass(row.tone)}`.trim()}>{row.text}</span>
+              </>
+            );
+          }}
         />
-      </div>
+        <p className="c-dim pane-note">
+          Install and update one local workspace for rules, skills, agents, configs, and documentation. Unknown or
+          modified files are preserved for review.
+        </p>
+      </Pane>
+
+      <Pane id="surfaces" index={2} title="surfaces" label="Surfaces" meta={`· ${selectedLabel}`}>
+        <PaneList
+          label={`${selectedLabel} surfaces`}
+          items={surfaceRows}
+          getKey={row => row.surface}
+          renderItem={row => (
+            <>
+              <span className="nm">
+                {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
+              </span>
+              <span className={`meta ${toneClass(row.display.tone)}`.trim()}>
+                <Glyph name={row.display.glyph} tone={row.display.tone} /> {row.display.label}
+              </span>
+            </>
+          )}
+        />
+        <div className="group pane-group">installed map</div>
+        <SurfaceMatrix rows={matrixModel(overview, targets, appSettings)} selectedId={selected} />
+      </Pane>
+
+      <Pane id="status" index={3} title="status" label="Status" scrollable meta={`· ${selectedLabel}`}>
+        <Kv items={statusItems} aria-label={`${selectedLabel} status`} />
+        <div className="group pane-group">verify</div>
+        <Kv items={verifyItems} aria-label="Verification and backups" />
+        {(workspaceValid || uninstallRecoveryTransactionId) && (
+          <>
+            <div className="group pane-group">lifecycle</div>
+            <UninstallCard
+              workspaceValid={workspaceValid}
+              busy={busy}
+              onApply={onUninstall}
+              previewRequested={uninstallPreviewRequested}
+              onPreviewRequestHandled={onUninstallPreviewHandled}
+            />
+            <UninstallRecoveryCard
+              transactionId={uninstallRecoveryTransactionId}
+              busy={busy}
+              onRollback={onUninstallRollback}
+            />
+          </>
+        )}
+      </Pane>
+
+      {outputPane(4)}
     </section>
   );
 }

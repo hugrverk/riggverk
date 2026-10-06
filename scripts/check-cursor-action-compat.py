@@ -36,8 +36,9 @@ def main() -> None:
     if manifest.get("setup_runtime") != "native":
         fail("Cursor manifest setup_runtime must be native")
 
-    if view.count("<HarnessInstallationCard") != 1:
-        fail("Cursor view must have exactly one unified installation card")
+    # The shared harness page owns the unified install review (preview, then apply with the reviewed plan).
+    if view.count("<HarnessPage") != 1 or 'harness="cursor"' not in view:
+        fail("Cursor view must render exactly one unified harness page for the cursor harness")
     for obsolete in (
         "onRepairWorkspace",
         "run_cursor_profile_action",

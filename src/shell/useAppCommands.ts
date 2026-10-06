@@ -1,14 +1,13 @@
-import { useConfirm } from "../components/ConfirmDialog";
 import { useCommands } from "../keyboard/commands/useCommands";
 import type { CommandSpec, ParsedCommand } from "../keyboard/commands/parser";
 import {
   describeUpdate,
-  surfacesForOverview,
   type InstallationOverview,
   type OverviewId,
 } from "../hooks/useInstallationOverview";
-import { HARNESS_NAV_ORDER, surfacesNeedingApply } from "../lib/harnessInstallation";
-import type { AppSettings, InstallAgent, SetupPlan, SetupSurfaceId } from "../types";
+import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
+import type { InstallTarget } from "../lib/installPlan";
+import type { AppSettings, InstallAgent } from "../types";
 import type { LibrarySourceType } from "../views/LibraryView";
 import { useShellState } from "./ShellState";
 import { VIEW_DEFS, type AppView } from "./views";
@@ -33,12 +32,17 @@ export interface AppCommandDeps {
   outputText: string | null;
   canRunReleaseCheck: boolean;
   runReleaseCheck: () => void;
-  previewSetup: (surfaces: SetupSurfaceId[]) => Promise<SetupPlan>;
-  /** Existing apply path (preview + apply behind the reviewed fingerprint). */
-  runUpdate: (surfaces: string[], label: string) => void;
-  /** Transaction left by the last uninstall, if it can still be rolled back. */
+  /**
+   * Opens the install review on the target's page: previews, then asks y or n before anything is written.
+   * `readOnly` shows the plan without an apply path. Surfaces whose target toggle is off are never part of it.
+   */
+  openInstall: (target: InstallTarget, options?: { readOnly?: boolean }) => void | Promise<void>;
+  /** Transaction left by the last install or uninstall, if it can still be rolled back. */
   rollbackTransactionId: string | null;
-  runRollback: () => Promise<boolean> | void;
+  /** Dry run, confirm, then roll back `rollbackTransactionId`. */
+  requestRollback: () => void | Promise<void>;
+  /** Opens the uninstall preview dialog on the workspace page. */
+  requestUninstallPreview: () => void | Promise<void>;
   setError: (message: string | null) => void;
 }
 
@@ -57,12 +61,11 @@ function isDarkNow(): boolean {
  * Global command set for `:` (view switches, theme, refresh, open, clear, copy, help, release-check,
  * update, preview, rollback, uninstall). Views add their own through `useCommands` while mounted.
  *
- * Mutating commands never write directly. Interim (until the plan screen lands): `update` previews, then asks
- * through the existing confirm dialog with the plan summary, then runs the existing apply path.
+ * Mutating commands never write directly: `update` and `preview` open the install review (plan table, then
+ * y to apply), `rollback` asks after a dry run, `uninstall` opens the existing uninstall preview.
  */
 export function useAppCommands(deps: AppCommandDeps): void {
-  const confirm = useConfirm();
-  const { openHelp, notify, beginConfirm } = useShellState();
+  const { openHelp, notify } = useShellState();
 
   const targets = () => updateTargets(deps.enabledHarnessIds);
   const busyReason = () => (deps.busyLabel ? `${deps.busyLabel} is running` : true);
@@ -76,26 +79,25 @@ export function useAppCommands(deps: AppCommandDeps): void {
   };
   const describeTarget = (value: string) => describeUpdate(deps.overview?.entries[value as OverviewId]?.status);
 
-  const resolveTargets = (parsed: ParsedCommand): { ids: OverviewId[]; label: string } => {
-    if (parsed.flags.all) return { ids: targets(), label: "all" };
-    const id = parsed.named.target as OverviewId;
-    return { ids: [id], label: id };
-  };
-  const surfacesOf = (ids: OverviewId[]): SetupSurfaceId[] => [...new Set(ids.flatMap(surfacesForOverview))];
+  const resolveTarget = (parsed: ParsedCommand): InstallTarget =>
+    parsed.flags.all ? "all" : (parsed.named.target as InstallTarget);
 
+  // Without a valid workspace only the workspace itself can be installed.
+  const targetValues = (): OverviewId[] => (deps.workspaceValid ? targets() : ["workspace"]);
   const targetArgs: CommandSpec["args"] = [
     {
       name: "target",
       kind: "enum",
-      values: () => targets(),
+      values: targetValues,
       describe: describeTarget,
     },
     { name: "all", kind: "flag", description: "every enabled harness and the workspace" },
   ];
   const requireTarget = (parsed: ParsedCommand): string | null => {
     const name = parsed.cmd.name;
-    if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targets().join(" | ")}) or pass --all`;
+    if (!parsed.named.target && !parsed.flags.all) return `${name}: name a target (${targetValues().join(" | ")}) or pass --all`;
     if (parsed.named.target && parsed.flags.all) return `${name}: use either a target or --all`;
+    if (!deps.workspaceValid && parsed.flags.all) return `${name}: no valid workspace installed (run ${name} workspace first)`;
     return null;
   };
 
@@ -184,33 +186,12 @@ export function useAppCommands(deps: AppCommandDeps): void {
     },
     {
       name: "update",
-      summary: "preview, then apply managed files (never overwrites conflicts)",
+      summary: "review what would change, then apply managed files (never overwrites conflicts)",
       group: "Workspace",
       args: targetArgs,
       validate: requireTarget,
-      enabled: guarded(workspaceReason, busyReason),
-      run: async parsed => {
-        const { ids, label } = resolveTargets(parsed);
-        const surfaces = surfacesOf(ids);
-        const plan = await deps.previewSetup(surfaces);
-        const conflicts = plan.conflicts.length;
-        if (surfacesNeedingApply(plan).length === 0 || !plan.plan_fingerprint || !plan.preview_token) {
-          notify(`update ${label}: nothing to apply${conflicts > 0 ? `, ${conflicts} conflict${conflicts === 1 ? "" : "s"} preserved` : ""}`);
-          return;
-        }
-        const release = beginConfirm();
-        let approved = false;
-        try {
-          approved = await confirm({
-            title: `Update ${label}`,
-            message: plan.summary,
-            confirmLabel: "update",
-          });
-        } finally {
-          release();
-        }
-        if (approved) deps.runUpdate(surfaces, `${label} update`);
-      },
+      enabled: guarded(busyReason),
+      run: parsed => void deps.openInstall(resolveTarget(parsed)),
     },
     {
       name: "preview",
@@ -218,43 +199,22 @@ export function useAppCommands(deps: AppCommandDeps): void {
       group: "Workspace",
       args: targetArgs,
       validate: requireTarget,
-      enabled: guarded(workspaceReason),
-      run: async parsed => {
-        const { ids, label } = resolveTargets(parsed);
-        const plan = await deps.previewSetup(surfacesOf(ids));
-        notify(`preview ${label}: ${plan.summary}`, 8000);
-      },
+      run: parsed => void deps.openInstall(resolveTarget(parsed), { readOnly: true }),
     },
     {
       name: "rollback",
-      summary: "restore the files removed by the last uninstall",
+      summary: "restore the files of the last install or uninstall from its backup (dry run, then confirm)",
       group: "Workspace",
       enabled: guarded(busyReason, () =>
-        deps.rollbackTransactionId ? true : "no uninstall to roll back in this session"),
-      run: async () => {
-        const release = beginConfirm();
-        let approved = false;
-        try {
-          approved = await confirm({
-            title: "Roll back uninstall",
-            message: `Restore the files removed by the last uninstall (transaction ${deps.rollbackTransactionId}) from backup?`,
-            confirmLabel: "roll back",
-          });
-        } finally {
-          release();
-        }
-        if (approved) await deps.runRollback();
-      },
+        deps.rollbackTransactionId ? true : "nothing to roll back in this session"),
+      run: () => void deps.requestRollback(),
     },
     {
       name: "uninstall",
       summary: "remove app-installed files (opens the uninstall preview)",
       group: "Workspace",
       enabled: guarded(workspaceReason, busyReason),
-      run: async () => {
-        await deps.switchView("start");
-        notify("uninstall: use the Uninstall card on the workspace page to preview and confirm");
-      },
+      run: () => void deps.requestUninstallPreview(),
     },
   ];
 

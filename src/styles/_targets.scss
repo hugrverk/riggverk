@@ -1,13 +1,35 @@
-/* ── target page system ── */
+/* ── harness pages: runtime pane rows (the OpenCode model override) ── */
 
-.target-page-layout .ws-shell {
-  grid-template-columns: minmax(0, 1.45fr) minmax(380px, 2fr);
+.runtime-edit { padding-top: 6px; }
+
+.kv-edit dt label { color: inherit; }
+
+.kv-edit dd { overflow: visible; }
+
+.kv-edit select,
+.kv-edit input[type="text"] {
+  width: 100%;
+  min-width: 0;
+  height: var(--lh);
+  padding: 0 6px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--inset);
+  color: var(--text);
 }
 
-.target-page-layout .ws-left {
-  max-width: none;
-  gap: 0;
+.kv-edit select:disabled,
+.kv-edit input:disabled { opacity: 0.5; }
+
+.kv-edit [aria-invalid="true"] { border-color: var(--warn); }
+
+.runtime-note {
+  padding: 4px 10px 0;
+  overflow-wrap: anywhere;
 }
+
+/* ── target page header ──
+   TargetPageHeader is still rendered by the Settings page; these rules go away together with it. */
 
 .target-page-header {
   flex-shrink: 0;
@@ -16,33 +38,6 @@
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: var(--bg);
-}
-
-.target-page-layout .target-page-header {
-  border: none;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-  background: var(--bg);
-}
-
-.ws-layout.target-page-layout .target-page-header {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-}
-
-.ws-layout.target-page-layout .target-panel {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-}
-
-.ws-layout.target-page-layout .ws-section,
-.ws-layout.target-page-layout .harness-action-card {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-  border-bottom: 1px solid var(--border);
 }
 
 .target-page-title-row {
@@ -105,85 +100,6 @@
   font-size: var(--fs-sm);
   line-height: 1.4;
   color: var(--dirty);
-}
-
-.target-panel {
-  flex-shrink: 0;
-  margin-bottom: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-  overflow: hidden;
-}
-
-.target-page-layout .target-panel {
-  border: none;
-  border-radius: 0;
-  border-bottom: 1px solid var(--border);
-}
-
-.ws-layout.target-page-layout .target-panel {
-  border-bottom: 1px solid var(--border);
-}
-
-.target-panel-header {
-  padding: 10px 14px 8px;
-  border-bottom: 1px solid var(--border);
-}
-
-.target-panel-title {
-  margin: 0;
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-heading);
-}
-
-.target-page-layout .ws-section-title,
-.target-page-layout .target-panel-title {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-heading);
-}
-
-.target-panel-body {
-  padding: 10px 14px 10px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.target-panel-group-label {
-  font-size: var(--fs-sm);
-  font-weight: 600;
-  letter-spacing: 0.06em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  opacity: 0.7;
-  margin-bottom: 4px;
-}
-
-.target-settings-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.target-settings-panel .settings-target-list {
-  gap: 2px;
-}
-
-.target-settings-dirty {
-  font-size: var(--fs-sm);
-  color: var(--dirty);
-  padding: 6px 10px;
-  margin: 8px 14px 0;
-  border: 1px solid rgba(var(--dirty-rgb, 200, 120, 80), 0.35);
-  border-radius: var(--radius);
-  background: rgba(var(--dirty-rgb, 200, 120, 80), 0.08);
 }
 
 .settings-target-path {

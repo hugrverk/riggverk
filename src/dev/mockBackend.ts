@@ -793,7 +793,9 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         for (const surface of ["claude_rules", "claude_agents", "claude_skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
         lastTransactionId = null;
       }
-      return { success: true, transaction_id: id, applied: [], failed: [], rolled_back: ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"], manual_steps: [], message: dryRun ? "dry run: 2 files would be restored" : "restored 2 files" } satisfies SetupResult;
+      const restored = ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"];
+      // Like the backend: a dry run lists what would be restored under `applied`; a real run under `rolled_back`.
+      return { success: true, transaction_id: id, applied: dryRun ? restored : [], failed: [], rolled_back: dryRun ? [] : restored, manual_steps: [], message: dryRun ? "Dry run: would restore 2 artifact(s); 0 already restored; 0 conflicted" : "restored 2 files" } satisfies SetupResult;
     }
     case "preview_uninstall":
       await delay(200);

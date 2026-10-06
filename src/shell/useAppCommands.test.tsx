@@ -1,7 +1,7 @@
-import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallationOverview";
-import type { InstallationStatus, SetupPlan } from "../types";
+import type { InstallationStatus } from "../types";
 import { useCommandList } from "../keyboard/context";
 import { parseCommandLine, type CommandSpec } from "../keyboard/commands/parser";
 import { renderInFrame } from "../test/renderWithShell";
@@ -44,26 +44,11 @@ function makeDeps(overrides: Partial<AppCommandDeps> = {}): AppCommandDeps {
     outputText: "stdout line",
     canRunReleaseCheck: true,
     runReleaseCheck: vi.fn(),
-    previewSetup: vi.fn(),
-    runUpdate: vi.fn(),
+    openInstall: vi.fn(),
     rollbackTransactionId: null,
-    runRollback: vi.fn(),
+    requestRollback: vi.fn(),
+    requestUninstallPreview: vi.fn(),
     setError: vi.fn(),
-    ...overrides,
-  };
-}
-
-function plan(overrides: Partial<SetupPlan> = {}): SetupPlan {
-  return {
-    operations: [{ surface: "claude_rules", kind: "update", summary: "update CLAUDE.md" }],
-    synced: [],
-    conflicts: [],
-    manual_steps: [],
-    summary: "1 to update",
-    has_pending_changes: true,
-    is_blocked: false,
-    plan_fingerprint: "fp-1",
-    preview_token: "tok-1",
     ...overrides,
   };
 }
@@ -246,76 +231,31 @@ describe("useAppCommands", () => {
   });
 
   describe("update", () => {
-    it("previews, asks through the confirm dialog with the plan summary, and only then runs the existing apply", async () => {
-      const deps = makeDeps({ previewSetup: vi.fn(async () => plan({ summary: "apply 7 safe, skip 1 conflict" })) });
+    it("opens the install review for the target instead of writing anything", () => {
+      const deps = makeDeps();
       setup(deps);
       runLine("update claude");
-      const dialog = await screen.findByRole("dialog");
-      expect(deps.previewSetup).toHaveBeenCalledWith(["claude_rules", "claude_agents", "claude_skills"]);
-      expect(within(dialog).getByText("apply 7 safe, skip 1 conflict")).not.toBeNull();
-      expect(deps.runUpdate).not.toHaveBeenCalled();
-      expect(screen.getByLabelText("Status bar").querySelector(".mode")!.textContent).toBe("CONFIRM");
-      fireEvent.click(within(dialog).getByRole("button", { name: "update" }));
-      await waitFor(() => expect(deps.runUpdate).toHaveBeenCalledWith(
-        ["claude_rules", "claude_agents", "claude_skills"],
-        "claude update",
-      ));
+      expect(deps.openInstall).toHaveBeenCalledTimes(1);
+      expect(deps.openInstall).toHaveBeenCalledWith("claude");
+      // No confirm dialog: the review on the page is the confirmation.
+      expect(screen.queryByRole("dialog")).toBeNull();
     });
 
-    it("does nothing when the dialog is cancelled", async () => {
-      const deps = makeDeps({ previewSetup: vi.fn(async () => plan()) });
+    it("covers the workspace, or the workspace plus every enabled harness with --all", () => {
+      const deps = makeDeps();
       setup(deps);
       runLine("update workspace");
-      const dialog = await screen.findByRole("dialog");
-      fireEvent.click(within(dialog).getByRole("button", { name: "cancel" }));
-      await act(async () => {
-        await Promise.resolve();
-      });
-      expect(deps.runUpdate).not.toHaveBeenCalled();
-      expect(screen.getByLabelText("Status bar").querySelector(".mode")!.textContent).not.toBe("CONFIRM");
-    });
-
-    it("--all previews the union of the workspace and every enabled harness", async () => {
-      const deps = makeDeps({
-        enabledHarnessIds: ["codex", "claude"],
-        previewSetup: vi.fn(async () => plan()),
-      });
-      setup(deps);
+      expect(deps.openInstall).toHaveBeenLastCalledWith("workspace");
       runLine("update --all");
-      await screen.findByRole("dialog");
-      expect(deps.previewSetup).toHaveBeenCalledWith([
-        "workspace_bundle",
-        "codex_config",
-        "codex_agents",
-        "codex_rules",
-        "codex_skills",
-        "claude_rules",
-        "claude_agents",
-        "claude_skills",
-      ]);
+      expect(deps.openInstall).toHaveBeenLastCalledWith("all");
     });
 
-    it("reports 'nothing to apply' without opening a dialog, mentioning preserved conflicts", async () => {
-      const conflict = { surface: "claude_rules" as const, kind: "conflict" as const, summary: "x" };
-      const deps = makeDeps({
-        previewSetup: vi.fn(async () => plan({ operations: [conflict], conflicts: [conflict], plan_fingerprint: null, preview_token: null })),
-      });
-      setup(deps);
-      runLine("update claude");
-      await waitFor(() =>
-        expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe(
-          "update claude: nothing to apply, 1 conflict preserved",
-        ),
-      );
-      expect(screen.queryByRole("dialog")).toBeNull();
-      expect(deps.runUpdate).not.toHaveBeenCalled();
-    });
-
-    it("requires a target or --all, refuses both, and is disabled while busy or without a workspace", () => {
-      const deps = makeDeps({ busyLabel: "apply" });
-      const { unmount } = setup(deps);
+    it("requires a target or --all, refuses both, and is disabled while busy", () => {
+      const busy = makeDeps({ busyLabel: "apply" });
+      const { unmount } = setup(busy);
       runLine("update claude");
       expect(commandLineError()).toBe("update: apply is running");
+      expect(busy.openInstall).not.toHaveBeenCalled();
       unmount();
 
       const idle = makeDeps();
@@ -324,7 +264,7 @@ describe("useAppCommands", () => {
         registered = useCommandList();
         return null;
       }
-      const second = renderInFrame(
+      renderInFrame(
         <>
           <Harness deps={idle} />
           <Probe />
@@ -337,13 +277,23 @@ describe("useAppCommands", () => {
       fireEvent.change(screen.getByRole("combobox", { name: "Command" }), { target: { value: "update codex --all" } });
       fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Enter" });
       expect(commandLineError()).toBe("update: use either a target or --all");
-      second.unmount();
+      expect(idle.openInstall).not.toHaveBeenCalled();
+    });
 
+    it("lets the workspace be installed without a valid workspace, but nothing that needs one", () => {
       const none = makeDeps({ workspaceValid: false });
       setup(none);
       runLine("update workspace");
-      expect(commandLineError()).toBe("update: no valid workspace installed");
-      expect(idle.previewSetup).not.toHaveBeenCalled();
+      expect(none.openInstall).toHaveBeenCalledWith("workspace");
+      runLine("update --all");
+      expect(commandLineError()).toBe("update: no valid workspace installed (run update workspace first)");
+      runLine("update claude");
+      expect(none.openInstall).toHaveBeenCalledTimes(1);
+
+      fireEvent.change(screen.getByRole("combobox", { name: "Command" }), { target: { value: "update " } });
+      const text = screen.getAllByRole("option").map(option => option.textContent!).join("|");
+      expect(text).toContain("update workspace");
+      expect(text).not.toContain("update claude");
     });
 
     it("suggests targets with descriptions from the installation overview", () => {
@@ -374,55 +324,60 @@ describe("useAppCommands", () => {
   });
 
   describe("preview", () => {
-    it("shows the plan summary without asking for confirmation or applying", async () => {
-      const deps = makeDeps({ previewSetup: vi.fn(async () => plan({ summary: "2 to create, 1 conflict" })) });
+    it("opens the same review read-only", () => {
+      const deps = makeDeps();
       setup(deps);
       runLine("preview codex");
-      await waitFor(() =>
-        expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("preview codex: 2 to create, 1 conflict"),
-      );
-      expect(screen.queryByRole("dialog")).toBeNull();
-      expect(deps.runUpdate).not.toHaveBeenCalled();
+      expect(deps.openInstall).toHaveBeenCalledWith("codex", { readOnly: true });
+      runLine("preview --all");
+      expect(deps.openInstall).toHaveBeenLastCalledWith("all", { readOnly: true });
     });
 
-    it("reports a failing preview through the status bar", async () => {
-      const deps = makeDeps({ previewSetup: vi.fn(async () => { throw new Error("backend down"); }) });
+    it("stays available while a task runs, since it writes nothing", () => {
+      const deps = makeDeps({ busyLabel: "release-check" });
       setup(deps);
-      runLine("preview codex");
-      await waitFor(() =>
-        expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toBe("preview: backend down"),
-      );
+      runLine("preview claude");
+      expect(deps.openInstall).toHaveBeenCalledWith("claude", { readOnly: true });
     });
   });
 
   describe("rollback and uninstall", () => {
-    it("rollback is disabled with a reason when there is no recovery transaction", () => {
+    it("rollback is disabled with a reason when there is nothing to roll back", () => {
       const deps = makeDeps({ rollbackTransactionId: null });
       setup(deps);
       runLine("rollback");
-      expect(commandLineError()).toBe("rollback: no uninstall to roll back in this session");
-      expect(deps.runRollback).not.toHaveBeenCalled();
+      expect(commandLineError()).toBe("rollback: nothing to roll back in this session");
+      expect(deps.requestRollback).not.toHaveBeenCalled();
     });
 
-    it("rollback confirms first, then runs the existing rollback", async () => {
+    it("rollback hands over to the dry-run and confirm flow", () => {
       const deps = makeDeps({ rollbackTransactionId: "tx-42" });
       setup(deps);
       runLine("rollback");
-      const dialog = await screen.findByRole("dialog");
-      expect(within(dialog).getByText(/tx-42/)).not.toBeNull();
-      expect(deps.runRollback).not.toHaveBeenCalled();
-      fireEvent.click(within(dialog).getByRole("button", { name: "roll back" }));
-      await waitFor(() => expect(deps.runRollback).toHaveBeenCalledTimes(1));
+      expect(deps.requestRollback).toHaveBeenCalledTimes(1);
     });
 
-    it("uninstall routes to the workspace page and points at its preview (no direct write)", async () => {
+    it("rollback waits for a running task", () => {
+      const deps = makeDeps({ rollbackTransactionId: "tx-42", busyLabel: "apply" });
+      setup(deps);
+      runLine("rollback");
+      expect(commandLineError()).toBe("rollback: apply is running");
+      expect(deps.requestRollback).not.toHaveBeenCalled();
+    });
+
+    it("uninstall asks the workspace page for its preview (no direct write)", () => {
       const deps = makeDeps();
       setup(deps);
       runLine("uninstall");
-      await waitFor(() => expect(deps.switchView).toHaveBeenCalledWith("start"));
-      await waitFor(() =>
-        expect(within(screen.getByLabelText("Status bar")).getByRole("status").textContent).toMatch(/^uninstall: use the Uninstall card/),
-      );
+      expect(deps.requestUninstallPreview).toHaveBeenCalledTimes(1);
+    });
+
+    it("uninstall needs a valid workspace", () => {
+      const deps = makeDeps({ workspaceValid: false });
+      setup(deps);
+      runLine("uninstall");
+      expect(commandLineError()).toBe("uninstall: no valid workspace installed");
+      expect(deps.requestUninstallPreview).not.toHaveBeenCalled();
     });
   });
 

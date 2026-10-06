@@ -61,6 +61,42 @@ describe("useInstallationOverview", () => {
     expect(overviewState(result.current, "workspace")).toBe("current");
   });
 
+  it("does not request surfaces whose target toggle is off when the toggles are given", async () => {
+    backend({});
+    const enabledTargetIds = ["codex_rules", "claude_rules"];
+    const { result } = renderHook(() => useInstallationOverview(options({ enabledTargetIds })));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    const requested = invokeMock.mock.calls.map(call => (call[1] as { surfaces: string[] }).surfaces);
+    expect(requested).toContainEqual(["codex_rules", "codex_skills"]);
+    expect(requested).toContainEqual(["claude_rules", "claude_skills"]);
+    expect(requested).toContainEqual(["cursor_skills"]);
+    expect(requested.flat()).not.toContain("codex_config");
+    expect(requested.flat()).not.toContain("claude_agents");
+    expect(requested.flat()).not.toContain("cursor_mcp");
+    expect(requested).toContainEqual(["workspace_bundle"]);
+  });
+
+  it("re-fetches when a target toggle changes, but not for a new array with the same toggles", async () => {
+    backend({});
+    const { result, rerender } = renderHook((props: UseInstallationOverviewOptions) => useInstallationOverview(props), {
+      initialProps: options({ enabledTargetIds: ["codex_rules"] }),
+    });
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    invokeMock.mockClear();
+    rerender(options({ enabledTargetIds: ["codex_rules"] }));
+    await act(async () => {
+      await Promise.resolve();
+    });
+    expect(invokeMock).not.toHaveBeenCalled();
+    rerender(options({ enabledTargetIds: ["codex_rules", "codex_agents"] }));
+    await waitFor(() => expect(invokeMock).toHaveBeenCalledTimes(5));
+    expect(invokeMock.mock.calls.map(call => (call[1] as { surfaces: string[] }).surfaces)).toContainEqual([
+      "codex_agents",
+      "codex_rules",
+      "codex_skills",
+    ]);
+  });
+
   it("skips disabled harnesses", async () => {
     backend({});
     const { result } = renderHook(() => useInstallationOverview(options({ enabledHarnessIds: ["codex"] })));
