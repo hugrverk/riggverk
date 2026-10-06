@@ -24,6 +24,12 @@ Options:
   --help           Show this help
 
 Default mode is dry-run. Use --apply to write files.
+
+A rules file that already holds the Agent Workspace base block
+(<!-- BEGIN AGENT-WORKSPACE BASE ... END AGENT-WORKSPACE BASE -->) is managed by
+the app. This script never writes such a file: --apply refuses, and the other
+modes only report it. Update it, or convert a hand-edited one, in the app
+(Convert on the harness page); that keeps your text outside the block.
 USAGE
 }
 
@@ -92,6 +98,16 @@ target_label() {
   esac
 }
 
+# The block markers the app writes. Matched anywhere on a line, so a stray BOM, indent or fence still counts:
+# refusing a file that only quotes a marker is safe, writing over a managed block is not.
+has_managed_block() {
+  [ -f "$1" ] && LC_ALL=C grep -aEq '<!-- (BEGIN|END) AGENT-WORKSPACE BASE' "$1"
+}
+
+refuse_managed_block() {
+  printf 'install-agent-rules.sh: %s holds the Agent Workspace base block and is managed by the app; this script would drop the block and your refinements, so nothing was written. Update it in the app, or use Convert on the harness page for a hand-edited file.\n' "$1" >&2
+}
+
 status_char() {
   case "$1" in
     synced)   printf '=' ;;
@@ -113,6 +129,11 @@ handle_target() {
   target="$(resolve_target "$agent_id")"
   local label
   label="$(target_label "$agent_id")"
+
+  if ! $apply && has_managed_block "$target"; then
+    printf '  %s managed by the app (base block); not compared here, update it in the app\n' "$label"
+    return 0
+  fi
 
   if ! $diff_mode && ! $apply; then
     if [ -f "$target" ]; then
@@ -145,6 +166,10 @@ handle_target() {
   # mutating step below checks its own status, and the target is never written
   # unless its backup was copied and verified.
   if $apply; then
+    if has_managed_block "$target"; then
+      refuse_managed_block "$target"
+      return 1
+    fi
     if [ -f "$target" ]; then
       if cmp -s "$source_file" "$target"; then
         if ! $quiet; then printf '  %s already synced\n' "$label"; fi
@@ -181,6 +206,25 @@ if ! $quiet; then
     printf '  Backups: %s\n' "$BACKUP_ROOT"
   else
     printf '  Mode: dry-run\n'
+  fi
+fi
+
+# Refuse before any write: a run that updates one target and refuses another would leave the rules half synced.
+if $apply; then
+  managed_found=false
+  for agent_id in codex opencode claude; do
+    case "$agent_id" in
+      codex)    selected=$codex ;;
+      opencode) selected=$opencode ;;
+      claude)   selected=$claude ;;
+    esac
+    if $selected && has_managed_block "$(resolve_target "$agent_id")"; then
+      refuse_managed_block "$(resolve_target "$agent_id")"
+      managed_found=true
+    fi
+  done
+  if $managed_found; then
+    exit 1
   fi
 fi
 

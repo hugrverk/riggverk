@@ -160,6 +160,74 @@ test_rules_backup_failure() {
   assert_content "$backup_file" "user claude rules"
 }
 
+# --- a rules file with the app's base block is never written by the legacy script ---
+
+write_managed_rules() {
+  printf '%s\n' \
+    '<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->' \
+    '# Global Agent Rules' \
+    '<!-- END AGENT-WORKSPACE BASE -->' \
+    '' \
+    '## My refinements' \
+    'keep this line' >"$1"
+}
+
+test_rules_managed_block() {
+  local home backups before mode
+  home="$(new_home h-rules-managed)"
+  backups="$tmp_root/rules-managed-backups"
+  mkdir -p "$home/.claude" "$home/.codex" "$home/.config/opencode"
+  write_managed_rules "$home/.claude/CLAUDE.md"
+  before="$(cat "$home/.claude/CLAUDE.md")"
+
+  # --apply refuses, points at the app, and neither writes nor backs up.
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" "$scripts/install-agent-rules.sh" --claude --apply --quiet
+  assert_nonzero "install-agent-rules.sh --apply must refuse a file that holds the base block"
+  assert_log "managed by the app"
+  assert_log "Convert"
+  assert_content "$home/.claude/CLAUDE.md" "$before"
+  [ ! -e "$backups" ] || fail "a refused rules apply must not create backups"
+
+  # One managed target refuses the whole run before any other target is written.
+  printf 'user codex rules\n' >"$home/.codex/AGENTS.md"
+  printf 'user opencode rules\n' >"$home/.config/opencode/AGENTS.md"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" "$scripts/install-agent-rules.sh" --all --apply --quiet
+  assert_nonzero "install-agent-rules.sh --all --apply must refuse when one target holds the base block"
+  assert_content "$home/.claude/CLAUDE.md" "$before"
+  assert_content "$home/.codex/AGENTS.md" "user codex rules"
+  assert_content "$home/.config/opencode/AGENTS.md" "user opencode rules"
+  [ ! -e "$backups" ] || fail "a refused rules apply must not create backups"
+
+  # A BOM before the markers, or markers that are only half there, still count as managed.
+  printf '\357\273\277' >"$home/.codex/AGENTS.md"
+  write_managed_rules "$home/managed.tmp"
+  cat "$home/managed.tmp" >>"$home/.codex/AGENTS.md"
+  rm "$home/managed.tmp"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" "$scripts/install-agent-rules.sh" --codex --apply --quiet
+  assert_nonzero "a BOM before the BEGIN marker must not hide the base block"
+  printf '<!-- BEGIN AGENT-WORKSPACE BASE: managed -->\nno end marker\n' >"$home/.config/opencode/AGENTS.md"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" "$scripts/install-agent-rules.sh" --opencode --apply --quiet
+  assert_nonzero "malformed markers must not be overwritten"
+  assert_content "$home/.config/opencode/AGENTS.md" "$(printf '<!-- BEGIN AGENT-WORKSPACE BASE: managed -->\nno end marker')"
+
+  # The read-only modes report it instead of calling it diverged, and never write.
+  for mode in "--claude" "--claude --diff"; do
+    # shellcheck disable=SC2086
+    run "$home" "$scripts/install-agent-rules.sh" $mode
+    assert_ok "install-agent-rules.sh $mode on a managed file"
+    assert_log "managed by the app"
+    assert_no_log "use --apply"
+    assert_no_log "diverged"
+    assert_content "$home/.claude/CLAUDE.md" "$before"
+  done
+
+  # A plain file is still synced.
+  printf 'user claude rules\n' >"$home/.claude/CLAUDE.md"
+  run "$home" AGENT_WORKSPACE_BACKUP_DIR="$backups" "$scripts/install-agent-rules.sh" --claude --apply --quiet
+  assert_ok "install-agent-rules.sh --apply on a plain file"
+  cmp -s "$workspace/templates/sync/claude-rules.md" "$home/.claude/CLAUDE.md" || fail "plain CLAUDE.md was not synced"
+}
+
 test_runtime_agents_backup_failure() {
   local home
   home="$(new_home h-agents)"
@@ -466,6 +534,7 @@ test_playwright_guard_home_paths() {
 all_tests="
 test_dry_run_default
 test_rules_backup_failure
+test_rules_managed_block
 test_runtime_agents_backup_failure
 test_runtime_agents_without_python
 test_legacy_scout
