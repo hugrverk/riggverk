@@ -1,158 +1,144 @@
 # App Release Smoke
 
-Manual smoke checklist for Agent Workspace app builds. Complements `scripts/release-check.sh` (automated syntax, bundled-default checks, forbidden-source scans, app build, Cargo checks). `scripts/release-check.sh` does not test GUI behavior, installed-app bundles, or folder-picker interactions.
+Manual smoke checklist for Agent Workspace builds. It complements `scripts/release-check.sh`, which covers syntax, bundled-default checks, source scans, the app build, Cargo checks, apply smokes in temporary `HOME` directories, and the backend runtime smoke. It does not drive the webview, an installed bundle, or the folder picker.
 
-## Automated backend runtime smoke
-
-For Tauri IPC-backed status without manual clicking or a live webview:
+Run this in the real Tauri app (not Vite only: `invoke` does not exist there) with isolated paths:
 
 ```bash
-./scripts/smoke-tauri-runtime.sh
+export HOME="$(mktemp -d)"
+export AGENT_WORKSPACE_PATH="$HOME/workspace"
+export AGENT_WORKSPACE_BACKUP_DIR="$HOME/backups"
+npm run tauri dev        # or open the built bundle from this shell
 ```
 
-**Covers:** temp `HOME` + `AGENT_WORKSPACE_PATH`, workspace diagnostics, `get_status` sync fields, OpenCode runtime health, Cursor profile health, Brain Setup seed (no bundled private context).
-
-**Does not cover:** Tauri webview routes, `invoke` in a browser, macOS window automation, or a real user profile. Playwright against `http://localhost:1420` only sees the Vite shell (no Tauri backend). Backend runtime smoke is not a substitute for actual isolated Tauri webview smoke below.
-
-## Actual Tauri webview smoke (required before release)
-
-Run the built or dev Tauri app with isolated `HOME`, `AGENT_WORKSPACE_PATH`, and backup paths. Verify in the real webview (not Vite-only):
-
-### Uninstall and recovery
-
-- [ ] Install into isolated `HOME`, workspace root, and backup root overrides
-- [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts
-- [ ] Modified and unknown fixture files remain on disk after uninstall preview/apply
-- [ ] **uninstall everything** removes proven app-owned files and invalidates or removes the workspace
-- [ ] **Recover previous uninstall** remains visible after the workspace becomes invalid or missing
-- [ ] **preview recovery** runs read-only dry-run and reports to restore / already restored / conflicts counts
-- [ ] **restore workspace** opens confirmation; Escape closes and focus returns to the restore button
-- [ ] Cancel confirmation leaves the recovery candidate unchanged
-- [ ] **confirm restore** brings workspace and harness state back; Installed State Map and health refresh
-- [ ] Recovery card disappears only after successful rollback
-- [ ] Create a changed or occupied restore target; dry-run reports conflict and restore stays disabled
-- [ ] No console errors during uninstall, recovery preview, or restore flows
-
-### Codex 0.134+ migration
-
-- [ ] Current top-level managed fields `approval_policy` and `sandbox_mode` apply correctly
-- [ ] App-shaped legacy `profile = "safe"` / `"workspace-write"` selectors and `[profiles.*]` tables are removed when still app-shipped
-- [ ] Custom profiles and unrelated keys remain
-- [ ] Model, personality, MCP entries, and comments remain
-- [ ] Same-line inline comments on managed fields remain
-- [ ] Ambiguous managed lines refuse safely with zero mutation
-
-### Settings and current UI
-
-- [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
-- [ ] Disable one harness: its nav icon, page, Installed row, health calls, and harness-specific Library entries disappear
-- [ ] Existing isolated harness files remain byte-identical after disable
-- [ ] Restart preserves the disabled state and prior fine-grained target selections
-- [ ] Re-enable restores UI and health without automatic installation
-- [ ] Disable every harness: Workspace, Repo Dashboard, Prompt Builder, generic Library content, and Settings remain usable
-- [ ] Explicit stale setup for a disabled harness fails without mutation
-- [ ] Full uninstall preview still includes proven app-owned artifacts from disabled harnesses; rollback remains complete
-- [ ] Installed State Map renders workspace, Codex, OpenCode, Claude, and Cursor groups and reflects status changes after managed actions
-- [ ] Reduce Motion disables pulse, scan, and flash animation classes
-- [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens the selected view after app restart
-- [ ] Appearance changes reset background and foreground overrides according to current behavior
-- [ ] All four text sizes remain usable at minimum supported window size
-
-### Installation rollback and dialogs
-
-- [ ] Rollback dry-run after simulated interruption reports correct reconciliation
-- [ ] Rollback retry does not restore already-completed artifacts twice
-- [ ] `rolling_back` transaction with all artifacts restored finalizes without extra filesystem mutations
-- [ ] Conflict review dialog: keyboard open, Escape closes, focus returns, and safe operations remain actionable
-- [ ] No console errors during rollback and Codex apply flows
-
-Run this checklist before sharing a built app bundle with another user.
+Tab keys below assume the default order: workspace, codex, opencode, cursor, claude, library, repo, prompts, settings (`1`-`9`).
 
 ## 1. Preflight
 
-- [ ] `git status --short` is clean (no uncommitted changes)
+- [ ] `git status --short` is clean; commit and branch noted for the report
 - [ ] `./scripts/release-check.sh` passes
-- [ ] `npm run tauri build` succeeds (skip if environment cannot produce macOS bundles)
+- [ ] `npm run tauri build` succeeds (skip if the environment cannot build bundles)
 - [ ] No secrets, private keys, names, or credential-bearing data in `resources/default-workspace/`
-- [ ] Current branch and commit noted for the pass/fail report
-- [ ] `./scripts/release-size-report.sh` runs and sizes are within expected range
+- [ ] `./scripts/release-size-report.sh` sizes are in the expected range
 
-## 2. Build / Install Smoke
+## 2. Launch and shell
 
-- [ ] App bundle built successfully (or dev mode confirmed working)
-- [ ] App launches without generic error banner on first launch
-- [ ] Fresh launch shows Not installed or Current status, not path-chooser UI
-- [ ] Workspace displays canonical path `~/.config/agent-workspace`
-- [ ] Toolbar icons stay on the same compact row as macOS traffic lights
-- [ ] Error/info banner renders below the toolbar
-- [ ] Window drags from the header band; toolbar buttons remain clickable
-- [ ] Start view scrolls when content exceeds window height
-- [ ] Product title "Agent Workspace" visible
+- [ ] First launch shows `not installed`, no generic error banner, no path chooser on the Workspace page
+- [ ] Workspace page shows `~/.config/agent-workspace` (or the isolated override)
+- [ ] Top line tabs match the order above; Mac traffic lights sit on the same 28px line
+- [ ] `?` opens the help overlay listing keys and commands; Escape closes it
+- [ ] `:` opens the command line; `:help`, `:codex`, `:theme toggle`, an unknown command (error, no crash)
+- [ ] `Mod+k` opens the command line, `Mod+,` opens Settings, also from inside a text field
+- [ ] `1`-`9` switch tabs; `h` and `l` move between panes; `j`/`k`, `g g`/`G` move in lists; `/` filters a filterable list; Escape clears the filter
+- [ ] Digits and letters typed into a text field are not treated as shortcuts; Escape leaves the field
+- [ ] Focus rings visible when tabbing; status bar hints match the focused pane
+- [ ] An error line is dismissed with Escape
 
-## 3. Workspace Install Smoke
+## 3. Install review
 
-- [ ] With no prior install, status is Not installed and **Install** is offered
-- [ ] **Install** creates the isolated runtime workspace with `.agent-workspace/workspace.json` and bundled files
-- [ ] A second run reports Current and performs no mutation
-- [ ] Modified historical and unknown files are preserved as conflicts
-- [ ] **open folder** opens the installed directory
-- [ ] **refresh** updates diagnostics
-- [ ] No choose-folder, check-path, use-default, or clear-active controls
-- [ ] Idle terminal shows operations ready; hints mention diff/sync, not pull
+- [ ] Fresh state: Workspace page shows `not installed`; `u` on the workspace row opens the plan table with create rows and a backup/rollback footer
+- [ ] `n` (and Escape) cancels; nothing was written (check the isolated workspace dir)
+- [ ] `p` shows the plan with no apply path; `n` closes it
+- [ ] `u` then `y` installs: `.agent-workspace/workspace.json`, `.agent-workspace/managed-state.json`, and the bundled files exist
+- [ ] Output pane shows the result; a second `u` reports `nothing to change`, no mutation
+- [ ] `d` expands a row's details; `c` jumps to the next conflict; `j`/`k` move rows
+- [ ] A modified bundled file in the workspace appears as a conflict row (`preserved, skipped`), `y` applies only the safe rows, and the conflict file is unchanged
+- [ ] Moving the conflicting file away and installing again updates it
+- [ ] A stale plan (change the installed file between preview and `y`) fails with a re-preview prompt; `r` previews again
+- [ ] `:update codex`, `:update --all`, `:preview opencode` open the same review; `:update` without a target explains itself
+- [ ] No repair, Setup Lifecycle, per-surface mutation, or duplicate skills install controls exist
+- [ ] Workspace page: `R` release-check state matches script availability; `o` opens the workspace folder; `B` opens the backups folder; `r` refreshes
 
-## 4. Harness and Library Smoke
+## 4. Target toggles
 
-- [ ] Codex, OpenCode, Cursor, Claude nav icons load harness pages
-- [ ] Workspace and each harness page show exactly one managed installation card
-- [ ] No repair, Setup Lifecycle, duplicate skills install, or per-surface mutation controls appear
-- [ ] Library: Docs, Rules, Skills, Agents, Configs, Brain Setup switch correctly
-- [ ] Library → Docs: document selection, Preview, Edit, modified state, save, reset, open, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
-- [ ] Brain Setup copy block works
-- [ ] Settings: appearance, all four text sizes (`small`, `medium`, `large`, `extra large`), and theme colors save and reset
-- [ ] Extra-large text size at minimum supported window width
+- [ ] Codex page: Space toggles targets, the change autosaves (no Save button)
+- [ ] Fresh settings: every target is on except `codex_config`
+- [ ] With `codex_config` off, a Codex plan has no config rows and `~/.codex/config.toml` is untouched
+- [ ] Turning a target off hides its surface from the plan and the status shows it as `off`
+- [ ] Turning it on adds it back to the next preview
+- [ ] Legacy settings file without `target_defaults_version`: migration keeps targets that were enabled or already managed
+- [ ] Skills surfaces and the workspace bundle are never gated
 
-## 4b. Prompt Builder and Repo Dashboard Smoke
+## 5. Rules block, Convert, Leave as is
 
-- [ ] Header exposes dedicated **Prompt Builder** and **Repo Dashboard** icons after Library and before Settings
-- [ ] No **Tools** icon or intermediate Tools page exists
-- [ ] Prompt Builder and Repo Dashboard sidebars have no tool switcher buttons
-- [ ] No Prompt Builder shortcut hint block (1–4 / / / ↑↓) in the sidebar
-- [ ] No Repo Dashboard sidebar `gh: enhanced` or `gh: local-only` status line
-- [ ] Prompt Builder keyboard shortcuts still work outside editable controls
-- [ ] **Use as context** from an eligible Repo Dashboard item switches to Prompt Builder with safe task context
-- [ ] Repo Dashboard refresh on a repository with more than 500 locally available commits loads complete reachable history (not a hard 500-cap)
+Use fixture files in the isolated `HOME` (`~/.claude/CLAUDE.md`, `~/.codex/AGENTS.md`, `~/.config/opencode/AGENTS.md`).
 
-## 5. Sync / Install Smoke (Caution)
+- [ ] Absent rules file: install creates a file holding the `BEGIN`/`END AGENT-WORKSPACE BASE` block
+- [ ] Text added below the END marker survives an update; a base update reports `update_available` and how many refinement lines it keeps
+- [ ] Edited block: conflict `base_block_edited`, file unchanged by `y`
+- [ ] Pre-existing file without markers: conflict `legacy_diverged`; file identical to a shipped base is wrapped after a full backup
+- [ ] Harness page rules row: `d` shows the diff, `v` shows the conversion preview (exact resulting file) and asks to confirm, `m` leaves the file as is; `:rules` mirrors them
+- [ ] Convert keeps changed `##` sections below the END marker and writes a backup under `setup/`
+- [ ] Leave as is changes the status to "base updates available, you manage this file" and writes `.agent-workspace/rules-preferences.json`; install no longer touches the file
+- [ ] Malformed markers (duplicate, unpaired, reordered) refuse with zero mutation
+- [ ] Non-empty `AGENTS.override.md` next to Codex rules produces a Codex health warning
 
-Dry-runs only unless testing your own machine:
+## 6. Rollback and uninstall
 
-- [ ] `scripts/install-agent-rules.sh --quiet --diff` from installed workspace
-- [ ] `scripts/install-opencode-config.sh --quiet --diff`
-- [ ] `scripts/install-skills.sh --quiet --dry-run --global` for selected agents
-- [ ] Do not run `--apply` on someone else's machine without intent
-- [ ] Apply creates backups under the platform backup root (`~/Library/Application Support/ai.agentworkspace.app/backups` on macOS, `${XDG_CONFIG_HOME:-~/.config}/ai.agentworkspace.app/backups` on Linux)
+- [ ] After `y`, the footer and output show a transaction; `z` on the output pane (or `:rollback`) runs a dry run and a confirm, then restores the backed-up files
+- [ ] `:rollback` with nothing to roll back says so
+- [ ] Backups exist under `setup/<transaction id>/` with `manifest.json`, `artifacts/`, `managed-state.previous.json` (dirs 0700, files 0600); Library saves under `docs/<id>-<timestamp>/`
+- [ ] Workspace status pane lists the backup run count and the root path; `B` opens the folder
+- [ ] **preview uninstall** classifies removable, preserved, and merge-managed artifacts; modified and unknown fixture files stay on disk after uninstall
+- [ ] Merge-managed rules files with user text outside the block are kept; a file with only an unedited block is removable
+- [ ] **uninstall everything** removes proven app-owned files and the workspace becomes invalid
+- [ ] **Recover previous uninstall** stays visible after the workspace becomes invalid or missing
+- [ ] **preview recovery** is read-only and reports restore, already restored, and conflict counts
+- [ ] **restore workspace** opens a confirmation; Escape closes it and focus returns to the button; cancel leaves the candidate unchanged; **confirm restore** brings workspace and harness state back and the card disappears
+- [ ] A changed or occupied restore target reports a conflict and restore stays disabled
+- [ ] No console errors during install, rollback, uninstall, and recovery
 
-## 6. Verify and Terminal Smoke
+## 7. Codex 0.134+ migration
 
-- [ ] **release-check** on Workspace VERIFY when script exists in workspace
-- [ ] Terminal shows action label, OK/FAILED, exit code after a safe dry-run
-- [ ] Output does not leak secrets or private paths from fixtures
+- [ ] `approval_policy`, `approvals_reviewer`, `sandbox_mode`, and `apps._default.*` apply correctly with `codex_config` on
+- [ ] `model` and `model_reasoning_effort` are written only when the file has none; an existing value is never changed or reported as drift
+- [ ] App-shaped legacy `profile = "safe"` / `"workspace-write"` selectors and `[profiles.*]` tables are removed while still app-shipped
+- [ ] Custom profiles, unrelated keys, MCP entries, personality, comments, and same-line inline comments remain
+- [ ] Ambiguous managed lines refuse safely with zero mutation
+- [ ] With `CODEX_HOME` set, rules, agents, config, and skills land under it
+- [ ] Skills under the old `~/.agents/skills` location migrate; diverged copies stay conflicts
 
-## 7. Keyboard and Lazy Views
+## 8. Settings, workspace picker, harness enablement
 
-- [ ] Tab through nav — focus rings visible
-- [ ] Library and Settings lazy-load with brief fallback
-- [ ] Escape dismisses error banner
+- [ ] Fresh and legacy settings enable Codex, OpenCode, Claude, and Cursor
+- [ ] Appearance (dark, light, system), all four text sizes (`small`, `medium`, `large`, `extra-large`), and theme colors autosave; `r` in the appearance pane resets after a confirm
+- [ ] Reduce Motion (Motion setting) disables pulse, scan, and flash animations
+- [ ] Landing page selection (`start`, `repo-dashboard`, `prompts`, `library`) persists and opens after app restart
+- [ ] Settings: `c` chooses a workspace folder; an invalid folder is refused with a reason; a valid one becomes the active workspace and status reloads; `R` resets to the default path
+- [ ] `AGENT_WORKSPACE_PATH` overrides the chosen path
+- [ ] Generator scripts run from the bundled copy: a modified `scripts/generate-opencode-config.py` in the chosen workspace is not executed
+- [ ] Disable one harness: its tab, page, Workspace row, health calls, and harness-specific Library entries disappear and the tabs renumber
+- [ ] Isolated harness files stay byte-identical after disable; restart preserves the disabled state and target selections
+- [ ] Re-enable restores UI and health without installing
+- [ ] Disable every harness: workspace, repo, prompts, library, and settings stay usable
+- [ ] A stale setup request for a disabled harness fails without mutation
+- [ ] Full uninstall preview still includes proven artifacts of disabled harnesses
+- [ ] All four text sizes usable at the minimum window size
 
-## 8. Known Limitations
+## 9. Library, Prompt Builder, Repo Dashboard
 
-- Workspace marker is `.agent-workspace/workspace.json` inside the install directory
-- Install path is `~/.config/agent-workspace` (not a dot-prefixed `.agent-workspace` config folder)
-- `AGENT_WORKSPACE_PATH` and backup-root overrides are development/test isolation controls only
-- Import/upgrade from arbitrary folders is not supported in normal UI
-- Uninstall recovery is session-scoped: the **Recover previous uninstall** card is not rediscovered automatically after app restart, even when backend transaction evidence remains on disk
+- [ ] Library shows items, editor, and preview panes; `[` `]` (and `<` `>`) switch among docs, rules, skills, agents, configs, brain
+- [ ] `i` or Enter opens the editor; `Mod+s` and `:w` save; Escape returns to the list; `:q` asks before discarding edits; `:reset` discards them; `n` creates a doc; `o` opens externally
+- [ ] Docs: select, preview, edit, dirty state, save, reset, create form, stale bundled-doc warning, Markdown table, fenced code, code copy
+- [ ] Saving over an existing file creates `docs/<id>-<timestamp>/` in the backup root; a symlinked doc is refused
+- [ ] Library edits do not change what a harness install writes (installs come from the bundle)
+- [ ] Brain Setup copy block works and changes no targets
+- [ ] Prompt Builder: `[` `]` or `<` `>` switch groups, `y` copies the composed prompt, `i` edits context, `/` filters
+- [ ] **Use as context** from an eligible Repo Dashboard item opens Prompt Builder with safe task context
+- [ ] Repo Dashboard on a trusted repository: `<` `>` or `[` `]` switch Overview, Work, Docs; `r` refreshes; `w` folds or expands the warnings strip
+- [ ] A repository with a failing `git fetch` or `gh` shows a warning, not a crash; no credential text appears in the output
+- [ ] A repository with more than 500 local commits loads the complete reachable history
+- [ ] No Tools icon or tool switcher exists
 
-## 9. Pass / Fail Report Template
+## 10. Known limitations
+
+- Workspace marker is `.agent-workspace/workspace.json`; the default workspace path is `~/.config/agent-workspace`
+- Uninstall recovery and the in-app rollback of the last install are session-scoped; they are not rediscovered after a restart even when transaction evidence remains on disk
+- Opening folders uses the macOS `open` command only
+- Bash CLI scripts do not run on Windows (Git Bash and MSYS are refused)
+- Python 3 must be on `PATH` for config merges and generators
+
+## 11. Pass / fail report template
 
 ```
 ## Agent Workspace App Smoke Report
@@ -167,24 +153,32 @@ Dry-runs only unless testing your own machine:
 - [ ] `./scripts/release-check.sh` passed
 - Notes: ________
 
-### Build / install
-- [ ] Preflight and build/install checks passed
+### Shell and keyboard layer
+- [ ] Tabs, help, command line, pane and list keys passed
+- Notes: ________
+
+### Install review and target toggles
+- [ ] Review, cancel, apply, conflicts, stale plan, toggles passed
+- Notes: ________
+
+### Rules (Convert, Leave as is, diff)
+- [ ] Block create/update, conflict, convert, leave-as-is passed
+- Notes: ________
+
+### Rollback and uninstall
+- [ ] Rollback, backup layout, uninstall preview, recovery passed
 - Notes: ________
 
 ### Codex migration
-- [ ] Codex 0.134+ managed-field and legacy migration checks passed
+- [ ] Managed fields, create-only model, legacy profile cleanup passed
 - Notes: ________
 
-### Uninstall / recovery
-- [ ] Isolated uninstall, recovery preview, confirmation, and conflict checks passed
+### Settings and workspace picker
+- [ ] Appearance, Reduce Motion, landing page, picker, harness enablement passed
 - Notes: ________
 
-### Settings / accessibility
-- [ ] Installed State Map, Reduce Motion, landing page, appearance reset, and text-size checks passed
-- Notes: ________
-
-### Harness / library / tools
-- [ ] Harness, Library, Prompt Builder, and Repo Dashboard checks passed
+### Library, Prompt Builder, Repo Dashboard
+- [ ] Panes, save and backup, prompts, repository warnings passed
 - Notes: ________
 
 ### Skipped checks and residual risk

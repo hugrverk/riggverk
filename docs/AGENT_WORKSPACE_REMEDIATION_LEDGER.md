@@ -1,6 +1,45 @@
 # Agent Workspace Remediation Ledger
 
-Active remediation source of truth. Audit input: `agent-workspace-deep-audit-2026-06-06.md`.
+Remediation record. The June 2026 sections below are historical (audit input `agent-workspace-deep-audit-2026-06-06.md`, which is not stored in the repository). The October 2026 overhaul section is the current state; where the two disagree, October wins.
+
+## 2026-10 overhaul (branch `feat/hugrverk-overhaul`, from `main` at `66768375`)
+
+Inputs: seven read-only audits (Rust, frontend, IPC contract, docs versus code, scripts and CI, harness templates, tests and dead code) and a skill-catalog audit. Findings were fixed in bounded slices, one commit per logical change. Release evidence for the branch comes from `./scripts/release-check.sh` and `docs/APP_RELEASE_SMOKE.md`, not from this table.
+
+| Area | What changed | Supersedes |
+|---|---|---|
+| Install | Reviewed install: `u` previews, a plan table lists every create, update, remove, and conflict, `y` applies, `n` cancels. Preview and apply run off the main thread. | The one-click "install" that previewed and applied in one task. |
+| Target toggles | `enabled_target_ids` now gates preview, apply, and status in the backend and the UI. `codex_config` is off by default. Settings files without `target_defaults_version` migrate once and keep every target that was enabled or already managed. | Toggles that only affected removed legacy actions and status counters. |
+| Rules | Rules files are merge-managed through a marked base block. Edited blocks and unmarked files are conflicts with diff, **Convert** (changed sections move below the block, previewed, backed up) and **Leave as is** (`rules-preferences.json`). Every shipped base is kept by digest in `metadata/rules-history/`. Codex health warns about a non-empty `AGENTS.override.md`. WordPress left the shared base. | Whole-file overwrite of `AGENTS.md` and `CLAUDE.md`. |
+| Setup transactions | Reconcile keeps user edits and finished manifests, one failed bootstrap adoption no longer drops the others, records that match the source refresh, JSON digests hash sorted keys, atomic writes keep file modes and use unique temp names, failed-apply rollback and retired-file removal have tests. | |
+| Backups | Created owner-only (0700 dirs, 0600 files on Unix). Setup, docs, install-script, and Cursor backups are all listed. Cursor backup dirs are unique and UTC. | A list that ignored `setup/` and `docs/` backups. |
+| Codex | `model` and `model_reasoning_effort` are create-only (`gpt-6.1-sol`, `xhigh`), then user-owned. Destinations resolve under `CODEX_HOME`. The TOML fallback parses inline tables and arrays. | The pinned `gpt-5.6-sol` overwrite and hard-coded `~/.codex` writes. |
+| OpenCode | Permission order and quoting preserved, nested model ids accepted, subprocesses bounded, override file written atomically. | |
+| CLI scripts | `install-skills.sh` defaults to dry-run and backs up before overwrite. Installers back up before overwriting and leave the target unchanged when the backup fails, pass paths to Python by argv, and guard agents and backup directories. Git Bash and MSYS are refused. Installer safety is checked in release-check. | `install-skills.sh` writing immediately without a backup. |
+| Repo Dashboard | Subprocesses bounded with process-group kill. Git runs with fsmonitor and hooks disabled and no optional locks or prompts. Branches validated. `gh` lists use `--limit`, failures become warnings. History is one bounded `git log`. Pane layout, warnings strip, section keys. | The 500-record paged history and the nonexistent `--paginate`. |
+| Library | Reads refuse symlinks and containment escapes, writes are atomic, loaders guard against selection races, dirty drafts survive source changes. Items, editor, and preview panes with `:w` and `:q`. | Unguarded reads that followed symlinks. |
+| Removed code | The 21 unreachable `run_action` arms and their helpers. `release_check` is the only remaining action. | |
+| Keyboard UI | Terminal-style shell: tabs `1`-`9`, `h`/`l` panes, `j`/`k` lists, `/` filter, `:` command line, `?` help, `Mod+,` settings, `<` `>` and `[` `]` sections. Settings, dialogs, harness, workspace, Library, Prompt Builder, and Repo pages rebuilt as panes. Browser-only mock backend for visual QA. | Button-per-action pages and the stale "Diff Rules / Sync Rules / repair" wording. |
+| Skills and agents | 22 skills including the user-invoked `retro`. Description standard with triggers and exit criteria, semantic routing checks (`check-skill-routing.py`), proactive Claude agent descriptions with enforced tool boundaries, harness boilerplate moved from skill overlays to rules. | 21 skills. |
+| Checks and CI | Skill counts derived, Rust shell spawns scanned, pinned toolchain, timeouts and `--locked`, LF enforced for bundled sources, placeholder tests replaced with assertions that can fail, tests and scripts type-checked, secret redaction extended (Basic auth, AWS secrets, npm tokens). | |
+| Docs | README, contract, security model, release and smoke checklists, and the bundled user docs rewritten against the code. | The audit's FALSE and PARTIAL items (see `git log` for the docs commits). |
+
+Superseded or corrected June items:
+
+| ID | Status now |
+|---|---|
+| AW-RD-001, "Post-audit product change" | Superseded again: history is a single bounded `git log` (limit 100,000 commits, 48 MB, 120 s) instead of 500-record `--skip` pages. A shallow clone is still reported as incomplete. |
+| AW-LOAD-001 | Not true: `App.tsx` loads the Brain Setup seed on mount and when the workspace path changes. |
+| AW-RD-005 | Hardened further: fetch is one of several calls that run with the git hardening above. |
+| AW-RD-007 | Moot after the single `git log`; per-commit `git show` for file lists is unchanged and still unmeasured. |
+| AW-REL-001 | Gates now live in `scripts/release-check/frontend-gate.sh` and `rust-gate.sh`; `release-check.sh` still holds the contract checks. |
+| Test counts (25, 30, 371, 375) | Historical only. |
+
+Open after the overhaul: `AW-CONFIG-001` and `AW-CONFIG-002` (blocked, operator decisions), wave-2 items (WordPress to a personal layer, the rules UI and workspace picker landing in the harness and Settings pages), and native webview smoke.
+
+---
+
+## June 2026 pass (historical)
 
 ## Session
 
@@ -13,7 +52,7 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 | Implementation HEAD (verified) | `4f9bbc03967f432d7464bfd3f12f427fded64336` |
 | Remote HEAD | Obtain from Git: `git rev-parse origin/main` (do not embed the evidence commit SHA here) |
 | Branch | `main` |
-| Verdict | **READY FOR MANUAL WEBVIEW SMOKE** — automated gates pass; native webview smoke BLOCKED in agent environment |
+| Verdict (June, at that HEAD) | READY FOR MANUAL WEBVIEW SMOKE; native webview smoke was blocked in the agent environment |
 
 ## Baseline (pre-edit, correctness closure)
 
@@ -82,7 +121,7 @@ Active remediation source of truth. Audit input: `agent-workspace-deep-audit-202
 
 The previous 500-record total cap was intentionally removed after operator review. Repo Dashboard now reloads the full commit history available in the local checkout using bounded 500-record `git log` pages against a frozen `HEAD`. Each subprocess keeps timeout and output limits. A shallow clone is reported as incomplete because commits absent from the local object database cannot be displayed.
 
-This post-audit change was written directly through the GitHub connector. It requires local Rust formatting, check, Clippy, tests, release-check, and manual Repo Dashboard smoke before the audit can be marked fully closed.
+This post-audit change was written directly through the GitHub connector. It required local Rust formatting, check, Clippy, tests, release-check, and manual Repo Dashboard smoke before the audit could be marked fully closed. Superseded in October 2026 by a single bounded `git log` (see the table above).
 
 ## Native webview smoke (manual checklist)
 

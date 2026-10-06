@@ -1,67 +1,55 @@
 # Release
 
-Run the app repository release check from the repository root:
+Run the repository release check from the repository root:
 
 ```bash
 ./scripts/release-check.sh
 ```
 
-The script is read-only except for normal ignored build artifacts created by frontend and Cargo checks. It runs:
+It writes only ignored build artifacts in the repository and temporary directories. Apply smokes run against a temporary `HOME`, workspace, and backup root, so the real home is never touched. Order and contents change often; read the `step` lines in the script. In outline it runs:
 
-- `git status --short`
-- `git diff --check`
-- shell syntax checks for the bundled default workspace scripts
-- bundled default workspace marker, template JSON, Tauri resource, skill structure, baseline skill, and public-boundary checks
-- forbidden operational source scans for shell execution and deprecated skill paths/package flows in scripts and app source
-- app `npm run build`
-- app `cargo fmt --check`, `cargo check`, `cargo clippy -- -D warnings`, and `cargo test`
+- `git status --short` and `git diff --check`
+- shell syntax checks and the bundled installer guard (dry-run default, backup-first, fail-fast)
+- README and docs drift (`check-readme-docs-drift.py`), the curated Library docs registry, and the default-workspace copy list
+- generator currency: skill adapters, agent adapters, rule adapters, OpenCode config snapshot, pre-manifest ownership
+- skill catalog and routing checks (`check-skill-routing.py`) and OpenCode permission composition and contract
+- merge-script unit tests, bundled-script temp-HOME apply smokes (OpenCode config, runtime agents, Cursor setup), and the pre-manifest upgrade smoke
+- forbidden source scans (shell command strings, `eval`, removed skill flows) and managed-installation contract guards, including the single reviewed install owner
+- frontend gate: `npm test` and `npm run build`
+- Rust gate: `cargo fmt --check`, `cargo check`, `cargo clippy -D warnings`, `cargo test`
+- the Tauri runtime smoke (`smoke-tauri-runtime.sh`)
 
-It does not run apply commands, install skills, create backups, write user config folders, inspect `.env` files, or manage `.agents/skills`.
+It does not drive the Tauri webview, install into a real profile, or read `.env` files.
 
-CI runs this POSIX release check on Ubuntu and macOS. Windows CI covers frontend, build, Rust format/check/Clippy/tests, and native app path behavior separately; native Windows support for the Bash installer scripts is out of scope until explicitly implemented and tested.
+CI runs this POSIX check on Ubuntu and macOS. Windows CI runs frontend, build, and Rust format, check, Clippy, and tests, which cover native app path logic. The Bash scripts under `resources/default-workspace/scripts/` are macOS and Linux only; on Git Bash or MSYS they refuse to run unless `AGENT_WORKSPACE_BACKUP_DIR` is set, and WSL behaves as Linux. Use the app on Windows.
 
-## Backend runtime smoke (optional)
+## Backend runtime smoke
 
 ```bash
 ./scripts/smoke-tauri-runtime.sh
 ```
 
-Isolated temp `HOME` and workspace path; exercises the same Rust command handlers the app uses (`get_status`, diagnostics, OpenCode/Cursor health, Brain Setup). Not part of `release-check.sh` (extra install steps). Does not automate the Tauri webview.
+Isolated temp `HOME` and workspace path; exercises the Rust command handlers the app calls (status, diagnostics, OpenCode and Cursor health, Brain Setup). `release-check.sh` already runs it. It does not automate the webview.
 
-## Manual GUI Smoke
+## Browser-only checks
 
-For installed-app release smoke (managed installation, bundled defaults, build/install), see [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md).
+`npm run dev` then `http://localhost:1420/?mock=<scenario>` renders the UI against `src/dev/mockBackend.ts` (scenarios `default`, `conflict`, `fresh`, `error`, `empty`). Use it for layout and keyboard checks. It has no Tauri backend, so it cannot prove filesystem behavior.
 
-After code changes that affect the app, manually check:
+## Manual GUI smoke
 
-- App starts and opens the Workspace view.
-- Workspace diagnostics show install state for `~/.config/agent-workspace`.
-- Each normal screen shows one managed installation card; no path chooser or parallel repair UI exists.
-- Diff/sync rules respect saved enabled rule targets.
-- Diff/sync configs respect saved enabled config targets.
-- Skills dry-run works for global targets with a valid selected workspace.
-- Skills project target without markers is rejected.
-- Skills project target with `.git` marker is accepted.
-- Backups list recent backup runs without reading file contents.
-- Backup details show target id, filename, size, and current status only.
-- Backup details do not display file contents, textual diffs, or a restore button.
-- Refresh preserves selection when the selected backup still exists and clears it when it does not.
-- Open backups creates the app-level backup root when needed and opens it in Finder, independent of workspace validity.
-- Backup creation remains script-owned during apply overwrite.
-- Library docs list/read/open/edit works.
-- Library rules, agents, and configs edit/save only workspace source files.
-- Brain Setup displays the copy-paste setup block and does not change enabled sync targets.
-- Copy brain setup writes the full setup block to the clipboard.
-- Settings save/reset works for appearance and theme colors; target changes from harness pages autosave (debounced).
-- Harness Targets panels show target toggles per tool with enable/disable checkboxes.
-- Toggling a target includes or excludes that managed projection from the unified installation plan.
-- Agent targets are enabled independently per tool.
-- Manual checkbox changes show custom target selection.
-- Save persists selected targets; Reset restores defaults.
-- Invalid workspace paths refuse script-backed actions.
+Before sharing a build, run [APP_RELEASE_SMOKE.md](./APP_RELEASE_SMOKE.md) in the real Tauri app with an isolated `HOME`, `AGENT_WORKSPACE_PATH`, and `AGENT_WORKSPACE_BACKUP_DIR`. It covers, in order of risk:
 
-## Remaining Limits
+- Install review: `u`, plan table, `n` cancels with nothing written, `y` applies, target toggles gate the plan.
+- Conflicts and rules: Convert, Leave as is, diff.
+- Rollback (`z`) and uninstall with recovery.
+- Workspace picker in Settings.
+- Keyboard layer, tab order, help overlay, command line.
+- Library panes, Prompt Builder, Repo Dashboard.
 
-- Release check does not replace real Tauri webview smoke for view wiring, managed installation behavior, installed bundles, or native file-open behavior.
-- `smoke-tauri-runtime.sh` does not drive the Tauri webview; native UI automation is not wired (Vite-only browser tools lack `invoke`).
-- The workspace marker directory `.agent-workspace/` and related env vars (`AGENT_WORKSPACE_PATH`, `AGENT_WORKSPACE_BACKUP_DIR`) remain part of the established workspace contract.
+Tab order is workspace, codex, opencode, cursor, claude, library, repo, prompts, settings.
+
+## Remaining limits
+
+- The release check does not replace webview smoke for view wiring, install behavior in an installed bundle, or native open and folder-picker behavior.
+- Native UI automation is not wired; Vite-only browser tools lack `invoke`.
+- `AGENT_WORKSPACE_PATH` and `AGENT_WORKSPACE_BACKUP_DIR` stay part of the established workspace contract and are honored in release builds.

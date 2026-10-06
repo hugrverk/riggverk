@@ -4,7 +4,11 @@
 
 A workspace is a user-owned runtime data directory containing docs, skills, templates, agents, metadata, and allowlisted scripts. It is separate from the Agent Workspace source repository.
 
-The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`; `AGENT_WORKSPACE_PATH` may override it for development and tests.
+The canonical bundled workspace source lives under `resources/default-workspace/`. The installed workspace normally lives at `~/.config/agent-workspace`. The path resolves in this order: `AGENT_WORKSPACE_PATH` (development and tests), a valid custom path saved in Settings, the default.
+
+Requirements on the machine: Python 3 (Codex, OpenCode, and Cursor merge and generator helpers) and Bash (CLI scripts only). Missing `python3` surfaces as an error when a helper runs.
+
+Install reads the bundled copy, never the runtime workspace. The runtime workspace is a user-owned copy that the app displays and the Library edits; editing it does not change what harnesses receive.
 
 ## Required runtime markers
 
@@ -12,36 +16,46 @@ A valid workspace contains:
 
 - `.agent-workspace/workspace.json`
 - `README.md`
-- `skills/`
+- `skills/` (directory)
 - `templates/global-agent-rules.md`
 - `templates/opencode.json`
 - `templates/codex/config.toml`
-- `templates/cursor/manifest.json`
-- `templates/cursor/agents/`
-- `templates/cursor/rules/`
-- `templates/cursor/mcp/mcp.example.json`
+- `templates/cursor/agents/` (directory)
+- `templates/cursor/rules/` (directory holding at least one `*.mdc` file)
 - `scripts/bootstrap.sh`
 - `scripts/install-agent-rules.sh`
-- `scripts/install-runtime-agents.sh`
 - `scripts/install-opencode-config.sh`
 - `scripts/install-codex-config.sh`
 - `scripts/install-skills.sh`
 - `scripts/install-cursor-workspace.sh`
 
-Validation is read-only. It does not run scripts, install files, or inspect credential-bearing state.
+Validation is read-only. It does not run workspace scripts, install files, or inspect credential-bearing state. Health checks that need the OpenCode generator run the bundled copy, not a script from the workspace.
 
 ## Bundled resources
 
 The default workspace currently contains 22 canonical semantic skills, generated harness skill adapters, shared semantic agent bodies, harness-native agent adapters, composed rule targets, config templates, runtime scripts, and operator documentation.
 
-Bundled resources are immutable installation input. The explicit **Install or Update** action:
+Bundled resources are immutable installation input. The explicit **Install or Update** action (`u`, review, `y`):
 
-- write only below the resolved workspace root
-- previews artifact-level creates, updates, removals, and conflicts
+- writes the workspace bundle below the resolved workspace root and harness artifacts below the user's home (or `$CODEX_HOME`)
+- previews artifact-level creates, updates, removals, and conflicts, and writes only after confirmation
+- skips surfaces whose target toggle or harness is off
 - updates only allowlisted managed projections
 - preserves unknown and diverged unowned files
-- never execute copied scripts
-- reject unsafe paths and symlink escapes
+- never executes workspace copies of scripts
+- rejects unsafe paths and symlink escapes
+
+### Conflicts
+
+A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file (for example in the Library) therefore freezes that file against future updates. To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so keep it with the workspace when you version it. Rules files have their own conflict handling (below).
+
+### Target toggles
+
+`enabled_target_ids` selects which target surfaces Install may touch: rules, agents, and config per harness, plus Cursor agents and MCP (`cursor_setup`). Defaults enable every target except `codex_config`. Skills and the workspace bundle are never gated. Settings files that predate gating are migrated once: defaults, plus every target already enabled or already holding managed records, so no installed surface is dropped.
+
+### Custom workspace
+
+Settings can point the app at another folder (`c` choose, `R` reset to the default path). A chosen folder is used only when it passes the markers above. `AGENT_WORKSPACE_PATH` overrides it. Install into a custom folder behaves as into the default one, and the generator scripts the app runs still come from the bundled read-only copy.
 
 ## Skill source layout
 
@@ -84,7 +98,7 @@ templates/skills/<harness>/<skill>/SKILL.md
 metadata/skill-adapters.json
 ```
 
-Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
+Managed setup and `scripts/install-skills.sh` resolve active harness skill artifacts from those generated adapter files. The generators themselves live in the source repository's `scripts/`, not in the installed workspace; skills added to a runtime workspace are not discovered for install. Missing or stale adapters are unavailable/stale and must be regenerated; production setup does not fall back to canonical generic skill files. Destination paths remain unchanged and are still single `SKILL.md` files. No supporting files or skill directories are owned by managed setup.
 
 ## Skill ownership and cleanup
 
@@ -164,7 +178,7 @@ The editable sources are:
 
 ### Codex
 
-Agent Workspace manages only allowlisted Codex config defaults in `~/.codex/config.toml`: `model`, `model_reasoning_effort`, `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode`. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
+Agent Workspace manages only allowlisted Codex config defaults in `$CODEX_HOME/config.toml` (default `~/.codex/config.toml`), and only while the `codex_config` target is on (off by default). `approval_policy`, `approvals_reviewer`, `sandbox_mode`, `apps._default.approvals_reviewer`, and `apps._default.default_tools_approval_mode` follow the template. `model` and `model_reasoning_effort` are create-only: written from the template (`gpt-6.1-sol`, `xhigh`) only while the file has no value, then user-owned, never overwritten and never reported as drift. The merge scripts read and write those scalar values only; user personality, MCP entries, unrelated tables, comments, and unsupported structures are preserved or cause a safe refusal with zero mutation.
 
 App-shaped legacy top-level profile selectors (`profile = "safe"` / `"workspace-write"`) and legacy `[profiles.safe]` / `[profiles.workspace-write]` tables are removed only during migration when they still carry app-shipped values. Legacy profile handling is migration-only; Agent Workspace does not generally own or rewrite arbitrary Codex profiles. Same-line inline comments on managed scalar assignments are preserved; ambiguous managed lines refuse safely.
 
@@ -178,15 +192,19 @@ Cursor global agents, generated skill adapters, and the named Playwright MCP ent
 
 ## Backups and writes
 
-Writes use allowlisted targets and explicit arguments. Existing managed files are backed up before replacement. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes.
+Writes use allowlisted targets and explicit arguments. Existing files that Install, uninstall, or a Library save would overwrite or remove are backed up first (new files are not). Install backups live in `<backup root>/setup/<transaction id>/artifacts/<artifact id>` with a `manifest.json` and `managed-state.previous.json`; Library saves in `<backup root>/docs/<doc id>-<timestamp>/`. Config merges use staged files and post-write validation. Backup roots and target roots reject filesystem roots, drive roots, home roots, traversal, and symlink escapes. See [SECURITY_MODEL.md](./SECURITY_MODEL.md) for the full write table and modes.
 
 The frontend supplies named actions and bounded identifiers, not shell commands or arbitrary destination paths.
+
+## Library edits
+
+The Library edits the runtime workspace copy only. Saves are atomic, refuse symlinks and paths outside the workspace root, and back up the existing file first (`<backup root>/docs/<doc id>-<timestamp>/`). A saved edit changes what the app displays and what a later bundled update sees as a conflict; it does not change what harness installs write, which always come from the bundle. `templates/opencode.json` is generated and read-only in the Library.
 
 ## Managed installation
 
 Surface status in the app is derived from artifact-level detection. OpenCode Config aggregates `opencode.json`, `tui.json`, and the Playwright MCP artifact; agents and skills surfaces aggregate every managed artifact for that harness.
 
-Preview issues a bounded in-memory token scoped to workspace, pending surfaces, and fingerprint. Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply consumes the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
+The UI runs preview, shows the plan table, and calls apply only after the user confirms (`y`); `p` and `:preview` show a plan with no apply path. Preview issues a bounded in-memory token scoped to workspace, pending surfaces, and fingerprint. Rapid identical previews receive distinct tokens. Token issuance fails closed when the registry cannot be locked. Apply consumes the token only after preflight succeeds and immediately before the first mutation. Tokens expire, are pruned deterministically by age, and are never logged or persisted to disk. App restart invalidates stale previews.
 
 Filesystem-mutating installation and rollback commands acquire a process-wide non-blocking mutation guard. A second mutation returns `setup operation already in progress` without filesystem changes or misleading transaction evidence. Preview, health, discovery, planning, and rollback dry-run remain available.
 
@@ -210,7 +228,7 @@ Full uninstall previews removable, preserved, and merge-managed artifacts before
 
 Uninstall creates a rollback-capable backend transaction with per-file backups. Preview and rollback dry-run perform zero filesystem mutation. Actual rollback restores exact prior app-owned bytes from the transaction backup and refuses occupied or changed targets.
 
-The frontend retains only the most recent uninstall transaction ID for the current app session. **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
+The frontend retains only the most recent install or uninstall transaction ID for the current app session (`z` or `:rollback` restores it after a dry run and a confirm). **Recover previous uninstall** remains visible after uninstall makes the workspace invalid, but recovery state is not persisted in AppSettings, localStorage, or a transaction registry. Closing or restarting the app loses the recovery affordance even though backend transaction evidence may remain on disk. Recovery requires a read-only dry-run before mutation and explicit confirmation to restore.
 
 ## Harness enablement
 
