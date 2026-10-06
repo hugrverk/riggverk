@@ -1,6 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HarnessActionCard, HarnessActionGrid } from "./HarnessActionCard";
+import { useConfirmMode } from "../shell/ShellState";
+import { Kv, type KvItem } from "../ui/Kv";
+import { Kbd } from "../ui/Kbd";
 import type { SetupResult } from "../types";
 
 interface UninstallRecoveryCardProps {
@@ -21,6 +23,8 @@ export function UninstallRecoveryCard({
   const [dryRunResult, setDryRunResult] = useState<SetupResult | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
   const [previewError, setPreviewError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  useConfirmMode(dialogOpen);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const restoreButtonRef = useRef<HTMLButtonElement>(null);
   const confirmTitleId = useId();
@@ -51,6 +55,7 @@ export function UninstallRecoveryCard({
   const openConfirm = () => {
     if (!rollbackDryRunReady(dryRunResult)) return;
     dialogRef.current?.showModal();
+    setDialogOpen(true);
   };
 
   const closeConfirm = () => {
@@ -67,47 +72,37 @@ export function UninstallRecoveryCard({
   if (!transactionId) return null;
 
   const canRestore = rollbackDryRunReady(dryRunResult);
-  const warning = previewError ?? undefined;
+  const details: KvItem[] | null = dryRunResult
+    ? [
+        { label: "to restore", value: String(dryRunResult.applied.length), tone: dryRunResult.applied.length > 0 ? "warn" : "dim" },
+        { label: "already restored", value: String(dryRunResult.rolled_back.length), tone: dryRunResult.rolled_back.length > 0 ? "ok" : "dim" },
+        { label: "conflicts", value: String(dryRunResult.failed.length), tone: dryRunResult.failed.length > 0 ? "fail" : "dim" },
+      ]
+    : null;
 
   return (
     <>
-      <HarnessActionCard
-        title="Recover previous uninstall"
-        ariaLabel="Recover previous uninstall"
-        description="The last uninstall was recorded as a rollback-capable transaction. Preview what can be restored from its backup, then confirm to bring app-owned files back."
-        warning={warning}
-        details={
-          dryRunResult
-            ? [
-                {
-                  label: "to restore",
-                  value: String(dryRunResult.applied.length),
-                  tone: dryRunResult.applied.length > 0 ? "warn" : "muted",
-                },
-                {
-                  label: "already restored",
-                  value: String(dryRunResult.rolled_back.length),
-                  tone: dryRunResult.rolled_back.length > 0 ? "ok" : "muted",
-                },
-                {
-                  label: "conflicts",
-                  value: String(dryRunResult.failed.length),
-                  tone: dryRunResult.failed.length > 0 ? "fail" : "muted",
-                },
-              ]
-            : undefined
-        }
-        nextAction={
-          dryRunResult
-            ? dryRunResult.message
-            : "Run a recovery preview before restoring anything."
-        }
-        nextActionTone={dryRunResult && !dryRunResult.success ? "fail" : "warn"}
-      >
-        <HarnessActionGrid>
+      <div className="lifecycle" role="region" aria-label="Recover previous uninstall">
+        <p className="c-dim">
+          The last uninstall was recorded as a rollback-capable transaction. Preview what can be restored from its
+          backup, then confirm to bring app-owned files back.
+        </p>
+        {details && <Kv items={details} className="lifecycle-kv" />}
+        {previewError && (
+          <p className="c-fail" role="status">
+            {previewError}
+          </p>
+        )}
+        <p
+          className={dryRunResult && !dryRunResult.success ? "c-fail" : "c-warn"}
+          role="status"
+        >
+          {dryRunResult ? dryRunResult.message : "Run a recovery preview before restoring anything."}
+        </p>
+        <div className="lifecycle-actions">
           <button
             type="button"
-            className="btn btn-sm"
+            className="action-key"
             disabled={busy || previewLoading}
             onClick={runDryRun}
           >
@@ -116,20 +111,23 @@ export function UninstallRecoveryCard({
           <button
             ref={restoreButtonRef}
             type="button"
-            className="btn btn-sm btn-warn"
+            className="action-key"
             disabled={busy || previewLoading || !canRestore}
             onClick={openConfirm}
           >
-            restore workspace
+            <Kbd>:rollback</Kbd> restore workspace
           </button>
-        </HarnessActionGrid>
-      </HarnessActionCard>
+        </div>
+      </div>
 
       <dialog
         ref={dialogRef}
         aria-labelledby={confirmTitleId}
         className="app-modal"
-        onClose={() => restoreButtonRef.current?.focus()}
+        onClose={() => {
+          setDialogOpen(false);
+          restoreButtonRef.current?.focus();
+        }}
       >
         <div className="app-modal-header">
           <h2 id={confirmTitleId} className="app-modal-title">Restore workspace from uninstall backup?</h2>

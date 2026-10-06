@@ -1,5 +1,8 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState, type ReactNode } from "react";
+import { applyOutputLineTone } from "../lib/installPlan";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
+import { Glyph } from "../ui/Glyph";
+import { toneClass } from "../ui/tone";
 import type { ActionResult } from "../types";
 
 // Re-exported so existing component-level imports keep working; the type lives in `types.ts`.
@@ -12,6 +15,12 @@ function relativeTime(ts: number): string {
   const minutes = Math.floor(seconds / 60);
   if (minutes < 60) return `${minutes}m ago`;
   return "earlier";
+}
+
+/** "08:29:04 · 2m ago": the clock time of the run and how long ago it was. */
+export function completedLabel(ts: number): string {
+  const clock = new Date(ts).toLocaleTimeString("sv-SE", { hour12: false });
+  return `${clock} · ${relativeTime(ts)}`;
 }
 
 const ACTIVITY_CELLS = 8;
@@ -45,14 +54,52 @@ export function ActivityLoader({ idle = false }: { idle?: boolean }) {
   );
 }
 
+/** `── stdout ──────`: a labelled rule. The rule is drawn by CSS; the label stays text. */
+function OutputBar({ label, tone }: { label: string; tone?: "fail" }) {
+  return (
+    <div className={`tui-bar${tone ? ` ${toneClass(tone)}` : ""}`}>
+      <span aria-hidden="true">── </span>
+      <span>{label}</span>
+      <span className="tui-bar-rule" aria-hidden="true" />
+    </div>
+  );
+}
+
+/** Lines written by an apply get a tone per leading word; other output stays plain. */
+function OutputText({ text, action, className }: { text: string; action: string; className?: string }) {
+  const toned = action.startsWith("apply_setup");
+  const lines = text.split("\n");
+  return (
+    <pre className={`tui-out${className ? ` ${className}` : ""}`}>
+      {lines.map((line, index) => {
+        const tone = toned ? applyOutputLineTone(line) : null;
+        const content: ReactNode = tone ? <span className={toneClass(tone)}>{line}</span> : line;
+        return (
+          <Fragment key={index}>
+            {content}
+            {index < lines.length - 1 ? "\n" : null}
+          </Fragment>
+        );
+      })}
+    </pre>
+  );
+}
+
+function CommandLine({ label, caret, when }: { label: string; caret?: boolean; when?: string }) {
+  return (
+    <div className="tui-cmdline">
+      <Glyph name="prompt" tone="acc" />
+      <span className="tui-cmd">{label}</span>
+      {caret && <span className="tui-caret" aria-hidden="true" />}
+      {when && <span className="tui-when">{when}</span>}
+    </div>
+  );
+}
+
 export function RunningState({ label }: { label: string }) {
   return (
     <>
-      <div className="tui-cmdline tui-running">
-        <span className="log-prompt">❯</span>
-        <span className="tui-cmd">{label}</span>
-        <span className="tui-caret" aria-hidden="true" />
-      </div>
+      <CommandLine label={label} caret />
       <div className="tui-progress" role="status" aria-label={`${label} running`}>
         <ActivityLoader />
         <span className="tui-progress-label">working…</span>
@@ -62,12 +109,7 @@ export function RunningState({ label }: { label: string }) {
 }
 
 export function ReadyState({ label }: { label: string }) {
-  return (
-    <div className="tui-cmdline log-empty">
-      <span className="log-prompt">❯</span>
-      <span className="tui-cmd">{label}</span>
-    </div>
-  );
+  return <CommandLine label={label} caret />;
 }
 
 export function ActionResultOutput({
@@ -87,17 +129,9 @@ export function ActionResultOutput({
 
   return (
     <>
-      <div className="tui-cmdline">
-        <span className="log-prompt">❯</span>
-        <span className="tui-cmd">{result.action}</span>
-        {completedAt !== undefined && (
-          <span className="tui-when">{relativeTime(completedAt)}</span>
-        )}
-      </div>
-      <div
-        className={`tui-statusline ${result.success ? "tui-statusline-ok" : "tui-statusline-fail"}`}
-      >
-        <span className="tui-status-mark" aria-hidden="true">{result.success ? "✓" : "✗"}</span>
+      <CommandLine label={result.action} when={completedAt !== undefined ? completedLabel(completedAt) : undefined} />
+      <div className={`tui-statusline ${result.success ? "c-ok" : "c-fail"}`}>
+        <Glyph name={result.success ? "check" : "fail"} />
         <span className="tui-status-text">
           {result.success ? "completed" : "failed"}
           {result.exit_code !== null && ` · exit ${result.exit_code}`}
@@ -107,22 +141,22 @@ export function ActionResultOutput({
       {sectioned ? (
         <>
           {result.stdout ? (
-            <div className="tui-block">
-              <span className="tui-block-label">stdout</span>
-              <pre className="log-output">{safeStdout}</pre>
-            </div>
+            <>
+              <OutputBar label="stdout" />
+              <OutputText text={safeStdout} action={result.action} />
+            </>
           ) : null}
           {result.stderr ? (
-            <div className="tui-block tui-block-fail">
-              <span className="tui-block-label">stderr</span>
-              <pre className="log-output log-stderr">{safeStderr}</pre>
-            </div>
+            <>
+              <OutputBar label="stderr" tone="fail" />
+              <OutputText text={safeStderr} action={result.action} className="c-fail" />
+            </>
           ) : null}
         </>
       ) : (
         <>
-          {result.stdout && <pre className="log-output">{safeStdout}</pre>}
-          {result.stderr && <pre className="log-output log-stderr">{safeStderr}</pre>}
+          {result.stdout && <OutputText text={safeStdout} action={result.action} />}
+          {result.stderr && <OutputText text={safeStderr} action={result.action} className="c-fail" />}
         </>
       )}
       {showNoOutput && !result.stdout && !result.stderr && (
@@ -145,7 +179,7 @@ export function TerminalState({
   result?: ActionResult | null;
   completedAt?: number;
   readyLabel: string;
-  idleContent?: React.ReactNode;
+  idleContent?: ReactNode;
   sectioned?: boolean;
   showNoOutput?: boolean;
 }) {

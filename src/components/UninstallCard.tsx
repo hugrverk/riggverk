@@ -1,12 +1,16 @@
-import { useId, useRef, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { HarnessActionCard, HarnessActionGrid } from "./HarnessActionCard";
+import { useConfirmMode } from "../shell/ShellState";
+import { Kbd } from "../ui/Kbd";
 import type { UninstallPlanView } from "../types";
 
 interface UninstallCardProps {
   workspaceValid: boolean;
   busy: boolean;
   onApply: (planFingerprint: string, previewToken: string) => void;
+  /** `:uninstall` asks for the preview dialog; the card reports back once it has taken the request. */
+  previewRequested?: boolean;
+  onPreviewRequestHandled?: () => void;
 }
 
 /**
@@ -15,10 +19,18 @@ interface UninstallCardProps {
  * merged configs stay, then applies the removal as a rollback-capable
  * transaction after explicit confirmation.
  */
-export function UninstallCard({ workspaceValid, busy, onApply }: UninstallCardProps) {
+export function UninstallCard({
+  workspaceValid,
+  busy,
+  onApply,
+  previewRequested = false,
+  onPreviewRequestHandled,
+}: UninstallCardProps) {
   const [plan, setPlan] = useState<UninstallPlanView | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  useConfirmMode(dialogOpen);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const titleId = useId();
 
@@ -29,12 +41,20 @@ export function UninstallCard({ workspaceValid, busy, onApply }: UninstallCardPr
       const next = await invoke<UninstallPlanView>("preview_uninstall");
       setPlan(next);
       dialogRef.current?.showModal();
+      setDialogOpen(true);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!previewRequested) return;
+    onPreviewRequestHandled?.();
+    if (workspaceValid && !busy && !loading) void loadPreview();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [previewRequested]);
 
   const confirm = () => {
     dialogRef.current?.close();
@@ -47,24 +67,28 @@ export function UninstallCard({ workspaceValid, busy, onApply }: UninstallCardPr
 
   return (
     <>
-      <HarnessActionCard
-        title="Uninstall"
-        ariaLabel="Uninstall"
-        description="Remove every app-installed rule, agent, skill, and workspace file. Modified and user-created files are preserved; removals are backed up and rollback-capable."
-        warning={error ?? undefined}
-      >
-        <HarnessActionGrid>
+      <div className="lifecycle" role="region" aria-label="Uninstall">
+        <p className="c-dim">
+          Remove every app-installed rule, agent, skill, and workspace file. Modified and user-created files are
+          preserved; removals are backed up and rollback-capable.
+        </p>
+        <div className="lifecycle-actions">
           <button
             type="button"
-            className="btn btn-sm btn-danger"
+            className="action-key"
             disabled={busy || loading}
             onClick={loadPreview}
           >
-            {loading ? "computing…" : "preview uninstall"}
+            <Kbd>:uninstall</Kbd> {loading ? "computing…" : "preview uninstall"}
           </button>
-        </HarnessActionGrid>
-      </HarnessActionCard>
-      <dialog ref={dialogRef} aria-labelledby={titleId} className="app-modal">
+        </div>
+        {error && (
+          <p className="c-fail" role="status">
+            {error}
+          </p>
+        )}
+      </div>
+      <dialog ref={dialogRef} aria-labelledby={titleId} className="app-modal" onClose={() => setDialogOpen(false)}>
         <div className="app-modal-header">
           <h2 id={titleId} className="app-modal-title">Uninstall everything?</h2>
         </div>
