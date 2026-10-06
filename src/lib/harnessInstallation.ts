@@ -15,10 +15,6 @@ export const HARNESS_LABELS: Record<InstallAgent, string> = {
 };
 export const HARNESS_NAV_ORDER: InstallAgent[] = ["codex", "opencode", "cursor", "claude"];
 
-export function isHarnessEnabled(enabled: readonly InstallAgent[], harness: InstallAgent): boolean {
-  return enabled.includes(harness);
-}
-
 export function harnessForView(view: string): InstallAgent | null {
   return (["codex", "opencode", "claude", "cursor"] as const).includes(view as InstallAgent)
     ? view as InstallAgent

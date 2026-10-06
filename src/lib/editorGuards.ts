@@ -11,7 +11,3 @@ export function dirtyTabClass(dirty: boolean): string {
 export function dirtyTabAriaLabel(dirty: boolean, name: string): string {
   return dirty ? `${name}, unsaved changes` : name;
 }
-
-export function dirtyTabSuffix(dirty: boolean): string {
-  return dirty ? " *" : "";
-}

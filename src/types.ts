@@ -33,10 +33,6 @@ export interface SkillSummary {
   category: string; risk: string; targets: string[]; related: string[];
 }
 
-export interface AgentSourceSummary {
-  id: string; title: string; path: string; exists: boolean;
-}
-
 export interface AgentMetadataEntry {
   role: string;
   summary: string;
@@ -67,21 +63,6 @@ export interface AgentSourceContent {
 export const INSTALL_AGENTS = ["codex", "opencode", "claude", "cursor"] as const;
 
 export type InstallAgent = (typeof INSTALL_AGENTS)[number];
-
-export interface InstallSkillsRequest {
-  agents: string[]; skills: string[]; dry_run: boolean;
-}
-
-export interface SkillSyncHealthEntry {
-  name: string; group: string; source_path: string; target_path: string;
-  supported: boolean; state: string; next_action: string;
-}
-
-export interface SkillsSyncHealth {
-  expected_count: number; synced_count: number; missing_count: number;
-  diverged_count: number;
-  skills: SkillSyncHealthEntry[];
-}
 
 export type InstallationState = "not_installed" | "update_available" | "current" | "conflict" | "unavailable";
 
@@ -327,50 +308,6 @@ export interface WorkspaceDiagnostics {
   missing_bundled_sample: string[];
 }
 
-export interface DefaultWorkspaceFile {
-  path: string;
-  exists: boolean;
-}
-
-export interface DefaultWorkspaceCategory {
-  label: string;
-  count: number;
-  files: DefaultWorkspaceFile[];
-}
-
-export interface DefaultWorkspaceSummary {
-  root_label: string;
-  description: string;
-  categories: DefaultWorkspaceCategory[];
-}
-
-export interface CreateWorkspacePlan {
-  ok: boolean;
-  status: string;
-  target_path: string;
-  reason: string;
-  warnings: string[];
-  planned_files: string[];
-}
-
-export interface WorkspaceSetupEvaluation {
-  candidate_path: string;
-  setup_phase: string;
-  plan: CreateWorkspacePlan;
-  missing_files_to_add: string[];
-}
-
-export interface CreateWorkspaceResult {
-  success: boolean;
-  status: string;
-  target_path: string;
-  created_dirs: string[];
-  copied_files: string[];
-  skipped_files: string[];
-  warnings: string[];
-  message: string;
-}
-
 export interface ActionResult {
   success: boolean;
   action: string;
@@ -541,9 +478,10 @@ export interface PlannedOperation {
   surface: SetupSurfaceId;
   kind: OperationKind;
   summary: string;
-  details: string[];
-  conflict_description: string | null;
-  manual_step: string | null;
+  // The backend omits these keys when empty (serde skip_serializing_if), so they are `undefined` on the wire.
+  details?: string[];
+  conflict_description?: string | null;
+  manual_step?: string | null;
 }
 
 export interface SetupPlan {
@@ -554,8 +492,9 @@ export interface SetupPlan {
   summary: string;
   has_pending_changes: boolean;
   is_blocked: boolean;
-  plan_fingerprint: string | null;
-  preview_token: string | null;
+  // Omitted by the backend when nothing is pending.
+  plan_fingerprint?: string | null;
+  preview_token?: string | null;
 }
 
 export interface UninstallItem {

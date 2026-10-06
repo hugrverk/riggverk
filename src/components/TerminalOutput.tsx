@@ -1,13 +1,9 @@
 import { useEffect, useState } from "react";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
+import type { ActionResult } from "../types";
 
-export interface ActionResult {
-  success: boolean;
-  action: string;
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-}
+// Re-exported so existing component-level imports keep working; the type lives in `types.ts`.
+export type { ActionResult };
 
 function relativeTime(ts: number): string {
   const seconds = Math.floor((Date.now() - ts) / 1000);
