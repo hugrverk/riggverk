@@ -115,13 +115,14 @@ describe("TopLine", () => {
     expect(screen.getByRole("button", { name: "Workspace" }).querySelector(".st")).toBeNull();
   });
 
-  it("is a window drag region with brand, tabs and a right slot", () => {
+  it("is a window drag region with tabs and a right slot, without a brand label", () => {
     const { container } = render(
       <TopLine view="start" libraryDirty={false} settingsErrored={false} onSwitchView={vi.fn()} right="main ✓" />,
     );
     const header = container.querySelector("header.topline")!;
     expect(header.hasAttribute("data-tauri-drag-region")).toBe(true);
-    expect(header.querySelector(".brand")!.textContent).toBe("agent-workspace");
+    expect(header.querySelector(".brand")).toBeNull();
+    expect(header.textContent).not.toContain("agent-workspace");
     expect(header.querySelector(".right")!.textContent).toBe("main ✓");
     expect(screen.getByRole("navigation", { name: "Main navigation" })).not.toBeNull();
   });

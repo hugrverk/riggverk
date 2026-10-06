@@ -20,7 +20,7 @@ export interface TopLineProps {
 const DOT_CLASS = { ok: "st-ok", warn: "st-warn", fail: "st-fail", muted: null } as const;
 
 /**
- * 28px top line: brand, numbered tabs and status. The leading 80px is reserved for the macOS traffic
+ * 28px top line: numbered tabs and status. The leading 80px is reserved for the macOS traffic
  * lights (styled by `.topline`), and the bar is a window drag region. Tab numbers are positional over
  * the visible destinations, so hiding a harness renumbers the tabs after it; `:codex` etc. stay stable.
  */
@@ -36,9 +36,6 @@ export function TopLine({
   const tabs = visibleViews(enabledHarnessIds);
   return (
     <header className="topline" data-tauri-drag-region>
-      <span className="brand" data-tauri-drag-region>
-        agent-workspace
-      </span>
       <nav className="tabs" aria-label="Main navigation" data-tauri-drag-region>
         {tabs.map((def, index) => {
           const number = index + 1;

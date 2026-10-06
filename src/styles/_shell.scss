@@ -13,7 +13,7 @@
 
 /* ---- top line ----
    28px tall, draggable (Tauri overlay titlebar), tabs are no-drag. --traffic-light-reserve
-   keeps the brand clear of the macOS window controls; the web preview has no controls. */
+   keeps the tabs clear of the macOS window controls; the web preview has no controls. */
 
 .topline {
   position: relative;
@@ -32,12 +32,6 @@
 
 :root:not([data-tauri]) .topline {
   padding-left: 10px;
-}
-
-.topline .brand {
-  margin-right: 16px;
-  color: var(--text-heading);
-  font-weight: 600;
 }
 
 .tabs {
