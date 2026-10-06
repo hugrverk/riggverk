@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderInFrame } from "../test/renderWithShell";
 import type { ActionResult, StatusData } from "../types";
+import { Pane } from "../ui/Pane";
 import { OutputPane, outputTextOf, type OutputPaneProps } from "./OutputPane";
 
 const STATUS = {
@@ -117,6 +118,51 @@ describe("OutputPane", () => {
     act(() => (body as HTMLElement).focus());
     fireEvent.keyDown(body, { key: "z" });
     expect(onRollback).toHaveBeenCalledTimes(2);
+  });
+
+  describe("focus after an apply", () => {
+    function Page({ transactionId, extra, onRollback = () => {} }: { transactionId: string | null; extra?: boolean; onRollback?: () => void }) {
+      return (
+        <>
+          <Pane id="targets" index={1} title="targets" defaultFocus scrollable>
+            <p>targets</p>
+          </Pane>
+          {extra && (
+            <Pane id="surfaces" index={2} title="surfaces" scrollable>
+              <p>surfaces</p>
+            </Pane>
+          )}
+          <OutputPane {...props({ wsLog: APPLY, rollbackTransactionId: transactionId, onRollback })} />
+        </>
+      );
+    }
+
+    function focusedPaneId() {
+      return (document.activeElement as HTMLElement | null)?.closest("[data-pane-id]")?.getAttribute("data-pane-id");
+    }
+
+    it("takes focus when a rollback transaction appears, so z works right away", () => {
+      const onRollback = vi.fn();
+      const { rerenderFrame } = renderInFrame(<Page transactionId={null} onRollback={onRollback} />);
+      act(() => screen.getByRole("group", { name: "targets" }).focus());
+      expect(focusedPaneId()).toBe("targets");
+      rerenderFrame(<Page transactionId="tx-1" onRollback={onRollback} />);
+      expect(focusedPaneId()).toBe("output");
+      fireEvent.keyDown(document.activeElement!, { key: "z" });
+      expect(onRollback).toHaveBeenCalledTimes(1);
+    });
+
+    it("leaves a pane the user moved to, and a transaction that was already there on mount", () => {
+      const { rerenderFrame } = renderInFrame(<Page transactionId={null} extra />);
+      act(() => screen.getByRole("group", { name: "surfaces" }).focus());
+      rerenderFrame(<Page transactionId="tx-1" extra />);
+      expect(focusedPaneId()).toBe("surfaces");
+      cleanup();
+
+      renderInFrame(<Page transactionId="tx-2" />);
+      act(() => screen.getByRole("group", { name: "targets" }).focus());
+      expect(focusedPaneId()).toBe("targets");
+    });
   });
 
   it("refreshes with r and says why it cannot while a task runs", () => {

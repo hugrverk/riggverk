@@ -1,4 +1,5 @@
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
+import { focusPaneById, listPanes, paneOf } from "../keyboard/focus";
 import { useKeymap } from "../keyboard/useKeymap";
 import type { Binding } from "../keyboard/registry";
 import { redactTerminalOutput } from "../lib/redactTerminalOutput";
@@ -46,7 +47,8 @@ function scrollPaneBody(id: string, to: "top" | "bottom") {
 /**
  * The terminal as a pane: `❯ action`, a status line, `── stdout ──`, then the text. Idle, it shows the
  * workspace context and the commands worth trying. Keys while it has focus: `y` copy, `C` clear,
- * `z` roll back the last transaction, `r` refresh, `g g` / `G` top and bottom.
+ * `z` roll back the last transaction, `r` refresh, `g g` / `G` top and bottom. When a new rollback
+ * transaction appears (an apply just finished) the pane takes focus, so the result and `z` are in reach.
  */
 export function OutputPane({
   id = "output",
@@ -148,6 +150,21 @@ export function OutputPane({
     },
   ];
   useKeymap(bindings);
+
+  const seenTransaction = useRef(rollbackTransactionId);
+  useEffect(() => {
+    const previous = seenTransaction.current;
+    seenTransaction.current = rollbackTransactionId;
+    if (!rollbackTransactionId || rollbackTransactionId === previous) return;
+    // Only take focus from where the closing review left it (the page's default pane) or from nowhere; a pane
+    // the user moved to on purpose keeps it.
+    const active = document.activeElement;
+    const activePane = active ? paneOf(active) : null;
+    const panes = listPanes();
+    const defaultPane = panes.find(pane => pane.hasAttribute("data-pane-default")) ?? panes[0];
+    const free = !active || active === document.body || active.closest(".topline") !== null || !activePane || activePane === defaultPane;
+    if (free) focusPaneById(id);
+  }, [rollbackTransactionId, id]);
 
   const verdict = wsRunning
     ? { text: "running", tone: undefined }
