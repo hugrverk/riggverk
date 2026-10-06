@@ -46,7 +46,7 @@ Tab keys below assume the default order: workspace, codex, opencode, cursor, cla
 - [ ] Moving the conflicting file away and installing again updates it
 - [ ] A stale plan (change the installed file between preview and `y`) fails with a re-preview prompt; `r` previews again
 - [ ] `:update codex`, `:update --all`, `:preview opencode` open the same review; `:update` without a target explains itself
-- [ ] No repair, Setup Lifecycle, per-surface mutation, or duplicate skills install controls exist
+- [ ] Each page has exactly one install path (`u`); no per-surface mutation or duplicate skills install controls exist
 - [ ] Workspace page: `R` release-check state matches script availability; `o` opens the workspace folder; `B` opens the backups folder; `r` refreshes
 
 ## 4. Target toggles

@@ -47,7 +47,7 @@ Bundled resources are immutable installation input. The explicit **Install or Up
 
 ### Conflicts
 
-A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file (for example in the Library) therefore freezes that file against future updates. To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so keep it with the workspace when you version it. Rules files have their own conflict handling (below).
+A file that exists but is not provably app-owned and unmodified is a conflict: Install skips it and reports it as preserved. Editing a bundled workspace file (for example in the Library) therefore freezes that file against future updates. To accept an update, move or delete your copy and run Install again; to keep your version, do nothing. Deleting `.agent-workspace/managed-state.json` removes the ownership proof and turns every previously managed file into a conflict, so do not delete it. It describes this machine's installs and should not be copied to another machine or committed. Rules files have their own conflict handling (below).
 
 ### Target toggles
 
