@@ -21,7 +21,7 @@ import {
   discoveredToDashboardEntry,
   isRepoPathAlreadySaved,
   mergeImportedRepoEntries,
-  repoEntryIdFromPath,
+  upsertRepoEntry,
 } from "../../lib/repoDashboardEntries";
 import { mergeWorkItemsDetailed } from "./docsParser";
 import {
@@ -121,12 +121,15 @@ export function RepoDashboardTool({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [snapshot, setSnapshot] = useState<RepoDashboardSnapshot | null>(null);
+  // The path the snapshot was requested with; the backend echoes an expanded path (e.g. `~`), so compare against this.
+  const [snapshotRequestPath, setSnapshotRequestPath] = useState<string | null>(null);
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [typeFilter, setTypeFilter] = useState<RepoDashboardWorkType | "all">("all");
   const [sourceFilter, setSourceFilter] = useState<CanonicalSourceFilter>("all");
   const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>("all");
   const savedEntries = savedEntriesProp;
-  const [saveStatus, setSaveStatus] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const { status: saveStatus, showStatus: showSaveStatus, clearStatus: clearSaveStatus } = useTransientStatus(2500);
   const { status: pickerStatus, showStatus: showPickerStatus } = useTransientStatus(2500);
   const [discoverOpen, setDiscoverOpen] = useState(false);
   const [discoverParentPath, setDiscoverParentPath] = useState("");
@@ -138,6 +141,7 @@ export function RepoDashboardTool({
   const [docsSelectedPath, setDocsSelectedPath] = useState<string | null>(null);
   const [docsSearchQuery, setDocsSearchQuery] = useState("");
   const loadSeqRef = useRef(0);
+  const discoverSeqRef = useRef(0);
   const [syncClock, setSyncClock] = useState(0);
 
   useEffect(() => {
@@ -164,11 +168,13 @@ export function RepoDashboardTool({
       });
       if (seq !== loadSeqRef.current) return;
       setSnapshot(data);
+      setSnapshotRequestPath(trimmedPath);
       setLastSynced(new Date());
     } catch (e) {
       if (seq !== loadSeqRef.current) return;
       setError(String(e));
       setSnapshot(null);
+      setSnapshotRequestPath(null);
     } finally {
       if (seq === loadSeqRef.current) setLoading(false);
     }
@@ -200,6 +206,8 @@ export function RepoDashboardTool({
   }, [snapshot]);
 
   const runDiscoverScan = useCallback(async (parentPath: string) => {
+    const seq = discoverSeqRef.current + 1;
+    discoverSeqRef.current = seq;
     setDiscoverLoading(true);
     setDiscoverError(null);
     setDiscoverResult(null);
@@ -208,16 +216,18 @@ export function RepoDashboardTool({
       const result = await invoke<DiscoverLocalGitReposResult>("discover_local_git_repos", {
         parentPath,
       });
+      if (seq !== discoverSeqRef.current) return;
       setDiscoverResult(result);
       const selectable = result.repos.filter(
         r => !isRepoPathAlreadySaved(r.path, savedEntries ?? []),
       );
       setDiscoverSelectedPaths(new Set(selectable.map(r => r.path)));
     } catch (e) {
+      if (seq !== discoverSeqRef.current) return;
       setDiscoverError(String(e));
       setDiscoverSelectedPaths(new Set());
     } finally {
-      setDiscoverLoading(false);
+      if (seq === discoverSeqRef.current) setDiscoverLoading(false);
     }
   }, [savedEntries]);
 
@@ -250,6 +260,7 @@ export function RepoDashboardTool({
   }, [discoverParentPath, repoPath, runDiscoverScan, showPickerStatus]);
 
   const closeDiscoverPanel = useCallback(() => {
+    discoverSeqRef.current += 1;
     setDiscoverOpen(false);
     setDiscoverLoading(false);
     setDiscoverError(null);
@@ -292,36 +303,28 @@ export function RepoDashboardTool({
 
   const saveCurrentRepo = useCallback(async () => {
     const path = repoPath.trim();
+    clearSaveStatus();
+    setSaveError(null);
     if (!path) {
-      setError("Enter a local repository path");
+      setSaveError("Enter a local repository path");
       return;
     }
-    setSaveStatus(null);
     try {
       if (!mutateSavedEntries) throw new Error("settings mutation unavailable");
-      const id = repoEntryIdFromPath(path);
-      const label = path.replace(/\/+$/, "").split("/").pop() || "Repository";
       const branch = defaultBranch.trim() || null;
       await mutateSavedEntries(settings => {
-        const entries = [...(settings.repo_dashboard_entries ?? [])];
-        const existingIndex = entries.findIndex(e => e.id === id || e.path === path);
-        const entry = { id, label, path, default_branch: branch };
-        if (existingIndex >= 0) {
-          entries[existingIndex] = entry;
-        } else {
-          entries.push(entry);
-        }
+        const { entries, id } = upsertRepoEntry(settings.repo_dashboard_entries ?? [], path, branch);
         return {
           ...settings,
           repo_dashboard_entries: entries,
           active_repo_dashboard_id: id,
         };
       });
-      setSaveStatus("saved");
+      showSaveStatus("saved");
     } catch (e) {
-      setError(String(e));
+      setSaveError(String(e));
     }
-  }, [defaultBranch, mutateSavedEntries, repoPath]);
+  }, [clearSaveStatus, defaultBranch, mutateSavedEntries, repoPath, showSaveStatus]);
 
   const chooseRepoFolder = useCallback(async () => {
     if (!isTauri()) {
@@ -421,11 +424,12 @@ export function RepoDashboardTool({
   const latestMerge = snapshot?.gh.merged_prs[0] ?? null;
   const latestCommit = snapshot?.latest_commit ?? null;
   const selectedSavedId =
-    savedEntries?.find(e => e.path === repoPath.trim())?.id ?? "";
+    savedEntries?.find(e => normalizeRepoPathForCompare(e.path) === normalizeRepoPathForCompare(repoPath))?.id ?? "";
   const snapshotMatchesPath =
     snapshot != null &&
+    snapshotRequestPath != null &&
     repoPath.trim() !== "" &&
-    normalizeRepoPathForCompare(snapshot.repo_path) ===
+    normalizeRepoPathForCompare(snapshotRequestPath) ===
       normalizeRepoPathForCompare(repoPath);
 
   const syncState = useMemo(
@@ -702,6 +706,13 @@ export function RepoDashboardTool({
             <div className="repo-dashboard-card repo-dashboard-error" role="alert">
               <h2 className="font-mono">Sync failed</h2>
               <pre className="font-mono">{error}</pre>
+            </div>
+          )}
+
+          {saveError && (
+            <div className="repo-dashboard-card repo-dashboard-error" role="alert">
+              <h2 className="font-mono">Save failed</h2>
+              <pre className="font-mono">{saveError}</pre>
             </div>
           )}
 

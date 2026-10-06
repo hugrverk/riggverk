@@ -34,6 +34,36 @@ export function discoveredToDashboardEntry(
   };
 }
 
+/** First free id for `baseId`: `baseId`, then `baseId-2`, `baseId-3`, ... */
+function uniqueRepoEntryId(baseId: string, takenIds: ReadonlySet<string>): string {
+  if (!takenIds.has(baseId)) return baseId;
+  let suffix = 2;
+  while (takenIds.has(`${baseId}-${suffix}`)) suffix += 1;
+  return `${baseId}-${suffix}`;
+}
+
+/**
+ * Add or update the saved entry for `path`. Entries match on normalized path only:
+ * ids are basename slugs and collide for different checkouts of the same folder name.
+ */
+export function upsertRepoEntry(
+  existing: RepoDashboardEntry[],
+  path: string,
+  defaultBranch: string | null,
+): { entries: RepoDashboardEntry[]; id: string } {
+  const entries = [...existing];
+  const pathKey = normalizeRepoPathForCompare(path);
+  const index = entries.findIndex(e => normalizeRepoPathForCompare(e.path) === pathKey);
+  if (index >= 0) {
+    const current = entries[index];
+    entries[index] = { ...current, path, default_branch: defaultBranch };
+    return { entries, id: current.id };
+  }
+  const id = uniqueRepoEntryId(repoEntryIdFromPath(path), new Set(entries.map(e => e.id)));
+  entries.push({ id, label: repoEntryLabelFromPath(path), path, default_branch: defaultBranch });
+  return { entries, id };
+}
+
 /** Merge imports into saved entries without duplicating normalized paths or ids. */
 export function mergeImportedRepoEntries(
   existing: RepoDashboardEntry[],
@@ -47,15 +77,8 @@ export function mergeImportedRepoEntries(
     const pathKey = normalizeRepoPathForCompare(entry.path);
     if (seenPaths.has(pathKey)) continue;
 
-    let id = entry.id;
-    if (seenIds.has(id)) {
-      let suffix = 2;
-      while (seenIds.has(`${entry.id}-${suffix}`)) suffix += 1;
-      id = `${entry.id}-${suffix}`;
-    }
-
-    const next = { ...entry, id };
-    entries.push(next);
+    const id = uniqueRepoEntryId(entry.id, seenIds);
+    entries.push({ ...entry, id });
     seenPaths.add(pathKey);
     seenIds.add(id);
   }

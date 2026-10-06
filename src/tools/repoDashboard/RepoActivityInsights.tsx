@@ -212,8 +212,8 @@ function ActivityInsightsChart({
           <title id={chartTitleId}>{activityInsightsChartTitle(rangeDays)}</title>
           <desc id={chartDescId}>{activityInsightsChartDescription(rangeDays, mode)}</desc>
 
-          {[0, Math.ceil(max / 2), max].map(v => (
-            <g key={v} aria-hidden="true">
+          {[0, Math.ceil(max / 2), max].map((v, tickIndex) => (
+            <g key={`${tickIndex}-${v}`} aria-hidden="true">
               {v > 0 ? (
                 <line
                   className="repo-dashboard-activity-gridline"
@@ -411,11 +411,14 @@ function ActivityInsightsChart({
 function ContributorVisibilityRow({
   stat,
   visible,
+  active,
   colorIndex,
   onToggle,
 }: {
   stat: ContributorStat;
   visible: boolean;
+  /** False when the contributor has no commits in the selected range, so there is nothing to chart. */
+  active: boolean;
   colorIndex: number;
   onToggle: () => void;
 }) {
@@ -425,7 +428,13 @@ function ContributorVisibilityRow({
       type="button"
       className={`repo-dashboard-contributor-visibility${visible ? " repo-dashboard-contributor-visibility-on" : ""}`}
       aria-pressed={visible}
-      aria-label={`${visible ? "Hide" : "Show"} ${stat.displayName} on chart`}
+      aria-label={
+        active
+          ? `${visible ? "Hide" : "Show"} ${stat.displayName} on chart`
+          : `${stat.displayName} has no commits in this range`
+      }
+      disabled={!active}
+      title={active ? undefined : "No commits in the selected range"}
       onClick={onToggle}
     >
       <span
@@ -434,7 +443,7 @@ function ContributorVisibilityRow({
         aria-hidden="true"
       />
       <span className="repo-dashboard-contributor-visibility-state" aria-hidden="true">
-        {visible ? "Shown" : "Hidden"}
+        {!active ? "Idle" : visible ? "Shown" : "Hidden"}
       </span>
       <span className="repo-dashboard-contributor-visibility-name">{stat.displayName}</span>
       <span className="repo-dashboard-contributor-visibility-stat">{stat.commitCount}</span>
@@ -522,13 +531,16 @@ export function RepoActivityInsights({
   const [visibleContributorIds, setVisibleContributorIds] = useState<string[]>([]);
 
   const allStats = useMemo(() => buildContributorStats(commits), [commits]);
+  // Range windows are anchored to the moment this snapshot's commits were loaded, so switching ranges
+  // after midnight cannot mix two different "today" values.
+  const windowNow = useMemo(() => new Date(), [commits]);
   const rangeCommits = useMemo(
-    () => filterCommitsForActivityInsights(commits, rangeDays),
-    [commits, rangeDays],
+    () => filterCommitsForActivityInsights(commits, rangeDays, windowNow),
+    [commits, rangeDays, windowNow],
   );
   const allSeries = useMemo(
-    () => buildContributorActivitySeries(rangeCommits, rangeDays),
-    [rangeCommits, rangeDays],
+    () => buildContributorActivitySeries(rangeCommits, rangeDays, windowNow),
+    [rangeCommits, rangeDays, windowNow],
   );
 
   const colorIndexById = useMemo(() => {
@@ -551,9 +563,10 @@ export function RepoActivityInsights({
   );
 
   const visibleIdSet = useMemo(() => new Set(visibleContributorIds), [visibleContributorIds]);
+  // Only contributors with commits in the range can be charted, so "Show all" is judged against those.
   const allContributorsVisible = useMemo(
-    () => allStats.length > 0 && allStats.every(stat => visibleIdSet.has(stat.id)),
-    [allStats, visibleIdSet],
+    () => allSeries.every(entry => visibleIdSet.has(entry.id)),
+    [allSeries, visibleIdSet],
   );
 
   const toggleContributor = useCallback((id: string) => {
@@ -656,6 +669,7 @@ export function RepoActivityInsights({
                       key={stat.id}
                       stat={stat}
                       visible={visibleIdSet.has(stat.id)}
+                      active={colorIndexById.has(stat.id)}
                       colorIndex={colorIndexById.get(stat.id) ?? 0}
                       onToggle={() => toggleContributor(stat.id)}
                     />

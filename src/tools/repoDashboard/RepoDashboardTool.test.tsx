@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { RepoDashboardTool } from "./RepoDashboardTool";
 import { RepoWorkWorkspace } from "./RepoWorkWorkspace";
@@ -26,15 +26,20 @@ const savedEntry: RepoDashboardEntry = {
 
 const snapshot: RepoDashboardSnapshot = {
   repo_path: "/tmp/example-repo",
+  git_available: true,
+  is_repo: true,
   branch: "develop",
   default_branch: "develop",
+  dirty: false,
+  ahead: null,
+  behind: null,
   latest_commit: null,
   commits: [],
   commits_truncated: false,
   changed_files: [],
   docs: [],
-  docs_source: "local",
-  docs_ref: null,
+  docs_source: "local-fallback",
+  docs_ref: "HEAD",
   docs_stale: false,
   warnings: [],
   gh: {
@@ -44,6 +49,22 @@ const snapshot: RepoDashboardSnapshot = {
     merged_prs: [],
     message: null,
   },
+};
+
+const baseSettings: AppSettings = {
+  workspace_path: null,
+  enabled_target_ids: [],
+  enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
+  appearance: "system",
+  app_font_size: "medium",
+  accent_color: null,
+  background_color: null,
+  foreground_color: null,
+  reduce_motion: false,
+  landing_view: "start",
+  repo_dashboard_entries: [],
+  active_repo_dashboard_id: null,
+  revision: 0,
 };
 
 describe("RepoDashboardTool", () => {
@@ -122,17 +143,7 @@ describe("RepoDashboardTool", () => {
 
   it("save persists default_branch", async () => {
     const mutateSavedEntries = vi.fn(async (mutator: (current: AppSettings) => AppSettings) =>
-      mutator({
-        workspace_path: null,
-        enabled_target_ids: [],
-        appearance: "system",
-        accent_color: null,
-        background_color: null,
-        foreground_color: null,
-        repo_dashboard_entries: [],
-        active_repo_dashboard_id: null,
-        revision: 0,
-      }),
+      mutator(baseSettings),
     );
     render(
       <RepoDashboardTool
@@ -147,18 +158,8 @@ describe("RepoDashboardTool", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save repository path to settings" }));
     await waitFor(() => expect(mutateSavedEntries).toHaveBeenCalled());
-    const next = mutateSavedEntries.mock.calls[0][0]({
-      workspace_path: null,
-      enabled_target_ids: [],
-      appearance: "system",
-      accent_color: null,
-      background_color: null,
-      foreground_color: null,
-      repo_dashboard_entries: [],
-      active_repo_dashboard_id: null,
-      revision: 0,
-    });
-    expect(next.repo_dashboard_entries[0]?.default_branch).toBe("develop");
+    const next = mutateSavedEntries.mock.calls[0][0](baseSettings);
+    expect(next.repo_dashboard_entries?.[0]?.default_branch).toBe("develop");
   });
 
   it("saved repo selection restores the branch", async () => {
@@ -187,6 +188,123 @@ describe("RepoDashboardTool", () => {
     await waitFor(() => {
       expect(screen.getByRole("region", { name: "Discover local repositories" })).not.toBeNull();
     });
+    expect(invokeMock).toHaveBeenCalledWith("discover_local_git_repos", { parentPath: "/tmp/projects" });
+  });
+
+  it("shows data for a ~ path even though the backend echoes the expanded path", async () => {
+    invokeMock.mockImplementation((command: string) => {
+      if (command === "get_repo_dashboard_snapshot") {
+        return Promise.resolve({ ...snapshot, repo_path: "/Users/dev/example-repo" });
+      }
+      return Promise.resolve({ repos: [], warnings: [] });
+    });
+    render(<RepoDashboardTool />);
+    fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "~/example-repo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+
+    await waitFor(() => expect(screen.getByText("Latest merge / commit")).not.toBeNull());
+    expect(screen.queryByText("Path changed")).toBeNull();
+  });
+
+  it("flags a snapshot as outdated once the path is edited", async () => {
+    render(<RepoDashboardTool />);
+    fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "/tmp/example-repo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Refresh dashboard" }));
+    await waitFor(() => expect(screen.getByText("Latest merge / commit")).not.toBeNull());
+
+    fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "/tmp/other-repo" } });
+    expect(screen.getByText("Path changed")).not.toBeNull();
+  });
+
+  it("shows a save failure as a save error, not as a sync failure", async () => {
+    const mutateSavedEntries = vi.fn(async () => {
+      throw new Error("settings conflict");
+    });
+    render(<RepoDashboardTool mutateSavedEntries={mutateSavedEntries} />);
+    fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "/tmp/example-repo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save repository path to settings" }));
+
+    await waitFor(() => expect(screen.getByText("Save failed")).not.toBeNull());
+    expect(screen.queryByText("Sync failed")).toBeNull();
+  });
+
+  it("does not overwrite a saved repo with the same folder name but a different path", async () => {
+    const mutateSavedEntries = vi.fn(async (mutator: (current: AppSettings) => AppSettings) =>
+      mutator(baseSettings),
+    );
+    render(<RepoDashboardTool mutateSavedEntries={mutateSavedEntries} />);
+    fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "/b/example-repo" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save repository path to settings" }));
+    await waitFor(() => expect(mutateSavedEntries).toHaveBeenCalled());
+
+    const current: AppSettings = {
+      ...baseSettings,
+      repo_dashboard_entries: [{ id: "example-repo", label: "example-repo", path: "/a/example-repo" }],
+    };
+    const next = mutateSavedEntries.mock.calls[0][0](current);
+    expect(next.repo_dashboard_entries).toEqual([
+      { id: "example-repo", label: "example-repo", path: "/a/example-repo" },
+      { id: "example-repo-2", label: "example-repo", path: "/b/example-repo", default_branch: null },
+    ]);
+    expect(next.active_repo_dashboard_id).toBe("example-repo-2");
+  });
+
+  it("clears the saved status after a short delay", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      const mutateSavedEntries = vi.fn(async (mutator: (current: AppSettings) => AppSettings) =>
+        mutator(baseSettings),
+      );
+      render(<RepoDashboardTool mutateSavedEntries={mutateSavedEntries} />);
+      fireEvent.change(screen.getByLabelText("Local repository path"), { target: { value: "/tmp/example-repo" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save repository path to settings" }));
+      await waitFor(() => expect(document.body.textContent).toContain("· saved"));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3000);
+      });
+      expect(document.body.textContent).not.toContain("· saved");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("keeps the results of the latest discover scan when an older scan resolves late", async () => {
+    let resolveFirst: (value: unknown) => void = () => {};
+    let scans = 0;
+    invokeMock.mockImplementation((command: string, args?: { parentPath?: string }) => {
+      if (command === "discover_local_git_repos") {
+        scans += 1;
+        if (scans === 1) {
+          return new Promise(resolve => {
+            resolveFirst = resolve;
+          });
+        }
+        return Promise.resolve({
+          repos: [{ label: "fresh-repo", path: `${args?.parentPath}/fresh-repo` }],
+          warnings: [],
+        });
+      }
+      return Promise.resolve(snapshot);
+    });
+    openMock.mockResolvedValueOnce("/tmp/first").mockResolvedValueOnce("/tmp/second");
+
+    render(<RepoDashboardTool />);
+    const discoverButton = screen.getByRole("button", { name: /Discover local git repositories/i });
+    fireEvent.click(discoverButton);
+    await waitFor(() => expect(scans).toBe(1));
+    // Cancel while the first scan is still running, then start another one.
+    fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+    fireEvent.click(discoverButton);
+    await waitFor(() => expect(scans).toBe(2));
+    await waitFor(() => expect(screen.getByText("fresh-repo")).not.toBeNull());
+
+    await act(async () => {
+      resolveFirst({ repos: [{ label: "stale-repo", path: "/tmp/first/stale-repo" }], warnings: [] });
+    });
+
+    expect(screen.queryByText("stale-repo")).toBeNull();
+    expect(screen.getByText("fresh-repo")).not.toBeNull();
   });
 });
 
