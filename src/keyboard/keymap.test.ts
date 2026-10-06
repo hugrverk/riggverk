@@ -19,6 +19,7 @@ describe("parseChord", () => {
     expect(parseChord("j")).toEqual([{ key: "j", mod: false, ctrl: false, shift: false }]);
     expect(parseChord("Esc")[0]!.key).toBe("Escape");
     expect(parseChord("Space")[0]!.key).toBe(" ");
+    expect(parseChord(" ")[0]!.key).toBe(" ");
     expect(parseChord("Down")[0]!.key).toBe("ArrowDown");
     expect(parseChord("PageUp")[0]!.key).toBe("PageUp");
   });

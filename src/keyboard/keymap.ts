@@ -118,6 +118,7 @@ function parseStep(raw: string, spec: string): KeyStep {
 
 /** Parses one chord spec ("g g", "Mod+s") into steps. */
 export function parseChord(spec: string): KeyChord {
+  if (spec === " ") return [{ key: " ", mod: false, ctrl: false, shift: false }];
   const tokens = spec.trim().split(/\s+/).filter(Boolean);
   if (tokens.length === 0) throw new Error("Empty key spec");
   return tokens.map(token => parseStep(token, spec));
