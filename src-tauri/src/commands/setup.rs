@@ -2379,6 +2379,8 @@ mod tests {
 
     #[test]
     fn skill_update_preserves_unknown_sibling_files() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
         let base = std::env::temp_dir().join(format!(
             "aw-setup-skill-sibling-{}",
             std::time::SystemTime::now()
@@ -2410,6 +2412,14 @@ mod tests {
             crate::artifact_registry::SkillName::new("frontend-design").unwrap(),
         );
         apply_single_artifact(&artifact, &ws, &resolved_home).expect("apply skill");
+        let source = artifact
+            .resolve_source(&crate::setup_roots::bundled_root().expect("bundled root"))
+            .expect("skill source");
+        assert_eq!(
+            fs::read(&dest).unwrap(),
+            fs::read(source).unwrap(),
+            "managed SKILL.md must be updated to the bundled source"
+        );
         assert_eq!(
             fs::read_to_string(
                 resolved_home.join(".config/opencode/skills/frontend-design/user-notes.md")
@@ -2571,27 +2581,33 @@ mod tests {
     }
 
     #[test]
-    fn rollback_dry_run_does_not_restore() {
-        let _guard = guard::lock();
-        let home = std::env::temp_dir().join("aw-setup-dry-run");
-        let _ = fs::remove_dir_all(&home);
-        fs::create_dir_all(&home).expect("create dir");
-        let _restore = guard::EnvRestore::capture();
-        set_test_user_dirs(&home);
-        unsafe {
-            std::env::set_var(
-                "AGENT_WORKSPACE_BACKUP_DIR",
-                home.join("backups").to_string_lossy().as_ref(),
-            );
-        }
+    fn rollback_dry_run_leaves_a_real_transaction_untouched() {
+        let env = TempSetupEnv::new("dry-run-real");
+        let applied =
+            apply_planned_artifacts(&env.plan(&[SetupSurfaceId::CodexRules]), vec![], None);
+        assert!(applied.success, "{}", applied.message);
+        let codex = env.home.join(".codex/AGENTS.md");
+        assert!(codex.is_file());
+        let manifest_path = env
+            .setup_root()
+            .join(&applied.transaction_id)
+            .join("manifest.json");
+        let manifest_before = fs::read(&manifest_path).unwrap();
 
-        let result = rollback_transaction("nonexistent", true);
-        // Dry-run on nonexistent should still fail — dry-run only affects
-        // the existence check stage
-        assert!(
-            !result.success,
-            "dry-run should still validate transaction exists"
+        let dry = rollback_transaction(&applied.transaction_id, true);
+        assert!(dry.success, "{}", dry.message);
+        assert_eq!(dry.applied.len(), 1, "dry run lists what would be restored");
+        assert!(dry.applied[0].contains("CodexRules"), "{:?}", dry.applied);
+        assert!(codex.is_file(), "dry run must not remove the created file");
+        assert_eq!(
+            fs::read(&manifest_path).unwrap(),
+            manifest_before,
+            "dry run must not write the manifest"
         );
+
+        let real = rollback_transaction(&applied.transaction_id, false);
+        assert!(real.success, "{}", real.message);
+        assert!(!codex.exists(), "real rollback removes the created file");
     }
 
     #[test]
@@ -3578,5 +3594,152 @@ mod tests {
             .find(|r| r.identity == identity)
             .expect("codex record");
         assert_eq!(record.hash, crate::stable_digest::bytes(&installed));
+    }
+
+    // ── Failure injection and removal safety ──
+
+    /// Restores permissions on drop so a failed assertion cannot leave an
+    /// undeletable directory behind.
+    #[cfg(unix)]
+    struct PermissionGuard {
+        path: PathBuf,
+        mode: u32,
+    }
+
+    #[cfg(unix)]
+    impl Drop for PermissionGuard {
+        fn drop(&mut self) {
+            use std::os::unix::fs::PermissionsExt;
+            let _ = fs::set_permissions(&self.path, fs::Permissions::from_mode(self.mode));
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn failed_apply_rolls_back_completed_artifacts_and_restores_state() {
+        use std::os::unix::fs::PermissionsExt;
+        let env = TempSetupEnv::new("auto-rollback");
+        let codex_dest = env.home.join(".codex/AGENTS.md");
+        let opencode_dest = env.home.join(".config/opencode/AGENTS.md");
+        let surfaces = [SetupSurfaceId::CodexRules, SetupSurfaceId::OpenCodeRules];
+
+        // Install both, then age them: installed content differs from the
+        // source but matches the managed record, so the next plan updates both.
+        let first = apply_planned_artifacts(&env.plan(&surfaces), vec![], None);
+        assert!(first.success, "{}", first.message);
+        fs::write(&codex_dest, "old-codex").unwrap();
+        fs::write(&opencode_dest, "old-opencode").unwrap();
+        let mut state = crate::managed_state::read_managed_state(&env.ws).expect("state");
+        for record in state.artifacts.iter_mut() {
+            let old = if record.identity
+                == crate::managed_state::artifact_identity(&ArtifactId::CodexRules)
+            {
+                b"old-codex".as_slice()
+            } else {
+                b"old-opencode".as_slice()
+            };
+            record.hash = crate::stable_digest::bytes(old);
+        }
+        crate::managed_state::write_managed_state_atomic(&env.ws, &state).unwrap();
+        let state_before = fs::read(crate::managed_state::managed_state_path(&env.ws)).unwrap();
+        let planned = env.plan(&surfaces);
+        assert!(
+            planned.iter().all(|p| p.kind == OperationKind::Update),
+            "{planned:?}"
+        );
+
+        // The second artifact cannot be written: its directory is read-only.
+        let opencode_dir = opencode_dest.parent().unwrap().to_path_buf();
+        fs::set_permissions(&opencode_dir, fs::Permissions::from_mode(0o555)).unwrap();
+        let _restore_permissions = PermissionGuard {
+            path: opencode_dir.clone(),
+            mode: 0o755,
+        };
+        if fs::write(opencode_dir.join(".probe"), "x").is_ok() {
+            return; // permissions are not enforced (running as root)
+        }
+
+        let result = apply_planned_artifacts(&planned, vec![], None);
+
+        assert!(!result.success, "second artifact must fail the apply");
+        assert!(
+            result
+                .rolled_back
+                .iter()
+                .any(|label| label.contains("CodexRules")),
+            "first artifact must be rolled back: {result:?}"
+        );
+        assert_eq!(fs::read_to_string(&codex_dest).unwrap(), "old-codex");
+        assert_eq!(fs::read_to_string(&opencode_dest).unwrap(), "old-opencode");
+        assert_eq!(
+            fs::read(crate::managed_state::managed_state_path(&env.ws)).unwrap(),
+            state_before,
+            "managed state must be untouched by a rolled-back apply"
+        );
+        let manifest = read_manifest(&result.transaction_id);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RolledBack
+        );
+        assert!(manifest
+            .operations
+            .iter()
+            .all(|op| op.rollback_status == setup_transaction::RollbackStatus::Restored));
+    }
+
+    #[test]
+    fn stale_removal_never_deletes_a_user_modified_file() {
+        let env = TempSetupEnv::new("stale-removal");
+        let stale_skill = |name: &str| {
+            ArtifactId::ClaudeSkill(crate::artifact_registry::SkillName::new(name).unwrap())
+        };
+        let (untouched, edited) = (stale_skill("grill-me"), stale_skill("caveman"));
+        let mut records = Vec::new();
+        for (artifact, installed_by_app) in [(&untouched, "app copy"), (&edited, "app copy")] {
+            let dest = artifact.resolve_dest(&env.home, &env.ws).unwrap();
+            fs::create_dir_all(dest.parent().unwrap()).unwrap();
+            fs::write(&dest, installed_by_app).unwrap();
+            records.push(crate::managed_state::ManagedArtifactRecord {
+                identity: crate::managed_state::artifact_identity(artifact),
+                hash: crate::stable_digest::bytes(installed_by_app.as_bytes()),
+                surface: None,
+            });
+        }
+        // The user edits one skill the app once installed and has since retired.
+        let edited_dest = edited.resolve_dest(&env.home, &env.ws).unwrap();
+        fs::write(&edited_dest, "my own changes").unwrap();
+        crate::managed_state::write_managed_state_atomic(
+            &env.ws,
+            &crate::managed_state::ManagedState {
+                schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: records,
+            },
+        )
+        .unwrap();
+
+        let planned = env.plan(&[SetupSurfaceId::ClaudeSkills]);
+        let kind_of = |artifact: &ArtifactId| {
+            planned
+                .iter()
+                .find(|p| &p.artifact == artifact)
+                .map(|p| p.kind)
+        };
+        assert_eq!(kind_of(&untouched), Some(OperationKind::Remove));
+        assert_eq!(kind_of(&edited), Some(OperationKind::Conflict));
+
+        let stale: Vec<_> = planned
+            .iter()
+            .filter(|p| p.artifact == untouched || p.artifact == edited)
+            .cloned()
+            .collect();
+        let result = apply_planned_artifacts(&stale, vec![], None);
+        assert!(result.success, "{}", result.message);
+        assert!(!untouched.resolve_dest(&env.home, &env.ws).unwrap().exists());
+        assert_eq!(
+            fs::read_to_string(&edited_dest).unwrap(),
+            "my own changes",
+            "a user-modified retired skill must be preserved"
+        );
     }
 }
