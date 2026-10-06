@@ -447,26 +447,37 @@ def main() -> None:
         if "allow(dead_code)" in read(path):
             fail(f"{path.relative_to(ROOT)} must not hide obsolete code")
 
-    card = require(
-        FRONTEND / "components/HarnessInstallationCard.tsx",
-        "installationPrimaryAction",
-        "showModal",
-        "conflict",
+    # Apply only ever receives the reviewed plan's fingerprint and one-time token.
+    flow = require(
+        FRONTEND / "hooks/useInstallFlow.ts",
+        '"apply_setup"',
+        "planFingerprint: review.plan.plan_fingerprint",
+        "previewToken: review.plan.preview_token",
     )
-    if card.count("<dialog") != 1:
-        fail("installation conflict review must have one dialog owner")
+    if flow.count('"apply_setup"') != 1:
+        fail("useInstallFlow must be the only apply_setup caller in the install flow")
+    require(FRONTEND / "hooks/useInstallScreen.ts", "useInstallFlow()")
+    require(FRONTEND / "components/InstallPlanPane.tsx", "conflict")
 
+    # One install owner per page: Start and the shared HarnessPage each render one plan pane;
+    # the harness views are thin configs around HarnessPage.
+    for path in (FRONTEND / "views/StartView.tsx", FRONTEND / "views/HarnessPage.tsx"):
+        if read(path).count("<InstallPlanPane") != 1:
+            fail(f"{path.relative_to(ROOT)} must render exactly one InstallPlanPane")
     for path in (
-        FRONTEND / "views/StartView.tsx",
         FRONTEND / "views/CodexView.tsx",
         FRONTEND / "views/OpenCodeView.tsx",
         FRONTEND / "views/CursorView.tsx",
         FRONTEND / "views/ClaudeView.tsx",
     ):
-        text = read(path)
-        if text.count("<HarnessInstallationCard") != 1:
-            fail(f"{path.relative_to(ROOT)} must render exactly one installation card")
-        if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", text, re.I):
+        if read(path).count("<HarnessPage") != 1:
+            fail(f"{path.relative_to(ROOT)} must render exactly one HarnessPage")
+    for path in (
+        FRONTEND / "views/StartView.tsx",
+        FRONTEND / "views/HarnessPage.tsx",
+        FRONTEND / "components/InstallPlanPane.tsx",
+    ):
+        if re.search(r"\brepair\b|setup lifecycle|transaction fingerprint", read(path), re.I):
             fail(f"{path.relative_to(ROOT)} exposes obsolete installation terminology")
 
     print("managed installation contract checks passed")

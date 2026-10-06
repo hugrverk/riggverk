@@ -1880,15 +1880,15 @@ if search_has_match 'choose folder|check path|use default|clear active' src/view
   printf 'FAIL: deprecated workspace path chooser controls still in Start UI\n' >&2
   exit 1
 fi
-if ! search_has_match 'runHarnessSetupUpdate' src/App.tsx; then
-  printf 'FAIL: App.tsx must route workspace installation through unified setup\n' >&2
+if ! search_has_match 'useInstallScreen' src/App.tsx; then
+  printf 'FAIL: App.tsx must route workspace installation through the reviewed install screen\n' >&2
   exit 1
 fi
 printf '  canonical install path model verified\n'
 
 step "Start page unified installation owner"
-if [ "$(grep -c '<HarnessInstallationCard' src/views/StartView.tsx)" -ne 1 ]; then
-  printf 'FAIL: Start page must expose exactly one unified installation card\n' >&2
+if [ "$(grep -c '<InstallPlanPane' src/views/StartView.tsx)" -ne 1 ]; then
+  printf 'FAIL: Start page must expose exactly one install review pane\n' >&2
   exit 1
 fi
 if search_has_match 'repair|update resources|SetupLifecycle|WorkspaceSkillsVerify' src/views/StartView.tsx; then
