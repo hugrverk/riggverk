@@ -200,7 +200,7 @@ describe("PromptLoopsTool", () => {
   it("shows an empty state when the filter matches nothing", () => {
     renderTool();
     fireEvent.change(screen.getByRole("searchbox", { name: "Filter prompts" }), { target: { value: "zzzz-no-match" } });
-    expect(screen.getByText("no matching prompts")).not.toBeNull();
+    expect(screen.getByRole("status").textContent).toBe("no matching prompts");
     expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
   });
 

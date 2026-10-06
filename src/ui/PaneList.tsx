@@ -52,7 +52,7 @@ export interface PaneListProps<T> {
   /** Label of the Enter hint shown in the owning pane's footer ("open"). */
   activateHint?: string;
   filter?: PaneListFilter;
-  /** Rendered instead of rows when `items` is empty. */
+  /** Rendered instead of rows when `items` is empty, as a status message right under the filter. */
   empty?: ReactNode;
   /** Rows moved by PageUp/PageDown. */
   pageSize?: number;
@@ -266,6 +266,11 @@ export function PaneList<T>({
           />
         </div>
       )}
+      {items.length === 0 && (
+        <p className="c-dim" role="status">
+          {empty ?? "nothing to show"}
+        </p>
+      )}
       <ul
         ref={listRef}
         className={cx("rows", className)}
@@ -312,7 +317,6 @@ export function PaneList<T>({
           );
         })}
       </ul>
-      {items.length === 0 && <p className="c-dim">{empty ?? "nothing to show"}</p>}
     </>
   );
 }

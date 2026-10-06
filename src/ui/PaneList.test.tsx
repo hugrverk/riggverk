@@ -254,6 +254,17 @@ describe("PaneList", () => {
     expect(within(listbox()).queryAllByRole("option")).toHaveLength(0);
   });
 
+  it("announces the empty message as a status right under the filter, before the empty list", () => {
+    renderWithShell(
+      <List rows={[]} empty="no matching rows" filter={{ value: "zzz", onChange: () => {}, label: "Filter rows" }} />,
+    );
+    const message = screen.getByRole("status");
+    expect(message.textContent).toBe("no matching rows");
+    const filterInput = screen.getByRole("searchbox", { name: "Filter rows" });
+    expect(filterInput.compareDocumentPosition(message) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(message.compareDocumentPosition(listbox()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
   it("shows an Enter hint in the pane footer that activates the cursor row when clicked", () => {
     const onActivate = vi.fn();
     renderWithShell(
