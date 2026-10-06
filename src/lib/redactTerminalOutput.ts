@@ -3,12 +3,20 @@ const REDACTED = "[REDACTED]";
 const PRIVATE_KEY_BLOCK_RE =
   /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]*?-----END [A-Z0-9 ]*PRIVATE KEY-----/g;
 
-const AUTH_BEARER_RE = /\b(authorization\s*:\s*Bearer\s+)[^\s]+/gi;
+// Any Authorization value (Bearer, Basic, Digest, custom schemes): keep a known scheme word, redact the credential.
+const AUTH_HEADER_RE =
+  /\b(authorization\s*:\s*(?:(?:bearer|basic|digest|token|negotiate|ntlm)\s+)?)[^\r\n]+/gi;
 
 const COOKIE_HEADER_RE = /\b(cookie\s*:\s*)[^\r\n]+/gi;
 
-const KEY_VALUE_RE =
-  /\b(api[_-]?key|access[_-]?token|refresh[_-]?token|client[_-]?secret|secret|password|token|session)\b(\s*[:=]\s*)(["']?)[^\s&;,`"']+/gi;
+// A name counts as sensitive when one of its `_`, `-` or `.` separated segments is a secret-ish word,
+// so AWS_SECRET_ACCESS_KEY, npm_token and x-api-key match while "tokens" or "max_tokens" do not.
+const SENSITIVE_WORD =
+  "(?:api[_-]?key|access[_-]?(?:key|token)|refresh[_-]?token|client[_-]?secret|secret|password|passwd|token|session|credentials?|private[_-]?key)";
+const KEY_VALUE_RE = new RegExp(
+  `\\b((?:[A-Za-z0-9]+[_.-])*${SENSITIVE_WORD}(?:[_.-][A-Za-z0-9]+)*)(["']?\\s*[:=]\\s*)(["']?)[^\\s&;,\`"']+`,
+  "gi",
+);
 
 const SIGNED_QUERY_PARAM_RE =
   /([?&](?:X-Amz-Signature|X-Amz-Credential|Signature|sig)=)[^&#\s]+/gi;
@@ -23,7 +31,7 @@ export function redactTerminalOutput(input: string): string {
 
   return input
     .replace(PRIVATE_KEY_BLOCK_RE, REDACTED)
-    .replace(AUTH_BEARER_RE, `$1${REDACTED}`)
+    .replace(AUTH_HEADER_RE, `$1${REDACTED}`)
     .replace(COOKIE_HEADER_RE, `$1${REDACTED}`)
     .replace(KEY_VALUE_RE, (_match, key: string, separator: string, quote: string) => {
       return `${key}${separator}${quote}${REDACTED}`;
