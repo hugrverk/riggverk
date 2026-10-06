@@ -2436,6 +2436,7 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
     #[cfg(unix)]
     #[test]
     fn fetch_args_do_not_run_repo_config_uploadpack() {
+        let _guard = crate::test_env::guard::lock();
         let (root, work) = work_repo_with_local_origin("fetch-uploadpack");
         let sentinel = root.join("uploadpack-ran");
         let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
@@ -2465,6 +2466,7 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
     #[cfg(unix)]
     #[test]
     fn fetch_origin_branch_does_not_use_local_path_remotes() {
+        let _guard = crate::test_env::guard::lock();
         let (root, work) = work_repo_with_local_origin("fetch-file-transport");
         let sentinel = root.join("uploadpack-ran");
         let script = sentinel_script(&root, "evil-upload-pack", &sentinel);
@@ -2491,6 +2493,7 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
     #[cfg(unix)]
     #[test]
     fn fetch_origin_branch_refuses_ext_transport_enabled_by_repo_config() {
+        let _guard = crate::test_env::guard::lock();
         let root = temp_dir_for("fetch-ext");
         let work = root.join("work");
         fs::create_dir_all(&work).expect("mkdir work");
@@ -2518,6 +2521,7 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
     #[cfg(unix)]
     #[test]
     fn fetch_origin_branch_ignores_repo_core_ssh_command() {
+        let _guard = crate::test_env::guard::lock();
         let root = temp_dir_for("fetch-ssh");
         let work = root.join("work");
         fs::create_dir_all(&work).expect("mkdir work");
@@ -2548,6 +2552,7 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
     #[cfg(unix)]
     #[test]
     fn fetch_origin_branch_ignores_repo_core_git_proxy() {
+        let _guard = crate::test_env::guard::lock();
         let root = temp_dir_for("fetch-gitproxy");
         let work = root.join("work");
         fs::create_dir_all(&work).expect("mkdir work");
