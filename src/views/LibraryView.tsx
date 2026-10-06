@@ -591,6 +591,10 @@ export function LibraryView(props: LibraryViewProps) {
 
   let mainContent: React.ReactNode = null;
 
+  // opencode_config is edited through editor sources; every other target shows its template.
+  const isOpenCodeConfigTarget = activeConfigTargetId === "opencode_config";
+  const activeConfigContent = isOpenCodeConfigTarget ? configEditorSourceContent : configTemplateContent;
+
   if (sourceType === "rules" && agentTemplate) {
     mainContent = (
       <RulesContent
@@ -640,7 +644,7 @@ export function LibraryView(props: LibraryViewProps) {
         brainSetupSource={brainSetupSource}
       />
     );
-  } else if (sourceType === "configs" && configTemplateContent) {
+  } else if (sourceType === "configs" && (isOpenCodeConfigTarget || configTemplateContent)) {
     mainContent = (
       <ConfigContent
         configTemplateContent={configTemplateContent}
@@ -689,7 +693,7 @@ export function LibraryView(props: LibraryViewProps) {
             configTargets={configTargets}
             activeTargetId={activeConfigTargetId}
             onSelect={onSelectConfigTarget}
-            configContent={configTemplateContent}
+            configContent={activeConfigContent}
             bundledAgentCount={agentSources.length}
           />
         );

@@ -64,6 +64,10 @@ export function ConfigContent(props: ConfigContentProps) {
   // For opencode_config, display the active source content; for other targets, use configTemplateContent.
   const displayedContent = isOpenCodeConfig ? configEditorSourceContent : configTemplateContent;
 
+  // Hooks must run before the early return below: opencode content arrives after the first render.
+  const displayedText = displayedContent?.content ?? "";
+  const formattedJson = useMemo(() => formatJson(displayedText), [displayedText]);
+
   // Early return for loading/missing state
   if (!displayedContent) {
     if (isOpenCodeConfig) {
@@ -91,8 +95,6 @@ export function ConfigContent(props: ConfigContentProps) {
 
   const isSnapshot = isOpenCodeConfig && activeConfigSourceType === "snapshot";
   const currentSourceIsEditable = activeSource ? activeSource.editable : true;
-
-  const formattedJson = useMemo(() => formatJson(displayedContent.content), [displayedContent.content]);
 
   // Determine edit mode availability
   const canEdit = currentSourceIsEditable && configMode === "edit";
