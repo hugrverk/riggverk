@@ -10,6 +10,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
+use crate::agent_skill_targets::codex_home;
 use crate::setup_lifecycle::SetupSurfaceId;
 
 // ── Artifact identity ──
@@ -200,10 +201,10 @@ impl ArtifactId {
                 .join(".config/opencode/skills")
                 .join(name.as_str())
                 .join("SKILL.md")),
-            ArtifactId::CodexConfig => Ok(home.join(".codex/config.toml")),
-            ArtifactId::CodexRules => Ok(home.join(".codex/AGENTS.md")),
-            ArtifactId::CodexAgent(name) => Ok(home
-                .join(".codex/agents")
+            ArtifactId::CodexConfig => Ok(codex_home(home).join("config.toml")),
+            ArtifactId::CodexRules => Ok(codex_home(home).join("AGENTS.md")),
+            ArtifactId::CodexAgent(name) => Ok(codex_home(home)
+                .join("agents")
                 .join(name.file_name_with_extension("toml"))),
             ArtifactId::CodexSkill(name) => {
                 Ok(crate::agent_skill_targets::codex_global_skills_dest(home)
@@ -949,5 +950,60 @@ mod tests {
             serde_json::from_str::<ArtifactId>(&json).unwrap(),
             ArtifactId::WorkspaceFile(rel)
         );
+    }
+
+    // ── CODEX_HOME ──
+
+    #[test]
+    fn codex_destinations_honor_codex_home_like_skills() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("codex-home-user");
+        let codex_home_dir = temp_dir("codex-home-override");
+        let ws = temp_dir("codex-home-ws");
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        std::env::set_var("CODEX_HOME", &codex_home_dir);
+
+        let agent = AgentName::new("repo-scout").unwrap();
+        let skill = SkillName::new("diagnose").unwrap();
+        let cases = [
+            (ArtifactId::CodexConfig, "config.toml"),
+            (ArtifactId::CodexRules, "AGENTS.md"),
+            (ArtifactId::CodexAgent(agent), "agents/repo-scout.toml"),
+            (ArtifactId::CodexSkill(skill), "skills/diagnose/SKILL.md"),
+        ];
+        for (artifact, rel) in cases {
+            let dest = artifact.resolve_dest(&home, &ws).expect("resolve dest");
+            assert_eq!(dest, codex_home_dir.join(rel), "{artifact:?}");
+        }
+    }
+
+    #[test]
+    fn codex_destinations_default_to_dot_codex_without_codex_home() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let home = temp_dir("codex-default-user");
+        let ws = temp_dir("codex-default-ws");
+        std::env::remove_var("CODEX_SKILLS_PATH");
+        for value in [None, Some("   ")] {
+            match value {
+                Some(blank) => std::env::set_var("CODEX_HOME", blank),
+                None => std::env::remove_var("CODEX_HOME"),
+            }
+            assert_eq!(
+                ArtifactId::CodexConfig.resolve_dest(&home, &ws).unwrap(),
+                home.join(".codex/config.toml")
+            );
+            assert_eq!(
+                ArtifactId::CodexRules.resolve_dest(&home, &ws).unwrap(),
+                home.join(".codex/AGENTS.md")
+            );
+            assert_eq!(
+                ArtifactId::CodexAgent(AgentName::new("repo-scout").unwrap())
+                    .resolve_dest(&home, &ws)
+                    .unwrap(),
+                home.join(".codex/agents/repo-scout.toml")
+            );
+        }
     }
 }
