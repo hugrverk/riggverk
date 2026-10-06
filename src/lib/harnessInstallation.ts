@@ -45,10 +45,23 @@ export const TARGET_SURFACES: Record<SetupTargetId, readonly SetupSurfaceId[]> =
 /** Targets that start OFF (`codex_config` rewrites the user's Codex approval/sandbox posture). */
 const DEFAULT_DISABLED_TARGET_IDS: readonly SetupTargetId[] = ["codex_config"];
 
+/** Target ids in backend registry order (`agent_targets::targets`), which settings normalize to. */
+const TARGET_IDS_REGISTRY_ORDER: readonly SetupTargetId[] = [
+  "codex_rules",
+  "opencode_rules",
+  "claude_rules",
+  "opencode_agents",
+  "claude_agents",
+  "codex_agents",
+  "opencode_config",
+  "codex_config",
+  "cursor_setup",
+];
+
 /** Mirrors `agent_targets::default_enabled_ids`. */
-export const DEFAULT_ENABLED_TARGET_IDS: readonly SetupTargetId[] = (
-  Object.keys(TARGET_SURFACES) as SetupTargetId[]
-).filter((id) => !DEFAULT_DISABLED_TARGET_IDS.includes(id));
+export const DEFAULT_ENABLED_TARGET_IDS: readonly SetupTargetId[] = TARGET_IDS_REGISTRY_ORDER.filter(
+  (id) => !DEFAULT_DISABLED_TARGET_IDS.includes(id),
+);
 
 /** The target toggle gating `surface`, or null for ungated surfaces (skills, workspace bundle). */
 export function targetIdForSurface(surface: SetupSurfaceId): SetupTargetId | null {

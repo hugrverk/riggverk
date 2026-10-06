@@ -1,4 +1,5 @@
 import { INSTALL_AGENTS, type AppSettings } from "../types";
+import { DEFAULT_ENABLED_TARGET_IDS } from "./harnessInstallation";
 
 /** AppSettings persistence state for autosave UI. */
 export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
@@ -6,16 +7,7 @@ export type SettingsSaveStatus = "saved" | "pending" | "saving" | "error";
 export const SETTINGS_AUTOSAVE_DEBOUNCE_MS = 600;
 
 /** Mirrors agent_targets::default_enabled_ids (registry order; codex_config stays opt-in). */
-export const DEFAULT_TARGET_IDS = [
-  "codex_rules",
-  "opencode_rules",
-  "claude_rules",
-  "opencode_agents",
-  "claude_agents",
-  "codex_agents",
-  "opencode_config",
-  "cursor_setup",
-];
+export const DEFAULT_TARGET_IDS: string[] = [...DEFAULT_ENABLED_TARGET_IDS];
 export const DEFAULT_HARNESS_IDS = [...INSTALL_AGENTS];
 export const APP_FONT_SIZE_VALUES = ["small", "medium", "large", "extra-large"] as const;
 
