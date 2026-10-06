@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useMemo, useRef, useState, type MutableRefObject } from "react";
+import { useConfirm } from "../components/ConfirmDialog";
 import { isSettingsConflictError } from "../lib/appSettingsMutation";
 import {
   applyMutationPreservingPendingLocal,
@@ -38,16 +39,16 @@ export function useAppSettingsController({
   loadWorkspaceResources,
   fetchStatus,
 }: AppSettingsControllerDeps) {
+  const confirm = useConfirm();
   const appSettingsRef = useRef<AppSettings | null>(null);
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
   const setAppSettings = useCallback((
     value: AppSettings | null | ((prev: AppSettings | null) => AppSettings | null),
   ) => {
-    setAppSettingsState(prev => {
-      const next = typeof value === "function" ? value(prev) : value;
-      appSettingsRef.current = next;
-      return next;
-    });
+    // The ref is the source of truth and must be current before the next await, not after React renders.
+    const next = typeof value === "function" ? value(appSettingsRef.current) : value;
+    appSettingsRef.current = next;
+    setAppSettingsState(next);
   }, []);
   const [settingsMsg, setSettingsMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [agentTargets, setAgentTargets] = useState<AgentTargetMeta[]>([]);
@@ -120,69 +121,61 @@ export function useAppSettingsController({
     setSettingsSaving(true);
 
     try {
-      const saved = await invoke<AppSettings>("update_settings", {
-        settings,
-        expectedRevision: settingsRevisionRef.current,
-      });
-      if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return false;
+      let payload = settings;
+      for (let attempt = 0; ; attempt++) {
+        try {
+          const saved = await invoke<AppSettings>("update_settings", {
+            settings: payload,
+            expectedRevision: settingsRevisionRef.current,
+          });
+          if (workspacePathChanged && !isWorkspaceLoadCurrent(generation)) return false;
 
-      const latest = appSettingsRef.current;
-      const latestSerialized = latest ? serializeSettingsForCompare(latest) : null;
-      const stillCurrent = latestSerialized === serialized;
+          // The write is on disk: always advance the CAS revision, even if the user kept editing meanwhile.
+          settingsRevisionRef.current = saved.revision ?? 0;
+          savedSettingsRef.current = serializeSettingsForCompare(saved);
 
-      if (stillCurrent) {
-        settingsRevisionRef.current = saved.revision ?? 0;
-        setAppSettings(saved);
-        appliedWorkspacePathRef.current = saved.workspace_path ?? null;
-        savedSettingsRef.current = serializeSettingsForCompare(saved);
-        applyThemeSettings(saved);
-        if (options?.bumpColorResetKey) setColorResetKey(key => key + 1);
-        setSettingsAutoSaveError(null);
-        if (options?.announce) {
-          setSettingsMsg({ ok: true, text: "settings saved" });
+          const latest = appSettingsRef.current;
+          const latestSerialized = latest ? serializeSettingsForCompare(latest) : null;
+          const stillCurrent = latestSerialized === serialized;
+
+          if (stillCurrent) {
+            setAppSettings(saved);
+            appliedWorkspacePathRef.current = saved.workspace_path ?? null;
+            applyThemeSettings(saved);
+            if (options?.bumpColorResetKey) setColorResetKey(key => key + 1);
+            setSettingsAutoSaveError(null);
+            if (options?.announce) {
+              setSettingsMsg({ ok: true, text: "settings saved" });
+            }
+            if (workspacePathChanged) {
+              await Promise.all([
+                loadWorkspaceDiagnostics(generation).catch(() => {}),
+                loadWorkspaceResources(generation),
+              ]);
+            } else {
+              fetchStatus(generation);
+              loadWorkspaceDiagnostics(generation);
+            }
+          } else if (latest) {
+            // Newer local edits stay pending on top of what was just acknowledged.
+            setAppSettings(mergePendingLocalOntoAcknowledged(saved, latest, serialized));
+          }
+          return stillCurrent;
+        } catch (error) {
+          if (!isSettingsConflictError(error) || attempt > 0) throw error;
+          // Another writer won the compare-and-swap: rebase pending local edits onto the latest file and retry once.
+          const latestResponse = await invoke<GetSettingsResponse>("get_settings");
+          const acknowledged = latestResponse.settings;
+          settingsRevisionRef.current = acknowledged.revision ?? 0;
+          payload = mergePendingLocalOntoAcknowledged(
+            acknowledged,
+            appSettingsRef.current ?? settings,
+            savedSettingsRef.current,
+          );
         }
       }
-
-      if (stillCurrent) {
-        if (workspacePathChanged) {
-          await Promise.all([
-            loadWorkspaceDiagnostics(generation).catch(() => {}),
-            loadWorkspaceResources(generation),
-          ]);
-        } else {
-          fetchStatus(generation);
-          loadWorkspaceDiagnostics(generation);
-        }
-      }
-      return stillCurrent;
     } catch (error) {
       const message = String(error);
-      if (isSettingsConflictError(error)) {
-        try {
-          const latestResponse = await invoke<GetSettingsResponse>("get_settings");
-          const latest = latestResponse.settings;
-          settingsRevisionRef.current = latest.revision ?? 0;
-          const latestSerialized = serializeSettingsForCompare(latest);
-          const stillCurrent = appSettingsRef.current
-            ? serializeSettingsForCompare(appSettingsRef.current) === serialized
-            : false;
-          if (stillCurrent) {
-            setAppSettings(latest);
-            savedSettingsRef.current = latestSerialized;
-            applyThemeSettings(latest);
-            if (latestResponse.load_warning) {
-              setSettingsMsg({ ok: false, text: latestResponse.load_warning });
-            }
-          }
-          setSettingsAutoSaveError("settings conflict — reloaded latest");
-          setSettingsMsg({ ok: false, text: "settings conflict — reloaded latest" });
-        } catch (reloadError) {
-          const reloadMessage = String(reloadError);
-          setSettingsAutoSaveError(reloadMessage);
-          setSettingsMsg({ ok: false, text: reloadMessage });
-        }
-        return false;
-      }
       setSettingsAutoSaveError(message);
       setSettingsMsg({ ok: false, text: message });
       return false;
@@ -221,24 +214,47 @@ export function useAppSettingsController({
   }, [persistAppSettings]);
 
   const resetSettings = useCallback(async () => {
-    settingsAutosaveSkipRef.current = true;
-    const ok = await persistAppSettings(defaultSettings(), { bumpColorResetKey: true });
+    const confirmed = await confirm({
+      title: "Reset appearance",
+      message: "Reset theme, font size, colors and motion to defaults? Workspace and repository settings are kept.",
+      confirmLabel: "reset",
+      destructive: true,
+    });
+    if (!confirmed) return;
+    const current = appSettingsRef.current;
+    if (!current) return;
+
+    // Appearance only: workspace path, repo dashboard entries, targets, harnesses and landing page stay.
+    const defaults = defaultSettings();
+    const next: AppSettings = {
+      ...current,
+      appearance: defaults.appearance,
+      app_font_size: defaults.app_font_size,
+      accent_color: defaults.accent_color,
+      background_color: defaults.background_color,
+      foreground_color: defaults.foreground_color,
+      reduce_motion: defaults.reduce_motion,
+    };
+    setSettingsMsg(null);
+    setAppSettings(next);
+    applyThemeSettings(next);
+    const ok = await persistAppSettings(next, { bumpColorResetKey: true });
     if (ok) {
-      setSettingsMsg({ ok: true, text: "reset to defaults" });
+      setSettingsMsg({ ok: true, text: "appearance reset to defaults" });
     }
-  }, [persistAppSettings]);
+  }, [confirm, persistAppSettings]);
 
   useEffect(() => {
     if (!settingsLoadedRef.current) return;
     const current = appSettingsRef.current;
     if (!current || savedSettingsRef.current === null) return;
 
+    // Consume the skip flag on every pass so it can never swallow a later, unrelated edit.
+    const skipAutosave = settingsAutosaveSkipRef.current;
+    settingsAutosaveSkipRef.current = false;
     const serialized = serializeSettingsForCompare(current);
     if (serialized === savedSettingsRef.current) return;
-    if (settingsAutosaveSkipRef.current) {
-      settingsAutosaveSkipRef.current = false;
-      return;
-    }
+    if (skipAutosave) return;
 
     const timer = window.setTimeout(() => {
       const latest = appSettingsRef.current;

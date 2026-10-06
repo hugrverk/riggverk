@@ -11,9 +11,12 @@ const base: AppSettings = {
   app_font_size: "medium",
   workspace_path: null,
   enabled_target_ids: ["codex_rules"],
+  enabled_harness_ids: ["codex", "opencode", "claude", "cursor"],
   accent_color: null,
   background_color: null,
   foreground_color: null,
+  reduce_motion: false,
+  landing_view: "start",
   repo_dashboard_entries: [],
   active_repo_dashboard_id: null,
   revision: 2,
@@ -31,6 +34,26 @@ describe("mergePendingAppSettings", () => {
     expect(merged.appearance).toBe("light");
     expect(merged.app_font_size).toBe("large");
     expect(merged.revision).toBe(5);
+  });
+
+  it("keeps pending reduce_motion and landing_view edits", () => {
+    const savedSerialized = serializeSettingsForCompare(base);
+    const local = { ...base, reduce_motion: true, landing_view: "library" };
+    const rebased = mergePendingLocalOntoAcknowledged({ ...base, revision: 6 }, local, savedSerialized);
+    expect(rebased.reduce_motion).toBe(true);
+    expect(rebased.landing_view).toBe("library");
+    expect(rebased.revision).toBe(6);
+
+    const afterMutation = applyMutationPreservingPendingLocal({ ...base, revision: 7 }, "sent", local, savedSerialized);
+    expect(afterMutation.reduce_motion).toBe(true);
+    expect(afterMutation.landing_view).toBe("library");
+    expect(afterMutation.revision).toBe(7);
+  });
+
+  it("returns the acknowledged settings when nothing is pending", () => {
+    const savedSerialized = serializeSettingsForCompare(base);
+    const acknowledged = { ...base, revision: 9, landing_view: "prompts" };
+    expect(mergePendingLocalOntoAcknowledged(acknowledged, base, savedSerialized)).toBe(acknowledged);
   });
 
   it("preserves newer local edits after a repository mutation completes", () => {

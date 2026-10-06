@@ -247,8 +247,8 @@ export function SettingsView({
   };
 
   const actionsDescription = showRetry
-    ? "Autosave failed. Retry or reset defaults."
-    : "Changes save automatically. Reset restores defaults.";
+    ? "Autosave failed. Retry or reset appearance."
+    : "Changes save automatically. Reset restores default appearance.";
 
   return (
     <section className="settings-layout" aria-label="Settings">
