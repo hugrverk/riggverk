@@ -719,4 +719,3 @@ describe("Cursor", () => {
     expect(within(screen.getByRole("region", { name: "Cursor surfaces" })).queryByRole("button", { name: /diff|convert|leave/ })).toBeNull();
   });
 });
-
