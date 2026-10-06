@@ -141,7 +141,10 @@ for selector in \
   prompt-loops-detail-actions \
   prompt-loops-btn \
   tools-placeholder \
-  repo-dashboard-type-row; do
+  repo-dashboard-type-row \
+  app-header \
+  nav-icon \
+  error-banner; do
   if search "$selector" src >"$ui_tmp"; then
     cat "$ui_tmp" >&2
     fail "deprecated UI selector still present: $selector"
@@ -351,8 +354,11 @@ if search 'prompt-loops-pill">1–4|tool-sidebar-hints' src/tools/promptLoops/Pr
   fail "Prompt Builder shortcut hint block must not return"
 fi
 
-if ! search 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles >"$ui_tmp"; then
-  fail "Library Docs scoped reading surface must exist"
+if ! search 'lib-docs-markdown' src/views/library/DocContent.tsx >"$ui_tmp"; then
+  fail "Library document preview must render the scoped reading surface"
+fi
+if ! search '\.lib-docs-markdown' src/styles >"$ui_tmp"; then
+  fail "Library document preview must have its scoped reading styles"
 fi
 if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/shell/TopLine.tsx src/shell/views.ts >"$ui_tmp"; then
   cat "$ui_tmp" >&2
@@ -360,6 +366,30 @@ if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/shell/
 fi
 if ! search '"prompts"|"repo-dashboard"' src/shell/TopLine.tsx src/shell/views.ts src/App.tsx >"$ui_tmp"; then
   fail "direct Prompt Builder and Repo Dashboard views must exist"
+fi
+
+# The shipped UI is offline-first: fonts are vendored and nothing may load from a remote origin.
+if search 'https?://' index.html src/styles >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "index.html and styles must not reference remote URLs"
+fi
+if ! search '@font-face' src/styles >"$ui_tmp"; then
+  fail "the vendored UI font must be declared with @font-face"
+fi
+if ! search '@media \(prefers-reduced-motion: reduce\)' src/styles >"$ui_tmp"; then
+  fail "styles must honor prefers-reduced-motion"
+fi
+
+# The browser mock backend is dev-only: main.tsx is its single importer and gates it on the dev server.
+if search 'dev/mockBackend' src --glob '!src/main.tsx' --glob '!src/dev/*' >"$ui_tmp"; then
+  cat "$ui_tmp" >&2
+  fail "src/dev/mockBackend must only be imported from src/main.tsx"
+fi
+if ! search 'import\.meta\.env\.DEV.*has\("mock"\)' src/main.tsx >"$ui_tmp"; then
+  fail "main.tsx must gate the mock backend on import.meta.env.DEV and ?mock"
+fi
+if ! search 'import\("\./dev/mockBackend"\)' src/main.tsx >"$ui_tmp"; then
+  fail "main.tsx must load the mock backend with a dynamic import"
 fi
 
 printf 'UI regression checks passed\n'
