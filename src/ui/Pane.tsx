@@ -1,6 +1,6 @@
 import { createContext, useContext, useId, type FocusEvent, type ReactNode } from "react";
 import { useKeymapEntries } from "../keyboard/context";
-import { evaluateWhen, paneHintEntries } from "../keyboard/registry";
+import { isVisibleHint, paneHintEntries } from "../keyboard/registry";
 import { BindingActionKey } from "./BindingActionKey";
 import { cx } from "./tone";
 
@@ -55,10 +55,7 @@ export function Pane({
 }: PaneProps) {
   const titleId = useId();
   const entries = useKeymapEntries();
-  const hints = paneHintEntries(entries, id).filter(entry => {
-    const { active, disabledReason } = evaluateWhen(entry.binding);
-    return active || disabledReason !== null;
-  });
+  const hints = paneHintEntries(entries, id).filter(isVisibleHint);
   const accessibleName = label ?? (typeof title === "string" ? title : undefined);
 
   const onFocus = (event: FocusEvent<HTMLElement>) => {
