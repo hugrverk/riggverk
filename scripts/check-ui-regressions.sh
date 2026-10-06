@@ -354,11 +354,11 @@ fi
 if ! search 'lib-docs-markdown|lib-docs-reader-pane' src/views/library/DocContent.tsx src/styles >"$ui_tmp"; then
   fail "Library Docs scoped reading surface must exist"
 fi
-if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/components/AppHeaderNav.tsx >"$ui_tmp"; then
+if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/shell/TopLine.tsx src/shell/views.ts >"$ui_tmp"; then
   cat "$ui_tmp" >&2
   fail "obsolete Tools view must not return in navigation"
 fi
-if ! search '"prompts"|"repo-dashboard"' src/components/AppHeaderNav.tsx src/App.tsx >"$ui_tmp"; then
+if ! search '"prompts"|"repo-dashboard"' src/shell/TopLine.tsx src/shell/views.ts src/App.tsx >"$ui_tmp"; then
   fail "direct Prompt Builder and Repo Dashboard views must exist"
 fi
 
