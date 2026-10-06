@@ -8,6 +8,7 @@ use std::fs;
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::path_safety::{ensure_within_root, reject_symlink, reject_symlink_parent_chain};
 
@@ -49,6 +50,72 @@ fn replace_file_atomic(temp: &Path, destination: &Path) -> std::io::Result<()> {
     }
 }
 
+/// Create one directory; owner-only (0700) when `private` on unix.
+#[cfg(unix)]
+fn create_dir(path: &Path, private: bool) -> std::io::Result<()> {
+    use std::os::unix::fs::DirBuilderExt;
+    let mut builder = fs::DirBuilder::new();
+    if private {
+        builder.mode(0o700);
+    }
+    builder.create(path)
+}
+
+#[cfg(not(unix))]
+fn create_dir(path: &Path, _private: bool) -> std::io::Result<()> {
+    fs::create_dir(path)
+}
+
+/// Create a new file; owner-only (0600) when `private` on unix.
+#[cfg(unix)]
+fn create_new_file(path: &Path, private: bool) -> std::io::Result<fs::File> {
+    use std::os::unix::fs::OpenOptionsExt;
+    let mut options = fs::OpenOptions::new();
+    options.write(true).create_new(true);
+    if private {
+        options.mode(0o600);
+    }
+    options.open(path)
+}
+
+#[cfg(not(unix))]
+fn create_new_file(path: &Path, _private: bool) -> std::io::Result<fs::File> {
+    fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+}
+
+/// Give the replacement the destination's permission bits, so an atomic write
+/// does not widen a restricted file (a 0600 config) to the default mode.
+#[cfg(unix)]
+fn preserve_destination_permissions(temp: &Path, destination: &Path) -> Result<(), String> {
+    match fs::symlink_metadata(destination) {
+        Ok(metadata) if metadata.is_file() => fs::set_permissions(temp, metadata.permissions())
+            .map_err(|e| format!("preserve permissions on {}: {e}", temp.display())),
+        _ => Ok(()),
+    }
+}
+
+#[cfg(not(unix))]
+fn preserve_destination_permissions(_temp: &Path, _destination: &Path) -> Result<(), String> {
+    Ok(())
+}
+
+/// Owner-only (0600) permissions for a file copied with `fs::copy`, which
+/// carries over the source's mode.
+#[cfg(unix)]
+fn restrict_file_to_owner(path: &Path) -> Result<(), String> {
+    use std::os::unix::fs::PermissionsExt;
+    fs::set_permissions(path, fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("restrict permissions on {}: {e}", path.display()))
+}
+
+#[cfg(not(unix))]
+fn restrict_file_to_owner(_path: &Path) -> Result<(), String> {
+    Ok(())
+}
+
 fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> Result<(), String> {
     if allowlisted_root.parent().is_none() {
         return Err(format!(
@@ -67,6 +134,17 @@ fn validate_mutation_path(path: &Path, allowlisted_root: &Path, label: &str) -> 
 /// backup root on a fresh install where `Application Support/<bundle-id>`
 /// has never been created.
 pub fn create_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> {
+    create_root_directory_all_with(root, false)
+}
+
+/// Like `create_root_directory_all_no_symlinks`; every directory it creates is
+/// owner-only (0700 on unix). For backup roots.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn create_private_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> {
+    create_root_directory_all_with(root, true)
+}
+
+fn create_root_directory_all_with(root: &Path, private: bool) -> Result<(), String> {
     let mut missing: Vec<std::path::PathBuf> = Vec::new();
     let mut current = root.to_path_buf();
     loop {
@@ -107,7 +185,7 @@ pub fn create_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> 
         }
     }
     for dir in missing.iter().rev() {
-        fs::create_dir(dir).map_err(|e| format!("create directory {}: {e}", dir.display()))?;
+        create_dir(dir, private).map_err(|e| format!("create directory {}: {e}", dir.display()))?;
     }
     Ok(())
 }
@@ -115,6 +193,24 @@ pub fn create_root_directory_all_no_symlinks(root: &Path) -> Result<(), String> 
 pub fn create_directory_all_no_symlinks(
     path: &Path,
     allowlisted_root: &Path,
+) -> Result<(), String> {
+    create_directory_all_with(path, allowlisted_root, false)
+}
+
+/// Like `create_directory_all_no_symlinks`; every directory it creates is
+/// owner-only (0700 on unix). For backup directories.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn create_private_directory_all_no_symlinks(
+    path: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    create_directory_all_with(path, allowlisted_root, true)
+}
+
+fn create_directory_all_with(
+    path: &Path,
+    allowlisted_root: &Path,
+    private: bool,
 ) -> Result<(), String> {
     validate_mutation_path(path, allowlisted_root, "directory creation")?;
     if fs::symlink_metadata(path).is_ok() {
@@ -131,7 +227,7 @@ pub fn create_directory_all_no_symlinks(
         .map_err(|_| format!("directory escapes allowlisted root: {}", path.display()))?;
     let mut current = allowlisted_root.to_path_buf();
     if fs::symlink_metadata(&current).is_err() {
-        fs::create_dir(&current)
+        create_dir(&current, private)
             .map_err(|e| format!("create directory {}: {e}", current.display()))?;
     }
     for component in relative.components() {
@@ -147,7 +243,7 @@ pub fn create_directory_all_no_symlinks(
             }
             Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
                 validate_mutation_path(&current, allowlisted_root, "directory creation")?;
-                fs::create_dir(&current)
+                create_dir(&current, private)
                     .map_err(|e| format!("create directory {}: {e}", current.display()))?;
             }
             Err(error) => {
@@ -161,15 +257,36 @@ pub fn create_directory_all_no_symlinks(
     Ok(())
 }
 
+/// Replace `path` atomically. An existing destination keeps its permission bits;
+/// a new file gets the default mode.
 pub fn write_regular_file_atomic(
     path: &Path,
     content: &[u8],
     allowlisted_root: &Path,
 ) -> Result<(), String> {
+    write_regular_file_atomic_with(path, content, allowlisted_root, false)
+}
+
+/// Like `write_regular_file_atomic`; a new file is owner-only (0600 on unix).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn write_private_regular_file_atomic(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    write_regular_file_atomic_with(path, content, allowlisted_root, true)
+}
+
+fn write_regular_file_atomic_with(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+    private: bool,
+) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("write destination has no parent: {}", path.display()))?;
-    create_directory_all_no_symlinks(parent, allowlisted_root)?;
+    create_directory_all_with(parent, allowlisted_root, private)?;
     validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
     if fs::symlink_metadata(path).is_ok() && !path.is_file() {
         return Err(format!(
@@ -177,18 +294,24 @@ pub fn write_regular_file_atomic(
             path.display()
         ));
     }
+    // The sequence restarts at 0 in every process, so pid and time keep a
+    // temporary file left behind by a crashed run from colliding with this one.
     let sequence = TEMP_FILE_SEQUENCE.fetch_add(1, Ordering::Relaxed);
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or_default();
     let file_name = path
         .file_name()
         .and_then(|name| name.to_str())
         .ok_or_else(|| format!("invalid write destination name: {}", path.display()))?;
-    let temp_path = parent.join(format!(".{file_name}.agent-workspace-{sequence}.tmp"));
+    let temp_path = parent.join(format!(
+        ".{file_name}.agent-workspace-{}-{nanos}-{sequence}.tmp",
+        std::process::id()
+    ));
     validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
     let result = (|| {
-        let mut output = fs::OpenOptions::new()
-            .write(true)
-            .create_new(true)
-            .open(&temp_path)
+        let mut output = create_new_file(&temp_path, private)
             .map_err(|e| format!("create temporary file {}: {e}", temp_path.display()))?;
         output
             .write_all(content)
@@ -197,6 +320,7 @@ pub fn write_regular_file_atomic(
             .sync_all()
             .map_err(|e| format!("sync temporary file {}: {e}", temp_path.display()))?;
         validate_mutation_path(path, allowlisted_root, "atomic write destination")?;
+        preserve_destination_permissions(&temp_path, path)?;
         validate_mutation_path(&temp_path, allowlisted_root, "atomic write temporary file")?;
         replace_file_atomic(&temp_path, path)
             .map_err(|e| format!("replace destination {}: {e}", path.display()))
@@ -212,15 +336,31 @@ pub fn write_new_regular_file_synced(
     content: &[u8],
     allowlisted_root: &Path,
 ) -> Result<(), String> {
+    write_new_regular_file_synced_with(path, content, allowlisted_root, false)
+}
+
+/// Like `write_new_regular_file_synced`; the file is owner-only (0600 on unix).
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn write_private_new_regular_file_synced(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    write_new_regular_file_synced_with(path, content, allowlisted_root, true)
+}
+
+fn write_new_regular_file_synced_with(
+    path: &Path,
+    content: &[u8],
+    allowlisted_root: &Path,
+    private: bool,
+) -> Result<(), String> {
     let parent = path
         .parent()
         .ok_or_else(|| format!("write destination has no parent: {}", path.display()))?;
-    create_directory_all_no_symlinks(parent, allowlisted_root)?;
+    create_directory_all_with(parent, allowlisted_root, private)?;
     validate_mutation_path(path, allowlisted_root, "create-new destination")?;
-    let mut output = fs::OpenOptions::new()
-        .write(true)
-        .create_new(true)
-        .open(path)
+    let mut output = create_new_file(path, private)
         .map_err(|e| format!("create file {}: {e}", path.display()))?;
     output
         .write_all(content)
@@ -235,6 +375,26 @@ pub fn write_new_regular_file_synced(
 /// Rejects symlink or dangling-symlink destinations and unsafe parent chains
 /// up to `allowlisted_root`.
 pub fn copy_dir_no_symlinks(src: &Path, dst: &Path, allowlisted_root: &Path) -> Result<(), String> {
+    copy_dir_with(src, dst, allowlisted_root, false)
+}
+
+/// Like `copy_dir_no_symlinks`; created directories are 0700 and copied files
+/// 0600 on unix. For backup trees.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn copy_private_dir_no_symlinks(
+    src: &Path,
+    dst: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    copy_dir_with(src, dst, allowlisted_root, true)
+}
+
+fn copy_dir_with(
+    src: &Path,
+    dst: &Path,
+    allowlisted_root: &Path,
+    private: bool,
+) -> Result<(), String> {
     reject_symlink(src, "copy source")?;
     validate_copy_destination(dst, allowlisted_root)?;
     if dst.exists() {
@@ -246,10 +406,10 @@ pub fn copy_dir_no_symlinks(src: &Path, dst: &Path, allowlisted_root: &Path) -> 
             ));
         }
     } else if let Some(parent) = dst.parent() {
-        create_directory_all_no_symlinks(parent, allowlisted_root)?;
+        create_directory_all_with(parent, allowlisted_root, private)?;
     }
-    create_directory_all_no_symlinks(dst, allowlisted_root)?;
-    copy_dir_recurse(src, dst, 0)
+    create_directory_all_with(dst, allowlisted_root, private)?;
+    copy_dir_recurse(src, dst, 0, private)
 }
 
 fn validate_copy_destination(dst: &Path, allowlisted_root: &Path) -> Result<(), String> {
@@ -264,7 +424,7 @@ fn validate_copy_destination(dst: &Path, allowlisted_root: &Path) -> Result<(), 
     Ok(())
 }
 
-fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> {
+fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize, private: bool) -> Result<(), String> {
     if depth > MAX_RECURSE_DEPTH {
         return Err(format!("max copy depth exceeded at {}", src.display()));
     }
@@ -279,8 +439,8 @@ fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> 
         }
         let target = dst.join(entry.file_name());
         if file_type.is_dir() {
-            create_directory_all_no_symlinks(&target, dst)?;
-            copy_dir_recurse(&entry.path(), &target, depth + 1)?;
+            create_directory_all_with(&target, dst, private)?;
+            copy_dir_recurse(&entry.path(), &target, depth + 1, private)?;
         } else if file_type.is_file() {
             fs::copy(entry.path(), &target).map_err(|e| {
                 format!(
@@ -289,6 +449,9 @@ fn copy_dir_recurse(src: &Path, dst: &Path, depth: usize) -> Result<(), String> 
                     target.display()
                 )
             })?;
+            if private {
+                restrict_file_to_owner(&target)?;
+            }
         }
     }
     Ok(())
@@ -341,6 +504,26 @@ pub fn copy_regular_file_no_symlinks(
     dst: &Path,
     allowlisted_root: &Path,
 ) -> Result<(), String> {
+    copy_regular_file_with(src, dst, allowlisted_root, false)
+}
+
+/// Like `copy_regular_file_no_symlinks`; a new destination and its missing
+/// parents are owner-only (0600/0700 on unix). For backup files.
+#[cfg_attr(not(test), allow(dead_code))]
+pub fn copy_private_regular_file_no_symlinks(
+    src: &Path,
+    dst: &Path,
+    allowlisted_root: &Path,
+) -> Result<(), String> {
+    copy_regular_file_with(src, dst, allowlisted_root, true)
+}
+
+fn copy_regular_file_with(
+    src: &Path,
+    dst: &Path,
+    allowlisted_root: &Path,
+    private: bool,
+) -> Result<(), String> {
     // Source: reject direct symlink only. Source comes from a trusted
     // workspace; parent chain may include system symlinks (macOS /var -> /private/var).
     reject_symlink(src, "regular file copy source")?;
@@ -374,11 +557,11 @@ pub fn copy_regular_file_no_symlinks(
         ));
     }
     if let Some(parent) = dst.parent() {
-        create_directory_all_no_symlinks(parent, allowlisted_root)?;
+        create_directory_all_with(parent, allowlisted_root, private)?;
     }
     validate_mutation_path(dst, allowlisted_root, "regular file copy destination")?;
     let content = fs::read(src).map_err(|e| format!("read copy source {}: {e}", src.display()))?;
-    write_regular_file_atomic(dst, &content, allowlisted_root)
+    write_regular_file_atomic_with(dst, &content, allowlisted_root, private)
 }
 
 /// Remove a regular file without following symlinks.
@@ -466,7 +649,11 @@ mod tests {
             .duration_since(UNIX_EPOCH)
             .unwrap_or_default()
             .as_nanos();
-        std::env::temp_dir().join(format!("aw-safe-fs-{label}-{n}"))
+        // Canonical base: on macOS /var is a symlink to /private/var and would
+        // mask symlink-ancestor bugs behind an unrelated rejection.
+        fs::canonicalize(std::env::temp_dir())
+            .unwrap_or_else(|_| std::env::temp_dir())
+            .join(format!("aw-safe-fs-{label}-{n}"))
     }
 
     #[test]
@@ -724,6 +911,248 @@ mod tests {
         std::os::unix::fs::symlink(base.join("missing"), &link).unwrap();
         let err = remove_dir_no_symlinks(&link, &base).expect_err("dangling removal");
         assert!(err.contains("symlink"), "{err}");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_root_directory_creates_missing_ancestors() {
+        let base = temp("root-create");
+        fs::create_dir_all(&base).unwrap();
+        let root = base.join("a/b/c");
+        create_root_directory_all_no_symlinks(&root).unwrap();
+        assert!(root.is_dir());
+        create_root_directory_all_no_symlinks(&root).expect("idempotent");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn create_root_directory_refuses_symlinked_ancestor() {
+        let base = temp("root-create-symlink");
+        let real = base.join("real");
+        fs::create_dir_all(&real).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(&real, &link).unwrap();
+        let err = create_root_directory_all_no_symlinks(&link.join("missing/root"))
+            .expect_err("symlinked ancestor must be refused");
+        assert!(err.contains("refusing symlinked ancestor"), "{err}");
+        assert!(!real.join("missing").exists(), "nothing may be created");
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_root_directory_refuses_file_ancestor() {
+        let base = temp("root-create-file");
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("file"), b"x").unwrap();
+        let err = create_root_directory_all_no_symlinks(&base.join("file"))
+            .expect_err("file root must be refused");
+        assert!(
+            err.contains("root creation ancestor is not a directory"),
+            "{err}"
+        );
+        let err = create_root_directory_all_no_symlinks(&base.join("file/root"))
+            .expect_err("file ancestor must be refused");
+        assert!(err.contains("root creation ancestor"), "{err}");
+        assert!(!base.join("file/root").exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn create_directory_all_creates_nested_directories_within_root() {
+        let base = temp("dir-create");
+        fs::create_dir_all(&base).unwrap();
+        let nested = base.join("x/y/z");
+        create_directory_all_no_symlinks(&nested, &base).unwrap();
+        assert!(nested.is_dir());
+        let outside = base.parent().unwrap().join("aw-safe-fs-outside");
+        let err = create_directory_all_no_symlinks(&outside, &base).expect_err("outside root");
+        assert!(err.contains("escapes"), "{err}");
+        assert!(!outside.exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn remove_rejects_nested_symlink_without_following_it() {
+        let base = temp("remove-nested-symlink");
+        let outside = base.join("outside");
+        fs::create_dir_all(&outside).unwrap();
+        fs::write(outside.join("keep.txt"), b"keep").unwrap();
+        let tree = base.join("tree");
+        fs::create_dir_all(tree.join("nested")).unwrap();
+        std::os::unix::fs::symlink(&outside, tree.join("nested/link")).unwrap();
+        let err = remove_dir_no_symlinks(&tree, &base).expect_err("nested symlink");
+        assert!(err.contains("refusing symlink during removal"), "{err}");
+        assert_eq!(fs::read(outside.join("keep.txt")).unwrap(), b"keep");
+        assert!(fs::symlink_metadata(tree.join("nested/link")).is_ok());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    fn deep_tree(base: &Path, levels: usize) -> std::path::PathBuf {
+        let mut path = base.join("deep");
+        for _ in 0..levels {
+            path.push("d");
+        }
+        fs::create_dir_all(&path).unwrap();
+        base.join("deep")
+    }
+
+    #[test]
+    fn remove_and_copy_recursion_depth_is_bounded() {
+        let base = temp("depth-bound");
+        fs::create_dir_all(&base).unwrap();
+
+        let too_deep = deep_tree(&base, MAX_RECURSE_DEPTH + 6);
+        let err = copy_dir_no_symlinks(&too_deep, &base.join("copy-too-deep"), &base)
+            .expect_err("copy depth bound");
+        assert!(err.contains("max copy depth exceeded"), "{err}");
+        let err = remove_dir_no_symlinks(&too_deep, &base).expect_err("removal depth bound");
+        assert!(err.contains("max removal depth exceeded"), "{err}");
+        fs::remove_dir_all(&too_deep).unwrap();
+
+        let within = deep_tree(&base, MAX_RECURSE_DEPTH - 4);
+        copy_dir_no_symlinks(&within, &base.join("copy-within"), &base).expect("copy in bound");
+        remove_dir_no_symlinks(&within, &base).expect("removal in bound");
+        assert!(!within.exists());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn regular_file_removal_rejects_symlink_and_keeps_target() {
+        let base = temp("reg-remove-symlink");
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("target.txt"), b"keep").unwrap();
+        let link = base.join("link.txt");
+        std::os::unix::fs::symlink(base.join("target.txt"), &link).unwrap();
+        let err = remove_regular_file_no_symlinks(&link, &base).expect_err("symlink removal");
+        assert!(err.contains("symlink"), "{err}");
+        assert_eq!(fs::read(base.join("target.txt")).unwrap(), b"keep");
+        assert!(fs::symlink_metadata(&link).is_ok());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn empty_directory_removal_rejects_symlink_and_keeps_target() {
+        let base = temp("empty-dir-symlink");
+        fs::create_dir_all(base.join("real")).unwrap();
+        let link = base.join("link");
+        std::os::unix::fs::symlink(base.join("real"), &link).unwrap();
+        let err = remove_empty_directory_no_symlinks(&link, &base).expect_err("symlink removal");
+        assert!(err.contains("symlink"), "{err}");
+        assert!(base.join("real").is_dir());
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    fn mode_of(path: &Path) -> u32 {
+        use std::os::unix::fs::PermissionsExt;
+        fs::symlink_metadata(path).unwrap().permissions().mode() & 0o777
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn atomic_write_preserves_destination_permission_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("atomic-mode");
+        fs::create_dir_all(&base).unwrap();
+        for mode in [0o600, 0o640, 0o444] {
+            let path = base.join(format!("config-{mode:o}.toml"));
+            fs::write(&path, b"one").unwrap();
+            fs::set_permissions(&path, fs::Permissions::from_mode(mode)).unwrap();
+            write_regular_file_atomic(&path, b"two", &base).unwrap();
+            assert_eq!(fs::read(&path).unwrap(), b"two");
+            assert_eq!(mode_of(&path), mode, "mode {mode:o} must survive a replace");
+        }
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn copy_over_existing_file_preserves_destination_permission_bits() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("copy-mode");
+        fs::create_dir_all(&base).unwrap();
+        fs::write(base.join("src.txt"), b"new").unwrap();
+        fs::set_permissions(base.join("src.txt"), fs::Permissions::from_mode(0o644)).unwrap();
+        let dst = base.join("dst.txt");
+        fs::write(&dst, b"old").unwrap();
+        fs::set_permissions(&dst, fs::Permissions::from_mode(0o600)).unwrap();
+        copy_regular_file_no_symlinks(&base.join("src.txt"), &dst, &base).unwrap();
+        assert_eq!(fs::read(&dst).unwrap(), b"new");
+        assert_eq!(mode_of(&dst), 0o600);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn private_helpers_create_owner_only_directories_and_files() {
+        use std::os::unix::fs::PermissionsExt;
+        let base = temp("private-modes");
+        let root = base.join("app-data/backups");
+        create_private_root_directory_all_no_symlinks(&root).unwrap();
+        assert_eq!(mode_of(&root), 0o700);
+        assert_eq!(mode_of(&base.join("app-data")), 0o700);
+
+        let txn = root.join("setup/123");
+        create_private_directory_all_no_symlinks(&txn, &root).unwrap();
+        assert_eq!(mode_of(&root.join("setup")), 0o700);
+        assert_eq!(mode_of(&txn), 0o700);
+
+        let src = base.join("src");
+        fs::create_dir_all(src.join("nested")).unwrap();
+        fs::write(src.join("a.txt"), b"a").unwrap();
+        fs::write(src.join("nested/b.txt"), b"b").unwrap();
+        fs::set_permissions(src.join("a.txt"), fs::Permissions::from_mode(0o644)).unwrap();
+
+        copy_private_regular_file_no_symlinks(&src.join("a.txt"), &txn.join("artifacts/a"), &root)
+            .unwrap();
+        assert_eq!(mode_of(&txn.join("artifacts")), 0o700);
+        assert_eq!(mode_of(&txn.join("artifacts/a")), 0o600);
+
+        copy_private_dir_no_symlinks(&src, &txn.join("artifacts/tree"), &root).unwrap();
+        assert_eq!(mode_of(&txn.join("artifacts/tree")), 0o700);
+        assert_eq!(mode_of(&txn.join("artifacts/tree/nested")), 0o700);
+        assert_eq!(mode_of(&txn.join("artifacts/tree/a.txt")), 0o600);
+        assert_eq!(mode_of(&txn.join("artifacts/tree/nested/b.txt")), 0o600);
+
+        write_private_regular_file_atomic(&txn.join("manifest.json"), b"{}", &root).unwrap();
+        assert_eq!(mode_of(&txn.join("manifest.json")), 0o600);
+        write_private_new_regular_file_synced(&txn.join("previous.json"), b"{}", &root).unwrap();
+        assert_eq!(mode_of(&txn.join("previous.json")), 0o600);
+
+        // Existing private files keep their mode on replace, with either writer.
+        write_regular_file_atomic(&txn.join("manifest.json"), b"{\"v\":2}", &root).unwrap();
+        assert_eq!(mode_of(&txn.join("manifest.json")), 0o600);
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn atomic_write_survives_leftover_temporary_files_from_another_process() {
+        let base = temp("atomic-leftover");
+        fs::create_dir_all(&base).unwrap();
+        let path = base.join("config.json");
+        // A crashed run named its temporary file by a counter that restarts at 0
+        // in every process; the next run must not collide with it.
+        let next = TEMP_FILE_SEQUENCE.load(Ordering::Relaxed);
+        let leftovers: Vec<_> = (0..64u64)
+            .map(|offset| {
+                base.join(format!(
+                    ".config.json.agent-workspace-{}.tmp",
+                    next + offset
+                ))
+            })
+            .collect();
+        for leftover in &leftovers {
+            fs::write(leftover, b"stale").unwrap();
+        }
+        write_regular_file_atomic(&path, b"fresh", &base).expect("write beside leftovers");
+        assert_eq!(fs::read(&path).unwrap(), b"fresh");
+        for leftover in &leftovers {
+            assert_eq!(fs::read(leftover).unwrap(), b"stale", "leftover untouched");
+        }
         let _ = fs::remove_dir_all(&base);
     }
 }
