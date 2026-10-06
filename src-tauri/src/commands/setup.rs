@@ -88,13 +88,16 @@ fn finalize_persisted_rollback(
     persist_setup_manifest(manifest_path, manifest, final_status, backup_dir).err()
 }
 
+/// Rolls back transactions an interrupted apply left half-done. Returns notes for transactions
+/// that stay unresolved on purpose (rollback-failed ones are never retried automatically).
 fn reconcile_interrupted_setup_transactions(
     workspace_root: &Path,
     home: &Path,
-) -> Result<(), String> {
+) -> Result<Vec<String>, String> {
+    let mut notes = Vec::new();
     let setup_root = backup_root()?.join("setup");
     if !setup_root.exists() {
-        return Ok(());
+        return Ok(notes);
     }
     crate::path_safety::reject_symlink(&setup_root, "setup transaction root")?;
     let workspace_key = setup_transaction::workspace_key(workspace_root)?;
@@ -127,6 +130,12 @@ fn reconcile_interrupted_setup_transactions(
         let header = setup_transaction::read_manifest_header(&raw)
             .map_err(|e| format!("read interrupted setup {transaction_id} manifest: {e}"))?;
         if header.workspace_key.as_deref() != Some(workspace_key.as_str()) {
+            continue;
+        }
+        if header.status == setup_transaction::TransactionStatus::RollbackFailed {
+            notes.push(format!(
+                "Setup transaction {transaction_id} was not fully rolled back and is left as is; review it and roll it back explicitly if needed"
+            ));
             continue;
         }
         if !header.status.needs_reconciliation() {
@@ -164,7 +173,83 @@ fn reconcile_interrupted_setup_transactions(
             );
         }
     }
-    Ok(())
+    Ok(notes)
+}
+
+/// What newer completed transactions for the same workspace wrote. An older transaction must
+/// not restore its backup over an artifact one of them wrote, because the current content
+/// belongs to the newer transaction.
+#[derive(Default)]
+struct NewerCompletedWrites {
+    /// (transaction id, artifact) for every operation a newer completed transaction applied.
+    written: Vec<(String, crate::artifact_registry::ArtifactId)>,
+    /// A newer completed manifest could not be read, so what it wrote is unknown and every
+    /// artifact counts as written.
+    unreadable: Option<String>,
+}
+
+impl NewerCompletedWrites {
+    fn owner_of(&self, artifact: &crate::artifact_registry::ArtifactId) -> Option<&str> {
+        if let Some(id) = &self.unreadable {
+            return Some(id);
+        }
+        self.written
+            .iter()
+            .find(|(_, written)| written == artifact)
+            .map(|(id, _)| id.as_str())
+    }
+}
+
+fn newer_completed_writes(
+    backup_dir: &Path,
+    workspace_key: &str,
+) -> Result<NewerCompletedWrites, String> {
+    let mut writes = NewerCompletedWrites::default();
+    let (Some(setup_root), Some(transaction_id)) = (
+        backup_dir.parent(),
+        backup_dir.file_name().and_then(|name| name.to_str()),
+    ) else {
+        return Ok(writes);
+    };
+    let entries = fs::read_dir(setup_root).map_err(|e| format!("read setup transactions: {e}"))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("read setup transaction entry: {e}"))?;
+        let candidate = entry.file_name().to_string_lossy().into_owned();
+        if !validate_transaction_id_format(&candidate)
+            || !transaction_id_is_newer(&candidate, transaction_id)
+            || !entry.file_type().map(|kind| kind.is_dir()).unwrap_or(false)
+        {
+            continue;
+        }
+        let manifest_path = entry.path().join("manifest.json");
+        if crate::path_safety::reject_symlink(&manifest_path, "setup manifest").is_err() {
+            continue;
+        }
+        let Ok(raw) = fs::read_to_string(&manifest_path) else {
+            continue;
+        };
+        let Ok(header) = setup_transaction::read_manifest_header(&raw) else {
+            continue;
+        };
+        if header.workspace_key.as_deref() != Some(workspace_key)
+            || header.status != setup_transaction::TransactionStatus::Completed
+        {
+            continue;
+        }
+        match serde_json::from_str::<ArtifactTransactionManifest>(&raw) {
+            Ok(manifest) => writes.written.extend(
+                manifest
+                    .operations
+                    .into_iter()
+                    .filter(|op| {
+                        setup_transaction::operation_may_have_been_modified(op.apply_status)
+                    })
+                    .map(|op| (candidate.clone(), op.artifact)),
+            ),
+            Err(_) => writes.unreadable = Some(candidate),
+        }
+    }
+    Ok(writes)
 }
 
 /// Id of a newer completed transaction for the same workspace, if one exists.
@@ -307,7 +392,33 @@ fn run_persisted_rollback(
     let mut rolled_back = Vec::new();
     let mut errors = Vec::new();
     let mut preserved = Vec::new();
+    // An explicit rollback is refused earlier when a newer completed transaction exists.
+    let newer_writes = match mode {
+        RollbackExecutionMode::Automatic => {
+            match newer_completed_writes(backup_dir, &manifest.workspace_key) {
+                Ok(writes) => writes,
+                Err(e) => return RollbackRun::persist_failed(rolled_back, errors, preserved, e),
+            }
+        }
+        RollbackExecutionMode::Explicit => NewerCompletedWrites::default(),
+    };
     for index in indices.into_iter().rev() {
+        if let Some(owner) = newer_writes.owner_of(&manifest.operations[index].artifact) {
+            manifest.operations[index].rollback_status = setup_transaction::RollbackStatus::Failed;
+            preserved.push(format!(
+                "{}: newer completed transaction {owner} wrote this artifact; current content kept",
+                artifact_label(&manifest.operations[index].artifact)
+            ));
+            if let Err(e) = persist_setup_manifest(
+                manifest_path,
+                manifest,
+                setup_transaction::TransactionStatus::RollingBack,
+                backup_dir,
+            ) {
+                return RollbackRun::persist_failed(rolled_back, errors, preserved, e);
+            }
+            continue;
+        }
         if matches!(
             manifest.operations[index].rollback_status,
             setup_transaction::RollbackStatus::InFlight
@@ -839,7 +950,7 @@ fn user_home() -> Result<PathBuf, String> {
 /// Apply artifact-level operations using artifact-owned transactions.
 pub(super) fn apply_planned_artifacts(
     selected: &[setup_transaction::PlannedArtifact],
-    manual_steps: Vec<String>,
+    mut manual_steps: Vec<String>,
     preview_token: Option<&str>,
 ) -> SetupResult {
     let transaction_id = match new_transaction_id() {
@@ -917,16 +1028,19 @@ pub(super) fn apply_planned_artifacts(
             };
         }
     };
-    if let Err(e) = reconcile_interrupted_setup_transactions(&ws_root, &home) {
-        return SetupResult {
-            success: false,
-            transaction_id,
-            applied: vec![],
-            failed: vec![e.clone()],
-            rolled_back: vec![],
-            manual_steps,
-            message: format!("Cannot reconcile interrupted setup: {e}"),
-        };
+    match reconcile_interrupted_setup_transactions(&ws_root, &home) {
+        Ok(notes) => manual_steps.extend(notes),
+        Err(e) => {
+            return SetupResult {
+                success: false,
+                transaction_id,
+                applied: vec![],
+                failed: vec![e.clone()],
+                rolled_back: vec![],
+                manual_steps,
+                message: format!("Cannot reconcile interrupted setup: {e}"),
+            };
+        }
     }
 
     let mut surfaces: Vec<SetupSurfaceId> = pending.iter().map(|p| p.surface).collect();
@@ -3585,6 +3699,100 @@ mod tests {
         let _ = fs::remove_dir_all(&base);
     }
 
+    /// Marks a seeded transaction as completed, keeping only operations on `artifacts`.
+    fn complete_seeded_transaction_for(txn_id: &str, artifacts: &[ArtifactId]) {
+        let backup_dir = backup_root().unwrap().join("setup").join(txn_id);
+        let mut manifest = read_manifest(txn_id);
+        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
+        manifest
+            .operations
+            .retain(|op| artifacts.contains(&op.artifact));
+        manifest.surface_ids = manifest.operations.iter().map(|op| op.surface).collect();
+        setup_transaction::persist_manifest_atomic(
+            &backup_dir.join("manifest.json"),
+            &manifest,
+            &backup_dir,
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn reconcile_does_not_rerun_a_rollback_failed_transaction_over_newer_state() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        // The interrupted transaction keeps the user's edit and ends rollback-failed.
+        fs::write(home.join(".codex/AGENTS.md"), "user-edit-after-crash").unwrap();
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("first reconcile");
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+
+        // A newer apply installs the same managed content over it and completes.
+        fs::write(home.join(".codex/AGENTS.md"), "codex-applied").unwrap();
+        seed_two_artifact_transaction(newer);
+        complete_seeded_transaction_for(newer, &[ArtifactId::CodexRules]);
+
+        let notes = reconcile_interrupted_setup_transactions(&ws, &home).expect("second reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied",
+            "the older backup must not be restored over the newer install"
+        );
+        assert_eq!(
+            read_manifest(&older).transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert!(
+            notes.iter().any(|note| note.contains(&older)),
+            "the unresolved transaction must be surfaced: {notes:?}"
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
+    #[test]
+    fn reconcile_skips_artifacts_a_newer_completed_transaction_wrote() {
+        let _guard = guard::lock();
+        let _restore = guard::EnvRestore::capture();
+        let (base, home, ws, older) = rollback_test_fixture();
+        let newer = "9876543210987654322";
+        seed_two_artifact_transaction(&older);
+        seed_two_artifact_transaction(newer);
+        // The newer transaction only wrote the Codex rules.
+        complete_seeded_transaction_for(newer, &[ArtifactId::CodexRules]);
+
+        reconcile_interrupted_setup_transactions(&ws, &home).expect("reconcile");
+
+        assert_eq!(
+            fs::read_to_string(home.join(".codex/AGENTS.md")).unwrap(),
+            "codex-applied",
+            "an artifact the newer transaction wrote keeps its content"
+        );
+        assert_eq!(
+            fs::read_to_string(home.join(".config/opencode/AGENTS.md")).unwrap(),
+            "opencode-rules-backup",
+            "an artifact only the older transaction wrote is still restored"
+        );
+        let manifest = read_manifest(&older);
+        assert_eq!(
+            manifest.transaction_status,
+            setup_transaction::TransactionStatus::RollbackFailed
+        );
+        assert_eq!(
+            manifest.operations[0].rollback_status,
+            setup_transaction::RollbackStatus::Failed
+        );
+        assert_eq!(
+            manifest.operations[1].rollback_status,
+            setup_transaction::RollbackStatus::Restored
+        );
+        let _ = fs::remove_dir_all(&base);
+    }
+
     #[test]
     fn reconcile_keeps_managed_state_owned_by_a_newer_completed_transaction() {
         let env = TempSetupEnv::new("reconcile-newer");
@@ -3600,15 +3808,9 @@ mod tests {
         let newer = "9876543210987654322";
         seed_two_artifact_transaction(older);
         seed_two_artifact_transaction(newer);
-        let backup_dir = env.setup_root().join(newer);
-        let mut manifest = read_manifest(newer);
-        manifest.transaction_status = setup_transaction::TransactionStatus::Completed;
-        setup_transaction::persist_manifest_atomic(
-            &backup_dir.join("manifest.json"),
-            &manifest,
-            &backup_dir,
-        )
-        .unwrap();
+        // The newer transaction wrote no artifact the older one covers, so the older one is
+        // still rolled back; it only owns the managed state.
+        complete_seeded_transaction_for(newer, &[]);
         // The newer transaction published this managed state.
         let state = crate::managed_state::ManagedState {
             schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,

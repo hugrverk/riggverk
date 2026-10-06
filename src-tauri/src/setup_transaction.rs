@@ -67,12 +67,17 @@ pub enum TransactionStatus {
 }
 
 impl TransactionStatus {
-    /// Completed and rolled-back transactions are finished; every other status
-    /// may have left artifacts half-applied and needs reconciliation.
+    /// Completed and rolled-back transactions are finished. A rollback-failed one is
+    /// terminal for automatic reconciliation: its leftover artifacts were preserved on
+    /// purpose (user edits) or need a person to look at them, and re-running it on every apply
+    /// could restore an old backup over newer state. An explicit rollback can still retry it.
+    /// Every other status may have left artifacts half-applied and needs reconciliation.
     pub fn needs_reconciliation(self) -> bool {
         !matches!(
             self,
-            TransactionStatus::Completed | TransactionStatus::RolledBack
+            TransactionStatus::Completed
+                | TransactionStatus::RolledBack
+                | TransactionStatus::RollbackFailed
         )
     }
 }
