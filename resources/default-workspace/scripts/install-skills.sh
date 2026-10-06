@@ -5,8 +5,13 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 WORKSPACE_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKILLS_DIR="$WORKSPACE_ROOT/skills"
 ADAPTERS_DIR="$WORKSPACE_ROOT/templates/skills"
+# shellcheck source=scripts/lib/platform-paths.sh
+. "$WORKSPACE_ROOT/scripts/lib/platform-paths.sh"
 
 VALID_AGENTS="codex opencode claude cursor"
+# discover_skills status for "no skills found"; any other non-zero status is an
+# error that discover_skills already reported on stderr.
+DISCOVER_NONE=3
 
 usage() {
   cat <<'USAGE'
@@ -23,11 +28,14 @@ Options:
   --skill <name>      Install a single skill by name (repeatable)
   --all               Install all available skills
   --core              Install all skills (backward-compatible alias for --all)
-  --dry-run           Preview without writing files
-  --apply             Write target files (setup lifecycle apply mode)
+  --dry-run           Preview without writing files (default)
+  --apply             Write target files; an existing SKILL.md that differs is
+                      backed up first (AGENT_WORKSPACE_BACKUP_DIR)
   --list              List available skills
   --quiet             Print compact app-friendly output
   --help              Show this help
+
+Default mode is dry-run. Use --apply to write files.
 USAGE
 }
 
@@ -138,7 +146,7 @@ scan_deeper_skill_md() {
     [ -d "$child" ] || continue
     count=$((count + 1))
     [ "$count" -gt 10000 ] && return 0
-    if [ -L "$child" ]; then
+    if [ -L "${child%/}" ]; then
       return 0
     fi
     if [ -f "${child}SKILL.md" ]; then
@@ -179,6 +187,10 @@ discover_skills() {
   local names_seen=""
   for entry in "$SKILLS_DIR"/*/; do
     [ -d "$entry" ] || continue
+    if [ -L "${entry%/}" ]; then
+      printf 'install-skills.sh: symlinked skill directories are not supported: %s\n' "${entry%/}" >&2
+      exit 1
+    fi
     local entry_name
     entry_name="$(basename "$entry")"
     local root_skill_md="$entry/SKILL.md"
@@ -193,6 +205,10 @@ discover_skills() {
     local sub
     for sub in "$entry"/*/; do
       [ -d "$sub" ] || continue
+      if [ -L "${sub%/}" ]; then
+        printf 'install-skills.sh: symlinked skill directories are not supported: %s\n' "${sub%/}" >&2
+        exit 1
+      fi
       local sub_name
       sub_name="$(basename "$sub")"
       local grouped_skill_md="$sub/SKILL.md"
@@ -205,7 +221,7 @@ discover_skills() {
     done
   done
   if [ "$found" -eq 0 ]; then
-    return 1
+    return "$DISCOVER_NONE"
   fi
 }
 
@@ -282,6 +298,7 @@ validate_project_target() {
 scope_global=false
 scope_project=false
 project_target=""
+apply=false
 dry_run=false
 list_mode=false
 quiet=false
@@ -296,7 +313,7 @@ while [ $# -gt 0 ]; do
     --list) list_mode=true ;;
     --quiet) quiet=true ;;
     --dry-run) dry_run=true ;;
-    --apply) ;;
+    --apply) apply=true ;;
     --all|--core) all_skills=true ;;
     --global) scope_global=true ;;
     --project) scope_project=true ;;
@@ -348,6 +365,11 @@ if [ ${#selected_agents[@]} -eq 0 ]; then
   selected_agents=(opencode)
 fi
 
+if $apply && $dry_run; then
+  printf 'install-skills.sh: --apply and --dry-run are mutually exclusive\n' >&2
+  exit 1
+fi
+
 if ! $scope_global && ! $scope_project; then
   scope_global=true
 fi
@@ -368,10 +390,14 @@ fi
 
 # --- list mode ---
 if $list_mode; then
-  if ! discovered="$(discover_skills 2>/dev/null)"; then
+  discover_rc=0
+  discovered="$(discover_skills)" || discover_rc=$?
+  if [ "$discover_rc" -eq "$DISCOVER_NONE" ]; then
     printf 'No skills installed in this workspace.\n'
     printf 'Add skills under the skills/ directory, then run again.\n'
     exit 0
+  elif [ "$discover_rc" -ne 0 ]; then
+    exit "$discover_rc"
   fi
   printf '%s\n' "$discovered" | while IFS="$(printf '\t')" read -r name dir desc; do
     printf '  %-32s %s\n' "$name" "$desc"
@@ -380,10 +406,14 @@ if $list_mode; then
 fi
 
 # --- discover skills ---
-discovered="$(discover_skills)" || {
+discover_rc=0
+discovered="$(discover_skills)" || discover_rc=$?
+if [ "$discover_rc" -eq "$DISCOVER_NONE" ]; then
   printf 'install-skills.sh: no skills found in %s\n' "$SKILLS_DIR" >&2
   exit 1
-}
+elif [ "$discover_rc" -ne 0 ]; then
+  exit "$discover_rc"
+fi
 
 # build parallel arrays: name->dir
 declare -a skill_names=()
@@ -434,8 +464,8 @@ if $scope_project; then
   project_target_resolved="$(validate_project_target "$project_target")"
 fi
 
-# --- dry-run mode ---
-if $dry_run; then
+# --- dry-run mode (default) ---
+if ! $apply; then
   if ! $quiet; then
     printf '\nSkills Install (dry-run)\n'
     printf '  Skills: %s\n' "${install_names[*]}"
@@ -445,6 +475,7 @@ if $dry_run; then
     else
       printf '  Scope: global\n'
     fi
+    printf '  Use --apply to write files.\n'
     printf '\n'
   fi
   for agent in "${selected_agents[@]}"; do
@@ -469,7 +500,11 @@ if $dry_run; then
   exit 0
 fi
 
-# --- install mode ---
+# --- install mode (--apply) ---
+BACKUP_ROOT="$(agent_workspace_backup_root)" || exit 1
+agent_workspace_refuse_broad_backup_root "$BACKUP_ROOT" "install-skills.sh" || exit 1
+backup_ts="$(date -u +%Y%m%d-%H%M%S)"
+
 if ! $quiet; then
   printf '\nSkills Install\n'
   printf '  Skills: %s\n' "${install_names[*]}"
@@ -479,7 +514,31 @@ if ! $quiet; then
   else
     printf '  Scope: global\n'
   fi
+  printf '  Backups: %s\n' "$BACKUP_ROOT"
 fi
+
+# Copy one adapter to <dest_dir>/SKILL.md. An existing SKILL.md that differs is
+# backed up and the backup verified before it is overwritten. Sets install_state
+# to "unchanged", "installed" or "updated" on success.
+install_skill_file() {
+  local src_file="$1" dest_dir="$2" agent="$3" name="$4"
+  local dest_file="$dest_dir/SKILL.md" backup_dir
+  install_state=installed
+  mkdir -p "$dest_dir" || return 1
+  if [ -f "$dest_file" ]; then
+    if cmp -s "$src_file" "$dest_file"; then
+      install_state=unchanged
+      return 0
+    fi
+    backup_dir="$BACKUP_ROOT/$backup_ts/${agent}-skills/$name"
+    if ! mkdir -p "$backup_dir" || ! cp "$dest_file" "$backup_dir/SKILL.md" || ! cmp -s "$dest_file" "$backup_dir/SKILL.md"; then
+      printf 'install-skills.sh: backup of %s to %s failed; skill left unchanged\n' "$dest_file" "$backup_dir" >&2
+      return 1
+    fi
+    install_state=updated
+  fi
+  cp "$src_file" "$dest_file"
+}
 
 exit_code=0
 
@@ -520,21 +579,23 @@ for agent in "${selected_agents[@]}"; do
       i=$((i + 1))
       continue
     fi
-    mkdir -p "$dest_dir"
-    cp "$src_file" "$dest_dir/SKILL.md"
-    if [ $? -ne 0 ]; then
+    if install_skill_file "$src_file" "$dest_dir" "$agent" "$name"; then
+      if $quiet; then
+        printf '  %-10s OK   %s\n' "${agent}:" "$name"
+      else
+        case "$install_state" in
+          unchanged) printf '    unchanged %s\n' "$name" ;;
+          updated)   printf '    updated %s (previous SKILL.md backed up)\n' "$name" ;;
+          *)         printf '    installed %s\n' "$name" ;;
+        esac
+      fi
+    else
       if $quiet; then
         printf '  %-10s FAIL %s (src=%s dest=%s)\n' "${agent}:" "$name" "$src_file" "$dest_dir/SKILL.md"
       else
         printf '    FAIL %s (src=%s dest=%s)\n' "$name" "$src_file" "$dest_dir/SKILL.md"
       fi
       exit_code=1
-    else
-      if $quiet; then
-        printf '  %-10s OK   %s\n' "${agent}:" "$name"
-      else
-        printf '    installed %s\n' "$name"
-      fi
     fi
     i=$((i + 1))
   done

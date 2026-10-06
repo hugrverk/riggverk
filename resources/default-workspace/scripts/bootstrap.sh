@@ -158,18 +158,18 @@ elif $diff_mode; then
   codex_config_args+=(--diff)
 fi
 
-for flag in "${rule_flags[@]}"; do
+# macOS ships bash 3.2, where expanding an empty array under `set -u` is an
+# error; the ${arr[@]+"${arr[@]}"} form expands to nothing instead.
+for flag in ${rule_flags[@]+"${rule_flags[@]}"}; do
   rules_args+=("$flag")
 done
 
-if [ "${#skill_agent_args[@]}" -gt 0 ]; then
-  for arg in "${skill_agent_args[@]}"; do
-    skills_args+=("$arg")
-  done
-fi
+for arg in ${skill_agent_args[@]+"${skill_agent_args[@]}"}; do
+  skills_args+=("$arg")
+done
 
 if $apply; then
-  skills_args+=(--global --all)
+  skills_args+=(--apply --global --all)
 else
   skills_args+=(--dry-run --global --all)
 fi
@@ -197,20 +197,20 @@ exit_code=0
 if $run_rules; then
   if ! $quiet; then printf '  [rules]\n'; fi
   if [ "${#rule_flags[@]}" -eq 0 ]; then
-    "$RULES_SCRIPT" --all "${rules_args[@]}" || exit_code=$?
+    "$RULES_SCRIPT" --all ${rules_args[@]+"${rules_args[@]}"} || exit_code=$?
   else
-    "$RULES_SCRIPT" "${rules_args[@]}" || exit_code=$?
+    "$RULES_SCRIPT" ${rules_args[@]+"${rules_args[@]}"} || exit_code=$?
   fi
 fi
 
 if $run_config; then
   if ! $quiet; then printf '  [opencode-config]\n'; fi
-  "$CONFIG_SCRIPT" "${config_args[@]}" || exit_code=$?
+  "$CONFIG_SCRIPT" ${config_args[@]+"${config_args[@]}"} || exit_code=$?
 fi
 
 if $run_codex_config; then
   if ! $quiet; then printf '  [codex-config]\n'; fi
-  "$CODEX_CONFIG_SCRIPT" "${codex_config_args[@]}" || exit_code=$?
+  "$CODEX_CONFIG_SCRIPT" ${codex_config_args[@]+"${codex_config_args[@]}"} || exit_code=$?
 fi
 
 if $run_cursor; then
@@ -225,7 +225,7 @@ fi
 
 if $run_skills; then
   if ! $quiet; then printf '  [skills]\n'; fi
-  "$SKILLS_SCRIPT" "${skills_args[@]}" || exit_code=$?
+  "$SKILLS_SCRIPT" ${skills_args[@]+"${skills_args[@]}"} || exit_code=$?
 fi
 
 exit "$exit_code"
