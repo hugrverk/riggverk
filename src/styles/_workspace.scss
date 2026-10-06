@@ -207,23 +207,3 @@
 }
 
 .lifecycle .action-key:disabled { opacity: 0.5; cursor: default; }
-
-/* ---- Settings page compatibility ----
-   HarnessActionCard, TargetPageHeader and SectionChip are still rendered by the Settings page; the rules
-   below serve them and go away together with those components. */
-
-.settings-layout .harness-action-card {
-  margin-bottom: 0;
-  padding: 10px 14px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-inset);
-}
-
-.settings-target-row:focus-visible {
-  border-color: var(--accent);
-}
-
-.settings-target-row {
-  transition: background 0.12s ease, border-color 0.12s ease, color 0.12s ease;
-}

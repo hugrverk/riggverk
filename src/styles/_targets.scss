@@ -27,12 +27,3 @@
   padding: 4px 10px 0;
   overflow-wrap: anywhere;
 }
-
-/* ── target page header ──
-   TargetPageHeader is still rendered by the Settings page; these rules go away together with it. */
-
-.settings-target-path {
-  color: var(--text-muted);
-  font-size: var(--fs-sm);
-  margin-left: auto;
-}
