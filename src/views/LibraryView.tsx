@@ -1,6 +1,9 @@
-import { useMemo, useState } from "react";
-import { ToolSectionTabs } from "../components/ToolSectionTabs";
+import { useEffect, useRef, useState } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
+import { focusPaneById } from "../keyboard/focus";
+import { useStatusContext } from "../shell/ShellState";
+import { Kbd } from "../ui/Kbd";
+import { Pane } from "../ui/Pane";
 import type {
   AgentMetadataResponse,
   AgentSourceContent,
@@ -11,25 +14,35 @@ import type {
   DocumentContent,
   SkillSummary,
 } from "../types";
-import { DocContent } from "./library/DocContent";
-import { RulesContent } from "./library/RulesContent";
-import { SkillsContent } from "./library/SkillsContent";
-import { AgentContent } from "./library/AgentContent";
-import { ConfigContent } from "./library/ConfigContent";
-import { BrainSetupContent } from "./library/BrainSetupContent";
+import { AgentItemList } from "./library/AgentItemList";
+import { BrainItemList } from "./library/BrainItemList";
+import { BrainPane } from "./library/BrainPane";
+import { ConfigItemList } from "./library/ConfigItemList";
+import { CreateDocForm } from "./library/CreateDocForm";
+import { DocItemList } from "./library/DocItemList";
+import { EditorPane } from "./library/EditorPane";
+import { buildEntry, emptyStateHint } from "./library/entry";
+import { PreviewPane } from "./library/PreviewPane";
+import { RULES_LIST_KEY, RulesItemList } from "./library/RulesItemList";
+import { SkillItemList } from "./library/SkillItemList";
+import { SourceSwitcher, type LibrarySourceTab } from "./library/SourceSwitcher";
+import { useLibraryKeys } from "./library/useLibraryKeys";
 
 export type LibrarySourceType = "docs" | "rules" | "skills" | "agents" | "configs" | "brain";
 
-const SOURCE_TYPES: { id: LibrarySourceType; label: string }[] = [
-  { id: "docs", label: "Docs" },
-  { id: "rules", label: "Rules" },
-  { id: "skills", label: "Skills" },
-  { id: "agents", label: "Runtime agents" },
-  { id: "configs", label: "Configs" },
-  { id: "brain", label: "Brain Setup" },
+const SOURCE_TYPES: { id: LibrarySourceType; label: string; title: string }[] = [
+  { id: "docs", label: "docs", title: "Docs" },
+  { id: "rules", label: "rules", title: "Rules" },
+  { id: "skills", label: "skills", title: "Skills" },
+  { id: "agents", label: "agents", title: "Runtime agents" },
+  { id: "configs", label: "configs", title: "Configs" },
+  { id: "brain", label: "brain", title: "Brain Setup" },
 ];
 
-interface LibraryViewProps {
+/** A pending "move into the editor" request outlives the open item it waits for only this long. */
+const FOCUS_REQUEST_MS = 2000;
+
+export interface LibraryViewProps {
   sourceType: LibrarySourceType;
   onSetSourceType: (type: LibrarySourceType) => void;
 
@@ -128,690 +141,236 @@ interface LibraryViewProps {
   showConfigs: boolean;
 }
 
-// ── sidebar item list components ──
-
-function filterDocsForSearch(docs: DocSummary[], query: string): DocSummary[] {
-  const q = query.trim().toLowerCase();
-  if (!q) return docs;
-  return docs.filter(
-    (d) =>
-      d.title.toLowerCase().includes(q) ||
-      d.path.toLowerCase().includes(q) ||
-      d.section.toLowerCase().includes(q),
-  );
-}
-
-function DocItemList({
-  docs,
-  docsHealth,
-  activeId,
-  onSelect,
-  workspaceValid,
-  onNewDoc,
-  onGoToWorkspaceRepair,
-  searchQuery,
-  onSearchQueryChange,
-}: {
-  docs: DocSummary[];
-  docsHealth: DocsHealth | null;
-  activeId: string | null;
-  onSelect: (id: string) => void;
-  workspaceValid: boolean;
-  onNewDoc: () => void;
-  onGoToWorkspaceRepair: () => void;
-  searchQuery: string;
-  onSearchQueryChange: (query: string) => void;
-}) {
-  const missingCount = docsHealth?.missing_count ?? 0;
-  const showStaleBanner = workspaceValid && missingCount > 0;
-  const filteredDocs = useMemo(
-    () => filterDocsForSearch(docs, searchQuery),
-    [docs, searchQuery],
-  );
-
-  const groups = useMemo(() => {
-    const next = new Map<string, DocSummary[]>();
-    for (const d of filteredDocs) {
-      const existing = next.get(d.section) ?? [];
-      existing.push(d);
-      next.set(d.section, existing);
-    }
-    return next;
-  }, [filteredDocs]);
-
-  const staleHint = docsHealth?.missing_prompt_template_docs
-    ? "Prompt Templates and other bundled docs are missing from this workspace."
-    : `${missingCount} bundled doc(s) are missing from this workspace.`;
-
-  return (
-    <aside className="lib-docs-list-pane" aria-label="Document list">
-      <label className="lib-docs-search-wrap font-mono">
-        <span className="visually-hidden">Filter documents</span>
-        <input
-          type="search"
-          className="lib-field lib-docs-search"
-          value={searchQuery}
-          onChange={(e) => onSearchQueryChange(e.target.value)}
-          placeholder="Filter by path or title"
-          aria-label="Filter documents"
-        />
-      </label>
-
-      {showStaleBanner && (
-        <div className="lib-docs-stale-banner" role="status">
-          <p className="lib-docs-stale-title">Bundled docs need update</p>
-          <p className="lib-docs-stale-hint text-muted small">{staleHint}</p>
-          <button
-            type="button"
-            className="btn btn-sm btn-primary lib-docs-stale-action"
-            onClick={onGoToWorkspaceRepair}
-          >
-            open workspace update
-          </button>
-        </div>
-      )}
-
-      {!workspaceValid ? (
-        <p className="text-muted small" role="status">No valid workspace</p>
-      ) : !docs.length ? (
-        <p className="text-muted small" role="status">No docs found</p>
-      ) : !filteredDocs.length ? (
-        <p className="text-muted small" role="status">No documents match the current filter.</p>
-      ) : (
-        <ul
-          className="lib-docs-list"
-          role="listbox"
-          aria-label="Workspace documents"
-          aria-activedescendant={activeId ? `lib-doc-option-${activeId}` : undefined}
-        >
-          {Array.from(groups.entries()).map(([section, items]) => (
-            <li key={section} role="none" className="lib-docs-list-section">
-              <div className="lib-docs-section-label">{section}</div>
-              <ul className="lib-docs-list-section-items" role="group" aria-label={section}>
-                {items.map((d) => {
-                  const selected = activeId === d.id;
-                  const optionId = `lib-doc-option-${d.id}`;
-                  return (
-                    <li key={d.id} role="none">
-                      <button
-                        type="button"
-                        id={optionId}
-                        role="option"
-                        aria-selected={selected}
-                        className={`lib-docs-list-item${selected ? " active" : ""}`}
-                        onClick={() => onSelect(d.id)}
-                      >
-                        <span className="font-mono lib-docs-list-title">{d.title}</span>
-                        {d.source === "custom" ? (
-                          <span className="lib-pill lib-docs-context-pill">context</span>
-                        ) : null}
-                        <span className="font-mono lib-docs-list-path text-muted">{d.path}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {workspaceValid && (
-        <button type="button" className="btn btn-sm btn-primary lib-docs-new-btn" onClick={onNewDoc}>
-          + new doc
-        </button>
-      )}
-    </aside>
-  );
-}
-
-function RulesItemList({
-  agentTemplate,
-  ruleTargets,
-}: {
-  agentTemplate: DocumentContent | null;
-  ruleTargets: AgentTargetMeta[];
-}) {
-  return (
-    <div className="lib-sidebar-body">
-      <div className="lib-sidebar-group">
-        <div className="lib-sidebar-group-label">Source</div>
-        <div className={`lib-sidebar-item lib-sidebar-item-meta ${agentTemplate ? "lib-sidebar-item-active" : ""}`}>
-          <span className="lib-sidebar-item-title">Global Rules</span>
-          <span className="lib-sidebar-item-tag">template</span>
-        </div>
-      </div>
-      {ruleTargets.length > 0 && (
-        <div className="lib-sidebar-group">
-          <div className="lib-sidebar-group-label">Targets</div>
-          {ruleTargets.map((t) => (
-            <div key={t.id} className="lib-sidebar-item lib-sidebar-item-meta">
-              <span className="lib-sidebar-item-title">{t.label}</span>
-              <span className="lib-sidebar-item-path">{t.target_rel}</span>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function SkillItemList({
-  skills,
-  activeId,
-  onSelect,
-  search,
-  onSearch,
-}: {
-  skills: SkillSummary[];
-  activeId: string | null;
-  onSelect: (id: string) => void;
-  search: string;
-  onSearch: (v: string) => void;
-}) {
-  const filtered = useMemo(() => {
-    const q = search.toLowerCase().trim();
-    if (!q) return skills;
-    return skills.filter(
-        (s) =>
-          s.name.toLowerCase().includes(q) ||
-          s.id.toLowerCase().includes(q) ||
-          s.description.toLowerCase().includes(q) ||
-          s.category.toLowerCase().includes(q) ||
-          s.targets.some((t) => t.toLowerCase().includes(q)) ||
-          s.related.some((r) => r.toLowerCase().includes(q))
-      );
-  }, [skills, search]);
-
-  return (
-    <div className="lib-sidebar-body">
-      <div className="lib-sidebar-search">
-        <input
-          className="lib-search-input"
-          type="text"
-          placeholder="search skills..."
-          value={search}
-          onChange={(e) => onSearch(e.target.value)}
-          aria-label="Search skills"
-        />
-        {search && (
-          <button className="btn btn-sm lib-search-clear" onClick={() => onSearch("")} aria-label="Clear skills search">clear</button>
-        )}
-      </div>
-      {filtered.length === 0 ? (
-        <div className="lib-sidebar-empty">No skills match</div>
-      ) : (
-        <div className="lib-sidebar-list">
-          {filtered.map((s) => (
-            <button
-              key={s.id}
-              className={`lib-sidebar-item ${activeId === s.id ? "lib-sidebar-item-active" : ""}`}
-              onClick={() => onSelect(s.id)}
-              aria-current={activeId === s.id ? "true" : undefined}
-            >
-              <span className="lib-sidebar-item-title">{s.name}</span>
-              <span className="lib-sidebar-item-desc">{s.description}</span>
-              <span className="lib-sidebar-item-meta-row">
-                {s.category && (
-                  <span className="lib-sidebar-item-tag">{s.category}</span>
-                )}
-                {s.risk && (
-                  <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${s.risk}`}>
-                    {s.risk}
-                  </span>
-                )}
-                {s.targets.length > 0 && (
-                  <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">{s.targets.join(", ")}</span>
-                )}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
-
-function AgentItemList({
-  agents,
-  activeId,
-  onSelect,
-}: {
-  agents: AgentMetadataResponse[];
-  activeId: string | null;
-  onSelect: (id: string) => void;
-}) {
-  if (agents.length === 0) {
-    return (
-      <div className="lib-sidebar-body">
-        <div className="lib-sidebar-empty">No agents found</div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="lib-sidebar-body">
-      {agents.map((a) => (
-        <button
-          key={a.id}
-          className={`lib-sidebar-item ${activeId === a.id ? "lib-sidebar-item-active" : ""} ${!a.exists ? "lib-sidebar-item-missing" : ""}`}
-          onClick={() => onSelect(a.id)}
-          aria-current={activeId === a.id ? "true" : undefined}
-        >
-          <span className="lib-sidebar-item-title">{a.title}</span>
-          <span className="lib-sidebar-item-desc">{a.id}</span>
-          {!a.exists && (
-            <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn">not in ws</span>
-          )}
-          <span className="lib-sidebar-item-meta-row">
-            {a.metadata?.role && (
-              <span className="lib-sidebar-item-tag">{a.metadata.role}</span>
-            )}
-            {a.metadata?.risk && (
-              <span className={`lib-sidebar-item-tag lib-sidebar-item-tag-${a.metadata.risk}`}>
-                {a.metadata.risk}
-              </span>
-            )}
-            {a.metadata && (a.metadata.targets.length > 0) && (
-              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-dim">{a.metadata.targets.join(", ")}</span>
-            )}
-            {a.metadata && !a.metadata.safe_to_edit_runtime && (
-              <span className="lib-sidebar-item-tag lib-sidebar-item-tag-warn" title="Runtime-sensitive frontmatter — edit with care">runtime</span>
-            )}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function ConfigItemList({
-  configTargets,
-  activeTargetId,
-  onSelect,
-  configContent,
-  bundledAgentCount,
-}: {
-  configTargets: AgentTargetMeta[];
-  activeTargetId: string;
-  onSelect: (id: string) => void;
-  configContent: DocumentContent | null;
-  bundledAgentCount: number;
-}) {
-  return (
-    <div className="lib-sidebar-body">
-      <div className="lib-sidebar-group">
-        <div className="lib-sidebar-group-label">Targets</div>
-        {configTargets.map((t) => (
-          <button
-            key={t.id}
-            className={`lib-sidebar-item ${activeTargetId === t.id ? "lib-sidebar-item-active" : ""}`}
-            onClick={() => onSelect(t.id)}
-            aria-current={activeTargetId === t.id ? "true" : undefined}
-          >
-            <span className="lib-sidebar-item-title">{t.label}</span>
-            <span className="lib-sidebar-item-path">{t.source_rel}</span>
-          </button>
-        ))}
-      </div>
-      {configContent && activeTargetId === "opencode_config" && (
-        <div className="lib-sidebar-group">
-          <div className="lib-sidebar-group-label">Bundle</div>
-          <div className="lib-sidebar-item lib-sidebar-item-meta">
-            <span className="lib-sidebar-item-title">OpenCode bundle</span>
-            <span className="lib-sidebar-item-desc">
-              {bundledAgentCount > 0 ? `${bundledAgentCount} agents bundled` : "agents bundled"}
-            </span>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ── type helpers ──
-
-function BrainItemList({ brainSetupSource }: { brainSetupSource: string }) {
-  return (
-    <div className="lib-sidebar-body">
-      <div className="lib-sidebar-group">
-        <div className="lib-sidebar-group-label">Source</div>
-        <div className="lib-sidebar-item lib-sidebar-item-meta lib-sidebar-item-active">
-          <span className="lib-sidebar-item-title">{brainSetupSource}</span>
-          <span className="lib-sidebar-item-desc">copy into assistant instructions</span>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function emptyStateHint(type: LibrarySourceType): string {
-  switch (type) {
-    case "docs": return "Select a document to preview";
-    case "rules": return "Rules template is loading";
-    case "skills": return "Select a skill to preview";
-    case "agents": return "Select an agent to preview";
-    case "configs": return "Select a config target to preview";
-    case "brain": return "Brain Setup is loading";
-  }
-}
-
-// ── main view ──
-
-export function LibraryView(props: LibraryViewProps) {
-  const {
-    sourceType,
-    onSetSourceType,
-    docs,
-    docsHealth,
-    onGoToWorkspaceRepair,
-    activeDoc,
-    onSelectDoc,
-    onOpenDoc,
-    docDraft,
-    docDirty,
-    docSaving,
-    docSaveResult,
-    docMode,
-    onSetDocMode,
-    onChangeDocDraft,
-    onSaveDoc,
-    onResetDoc,
-    showCreateDoc,
-    createDocTitle,
-    createDocSlug,
-    createDocError,
-    createDocCreating,
-    onSetShowCreateDoc,
-    onSetCreateDocTitle,
-    onSetCreateDocSlug,
-    onCreateDoc,
-    agentTemplate,
-    onOpenTemplate,
-    agentTemplateDraft,
-    agentTemplateDirty,
-    agentTemplateSaving,
-    agentTemplateSaveResult,
-    agentTemplateMode,
-    onSetAgentTemplateMode,
-    onChangeAgentTemplateDraft,
-    onSaveAgentTemplate,
-    onResetAgentTemplate,
-    agentTargets,
-    skills,
-    activeSkillId,
-    activeSkillContent,
-    skillSearch,
-    onSetSkillSearch,
-    onSelectSkillPreview,
-    onOpenSkill,
-    agentSources,
-    activeAgentId,
-    activeAgentContent,
-    onSelectAgent,
-    onOpenAgent,
-    agentDraft,
-    agentDirty,
-    agentSaving,
-    agentSaveResult,
-    agentMode,
-    onSetAgentMode,
-    onChangeAgentDraft,
-    onSaveAgent,
-    onResetAgent,
-    configTemplateContent,
-    activeConfigTargetId,
-    configTargets,
-    onSelectConfigTarget,
-    onOpenConfig,
-    configDraft,
-    configDirty,
-    configSaving,
-    configSaveResult,
-    configMode,
-    onSetConfigMode,
-    onChangeConfigDraft,
-    onSaveConfig,
-    onResetConfig,
-    configEditorSources,
-    activeConfigSourceType,
-    onSelectConfigSource,
-    configEditorSourceSaveMessage,
-    configEditorSourceContent,
-    brainSetupText,
-    brainSetupSource,
-    workspaceValid,
-    showConfigs,
-  } = props;
-
-  const ruleTargets = useMemo(() => agentTargets.filter((t) => t.kind === "rules"), [agentTargets]);
-  const [docSearch, setDocSearch] = useState("");
-
-  // ── derive active content for main pane ──
-
-  let mainContent: React.ReactNode = null;
-
-  // opencode_config is edited through editor sources; every other target shows its template.
-  const isOpenCodeConfigTarget = activeConfigTargetId === "opencode_config";
-  const activeConfigContent = isOpenCodeConfigTarget ? configEditorSourceContent : configTemplateContent;
-
-  if (sourceType === "rules" && agentTemplate) {
-    mainContent = (
-      <RulesContent
-        agentTemplate={agentTemplate}
-        onOpenTemplate={onOpenTemplate}
-        agentTemplateDraft={agentTemplateDraft}
-        agentTemplateDirty={agentTemplateDirty}
-        agentTemplateSaving={agentTemplateSaving}
-        agentTemplateSaveResult={agentTemplateSaveResult}
-        agentTemplateMode={agentTemplateMode}
-        onSetAgentTemplateMode={onSetAgentTemplateMode}
-        onChangeAgentTemplateDraft={onChangeAgentTemplateDraft}
-        onSaveAgentTemplate={onSaveAgentTemplate}
-        onResetAgentTemplate={onResetAgentTemplate}
-      />
-    );
-  } else if (sourceType === "skills" && activeSkillContent) {
-    mainContent = (
-      <SkillsContent
-        skills={skills}
-        activeSkillContent={activeSkillContent}
-        onOpenSkill={onOpenSkill}
-      />
-    );
-  } else if (sourceType === "agents" && activeAgentContent) {
-    mainContent = (
-      <AgentContent
-        agentSources={agentSources}
-        activeAgentContent={activeAgentContent}
-        onOpenAgent={onOpenAgent}
-        agentDraft={agentDraft}
-        agentDirty={agentDirty}
-        agentSaving={agentSaving}
-        agentSaveResult={agentSaveResult}
-        agentMode={agentMode}
-        onSetAgentMode={onSetAgentMode}
-        onChangeAgentDraft={onChangeAgentDraft}
-        onSaveAgent={onSaveAgent}
-        onResetAgent={onResetAgent}
-      />
-    );
-  } else if (sourceType === "brain") {
-    mainContent = (
-      <BrainSetupContent
-        workspaceValid={workspaceValid}
-        brainSetupText={brainSetupText}
-        brainSetupSource={brainSetupSource}
-      />
-    );
-  } else if (sourceType === "configs" && (isOpenCodeConfigTarget || configTemplateContent)) {
-    mainContent = (
-      <ConfigContent
-        configTemplateContent={configTemplateContent}
-        activeConfigTargetId={activeConfigTargetId}
-        configTargets={configTargets}
-        onOpenConfig={onOpenConfig}
-        configDraft={configDraft}
-        configDirty={configDirty}
-        configSaving={configSaving}
-        configSaveResult={configSaveResult}
-        configMode={configMode}
-        onSetConfigMode={onSetConfigMode}
-        onChangeConfigDraft={onChangeConfigDraft}
-        onSaveConfig={onSaveConfig}
-        onResetConfig={onResetConfig}
-        agentSources={agentSources}
-        configEditorSources={configEditorSources}
-        activeConfigSourceType={activeConfigSourceType}
-        onSelectConfigSource={onSelectConfigSource}
-        configEditorSourceSaveMessage={configEditorSourceSaveMessage}
-        configEditorSourceContent={configEditorSourceContent}
-      />
-    );
-  }
-
-  // Sidebar content per source type
-  const sidebarContent = () => {
-    switch (sourceType) {
-      case "rules":
-        return <RulesItemList agentTemplate={agentTemplate} ruleTargets={ruleTargets} />;
-      case "skills":
-        return (
-          <SkillItemList
-            skills={skills}
-            activeId={activeSkillId}
-            onSelect={onSelectSkillPreview}
-            search={skillSearch}
-            onSearch={onSetSkillSearch}
-          />
-        );
-      case "agents":
-        return <AgentItemList agents={agentSources} activeId={activeAgentId} onSelect={onSelectAgent} />;
-      case "configs":
-        return (
-          <ConfigItemList
-            configTargets={configTargets}
-            activeTargetId={activeConfigTargetId}
-            onSelect={onSelectConfigTarget}
-            configContent={activeConfigContent}
-            bundledAgentCount={agentSources.length}
-          />
-        );
-      case "brain":
-        return <BrainItemList brainSetupSource={brainSetupSource} />;
-      default:
-        return null;
-    }
-  };
-
-  // Count helpers for source rail badges
-  const docsCount = docs.length;
-  const skillsCount = skills.length;
-  const agentsCount = agentSources.length;
-  const configCount = configTargets.length;
-
-  function sourceCount(type: LibrarySourceType): string | null {
+function sourceCount(props: LibraryViewProps, type: LibrarySourceType): number | undefined {
+  const count = (() => {
     switch (type) {
-      case "docs": return docsCount > 0 ? String(docsCount) : null;
-      case "skills": return skillsCount > 0 ? String(skillsCount) : null;
-      case "agents": return agentsCount > 0 ? String(agentsCount) : null;
-      case "configs": return configCount > 0 ? String(configCount) : null;
-      default: return null;
+      case "docs": return props.docs.length;
+      case "skills": return props.skills.length;
+      case "agents": return props.agentSources.length;
+      case "configs": return props.configTargets.length;
+      default: return 0;
     }
+  })();
+  return count > 0 ? count : undefined;
+}
+
+/**
+ * Library: [1] item list of the active source (with the source switcher), [2] editor, [3] preview of the
+ * working copy. Brain Setup has no editor, so it is a list plus one copy-block pane.
+ *
+ * The preview/edit mode props (`docMode`, ...) stay in the contract with the controller; the panes no
+ * longer need them because the preview is always on and the editor is a pane of its own.
+ */
+export function LibraryView(props: LibraryViewProps) {
+  const { sourceType, onSetSourceType, workspaceValid, showConfigs } = props;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [docSearch, setDocSearch] = useState("");
+  const [agentSearch, setAgentSearch] = useState("");
+  const [focusRequest, setFocusRequest] = useState<string | null>(null);
+
+  const entry = buildEntry(props);
+  const isBrain = sourceType === "brain";
+  const followCursor = !(entry?.dirty ?? false);
+
+  const sources: LibrarySourceTab[] = SOURCE_TYPES
+    .filter(source => source.id !== "configs" || showConfigs)
+    .map(source => ({ ...source, count: sourceCount(props, source.id) }));
+  const activeSource = SOURCE_TYPES.find(source => source.id === sourceType) ?? SOURCE_TYPES[0]!;
+  const activeCount = sourceCount(props, sourceType);
+
+  useStatusContext(activeSource.label);
+  const { close } = useLibraryKeys({
+    rootRef,
+    textareaRef,
+    entry,
+    sourceType,
+    sourceIds: sources.map(source => source.id),
+    workspaceValid,
+    onSetSourceType,
+    showCreateDoc: props.showCreateDoc,
+    onSetShowCreateDoc: props.onSetShowCreateDoc,
+  });
+
+  // Switching source replaces the list, which takes focus with it: put it back on the new list.
+  const previousSource = useRef(sourceType);
+  useEffect(() => {
+    if (previousSource.current === sourceType) return;
+    previousSource.current = sourceType;
+    const active = document.activeElement;
+    if (!active || active === document.body) focusPaneById("items", rootRef.current ?? document);
+  }, [sourceType]);
+
+  // Enter on a row opens it and moves into the editor once that item has loaded.
+  const entryKey = entry?.listKey ?? null;
+  useEffect(() => {
+    if (focusRequest === null) return;
+    if (entryKey === focusRequest && textareaRef.current) {
+      textareaRef.current.focus();
+      setFocusRequest(null);
+      return;
+    }
+    const timer = setTimeout(() => setFocusRequest(null), FOCUS_REQUEST_MS);
+    return () => clearTimeout(timer);
+  }, [focusRequest, entryKey]);
+
+  const onActivate = (key: string) => {
+    if (isBrain) {
+      focusPaneById("editor", rootRef.current ?? document);
+      return;
+    }
+    setFocusRequest(key);
+  };
+  const hasFilter = sourceType === "docs" || sourceType === "skills" || sourceType === "agents";
+
+  let list: React.ReactNode;
+  switch (sourceType) {
+    case "docs":
+      list = (
+        <DocItemList
+          docs={props.docs}
+          docsHealth={props.docsHealth}
+          workspaceValid={workspaceValid}
+          activeKey={props.activeDoc?.id ?? null}
+          followCursor={followCursor}
+          onSelect={props.onSelectDoc}
+          onActivate={onActivate}
+          onGoToWorkspaceRepair={props.onGoToWorkspaceRepair}
+          search={docSearch}
+          onSearchChange={setDocSearch}
+        />
+      );
+      break;
+    case "rules":
+      list = (
+        <RulesItemList
+          agentTemplate={props.agentTemplate}
+          activeKey={props.agentTemplate ? RULES_LIST_KEY : null}
+          followCursor={followCursor}
+          onActivate={onActivate}
+        />
+      );
+      break;
+    case "skills":
+      list = (
+        <SkillItemList
+          skills={props.skills}
+          activeKey={props.activeSkillId}
+          followCursor={followCursor}
+          onSelect={props.onSelectSkillPreview}
+          onActivate={onActivate}
+          search={props.skillSearch}
+          onSearchChange={props.onSetSkillSearch}
+        />
+      );
+      break;
+    case "agents":
+      list = (
+        <AgentItemList
+          agents={props.agentSources}
+          activeKey={props.activeAgentId}
+          followCursor={followCursor}
+          onSelect={props.onSelectAgent}
+          onActivate={onActivate}
+          search={agentSearch}
+          onSearchChange={setAgentSearch}
+        />
+      );
+      break;
+    case "configs":
+      list = (
+        <ConfigItemList
+          configTargets={props.configTargets}
+          activeTargetId={props.activeConfigTargetId}
+          configEditorSources={props.configEditorSources}
+          activeSourceType={props.activeConfigSourceType}
+          followCursor={followCursor}
+          onSelectTarget={props.onSelectConfigTarget}
+          onSelectSource={props.onSelectConfigSource}
+          onActivate={onActivate}
+        />
+      );
+      break;
+    case "brain":
+      list = (
+        <BrainItemList
+          brainSetupSource={props.brainSetupSource}
+          workspaceValid={workspaceValid}
+          onActivate={onActivate}
+        />
+      );
+      break;
   }
 
-  const sourceTabItems = SOURCE_TYPES
-    .filter(st => st.id !== "configs" || showConfigs)
-    .map((st) => ({
-    id: st.id,
-    label: st.label,
-    count: sourceCount(st.id) ?? undefined,
-    }));
-
-  if (sourceType === "docs") {
-    return (
-      <section className="lib-frame">
-        <div className="lib-docs-workspace">
-          <div className="lib-docs-toolbar">
-            <ToolSectionTabs
-              className="lib-docs-source-tabs"
-              items={sourceTabItems}
-              activeId={sourceType}
-              onSelect={(id) => onSetSourceType(id as LibrarySourceType)}
-              ariaLabel="Library source type"
-            />
-          </div>
-          <div className="lib-docs-body">
-            <DocItemList
-              docs={docs}
-              docsHealth={docsHealth}
-              activeId={activeDoc?.id ?? null}
-              onSelect={onSelectDoc}
-              workspaceValid={workspaceValid}
-              onNewDoc={() => onSetShowCreateDoc(!showCreateDoc)}
-              onGoToWorkspaceRepair={onGoToWorkspaceRepair}
-              searchQuery={docSearch}
-              onSearchQueryChange={setDocSearch}
-            />
-            <DocContent
-              activeDoc={activeDoc}
-              onOpenDoc={onOpenDoc}
-              docDraft={docDraft}
-              docDirty={docDirty}
-              docSaving={docSaving}
-              docSaveResult={docSaveResult}
-              docMode={docMode}
-              onSetDocMode={onSetDocMode}
-              onChangeDocDraft={onChangeDocDraft}
-              onSaveDoc={onSaveDoc}
-              onResetDoc={onResetDoc}
-              showCreateDoc={showCreateDoc}
-              createDocTitle={createDocTitle}
-              createDocSlug={createDocSlug}
-              createDocError={createDocError}
-              createDocCreating={createDocCreating}
-              onSetShowCreateDoc={onSetShowCreateDoc}
-              onSetCreateDocTitle={onSetCreateDocTitle}
-              onSetCreateDocSlug={onSetCreateDocSlug}
-              onCreateDoc={onCreateDoc}
-            />
-          </div>
-        </div>
-      </section>
-    );
-  }
+  // Opening the form from `n` or the footer puts the cursor in its title field.
+  const createForm =
+    sourceType === "docs" && props.showCreateDoc ? (
+      <CreateDocForm
+        title={props.createDocTitle}
+        slug={props.createDocSlug}
+        error={props.createDocError}
+        creating={props.createDocCreating}
+        onSetShow={props.onSetShowCreateDoc}
+        onSetTitle={props.onSetCreateDocTitle}
+        onSetSlug={props.onSetCreateDocSlug}
+        onCreate={props.onCreateDoc}
+      />
+    ) : undefined;
 
   return (
-    <section className="lib-frame">
-      <div className="lib-docs-workspace">
-        <div className="lib-docs-toolbar">
-          <ToolSectionTabs
-            className="lib-docs-source-tabs"
-            items={sourceTabItems}
-            activeId={sourceType}
-            onSelect={(id) => onSetSourceType(id as LibrarySourceType)}
-            ariaLabel="Library source type"
-          />
-        </div>
-        <div className="lib-layout lib-layout-body">
-        <aside className="lib-sidebar">
-          <div className="lib-sidebar-panel">
-            {sidebarContent()}
-          </div>
-        </aside>
+    <div className={isBrain ? "screen library library-pair" : "screen library"} ref={rootRef}>
+      <Pane
+        id="items"
+        index={1}
+        label="Library items"
+        title={activeSource.label}
+        meta={activeCount !== undefined ? `· ${activeCount}` : undefined}
+        defaultFocus
+        bodyClassName="lib-list-body"
+        footer={
+          <>
+            {hasFilter && (
+              <span>
+                <Kbd>/</Kbd> filter
+              </span>
+            )}
+            <span>
+              <Kbd>[</Kbd>
+              <Kbd>]</Kbd> source
+            </span>
+          </>
+        }
+      >
+        <SourceSwitcher
+          sources={sources}
+          activeId={sourceType}
+          onSelect={type => void onSetSourceType(type)}
+        />
+        {list}
+      </Pane>
 
-        <div className="lib-main">
-          {mainContent ? (
-            mainContent
-          ) : (
-            <div className="lib-main-empty">
-              <span className="log-prompt">$</span>{" "}
-              {workspaceValid ? emptyStateHint(sourceType) : "No valid workspace selected"}
-            </div>
-          )}
-        </div>
-        </div>
-      </div>
-    </section>
+      {isBrain ? (
+        <BrainPane
+          workspaceValid={workspaceValid}
+          brainSetupText={props.brainSetupText}
+          brainSetupSource={props.brainSetupSource}
+        />
+      ) : (
+        <>
+          <EditorPane
+            entry={entry}
+            emptyHint={
+              sourceType === "configs" && props.activeConfigTargetId === "opencode_config" && workspaceValid
+                ? "Loading config source..."
+                : emptyStateHint(sourceType, workspaceValid)
+            }
+            textareaRef={textareaRef}
+            top={createForm}
+            onClose={close}
+          />
+          <PreviewPane entry={entry} />
+        </>
+      )}
+    </div>
   );
 }
