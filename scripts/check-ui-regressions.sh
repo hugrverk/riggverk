@@ -357,7 +357,7 @@ fi
 if ! search 'lib-docs-markdown' src/views/library/DocContent.tsx >"$ui_tmp"; then
   fail "Library document preview must render the scoped reading surface"
 fi
-if ! search '\.lib-docs-markdown' src/styles >"$ui_tmp"; then
+if ! search '^\.lib-docs-markdown \{' src/styles/_library.scss >"$ui_tmp"; then
   fail "Library document preview must have its scoped reading styles"
 fi
 if search 'view === "tools"|AppHeaderView.*tools|"tools"' src/App.tsx src/shell/TopLine.tsx src/shell/views.ts >"$ui_tmp"; then
@@ -376,8 +376,8 @@ fi
 if ! search '@font-face' src/styles >"$ui_tmp"; then
   fail "the vendored UI font must be declared with @font-face"
 fi
-if ! search '@media \(prefers-reduced-motion: reduce\)' src/styles >"$ui_tmp"; then
-  fail "styles must honor prefers-reduced-motion"
+if ! search '@media \(prefers-reduced-motion: reduce\)' src/styles/_tokens.scss >"$ui_tmp"; then
+  fail "base styles must honor prefers-reduced-motion"
 fi
 
 # The browser mock backend is dev-only: main.tsx is its single importer and gates it on the dev server.
