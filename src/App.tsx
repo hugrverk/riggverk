@@ -257,6 +257,7 @@ function AppShell() {
 
   const {
     appSettings,
+    savedSelection,
     settingsMsg,
     agentTargets,
     settingsDirty,
@@ -623,8 +624,10 @@ function AppShell() {
   const overview = useInstallationOverview({
     workspaceValid,
     busy: wsRunning !== null,
-    enabledHarnessIds,
-    enabledTargetIds: appSettings?.enabled_target_ids,
+    // The backend filters its status on the saved settings, so follow the acknowledged toggles, not edits
+    // still waiting for their autosave.
+    enabledHarnessIds: savedSelection?.harnessIds ?? [],
+    enabledTargetIds: savedSelection?.targetIds,
     refreshKey: overviewRefreshKey,
   });
 

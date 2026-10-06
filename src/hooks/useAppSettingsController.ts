@@ -16,6 +16,19 @@ import {
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
 import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
 
+/**
+ * Harness and target toggles as the backend last acknowledged them. Its status commands filter on the saved
+ * settings, so anything that asks the backend about them must follow this, not an edit still in memory.
+ */
+export interface SavedSelection {
+  harnessIds: InstallAgent[];
+  targetIds: string[];
+}
+
+function sameList(a: readonly string[], b: readonly string[]) {
+  return a.length === b.length && a.every((value, index) => value === b[index]);
+}
+
 /** Outcome of switching the active workspace; `message` is the backend's reason when it was refused. */
 export type WorkspaceSwitchResult = { ok: true } | { ok: false; message: string };
 
@@ -61,6 +74,17 @@ export function useAppSettingsController({
   const [colorResetKey, setColorResetKey] = useState(0);
 
   const savedSettingsRef = useRef<string | null>(null);
+  const [savedSelection, setSavedSelection] = useState<SavedSelection | null>(null);
+  const acknowledgeSaved = useCallback((saved: AppSettings) => {
+    savedSettingsRef.current = serializeSettingsForCompare(saved);
+    const harnessIds = saved.enabled_harness_ids ?? [];
+    const targetIds = saved.enabled_target_ids;
+    setSavedSelection(previous =>
+      previous && sameList(previous.harnessIds, harnessIds) && sameList(previous.targetIds, targetIds)
+        ? previous
+        : { harnessIds, targetIds },
+    );
+  }, []);
   const settingsRevisionRef = useRef(0);
   const settingsLoadedRef = useRef(false);
   const settingsAutosaveInFlightRef = useRef<string | null>(null);
@@ -91,7 +115,7 @@ export function useAppSettingsController({
       }
       setAppSettings(settings);
       settingsRevisionRef.current = settings.revision ?? 0;
-      savedSettingsRef.current = serializeSettingsForCompare(settings);
+      acknowledgeSaved(settings);
       if (settingsResponse.load_warning) {
         setSettingsMsg({ ok: false, text: settingsResponse.load_warning });
       } else {
@@ -104,7 +128,7 @@ export function useAppSettingsController({
     } catch (error) {
       setError(`Settings: ${error}`);
     }
-  }, [appliedWorkspacePathRef, setError]);
+  }, [acknowledgeSaved, appliedWorkspacePathRef, setError]);
 
   const persistAppSettings = useCallback(async (
     settings: AppSettings,
@@ -135,7 +159,7 @@ export function useAppSettingsController({
 
           // The write is on disk: always advance the CAS revision, even if the user kept editing meanwhile.
           settingsRevisionRef.current = saved.revision ?? 0;
-          savedSettingsRef.current = serializeSettingsForCompare(saved);
+          acknowledgeSaved(saved);
 
           const latest = appSettingsRef.current;
           const latestSerialized = latest ? serializeSettingsForCompare(latest) : null;
@@ -189,6 +213,7 @@ export function useAppSettingsController({
       setSettingsSaving(false);
     }
   }, [
+    acknowledgeSaved,
     appliedWorkspacePathRef,
     beginWorkspaceLoadGeneration,
     fetchStatus,
@@ -203,12 +228,12 @@ export function useAppSettingsController({
     setAppSettings(saved);
     settingsRevisionRef.current = saved.revision ?? 0;
     appliedWorkspacePathRef.current = saved.workspace_path ?? null;
-    savedSettingsRef.current = serializeSettingsForCompare(saved);
+    acknowledgeSaved(saved);
     if (options?.skipAutosave) settingsAutosaveSkipRef.current = true;
     applyThemeSettings(saved);
     setSettingsMsg(null);
     setSettingsAutoSaveError(null);
-  }, [appliedWorkspacePathRef]);
+  }, [acknowledgeSaved, appliedWorkspacePathRef]);
 
   const retrySaveSettings = useCallback(async () => {
     const current = appSettingsRef.current;
@@ -373,7 +398,7 @@ export function useAppSettingsController({
         // Edits still waiting for their autosave stay pending on top of the acknowledged settings.
         settingsRevisionRef.current = saved.revision ?? 0;
         appliedWorkspacePathRef.current = saved.workspace_path ?? null;
-        savedSettingsRef.current = serializeSettingsForCompare(saved);
+        acknowledgeSaved(saved);
         setAppSettings({
           ...mergePendingLocalOntoAcknowledged(saved, local, baseline),
           workspace_path: saved.workspace_path,
@@ -390,6 +415,7 @@ export function useAppSettingsController({
       workspaceSwitchInFlightRef.current = false;
     }
   }, [
+    acknowledgeSaved,
     applySavedSettings,
     appliedWorkspacePathRef,
     beginWorkspaceLoadGeneration,
@@ -443,7 +469,7 @@ export function useAppSettingsController({
           acknowledgedAtStart,
         );
         settingsRevisionRef.current = saved.revision ?? 0;
-        savedSettingsRef.current = serializeSettingsForCompare(saved);
+        acknowledgeSaved(saved);
         setAppSettings(merged);
         applyThemeSettings(merged);
         setSettingsAutoSaveError(null);
@@ -456,10 +482,11 @@ export function useAppSettingsController({
     }
 
     throw new Error("settings conflict");
-  }, []);
+  }, [acknowledgeSaved]);
 
   return {
     appSettings,
+    savedSelection,
     setAppSettings,
     settingsMsg,
     agentTargets,

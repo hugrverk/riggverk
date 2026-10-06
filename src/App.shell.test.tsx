@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
-import type { AppSettings, InstallationState } from "./types";
+import type { AppSettings, InstallAgent, InstallationState } from "./types";
 
 const invokeMock = vi.fn();
 
@@ -19,6 +19,10 @@ interface Backend {
   settings: AppSettings;
   commandLog: string[];
   installation: Partial<Record<string, InstallationState>>;
+  /** Surfaces of every get_installation_status call, in order. */
+  statusRequests: string[][];
+  /** When set, update_settings resolves only after this promise does. */
+  holdUpdate: Promise<void> | null;
 }
 
 function installBackend(overrides: Partial<AppSettings> = {}): Backend {
@@ -26,6 +30,8 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
     settings: { ...defaultSettings(), revision: 1, ...overrides },
     commandLog: [],
     installation: {},
+    statusRequests: [],
+    holdUpdate: null,
   };
   invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; surfaces?: string[] }) => {
     backend.commandLog.push(command);
@@ -33,8 +39,10 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
       case "get_settings":
         return Promise.resolve({ settings: backend.settings, load_warning: null });
       case "update_settings":
-        backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
-        return Promise.resolve(backend.settings);
+        return (backend.holdUpdate ?? Promise.resolve()).then(() => {
+          backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
+          return backend.settings;
+        });
       case "get_agent_targets":
       case "list_backups":
       case "list_docs":
@@ -63,6 +71,11 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
       case "get_installation_status": {
         const surface = args?.surfaces?.[0] ?? "";
         const harness = surface.startsWith("open_code") ? "opencode" : surface.split("_")[0]!;
+        backend.statusRequests.push(args?.surfaces ?? []);
+        // Like the real command, it answers from the saved settings only.
+        if (harness !== "workspace" && !backend.settings.enabled_harness_ids.includes(harness as InstallAgent)) {
+          return Promise.reject(`Harness disabled: ${harness}`);
+        }
         const state = backend.installation[harness] ?? "current";
         return Promise.resolve({
           state,
@@ -166,6 +179,29 @@ describe("App shell", () => {
     expect(codex.querySelector(".st.st-warn")).not.toBeNull();
     expect(within(nav()).getByRole("button", { name: "Cursor, conflicts" }).querySelector(".st.st-fail")).not.toBeNull();
     expect(within(nav()).getByRole("button", { name: "OpenCode, current" }).querySelector(".st.st-ok")).not.toBeNull();
+  });
+
+  it("asks the backend about a newly enabled harness only after the settings save has landed", async () => {
+    const backend = installBackend({ enabled_harness_ids: ["codex"] });
+    let release: () => void = () => {};
+    backend.holdUpdate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const claudeRequests = () => backend.statusRequests.filter(surfaces => surfaces[0]?.startsWith("claude"));
+    render(<App />);
+    await within(nav()).findByRole("button", { name: "Codex, current" });
+
+    fireEvent.keyDown(document.body, { key: ",", ctrlKey: true });
+    const settings = await screen.findByRole("region", { name: "Settings" });
+    fireEvent.click(within(settings).getByRole("checkbox", { name: "claude" }));
+    await waitFor(() => expect(backend.commandLog).toContain("update_settings"), { timeout: 3000 });
+    // Toggled in memory, not yet saved: the backend would still answer "Harness disabled".
+    expect(claudeRequests()).toHaveLength(0);
+
+    release();
+    const claude = await within(nav()).findByRole("button", { name: "Claude, current" });
+    expect(claude).toBeInTheDocument();
+    expect(claudeRequests()).toHaveLength(1);
   });
 
   it("lets ? open the help overlay and Escape close it", async () => {
