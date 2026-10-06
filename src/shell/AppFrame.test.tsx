@@ -185,7 +185,8 @@ describe("AppFrame", () => {
       const alert = screen.getByRole("alert");
       expect(alert.className).toContain("error-line");
       expect(alert.textContent).toContain("backups: boom");
-      fireEvent.click(within(alert).getByRole("button", { name: /dismiss/ }));
+      expect(alert.querySelector(".error-line-text")!.textContent).toBe("backups: boom");
+      fireEvent.click(within(alert).getByRole("button", { name: "Dismiss error" }));
       expect(onDismissError).toHaveBeenCalledTimes(1);
       press(document.body, "Escape");
       expect(onDismissError).toHaveBeenCalledTimes(2);

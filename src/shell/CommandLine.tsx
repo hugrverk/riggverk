@@ -173,35 +173,32 @@ function CommandLineBox({ initial }: { initial: string }) {
           />
           <kbd>esc</kbd>
         </div>
-        <div className="sug">
-          {suggestions.length > 0 && (
-            <div id={listId} role="listbox" aria-label="Suggestions">
-              {suggestions.map((suggestion, index) => (
-                <button
-                  key={suggestion.text}
-                  id={optionId(index)}
-                  type="button"
-                  role="option"
-                  tabIndex={-1}
-                  aria-selected={index === current}
-                  aria-disabled={suggestion.disabled ? true : undefined}
-                  onMouseDown={event => event.preventDefault()}
-                  onClick={() => runSuggestion(suggestion)}
-                >
-                  <span className="g c-acc" aria-hidden="true">{index === current ? "▸" : " "}</span>{" "}
-                  <span>{suggestion.text}</span>{" "}
-                  <span className="d">{suggestion.disabled ?? suggestion.description}</span>
-                </button>
-              ))}
-            </div>
-          )}
-          {suggestions.length === 0 && !error && <p className="d">no matching command</p>}
-          {error && (
-            <p className="d c-fail" role="alert">
-              {error}
-            </p>
-          )}
-        </div>
+        {suggestions.length > 0 && (
+          <div className="sug" id={listId} role="listbox" aria-label="Suggestions">
+            {suggestions.map((suggestion, index) => (
+              <button
+                key={suggestion.text}
+                id={optionId(index)}
+                type="button"
+                role="option"
+                tabIndex={-1}
+                aria-selected={index === current}
+                aria-disabled={suggestion.disabled ? true : undefined}
+                onMouseDown={event => event.preventDefault()}
+                onClick={() => runSuggestion(suggestion)}
+              >
+                <span className="c-acc" aria-hidden="true">{index === current ? "▸" : " "}</span>{" "}
+                <span>{suggestion.text}</span>{" "}
+                <span className="d">{suggestion.disabled ?? suggestion.description}</span>
+              </button>
+            ))}
+          </div>
+        )}
+        {error && (
+          <p className="err" role="alert">
+            {error}
+          </p>
+        )}
       </div>
     </div>
   );

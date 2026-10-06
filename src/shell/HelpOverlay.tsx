@@ -95,33 +95,40 @@ function HelpBody() {
       tabIndex={-1}
       data-keyscope="overlay"
       onKeyDown={onKeyDown}
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) closeHelp();
+      }}
     >
-      <h2 className="group">keyboard</h2>
-      {groups.map(group => (
-        <section key={group.name} aria-label={group.name}>
-          <h3 className="group">{group.name}</h3>
-          <dl className="kv">
-            {group.lines.map(line => (
-              <HelpRow key={line.key} line={line} />
-            ))}
-          </dl>
-        </section>
-      ))}
-      {commands.length > 0 && (
-        <section aria-label="Commands">
-          <h3 className="group">Commands (:)</h3>
-          <dl className="kv">
-            {commands.map(command => (
-              <HelpCommandRow key={command.name} name={command.name} aliases={command.aliases ?? []} summary={command.summary} />
-            ))}
-          </dl>
-        </section>
-      )}
-      <p>
-        <ActionKey keys={["esc"]} onClick={closeHelp}>
-          close
-        </ActionKey>
-      </p>
+      <div className="help-box">
+        <h2>keyboard</h2>
+        <div className="help-cols">
+          {groups.map(group => (
+            <section key={group.name} aria-label={group.name}>
+              <h3 className="group">{group.name}</h3>
+              <dl className="kv">
+                {group.lines.map(line => (
+                  <HelpRow key={line.key} line={line} />
+                ))}
+              </dl>
+            </section>
+          ))}
+          {commands.length > 0 && (
+            <section aria-label="Commands">
+              <h3 className="group">Commands (:)</h3>
+              <dl className="kv">
+                {commands.map(command => (
+                  <HelpCommandRow key={command.name} name={command.name} aliases={command.aliases ?? []} summary={command.summary} />
+                ))}
+              </dl>
+            </section>
+          )}
+        </div>
+        <p className="foot">
+          <ActionKey keys={["esc"]} onClick={closeHelp}>
+            close
+          </ActionKey>
+        </p>
+      </div>
     </div>
   );
 }
@@ -143,8 +150,11 @@ function HelpRow({ line }: { line: HelpLine }) {
 function HelpCommandRow({ name, aliases, summary }: { name: string; aliases: readonly string[]; summary: string }) {
   return (
     <>
-      <dt>{[name, ...aliases].join(" / ")}</dt>
-      <dd>{summary}</dd>
+      <dt>{name}</dt>
+      <dd>
+        {summary}
+        {aliases.length > 0 && <span className="c-dim"> · {aliases.join(", ")}</span>}
+      </dd>
     </>
   );
 }

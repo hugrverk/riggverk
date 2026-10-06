@@ -79,6 +79,19 @@ describe("CommandLine", () => {
     expect(document.activeElement).toBe(anchor);
   });
 
+  it("renders the suggestions as direct children of .sug and errors as .err below it", () => {
+    setup(commandSet());
+    const input = openCommandLine();
+    type(input, "upd");
+    const sug = screen.getByRole("listbox", { name: "Suggestions" });
+    expect(sug.className).toBe("sug");
+    expect(Array.from(sug.children).every(child => child.getAttribute("role") === "option")).toBe(true);
+    type(input, "nope");
+    expect(screen.queryByRole("listbox")).toBeNull();
+    fireEvent.keyDown(input, { key: "Enter" });
+    expect(screen.getByRole("alert").className).toBe("err");
+  });
+
   it("lists commands for an empty line and filters while typing, with the first suggestion selected", () => {
     setup(commandSet());
     const input = openCommandLine();

@@ -103,8 +103,9 @@ describe("HelpOverlay", () => {
       />,
     );
     const help = openHelp();
-    expect(within(help).getByText("release-check / rc")).not.toBeNull();
-    expect(within(help).getByText("run the workspace release check")).not.toBeNull();
+    const name = within(help).getByText("release-check");
+    expect(name.tagName).toBe("DT");
+    expect(name.nextElementSibling!.textContent).toBe("run the workspace release check · rc");
   });
 
   it("closes with Escape, ? and q, restoring focus to where it was", () => {
@@ -133,6 +134,21 @@ describe("HelpOverlay", () => {
     expect(prevented).toBe(true);
     expect(document.activeElement).toBe(close);
     fireEvent.click(close);
+    expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
+  });
+
+  it("uses the styled structure: backdrop dialog, .help-box with sections and kv rows, and closes on backdrop click", () => {
+    renderInFrame(<Pane id="main" index={1} title="main" scrollable><p>body</p></Pane>);
+    const help = openHelp();
+    expect(help.className).toBe("help-overlay");
+    const box = help.querySelector(":scope > .help-box")!;
+    expect(box.querySelector("h2")).not.toBeNull();
+    expect(box.querySelector(".help-cols > section > h3.group")).not.toBeNull();
+    expect(box.querySelector(".help-cols dl.kv > dt kbd")).not.toBeNull();
+    expect(box.querySelector("p.foot")).not.toBeNull();
+    fireEvent.mouseDown(box);
+    expect(screen.queryByRole("dialog", { name: "Keyboard help" })).not.toBeNull();
+    fireEvent.mouseDown(help);
     expect(screen.queryByRole("dialog", { name: "Keyboard help" })).toBeNull();
   });
 

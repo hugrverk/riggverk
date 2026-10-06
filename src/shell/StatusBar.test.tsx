@@ -41,8 +41,10 @@ describe("StatusBar", () => {
   it("shows NORMAL, INSERT while a text field has focus, and NORMAL again after blur", () => {
     renderInFrame(<View />);
     expect(mode()).toBe("NORMAL");
+    expect(status().querySelector(".mode")!.getAttribute("data-mode")).toBe("normal");
     act(() => screen.getByLabelText("field").focus());
     expect(mode()).toBe("INSERT");
+    expect(status().querySelector(".mode")!.getAttribute("data-mode")).toBe("insert");
     act(() => screen.getByLabelText("field").blur());
     expect(mode()).toBe("NORMAL");
   });
@@ -120,15 +122,45 @@ describe("StatusBar", () => {
     expect(copy).toHaveBeenCalledTimes(1);
   });
 
-  it("always offers the command-line and help hints, and hides row hints while typing", () => {
+  it("offers the command-line and help hints in NORMAL mode and row hints while a list has focus", () => {
     renderInFrame(<View />);
     const bar = within(status());
     expect(bar.getByRole("button", { name: /command/ })).not.toBeNull();
     expect(bar.getByRole("button", { name: /help/ })).not.toBeNull();
+    act(() => screen.getByRole("group", { name: "other" }).focus());
+    expect(status().textContent).not.toContain("move");
     act(() => screen.getByRole("listbox", { name: "rows" }).focus());
     expect(status().textContent).toContain("move");
+  });
+
+  it("while typing, drops hints that cannot fire in a text field and shows how to leave", () => {
+    const save = vi.fn();
+    renderInFrame(
+      <View
+        bindings={[
+          { id: "t.save", keys: "Mod+s", title: "Save", hint: "save", scope: "pane", paneId: "main", inEditable: true, run: save },
+          { id: "t.update", keys: "u", title: "Update", hint: "update", scope: "pane", paneId: "main", run: () => {} },
+        ]}
+      />,
+    );
     act(() => screen.getByLabelText("field").focus());
+    const bar = within(status());
+    expect(bar.getByRole("button", { name: /save/ })).not.toBeNull();
+    expect(bar.queryByRole("button", { name: /update/ })).toBeNull();
+    expect(bar.queryByRole("button", { name: /command/ })).toBeNull();
+    expect(status().textContent).toContain("leave field");
     expect(status().textContent).not.toContain("move");
-    expect(status().textContent).not.toContain("tab");
+    expect(status().textContent).not.toContain("pane");
+  });
+
+  it("shows command-line key hints in COMMAND mode and only a close hint in HELP mode", () => {
+    renderInFrame(<View />);
+    fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+    expect(status().textContent).toContain("complete");
+    expect(status().textContent).toContain("run");
+    fireEvent.keyDown(screen.getByRole("combobox", { name: "Command" }), { key: "Escape" });
+    fireEvent.keyDown(document.body, { key: "?", shiftKey: true });
+    expect(status().textContent).toContain("close");
+    expect(within(status()).queryByRole("button")).toBeNull();
   });
 });

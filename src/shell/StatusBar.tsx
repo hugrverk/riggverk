@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { useKeymapEntries, useKeymapState } from "../keyboard/context";
-import { isVisibleHint, paneHintEntries } from "../keyboard/registry";
+import { isVisibleHint, paneHintEntries, type RegisteredBinding } from "../keyboard/registry";
 import { BindingActionKey } from "../ui/BindingActionKey";
 import { Kbd } from "../ui/Kbd";
 import { useShellMode, useShellState } from "./ShellState";
@@ -20,18 +20,21 @@ export interface StatusBarProps {
 export function StatusBar({ viewLabel, right }: StatusBarProps) {
   const mode = useShellMode();
   const { statusContext, notice } = useShellState();
-  const { pendingChord, activePaneId, inList, editing } = useKeymapState();
+  const { pendingChord, activePaneId, inList } = useKeymapState();
   const entries = useKeymapEntries();
 
-  const paneHints = activePaneId ? paneHintEntries(entries, activePaneId).filter(isVisibleHint) : [];
-  const globalHints = entries
-    .filter(entry => entry.binding.scope === "global" && !entry.binding.paneId)
-    .filter(isVisibleHint);
+  const typing = mode === "INSERT";
+  // Bindings that cannot fire while a text field has focus are not offered as hints there.
+  const offered = (entry: RegisteredBinding) => isVisibleHint(entry) && (!typing || entry.binding.inEditable === true);
+  const paneHints = activePaneId ? paneHintEntries(entries, activePaneId).filter(offered) : [];
+  const globalHints = entries.filter(entry => entry.binding.scope === "global" && !entry.binding.paneId).filter(offered);
   const context = statusContext ? `${viewLabel} › ${statusContext}` : viewLabel;
 
   return (
     <footer className="statusbar" aria-label="Status bar">
-      <span className="mode">{mode}</span>
+      <span className="mode" data-mode={mode.toLowerCase()}>
+        {mode}
+      </span>
       <span className="ctx" role="status">
         {notice ?? context}
       </span>
@@ -41,7 +44,7 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
         </span>
       )}
       <div className="hints">
-        {!editing && (
+        {mode === "NORMAL" && (
           <>
             <span>
               <Kbd>1</Kbd>–<Kbd>9</Kbd> tab
@@ -58,12 +61,43 @@ export function StatusBar({ viewLabel, right }: StatusBarProps) {
             )}
           </>
         )}
-        {paneHints.map(entry => (
-          <BindingActionKey key={entry.binding.id} entry={entry} />
-        ))}
-        {globalHints.map(entry => (
-          <BindingActionKey key={entry.binding.id} entry={entry} />
-        ))}
+        {mode === "INSERT" && (
+          <span>
+            <Kbd>esc</Kbd> leave field
+          </span>
+        )}
+        {mode === "COMMAND" && (
+          <>
+            <span>
+              <Kbd>↑</Kbd>
+              <Kbd>↓</Kbd> select
+            </span>
+            <span>
+              <Kbd>tab</Kbd> complete
+            </span>
+            <span>
+              <Kbd>↵</Kbd> run
+            </span>
+            <span>
+              <Kbd>esc</Kbd> close
+            </span>
+          </>
+        )}
+        {mode === "HELP" && (
+          <span>
+            <Kbd>esc</Kbd> close
+          </span>
+        )}
+        {mode !== "COMMAND" && mode !== "HELP" && (
+          <>
+            {paneHints.map(entry => (
+              <BindingActionKey key={entry.binding.id} entry={entry} />
+            ))}
+            {globalHints.map(entry => (
+              <BindingActionKey key={entry.binding.id} entry={entry} />
+            ))}
+          </>
+        )}
       </div>
       <span className="rt">{right}</span>
     </footer>

@@ -2,7 +2,6 @@ import { useRef, type ReactNode } from "react";
 import { focusDefaultPane } from "../keyboard/focus";
 import type { InstallationState, InstallAgent } from "../types";
 import { INSTALL_AGENTS } from "../types";
-import { ActionKey } from "../ui/ActionKey";
 import { Glyph } from "../ui/Glyph";
 import { CommandLine } from "./CommandLine";
 import { HelpOverlay } from "./HelpOverlay";
@@ -75,10 +74,17 @@ export function AppFrame({
       />
       {error && (
         <div className="error-line" role="alert">
-          <Glyph name="fail" tone="fail" /> <span>{error}</span>{" "}
-          <ActionKey keys={["esc"]} onClick={onDismissError}>
-            dismiss
-          </ActionKey>
+          <Glyph name="fail" tone="fail" />
+          <span className="error-line-text">{error}</span>
+          <button
+            type="button"
+            className="error-line-dismiss"
+            aria-label="Dismiss error"
+            title="Dismiss (esc)"
+            onClick={onDismissError}
+          >
+            ×
+          </button>
         </div>
       )}
       <div className="view-area" ref={viewAreaRef}>

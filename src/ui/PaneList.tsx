@@ -187,7 +187,7 @@ export function PaneList<T>({
       ...bindingBase,
       id: `list.${idBase}.activate`,
       keys: "Enter",
-      title: activateHint ? `Open (${activateHint})` : "Activate",
+      title: "Activate item",
       hint: activateHint,
       paneId: activateHint && paneId ? paneId : undefined,
       when: () => latest.current.onActivate !== undefined && latest.current.cursorIndex >= 0,
@@ -303,8 +303,8 @@ export function PaneList<T>({
                 }}
                 onDoubleClick={() => latest.current.onActivate?.(item)}
               >
-                <span className="cur g" aria-hidden="true">
-                  {isCursor ? "▸" : " "}
+                <span className="cur" aria-hidden="true">
+                  <span className="g">{isCursor ? "▸" : " "}</span>
                 </span>
                 {renderItem(item, { cursor: isCursor, selected: isSelected })}
               </li>
