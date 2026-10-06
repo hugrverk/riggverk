@@ -7,11 +7,14 @@ const stylePartials = [
   "_tokens.scss",
   "_shell.scss",
   "_content.scss",
-  "_settings-targets.scss",
-  "_workspace-library.scss",
+  "_settings.scss",
+  "_targets.scss",
+  "_workspace.scss",
+  "_library.scss",
   "_tools-prompt.scss",
   "_repo-dashboard.scss",
-  "_state-dialogs-terminal.scss",
+  "_dialogs.scss",
+  "_terminal.scss",
 ];
 const styles = stylePartials
   .map(file => readFileSync(resolve(import.meta.dirname, "styles", file), "utf8"))

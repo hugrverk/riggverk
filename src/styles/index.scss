@@ -1,8 +1,11 @@
 @use "tokens";
 @use "shell";
 @use "content";
-@use "settings-targets";
-@use "workspace-library";
+@use "settings";
+@use "targets";
+@use "workspace";
+@use "library";
 @use "tools-prompt";
 @use "repo-dashboard";
-@use "state-dialogs-terminal";
+@use "dialogs";
+@use "terminal";
