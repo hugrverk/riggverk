@@ -708,6 +708,23 @@ mod tests {
     }
 
     #[test]
+    fn edits_diff_of_a_crlf_file_shows_one_changed_line_and_a_matching_note() {
+        let env = Env::new("diff-edits-crlf");
+        let refined = owner_state(&env);
+        env.write_claude(&refined.replace('\n', "\r\n"));
+
+        let view = preview_rules_diff("claude_rules".into(), Some("edits".into())).unwrap();
+        assert!(view.applicable);
+        assert_eq!(view.compared_base.as_deref(), Some(OWNER_BASE));
+        assert_eq!((view.removed, view.added), (1, 1), "{}", view.diff);
+        let note = view.note.unwrap();
+        assert!(
+            note.contains(&format!("({} lines differ)", view.removed + view.added)),
+            "{note}"
+        );
+    }
+
+    #[test]
     fn diff_previews_reject_unknown_modes_and_non_rules_surfaces() {
         let _env = Env::new("diff-reject");
         assert!(preview_rules_diff("claude_rules".into(), Some("bogus".into())).is_err());

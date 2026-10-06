@@ -413,6 +413,18 @@ mod tests {
     }
 
     #[test]
+    fn edits_diff_of_a_crlf_file_matches_the_changed_line_count() {
+        let refined = BASE_OLD
+            .replace("model one", "model two")
+            .replace('\n', "\r\n");
+        let closest = closest_base(BASE_NEW, &[old_base()], &refined);
+        assert_eq!(closest.digest, old_base().digest);
+        let diff = rules_diff::unified_diff("base", "installed", &closest.text, &refined);
+        assert_eq!((diff.removed, diff.added), (1, 1), "{}", diff.text);
+        assert_eq!(diff.removed + diff.added, closest.changed_lines);
+    }
+
+    #[test]
     fn converting_a_refined_legacy_file_moves_only_the_changed_section() {
         let refined = BASE_OLD.replace("Use model one.", "Use model two.");
         let converted = convert(refined.as_bytes(), BASE_NEW, &[old_base()], "CLAUDE.md").unwrap();

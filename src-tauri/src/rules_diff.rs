@@ -44,8 +44,21 @@ fn split_lines(text: &str) -> Lines<'_> {
     }
     let missing_final_newline = !text.ends_with('\n');
     let body = text.strip_suffix('\n').unwrap_or(text);
+    // CRLF and LF files compare equal line by line; a `\r` is only a line ending when a
+    // `\n` follows it, so a lone trailing `\r` on an unterminated last line stays.
+    let last = body.matches('\n').count();
     Lines {
-        items: body.split('\n').collect(),
+        items: body
+            .split('\n')
+            .enumerate()
+            .map(|(index, line)| {
+                if index < last || !missing_final_newline {
+                    line.strip_suffix('\r').unwrap_or(line)
+                } else {
+                    line
+                }
+            })
+            .collect(),
         missing_final_newline,
     }
 }
@@ -287,6 +300,28 @@ mod tests {
         assert_eq!(created.text, "--- a\n+++ b\n@@ -0,0 +1,2 @@\n+one\n+two\n");
         let emptied = unified_diff("a", "b", "one\n", "");
         assert_eq!(emptied.text, "--- a\n+++ b\n@@ -1,1 +0,0 @@\n-one\n");
+    }
+
+    #[test]
+    fn crlf_and_lf_files_diff_by_their_real_changes() {
+        let base = "one\ntwo\nthree\n";
+        let crlf_edited = "one\r\nTWO\r\nthree\r\n";
+        let diff = unified_diff("base", "installed", base, crlf_edited);
+        assert_eq!((diff.added, diff.removed), (1, 1), "{}", diff.text);
+        assert_eq!(changed_line_count(base, crlf_edited), 2);
+        assert!(!diff.text.contains('\r'), "{:?}", diff.text);
+        // The other direction and an untouched CRLF copy.
+        assert_eq!(
+            unified_diff("a", "b", crlf_edited, base).removed,
+            1,
+            "CRLF as the from side"
+        );
+        assert_eq!(
+            unified_diff("a", "b", base, "one\r\ntwo\r\nthree\r\n").text,
+            ""
+        );
+        // A lone `\r` that no `\n` follows is content, not a line ending.
+        assert_eq!(changed_line_count("a\nb", "a\r\nb\r"), 2);
     }
 
     #[test]
