@@ -4,19 +4,25 @@ use std::path::{Path, PathBuf};
 use crate::agent_targets;
 use crate::settings;
 
-use super::process::run_cmd;
+use super::process::{run_cmd_with_timeout, run_git_bounded, BoundedCmdOptions};
 use super::workspace::workspace_root;
 
+use std::time::Duration;
+
+const GIT_STATUS_TIMEOUT: Duration = Duration::from_secs(15);
+const HOST_NAME_TIMEOUT: Duration = Duration::from_secs(5);
+
 fn host_name() -> String {
-    let output = std::process::Command::new("scutil")
-        .args(["--get", "ComputerName"])
-        .output();
-    if let Ok(out) = output {
-        if out.status.success() {
-            let name = String::from_utf8_lossy(&out.stdout).trim().to_string();
-            if !name.is_empty() {
-                return name;
-            }
+    let (ok, stdout, _, _) = run_cmd_with_timeout(
+        "scutil",
+        &["--get", "ComputerName"],
+        Path::new("/"),
+        HOST_NAME_TIMEOUT,
+    );
+    if ok {
+        let name = stdout.trim().to_string();
+        if !name.is_empty() {
+            return name;
         }
     }
     match std::env::var("HOSTNAME").or_else(|_| std::env::var("HOST")) {
@@ -237,8 +243,23 @@ pub struct StatusData {
     enabled_target_ids: Vec<String>,
 }
 
+/// Read-only git for the status panel: hardened config, no optional locks, bounded runtime.
+fn git_output(root: &Path, args: &[&str]) -> (bool, String) {
+    let result = run_git_bounded(
+        args,
+        root,
+        BoundedCmdOptions {
+            timeout: Some(GIT_STATUS_TIMEOUT),
+            stdout_cap: 256 * 1024,
+            stderr_cap: 64 * 1024,
+            ..BoundedCmdOptions::default()
+        },
+    );
+    (result.success, result.stdout)
+}
+
 fn git_available(root: &Path) -> bool {
-    let (ok, out, _, _) = run_cmd("git", &["rev-parse", "--is-inside-work-tree"], root);
+    let (ok, out) = git_output(root, &["rev-parse", "--is-inside-work-tree"]);
     ok && out.trim() == "true"
 }
 
@@ -247,19 +268,19 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
         return (false, "not git".into(), false, "not git".into());
     }
 
-    let (_, out, _, _) = run_cmd("git", &["branch", "--show-current"], root);
+    let (_, out) = git_output(root, &["branch", "--show-current"]);
     let branch = out.trim().to_string();
 
-    let (_, dirty_out, _, _) = run_cmd("git", &["status", "--short"], root);
+    let (_, dirty_out) = git_output(root, &["status", "--short"]);
     let dirty = !dirty_out.trim().is_empty();
 
-    let (_, commit_out, _, _) = run_cmd("git", &["log", "-1", "--pretty=%h %s"], root);
+    let (_, commit_out) = git_output(root, &["log", "-1", "--pretty=%h %s"]);
     let latest_commit = commit_out.trim().to_string();
 
     (true, branch, dirty, latest_commit)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_status() -> Result<StatusData, String> {
     let root = workspace_root()?;
     let home = agent_targets::home_dir()?;

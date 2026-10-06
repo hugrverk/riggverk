@@ -1,13 +1,15 @@
 use std::path::Path;
 use std::time::Duration;
 
-use super::process::{run_cmd_bounded, BoundedCmdOptions};
+use super::process::{run_git_bounded, BoundedCmdOptions};
 use super::repo_dashboard::RepoCommitEntry;
 
-const PAGE_SIZE: usize = 500;
-const PAGE_BYTES: usize = 8 * 1024 * 1024;
+/// Safety bound for one `git log`; the dashboard shows the complete history below it.
+const MAX_HISTORY_COMMITS: usize = 100_000;
+const MAX_HISTORY_BYTES: usize = 48 * 1024 * 1024;
 const STDERR_BYTES: usize = 512 * 1024;
-const PAGE_TIMEOUT: Duration = Duration::from_secs(60);
+const HISTORY_TIMEOUT: Duration = Duration::from_secs(120);
+const PROBE_TIMEOUT: Duration = Duration::from_secs(30);
 const FIELD_SEPARATOR: char = '\u{1f}';
 const RECORD_SEPARATOR: char = '\u{1e}';
 
@@ -44,71 +46,57 @@ fn parse_commit_records(raw: &str) -> Result<Vec<RepoCommitEntry>, String> {
     Ok(commits)
 }
 
-fn load_page(repo: &Path, head: &str, offset: usize) -> Result<Vec<RepoCommitEntry>, String> {
-    let offset_arg = offset.to_string();
-    let page_size_arg = PAGE_SIZE.to_string();
+/// One `git log` against a frozen `head`. Paging with `--skip` would rescan the history for
+/// every page (quadratic on large repositories).
+fn load_history(
+    repo: &Path,
+    head: &str,
+    max_commits: usize,
+    max_bytes: usize,
+) -> Result<(Vec<RepoCommitEntry>, bool), String> {
+    let max_count_arg = max_commits.saturating_add(1).to_string();
     let pretty_arg = "%H%x1f%h%x1f%an%x1f%ae%x1f%at%x1f%P%x1f%s%x1e";
     let pretty = format!("--pretty=format:{pretty_arg}");
-    let result = run_cmd_bounded(
-        "git",
-        &[
-            "log",
-            "--topo-order",
-            &pretty,
-            "--skip",
-            &offset_arg,
-            "-n",
-            &page_size_arg,
-            head,
-        ],
+    let result = run_git_bounded(
+        &["log", "--topo-order", &pretty, "-n", &max_count_arg, head],
         repo,
         BoundedCmdOptions {
-            timeout: Some(PAGE_TIMEOUT),
-            stdout_cap: PAGE_BYTES,
+            timeout: Some(HISTORY_TIMEOUT),
+            stdout_cap: max_bytes,
             stderr_cap: STDERR_BYTES,
             ..BoundedCmdOptions::default()
         },
     );
     if result.timed_out {
-        return Err("commit history page timed out".to_string());
+        return Err("commit history timed out".to_string());
     }
     if !result.success {
         return Err(format!(
-            "commit history page failed with exit code {:?}",
+            "commit history failed with exit code {:?}",
             result.exit_code
         ));
     }
+    let mut raw = result.stdout.as_str();
     if result.stdout_truncated {
-        return Err("commit history page exceeded its bounded output limit".to_string());
+        // Drop the partial trailing record.
+        raw = raw
+            .rfind(RECORD_SEPARATOR)
+            .map_or("", |end| &raw[..end + RECORD_SEPARATOR.len_utf8()]);
     }
-    parse_commit_records(&result.stdout)
-}
-
-fn collect_pages<F>(mut load: F) -> Result<Vec<RepoCommitEntry>, String>
-where
-    F: FnMut(usize) -> Result<Vec<RepoCommitEntry>, String>,
-{
-    let mut commits = Vec::new();
-    let mut offset = 0usize;
-    loop {
-        let page = load(offset)?;
-        let page_len = page.len();
-        commits.extend(page);
-        if page_len < PAGE_SIZE {
-            break;
-        }
-        offset = offset.saturating_add(page_len);
+    let mut commits = parse_commit_records(raw)?;
+    let count_truncated = commits.len() > max_commits;
+    if count_truncated {
+        commits.truncate(max_commits);
     }
-    Ok(commits)
+    Ok((commits, count_truncated || result.stdout_truncated))
 }
 
 fn resolve_head(repo: &Path) -> Result<String, String> {
-    let result = run_cmd_bounded(
-        "git",
+    let result = run_git_bounded(
         &["rev-parse", "--verify", "HEAD"],
         repo,
         BoundedCmdOptions {
-            timeout: Some(PAGE_TIMEOUT),
+            timeout: Some(PROBE_TIMEOUT),
             stdout_cap: 256,
             stderr_cap: STDERR_BYTES,
             ..BoundedCmdOptions::default()
@@ -125,12 +113,11 @@ fn resolve_head(repo: &Path) -> Result<String, String> {
 }
 
 fn is_shallow(repo: &Path) -> bool {
-    let result = run_cmd_bounded(
-        "git",
+    let result = run_git_bounded(
         &["rev-parse", "--is-shallow-repository"],
         repo,
         BoundedCmdOptions {
-            timeout: Some(PAGE_TIMEOUT),
+            timeout: Some(PROBE_TIMEOUT),
             stdout_cap: 64,
             stderr_cap: 256,
             ..BoundedCmdOptions::default()
@@ -141,16 +128,25 @@ fn is_shallow(repo: &Path) -> bool {
 
 pub(super) fn load_all_commits(repo: &Path) -> Result<FullCommitHistory, String> {
     let head = resolve_head(repo)?;
-    let commits = collect_pages(|offset| load_page(repo, &head, offset))?;
-    let incomplete = is_shallow(repo);
-    let warning = incomplete.then(|| {
-        "repository is a shallow clone; all locally available commits were loaded, but older history is not present locally"
-            .to_string()
-    });
+    let (commits, truncated) = load_history(repo, &head, MAX_HISTORY_COMMITS, MAX_HISTORY_BYTES)?;
+    let shallow = is_shallow(repo);
+    let mut warnings = Vec::new();
+    if shallow {
+        warnings.push(
+            "repository is a shallow clone; all locally available commits were loaded, but older history is not present locally"
+                .to_string(),
+        );
+    }
+    if truncated {
+        warnings.push(format!(
+            "commit history is limited to the {} most recent commits; older commits are not shown",
+            commits.len()
+        ));
+    }
     Ok(FullCommitHistory {
         commits,
-        incomplete,
-        warning,
+        incomplete: shallow || truncated,
+        warning: (!warnings.is_empty()).then(|| warnings.join(" ")),
     })
 }
 
@@ -158,40 +154,100 @@ pub(super) fn load_all_commits(repo: &Path) -> Result<FullCommitHistory, String>
 mod tests {
     use super::*;
 
-    fn commit(index: usize) -> RepoCommitEntry {
-        RepoCommitEntry {
-            sha: format!("sha-{index}"),
-            short_sha: format!("s-{index}"),
-            author_name: "Author".to_string(),
-            author_email: "author@example.test".to_string(),
-            authored_at: index as i64,
-            subject: format!("Commit {index}"),
-            is_merge: false,
+    /// Builds a repository with `count` empty commits (`c0` oldest) through `git fast-import`.
+    fn repo_with_commits(label: &str, count: usize) -> std::path::PathBuf {
+        use std::io::Write;
+        use std::process::{Command, Stdio};
+        use std::time::{SystemTime, UNIX_EPOCH};
+
+        let nonce = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .expect("clock")
+            .as_nanos();
+        let repo = std::env::temp_dir().join(format!("aw-history-{label}-{nonce}"));
+        std::fs::create_dir_all(&repo).expect("mkdir repo");
+        let init = Command::new("git")
+            .args(["init", "--quiet"])
+            .current_dir(&repo)
+            .status()
+            .expect("git init");
+        assert!(init.success());
+
+        let mut stream = String::new();
+        for index in 0..count {
+            let message = format!("c{index}");
+            stream.push_str(&format!(
+                "commit refs/heads/trunk\nmark :{mark}\ncommitter Test <test@example.test> {ts} +0000\ndata {len}\n{message}\n",
+                mark = index + 1,
+                ts = 1_700_000_000 + index,
+                len = message.len(),
+            ));
+            if index > 0 {
+                stream.push_str(&format!("from :{index}\n"));
+            }
+            stream.push('\n');
         }
+        let mut import = Command::new("git")
+            .args(["fast-import", "--quiet"])
+            .current_dir(&repo)
+            .stdin(Stdio::piped())
+            .spawn()
+            .expect("git fast-import");
+        import
+            .stdin
+            .take()
+            .expect("stdin")
+            .write_all(stream.as_bytes())
+            .expect("write stream");
+        assert!(import.wait().expect("wait").success());
+        let head = Command::new("git")
+            .args(["symbolic-ref", "HEAD", "refs/heads/trunk"])
+            .current_dir(&repo)
+            .status()
+            .expect("symbolic-ref");
+        assert!(head.success());
+        repo
     }
 
     #[test]
-    fn collects_all_commits_across_multiple_pages() {
-        let source: Vec<RepoCommitEntry> = (0..1_205).map(commit).collect();
-        let commits = collect_pages(|offset| {
-            Ok(source
-                .iter()
-                .skip(offset)
-                .take(PAGE_SIZE)
-                .cloned()
-                .collect())
-        })
-        .expect("collect pages");
+    fn loads_complete_history_beyond_the_old_page_size() {
+        let repo = repo_with_commits("full", 1_205);
+        let history = load_all_commits(&repo).expect("load history");
+        assert_eq!(history.commits.len(), 1_205);
+        assert_eq!(history.commits[0].subject, "c1204");
+        assert_eq!(history.commits[1_204].subject, "c0");
+        assert!(!history.incomplete);
+        assert!(history.warning.is_none());
+        let _ = std::fs::remove_dir_all(&repo);
+    }
 
-        assert_eq!(commits.len(), 1_205);
-        assert_eq!(
-            commits.first().map(|entry| entry.sha.as_str()),
-            Some("sha-0")
+    #[test]
+    fn history_stops_at_the_commit_cap_and_reports_it() {
+        let repo = repo_with_commits("cap", 10);
+        let head = resolve_head(&repo).expect("head");
+        let (commits, truncated) = load_history(&repo, &head, 3, MAX_HISTORY_BYTES).expect("log");
+        assert_eq!(commits.len(), 3);
+        assert_eq!(commits[0].subject, "c9");
+        assert!(truncated);
+        let (all, truncated) = load_history(&repo, &head, 10, MAX_HISTORY_BYTES).expect("log");
+        assert_eq!(all.len(), 10);
+        assert!(!truncated);
+        let _ = std::fs::remove_dir_all(&repo);
+    }
+
+    #[test]
+    fn history_byte_cap_drops_the_partial_trailing_record() {
+        let repo = repo_with_commits("bytes", 50);
+        let head = resolve_head(&repo).expect("head");
+        let (commits, truncated) = load_history(&repo, &head, 1_000, 400).expect("log");
+        assert!(truncated);
+        assert!(
+            !commits.is_empty() && commits.len() < 50,
+            "{}",
+            commits.len()
         );
-        assert_eq!(
-            commits.last().map(|entry| entry.sha.as_str()),
-            Some("sha-1204")
-        );
+        assert!(commits.iter().all(|commit| commit.sha.len() == 40));
+        let _ = std::fs::remove_dir_all(&repo);
     }
 
     #[test]

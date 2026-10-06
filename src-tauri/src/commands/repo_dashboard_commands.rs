@@ -2,11 +2,11 @@ use std::path::Path;
 
 use crate::commands::repo_dashboard::{
     discover_local_git_repos as scan_local_git_repos, inspect_repo, inspect_repo_prompt_context,
-    DiscoverLocalGitReposResult, RepoDashboardSnapshot, RepoPromptContext,
+    load_commits, DiscoverLocalGitReposResult, RepoDashboardSnapshot, RepoPromptContext,
 };
 use crate::commands::repo_dashboard_history::load_all_commits;
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_repo_dashboard_snapshot(
     repo_path: String,
     default_branch: Option<String>,
@@ -24,14 +24,14 @@ pub fn get_repo_dashboard_snapshot(
                 snapshot.commits = history.commits;
                 snapshot.latest_commit = snapshot.commits.first().cloned();
                 snapshot.commits_truncated = history.incomplete;
-                snapshot
-                    .warnings
-                    .retain(|warning| !warning.starts_with("local git commit log truncated at"));
                 if let Some(warning) = history.warning {
                     snapshot.warnings.push(warning);
                 }
             }
             Err(error) => {
+                let (commits, _) = load_commits(Path::new(&snapshot.repo_path));
+                snapshot.latest_commit = commits.first().cloned();
+                snapshot.commits = commits;
                 snapshot.commits_truncated = true;
                 snapshot.warnings.push(format!(
                     "complete local commit history could not be loaded; showing the bounded fallback: {error}"
@@ -43,7 +43,7 @@ pub fn get_repo_dashboard_snapshot(
     Ok(snapshot)
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn get_repo_prompt_context(
     repo_path: String,
     default_branch: Option<String>,
@@ -51,7 +51,7 @@ pub fn get_repo_prompt_context(
     inspect_repo_prompt_context(&repo_path, default_branch.as_deref())
 }
 
-#[tauri::command]
+#[tauri::command(async)]
 pub fn discover_local_git_repos(
     parent_path: String,
 ) -> Result<DiscoverLocalGitReposResult, String> {
