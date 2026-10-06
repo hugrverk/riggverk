@@ -140,6 +140,7 @@ mod tests {
 
     #[test]
     fn default_installed_workspace_path_resolves_under_home_config() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let path = default_installed_workspace_path().expect("default path");
         assert_eq!(path, home.join(".config/agent-workspace"));
@@ -151,6 +152,7 @@ mod tests {
 
     #[test]
     fn legacy_default_workspace_path_is_detected() {
+        let _guard = crate::test_env::guard::lock();
         let home = crate::test_env::process_home();
         let legacy = home.join("Agent Workspace").to_string_lossy().into_owned();
         assert!(is_legacy_default_workspace_path("~/Agent Workspace"));
