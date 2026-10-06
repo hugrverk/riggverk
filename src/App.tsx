@@ -574,11 +574,19 @@ function AppShell() {
     setError,
   });
 
-  /** `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. */
+  /**
+   * `:uninstall`: go to the workspace page, where the Uninstall card opens its preview dialog. The card is not
+   * on the page while the install review is open, so the request is dropped then instead of waiting to pop the
+   * dialog once the review closes.
+   */
   const requestUninstallPreview = useCallback(async () => {
+    if (install.isOpenOn("start")) {
+      notify("close the install review first (n or Esc), then run :uninstall");
+      return;
+    }
     await switchView("start");
     if (viewRef.current === "start") setUninstallPreviewRequested(true);
-  }, [switchView]);
+  }, [install, notify, switchView]);
 
   const configTargets = useMemo(
     () => agentTargets.filter(t =>

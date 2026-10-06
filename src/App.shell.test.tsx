@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
+import { op, planOf } from "./test/pageFixtures";
 import type { AppSettings, InstallAgent, InstallationState } from "./types";
 
 const invokeMock = vi.fn();
@@ -68,6 +69,8 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
         });
       case "list_agent_metadata":
         return Promise.resolve({ agents: [], warnings: [] });
+      case "preview_setup":
+        return Promise.resolve(planOf([op("workspace_bundle", "update")]));
       case "get_installation_status": {
         const surface = args?.surfaces?.[0] ?? "";
         const harness = surface.startsWith("open_code") ? "opencode" : surface.split("_")[0]!;
@@ -202,6 +205,29 @@ describe("App shell", () => {
     const claude = await within(nav()).findByRole("button", { name: "Claude, current" });
     expect(claude).toBeInTheDocument();
     expect(claudeRequests()).toHaveLength(1);
+  });
+
+  it("drops :uninstall while the install review is open instead of popping the dialog after it closes", async () => {
+    const backend = installBackend();
+    render(<App />);
+    await ready();
+    const runCommand = (line: string) => {
+      fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
+      const input = screen.getByRole("combobox", { name: "Command" });
+      fireEvent.change(input, { target: { value: line } });
+      fireEvent.keyDown(input, { key: "Enter" });
+    };
+
+    runCommand("update workspace");
+    await screen.findByRole("region", { name: "Workspace install review" });
+    runCommand("uninstall");
+    expect(screen.getByLabelText("Status bar").textContent).toContain("close the install review first");
+
+    fireEvent.keyDown(document.body, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("region", { name: "Workspace install review" })).toBeNull());
+    await screen.findByRole("region", { name: "Uninstall" });
+    await act(async () => {});
+    expect(backend.commandLog).not.toContain("preview_uninstall");
   });
 
   it("lets ? open the help overlay and Escape close it", async () => {
