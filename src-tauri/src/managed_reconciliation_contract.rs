@@ -1579,4 +1579,110 @@ mod tests {
 
         let _ = fs::remove_dir_all(&base);
     }
+
+    /// File of the app repository at a commit (rules history fixtures).
+    fn rules_at_commit(commit: &str, rel: &str) -> String {
+        let output = Command::new("git")
+            .args([
+                "show",
+                &format!("{commit}:resources/default-workspace/{rel}"),
+            ])
+            .current_dir(PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(".."))
+            .output()
+            .expect("run git show");
+        assert!(
+            output.status.success(),
+            "{commit}:{rel}: {}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        String::from_utf8(output.stdout).expect("utf-8 rules")
+    }
+
+    /// The state the owner's `~/.claude/CLAUDE.md` is in: the managed record
+    /// holds an old shipped template, and the file is a newer shipped base with
+    /// one line of "Codex delegation" edited by hand.
+    #[test]
+    fn owner_refined_claude_rules_are_a_legacy_conflict_and_stay_untouched() {
+        let _guard = guard::lock();
+        let _restore = EnvRestore::capture();
+        let base = temp_base("owner-rules");
+        let _ = fs::remove_dir_all(&base);
+        let home = base.join("home");
+        let ws = base.join("workspace");
+        fs::create_dir_all(&home).expect("home");
+        fs::create_dir_all(&ws).expect("workspace");
+        set_test_user_dirs(&home);
+        let ws = ws.canonicalize().expect("workspace");
+        unsafe {
+            std::env::set_var("AGENT_WORKSPACE_PATH", ws.to_string_lossy().as_ref());
+            std::env::set_var(
+                "AGENT_WORKSPACE_BACKUP_DIR",
+                base.join("backups").to_string_lossy().as_ref(),
+            );
+        }
+        let resolved_home = crate::platform_paths::resolve_user_home(
+            &crate::platform_paths::PlatformEnv::from_process_env(),
+            crate::platform_paths::Platform::current(),
+        )
+        .expect("home");
+
+        let rel = "templates/sync/claude-rules.md";
+        let recorded_template = rules_at_commit("0f2eac13", rel);
+        let installed_base = rules_at_commit("0e042154", rel);
+        let refined = installed_base.replace("`gpt-5.6-sol` at `high`", "`gpt-6.1-sol` at `xhigh`");
+        assert_ne!(refined, installed_base, "fixture must hold the edited line");
+        let installed_path = resolved_home.join(".claude/CLAUDE.md");
+        fs::create_dir_all(installed_path.parent().unwrap()).expect("claude dir");
+        fs::write(&installed_path, &refined).expect("refined rules");
+        crate::managed_state::write_managed_state_atomic(
+            &ws,
+            &crate::managed_state::ManagedState {
+                schema_version: MANAGED_STATE_SCHEMA_VERSION,
+                bundled_version: crate::stable_digest::bytes(b"bundle"),
+                artifacts: vec![crate::managed_state::ManagedArtifactRecord {
+                    identity: artifact_identity(&ArtifactId::ClaudeRules),
+                    hash: crate::stable_digest::bytes(recorded_template.as_bytes()),
+                    surface: None,
+                }],
+            },
+        )
+        .expect("managed state");
+
+        let planned = crate::setup_transaction::plan_artifacts_for_surfaces(
+            &[SetupSurfaceId::ClaudeRules],
+            &ws,
+            &resolved_home,
+        )
+        .expect("plan");
+        assert_planned_kind(&planned, ArtifactId::ClaudeRules, OperationKind::Conflict);
+        assert_eq!(
+            planned[0].rules.expect("rules assessment").plan,
+            crate::rules_block::RulesPlan::Conflict(
+                crate::rules_block::RulesConflict::LegacyDiverged
+            )
+        );
+        let status = crate::installation_status::status_for_surfaces(
+            &[SetupSurfaceId::ClaudeRules],
+            &ws,
+            &resolved_home,
+        )
+        .expect("status");
+        assert_eq!(
+            status.state,
+            crate::installation_status::InstallationState::Conflict
+        );
+        assert_eq!(
+            status.surfaces[0]
+                .rules
+                .as_ref()
+                .and_then(|rules| rules.conflict_reason),
+            Some(crate::rules_block::RulesConflict::LegacyDiverged)
+        );
+
+        let plan = preview_setup(vec!["claude_rules".into()]).expect("preview");
+        assert!(!plan.has_pending_changes);
+        assert!(apply_setup(vec!["claude_rules".into()], false, None, None).is_err());
+        assert_eq!(fs::read_to_string(&installed_path).unwrap(), refined);
+        let _ = fs::remove_dir_all(&base);
+    }
 }

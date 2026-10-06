@@ -293,6 +293,15 @@ impl ArtifactId {
         }
     }
 
+    /// Rules files hold the managed base in a marked block; the rest of the
+    /// file belongs to the user (see `rules_block`).
+    pub fn is_rules_block(&self) -> bool {
+        matches!(
+            self,
+            ArtifactId::OpenCodeRules | ArtifactId::CodexRules | ArtifactId::ClaudeRules
+        )
+    }
+
     /// Returns the parent SetupSurfaceId for this artifact.
     pub fn surface(&self) -> SetupSurfaceId {
         match self {

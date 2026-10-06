@@ -614,6 +614,40 @@ fn remove_empty_migration_parents(path: &Path, workspace_root: &Path) -> Result<
     Ok(())
 }
 
+/// Write the managed base block into a rules file. The user's text before and
+/// after the block is kept byte for byte; a pristine pre-block file is
+/// replaced by a file holding only the block.
+fn apply_rules_artifact(
+    artifact: &crate::artifact_registry::ArtifactId,
+    source: &Path,
+    dest: &Path,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    setup_transaction::ensure_rules_apply_allowed(artifact, workspace_root, home)?;
+    let source_text = fs::read_to_string(source)
+        .map_err(|e| format!("read rules source {}: {e}", source.display()))?;
+    let rendered = if dest.exists() {
+        let installed =
+            fs::read(dest).map_err(|e| format!("read rules file {}: {e}", dest.display()))?;
+        match crate::rules_block::parse_bytes(&installed) {
+            Ok(Some(file)) => file.render_with_body(&source_text),
+            Ok(None) => crate::rules_block::render_new(&source_text),
+            Err(reason) => {
+                return Err(format!(
+                    "refusing to change rules file {}: {}",
+                    dest.display(),
+                    reason.message()
+                ));
+            }
+        }
+    } else {
+        crate::rules_block::render_new(&source_text)
+    };
+    crate::safe_filesystem::write_regular_file_atomic(dest, rendered.as_bytes(), home)
+        .map_err(|e| format!("write rules file {}: {e}", dest.display()))
+}
+
 fn apply_single_artifact(
     artifact: &crate::artifact_registry::ArtifactId,
     workspace_root: &Path,
@@ -630,6 +664,10 @@ fn apply_single_artifact(
         crate::safe_filesystem::copy_dir_no_symlinks(&source, &dest, home)
             .map_err(|e| format!("apply dir: {e}"))?;
         return Ok(());
+    }
+
+    if artifact.is_rules_block() {
+        return apply_rules_artifact(artifact, &source, &dest, workspace_root, home);
     }
 
     if artifact == &crate::artifact_registry::ArtifactId::CursorMcp {
@@ -3597,7 +3635,10 @@ mod tests {
             .iter()
             .find(|r| r.identity == identity)
             .expect("codex record");
-        assert_eq!(record.hash, crate::stable_digest::bytes(&installed));
+        assert_eq!(
+            record.hash,
+            crate::rules_block::installed_managed_digest(&installed)
+        );
     }
 
     #[cfg(unix)]

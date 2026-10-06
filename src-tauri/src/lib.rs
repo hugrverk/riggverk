@@ -12,6 +12,7 @@ mod managed_state;
 mod path_safety;
 mod path_utils;
 mod platform_paths;
+mod rules_block;
 mod safe_filesystem;
 mod settings;
 mod setup_fingerprint;
@@ -28,6 +29,8 @@ mod stable_digest;
 mod managed_reconciliation_contract;
 #[cfg(test)]
 mod opencode_model_override_contract;
+#[cfg(test)]
+mod rules_block_contract;
 #[cfg(test)]
 mod smoke_runtime;
 #[cfg(test)]

@@ -129,6 +129,12 @@ pub fn artifact_source_digest(
     workspace_root: &Path,
     home: &Path,
 ) -> Result<String, String> {
+    if artifact.is_rules_block() {
+        let source = require_source_path(artifact, workspace_root)?;
+        crate::path_safety::reject_symlink(&source, "rules source")?;
+        let bytes = fs::read(&source).map_err(|e| format!("read {}: {e}", source.display()))?;
+        return crate::rules_block::source_digest(&bytes);
+    }
     match artifact_kind(artifact) {
         ArtifactKind::RulesFile | ArtifactKind::AgentFile
             if matches!(artifact, ArtifactId::WorkspaceFile(_)) =>
@@ -187,6 +193,16 @@ pub fn artifact_installed_managed_digest_from_path(
     artifact: &ArtifactId,
     path: &Path,
 ) -> Result<String, String> {
+    if artifact.is_rules_block() {
+        // The block body when the file has one; a pre-block file or an
+        // unparsable one digests as a whole so the plan still sees changes.
+        if !path.is_file() {
+            return Ok(ABSENT_DIGEST.into());
+        }
+        crate::path_safety::reject_symlink(path, "rules file")?;
+        let bytes = fs::read(path).map_err(|e| format!("read {}: {e}", path.display()))?;
+        return Ok(crate::rules_block::installed_managed_digest(&bytes));
+    }
     match artifact_kind(artifact) {
         ArtifactKind::RulesFile | ArtifactKind::AgentFile | ArtifactKind::TuiConfig => {
             if path.is_file() {

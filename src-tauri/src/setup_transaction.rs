@@ -195,6 +195,8 @@ pub struct PlannedArtifact {
     pub kind: OperationKind,
     pub previous_state: PreviousState,
     pub rollback_action: RollbackAction,
+    /// Block classification for rules artifacts; `None` for every other artifact.
+    pub rules: Option<crate::rules_block::RulesAssessment>,
 }
 
 const MAX_PREVIEW_TOKENS: usize = 64;
@@ -634,6 +636,15 @@ pub fn detect_artifact_state(
         return (OperationKind::Unavailable, PreviousState::Unavailable);
     }
 
+    if artifact.is_rules_block() {
+        // Without a managed record only the exact outcomes are known: absent,
+        // or a block that already carries the current base.
+        return match assess_rules(artifact, &dest, &source, None) {
+            Some(assessment) => rules_outcome(assessment.plan),
+            None => (OperationKind::Unavailable, PreviousState::Unavailable),
+        };
+    }
+
     match artifact_kind(artifact) {
         ArtifactKind::ConfigFile => detect_config_artifact(artifact, &dest, &source, home),
         ArtifactKind::TuiConfig | ArtifactKind::RulesFile | ArtifactKind::AgentFile => {
@@ -687,6 +698,95 @@ pub fn detect_artifact_state(
                 _ => (OperationKind::Unavailable, PreviousState::Unavailable),
             }
         }
+    }
+}
+
+/// Classify a rules artifact's installed file against its bundled source.
+/// `None` means the source cannot be read.
+fn assess_rules(
+    artifact: &ArtifactId,
+    dest: &Path,
+    source: &Path,
+    managed_hash: Option<&str>,
+) -> Option<crate::rules_block::RulesAssessment> {
+    use crate::rules_block::{MalformedReason, RulesAssessment, RulesConflict, RulesLayout};
+    let source_text = fs::read_to_string(source).ok()?;
+    let installed = match fs::symlink_metadata(dest) {
+        Ok(_) => match fs::read(dest) {
+            Ok(bytes) => Some(bytes),
+            // Present but unreadable (a directory, no permission): never replaced.
+            Err(_) => {
+                return Some(RulesAssessment {
+                    plan: crate::rules_block::RulesPlan::Conflict(RulesConflict::MalformedMarkers),
+                    layout: RulesLayout::Malformed,
+                    malformed: Some(MalformedReason::NotUtf8),
+                    refinement_lines: 0,
+                });
+            }
+        },
+        Err(_) => None,
+    };
+    Some(crate::rules_block::assess(
+        installed.as_deref(),
+        &source_text,
+        managed_hash,
+        &|digest| crate::managed_bootstrap::approved_rules_base_digest(artifact, digest),
+    ))
+}
+
+/// Block classification for the plan, or `None` for non-rules artifacts and
+/// rules artifacts whose source or destination cannot be used.
+fn plan_rules_artifact(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+    managed_hash: Option<&str>,
+) -> Option<crate::rules_block::RulesAssessment> {
+    if !artifact.is_rules_block() {
+        return None;
+    }
+    let dest = artifact.resolve_dest(home, workspace_root).ok()?;
+    let bundled_root = crate::setup_roots::bundled_root_for(workspace_root).ok()?;
+    let source = artifact.resolve_source(&bundled_root)?;
+    if reject_symlink(&dest, "destination").is_err() || reject_symlink(&source, "source").is_err() {
+        return None;
+    }
+    assess_rules(artifact, &dest, &source, managed_hash)
+}
+
+/// Re-checks, at apply time, that a rules file may still be written: the plan
+/// came from an earlier read, and a diverged or malformed file must never be
+/// replaced.
+pub fn ensure_rules_apply_allowed(
+    artifact: &ArtifactId,
+    workspace_root: &Path,
+    home: &Path,
+) -> Result<(), String> {
+    let managed = crate::managed_state::read_managed_state(workspace_root);
+    let records = records_with_bootstrap(workspace_root, home, managed.as_ref());
+    let identity = crate::managed_state::artifact_identity(artifact);
+    let managed_hash = managed_hash_for(&identity, &records);
+    let assessment = plan_rules_artifact(artifact, workspace_root, home, managed_hash.as_deref())
+        .ok_or_else(|| "rules source or destination is unavailable".to_string())?;
+    match assessment.plan {
+        crate::rules_block::RulesPlan::Conflict(conflict) => Err(format!(
+            "refusing to change rules file: {}",
+            conflict.message()
+        )),
+        _ => Ok(()),
+    }
+}
+
+fn rules_outcome(plan: crate::rules_block::RulesPlan) -> (OperationKind, PreviousState) {
+    use crate::rules_block::RulesPlan;
+    match plan {
+        RulesPlan::Create => (OperationKind::Create, PreviousState::Absent),
+        RulesPlan::NoChange => (OperationKind::NoChange, PreviousState::MergeableConfigFile),
+        // Only the block body changes; the user's text around it is merged.
+        RulesPlan::UpdateBlock => (OperationKind::Update, PreviousState::MergeableConfigFile),
+        // A pristine pre-block file is replaced whole after a full backup.
+        RulesPlan::WrapLegacy => (OperationKind::Update, PreviousState::ManagedFile),
+        RulesPlan::Conflict(_) => (OperationKind::Conflict, PreviousState::Conflict),
     }
 }
 
@@ -876,6 +976,12 @@ pub fn plan_artifacts_for_uninstall(
             }
             continue;
         }
+        if rules_block_has_user_content(&artifact, workspace_root, home) {
+            // The file holds the user's own text beside the base block;
+            // deleting it would destroy that content.
+            merged.push(artifact);
+            continue;
+        }
         let installed = crate::setup_fingerprint::artifact_installed_managed_digest(
             &artifact,
             workspace_root,
@@ -905,6 +1011,7 @@ pub fn plan_artifacts_for_uninstall(
                     OperationKind::Remove,
                     PreviousState::ManagedFile,
                 ),
+                rules: None,
             });
         } else {
             preserved.push(artifact);
@@ -938,6 +1045,7 @@ pub fn plan_artifacts_for_uninstall(
                     kind,
                     previous_state,
                     rollback_action,
+                    rules: None,
                 });
             }
             OperationKind::Conflict => preserved.push(artifact),
@@ -950,6 +1058,23 @@ pub fn plan_artifacts_for_uninstall(
         preserved,
         merged,
     })
+}
+
+/// Whether a rules file carries user text around its managed block.
+fn rules_block_has_user_content(artifact: &ArtifactId, workspace_root: &Path, home: &Path) -> bool {
+    if !artifact.is_rules_block() {
+        return false;
+    }
+    let Ok(dest) = artifact.resolve_dest(home, workspace_root) else {
+        return false;
+    };
+    let Ok(bytes) = fs::read(&dest) else {
+        return false;
+    };
+    matches!(
+        crate::rules_block::parse_bytes(&bytes),
+        Ok(Some(file)) if !file.user_region_is_blank()
+    )
 }
 
 /// Managed records plus historical-ownership records for pre-manifest copies.
@@ -1025,25 +1150,31 @@ pub fn plan_artifacts_for_surfaces(
         let surface = artifact.surface();
         let identity = crate::managed_state::artifact_identity(&artifact);
         let managed_hash = managed_hash_for(&identity, &records);
-        let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
-        let (kind, previous_state) = refine_with_managed_hash(
-            kind,
-            previous_state,
-            &artifact,
-            workspace_root,
-            home,
-            managed_hash.as_deref(),
-        );
-        // Updates without proven ownership are preserved as conflicts, except
-        // mergeable configs: their merge rewrites only managed keys and
-        // preserves user-owned content by construction.
-        let (kind, previous_state) = if managed_hash.is_none()
-            && matches!(kind, OperationKind::Update)
-            && !matches!(previous_state, PreviousState::MergeableConfigFile)
-        {
-            (OperationKind::Conflict, PreviousState::Conflict)
-        } else {
-            (kind, previous_state)
+        let rules = plan_rules_artifact(&artifact, workspace_root, home, managed_hash.as_deref());
+        let (kind, previous_state) = match &rules {
+            Some(assessment) => rules_outcome(assessment.plan),
+            None => {
+                let (kind, previous_state) = detect_artifact_state(&artifact, workspace_root, home);
+                let (kind, previous_state) = refine_with_managed_hash(
+                    kind,
+                    previous_state,
+                    &artifact,
+                    workspace_root,
+                    home,
+                    managed_hash.as_deref(),
+                );
+                // Updates without proven ownership are preserved as conflicts,
+                // except mergeable configs: their merge rewrites only managed
+                // keys and preserves user-owned content by construction.
+                if managed_hash.is_none()
+                    && matches!(kind, OperationKind::Update)
+                    && !matches!(previous_state, PreviousState::MergeableConfigFile)
+                {
+                    (OperationKind::Conflict, PreviousState::Conflict)
+                } else {
+                    (kind, previous_state)
+                }
+            }
         };
         let rollback_action = rollback_action_for(kind, previous_state);
         planned.push(PlannedArtifact {
@@ -1052,6 +1183,7 @@ pub fn plan_artifacts_for_surfaces(
             kind,
             previous_state,
             rollback_action,
+            rules,
         });
     }
 
@@ -1088,6 +1220,7 @@ pub fn plan_artifacts_for_surfaces(
             kind,
             previous_state,
             rollback_action,
+            rules: None,
         });
     }
     Ok(planned)
@@ -1995,6 +2128,32 @@ fn restore_artifact_from_backup_with_mode(
                             allowlist_root,
                         )
                         .map_err(|e| format!("write cursor mcp: {e}"))?;
+                    } else if op.artifact.is_rules_block() {
+                        // Put the previous base back inside the block; the
+                        // user's text around it is whatever it is now.
+                        let backup_bytes = fs::read(&backup_path)
+                            .map_err(|e| format!("read backup rules file: {e}"))?;
+                        let backup_file = crate::rules_block::parse_bytes(&backup_bytes)
+                            .map_err(|reason| {
+                                format!("backup rules file is unusable: {}", reason.message())
+                            })?
+                            .ok_or_else(|| "backup rules file has no managed block".to_string())?;
+                        let installed_bytes = fs::read(&dest)
+                            .map_err(|e| format!("read installed rules file: {e}"))?;
+                        let installed_file = crate::rules_block::parse_bytes(&installed_bytes)
+                            .map_err(|reason| {
+                                format!("installed rules file is unusable: {}", reason.message())
+                            })?
+                            .ok_or_else(|| {
+                                "installed rules file has no managed block".to_string()
+                            })?;
+                        let rendered = installed_file.render_with_body(backup_file.body);
+                        crate::safe_filesystem::write_regular_file_atomic(
+                            &dest,
+                            rendered.as_bytes(),
+                            allowlist_root,
+                        )
+                        .map_err(|e| format!("write rules file: {e}"))?;
                     } else {
                         return Err("unsupported managed config artifact".into());
                     }
@@ -2371,12 +2530,25 @@ mod tests {
         let home = temp("val-home");
         let ws = temp("val-ws");
         fs::create_dir_all(home.join(".codex")).unwrap();
-        fs::create_dir_all(ws.join("templates/sync")).unwrap();
-        fs::write(ws.join("templates/sync/codex-rules.md"), "a").unwrap();
-        fs::write(home.join(".codex/AGENTS.md"), "b").unwrap();
         let artifact = ArtifactId::CodexRules;
+        let bundled = crate::setup_roots::bundled_root().unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        let installed = home.join(".codex/AGENTS.md");
+        // An unwrapped file that equals the source still shows a pending update:
+        // apply was supposed to put the base in a managed block.
+        fs::write(&installed, &source).unwrap();
         let err = validate_artifact_after_apply(&artifact, &ws, &home).unwrap_err();
-        assert!(err.contains("Update"));
+        assert!(err.contains("Update"), "{err}");
+        // A block that differs from the source is no valid outcome either.
+        fs::write(&installed, crate::rules_block::render_new("# other base\n")).unwrap();
+        assert!(validate_artifact_after_apply(&artifact, &ws, &home).is_err());
+        // The source in a block, with user text around it, is.
+        fs::write(
+            &installed,
+            format!("mine\n{}tail\n", crate::rules_block::render_new(&source)),
+        )
+        .unwrap();
+        assert!(validate_artifact_after_apply(&artifact, &ws, &home).is_ok());
         let _ = fs::remove_dir_all(&home);
         let _ = fs::remove_dir_all(&ws);
     }
@@ -2497,8 +2669,12 @@ mod tests {
         let identity = crate::managed_state::artifact_identity(&artifact);
 
         // Installed == current source, record stale: planned as no change.
-        let source = fs::read(bundled.join("templates/sync/codex-rules.md")).unwrap();
-        fs::write(home.join(".codex/AGENTS.md"), &source).unwrap();
+        let source = fs::read_to_string(bundled.join("templates/sync/codex-rules.md")).unwrap();
+        fs::write(
+            home.join(".codex/AGENTS.md"),
+            crate::rules_block::render_new(&source),
+        )
+        .unwrap();
         let stale = crate::managed_state::ManagedState {
             schema_version: crate::managed_state::MANAGED_STATE_SCHEMA_VERSION,
             bundled_version: crate::stable_digest::bytes(b"bundle"),
@@ -2524,19 +2700,26 @@ mod tests {
 
         // Once the source moves on, the installed file differs from it. Only the
         // refreshed record still proves ownership, so only it yields an update.
+        let installed = fs::read(home.join(".codex/AGENTS.md")).unwrap();
         let decide = |state: &crate::managed_state::ManagedState| {
-            refine_with_managed_hash(
-                OperationKind::Update,
-                PreviousState::ManagedFile,
-                &artifact,
-                &ws,
-                &home,
+            crate::rules_block::assess(
+                Some(&installed),
+                "# a newer base\n",
                 managed_hash_for(&identity, &state.artifacts).as_deref(),
+                &|_| false,
             )
-            .0
+            .plan
         };
-        assert_eq!(decide(&stale), OperationKind::Conflict);
-        assert_eq!(decide(&refreshed), OperationKind::Update);
+        assert_eq!(
+            decide(&stale),
+            crate::rules_block::RulesPlan::Conflict(
+                crate::rules_block::RulesConflict::BaseBlockEdited
+            )
+        );
+        assert_eq!(
+            decide(&refreshed),
+            crate::rules_block::RulesPlan::UpdateBlock
+        );
         let _ = fs::remove_dir_all(base);
     }
 }

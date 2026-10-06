@@ -174,6 +174,13 @@ fn approved_historical_digest(artifact: &ArtifactId, action: &str, digest: &str)
     })
 }
 
+/// Whether `digest` belongs to a rules base the app shipped. Pre-block
+/// installs recorded whole-file digests, which equal the digest of the base
+/// body they carried.
+pub(crate) fn approved_rules_base_digest(artifact: &ArtifactId, digest: &str) -> bool {
+    approved_historical_digest(artifact, "update", digest)
+}
+
 pub fn bootstrap_metadata_dir_entries(workspace_root: &Path) -> Vec<String> {
     REMOVED_SKILL_NAMES
         .iter()

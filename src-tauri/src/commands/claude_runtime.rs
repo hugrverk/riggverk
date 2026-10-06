@@ -88,18 +88,21 @@ fn expected_agent_count(workspace_root: &Path) -> usize {
         .unwrap_or(0)
 }
 
-/// Check whether the workspace's Claude rules template would produce
-/// the same content as the installed target.
+/// Check whether the installed Claude rules carry the workspace's base: the
+/// managed block body matches the template (the user's text around it is not
+/// compared), or a pre-block file equals the template exactly.
 fn check_rules_synced(home: &Path, workspace_root: &Path) -> bool {
     let target = home.join(".claude/CLAUDE.md");
-    if !target.is_file() {
-        return false;
-    }
     let source = workspace_root.join("templates/sync/claude-rules.md");
-    if !source.is_file() {
+    if !target.is_file() || !source.is_file() {
         return false;
     }
-    file_eq(&target, &source)
+    match (std::fs::read(&target), std::fs::read(&source)) {
+        (Ok(installed), Ok(source)) => {
+            crate::rules_block::installed_matches_source(&installed, &source)
+        }
+        _ => false,
+    }
 }
 
 /// Check whether the source Claude agents match the installed ones.
@@ -392,6 +395,25 @@ mod tests {
 
         let health = compute_health(&ws, &home);
         assert!(!health.rules_synced, "rules should be reported as diverged");
+    }
+
+    #[test]
+    fn health_compares_only_the_managed_block_body() {
+        let home = temp_dir("claude-rules-block");
+        let ws = temp_dir("claude-rules-block-ws");
+        let source = "# Base\n- one\n";
+        write_file(&ws.join("templates/sync/claude-rules.md"), source);
+        let with_text = format!(
+            "my notes\n\n{}\n## mine\n- extra\n",
+            crate::rules_block::render_new(source)
+        );
+        write_file(&home.join(".claude/CLAUDE.md"), &with_text);
+        assert!(compute_health(&ws, &home).rules_synced);
+
+        // An older base inside the block is out of sync, whatever surrounds it.
+        let older = with_text.replace("- one", "- uno");
+        write_file(&home.join(".claude/CLAUDE.md"), &older);
+        assert!(!compute_health(&ws, &home).rules_synced);
     }
 
     #[test]

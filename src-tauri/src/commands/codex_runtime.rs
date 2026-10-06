@@ -327,7 +327,13 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
     } else if !rules_installed_path.is_file() {
         has_warn = true;
         "missing".into()
-    } else if file_eq(&rules_source_path, &rules_installed_path) {
+    } else if std::fs::read(&rules_source_path)
+        .ok()
+        .zip(std::fs::read(&rules_installed_path).ok())
+        .is_some_and(|(source, installed)| {
+            crate::rules_block::installed_matches_source(&installed, &source)
+        })
+    {
         "synced".into()
     } else {
         has_warn = true;
@@ -344,6 +350,26 @@ pub fn compute_health(workspace_root: &Path, home_dir: &Path) -> CodexRuntimeHea
         .into(),
         detail: rules_installed_path_str.clone(),
     });
+
+    // Codex reads AGENTS.override.md instead of AGENTS.md when it has content,
+    // which silently drops the Agent Workspace base.
+    let override_path = codex_dir.join("AGENTS.override.md");
+    if std::fs::read(&override_path)
+        .is_ok_and(|content| content.iter().any(|byte| !byte.is_ascii_whitespace()))
+    {
+        has_warn = true;
+        let detail = format!(
+            "{} exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied",
+            override_path.display()
+        );
+        checks.push(CodexRuntimeCheck {
+            id: "rules_override".into(),
+            label: "AGENTS.override.md replaces AGENTS.md".into(),
+            status: "warn".into(),
+            detail: detail.clone(),
+        });
+        warnings.push(detail);
+    }
 
     let mut skills_synced_count = 0usize;
     let mut skills_missing_count = 0usize;
@@ -713,6 +739,77 @@ apps._default.default_tools_approval_mode = "prompt"
     fn add_rules(ws: &Path, home: &Path) {
         write_file(&ws.join("templates/sync/codex-rules.md"), "# rules");
         write_file(&home.join(".codex/AGENTS.md"), "# rules");
+    }
+
+    #[test]
+    fn rules_in_a_managed_block_with_user_text_are_synced() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+        let ws = temp_root("rules-block");
+        let home = temp_root("rules-block-home");
+        write_file(&ws.join("templates/sync/codex-rules.md"), "# rules\n");
+        write_file(
+            &home.join(".codex/AGENTS.md"),
+            &format!(
+                "mine\n{}after\n",
+                crate::rules_block::render_new("# rules\n")
+            ),
+        );
+        let health = compute_health(&ws, &home);
+        assert_eq!(health.rules_status, "synced");
+
+        write_file(
+            &home.join(".codex/AGENTS.md"),
+            &crate::rules_block::render_new("# older rules\n"),
+        );
+        assert_eq!(compute_health(&ws, &home).rules_status, "diverged");
+        cleanup(&ws);
+        cleanup(&home);
+    }
+
+    #[test]
+    fn a_non_empty_agents_override_is_reported_because_it_replaces_agents_md() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        unsafe { std::env::remove_var("CODEX_HOME") };
+        let ws = temp_root("override");
+        let home = temp_root("override-home");
+        add_rules(&ws, &home);
+
+        let clean = compute_health(&ws, &home);
+        assert!(clean
+            .checks
+            .iter()
+            .all(|check| check.id != "rules_override"));
+
+        write_file(&home.join(".codex/AGENTS.override.md"), "\n  \n");
+        let blank = compute_health(&ws, &home);
+        assert!(blank
+            .checks
+            .iter()
+            .all(|check| check.id != "rules_override"));
+
+        write_file(&home.join(".codex/AGENTS.override.md"), "# my override\n");
+        let health = compute_health(&ws, &home);
+        let check = health
+            .checks
+            .iter()
+            .find(|check| check.id == "rules_override")
+            .expect("override check");
+        assert_eq!(check.status, "warn");
+        assert!(
+            check.detail.contains("replaces AGENTS.md"),
+            "{}",
+            check.detail
+        );
+        assert!(health
+            .warnings
+            .iter()
+            .any(|warning| warning.contains("AGENTS.override.md")));
+        assert_ne!(health.status, "synced");
+        cleanup(&ws);
+        cleanup(&home);
     }
 
     fn add_skill(ws: &Path, home: &Path, name: &str) {
