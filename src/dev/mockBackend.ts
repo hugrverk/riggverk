@@ -4,7 +4,10 @@
  * Loaded by main.tsx only when `import.meta.env.DEV && !isTauri()` and the URL has a
  * `mock` query parameter, so production bundles never contain it. Scenarios:
  *   default   everything installed, OpenCode + Claude have updates
- *   conflict  Claude plan with + ~ − ! rows, Cursor blocked by a conflict
+ *   conflict  Claude plan with + ~ − ! rows, Cursor blocked by a conflict; rules files in every state:
+ *             Claude edited block (`&rules=legacy|malformed|managed|update|current|absent` picks another state),
+ *             Codex base update keeping 14 refinement lines plus the AGENTS.override.md warning,
+ *             OpenCode plain file that differs from every shipped base
  *   fresh     nothing installed, no backups, no transactions
  *   error     status/diagnostics calls fail (exercises the error line)
  *   empty     valid workspace with no docs, skills or agents
@@ -40,6 +43,12 @@ import type {
   PlannedOperation,
   RepoDashboardSnapshot,
   RepoPromptContext,
+  RulesConversionPreview,
+  RulesDiffMode,
+  RulesDiffView,
+  RulesMalformedReason,
+  RulesStatus,
+  RulesSurfaceId,
   SetupPlan,
   SetupResult,
   SetupSurfaceId,
@@ -176,6 +185,262 @@ const surfaceStates = initialSurfaceStates();
 let lastTransactionId: string | null = scenario === "fresh" ? null : "2026-09-28T19-02-40Z-c21a";
 let transactionSeq = 0;
 
+/* ---- rules files (managed base block) ---- */
+
+const RULES_SURFACES: RulesSurfaceId[] = ["claude_rules", "codex_rules", "open_code_rules"];
+
+function isRulesSurface(surface: SetupSurfaceId): surface is RulesSurfaceId {
+  return (RULES_SURFACES as SetupSurfaceId[]).includes(surface);
+}
+
+const MALFORMED_TEXT: Record<RulesMalformedReason, string> = {
+  not_utf8: "file is not valid UTF-8",
+  too_large: "file is larger than 4 MB",
+  duplicate_begin: "more than one BEGIN AGENT-WORKSPACE BASE marker",
+  duplicate_end: "more than one END AGENT-WORKSPACE BASE marker",
+  missing_end: "BEGIN marker has no matching END marker",
+  missing_begin: "END marker has no matching BEGIN marker",
+  end_before_begin: "END marker appears before the BEGIN marker",
+};
+
+interface RulesVariant {
+  state: InstallationState;
+  file: RulesStatus;
+}
+
+const RULES_VARIANTS: Record<string, RulesVariant> = {
+  edited: { state: "conflict", file: { layout: "block", refinement_lines: 2, conflict_reason: "base_block_edited", user_managed: false } },
+  legacy: { state: "conflict", file: { layout: "legacy", refinement_lines: 0, conflict_reason: "legacy_diverged", user_managed: false } },
+  malformed: { state: "conflict", file: { layout: "malformed", refinement_lines: 0, conflict_reason: "malformed_markers", malformed_reason: "missing_end", user_managed: false } },
+  managed: { state: "current", file: { layout: "block", refinement_lines: 2, conflict_reason: "base_block_edited", user_managed: true } },
+  update: { state: "update_available", file: { layout: "block", refinement_lines: 14, user_managed: false } },
+  current: { state: "current", file: { layout: "block", refinement_lines: 3, user_managed: false } },
+  absent: { state: "not_installed", file: { layout: "absent", refinement_lines: 0, user_managed: false } },
+};
+
+const rulesFiles = new Map<RulesSurfaceId, RulesStatus>();
+
+function seedRules() {
+  const set = (surface: RulesSurfaceId, variant: RulesVariant) => {
+    rulesFiles.set(surface, { ...variant.file });
+    surfaceStates.set(surface, variant.state);
+  };
+  const requested = RULES_VARIANTS[params.get("rules") ?? ""];
+  switch (scenario) {
+    case "fresh":
+      for (const surface of RULES_SURFACES) set(surface, RULES_VARIANTS.absent!);
+      break;
+    case "conflict":
+      set("claude_rules", requested ?? RULES_VARIANTS.edited!);
+      set("codex_rules", RULES_VARIANTS.update!);
+      set("open_code_rules", RULES_VARIANTS.legacy!);
+      break;
+    case "empty":
+      for (const surface of RULES_SURFACES) set(surface, RULES_VARIANTS.current!);
+      break;
+    default:
+      set("claude_rules", RULES_VARIANTS.update!);
+      set("codex_rules", RULES_VARIANTS.current!);
+      set("open_code_rules", { state: "update_available", file: { layout: "block", refinement_lines: 0, user_managed: false } });
+      break;
+  }
+}
+seedRules();
+
+/** What a file and its state were before a conversion, by transaction, so a rollback can restore them. */
+const rulesSnapshots = new Map<string, Array<[RulesSurfaceId, RulesStatus, InstallationState]>>();
+
+function rulesDetail(file: RulesStatus, state: InstallationState): string {
+  const kept = file.refinement_lines === 0 ? "" : `; refinements: ${file.refinement_lines} line${file.refinement_lines === 1 ? "" : "s"} preserved`;
+  if (file.user_managed) return "base updates available; you manage this file, so none are applied";
+  switch (file.conflict_reason) {
+    case "base_block_edited": return `base block was edited, left as is${kept}`;
+    case "legacy_diverged": return "file differs from every shipped base, left as is";
+    case "malformed_markers": return `base block markers are malformed (${MALFORMED_TEXT[file.malformed_reason ?? "missing_end"]}), left as is`;
+  }
+  if (state === "update_available") return `base update available${kept}`;
+  if (state === "not_installed") return "not installed";
+  return `installed and current${kept}`;
+}
+
+function rulesFor(surface: SetupSurfaceId): RulesStatus | undefined {
+  return isRulesSurface(surface) ? rulesFiles.get(surface) : undefined;
+}
+
+function convertible(file: RulesStatus | undefined): boolean {
+  return file?.conflict_reason === "base_block_edited" || file?.conflict_reason === "legacy_diverged";
+}
+
+const RULES_BASE_LINES = [
+  "# Global Agent Rules",
+  "",
+  "## Priority",
+  "Repository reality overrides assumptions. Explicit user instructions override these defaults. Instructions after the Agent Workspace base block are the user's refinements and override the base where they conflict.",
+  "",
+  "## Communication",
+  "Be direct, dense, technical, and concise. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts.",
+  "",
+  "## Security",
+  "Credential-bearing data is NO-PRINT. Never print, quote, or pass onward secrets, tokens, passwords, private keys, or raw env values.",
+  "",
+  "## Verification",
+  "Never claim done without evidence. Verify with the lightest check that can falsify the change.",
+];
+
+function mockRulesDiff(surface: RulesSurfaceId, mode: RulesDiffMode): RulesDiffView {
+  const file = rulesFiles.get(surface);
+  const base = { surface, mode, compared_base: null as string | null, truncated: false };
+  if (!file || file.layout === "absent") {
+    return { ...base, from_label: "shipped base", to_label: "installed", applicable: false, note: "no rules file is installed", added: 0, removed: 0, diff: "" };
+  }
+  if (file.layout === "malformed") {
+    return { ...base, from_label: "installed", to_label: "new", applicable: false, note: `base block markers are malformed: ${MALFORMED_TEXT[file.malformed_reason ?? "missing_end"]}`, added: 0, removed: 0, diff: "" };
+  }
+  if (mode === "edits") {
+    const label = "shipped base sha256:5f3a91c0b2e4d6a8";
+    return {
+      ...base,
+      from_label: label,
+      to_label: "installed",
+      applicable: true,
+      note: "compared with the closest shipped base (4 lines differ)",
+      compared_base: "sha256:5f3a91c0b2e4d6a8c1d2e3f4a5b6c7d8",
+      added: 3,
+      removed: 1,
+      diff: [
+        `--- ${label}`,
+        "+++ installed",
+        "@@ -5,7 +5,9 @@",
+        " ",
+        " ## Communication",
+        "-Be direct, dense, technical, and concise. Respond in the user's language. Use English for code, comments, identifiers, commits, filenames, docs, and agent prompts.",
+        "+Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.",
+        "+Prefer short answers; no praise or filler.",
+        " ",
+        " ## Security",
+        "+Never run destructive git commands without asking first.",
+        " Credential-bearing data is NO-PRINT. Never print, quote, or pass onward secrets, tokens, passwords, private keys, or raw env values.",
+        "",
+      ].join("\n"),
+    };
+  }
+  const refused = file.conflict_reason !== undefined;
+  const from = refused ? "your base block" : "installed";
+  const to = refused ? "new base" : "after update";
+  return {
+    ...base,
+    from_label: from,
+    to_label: to,
+    applicable: !refused,
+    note: refused ? "update refused: the managed base block was edited; this shows what the new base contains" : null,
+    added: 3,
+    removed: 1,
+    diff: [
+      `--- ${from}`,
+      `+++ ${to}`,
+      "@@ -9,3 +9,6 @@",
+      " ## Security",
+      "-Credential-bearing data is NO-PRINT.",
+      "+Credential-bearing or credential-adjacent data is NO-PRINT. Never print, quote, or pass onward secrets, tokens, passwords, private keys, or raw env values.",
+      "+",
+      "+## Verification",
+      "+Never claim done without evidence. Verify with the lightest check that can falsify the change.",
+      "",
+    ].join("\n"),
+  };
+}
+
+function conversionResult(file: RulesStatus): string {
+  const refinements = file.layout === "block"
+    ? ["", "## Communication", "Be direct and concise. Respond in the user's language, and in Swedish for Swedish user-facing copy.", "Prefer short answers; no praise or filler.", "", "## My refinements", "Never run destructive git commands without asking first."]
+    : ["", "## Communication", "Be direct and concise. Swedish copy for Swedish user-facing text.", "", "## Local tooling", "Use rtk for inspection-style commands.", "Prefer small diffs."];
+  return [
+    "<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->",
+    ...RULES_BASE_LINES,
+    "<!-- END AGENT-WORKSPACE BASE -->",
+    ...refinements,
+    "",
+  ].join("\n");
+}
+
+let rulesPreviewSeq = 0;
+let rulesPreview: { surface: RulesSurfaceId; fingerprint: string; token: string } | null = null;
+
+function mockRulesConversion(surface: RulesSurfaceId): RulesConversionPreview {
+  const file = rulesFiles.get(surface);
+  const refused = (reason: string): RulesConversionPreview => ({
+    surface, applicable: false, reason, origin: null, compared_base: null, compared_base_changed_lines: null,
+    moved_sections: [], removed_sections: [], result: "", diff: "", diff_truncated: false, plan_fingerprint: null, preview_token: null,
+  });
+  if (!file || file.layout === "absent") return refused("no rules file is installed");
+  if (file.layout === "malformed") return refused("the base block markers are malformed; fix or remove them by hand first");
+  if (!file || !convertible(file)) return refused("this file is managed by the base block already; use the regular update");
+  const edited = file.layout === "block";
+  rulesPreviewSeq += 1;
+  rulesPreview = { surface, fingerprint: `rulesfp${rulesPreviewSeq}-${surface}`, token: `rulestok-${Date.now()}-${rulesPreviewSeq}` };
+  return {
+    surface,
+    applicable: true,
+    reason: null,
+    origin: edited ? "edited_block" : "legacy_file",
+    compared_base: "sha256:5f3a91c0b2e4d6a8c1d2e3f4a5b6c7d8",
+    compared_base_changed_lines: edited ? 4 : 11,
+    moved_sections: edited ? ["## Communication", "## My refinements"] : ["## Communication", "## Local tooling"],
+    removed_sections: edited ? [] : ["## Priority", "## Verification"],
+    result: conversionResult(file),
+    diff: [
+      "--- installed",
+      "+++ after conversion",
+      "@@ -1,6 +1,18 @@",
+      "+<!-- BEGIN AGENT-WORKSPACE BASE: managed by Agent Workspace; edits inside are replaced on update; add refinements below END -->",
+      " # Global Agent Rules",
+      " ",
+      " ## Priority",
+      "-Repository reality overrides assumptions.",
+      "+Repository reality overrides assumptions. Explicit user instructions override these defaults.",
+      "+<!-- END AGENT-WORKSPACE BASE -->",
+      "",
+    ].join("\n"),
+    diff_truncated: false,
+    plan_fingerprint: rulesPreview.fingerprint,
+    preview_token: rulesPreview.token,
+  };
+}
+
+function applyRulesConversion(surface: RulesSurfaceId, fingerprint: string | null, token: string | null): SetupResult {
+  const file = rulesFiles.get(surface);
+  if (!rulesPreview || rulesPreview.surface !== surface || fingerprint !== rulesPreview.fingerprint) {
+    throw new Error("Plan fingerprint mismatch: the file changed after preview. Re-run preview before applying.");
+  }
+  if (token !== rulesPreview.token) throw new Error("Preview token expired or already used. Re-run preview before applying.");
+  if (!file || !convertible(file)) throw new Error("this file is managed by the base block already; use the regular update");
+  rulesPreview = null;
+  transactionSeq += 1;
+  const id = `2026-10-06T08-40-00Z-${(0x9a00 + transactionSeq).toString(16)}`;
+  rulesSnapshots.set(id, [[surface, { ...file }, surfaceStates.get(surface) ?? "conflict"]]);
+  rulesFiles.set(surface, { layout: "block", refinement_lines: file.layout === "block" ? file.refinement_lines + 7 : 9, user_managed: false });
+  surfaceStates.set(surface, "current");
+  lastTransactionId = id;
+  backups.unshift({ id, timestamp: new Date().toISOString(), path: `${BACKUP_ROOT}/${id}`, targets: [surface], file_count: 1 });
+  return {
+    success: true,
+    transaction_id: id,
+    applied: [SURFACE_PATHS[surface]],
+    failed: [],
+    rolled_back: [],
+    manual_steps: [],
+    message: `applied 1 · preserved 0 · failed 0 · transaction ${id} recorded`,
+  };
+}
+
+function setRulesUserManaged(surface: RulesSurfaceId, userManaged: boolean) {
+  const file = rulesFiles.get(surface);
+  if (!file) throw new Error(`${surface} is not a rules surface`);
+  if (userManaged && !convertible(file)) throw new Error("this file is not a conflict; there is nothing to leave as is");
+  rulesFiles.set(surface, { ...file, user_managed: userManaged });
+  surfaceStates.set(surface, userManaged ? "current" : "conflict");
+}
+
 function surfaceDetail(surface: SetupSurfaceId, state: InstallationState): string {
   switch (state) {
     case "current": return `installed · ${BUNDLE_DIGEST}`;
@@ -193,7 +458,14 @@ const STATE_RANK: Record<InstallationState, number> = {
 function installationStatus(surfaces: SetupSurfaceId[]): InstallationStatus {
   const rows: SurfaceInstallationStatus[] = surfaces.map(surface => {
     const state = surfaceStates.get(surface) ?? "not_installed";
-    return { surface, label: SURFACE_LABELS[surface], state, detail: surfaceDetail(surface, state) };
+    const file = rulesFor(surface);
+    return {
+      surface,
+      label: SURFACE_LABELS[surface],
+      state,
+      detail: file ? rulesDetail(file, state) : surfaceDetail(surface, state),
+      ...(file ? { rules: { ...file } } : {}),
+    };
   });
   const counts = { create_count: 0, update_count: 0, remove_count: 0, conflict_count: 0 };
   for (const row of rows) {
@@ -229,7 +501,8 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
     conflict: "conflict",
     unavailable: "unavailable",
   };
-  const kind = kindByState[state];
+  // A rules file the user keeps is not planned for writing; the plan lists it as a manual step.
+  const kind: OperationKind = rulesFor(surface)?.user_managed ? "manual" : kindByState[state];
   const path = SURFACE_PATHS[surface];
   const summaryByKind: Record<OperationKind, string> = {
     no_change: `${SURFACE_LABELS[surface]} is current`,
@@ -258,7 +531,7 @@ function plannedOperation(surface: SetupSurfaceId): PlannedOperation {
     details,
     conflict_description:
       kind === "conflict" ? `${path} was modified locally since install; it is preserved and skipped.` : null,
-    manual_step: null,
+    manual_step: kind === "manual" ? `${path} is left as is; convert it in the app or hand it back to take base updates` : null,
   };
 }
 
@@ -403,6 +676,9 @@ function diagnostics(): WorkspaceDiagnostics {
 
 function codexHealth(): CodexRuntimeHealth {
   const fresh = scenario === "fresh";
+  // Codex reads AGENTS.override.md instead of AGENTS.md when it has content, which drops the base.
+  const override = scenario === "conflict";
+  const overrideDetail = `${HOME}/.codex/AGENTS.override.md exists and replaces AGENTS.md; the Agent Workspace base is not loaded until it is removed or emptied`;
   const status = fresh ? "missing" : "synced";
   return {
     status,
@@ -430,8 +706,9 @@ function codexHealth(): CodexRuntimeHealth {
     checks: [
       { id: "cli", label: "codex cli", status: "ok", detail: "codex 0.42.0" },
       { id: "rules", label: "rules", status: fresh ? "missing" : "ok", detail: fresh ? "not installed" : "synced" },
+      ...(override ? [{ id: "rules_override", label: "AGENTS.override.md replaces AGENTS.md", status: "warn", detail: overrideDetail }] : []),
     ],
-    warnings: [],
+    warnings: override ? [overrideDetail] : [],
     summary: fresh ? "Codex is not set up yet." : "Codex rules, agents and skills are current.",
     next_action: fresh ? "Install Codex surfaces." : "Nothing to do.",
   };
@@ -782,6 +1059,19 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
     case "apply_setup":
       await delay(700);
       return applyPlan(arg<SetupSurfaceId[]>(args, "surfaces"));
+    case "preview_rules_diff":
+      await delay(150);
+      return mockRulesDiff(arg<RulesSurfaceId>(args, "surface"), (arg<RulesDiffMode | undefined>(args, "mode")) ?? "update");
+    case "preview_rules_conversion":
+      await delay(200);
+      return mockRulesConversion(arg<RulesSurfaceId>(args, "surface"));
+    case "apply_rules_conversion":
+      await delay(700);
+      return applyRulesConversion(arg<RulesSurfaceId>(args, "surface"), arg<string | null>(args, "planFingerprint"), arg<string | null>(args, "previewToken"));
+    case "set_rules_user_managed":
+      await delay(100);
+      setRulesUserManaged(arg<RulesSurfaceId>(args, "surface"), arg<boolean>(args, "userManaged"));
+      return null;
     case "rollback_setup_transaction": {
       await delay(400);
       const dryRun = arg<boolean>(args, "dryRun");
@@ -790,7 +1080,16 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
         return { success: false, transaction_id: id, applied: [], failed: [id], rolled_back: [], manual_steps: [], message: `transaction ${id} not found` } satisfies SetupResult;
       }
       if (!dryRun) {
-        for (const surface of ["claude_rules", "claude_agents", "claude_skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
+        const snapshot = rulesSnapshots.get(id);
+        if (snapshot) {
+          for (const [surface, file, state] of snapshot) {
+            rulesFiles.set(surface, file);
+            surfaceStates.set(surface, state);
+          }
+          rulesSnapshots.delete(id);
+        } else {
+          for (const surface of ["claude_rules", "claude_agents", "claude_skills"] as SetupSurfaceId[]) surfaceStates.set(surface, "update_available");
+        }
         lastTransactionId = null;
       }
       const restored = ["~/.claude/CLAUDE.md", "~/.claude/agents/verifier.md"];
