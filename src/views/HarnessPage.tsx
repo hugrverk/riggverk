@@ -1,6 +1,6 @@
 import { useEffect, useState, type ReactNode } from "react";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { OutputPane } from "../components/OutputPane";
+import { OutputPane, useFocusOutputOnNewTransaction } from "../components/OutputPane";
 import { RulesPane } from "../components/RulesPane";
 import { RulesSummary } from "../components/RulesSummary";
 import { useRulesActions } from "../hooks/useRulesActions";
@@ -69,6 +69,7 @@ export function HarnessPage({
   onClearOutput,
 }: HarnessPageProps) {
   const label = HARNESS_LABELS[harness];
+  useFocusOutputOnNewTransaction(rollbackTransactionId);
   const entry = overview.entries[harness];
   const targets: AgentTargetMeta[] = filterTargetsForPage(agentTargets, harness);
   const enabledTargets = new Set(appSettings?.enabled_target_ids ?? []);

@@ -31,6 +31,29 @@ export interface OutputPaneProps {
   onRollback?: () => void;
 }
 
+/**
+ * For the page that owns an OutputPane: when a new rollback transaction appears (an apply or uninstall just
+ * finished) the output pane takes focus, so its result and `z` are in reach instead of dead behind the list
+ * the closing review handed focus to. Focus the user placed on another pane is left alone, and a transaction
+ * that was already there when the page mounted does nothing. Call it from a component that stays mounted
+ * across the review (the page), not from OutputPane itself, which remounts with the review.
+ */
+export function useFocusOutputOnNewTransaction(transactionId: string | null | undefined, paneId = "output"): void {
+  const seen = useRef(transactionId);
+  useEffect(() => {
+    const previous = seen.current;
+    seen.current = transactionId;
+    if (!transactionId || transactionId === previous) return;
+    const active = document.activeElement;
+    const activePane = active ? paneOf(active) : null;
+    const panes = listPanes();
+    const defaultPane = panes.find(pane => pane.hasAttribute("data-pane-default")) ?? panes[0];
+    // Free: nothing holds focus, or it sits where the closing review left it (the page's default pane).
+    const free = !active || active === document.body || active.closest(".topline") !== null || !activePane || activePane === defaultPane;
+    if (free) focusPaneById(paneId);
+  }, [transactionId, paneId]);
+}
+
 /** Redacted stdout + stderr, the text `y` copies. */
 export function outputTextOf(log: ActionResult | null): string | null {
   if (!log) return null;
@@ -47,8 +70,7 @@ function scrollPaneBody(id: string, to: "top" | "bottom") {
 /**
  * The terminal as a pane: `❯ action`, a status line, `── stdout ──`, then the text. Idle, it shows the
  * workspace context and the commands worth trying. Keys while it has focus: `y` copy, `C` clear,
- * `z` roll back the last transaction, `r` refresh, `g g` / `G` top and bottom. When a new rollback
- * transaction appears (an apply just finished) the pane takes focus, so the result and `z` are in reach.
+ * `z` roll back the last transaction, `r` refresh, `g g` / `G` top and bottom.
  */
 export function OutputPane({
   id = "output",
@@ -150,21 +172,6 @@ export function OutputPane({
     },
   ];
   useKeymap(bindings);
-
-  const seenTransaction = useRef(rollbackTransactionId);
-  useEffect(() => {
-    const previous = seenTransaction.current;
-    seenTransaction.current = rollbackTransactionId;
-    if (!rollbackTransactionId || rollbackTransactionId === previous) return;
-    // Only take focus from where the closing review left it (the page's default pane) or from nowhere; a pane
-    // the user moved to on purpose keeps it.
-    const active = document.activeElement;
-    const activePane = active ? paneOf(active) : null;
-    const panes = listPanes();
-    const defaultPane = panes.find(pane => pane.hasAttribute("data-pane-default")) ?? panes[0];
-    const free = !active || active === document.body || active.closest(".topline") !== null || !activePane || activePane === defaultPane;
-    if (free) focusPaneById(id);
-  }, [rollbackTransactionId, id]);
 
   const verdict = wsRunning
     ? { text: "running", tone: undefined }

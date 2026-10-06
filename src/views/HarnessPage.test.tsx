@@ -136,6 +136,15 @@ describe("HarnessPage", () => {
     expect(p.onToggleTarget).toHaveBeenCalledTimes(3);
   });
 
+  it("moves focus to the output pane when an apply leaves a rollback transaction, so z works", () => {
+    const { rerenderFrame, props: p } = renderCodex();
+    act(() => targets().focus());
+    rerenderFrame(<CodexView {...p} rollbackTransactionId="tx-1" runtimeHealth={CODEX_HEALTH} />);
+    expect(document.activeElement?.closest("[data-pane-id]")?.getAttribute("data-pane-id")).toBe("output");
+    fireEvent.keyDown(document.activeElement!, { key: "z" });
+    expect(p.onRollback).toHaveBeenCalledTimes(1);
+  });
+
   it("offers the toggle as a button too", () => {
     const { props: p } = renderCodex();
     fireEvent.click(within(screen.getByRole("region", { name: "Codex targets" })).getByRole("button", { name: /toggle/ }));

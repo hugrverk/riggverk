@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { InstallPlanPane } from "../components/InstallPlanPane";
-import { OutputPane } from "../components/OutputPane";
+import { OutputPane, useFocusOutputOnNewTransaction } from "../components/OutputPane";
 import { SurfaceMatrix } from "../components/SurfaceMatrix";
 import { completedLabel } from "../components/TerminalOutput";
 import { UninstallCard } from "../components/UninstallCard";
@@ -86,6 +86,7 @@ export function StartView({
   canRunReleaseCheck,
   onClearOutput,
 }: StartViewProps) {
+  useFocusOutputOnNewTransaction(rollbackTransactionId);
   const targets = overviewTargets(enabledHarnessIds);
   const [cursor, setCursor] = useState<OverviewId>("workspace");
   const selected: OverviewId = targets.includes(cursor) ? cursor : "workspace";

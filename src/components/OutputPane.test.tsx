@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderInFrame } from "../test/renderWithShell";
 import type { ActionResult, StatusData } from "../types";
 import { Pane } from "../ui/Pane";
-import { OutputPane, outputTextOf, type OutputPaneProps } from "./OutputPane";
+import { OutputPane, outputTextOf, useFocusOutputOnNewTransaction, type OutputPaneProps } from "./OutputPane";
 
 const STATUS = {
   branch: "main",
@@ -120,8 +120,9 @@ describe("OutputPane", () => {
     expect(onRollback).toHaveBeenCalledTimes(2);
   });
 
-  describe("focus after an apply", () => {
+  describe("useFocusOutputOnNewTransaction", () => {
     function Page({ transactionId, extra, onRollback = () => {} }: { transactionId: string | null; extra?: boolean; onRollback?: () => void }) {
+      useFocusOutputOnNewTransaction(transactionId);
       return (
         <>
           <Pane id="targets" index={1} title="targets" defaultFocus scrollable>
@@ -150,6 +151,33 @@ describe("OutputPane", () => {
       expect(focusedPaneId()).toBe("output");
       fireEvent.keyDown(document.activeElement!, { key: "z" });
       expect(onRollback).toHaveBeenCalledTimes(1);
+    });
+
+    it("works when the output pane remounts with the review and already carries the new transaction", () => {
+      function Host({ transactionId, review }: { transactionId: string | null; review: boolean }) {
+        useFocusOutputOnNewTransaction(transactionId);
+        return review ? (
+          <section>
+            <Pane id="plan" index={1} title="plan" scrollable>
+              <p>plan</p>
+            </Pane>
+            <OutputPane {...props({ wsLog: APPLY })} />
+          </section>
+        ) : (
+          <section>
+            <Pane id="targets" index={1} title="targets" defaultFocus scrollable>
+              <p>targets</p>
+            </Pane>
+            <OutputPane {...props({ wsLog: APPLY, rollbackTransactionId: transactionId, onRollback: () => {} })} />
+          </section>
+        );
+      }
+      const { rerenderFrame } = renderInFrame(<Host transactionId={null} review />);
+      act(() => screen.getByRole("group", { name: "plan" }).focus());
+      // The apply finishes: the review (and the focus in it) goes, the page's own panes come back with the new
+      // transaction already set.
+      rerenderFrame(<Host transactionId="tx-1" review={false} />);
+      expect(focusedPaneId()).toBe("output");
     });
 
     it("leaves a pane the user moved to, and a transaction that was already there on mount", () => {
