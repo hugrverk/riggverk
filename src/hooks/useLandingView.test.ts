@@ -1,9 +1,9 @@
 import { renderHook } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
-import type { AppHeaderView } from "../components/AppHeaderNav";
+import type { AppView } from "../shell/views";
 import { useLandingView } from "./useLandingView";
 
-type Props = { landingView: string | undefined; currentView: AppHeaderView };
+type Props = { landingView: string | undefined; currentView: AppView };
 
 function setup(initial: Props) {
   const navigate = vi.fn();

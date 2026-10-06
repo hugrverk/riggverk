@@ -1,6 +1,5 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
-import { AppHeaderNav, type AppHeaderView } from "./components/AppHeaderNav";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { ConfirmProvider, useConfirm } from "./components/ConfirmDialog";
@@ -9,6 +8,7 @@ import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useInstallationOverview } from "./hooks/useInstallationOverview";
 import { useLandingView } from "./hooks/useLandingView";
 import { EDITABLE_CONFIG_TARGET_IDS, useLibraryController } from "./hooks/useLibraryController";
 import { useWorkspaceHealthController } from "./hooks/useWorkspaceHealthController";
@@ -31,9 +31,11 @@ const LibraryView = lazy(() => import("./views/LibraryView").then(m => ({ defaul
 const SettingsView = lazy(() => import("./views/SettingsView").then(m => ({ default: m.SettingsView })));
 import { harnessForView, surfacesNeedingApply } from "./lib/harnessInstallation";
 import { filterVisibleMetadataTargets } from "./lib/harnessVisibility";
+import { redactTerminalOutput } from "./lib/redactTerminalOutput";
+import { AppFrame, ShellProviders, useAppCommands, type AppView } from "./shell";
 import type { InstallAgent, RepoDashboardWorkItem, SetupPlan, SetupResult } from "./types";
 
-type View = AppHeaderView;
+type View = AppView;
 
 function isWorkspaceLoadView(view: View): boolean {
   return view === "start" || view === "codex" || view === "opencode" || view === "cursor" || view === "claude";
@@ -578,26 +580,60 @@ function AppShell() {
   const canRunReleaseCheck = workspaceValid && workspaceDiagnostics?.release_check_available === true;
   const gitAvailable = status?.git_available === true;
 
+  const overview = useInstallationOverview({
+    workspaceValid,
+    busy: wsRunning !== null,
+    enabledHarnessIds,
+  });
+
+  const outputText = useMemo(() => {
+    if (!wsLog) return null;
+    const text = [redactTerminalOutput(wsLog.stdout), redactTerminalOutput(wsLog.stderr)].filter(Boolean).join("\n");
+    return text || null;
+  }, [wsLog]);
+
+  useAppCommands({
+    enabledHarnessIds,
+    workspaceValid,
+    busyLabel: wsRunning,
+    overview,
+    switchView,
+    setLibrarySource: setGuardedLibrarySourceType,
+    appearance: appSettings?.appearance,
+    setAppearance,
+    refresh: async () => {
+      await Promise.all([loadWorkspaceDiagnostics(), loadWorkspaceResources(), loadBackups(), overview.refresh()]);
+    },
+    openFolder: openDefaultWorkspaceFolder,
+    openBackups: openBackupsFolder,
+    clearOutput: resetTerminalOutput,
+    outputText,
+    canRunReleaseCheck,
+    runReleaseCheck: () => void runWsAction("release_check", "release-check"),
+    previewSetup: surfaces => invoke<SetupPlan>("preview_setup", { surfaces }),
+    runUpdate: runHarnessSetupUpdate,
+    rollbackTransactionId: uninstallRecoveryTransactionId,
+    runRollback: runUninstallRollback,
+    setError,
+  });
+
   return (
-      <div className="app-shell">
-      <AppHeaderNav
+      <AppFrame
         view={view}
+        onSwitchView={switchView}
         libraryDirty={libraryDirty}
         settingsErrored={settingsSaveStatus === "error"}
         enabledHarnessIds={enabledHarnessIds}
-        onSwitchView={switchView}
-      />
-
-      {error && (
-        <div className="error-banner" role="alert">
-          <span className="error-banner-text">{error}</span>
-          <button className="error-banner-dismiss" onClick={() => setError(null)} aria-label="Dismiss error">
-            &times;
-          </button>
-        </div>
-      )}
-
-      <div className="view-area">
+        harnessStates={{
+          codex: overview.entries.codex?.status?.state ?? null,
+          opencode: overview.entries.opencode?.status?.state ?? null,
+          cursor: overview.entries.cursor?.status?.state ?? null,
+          claude: overview.entries.claude?.status?.state ?? null,
+        }}
+        error={error}
+        onDismissError={() => setError(null)}
+        statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}
+      >
         {view === "start" && (
           <StartView
             workspaceDiagnostics={workspaceDiagnostics}
@@ -834,18 +870,19 @@ function AppShell() {
           />
           </Suspense>
         )}
-      </div>
-    </div>
+      </AppFrame>
   );
 }
 
 /**
- * Root component wraps the app in the confirm dialog provider.
+ * Root component wraps the app in the confirm dialog provider and the shell (keymap, commands, overlays).
  */
 function App() {
   return (
     <ConfirmProvider>
-      <AppShell />
+      <ShellProviders>
+        <AppShell />
+      </ShellProviders>
     </ConfirmProvider>
   );
 }

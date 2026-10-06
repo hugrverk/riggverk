@@ -1,14 +1,14 @@
 import { useEffect, useRef } from "react";
-import type { AppHeaderView } from "../components/AppHeaderNav";
+import type { AppView } from "../shell/views";
 
 const LANDING_VIEWS: readonly string[] = ["repo-dashboard", "prompts", "library"];
 
 interface LandingViewOptions {
   /** Persisted `landing_view`; undefined until settings have loaded. */
   landingView: string | undefined;
-  currentView: AppHeaderView;
+  currentView: AppView;
   /** Navigation entry point that runs dirty guards and per-view data loading. */
-  navigate: (view: AppHeaderView) => void;
+  navigate: (view: AppView) => void;
 }
 
 /**
@@ -27,6 +27,6 @@ export function useLandingView({ landingView, currentView, navigate }: LandingVi
     if (appliedRef.current || landingView === undefined) return;
     appliedRef.current = true;
     if (currentViewRef.current !== "start") return;
-    if (LANDING_VIEWS.includes(landingView)) navigateRef.current(landingView as AppHeaderView);
+    if (LANDING_VIEWS.includes(landingView)) navigateRef.current(landingView as AppView);
   }, [landingView]);
 }
