@@ -651,6 +651,124 @@ def test_fallback_parser_array_values() -> None:
     assert result["empty"] == {}
 
 
+# ── Routing defaults: model and reasoning effort are create-only ──
+
+ROUTING_SCRIPT = Path(__file__).resolve().parent / "ensure-codex-routing-defaults.py"
+
+ROUTING_TEMPLATE = """model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
+approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
+"""
+
+ROUTING_ENFORCED_ONLY = """approval_policy = "on-request"
+approvals_reviewer = "user"
+sandbox_mode = "workspace-write"
+apps._default.approvals_reviewer = "user"
+apps._default.default_tools_approval_mode = "prompt"
+"""
+
+
+def run_routing(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, str(ROUTING_SCRIPT), *args],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_routing_user_model_and_effort_are_not_drift() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        installed = write_file(
+            tmp / "installed.toml",
+            'model = "gpt-5.4"\nmodel_reasoning_effort = "low"\n' + ROUTING_ENFORCED_ONLY,
+        )
+        assert run_routing(str(installed), str(managed), "--managed-match").returncode == 0
+        diff = run_routing(str(installed), str(managed), "--diff")
+        assert "synced" in diff.stdout, diff.stdout
+
+
+def test_routing_enforced_value_differing_is_drift() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        installed = write_file(
+            tmp / "installed.toml",
+            'model = "gpt-6.1-sol"\nmodel_reasoning_effort = "xhigh"\n'
+            + ROUTING_ENFORCED_ONLY.replace("on-request", "never"),
+        )
+        assert run_routing(str(installed), str(managed), "--managed-match").returncode == 1
+
+
+def test_routing_absent_model_and_effort_are_drift_until_written() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        installed = write_file(tmp / "installed.toml", ROUTING_ENFORCED_ONLY)
+        assert run_routing(str(installed), str(managed), "--managed-match").returncode == 1
+        diff = run_routing(str(installed), str(managed), "--diff")
+        assert '"model" would be set' in diff.stdout, diff.stdout
+        assert '"model_reasoning_effort" would be set' in diff.stdout, diff.stdout
+
+
+def test_routing_apply_writes_absent_model_and_effort_only() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        installed = write_file(
+            tmp / "installed.toml",
+            "# user comment\n" + ROUTING_ENFORCED_ONLY + '\n[mcp_servers.custom]\ncommand = "echo"\n',
+        )
+        result = run_routing(
+            str(installed), str(managed), "--apply", "--backup-dir", str(tmp / "backup")
+        )
+        assert result.returncode == 0, result.stderr
+        content = installed.read_text(encoding="utf-8")
+        assert 'model = "gpt-6.1-sol"' in content
+        assert 'model_reasoning_effort = "xhigh"' in content
+        assert "# user comment" in content
+        assert "[mcp_servers.custom]" in content
+        assert run_routing(str(installed), str(managed), "--managed-match").returncode == 0
+
+
+def test_routing_apply_preserves_user_model_and_updates_enforced_values() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        installed = write_file(
+            tmp / "installed.toml",
+            'model = "gpt-5.4" # my pick\nmodel_reasoning_effort = "low"\n'
+            + ROUTING_ENFORCED_ONLY.replace("on-request", "never"),
+        )
+        result = run_routing(
+            str(installed), str(managed), "--apply", "--backup-dir", str(tmp / "backup")
+        )
+        assert result.returncode == 0, result.stderr
+        content = installed.read_text(encoding="utf-8")
+        assert 'model = "gpt-5.4" # my pick' in content
+        assert 'model_reasoning_effort = "low"' in content
+        assert 'approval_policy = "on-request"' in content
+        assert "gpt-6.1-sol" not in content
+        assert "xhigh" not in content
+
+
+def test_routing_apply_seeds_model_and_effort_in_new_config() -> None:
+    with tempfile.TemporaryDirectory() as td:
+        tmp = Path(td)
+        managed = write_file(tmp / "managed.toml", ROUTING_TEMPLATE)
+        target = tmp / "new" / "config.toml"
+        result = run_routing(str(target), str(managed), "--apply")
+        assert result.returncode == 0, result.stderr
+        content = target.read_text(encoding="utf-8")
+        assert 'model = "gpt-6.1-sol"' in content
+        assert 'model_reasoning_effort = "xhigh"' in content
+
+
 # ── Main guard ──
 
 if __name__ == "__main__":

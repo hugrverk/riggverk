@@ -58,13 +58,11 @@ pub struct CodexRuntimeHealth {
     pub next_action: String,
 }
 
-const MANAGED_TOP_LEVEL_KEYS: &[&str] = &[
-    "model",
-    "model_reasoning_effort",
-    "approval_policy",
-    "approvals_reviewer",
-    "sandbox_mode",
-];
+/// Top-level keys the app keeps aligned with the bundled template on every update.
+const ENFORCED_TOP_LEVEL_KEYS: &[&str] = &["approval_policy", "approvals_reviewer", "sandbox_mode"];
+/// Written from the template only while `config.toml` has no value for the key.
+/// Afterwards they are user-owned: never overwritten and never counted as drift.
+const CREATE_ONLY_TOP_LEVEL_KEYS: &[&str] = &["model", "model_reasoning_effort"];
 const MANAGED_APP_DEFAULT_KEYS: &[&str] = &["approvals_reviewer", "default_tools_approval_mode"];
 // Pre-0.134 profile scheme this app used to write. Codex now rejects the
 // top-level `profile` selector and ignores `[profiles.*]` tables, so
@@ -115,7 +113,7 @@ fn is_app_shaped_legacy_profile(profile: &toml::map::Map<String, toml::Value>) -
 pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value {
     let mut managed = toml::map::Map::new();
     if let Some(table) = config.as_table() {
-        for key in MANAGED_TOP_LEVEL_KEYS {
+        for key in ENFORCED_TOP_LEVEL_KEYS {
             if let Some(value) = table.get(*key) {
                 managed.insert(key.to_string(), value.clone());
             }
@@ -167,8 +165,14 @@ pub(crate) fn extract_managed_codex_config(config: &toml::Value) -> toml::Value 
     toml::Value::Table(managed)
 }
 
+/// True when `installed` needs no update from `managed` (the bundled template).
+/// Create-only keys count as drift only while the template sets them and
+/// `installed` has no value; any user value matches.
 pub(crate) fn managed_codex_keys_match(installed: &toml::Value, managed: &toml::Value) -> bool {
     extract_managed_codex_config(installed) == extract_managed_codex_config(managed)
+        && CREATE_ONLY_TOP_LEVEL_KEYS
+            .iter()
+            .all(|key| managed.get(*key).is_none() || installed.get(*key).is_some())
 }
 
 fn unique_render_temp_dir() -> PathBuf {
@@ -696,8 +700,8 @@ mod tests {
 
     fn managed_codex_config() -> &'static str {
         r#"
-model = "gpt-5.6-sol"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
 approvals_reviewer = "user"
 sandbox_mode = "workspace-write"
@@ -789,11 +793,11 @@ command = "echo"
         write_file(
             &home.join(".codex/config.toml"),
             r#"
-model = "gpt-5.4"
-model_reasoning_effort = "high"
+model = "gpt-6.1-sol"
+model_reasoning_effort = "xhigh"
 approval_policy = "on-request"
 approvals_reviewer = "user"
-sandbox_mode = "workspace-write"
+sandbox_mode = "danger-full-access"
 apps._default.approvals_reviewer = "user"
 apps._default.default_tools_approval_mode = "prompt"
 "#,
@@ -812,11 +816,138 @@ apps._default.default_tools_approval_mode = "prompt"
     #[test]
     fn test_diverged_when_app_default_approval_differs() {
         let installed = toml::from_str::<toml::Value>(
-            "model = \"gpt-5.6-sol\"\nmodel_reasoning_effort = \"high\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+            "model = \"gpt-6.1-sol\"\nmodel_reasoning_effort = \"xhigh\"\napproval_policy = \"on-request\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"auto_review\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
         )
         .expect("installed");
         let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
         assert!(!managed_codex_keys_match(&installed, &template));
+    }
+
+    fn without_model_keys(config: &str) -> String {
+        config
+            .lines()
+            .filter(|line| !line.starts_with("model"))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    #[test]
+    fn test_user_model_and_effort_are_preserved_and_not_drift() {
+        let ws = temp_root("cfg-user-model");
+        let home = temp_root("cfg-user-model-home");
+        add_rules(&ws, &home);
+        write_file(
+            &ws.join("templates/codex/config.toml"),
+            managed_codex_config(),
+        );
+        write_file(
+            &home.join(".codex/config.toml"),
+            &managed_codex_config()
+                .replace("gpt-6.1-sol", "gpt-5.4")
+                .replace("xhigh", "low"),
+        );
+        add_agent(&ws, &home, "repo_scout.toml", "name = \"repo_scout\"\n");
+        add_skill(&ws, &home, "diagnose");
+
+        let health = compute_health(&ws, &home);
+        cleanup(&ws);
+        cleanup(&home);
+
+        assert_eq!(health.config_status, "synced");
+        assert_eq!(health.model.as_deref(), Some("gpt-5.4"));
+        assert_eq!(health.model_reasoning_effort.as_deref(), Some("low"));
+    }
+
+    #[test]
+    fn test_absent_model_or_effort_reads_as_drift() {
+        let template = toml::from_str::<toml::Value>(managed_codex_config()).expect("template");
+        let no_model = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("installed");
+        assert!(!managed_codex_keys_match(&no_model, &template));
+
+        let only_model = toml::from_str::<toml::Value>(&format!(
+            "model = \"gpt-5.4\"\n{}",
+            without_model_keys(managed_codex_config())
+        ))
+        .expect("installed");
+        assert!(
+            !managed_codex_keys_match(&only_model, &template),
+            "an absent reasoning effort is still seeded from the template"
+        );
+    }
+
+    #[test]
+    fn test_template_without_model_keys_never_reports_them_as_drift() {
+        let template = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("template");
+        let installed = toml::from_str::<toml::Value>(&without_model_keys(managed_codex_config()))
+            .expect("installed");
+        assert!(managed_codex_keys_match(&installed, &template));
+    }
+
+    #[test]
+    fn test_create_only_keys_are_not_part_of_the_managed_projection() {
+        let config = toml::from_str::<toml::Value>(managed_codex_config()).expect("config");
+        let projection = extract_managed_codex_config(&config);
+        let table = projection.as_table().expect("projection table");
+        assert!(!table.contains_key("model"));
+        assert!(!table.contains_key("model_reasoning_effort"));
+        assert_eq!(
+            table.get("approval_policy").and_then(|v| v.as_str()),
+            Some("on-request")
+        );
+    }
+
+    fn bundled_workspace_root() -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../resources/default-workspace")
+    }
+
+    #[test]
+    fn test_render_projection_keeps_user_model_and_updates_enforced_keys() {
+        let dir = temp_root("render-user-model");
+        let dest = dir.join("config.toml");
+        write_file(
+            &dest,
+            "model = \"gpt-5.4\"\nmodel_reasoning_effort = \"low\"\napproval_policy = \"never\"\napprovals_reviewer = \"user\"\nsandbox_mode = \"workspace-write\"\napps._default.approvals_reviewer = \"user\"\napps._default.default_tools_approval_mode = \"prompt\"\n",
+        );
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+
+        let rendered =
+            render_codex_config_managed_projection(&bundled_workspace_root(), &dest, &source);
+        cleanup(&dir);
+        let rendered = rendered.expect("render");
+
+        let parsed = rendered.parse::<toml::Value>().expect("valid toml");
+        assert_eq!(parsed["model"].as_str(), Some("gpt-5.4"));
+        assert_eq!(parsed["model_reasoning_effort"].as_str(), Some("low"));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("on-request"));
+    }
+
+    #[test]
+    fn test_render_projection_seeds_absent_model_and_effort() {
+        let dir = temp_root("render-absent-model");
+        let dest = dir.join("config.toml");
+        write_file(
+            &dest,
+            "approval_policy = \"never\"\n\n[mcp_servers.custom]\ncommand = \"echo\"\n",
+        );
+        let source = dir.join("template.toml");
+        write_file(&source, managed_codex_config());
+
+        let rendered =
+            render_codex_config_managed_projection(&bundled_workspace_root(), &dest, &source);
+        cleanup(&dir);
+        let rendered = rendered.expect("render");
+
+        let parsed = rendered.parse::<toml::Value>().expect("valid toml");
+        assert_eq!(parsed["model"].as_str(), Some("gpt-6.1-sol"));
+        assert_eq!(parsed["model_reasoning_effort"].as_str(), Some("xhigh"));
+        assert_eq!(parsed["approval_policy"].as_str(), Some("on-request"));
+        assert_eq!(
+            parsed["mcp_servers"]["custom"]["command"].as_str(),
+            Some("echo")
+        );
     }
 
     #[test]
