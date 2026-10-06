@@ -652,7 +652,7 @@ function diagnostics(): WorkspaceDiagnostics {
   const enabled = new Set(settings.enabled_target_ids);
   return {
     candidate_path: settings.workspace_path ?? WORKSPACE,
-    resolved_path: valid ? WORKSPACE : null,
+    resolved_path: valid ? settings.workspace_path ?? WORKSPACE : null,
     valid,
     error: valid ? null : "workspace markers missing: metadata/manifest.json",
     markers: [
@@ -1027,6 +1027,8 @@ function unavailable(): never {
 }
 
 async function handle(cmd: string, args: Args): Promise<unknown> {
+  // `?pick=<folder>` stands in for the native folder dialog (workspace picker QA); without it the dialog is cancelled.
+  if (cmd === "plugin:dialog|open") return new URLSearchParams(location.search).get("pick");
   if (cmd.startsWith("plugin:dialog|")) return null;
   if (cmd.startsWith("open_")) {
     await delay(100);
@@ -1042,8 +1044,15 @@ async function handle(cmd: string, args: Args): Promise<unknown> {
       settings = { ...next, revision: (settings.revision ?? 0) + 1 };
       return settings;
     }
-    case "try_set_active_workspace_path":
-      settings = { ...settings, workspace_path: arg<string | null>(args, "path"), revision: (settings.revision ?? 0) + 1 };
+    case "try_set_active_workspace_path": {
+      const path = arg<string>(args, "path");
+      // Like the backend: a folder without the workspace markers is refused and nothing changes.
+      if (path.includes("invalid")) throw new Error("invalid workspace path: not a valid workspace (missing .agent-workspace/workspace.json)");
+      settings = { ...settings, workspace_path: path, revision: (settings.revision ?? 0) + 1 };
+      return settings;
+    }
+    case "reset_active_workspace_path":
+      settings = { ...settings, workspace_path: null, revision: (settings.revision ?? 0) + 1 };
       return settings;
     case "get_agent_targets":
       return TARGETS;

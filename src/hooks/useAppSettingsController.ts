@@ -16,6 +16,9 @@ import {
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
 import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
 
+/** Outcome of switching the active workspace; `message` is the backend's reason when it was refused. */
+export type WorkspaceSwitchResult = { ok: true } | { ok: false; message: string };
+
 export interface AppSettingsControllerDeps {
   setError: (message: string | null) => void;
   appliedWorkspacePathRef: MutableRefObject<string | null | undefined>;
@@ -341,30 +344,59 @@ export function useAppSettingsController({
     });
   }, []);
 
-  const persistActiveWorkspace = useCallback(async (path: string) => {
-    if (!appSettings) return;
-    const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
+  const workspaceSwitchInFlightRef = useRef(false);
+
+  /**
+   * Makes `path` the active workspace (null: back to the default) and reloads everything bound to it, without
+   * a full app reload. The backend validates the folder and persists the choice first; only an accepted
+   * folder resets workspace-bound state, so a rejected one leaves the current workspace untouched.
+   * Resolves with the backend's error text instead of raising it.
+   */
+  const persistActiveWorkspace = useCallback(async (path: string | null): Promise<WorkspaceSwitchResult> => {
+    if (!appSettingsRef.current) return { ok: false, message: "settings are not loaded yet" };
+    if (workspaceSwitchInFlightRef.current) return { ok: false, message: "a workspace change is already running" };
+    workspaceSwitchInFlightRef.current = true;
     try {
-      const saved = await invoke<AppSettings>("try_set_active_workspace_path", { path });
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      applySavedSettings(saved, { skipAutosave: true });
+      let saved: AppSettings;
+      try {
+        saved = path === null
+          ? await invoke<AppSettings>("reset_active_workspace_path")
+          : await invoke<AppSettings>("try_set_active_workspace_path", { path });
+      } catch (error) {
+        return { ok: false, message: String(error) };
+      }
+
+      const generation = beginWorkspaceLoadGeneration(resetWorkspaceBoundState);
+      const local = appSettingsRef.current;
+      const baseline = savedSettingsRef.current;
+      if (local && baseline !== null && serializeSettingsForCompare(local) !== baseline) {
+        // Edits still waiting for their autosave stay pending on top of the acknowledged settings.
+        settingsRevisionRef.current = saved.revision ?? 0;
+        appliedWorkspacePathRef.current = saved.workspace_path ?? null;
+        savedSettingsRef.current = serializeSettingsForCompare(saved);
+        setAppSettings({
+          ...mergePendingLocalOntoAcknowledged(saved, local, baseline),
+          workspace_path: saved.workspace_path,
+        });
+      } else {
+        applySavedSettings(saved, { skipAutosave: true });
+      }
       await Promise.all([
         loadWorkspaceDiagnostics(generation).catch(() => {}),
         loadWorkspaceResources(generation),
       ]);
-    } catch (error) {
-      if (!isWorkspaceLoadCurrent(generation)) return;
-      setError(`Activate workspace: ${error}`);
+      return { ok: true };
+    } finally {
+      workspaceSwitchInFlightRef.current = false;
     }
   }, [
-    appSettings,
     applySavedSettings,
+    appliedWorkspacePathRef,
     beginWorkspaceLoadGeneration,
-    isWorkspaceLoadCurrent,
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
     resetWorkspaceBoundState,
-    setError,
+    setAppSettings,
   ]);
 
   const clearSettingsMsg = useCallback(() => setSettingsMsg(null), []);

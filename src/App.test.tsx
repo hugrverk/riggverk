@@ -1,5 +1,6 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { open } from "@tauri-apps/plugin-dialog";
 import App from "./App";
 import { defaultSettings } from "./lib/settingsDraft";
 import type { AppSettings } from "./types";
@@ -21,19 +22,30 @@ interface Backend {
   openResult: { success: boolean; stderr: string };
 }
 
+const DEFAULT_WORKSPACE = "/tmp/ws";
+
 function installBackend(overrides: Partial<AppSettings> = {}): Backend {
   const backend: Backend = {
     settings: { ...defaultSettings(), revision: 1, ...overrides },
     commandLog: [],
     openResult: { success: true, stderr: "" },
   };
-  invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings }) => {
+  invokeMock.mockImplementation((command: string, args?: { settings?: AppSettings; path?: string }) => {
     backend.commandLog.push(command);
     switch (command) {
       case "get_settings":
         return Promise.resolve({ settings: backend.settings, load_warning: null });
       case "update_settings":
         backend.settings = { ...(args?.settings ?? backend.settings), revision: (backend.settings.revision ?? 0) + 1 };
+        return Promise.resolve(backend.settings);
+      case "try_set_active_workspace_path":
+        if (args?.path?.includes("invalid")) {
+          return Promise.reject("invalid workspace path: not a valid workspace (missing .agent-workspace/workspace.json)");
+        }
+        backend.settings = { ...backend.settings, workspace_path: args?.path ?? null, revision: (backend.settings.revision ?? 0) + 1 };
+        return Promise.resolve(backend.settings);
+      case "reset_active_workspace_path":
+        backend.settings = { ...backend.settings, workspace_path: null, revision: (backend.settings.revision ?? 0) + 1 };
         return Promise.resolve(backend.settings);
       case "get_agent_targets":
       case "list_backups":
@@ -42,8 +54,8 @@ function installBackend(overrides: Partial<AppSettings> = {}): Backend {
         return Promise.resolve([]);
       case "get_workspace_diagnostics":
         return Promise.resolve({
-          candidate_path: "/tmp/ws",
-          resolved_path: "/tmp/ws",
+          candidate_path: backend.settings.workspace_path ?? DEFAULT_WORKSPACE,
+          resolved_path: backend.settings.workspace_path ?? DEFAULT_WORKSPACE,
           valid: true,
           error: null,
           markers: [],
@@ -125,5 +137,85 @@ describe("App", () => {
     });
 
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("no application knows how to open this"));
+  });
+
+  describe("workspace picker in Settings", () => {
+    async function openSettings(backend: Backend) {
+      render(<App />);
+      await waitFor(() => expect(commandCount(backend, "get_settings")).toBeGreaterThanOrEqual(1));
+      fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+      await screen.findByRole("region", { name: "Settings" });
+      return within(await screen.findByRole("group", { name: "workspace" }));
+    }
+
+    beforeEach(() => {
+      vi.mocked(open).mockReset();
+    });
+
+    it("switches to the chosen folder and reloads workspace state without leaving Settings", async () => {
+      const backend = installBackend();
+      const row = await openSettings(backend);
+      expect(row.getByText("/tmp/ws")).toBeTruthy();
+      vi.mocked(open).mockResolvedValue("/tmp/other");
+      const diagnosticsBefore = commandCount(backend, "get_workspace_diagnostics");
+
+      await act(async () => {
+        fireEvent.click(row.getByRole("button", { name: /choose…/ }));
+      });
+
+      await waitFor(() => expect(row.getByText("/tmp/other")).toBeTruthy());
+      expect(row.getByRole("status", { name: "Workspace change" }).textContent).toContain("workspace set to /tmp/other");
+      expect(backend.settings.workspace_path).toBe("/tmp/other");
+      expect(commandCount(backend, "try_set_active_workspace_path")).toBe(1);
+      expect(commandCount(backend, "get_workspace_diagnostics")).toBeGreaterThan(diagnosticsBefore);
+      expect(screen.getByRole("region", { name: "Settings" })).toBeTruthy();
+    });
+
+    it("refuses a folder the backend rejects, says why, and keeps the current workspace", async () => {
+      const backend = installBackend();
+      const row = await openSettings(backend);
+      vi.mocked(open).mockResolvedValue("/tmp/invalid-folder");
+      const diagnosticsBefore = commandCount(backend, "get_workspace_diagnostics");
+
+      await act(async () => {
+        fireEvent.click(row.getByRole("button", { name: /choose…/ }));
+      });
+
+      await waitFor(() =>
+        expect(row.getByRole("status", { name: "Workspace change" }).textContent).toContain(
+          "/tmp/invalid-folder is not an Agent Workspace folder (missing .agent-workspace/workspace.json)",
+        ),
+      );
+      expect(row.getByText("/tmp/ws")).toBeTruthy();
+      expect(backend.settings.workspace_path).toBeNull();
+      expect(commandCount(backend, "get_workspace_diagnostics")).toBe(diagnosticsBefore);
+    });
+
+    it("leaves everything alone when the picker is cancelled", async () => {
+      const backend = installBackend();
+      const row = await openSettings(backend);
+      vi.mocked(open).mockResolvedValue(null);
+
+      await act(async () => {
+        fireEvent.click(row.getByRole("button", { name: /choose…/ }));
+      });
+
+      expect(commandCount(backend, "try_set_active_workspace_path")).toBe(0);
+      expect(row.getByRole("status", { name: "Workspace change" }).textContent).toBe("");
+    });
+
+    it("resets a custom folder to the default", async () => {
+      const backend = installBackend({ workspace_path: "/tmp/other" });
+      const row = await openSettings(backend);
+      await waitFor(() => expect(row.getByText("/tmp/other")).toBeTruthy());
+
+      await act(async () => {
+        fireEvent.click(row.getByRole("button", { name: /reset to default/ }));
+      });
+
+      await waitFor(() => expect(row.getByText("/tmp/ws")).toBeTruthy());
+      expect(backend.settings.workspace_path).toBeNull();
+      expect(commandCount(backend, "reset_active_workspace_path")).toBe(1);
+    });
   });
 });

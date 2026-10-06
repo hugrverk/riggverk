@@ -123,6 +123,57 @@ describe("useAppCommands", () => {
       expect(deps.setLibrarySource).toHaveBeenCalledWith("skills");
     });
 
+    describe(":workspace choose|reset", () => {
+      const workspaceSwitch = (overrides: Partial<NonNullable<AppCommandDeps["workspaceSwitch"]>> = {}) => ({
+        choose: vi.fn(),
+        reset: vi.fn(),
+        isDefault: false,
+        busy: false,
+        ...overrides,
+      });
+
+      it("choose and reset hand over to the workspace picker, without leaving the page", () => {
+        const switcher = workspaceSwitch();
+        const deps = makeDeps({ workspaceSwitch: switcher });
+        setup(deps);
+        runLine("workspace choose");
+        expect(switcher.choose).toHaveBeenCalledTimes(1);
+        runLine("ws reset");
+        expect(switcher.reset).toHaveBeenCalledTimes(1);
+        expect(deps.switchView).not.toHaveBeenCalled();
+      });
+
+      it("plain :workspace still opens the page", () => {
+        const deps = makeDeps({ workspaceSwitch: workspaceSwitch() });
+        setup(deps);
+        runLine("workspace");
+        expect(deps.switchView).toHaveBeenCalledWith("start");
+      });
+
+      it("refuses reset when the default is already active, and both while a change runs", () => {
+        const defaults = workspaceSwitch({ isDefault: true });
+        setup(makeDeps({ workspaceSwitch: defaults }));
+        runLine("workspace reset");
+        expect(commandLineError()).toContain("already the default workspace");
+        expect(defaults.reset).not.toHaveBeenCalled();
+        cleanup();
+
+        const busy = workspaceSwitch({ busy: true });
+        setup(makeDeps({ workspaceSwitch: busy }));
+        runLine("workspace choose");
+        expect(commandLineError()).toContain("already running");
+        expect(busy.choose).not.toHaveBeenCalled();
+      });
+
+      it("rejects an unknown action", () => {
+        const deps = makeDeps({ workspaceSwitch: workspaceSwitch() });
+        setup(deps);
+        runLine("workspace nowhere");
+        expect(commandLineError()).toBeTruthy();
+        expect(deps.switchView).not.toHaveBeenCalled();
+      });
+    });
+
     it("a hidden harness is refused with the reason instead of falling back to the workspace", () => {
       const deps = makeDeps({ enabledHarnessIds: ["codex"] });
       setup(deps);

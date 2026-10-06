@@ -9,6 +9,7 @@ import { useUninstallRecovery } from "./lib/useUninstallRecovery";
 import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
+import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
 import { useInstallScreen } from "./hooks/useInstallScreen";
 import { useRollbackRequest } from "./hooks/useRollbackRequest";
@@ -222,7 +223,7 @@ function AppShell() {
   const rollbackTransactionId = applyTransactionId ?? uninstallRecoveryTransactionId;
   const [uninstallPreviewRequested, setUninstallPreviewRequested] = useState(false);
   const [overviewRefreshKey, setOverviewRefreshKey] = useState(0);
-  const { beginConfirm } = useShellState();
+  const { beginConfirm, notify } = useShellState();
 
   // workspace action runner (terminal output, activity animation, action wrappers)
   const {
@@ -276,6 +277,7 @@ function AppShell() {
     toggleHarness,
     clearSettingsMsg,
     mutateAppSettings,
+    persistActiveWorkspace,
   } = useAppSettingsController({
     setError,
     appliedWorkspacePathRef,
@@ -291,6 +293,16 @@ function AppShell() {
   const enabledHarnessIds = appSettings?.enabled_harness_ids ?? [];
   const enabledHarnessKey = enabledHarnessIds.join(",");
   enabledHarnessIdsRef.current = enabledHarnessIds;
+
+  // Settings and `:workspace choose|reset` share one picker. A switch also makes the install overview stale.
+  const activeWorkspacePath =
+    workspaceDiagnostics?.resolved_path ?? workspaceDiagnostics?.candidate_path ?? appSettings?.workspace_path ?? null;
+  const switchWorkspace = useCallback(async (path: string | null) => {
+    const result = await persistActiveWorkspace(path);
+    if (result.ok) setOverviewRefreshKey(key => key + 1);
+    return result;
+  }, [persistActiveWorkspace]);
+  const workspacePicker = useWorkspacePicker({ activePath: activeWorkspacePath, libraryDirty, switchWorkspace });
 
   useEffect(() => {
     if (
@@ -643,6 +655,13 @@ function AppShell() {
     return text || null;
   }, [wsLog]);
 
+  // The command line has no row to show the outcome in: a switch is a notice, a refusal the error banner.
+  const reportWorkspaceSwitch = (message: { ok: boolean; text: string } | null) => {
+    if (!message) return;
+    if (message.ok) notify(message.text);
+    else setError(message.text);
+  };
+
   useAppCommands({
     enabledHarnessIds,
     workspaceValid,
@@ -663,6 +682,12 @@ function AppShell() {
     rollbackTransactionId,
     requestRollback,
     requestUninstallPreview,
+    workspaceSwitch: {
+      isDefault: appSettings?.workspace_path == null,
+      busy: workspacePicker.busy,
+      choose: async () => reportWorkspaceSwitch(await workspacePicker.choose()),
+      reset: async () => reportWorkspaceSwitch(await workspacePicker.reset()),
+    },
     setError,
   });
 
@@ -867,6 +892,10 @@ function AppShell() {
             onRetrySave={retrySaveSettings}
             onReset={resetSettings}
             colorResetKey={colorResetKey}
+            workspacePath={activeWorkspacePath}
+            workspaceBusy={workspacePicker.busy}
+            onChooseWorkspace={workspacePicker.choose}
+            onResetWorkspace={workspacePicker.reset}
           />
           </Suspense>
         )}

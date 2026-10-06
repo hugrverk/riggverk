@@ -43,6 +43,15 @@ export interface AppCommandDeps {
   requestRollback: () => void | Promise<void>;
   /** Opens the uninstall preview dialog on the workspace page. */
   requestUninstallPreview: () => void | Promise<void>;
+  /** `:workspace choose|reset`: switch the folder the app works in. Absent: the command only opens the page. */
+  workspaceSwitch?: {
+    choose: () => void | Promise<void>;
+    reset: () => void | Promise<void>;
+    /** No custom folder is saved (reset has nothing to do). */
+    isDefault: boolean;
+    /** A choose or reset is already running. */
+    busy: boolean;
+  };
   setError: (message: string | null) => void;
 }
 
@@ -101,15 +110,43 @@ export function useAppCommands(deps: AppCommandDeps): void {
     return null;
   };
 
+  const workspaceActions = ["choose", "reset"];
+  const viewArgs = (def: (typeof VIEW_DEFS)[number]): CommandSpec["args"] => {
+    if (def.id === "library") return [{ name: "source", kind: "enum", values: LIBRARY_SOURCES, optional: true }];
+    if (def.id === "start" && deps.workspaceSwitch) {
+      return [{
+        name: "action",
+        kind: "enum",
+        values: workspaceActions,
+        optional: true,
+        describe: value => (value === "choose" ? "pick the workspace folder" : "back to the default workspace"),
+      }];
+    }
+    return undefined;
+  };
+
   const viewCommands = VIEW_DEFS.map((def): CommandSpec => ({
     name: def.command,
     aliases: def.aliases,
-    summary: `open ${def.label}`,
+    summary: def.id === "start" && deps.workspaceSwitch ? `open ${def.label}, or choose | reset its folder` : `open ${def.label}`,
     group: "Views",
-    args: def.id === "library" ? [{ name: "source", kind: "enum", values: LIBRARY_SOURCES, optional: true }] : undefined,
+    args: viewArgs(def),
     enabled: () =>
       def.harness && !deps.enabledHarnessIds.includes(def.harness) ? `${def.tab} is hidden in Settings` : true,
+    validate: def.id === "start"
+      ? parsed => {
+          const action = parsed.named.action;
+          if (!action || !deps.workspaceSwitch) return null;
+          if (deps.workspaceSwitch.busy) return "a workspace change is already running";
+          if (action === "reset" && deps.workspaceSwitch.isDefault) return "already the default workspace";
+          return null;
+        }
+      : undefined,
     run: parsed => {
+      if (def.id === "start" && parsed.named.action && deps.workspaceSwitch) {
+        void (parsed.named.action === "reset" ? deps.workspaceSwitch.reset() : deps.workspaceSwitch.choose());
+        return;
+      }
       void deps.switchView(def.id);
       if (def.id === "library" && parsed.named.source) void deps.setLibrarySource?.(parsed.named.source as LibrarySourceType);
     },

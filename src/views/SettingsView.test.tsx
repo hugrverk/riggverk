@@ -404,3 +404,148 @@ describe("SettingsView reset", () => {
     expect(onReset).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("SettingsView workspace row", () => {
+  const custom = { ...defaultSettings(), workspace_path: "/Users/dev/other-workspace", revision: 1 };
+
+  function workspaceRow() {
+    return within(pane("App")).getByRole("group", { name: "workspace" });
+  }
+
+  it("shows the default workspace and offers choose, but not reset", () => {
+    renderSettings({
+      workspacePath: "/Users/dev/.config/agent-workspace",
+      onChooseWorkspace: vi.fn(async () => null),
+      onResetWorkspace: vi.fn(async () => null),
+    });
+    const row = workspaceRow();
+    expect(row.textContent).toContain("/Users/dev/.config/agent-workspace");
+    expect(row.textContent).toContain("default");
+    expect(within(row).getByRole("button", { name: /choose…/ }).getAttribute("aria-disabled")).toBeNull();
+    const reset = within(row).getByRole("button", { name: /reset to default/ });
+    expect(reset.getAttribute("aria-disabled")).toBe("true");
+    expect(reset.title).toBe("already the default workspace");
+  });
+
+  it("shows a custom folder and offers reset", () => {
+    renderSettings({
+      appSettings: custom,
+      workspacePath: "/Users/dev/other-workspace",
+      onChooseWorkspace: vi.fn(async () => null),
+      onResetWorkspace: vi.fn(async () => null),
+    });
+    const row = workspaceRow();
+    expect(row.textContent).toContain("/Users/dev/other-workspace");
+    expect(row.textContent).toContain("custom folder");
+    expect(within(row).getByRole("button", { name: /reset to default/ }).getAttribute("aria-disabled")).toBeNull();
+  });
+
+  it("falls back to the saved path and then the default display path", () => {
+    renderSettings({ appSettings: custom });
+    expect(workspaceRow().textContent).toContain("/Users/dev/other-workspace");
+    cleanup();
+    renderSettings();
+    expect(workspaceRow().textContent).toContain("~/.config/agent-workspace");
+  });
+
+  it("chooses from the c key and from the button, through onChooseWorkspace", async () => {
+    const onChooseWorkspace = vi.fn(async () => null);
+    renderSettings({ onChooseWorkspace, onResetWorkspace: vi.fn(async () => null) });
+
+    focus(radios("Landing page")[0]!);
+    press(document.activeElement!, "c");
+    expect(onChooseWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+
+    fireEvent.click(within(workspaceRow()).getByRole("button", { name: /choose…/ }));
+    expect(onChooseWorkspace).toHaveBeenCalledTimes(2);
+    await act(async () => {});
+  });
+
+  it("resets from the shifted R key and the button only when a custom folder is active", async () => {
+    const onResetWorkspace = vi.fn(async () => null);
+    const { rerenderFrame, props } = renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace });
+
+    focus(radios("Landing page")[0]!);
+    press(document.activeElement!, "R", { shiftKey: true });
+    fireEvent.click(within(workspaceRow()).getByRole("button", { name: /reset to default/ }));
+    expect(onResetWorkspace).not.toHaveBeenCalled();
+
+    rerenderFrame(<SettingsView {...props} appSettings={custom} />);
+    focus(radios("Landing page")[0]!);
+    press(document.activeElement!, "R", { shiftKey: true });
+    expect(onResetWorkspace).toHaveBeenCalledTimes(1);
+    await act(async () => {});
+    fireEvent.click(within(workspaceRow()).getByRole("button", { name: /reset to default/ }));
+    expect(onResetWorkspace).toHaveBeenCalledTimes(2);
+    await act(async () => {});
+  });
+
+  it("keeps the appearance reset on lower-case r", () => {
+    const { props } = renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
+    focus(radios("Theme")[0]!);
+    press(document.activeElement!, "r");
+    expect(props.onReset).toHaveBeenCalledTimes(1);
+    expect(props.onResetWorkspace).toHaveBeenCalledTimes(0);
+  });
+
+  it("shows what came back, an error for a refused folder and a confirmation for a switch", async () => {
+    const onChooseWorkspace = vi
+      .fn<() => Promise<{ ok: boolean; text: string } | null>>()
+      .mockResolvedValueOnce({ ok: false, text: "/tmp/x is not an Agent Workspace folder (missing README.md)" })
+      .mockResolvedValueOnce({ ok: true, text: "workspace set to /tmp/y" })
+      .mockResolvedValueOnce(null);
+    renderSettings({ onChooseWorkspace });
+    const choose = () => within(workspaceRow()).getByRole("button", { name: /choose…/ });
+    const status = () => within(workspaceRow()).getByRole("status", { name: "Workspace change" });
+
+    fireEvent.click(choose());
+    await vi.waitFor(() => expect(status().textContent).toContain("not an Agent Workspace folder"));
+    expect(status().querySelector(".c-fail")).not.toBeNull();
+
+    fireEvent.click(choose());
+    await vi.waitFor(() => expect(status().textContent).toContain("workspace set to /tmp/y"));
+    expect(status().querySelector(".c-ok")).not.toBeNull();
+
+    // A cancelled picker clears the previous message and shows nothing.
+    fireEvent.click(choose());
+    await vi.waitFor(() => expect(status().textContent).toBe(""));
+  });
+
+  it("disables both actions and says so while a change is running", () => {
+    const onChooseWorkspace = vi.fn(async () => null);
+    renderSettings({
+      appSettings: custom,
+      workspaceBusy: true,
+      onChooseWorkspace,
+      onResetWorkspace: vi.fn(async () => null),
+    });
+    const row = workspaceRow();
+    for (const name of [/choose…/, /reset to default/]) {
+      const button = within(row).getByRole("button", { name });
+      expect(button.getAttribute("aria-disabled")).toBe("true");
+      fireEvent.click(button);
+    }
+    expect(onChooseWorkspace).not.toHaveBeenCalled();
+    expect(row.textContent).toContain("switching workspace…");
+    focus(radios("Landing page")[0]!);
+    press(document.activeElement!, "c");
+    expect(onChooseWorkspace).not.toHaveBeenCalled();
+  });
+
+  it("reaches the workspace actions with j and k like every other row", () => {
+    renderSettings({ onChooseWorkspace: vi.fn(async () => null), onResetWorkspace: vi.fn(async () => null) });
+    const choose = within(workspaceRow()).getByRole("button", { name: /choose…/ });
+    focus(radios("Landing page")[0]!);
+    // landing, four harness checkboxes, then the workspace actions.
+    for (let step = 0; step < 5; step += 1) press(document.activeElement!, "j");
+    expect(document.activeElement).toBe(choose);
+    press(document.activeElement!, "k");
+    expect(document.activeElement).not.toBe(choose);
+  });
+
+  it("offers no workspace actions without handlers", () => {
+    renderSettings();
+    expect(within(workspaceRow()).queryByRole("button")).toBeNull();
+  });
+});
