@@ -269,12 +269,20 @@ fn git_status(root: &Path) -> (bool, String, bool, String) {
         return (false, "not git".into(), false, "not git".into());
     }
 
-    let (_, out) = git_output(root, &["branch", "--show-current"]);
-    let branch = out.trim().to_string();
+    // A failed or timed-out call has empty output; that must not read as "detached" or "clean".
+    // The IPC `dirty` is a plain bool, so a status that could not be read counts as dirty
+    // (not provably clean); the branch says `unknown`.
+    let (branch_ok, out) = git_output(root, &["branch", "--show-current"]);
+    let branch = if branch_ok {
+        out.trim().to_string()
+    } else {
+        "unknown".to_string()
+    };
 
-    let (_, dirty_out) = git_output(root, &["status", "--short"]);
-    let dirty = !dirty_out.trim().is_empty();
+    let (dirty_ok, dirty_out) = git_output(root, &["status", "--short"]);
+    let dirty = !dirty_ok || !dirty_out.trim().is_empty();
 
+    // `git log` also fails on a repository without commits, so its empty output stays "no commit".
     let (_, commit_out) = git_output(root, &["log", "-1", "--pretty=%h %s"]);
     let latest_commit = commit_out.trim().to_string();
 
@@ -688,6 +696,40 @@ mod tests {
     }
 
     // ── git tests ──
+
+    #[cfg(unix)]
+    #[test]
+    fn unreadable_git_status_is_not_reported_as_clean() {
+        let _guard = crate::test_env::guard::lock();
+        let root = temp_root("git-status-unreadable");
+        fs::create_dir_all(&root).expect("create temp dir");
+        for args in [
+            vec!["init", "--quiet"],
+            vec!["add", "-A"],
+            vec!["commit", "--quiet", "--allow-empty", "-m", "init"],
+        ] {
+            let status = std::process::Command::new("git")
+                .args(["-c", "user.name=t", "-c", "user.email=t@example.invalid"])
+                .args(&args)
+                .current_dir(&root)
+                .status()
+                .expect("run git");
+            assert!(status.success(), "git {args:?}");
+        }
+        let (_, _, clean_dirty, _) = git_status(&root);
+        assert!(!clean_dirty, "a fresh repository is clean");
+        // A damaged index makes `git status` fail with empty output.
+        fs::write(root.join(".git/index"), b"not an index").expect("corrupt index");
+
+        let (available, _, dirty, _) = git_status(&root);
+
+        let _ = fs::remove_dir_all(&root);
+        assert!(available);
+        assert!(
+            dirty,
+            "a status that could not be read must not read as clean"
+        );
+    }
 
     #[test]
     fn non_git_workspace_is_reported_as_not_git() {

@@ -14,6 +14,7 @@ const GIT_LOCAL_TIMEOUT: Duration = Duration::from_secs(30);
 const TOOL_PROBE_TIMEOUT: Duration = Duration::from_secs(10);
 const GH_AUTH_TIMEOUT: Duration = Duration::from_secs(15);
 const GH_LIST_TIMEOUT: Duration = Duration::from_secs(60);
+const GH_LIST_STDOUT_BYTES: usize = 16 * 1024 * 1024;
 const GIT_NONINTERACTIVE_ENV: [(&str, &str); 2] =
     [("GCM_INTERACTIVE", "never"), ("GIT_ASKPASS", "")];
 
@@ -238,8 +239,12 @@ fn warn_invalid_configured_branch(configured: Option<&str>, warnings: &mut Vec<S
     }
 }
 
+/// `unknown` when git failed or timed out, so it is not mistaken for a detached HEAD.
 fn current_branch(repo: &Path) -> String {
-    let (_, out, _) = git_in_repo(repo, &["branch", "--show-current"]);
+    let (ok, out, _) = git_in_repo(repo, &["branch", "--show-current"]);
+    if !ok {
+        return "unknown".into();
+    }
     let branch = out.trim().to_string();
     if branch.is_empty() {
         "detached".into()
@@ -248,9 +253,22 @@ fn current_branch(repo: &Path) -> String {
     }
 }
 
-fn is_dirty(repo: &Path) -> bool {
-    let (_, out, _) = git_in_repo(repo, &["status", "--short"]);
-    !out.trim().is_empty()
+/// `None` when `git status` failed or timed out: the tree was never seen, so it is not clean.
+fn is_dirty(repo: &Path) -> Option<bool> {
+    let (ok, out, _) = git_in_repo(repo, &["status", "--short"]);
+    ok.then(|| !out.trim().is_empty())
+}
+
+/// Snapshot `dirty` flag. The IPC field is a plain bool, so an unknown state is reported as a
+/// warning and shown as not dirty.
+fn dirty_with_warning(repo: &Path, warnings: &mut Vec<String>) -> bool {
+    is_dirty(repo).unwrap_or_else(|| {
+        warnings.push(
+            "Could not determine whether the working tree is clean (git status failed or timed out)."
+                .into(),
+        );
+        false
+    })
 }
 
 fn detect_default_branch(repo: &Path, configured: Option<&str>) -> Option<String> {
@@ -960,8 +978,14 @@ fn redact_gh_status(raw: String) -> String {
         .join("\n")
 }
 
-/// Runs a bounded `gh ... list` and returns its stdout. A non-zero exit or timeout is
-/// reported through `warnings` instead of silently producing an empty list.
+/// Well-formed JSON whose top level is an array (`IgnoredAny` validates without building values).
+fn is_json_array(raw: &str) -> bool {
+    raw.trim_start().starts_with('[') && serde_json::from_str::<serde::de::IgnoredAny>(raw).is_ok()
+}
+
+/// Runs a bounded `gh ... list` and returns its stdout. A non-zero exit, timeout, cut-off
+/// output, or output that is not a JSON list is reported through `warnings` instead of
+/// silently producing an empty list.
 fn run_gh_list(
     repo: &Path,
     args: &[&str],
@@ -974,10 +998,24 @@ fn run_gh_list(
         repo,
         BoundedCmdOptions {
             timeout: Some(GH_LIST_TIMEOUT),
+            stdout_cap: GH_LIST_STDOUT_BYTES,
             ..BoundedCmdOptions::default()
         },
     );
     if result.success {
+        if result.stdout_truncated {
+            warnings.push(format!(
+                "gh {what} output exceeded {} MB and was cut; the list is not shown",
+                GH_LIST_STDOUT_BYTES / (1024 * 1024)
+            ));
+            return None;
+        }
+        if !is_json_array(&result.stdout) {
+            warnings.push(format!(
+                "gh {what} returned output that is not a JSON list; the list is not shown"
+            ));
+            return None;
+        }
         return Some(result.stdout);
     }
     if result.timed_out {
@@ -1318,7 +1356,7 @@ pub fn inspect_repo(
     }
 
     let branch = current_branch(&path);
-    let dirty = is_dirty(&path);
+    let dirty = dirty_with_warning(&path, &mut warnings);
     warn_invalid_configured_branch(configured_default_branch, &mut warnings);
     let default_branch = detect_default_branch(&path, configured_default_branch);
     let (ahead, behind) = default_branch
@@ -2374,12 +2412,99 @@ echo '[{"number":3,"title":"i","state":"OPEN","labels":[{"name":"bug"}]}]'"#,
         assert_eq!(args[limit_at + 1], (MAX_GH_OPEN_ISSUES + 1).to_string());
     }
 
+    #[cfg(unix)]
+    #[test]
+    fn gh_list_that_is_not_json_is_reported_instead_of_hidden() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        let bin = install_fake_gh("gh-not-json", "echo 'Welcome to a gh that prints prose'");
+        let repo = repo_with_github_origin("gh-not-json-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, truncated) = gh_merged_prs(&repo, &mut warnings);
+        let (issues, _) = gh_open_issues(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert!(prs.is_empty() && issues.is_empty() && !truncated);
+        assert_eq!(warnings.len(), 2, "{warnings:?}");
+        assert!(warnings[0].contains("gh pr list") && warnings[0].contains("not a JSON list"));
+        assert!(warnings[1].contains("gh issue list") && warnings[1].contains("not a JSON list"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn gh_list_output_over_the_cap_is_reported_instead_of_parsed_as_empty() {
+        let _guard = crate::test_env::guard::lock();
+        let _restore = crate::test_env::guard::EnvRestore::capture();
+        // A JSON array that starts fine and runs past the stdout cap.
+        let bin = install_fake_gh(
+            "gh-huge",
+            "printf '['\nhead -c 17000000 /dev/zero | tr '\\0' 'x'",
+        );
+        let repo = repo_with_github_origin("gh-huge-repo");
+
+        let mut warnings = Vec::new();
+        let (prs, _) = gh_merged_prs(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&bin);
+        let _ = fs::remove_dir_all(&repo);
+        assert!(prs.is_empty());
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("gh pr list") && warnings[0].contains("was cut"),
+            "{warnings:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_failed_git_status_is_unknown_not_clean() {
+        let _guard = crate::test_env::guard::lock();
+        let repo = temp_dir_for("dirty-unknown");
+        git_init(&repo);
+        fs::write(repo.join("file.txt"), "x").expect("write file");
+        git_ok(&repo, &["add", "-A"]);
+        git_ok(&repo, &["commit", "--quiet", "-m", "init"]);
+        assert_eq!(is_dirty(&repo), Some(false));
+        // A damaged index makes `git status` exit non-zero; its empty output must not read as clean.
+        fs::write(repo.join(".git/index"), b"not an index").expect("corrupt index");
+
+        let state = is_dirty(&repo);
+        let mut warnings = Vec::new();
+        let flag = dirty_with_warning(&repo, &mut warnings);
+
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(state, None);
+        assert!(!flag);
+        assert_eq!(warnings.len(), 1, "{warnings:?}");
+        assert!(
+            warnings[0].contains("working tree is clean"),
+            "{warnings:?}"
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn current_branch_is_unknown_when_git_fails() {
+        let _guard = crate::test_env::guard::lock();
+        let repo = temp_dir_for("branch-unknown");
+        git_init(&repo);
+        assert_ne!(current_branch(&repo), "unknown");
+        fs::write(repo.join(".git/HEAD"), b"garbage").expect("corrupt HEAD");
+
+        let branch = current_branch(&repo);
+
+        let _ = fs::remove_dir_all(&repo);
+        assert_eq!(branch, "unknown");
+    }
+
     #[test]
     fn is_dirty_does_not_take_the_index_lock() {
         let repo = temp_dir_for("dirty-no-lock");
         git_init(&repo);
         fs::write(repo.join("file.txt"), "x").expect("write file");
-        assert!(is_dirty(&repo));
+        assert_eq!(is_dirty(&repo), Some(true));
         assert!(!repo.join(".git/index.lock").exists());
         let _ = fs::remove_dir_all(&repo);
     }
