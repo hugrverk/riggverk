@@ -37,6 +37,25 @@ PERMISSION_KEY_ORDER = [
     "skill", "bash", "edit",
 ]
 
+# Policy keys this generator understands; anything else would be silently dropped
+# from opencode.json, so it is rejected instead.
+POLICY_SECTION_KEYS = {
+    "top_level": None,
+    "skill": None,
+    "read": {"default", "deny", "allow_override"},
+    "edit": {"default", "allow", "ask", "deny", "allow_override"},
+    "bash": {"default", "allow", "ask", "deny", "secret_content_commands", "secret_content_patterns"},
+    "role_profiles": None,
+}
+
+# Non-permission keys emitted first, in this order. Unknown keys from
+# opencode.base.json follow them; "permission" is generated from the policy.
+BASE_KEY_ORDER = [
+    "$schema", "share", "autoupdate", "snapshot",
+    "model", "small_model", "default_agent",
+    "provider", "mcp", "compaction", "watcher",
+]
+
 
 def load_json(path, label):
     """Load and validate a strict JSON file."""
@@ -126,7 +145,25 @@ def build_permission(policy):
         elif key in policy.get("top_level", {}):
             perm[key] = policy["top_level"][key]
 
+    # Unknown permission keys keep their policy order after the known ones.
+    for key, value in policy.get("top_level", {}).items():
+        if key not in PERMISSION_KEY_ORDER:
+            perm[key] = value
+
     return perm
+
+
+def unknown_policy_keys(policy):
+    """Return policy keys that build_permission would silently ignore."""
+    problems = []
+    for key, value in policy.items():
+        if key not in POLICY_SECTION_KEYS:
+            problems.append(key)
+            continue
+        allowed = POLICY_SECTION_KEYS[key]
+        if allowed is not None and isinstance(value, dict):
+            problems.extend(f"{key}.{sub}" for sub in value if sub not in allowed)
+    return problems
 
 
 def generate_config():
@@ -134,17 +171,23 @@ def generate_config():
     base = load_json(BASE_PATH, "opencode.base.json")
     policy = load_json(POLICY_PATH, "opencode.policy.json")
 
+    unknown = unknown_policy_keys(policy)
+    if unknown:
+        print(f"ERROR: unknown keys in opencode.policy.json would be dropped: {', '.join(unknown)}", file=sys.stderr)
+        sys.exit(1)
+    if "permission" in base:
+        print("ERROR: opencode.base.json must not define 'permission'; it is generated from opencode.policy.json", file=sys.stderr)
+        sys.exit(1)
+
     config = {}
 
-    # Base keys in stable order
-    base_keys = [
-        "$schema", "share", "autoupdate", "snapshot",
-        "model", "small_model", "default_agent",
-        "provider", "mcp", "compaction", "watcher",
-    ]
-    for key in base_keys:
+    # Base keys in stable order, then any unknown keys in file order
+    for key in BASE_KEY_ORDER:
         if key in base:
             config[key] = base[key]
+    for key, value in base.items():
+        if key not in config:
+            config[key] = value
 
     # Build and append permission
     config["permission"] = build_permission(policy)

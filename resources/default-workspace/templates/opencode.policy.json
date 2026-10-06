@@ -64,7 +64,12 @@
       "**/.zsh_history",
       "**/*.ppk",
       "**/*.jks",
-      "**/Pulumi.*.yaml"
+      "**/Pulumi.*.yaml",
+      "**/mcp.json",
+      "**/.claude.json",
+      "**/.codex/config.toml",
+      "**/.git-credentials",
+      "**/.git/config"
     ],
     "allow_override": [
       "**/.env.example",
@@ -178,7 +183,13 @@
       "git diff*",
       "git log*",
       "git show*",
-      "git branch*",
+      "git branch",
+      "git branch --list*",
+      "git branch --show-current",
+      "git branch -a",
+      "git branch -r",
+      "git branch -v",
+      "git branch -vv",
       "git rev-parse*",
       "git ls-files*",
       "git add*",
@@ -300,7 +311,13 @@
       "head *",
       "tail *",
       "sed *",
-      "git grep *"
+      "git grep *",
+      "find *-delete*",
+      "find *-exec*",
+      "find *-ok*",
+      "find *-fprint*",
+      "find *-fls*",
+      "git commit*--amend*"
     ],
     "deny": [
       "git push --force*",

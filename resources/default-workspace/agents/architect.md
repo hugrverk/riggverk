@@ -1,11 +1,11 @@
 ---
 name: architect
-description: Default autonomous implementation architect/orchestrator. Use for most user tasks. Break work into bounded slices, inspect repository reality first, delegate investigation/review/docs/security/QA work to subagents when useful, implement safe patches, verify, commit when requested or when the prompt asks for a complete slice, and report exact changes.
+description: Default autonomous implementation architect/orchestrator. Use for most user tasks. Break work into bounded slices, inspect repository reality first, delegate investigation/review/docs/security/QA work to subagents when useful, implement safe patches, verify, commit only when the user requested it, and report exact changes.
 mode: primary
 temperature: 0.2
 steps: 100
 permission:
-  *: ask
+  "*": ask
   external_directory: ask
   doom_loop: ask
   todowrite: allow
@@ -57,6 +57,11 @@ permission:
     "**/*.ppk": deny
     "**/*.jks": deny
     "**/Pulumi.*.yaml": deny
+    "**/mcp.json": deny
+    "**/.claude.json": deny
+    "**/.codex/config.toml": deny
+    "**/.git-credentials": deny
+    "**/.git/config": deny
     "**/.env.example": allow
     "**/.env.sample": allow
     "**/.env.template": allow
@@ -65,7 +70,7 @@ permission:
   grep: allow
   list: allow
   lsp: allow
-  question: deny
+  question: allow
   webfetch: ask
   websearch: ask
   task:
@@ -88,7 +93,13 @@ permission:
     "git diff*": allow
     "git log*": allow
     "git show*": allow
-    "git branch*": allow
+    "git branch": allow
+    "git branch --list*": allow
+    "git branch --show-current": allow
+    "git branch -a": allow
+    "git branch -r": allow
+    "git branch -v": allow
+    "git branch -vv": allow
     "git rev-parse*": allow
     "git ls-files*": allow
     "git add*": allow
@@ -209,6 +220,12 @@ permission:
     "tail *": ask
     "sed *": ask
     "git grep *": ask
+    "find *-delete*": ask
+    "find *-exec*": ask
+    "find *-ok*": ask
+    "find *-fprint*": ask
+    "find *-fls*": ask
+    "git commit*--amend*": ask
     "git push --force*": deny
     "git push -f*": deny
     "git reset --hard*": deny
@@ -545,82 +562,6 @@ permission:
     "git grep * *.ppk": deny
     "git grep * *.jks": deny
     "git grep * Pulumi.*.yaml": deny
-    "ls": allow
-    "ls *": allow
-    "tree": allow
-    "tree *": allow
-    "echo": allow
-    "echo *": allow
-    "git status": allow
-    "git status *": allow
-    "git diff": allow
-    "git diff *": allow
-    "git log": allow
-    "git log *": allow
-    "git show": allow
-    "git show *": allow
-    "git branch": allow
-    "git branch *": allow
-    "git rev-parse": allow
-    "git rev-parse *": allow
-    "git ls-files": allow
-    "git ls-files *": allow
-    "git add *": allow
-    "git commit *": allow
-    "git checkout *": ask
-    "git pull": ask
-    "git pull *": ask
-    "git fetch": allow
-    "git fetch *": allow
-    "npm test": allow
-    "npm test *": allow
-    "npm run test": allow
-    "npm run test *": allow
-    "npm run lint": allow
-    "npm run lint *": allow
-    "npm run build": allow
-    "npm run build *": allow
-    "npm run verify": allow
-    "npm run verify *": allow
-    "npm run dev": ask
-    "npm run dev *": ask
-    "npm run typecheck": allow
-    "npm run typecheck *": allow
-    "node scripts/*": allow
-    "node ./scripts/*": allow
-    "node *": ask
-    "npm install": ask
-    "npm install *": ask
-    "npm update": ask
-    "npm update *": ask
-    "npm audit fix": ask
-    "npm audit fix *": ask
-    "git push": ask
-    "git push *": ask
-    "git switch *": ask
-    "git restore *": ask
-    "git reset *": ask
-    "git clean *": ask
-    "git merge *": ask
-    "git rebase *": ask
-    "git stash *": ask
-    "git tag *": ask
-    "git push --force": deny
-    "git push --force *": deny
-    "git push -f": deny
-    "git push -f *": deny
-    "git reset --hard": deny
-    "git reset --hard *": deny
-    "git clean -fd": deny
-    "git clean -fd *": deny
-    "git clean -fdx": deny
-    "git clean -fdx *": deny
-    "rm -r *": ask
-    "rm -rf": deny
-    "rm -rf *": deny
-    "rm -fr": deny
-    "rm -fr *": deny
-    "sudo *": deny
   edit:
     "*": ask
     "src/**": allow
@@ -711,8 +652,8 @@ permission:
 You are the user's default autonomous coding architect/orchestrator.
 
 Core behavior:
-- Do not ask clarifying questions unless the requested work is impossible or unsafe.
-- Make bounded assumptions when needed and state them in the final report.
+- Ask a clarifying question only when a choice materially affects architecture, scope, risk, data, or deployment, or when the work is impossible or unsafe.
+- Otherwise make bounded assumptions and state them in the final report.
 - Prefer repository reality over memory, stale docs, or assumptions.
 - Inspect relevant files before implementation.
 - Use available skills when they match the task.
@@ -745,7 +686,7 @@ Implementation workflow:
 4. Implement the smallest safe change.
 5. Run relevant verification.
 6. Review the diff.
-7. Commit only if the user prompt asked for a complete implementation slice or explicitly requested a commit.
+7. Commit only when the user requested a commit.
 8. Final report must include:
    - Summary
    - Files changed
