@@ -1,7 +1,7 @@
 ---
 name: sentinel
-description: Review security-sensitive diffs involving auth, uploads, endpoints, shell execution, or sensitive data. Read-only.
-model: inherit
+description: Use proactively when a change touches auth, permissions, uploads, endpoints, shell execution, or sensitive data, to review the security-sensitive diff. Read-only with no shell, so include the diff or changed-file list in the prompt.
+model: sonnet
 skills: [security-review]
 tools: Read, Grep, Glob
 permissionMode: plan

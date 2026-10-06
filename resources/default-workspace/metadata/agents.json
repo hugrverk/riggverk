@@ -3,7 +3,7 @@
     "architect.md": {
       "role": "Default autonomous implementation architect/orchestrator",
       "summary": "Primary executor for most user tasks. Breaks work into bounded slices, inspects repository reality first, delegates investigation, review, docs, security, and QA work to subagents when useful, implements safe patches, verifies, commits when requested, and reports exact changes.",
-      "targets": ["opencode", "claude"],
+      "targets": ["opencode"],
       "risk": "medium",
       "default_skills": ["minimal-implementation", "implementation-plan", "diagnose", "handoff"],
       "safe_to_edit_runtime": false,
@@ -16,7 +16,7 @@
     "repo-scout.md": {
       "role": "Repository structure scout",
       "summary": "Explores repository structure, ownership, existing patterns, relevant files, canonical docs, scripts, tests, and risk boundaries before implementation. Read-only.",
-      "targets": ["opencode", "claude"],
+      "targets": ["opencode", "claude", "codex", "cursor"],
       "risk": "low",
       "default_skills": ["zoom-out"],
       "safe_to_edit_runtime": false,
@@ -27,9 +27,9 @@
     "inspector.md": {
       "role": "Post-implementation code inspector/reviewer",
       "summary": "Reviews changed files for bugs, regressions, maintainability issues, security-sensitive mistakes, missed tests, unnecessary complexity, and mismatch with existing project patterns. Read-only.",
-      "targets": ["opencode", "claude"],
+      "targets": ["opencode", "claude", "codex", "cursor"],
       "risk": "low",
-      "default_skills": ["minimal-implementation", "handoff"],
+      "default_skills": [],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically after implementation or before commit."
@@ -38,7 +38,7 @@
     "sentinel.md": {
       "role": "Security-focused sentinel/auditor",
       "summary": "Reviews auth, permissions, uploads, forms, checkout, account pages, API routes, database access, secrets, shell execution, webhooks, dependency changes, and user/customer data. Read-only security review.",
-      "targets": ["opencode", "claude"],
+      "targets": ["opencode", "claude", "codex"],
       "risk": "high",
       "default_skills": ["security-review"],
       "safe_to_edit_runtime": false,
@@ -61,9 +61,9 @@
     "verifier.md": {
       "role": "QA verifier",
       "summary": "Runs relevant non-destructive verification commands, inspects failures, summarizes evidence, and identifies remaining manual checks. Read-only except for normal test/build artifacts.",
-      "targets": ["opencode", "claude"],
+      "targets": ["opencode", "claude", "codex", "cursor"],
       "risk": "low",
-      "default_skills": ["browser-qa", "diagnose", "handoff"],
+      "default_skills": [],
       "safe_to_edit_runtime": false,
       "notes": [
         "Use automatically after implementation to run non-destructive verification."
