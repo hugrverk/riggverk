@@ -7,6 +7,7 @@ import {
 } from "../hooks/useInstallationOverview";
 import { HARNESS_NAV_ORDER } from "../lib/harnessInstallation";
 import type { InstallTarget } from "../lib/installPlan";
+import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AppSettings, InstallAgent } from "../types";
 import type { LibrarySourceType } from "../views/LibraryView";
 import { useShellState } from "./ShellState";
@@ -138,6 +139,7 @@ export function useAppCommands(deps: AppCommandDeps): void {
           const action = parsed.named.action;
           if (!action || !deps.workspaceSwitch) return null;
           if (deps.workspaceSwitch.busy) return "a workspace change is already running";
+          if (deps.busyLabel) return workspaceTaskBlockedMessage(deps.busyLabel);
           if (action === "reset" && deps.workspaceSwitch.isDefault) return "already the default workspace";
           return null;
         }

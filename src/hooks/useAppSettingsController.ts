@@ -14,6 +14,7 @@ import {
   type SettingsSaveStatus,
 } from "../lib/settingsDraft";
 import type { MutateAppSettings } from "../lib/useSavedRepoEntriesController";
+import { workspaceTaskBlockedMessage } from "../lib/workspaceErrors";
 import type { AgentTargetMeta, AppSettings, GetSettingsResponse, InstallAgent } from "../types";
 
 /**
@@ -42,6 +43,8 @@ export interface AppSettingsControllerDeps {
   loadWorkspaceDiagnostics: (generation?: number) => Promise<void>;
   loadWorkspaceResources: (generation?: number) => Promise<void>;
   fetchStatus: (generation?: number) => Promise<void>;
+  /** Label of the workspace task in flight (apply, uninstall, rollback, ...), or null. A switch must not run under it. */
+  workspaceTaskLabel?: string | null;
 }
 
 export function useAppSettingsController({
@@ -54,8 +57,11 @@ export function useAppSettingsController({
   loadWorkspaceDiagnostics,
   loadWorkspaceResources,
   fetchStatus,
+  workspaceTaskLabel = null,
 }: AppSettingsControllerDeps) {
   const confirm = useConfirm();
+  const workspaceTaskLabelRef = useRef(workspaceTaskLabel);
+  workspaceTaskLabelRef.current = workspaceTaskLabel;
   const appSettingsRef = useRef<AppSettings | null>(null);
   const [appSettings, setAppSettingsState] = useState<AppSettings | null>(null);
   const setAppSettings = useCallback((
@@ -379,6 +385,7 @@ export function useAppSettingsController({
    */
   const persistActiveWorkspace = useCallback(async (path: string | null): Promise<WorkspaceSwitchResult> => {
     if (!appSettingsRef.current) return { ok: false, message: "settings are not loaded yet" };
+    if (workspaceTaskLabelRef.current) return { ok: false, message: workspaceTaskBlockedMessage(workspaceTaskLabelRef.current) };
     if (workspaceSwitchInFlightRef.current) return { ok: false, message: "a workspace change is already running" };
     workspaceSwitchInFlightRef.current = true;
     try {

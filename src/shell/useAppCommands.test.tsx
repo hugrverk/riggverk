@@ -165,6 +165,20 @@ describe("useAppCommands", () => {
         expect(busy.choose).not.toHaveBeenCalled();
       });
 
+      it("refuses both while a workspace task runs, naming the task", () => {
+        const switcher = workspaceSwitch();
+        setup(makeDeps({ workspaceSwitch: switcher, busyLabel: "apply" }));
+        runLine("workspace choose");
+        expect(commandLineError()).toContain("apply is running");
+        expect(switcher.choose).not.toHaveBeenCalled();
+        cleanup();
+
+        setup(makeDeps({ workspaceSwitch: switcher, busyLabel: "apply" }));
+        runLine("workspace reset");
+        expect(commandLineError()).toContain("apply is running");
+        expect(switcher.reset).not.toHaveBeenCalled();
+      });
+
       it("rejects an unknown action", () => {
         const deps = makeDeps({ workspaceSwitch: workspaceSwitch() });
         setup(deps);

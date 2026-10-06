@@ -16,6 +16,8 @@ export interface UseWorkspacePickerOptions {
   libraryDirty: boolean;
   /** Validates, persists and reloads (`useAppSettingsController`); null switches back to the default. */
   switchWorkspace: (path: string | null) => Promise<WorkspaceSwitchResult>;
+  /** Why a switch is refused right now (a workspace task is running), or null. Checked before the folder dialog opens. */
+  blockedReason?: string | null;
 }
 
 export interface WorkspacePicker {
@@ -39,15 +41,21 @@ export function describeRefusedWorkspace(path: string, message: string): string 
  * switch would drop unsaved Library edits, then the backend validation and the existing workspace reload.
  * Never reloads the app; a refused folder changes nothing and comes back as a message.
  */
-export function useWorkspacePicker({ activePath, libraryDirty, switchWorkspace }: UseWorkspacePickerOptions): WorkspacePicker {
+export function useWorkspacePicker({
+  activePath,
+  libraryDirty,
+  switchWorkspace,
+  blockedReason = null,
+}: UseWorkspacePickerOptions): WorkspacePicker {
   const confirm = useConfirm();
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
-  const latest = useRef({ activePath, libraryDirty, switchWorkspace });
-  latest.current = { activePath, libraryDirty, switchWorkspace };
+  const latest = useRef({ activePath, libraryDirty, switchWorkspace, blockedReason });
+  latest.current = { activePath, libraryDirty, switchWorkspace, blockedReason };
 
   const guarded = useCallback(async (run: () => Promise<WorkspaceMessage | null>): Promise<WorkspaceMessage | null> => {
     if (busyRef.current) return null;
+    if (latest.current.blockedReason) return { ok: false, text: latest.current.blockedReason };
     busyRef.current = true;
     setBusy(true);
     try {

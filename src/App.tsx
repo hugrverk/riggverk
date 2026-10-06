@@ -10,6 +10,7 @@ import { useWorkspaceActions } from "./lib/useWorkspaceActions";
 import { useWorkspaceGeneration } from "./lib/useWorkspaceGeneration";
 import { useAppSettingsController } from "./hooks/useAppSettingsController";
 import { useWorkspacePicker } from "./hooks/useWorkspacePicker";
+import { workspaceTaskBlockedMessage } from "./lib/workspaceErrors";
 import { useInstallationOverview } from "./hooks/useInstallationOverview";
 import { useInstallScreen } from "./hooks/useInstallScreen";
 import { useRollbackRequest } from "./hooks/useRollbackRequest";
@@ -289,6 +290,7 @@ function AppShell() {
     loadWorkspaceDiagnostics,
     loadWorkspaceResources,
     fetchStatus,
+    workspaceTaskLabel: wsRunning,
   });
 
   const enabledHarnessIds = appSettings?.enabled_harness_ids ?? [];
@@ -303,7 +305,12 @@ function AppShell() {
     if (result.ok) setOverviewRefreshKey(key => key + 1);
     return result;
   }, [persistActiveWorkspace]);
-  const workspacePicker = useWorkspacePicker({ activePath: activeWorkspacePath, libraryDirty, switchWorkspace });
+  const workspacePicker = useWorkspacePicker({
+    activePath: activeWorkspacePath,
+    libraryDirty,
+    switchWorkspace,
+    blockedReason: wsRunning ? workspaceTaskBlockedMessage(wsRunning) : null,
+  });
 
   useEffect(() => {
     if (

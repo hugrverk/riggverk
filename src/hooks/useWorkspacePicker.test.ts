@@ -15,13 +15,16 @@ vi.mock("../components/ConfirmDialog", () => ({
 
 const OK: WorkspaceSwitchResult = { ok: true };
 
-function setup(options: { libraryDirty?: boolean; activePath?: string | null; result?: WorkspaceSwitchResult } = {}) {
+function setup(
+  options: { libraryDirty?: boolean; activePath?: string | null; result?: WorkspaceSwitchResult; blockedReason?: string | null } = {},
+) {
   const switchWorkspace = vi.fn(async (_path: string | null): Promise<WorkspaceSwitchResult> => options.result ?? OK);
   const hook = renderHook(() =>
     useWorkspacePicker({
       activePath: options.activePath ?? "/Users/dev/.config/agent-workspace",
       libraryDirty: options.libraryDirty ?? false,
       switchWorkspace,
+      blockedReason: options.blockedReason,
     }),
   );
   return { switchWorkspace, ...hook };
@@ -57,6 +60,21 @@ describe("useWorkspacePicker choose", () => {
       await result.current.choose();
     });
     expect(openMock.mock.calls[0]![0].defaultPath).toBeUndefined();
+  });
+
+  it("refuses with the reason before the folder dialog opens while a workspace task runs", async () => {
+    const reason = "apply is running; wait for it to finish before switching workspace";
+    const { result, switchWorkspace } = setup({ blockedReason: reason });
+    let chosen: unknown = "unset";
+    let reset: unknown = "unset";
+    await act(async () => {
+      chosen = await result.current.choose();
+      reset = await result.current.reset();
+    });
+    expect(chosen).toEqual({ ok: false, text: reason });
+    expect(reset).toEqual({ ok: false, text: reason });
+    expect(openMock).not.toHaveBeenCalled();
+    expect(switchWorkspace).not.toHaveBeenCalled();
   });
 
   it("does nothing when the picker is cancelled", async () => {

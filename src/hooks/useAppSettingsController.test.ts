@@ -761,6 +761,29 @@ describe("useAppSettingsController persistActiveWorkspace", () => {
     expect(invoke.mock.calls.filter(([cmd]) => cmd === "try_set_active_workspace_path")).toHaveLength(1);
   });
 
+  it("refuses while a workspace task runs, before the backend is asked", async () => {
+    mockInitialLoad();
+    const deps = createDeps();
+    const { result, rerender } = renderHook(
+      (props: { label: string | null }) => useAppSettingsController({ ...deps, workspaceTaskLabel: props.label }),
+      { initialProps: { label: null as string | null } },
+    );
+    await act(async () => {
+      await result.current.loadSettings();
+    });
+    invoke.mockClear();
+    rerender({ label: "apply" });
+
+    let outcome: unknown;
+    await act(async () => {
+      outcome = await result.current.persistActiveWorkspace("/tmp/other");
+    });
+
+    expect(outcome).toEqual({ ok: false, message: "apply is running; wait for it to finish before switching workspace" });
+    expect(invoke).not.toHaveBeenCalled();
+    expect(deps.beginWorkspaceLoadGeneration).not.toHaveBeenCalled();
+  });
+
   it("refuses before settings are loaded", async () => {
     const deps = createDeps();
     const { result } = renderHook(() => useAppSettingsController(deps));
