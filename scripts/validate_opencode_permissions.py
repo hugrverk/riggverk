@@ -223,6 +223,27 @@ ARCHITECT_BASH_ACTIONS = [
     ("git commit --amend", "ask"),
     ("git commit -m test --amend", "ask"),
     ("git push origin main", "ask"),
+    # Branch, history, and working-tree changes beyond add/commit stay ask-gated.
+    ("git checkout main", "ask"),
+    ("git checkout -b feature", "ask"),
+    ("git switch main", "ask"),
+    ("git restore .", "ask"),
+    ("git pull", "ask"),
+    ("git pull origin main", "ask"),
+    ("git rebase main", "ask"),
+    ("git merge feature", "ask"),
+    ("git stash", "ask"),
+    ("git stash pop", "ask"),
+    ("git tag v1", "ask"),
+    # Long-running, installing, networked, and removing commands.
+    ("npm run dev", "ask"),
+    ("npm run start", "ask"),
+    ("npm install", "ask"),
+    ("pnpm install", "ask"),
+    ("npx vitest", "ask"),
+    ("curl https://example.com", "ask"),
+    ("wget https://example.com", "ask"),
+    ("rm notes.txt", "ask"),
     ("node scripts/build.js", "ask"),
     ("node other.js", "ask"),
     ("cat .env", "deny"),
@@ -234,6 +255,19 @@ ARCHITECT_BASH_ACTIONS = [
     ("rm -rf node_modules", "deny"),
     ("sudo ls", "deny"),
 ]
+
+# Top-level permission keys every role must keep gated, and the edit default per role.
+# `edit` is a bare action for the read-only roles and a pattern map elsewhere; the map's `*`
+# entry is its default.
+GATED_TOP_LEVEL_KEYS = ("external_directory", "webfetch", "websearch", "doom_loop")
+EDIT_DEFAULT = {
+    "architect": "ask",
+    "repo-scout": "deny",
+    "inspector": "deny",
+    "sentinel": "deny",
+    "scribe": "deny",
+    "verifier": "deny",
+}
 
 MUTATION_CASES = [
     ("repo-scout", {"bash": {"*&*": "allow"}}, "bash", "git status & touch changed.txt", "allow"),
@@ -286,6 +320,28 @@ def _apply_mutation(perm: dict, mutation: dict) -> dict:
         else:
             mutated[key] = section
     return mutated
+
+
+def _architect_bash_errors(perm: dict) -> list[str]:
+    errors: list[str] = []
+    for cmd, expected in ARCHITECT_BASH_ACTIONS:
+        action = effective_bash_action(perm, cmd)
+        if action != expected:
+            pattern, _ = winning_rule(perm, "bash", cmd)
+            errors.append(f"architect: bash {cmd!r} must be {expected}, got {action} (via {pattern!r})")
+    return errors
+
+
+def _top_level_action_errors(role: str, perm: dict) -> list[str]:
+    errors: list[str] = []
+    for key in GATED_TOP_LEVEL_KEYS:
+        if perm.get(key) != "ask":
+            errors.append(f"{role}: {key} must be ask, got {perm.get(key)!r}")
+    edit = perm.get("edit")
+    default = edit.get("*") if isinstance(edit, dict) else edit
+    if default != EDIT_DEFAULT[role]:
+        errors.append(f"{role}: edit default must be {EDIT_DEFAULT[role]}, got {default!r}")
+    return errors
 
 
 def _secret_read_errors(role: str, perm: dict) -> list[str]:
@@ -454,14 +510,11 @@ def validate() -> list[str]:
         errors.append("architect: must allow repo-scout delegation")
     if architect.get("question") != "allow":
         errors.append("architect: must allow the question tool (body asks when a choice is material)")
-    for cmd, expected in ARCHITECT_BASH_ACTIONS:
-        action = effective_bash_action(architect, cmd)
-        if action != expected:
-            pattern, _ = winning_rule(architect, "bash", cmd)
-            errors.append(f"architect: bash {cmd!r} must be {expected}, got {action} (via {pattern!r})")
+    errors.extend(_architect_bash_errors(architect))
 
     for role in ALL_ROLES:
         perm = compose_role_permission(load_role(role))
+        errors.extend(_top_level_action_errors(role, perm))
         errors.extend(_secret_read_errors(role, perm))
         bash = perm.get("bash", {})
         if isinstance(bash, dict):

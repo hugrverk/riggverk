@@ -1176,23 +1176,8 @@ for pat in "${secret_read_patterns[@]}"; do
 done
 printf '  bundled opencode.json read deny covers expanded secret patterns\n'
 
-step "bundled architect git checkout and git pull are ask-gated"
-if grep -Eq '"git checkout \*":[[:space:]]*allow|git checkout \*: allow' resources/default-workspace/agents/architect.md; then
-  printf 'FAIL: bundled architect.md must not allow git checkout * (ask-gate it)\n' >&2
-  exit 1
-fi
-if grep -Eq '"git pull":[[:space:]]*allow|git pull: allow' resources/default-workspace/agents/architect.md; then
-  printf 'FAIL: bundled architect.md must not allow git pull (ask-gate it)\n' >&2
-  exit 1
-fi
-printf '  bundled architect.md git checkout and git pull are ask-gated\n'
-
-step "bundled architect npm run dev is ask-gated"
-if grep -Eq '"npm run dev":[[:space:]]*allow|npm run dev: allow' resources/default-workspace/agents/architect.md; then
-  printf 'FAIL: bundled architect.md must not allow npm run dev (ask-gate it)\n' >&2
-  exit 1
-fi
-printf '  bundled architect.md npm run dev is ask-gated\n'
+# Ask-gating of git checkout/pull/rebase/stash, npm run dev, installs, curl and rm is checked
+# semantically by scripts/validate_opencode_permissions.py (ARCHITECT_BASH_ACTIONS).
 
 step "bundled agents bash deny coverage for expanded secret patterns"
 for agent in architect.md repo-scout.md inspector.md sentinel.md scribe.md verifier.md; do

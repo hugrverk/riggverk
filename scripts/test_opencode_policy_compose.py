@@ -37,7 +37,9 @@ from validate_opencode_permissions import (  # noqa: E402
     CREDENTIAL_CONFIG_READ,
     READ_ACTIONS,
     SECRET_READ,
+    _architect_bash_errors,
     _secret_read_errors,
+    _top_level_action_errors,
     lexical_frontmatter_errors,
     validate_agent_frontmatter,
 )
@@ -367,6 +369,13 @@ class TestArchitect(unittest.TestCase):
                     f"{command!r}: expected {expected}, got {action} ({winning_rule(self.perm, 'bash', command)})",
                 )
 
+    def test_gated_commands_and_top_level_actions_match_the_contract(self) -> None:
+        self.assertEqual(_architect_bash_errors(self.perm), [])
+        for role in ("architect",) + READONLY_ROLES + ("scribe", "verifier"):
+            with self.subTest(role=role):
+                perm = compose_role_permission(load_role(role))
+                self.assertEqual(_top_level_action_errors(role, perm), [])
+
     def test_no_override_allow_follows_redirect_guard(self) -> None:
         # Last match wins: an allow placed after the `*>*` ask would let `cmd > file` through.
         bash = list(self.perm["bash"].items())
@@ -441,6 +450,39 @@ class TestMutationRejection(unittest.TestCase):
                 assert isinstance(read, dict)
                 read.pop(pattern)
                 self.assertTrue(any(pattern in err for err in _secret_read_errors("repo-scout", perm)))
+
+    def test_widening_any_ask_gated_architect_command_is_detected(self) -> None:
+        gated = [command for command, expected in ARCHITECT_BASH_ACTIONS if expected == "ask"]
+        self.assertGreater(len(gated), 20)
+        for command in gated:
+            with self.subTest(command=command):
+                perm = compose_role_permission(load_role("architect"))
+                pattern, action = winning_rule(perm, "bash", command)
+                if pattern == "*":
+                    continue  # gated by the bash default; covered by the other cases
+                perm["bash"][pattern] = "allow"
+                errors = _architect_bash_errors(perm)
+                self.assertTrue(any(repr(command) in error for error in errors), errors)
+
+    def test_widening_a_gated_top_level_action_or_edit_default_is_detected(self) -> None:
+        for role in ("architect", "scribe", "verifier"):
+            for key in ("external_directory", "webfetch", "websearch", "doom_loop"):
+                with self.subTest(role=role, key=key):
+                    perm = compose_role_permission(load_role(role))
+                    perm[key] = "allow"
+                    self.assertTrue(
+                        any(key in error for error in _top_level_action_errors(role, perm))
+                    )
+        for role, default in (("architect", "allow"), ("scribe", "allow")):
+            with self.subTest(role=role, edit_default=default):
+                perm = compose_role_permission(load_role(role))
+                perm["edit"]["*"] = default
+                self.assertTrue(
+                    any("edit default" in error for error in _top_level_action_errors(role, perm))
+                )
+        perm = compose_role_permission(load_role("verifier"))
+        perm["edit"] = "allow"
+        self.assertTrue(any("edit default" in error for error in _top_level_action_errors("verifier", perm)))
 
     def test_scribe_agents_edit_would_allow(self) -> None:
         perm = compose_role_permission(load_role("scribe"))
