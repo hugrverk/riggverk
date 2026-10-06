@@ -85,10 +85,10 @@ assert.ok(
   "recent activity must own a bounded scroll region",
 );
 assert.ok(
-  /\.repo-dashboard-overview-lower \.repo-dashboard-latest-content \{[^}]*overflow:\s*hidden/.test(
-    stylesSource,
-  ),
-  "latest change card must not scroll inside overview lower row",
+  // Clipping hid the lower rows of a long card (QA 2026-10); the pane body owns a bounded scroll instead.
+  /\.repo-dashboard-latest-body \{[^}]*overflow:\s*auto/.test(stylesSource) &&
+    !/\.repo-dashboard-overview-lower \.repo-dashboard-latest-content \{[^}]*overflow:\s*hidden/.test(stylesSource),
+  "latest change pane must scroll its body instead of clipping the card",
 );
 assert.ok(!workSource.includes("laneView"), "work must not use Active/Done laneView toggle");
 assert.ok(!workSource.includes("repo-dashboard-seg"), "work must not use segmented Active/Done toggle");
