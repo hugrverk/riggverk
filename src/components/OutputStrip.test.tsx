@@ -62,16 +62,20 @@ function press(target: Element, key: string, init: KeyboardEventInit = {}) {
 }
 
 const scrollTo = vi.fn();
+const scrollIntoView = vi.fn();
 
 beforeEach(() => {
   Object.assign(navigator, { clipboard: { writeText: vi.fn(async () => {}) } });
   scrollTo.mockClear();
+  scrollIntoView.mockClear();
   Object.defineProperty(HTMLElement.prototype, "scrollTo", { configurable: true, writable: true, value: scrollTo });
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", { configurable: true, writable: true, value: scrollIntoView });
 });
 
 afterEach(() => {
   cleanup();
   delete (HTMLElement.prototype as { scrollTo?: unknown }).scrollTo;
+  delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
 });
 
 describe("OutputStrip", () => {
@@ -182,6 +186,17 @@ describe("OutputStrip", () => {
       fireEvent.click(line());
       expect(line().getAttribute("aria-expanded")).toBe("false");
       expect(log().hidden).toBe(true);
+    });
+
+    it("brings the strip into view when it opens, for a stacked page that scrolls", () => {
+      renderInFrame(<OutputStrip {...props({ wsLog: APPLY })} />);
+      expect(scrollIntoView).not.toHaveBeenCalled();
+      fireEvent.click(line());
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
+      expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" });
+      expect(scrollIntoView.mock.contexts[0]).toBe(strip());
+      fireEvent.click(line());
+      expect(scrollIntoView).toHaveBeenCalledTimes(1);
     });
 
     it("shows stderr under its own rule", () => {

@@ -95,6 +95,7 @@ export function OutputStrip({
 }: OutputStripProps) {
   const notify = useNotify();
   const logId = useId();
+  const paneRef = useRef<HTMLElement>(null);
   const lineRef = useRef<HTMLButtonElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   const pendingScroll = useRef<"top" | "bottom" | null>(null);
@@ -114,10 +115,12 @@ export function OutputStrip({
   const latest = useRef({ text, expanded, wsRunning, wsLog, rollbackTransactionId, onClear, onRefresh, onRollback });
   latest.current = { text, expanded, wsRunning, wsLog, rollbackTransactionId, onClear, onRefresh, onRollback };
 
-  // `g g` / `G` on a collapsed strip open it first; the scroll waits for the log to exist.
   useEffect(() => {
-    if (!expanded || !pendingScroll.current) return;
-    scrollLogTo(logRef.current, pendingScroll.current);
+    if (!expanded) return;
+    // A stacked page scrolls, and the strip sits at its end: bring the log it just opened into view.
+    paneRef.current?.scrollIntoView?.({ block: "nearest" });
+    // `g g` / `G` on a collapsed strip open it first; the scroll waits for the log to exist.
+    if (pendingScroll.current) scrollLogTo(logRef.current, pendingScroll.current);
     pendingScroll.current = null;
   }, [expanded]);
 
@@ -292,6 +295,7 @@ export function OutputStrip({
 
   return (
     <section
+      ref={paneRef}
       className="pane outstrip"
       data-pane-id={id}
       data-keyscope="pane"
