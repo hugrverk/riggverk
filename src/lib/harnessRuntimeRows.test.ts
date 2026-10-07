@@ -26,7 +26,6 @@ describe("runtimeRowsFor", () => {
       ["agents", "diverged · 5/6", "warn"],
       ["skills", "synced", "ok"],
       ["claude cli", "not found", "warn"],
-      ["summary", "Claude CLI not found", undefined],
     ]);
     expect(runtimeVerdict({ harness: "claude", health: CLAUDE })).toEqual({ text: "diverged", tone: "warn" });
     expect(runtimeVerdict({ harness: "claude", health: { ...CLAUDE, agents_synced: true } })).toEqual({ text: "synced", tone: "ok" });
@@ -51,6 +50,30 @@ describe("runtimeRowsFor", () => {
     expect(rows.find(row => row.label === "autoupdate")).toBeUndefined();
     expect(rows.filter(row => row.tone === "warn" && row.wrap).map(row => row.value)).toEqual(["first warning", "second warning"]);
     expect(rows.find(row => row.label === "next")?.value).toBe("Update OpenCode.");
+  });
+
+  it("shows the next step only while the runtime is out of sync, and never a summary", () => {
+    const opencode = (status: string, nextAction: string) =>
+      ({
+        status,
+        tui_status: "synced",
+        default_agent: null,
+        autoupdate: null,
+        bundled_agent_count: 3,
+        installed_bundled_agent_count: 3,
+        agent_mismatches: [],
+        warnings: [],
+        summary: "OpenCode summary",
+        next_action: nextAction,
+      }) as unknown as OpenCodeRuntimeHealth;
+    const labels = (status: string, nextAction: string) =>
+      runtimeRowsFor({ harness: "opencode", health: opencode(status, nextAction) }).map(row => row.label);
+
+    expect(labels("synced", "No runtime action needed.")).not.toContain("next");
+    expect(labels("synced", "No runtime action needed.")).not.toContain("summary");
+    const stale = runtimeRowsFor({ harness: "opencode", health: opencode("stale", "Regenerate opencode.json before sync.") });
+    expect(stale.find(row => row.label === "next")?.value).toBe("Regenerate opencode.json before sync.");
+    expect(stale.map(row => row.label)).not.toContain("summary");
   });
 
   it("shows the Cursor profile counts against what is expected", () => {
