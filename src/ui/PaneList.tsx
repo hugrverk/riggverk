@@ -217,6 +217,9 @@ export function PaneList<T>({
       id: `list.${idBase}.filter`,
       keys: "/",
       title: "Filter",
+      // A filterable list offers it in the status bar like Enter and Space, for its whole pane.
+      hint: filter ? "filter" : undefined,
+      paneId: filter && paneId ? paneId : undefined,
       when: () => latest.current.filter !== undefined,
       run: () => {
         filterRef.current?.focus();

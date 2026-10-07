@@ -20,8 +20,6 @@ interface LibraryKeysOptions {
   /** Source ids in tab order (configs left out while it is hidden). */
   sourceIds: readonly LibrarySourceType[];
   workspaceValid: boolean;
-  /** The active source's list has a filter box. */
-  hasFilter: boolean;
   onSetSourceType: (type: LibrarySourceType) => void | Promise<void>;
   showCreateDoc: boolean;
   onSetShowCreateDoc: (show: boolean) => void;
@@ -43,7 +41,6 @@ export function useLibraryKeys({
   sourceType,
   sourceIds,
   workspaceValid,
-  hasFilter,
   onSetSourceType,
   showCreateDoc,
   onSetShowCreateDoc,
@@ -109,29 +106,6 @@ export function useLibraryKeys({
     wasSaving.current = saving;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saving]);
-
-  // The list's own `/` takes the key while it has focus; this one carries the status-bar hint (clickable) and
-  // covers the rest of the items pane. Anchored by `paneId` alone so it stays out of the editor and preview.
-  // Registered first so the hint reads before the source stepping.
-  const focusFilter = () => {
-    const input = rootRef.current?.querySelector<HTMLInputElement>('[data-pane-id="items"] input[type="search"]');
-    if (!input) return false;
-    input.focus();
-    input.select();
-  };
-  useKeymap([
-    {
-      id: "library.filter",
-      keys: "/",
-      title: "Filter",
-      hint: "filter",
-      group: "Lists",
-      scope: "pane",
-      paneId: "items",
-      when: () => hasFilter,
-      run: focusFilter,
-    },
-  ]);
 
   const bindings: Binding[] = [
     {

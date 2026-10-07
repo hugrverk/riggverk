@@ -177,7 +177,6 @@ export function LibraryView(props: LibraryViewProps) {
     .map(source => ({ ...source, count: sourceCount(props, source.id) }));
   const activeSource = SOURCE_TYPES.find(source => source.id === sourceType) ?? SOURCE_TYPES[0]!;
   const activeCount = sourceCount(props, sourceType);
-  const hasFilter = sourceType === "docs" || sourceType === "skills" || sourceType === "agents";
 
   useStatusContext(activeSource.label);
   const { close } = useLibraryKeys({
@@ -187,7 +186,6 @@ export function LibraryView(props: LibraryViewProps) {
     sourceType,
     sourceIds: sources.map(source => source.id),
     workspaceValid,
-    hasFilter,
     onSetSourceType,
     showCreateDoc: props.showCreateDoc,
     onSetShowCreateDoc: props.onSetShowCreateDoc,
