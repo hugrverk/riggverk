@@ -191,13 +191,28 @@ describe("StartView panes", () => {
   it("shows status, verification and the last transaction for the selected target", () => {
     renderStart({ rollbackTransactionId: "1710000000000", wsLog: { success: true, action: "release_check", stdout: "ok", stderr: "", exit_code: 0 }, wsLogCompletedAt: Date.now() });
     const pane = detail();
-    expect(within(pane).getByLabelText("workspace status").textContent).toContain("current");
+    // The state is the title's ("workspace · current"); the status rows add the path.
+    expect(pane.querySelector(".pane-title")!.textContent).toContain("workspace · current");
+    expect(within(pane).getByLabelText("workspace status").textContent).not.toContain("current");
     expect(within(pane).getByLabelText("workspace status").textContent).toContain("/tmp/workspace");
     const verify = within(pane).getByLabelText("Verification and backups");
     expect(verify.textContent).toContain("release-check");
     expect(verify.textContent).toContain("ok");
     expect(verify.textContent).toContain("2 runs · /tmp/backups");
     expect(verify.textContent).toContain("1710000000000 · rollback available");
+  });
+
+  it("adds the backend's change breakdown only for an update, without its prefix", () => {
+    const update = installationStatus("update_available", [], { create_count: 5, update_count: 165, remove_count: 3 }, {
+      summary: "Update available: 5 to create, 165 to update, 3 to remove",
+    });
+    renderStart({ overview: overviewOf({ workspace: update }) });
+    const status = within(detail()).getByLabelText("workspace status");
+    expect(status.textContent).toContain("changes5 to create, 165 to update, 3 to remove");
+    expect(status.textContent).not.toContain("Update available");
+    cleanup();
+    renderStart({ overview: overviewOf({ workspace: installationStatus("conflict", [], { conflict_count: 2 }) }) });
+    expect(within(detail()).getByLabelText("workspace status").textContent).not.toContain("changes");
   });
 
   it("offers the rollback key on the output strip when a transaction can be rolled back", () => {

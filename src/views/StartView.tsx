@@ -194,9 +194,10 @@ export function StartView({
   const rulesHint = rulesModel ? rulesPageHint(rulesModel, selectedLabel) : null;
   const override = selected === "codex" ? rulesOverrideWarning(codexRuntimeHealth) : null;
 
+  // The state is the detail title's. The backend summary adds something only for an update: the breakdown.
+  const changes = entry?.status?.state === "update_available" ? entry.status.summary.replace(/^Update available:\s*/, "") : null;
   const statusItems: KvItem[] = [
-    { label: "state", value: meta.text, tone: meta.tone },
-    ...(entry?.status ? [{ label: "summary", value: entry.status.summary, wrap: true }] : []),
+    ...(changes ? [{ label: "changes", value: changes, wrap: true }] : []),
     ...(entry?.error ? [{ label: "error", value: entry.error, tone: "fail" as const, wrap: true }] : []),
     ...(conflicts.length > 0
       ? [{ label: "preserved", value: conflicts.join(", "), tone: "warn" as const, wrap: true }]
@@ -286,13 +287,15 @@ export function StartView({
         {/* Static rows, not a listbox: the detail is one scroll and j/k do not move inside it. */}
         <ul className="rows rows-static" aria-label={`${selectedLabel} surfaces`}>
           {surfaceRows.map(row => {
-            // A rules file the user keeps is not current and not a conflict; the rules model says so.
-            const display = row.surface === rulesSurface && rulesModel?.display ? rulesModel.display : row.display;
+            // A rules file the user keeps is not current and not a conflict; the rules model says so. Its own
+            // sentence is the `rules` / `why` rows below, so the row does not repeat it.
+            const isRules = row.surface === rulesSurface && rulesModel !== null;
+            const display = isRules && rulesModel.display ? rulesModel.display : row.display;
             return (
               <li key={row.surface} className="row">
                 <span className="cur" aria-hidden="true" />
                 <span className="nm">
-                  {row.name} {row.detail && <span className="c-dim">{row.detail}</span>}
+                  {row.name} {row.detail && !isRules && <span className="c-dim">{row.detail}</span>}
                 </span>
                 <span className={`meta ${toneClass(display.tone)}`.trim()}>{display.label}</span>
               </li>
