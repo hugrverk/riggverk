@@ -62,8 +62,8 @@ export function EditorPane({ entry, emptyHint, textareaRef, top, onClose }: Edit
       footer={
         entry ? (
           <>
+            {/* `:q` and `:reset` are command-line commands, not key bindings, so the status bar cannot offer them. */}
             <ActionKey keys={[":q"]} onClick={() => void onClose()}>close</ActionKey>
-            <ActionKey keys={["o"]} onClick={entry.onOpen}>open</ActionKey>
             {!entry.readOnly && (
               <ActionKey keys={[":reset"]} onClick={entry.onReset} disabled={entry.dirty ? false : "no unsaved changes"}>
                 discard

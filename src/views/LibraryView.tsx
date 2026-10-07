@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from "react";
 import type { ActionResult } from "../components/TerminalOutput";
 import { focusPaneById } from "../keyboard/focus";
 import { useStatusContext } from "../shell/ShellState";
-import { Kbd } from "../ui/Kbd";
 import { Pane } from "../ui/Pane";
 import type {
   AgentMetadataResponse,
@@ -178,6 +177,7 @@ export function LibraryView(props: LibraryViewProps) {
     .map(source => ({ ...source, count: sourceCount(props, source.id) }));
   const activeSource = SOURCE_TYPES.find(source => source.id === sourceType) ?? SOURCE_TYPES[0]!;
   const activeCount = sourceCount(props, sourceType);
+  const hasFilter = sourceType === "docs" || sourceType === "skills" || sourceType === "agents";
 
   useStatusContext(activeSource.label);
   const { close } = useLibraryKeys({
@@ -187,6 +187,7 @@ export function LibraryView(props: LibraryViewProps) {
     sourceType,
     sourceIds: sources.map(source => source.id),
     workspaceValid,
+    hasFilter,
     onSetSourceType,
     showCreateDoc: props.showCreateDoc,
     onSetShowCreateDoc: props.onSetShowCreateDoc,
@@ -221,7 +222,6 @@ export function LibraryView(props: LibraryViewProps) {
     }
     setFocusRequest(key);
   };
-  const hasFilter = sourceType === "docs" || sourceType === "skills" || sourceType === "agents";
 
   let list: React.ReactNode;
   switch (sourceType) {
@@ -326,19 +326,6 @@ export function LibraryView(props: LibraryViewProps) {
         meta={activeCount !== undefined ? `· ${activeCount}` : undefined}
         defaultFocus
         bodyClassName="lib-list-body"
-        footer={
-          <>
-            {hasFilter && (
-              <span>
-                <Kbd>/</Kbd> filter
-              </span>
-            )}
-            <span>
-              <Kbd>[</Kbd>
-              <Kbd>]</Kbd> source
-            </span>
-          </>
-        }
       >
         <SourceSwitcher
           sources={sources}

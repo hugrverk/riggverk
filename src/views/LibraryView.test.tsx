@@ -166,6 +166,20 @@ function focusList() {
   return listbox();
 }
 
+/** Moves focus into a pane by its accessible name (the pane hands it to its primary target). */
+function focusPane(name: string) {
+  act(() => screen.getByRole("region", { name }).focus());
+}
+
+/** Key hints of the focused pane live in the status bar; look them up outside `act`. */
+function statusHint(name: string) {
+  return within(screen.getByLabelText("Status bar")).getByRole("button", { name });
+}
+
+function queryStatusHint(name: string) {
+  return within(screen.getByLabelText("Status bar")).queryByRole("button", { name });
+}
+
 function textarea(label?: string) {
   return (label ? screen.getByLabelText(label) : screen.getByRole("textbox")) as HTMLTextAreaElement;
 }
@@ -510,6 +524,66 @@ describe("LibraryView source switching", () => {
   });
 });
 
+describe("LibraryView status-bar hints", () => {
+  const doc = makeDoc("a", "Alpha", "# A");
+
+  it("offers filter, source stepping and open while the items pane has focus, and no pane footer", () => {
+    const onSetSourceType = vi.fn();
+    const onOpenDoc = vi.fn();
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onSetSourceType, onOpenDoc });
+    focusList();
+    expect(statusHint("[ prev source")).not.toBeNull();
+    expect(statusHint("o open")).not.toBeNull();
+
+    fireEvent.click(statusHint("] next source"));
+    expect(onSetSourceType).toHaveBeenLastCalledWith("rules");
+    fireEvent.click(statusHint("[ prev source"));
+    expect(onSetSourceType).toHaveBeenLastCalledWith("brain");
+    fireEvent.click(statusHint("o open"));
+    expect(onOpenDoc).toHaveBeenCalledWith("a");
+
+    expect(screen.getByRole("region", { name: "Library items" }).querySelector(".pane-foot")).toBeNull();
+  });
+
+  it("focuses the filter from its hint, and still from the list key", () => {
+    renderLibrary({ docs });
+    focusList();
+    fireEvent.click(statusHint("/ filter"));
+    expect(document.activeElement).toBe(screen.getByLabelText("Filter documents"));
+    focusList();
+    press(listbox(), "/");
+    expect(document.activeElement).toBe(screen.getByLabelText("Filter documents"));
+  });
+
+  it("only offers the filter for sources that have one", () => {
+    const { update } = renderLibrary({ docs });
+    focusList();
+    expect(queryStatusHint("/ filter")).not.toBeNull();
+    update({ sourceType: "rules" });
+    focusList();
+    expect(queryStatusHint("/ filter")).toBeNull();
+    update({ sourceType: "brain", brainSetupText: "text", brainSetupSource: "src" });
+    focusList();
+    expect(queryStatusHint("/ filter")).toBeNull();
+  });
+
+  it("offers open, not the list hints, while the editor pane has focus", () => {
+    renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
+    focusPane("Editor");
+    expect(statusHint("o open")).not.toBeNull();
+    expect(queryStatusHint("/ filter")).toBeNull();
+    expect(queryStatusHint("] next source")).toBeNull();
+  });
+
+  it("hides open while nothing is open", () => {
+    renderLibrary({ docs });
+    focusList();
+    expect(queryStatusHint("o open")).toBeNull();
+    focusPane("Editor");
+    expect(queryStatusHint("o open")).toBeNull();
+  });
+});
+
 describe("LibraryView list and filter keys", () => {
   it("focuses the filter with / and returns to the list with Escape, which then clears the filter", () => {
     renderLibrary({ docs });
@@ -758,18 +832,24 @@ describe("LibraryView editor", () => {
     expect(textarea("Skill source").value).toBe(content);
   });
 
-  it("opens the item externally from the list key and from the editor footer", () => {
+  it("opens the item externally from the list key and from the status-bar hint of the editor pane", () => {
     const onOpenDoc = vi.fn();
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content, onOpenDoc });
     press(focusList(), "o");
     expect(onOpenDoc).toHaveBeenCalledWith("a");
-    fireEvent.click(within(screen.getByRole("region", { name: "Editor" })).getByRole("button", { name: /open/ }));
+    focusPane("Editor");
+    fireEvent.click(statusHint("o open"));
     expect(onOpenDoc).toHaveBeenCalledTimes(2);
+    expect(within(screen.getByRole("region", { name: "Editor" })).queryByRole("button", { name: /open/ })).toBeNull();
   });
 
-  it("offers copy path in the editor footer", () => {
+  it("offers copy path, close and discard in the editor footer", () => {
     renderLibrary({ docs, activeDoc: doc, docDraft: doc.content });
-    expect(within(screen.getByRole("region", { name: "Editor" })).getByRole("button", { name: "Copy path" })).not.toBeNull();
+    const footer = screen.getByRole("region", { name: "Editor" }).querySelector<HTMLElement>(".pane-foot")!;
+    expect(within(footer).getByRole("button", { name: "Copy path" })).not.toBeNull();
+    // `:q` and `:reset` are command-line commands: the status bar has no binding to offer, so they stay here.
+    expect(within(footer).getByRole("button", { name: ":q close" })).not.toBeNull();
+    expect(within(footer).getByRole("button", { name: ":reset discard" })).not.toBeNull();
   });
 
   it("marks skills read-only: readOnly textarea, marker, no save, open externally", () => {
