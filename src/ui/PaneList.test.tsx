@@ -211,6 +211,17 @@ describe("PaneList", () => {
       );
     }
 
+    it("offers / filter in the status bar for its pane, and the hint focuses the filter", () => {
+      renderInFrame(
+        <Pane id="harnesses" title="harnesses">
+          <Filtered />
+        </Pane>,
+      );
+      act(() => listbox().focus());
+      fireEvent.click(within(screen.getByLabelText("Status bar")).getByRole("button", { name: /filter/ }));
+      expect(document.activeElement).toBe(screen.getByLabelText("Filter harnesses"));
+    });
+
     it("focuses the filter with / and keeps list keys out of the input", () => {
       renderWithShell(<Filtered />);
       const list = listbox();
