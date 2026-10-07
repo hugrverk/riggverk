@@ -123,6 +123,9 @@
   overflow-wrap: anywhere;
 }
 
+/* The detail pane's surface rows are plain text in the `.rows` layout, not a list to move in: no hover highlight. */
+.rows-static .row:hover { background: none; }
+
 /* ---- surface matrix ---- */
 
 .matrix-row { display: contents; }
