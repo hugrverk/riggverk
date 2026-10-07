@@ -118,8 +118,12 @@ def generate() -> dict[str, object]:
             if blob_digests[sha] is not None:
                 sources.setdefault(key, set()).add(blob_digests[sha])
 
+    # The current version of each tracked source (edits not yet committed included); untracked
+    # files are never shipped, so they are not listed.
     workspace = ROOT / PREFIX
-    for path in sorted(workspace.rglob("*")):
+    tracked = ownership.git("ls-files", "-z", "--", PREFIX).decode().split("\0")
+    for rel_path in sorted(filter(None, tracked)):
+        path = ROOT / rel_path
         if not path.is_file() or path.is_symlink():
             continue
         key = source_key(path.relative_to(workspace).as_posix())
