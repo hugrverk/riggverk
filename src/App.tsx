@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo, lazy, Suspense } from "react";
 import { invoke } from "@tauri-apps/api/core";
+import { version as APP_VERSION } from "../package.json";
 import { LEAVE_DIRTY_MESSAGE } from "./lib/editorGuards";
 import { invokeOpen } from "./lib/invokeOpen";
 import { useConfirm } from "./components/ConfirmDialog";
@@ -730,6 +731,18 @@ function AppShell() {
         error={error}
         onDismissError={() => setError(null)}
         statusRight={`${backups.length} backup${backups.length === 1 ? "" : "s"}`}
+        // The launch sequence waits for the settings (the motion level is final then) and only tells what has loaded.
+        boot={
+          appSettings
+            ? {
+                version: APP_VERSION,
+                workspace: workspaceDiagnostics ? (workspaceDiagnostics.valid ? workspaceDiagnostics.resolved_path : null) : undefined,
+                branch: status?.git_available ? status.branch : null,
+                dirty: status?.dirty,
+                backups: backups.length > 0 ? backups.length : undefined,
+              }
+            : undefined
+        }
       >
         {view === "start" && (
           <StartView

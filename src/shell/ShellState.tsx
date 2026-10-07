@@ -43,6 +43,8 @@ export interface ShellStateValue {
   noticeId: number;
   /** The last handled key with its hint (`u update`) while it is fresh; see `echoOf` for what counts. */
   echo: KeyEcho | null;
+  /** Bumped by `replayBoot`; the boot overlay replays when it changes. */
+  bootRun: number;
   openCommandLine: (initialText?: string) => void;
   closeCommandLine: () => void;
   openHelp: () => void;
@@ -53,6 +55,7 @@ export interface ShellStateValue {
   setStatusContext: (text: string | null) => void;
   /** A bare number is the duration, kept for older callers; prefer `{ tone, durationMs }`. */
   notify: (text: string, options?: number | NotifyOptions) => void;
+  replayBoot: () => void;
 }
 
 const NOTICE_MS = 4000;
@@ -70,6 +73,7 @@ const DETACHED_STATE: ShellStateValue = {
   noticeTone: null,
   noticeId: 0,
   echo: null,
+  bootRun: 0,
   openCommandLine: noop,
   closeCommandLine: noop,
   openHelp: noop,
@@ -78,6 +82,7 @@ const DETACHED_STATE: ShellStateValue = {
   beginConfirm: () => noop,
   setStatusContext: noop,
   notify: noop,
+  replayBoot: noop,
 };
 
 const ShellStateContext = createContext<ShellStateValue>(DETACHED_STATE);
@@ -90,6 +95,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
   const [statusContext, setStatusContext] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ text: string; tone: NoticeTone | null; id: number } | null>(null);
   const [echo, setEcho] = useState<KeyEcho | null>(null);
+  const [bootRun, setBootRun] = useState(0);
   const noticeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const noticeSeq = useRef(0);
   const echoTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -153,6 +159,8 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
     }, durationMs);
   }, []);
 
+  const replayBoot = useCallback(() => setBootRun(run => run + 1), []);
+
   const value = useMemo<ShellStateValue>(
     () => ({
       commandLineOpen,
@@ -164,6 +172,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       noticeTone: notice?.tone ?? null,
       noticeId: notice?.id ?? 0,
       echo,
+      bootRun,
       openCommandLine,
       closeCommandLine,
       openHelp,
@@ -172,6 +181,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       beginConfirm,
       setStatusContext,
       notify,
+      replayBoot,
     }),
     [
       commandLineOpen,
@@ -181,6 +191,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       statusContext,
       notice,
       echo,
+      bootRun,
       openCommandLine,
       closeCommandLine,
       openHelp,
@@ -188,6 +199,7 @@ export function ShellStateProvider({ children }: { children: ReactNode }) {
       toggleHelp,
       beginConfirm,
       notify,
+      replayBoot,
     ],
   );
 

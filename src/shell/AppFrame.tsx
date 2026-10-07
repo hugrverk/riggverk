@@ -3,8 +3,10 @@ import { focusDefaultPane } from "../keyboard/focus";
 import type { InstallAgent } from "../types";
 import { INSTALL_AGENTS } from "../types";
 import { Glyph } from "../ui/Glyph";
+import { Boot, type BootInfo } from "./Boot";
 import { CommandLine } from "./CommandLine";
 import { HelpOverlay } from "./HelpOverlay";
+import { useShellState } from "./ShellState";
 import { StatusBar } from "./StatusBar";
 import { TopLine } from "./TopLine";
 import { useShellBindings } from "./useShellBindings";
@@ -25,6 +27,11 @@ export interface AppFrameProps {
   topRight?: ReactNode;
   /** Status-bar right text. */
   statusRight?: ReactNode;
+  /**
+   * What the launch sequence reports. Pass it once the settings are loaded, when the motion level is final;
+   * without it there is no boot.
+   */
+  boot?: BootInfo;
   /** The active view. */
   children: ReactNode;
 }
@@ -43,9 +50,11 @@ export function AppFrame({
   onDismissError,
   topRight,
   statusRight,
+  boot,
   children,
 }: AppFrameProps) {
   const viewAreaRef = useRef<HTMLDivElement>(null);
+  const { bootRun } = useShellState();
   const tabs = visibleViews(enabledHarnessIds);
 
   /** Switching to the view you are already on re-focuses its default pane (the view effect only fires on change). */
@@ -58,6 +67,12 @@ export function AppFrame({
 
   useShellBindings({ tabs, goTo, hasError: error !== null, onDismissError });
   useViewFocus(view, viewAreaRef);
+
+  /** The overlay never takes focus; if nothing holds it once it is gone, the view's default pane does. */
+  const afterBoot = () => {
+    const active = document.activeElement;
+    if (!active || active === document.body) focusDefaultPane(viewAreaRef.current ?? document);
+  };
 
   return (
     <div className="app-shell">
@@ -90,6 +105,7 @@ export function AppFrame({
       <StatusBar viewLabel={viewDef(view).tab} right={statusRight} />
       <CommandLine />
       <HelpOverlay />
+      {boot && <Boot info={{ harnesses: enabledHarnessIds, ...boot }} run={bootRun} onDone={afterBoot} />}
     </div>
   );
 }

@@ -356,3 +356,26 @@
 }
 
 .btn-warn:hover:not(:disabled) { border-color: var(--warn); color: var(--warn); }
+
+/* ---- boot (launch overlay, Boot.tsx) ----
+   A once-per-launch sequence: full motion types a few lines, subtle fades the shell in (.veil), off never mounts it.
+   Opacity only. The caret is the terminal's .tui-caret, which blinks at 1 Hz. */
+
+.boot {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  padding: 14px 12px;
+  background: var(--bg);
+  color: var(--text);
+  white-space: pre-wrap;
+  overflow: hidden;
+}
+
+.boot .ln { display: block; min-height: var(--lh); }
+.boot .k { color: var(--text-muted); }
+.boot .tui-caret { vertical-align: -0.15em; }
+.boot.veil { pointer-events: none; }
+.boot.out { animation: boot-out 200ms ease-out forwards; }
+
+@keyframes boot-out { to { opacity: 0; } }

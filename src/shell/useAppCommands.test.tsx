@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { InstallationOverview, OverviewEntry } from "../hooks/useInstallationOverview";
 import type { InstallationStatus } from "../types";
@@ -6,6 +6,7 @@ import { useCommandList } from "../keyboard/context";
 import { parseCommandLine, type CommandSpec } from "../keyboard/commands/parser";
 import { renderInFrame } from "../test/renderWithShell";
 import { Pane } from "../ui/Pane";
+import { resetBootLaunch } from "./Boot";
 import { useAppCommands, type AppCommandDeps } from "./useAppCommands";
 
 const originalShowModal = HTMLDialogElement.prototype.showModal;
@@ -447,6 +448,47 @@ describe("useAppCommands", () => {
     });
   });
 
+  describe("boot", () => {
+    afterEach(() => {
+      vi.useRealTimers();
+      delete document.documentElement.dataset.motion;
+      resetBootLaunch();
+    });
+
+    it("replays the launch sequence under full motion; a key ends it and focus lands in the default pane", () => {
+      vi.useFakeTimers();
+      document.documentElement.dataset.motion = "full";
+      renderInFrame(<Harness deps={makeDeps()} />, { boot: { version: "0.1.0" } });
+      // The sequence does not play on its own under test.
+      expect(document.querySelector(".boot")).toBeNull();
+
+      runLine("boot");
+      expect(document.querySelector(".boot")).not.toBeNull();
+
+      fireEvent.keyDown(document.body, { key: "x" });
+      act(() => {
+        vi.advanceTimersByTime(250);
+      });
+      expect(document.querySelector(".boot")).toBeNull();
+      expect(document.activeElement).toBe(screen.getByRole("group", { name: "main" }));
+    });
+
+    it("is refused with the reason under subtle or off motion, and shows nothing", () => {
+      document.documentElement.dataset.motion = "off";
+      renderInFrame(<Harness deps={makeDeps()} />, { boot: { version: "0.1.0" } });
+      runLine("boot");
+      expect(commandLineError()).toBe("boot: the launch sequence needs motion: full");
+      expect(document.querySelector(".boot")).toBeNull();
+    });
+
+    it("does nothing when the frame has no launch data yet", () => {
+      document.documentElement.dataset.motion = "full";
+      renderInFrame(<Harness deps={makeDeps()} />);
+      runLine("boot");
+      expect(document.querySelector(".boot")).toBeNull();
+    });
+  });
+
   it("registers every global command so the help overlay and suggestions list them", () => {
     setup(makeDeps());
     fireEvent.keyDown(document.body, { key: ":", shiftKey: true });
@@ -472,6 +514,7 @@ describe("useAppCommands", () => {
       "clear",
       "copy",
       "help",
+      "boot",
       "release-check",
       "update",
       "preview",
