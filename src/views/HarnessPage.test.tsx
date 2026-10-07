@@ -147,7 +147,8 @@ describe("HarnessPage", () => {
 
   it("lists one row per surface with the toggle of its target, and skills without one", () => {
     renderCodex();
-    expect(surfaces().getAttribute("aria-multiselectable")).toBe("true");
+    // Single-select: the highlight is the cursor row, the one the detail shows; [x] tells the toggle.
+    expect(surfaces().getAttribute("aria-multiselectable")).toBeNull();
     const rows = within(surfaces()).getAllByRole("option");
     // codex_config is off by default; codex_agents is on but has no status row yet; skills have no target.
     expect(rows.map(rowText)).toEqual([
@@ -156,7 +157,7 @@ describe("HarnessPage", () => {
       ["[x] rules .codex/AGENTS.md", "update"],
       ["skills current detail", "current"],
     ]);
-    expect(rows.map(row => row.getAttribute("aria-selected"))).toEqual(["false", "true", "true", "false"]);
+    expect(rows.map(row => row.getAttribute("aria-selected"))).toEqual(["true", "false", "false", "false"]);
     // One signal per row: the state word in its tone, no glyph.
     expect(rows[2]!.querySelector(".meta")!.className).toContain("c-warn");
     expect(rows[3]!.querySelector(".meta")!.className).toContain("c-ok");
@@ -172,7 +173,7 @@ describe("HarnessPage", () => {
     expect(p.onToggleTarget).toHaveBeenCalledWith("codex_agents");
   });
 
-  it("Space toggles the target of the row under the cursor, and a click does too", () => {
+  it("Space toggles the target of the row under the cursor; a click only selects the row", () => {
     const { props: p } = renderCodex();
     const rows = within(surfaces()).getAllByRole("option");
     act(() => surfaces().focus());
@@ -182,9 +183,12 @@ describe("HarnessPage", () => {
     press("j");
     press(" ");
     expect(p.onToggleTarget).toHaveBeenLastCalledWith("codex_rules");
+    // Clicking to inspect a row must not flip it (codex config rewrites the approval posture).
     fireEvent.click(rows[1]!);
+    expect(p.onToggleTarget).toHaveBeenCalledTimes(2);
+    expect(detail().querySelector(".pane-title")!.textContent).toContain("agents");
+    press(" ");
     expect(p.onToggleTarget).toHaveBeenLastCalledWith("codex_agents");
-    expect(p.onToggleTarget).toHaveBeenCalledTimes(3);
   });
 
   it("offers the toggle as a status-bar hint, and it toggles too", () => {

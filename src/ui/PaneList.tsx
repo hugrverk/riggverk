@@ -47,11 +47,11 @@ export interface PaneListProps<T> {
   multiSelectable?: boolean;
   /** Enter on the cursor row, or double-click. */
   onActivate?: (item: T) => void;
-  /** Space on the cursor row, or click, when `multiSelectable`. */
+  /** Space on the cursor row. A click toggles too, but only in a `multiSelectable` list; elsewhere it just moves the cursor. */
   onToggle?: (item: T) => void;
   /** Label of the Enter hint shown in the status bar while the list's pane has focus ("open"). */
   activateHint?: string;
-  /** Label of the Space hint, same placement ("toggle target"). Only shown while the list is multi-selectable. */
+  /** Label of the Space hint, same placement ("toggle target"). Only shown while `onToggle` is given. */
   toggleHint?: string;
   filter?: PaneListFilter;
   /** Rendered instead of rows when `items` is empty, as a status message right under the filter. */
@@ -71,7 +71,7 @@ function toSet(keys: ReadonlySet<string> | readonly string[] | undefined): Reado
 /**
  * Single-tab-stop listbox: `ul[role=listbox][tabindex=0]` with `aria-activedescendant`, so Tab enters and
  * leaves it once. Keys (while it has focus): j/k and arrows move, `g g`/Home first, G/End last, PageUp/PageDown
- * page, Enter activates, Space toggles in multi-select lists, `/` focuses the filter, Escape clears an active
+ * page, Enter activates, Space toggles (when `onToggle` is given), `/` focuses the filter, Escape clears an active
  * filter. Filtering itself is the caller's job: pass the already-filtered `items`.
  */
 export function PaneList<T>({
@@ -206,7 +206,7 @@ export function PaneList<T>({
       title: "Toggle selection",
       hint: toggleHint,
       paneId: toggleHint && paneId ? paneId : undefined,
-      when: () => latest.current.multiSelectable && latest.current.onToggle !== undefined && latest.current.cursorIndex >= 0,
+      when: () => latest.current.onToggle !== undefined && latest.current.cursorIndex >= 0,
       run: () => {
         const { items: list, cursorIndex: at, onToggle: toggle } = latest.current;
         if (at >= 0 && toggle) toggle(list[at]!);

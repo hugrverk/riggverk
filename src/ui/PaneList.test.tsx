@@ -169,11 +169,24 @@ describe("PaneList", () => {
       expect(onToggle).toHaveBeenLastCalledWith(ROWS[2]);
     });
 
-    it("ignores Space in single-select lists", () => {
+    it("toggles with Space but not on click in single-select lists", () => {
       const onToggle = vi.fn();
       renderWithShell(<List onToggle={onToggle} />);
-      press(listbox(), " ");
+      const list = listbox();
+      const options = within(list).getAllByRole("option");
+      fireEvent.click(options[2]!);
+      // A click only moves the cursor (and the selection with it): inspecting a row never flips it.
       expect(onToggle).not.toHaveBeenCalled();
+      expect(options.map(option => option.getAttribute("aria-selected"))).toEqual(["false", "false", "true", "false"]);
+      press(list, " ");
+      expect(onToggle).toHaveBeenLastCalledWith(ROWS[2]);
+    });
+
+    it("ignores Space without onToggle", () => {
+      const onActivate = vi.fn();
+      renderWithShell(<List onActivate={onActivate} />);
+      press(listbox(), " ");
+      expect(onActivate).not.toHaveBeenCalled();
     });
   });
 
@@ -280,7 +293,7 @@ describe("PaneList", () => {
     expect(onActivate).toHaveBeenCalledWith(ROWS[0]);
   });
 
-  it("shows a Space hint in the status bar for multi-select lists and toggles the cursor row when clicked", () => {
+  it("shows a Space hint in the status bar when the list toggles, and toggles the cursor row when clicked", () => {
     const onToggle = vi.fn();
     const { rerenderFrame } = renderInFrame(
       <Pane id="harnesses" title="harnesses">
@@ -293,10 +306,10 @@ describe("PaneList", () => {
     expect(hint.textContent).toContain("space");
     fireEvent.click(hint);
     expect(onToggle).toHaveBeenCalledWith(ROWS[0]);
-    // Single-select lists cannot toggle, so the hint is not offered.
+    // Without onToggle there is nothing to toggle, so the hint is not offered.
     rerenderFrame(
       <Pane id="harnesses" title="harnesses">
-        <List onToggle={onToggle} toggleHint="toggle target" />
+        <List toggleHint="toggle target" />
       </Pane>,
     );
     expect(bar.queryByRole("button", { name: /toggle target/ })).toBeNull();

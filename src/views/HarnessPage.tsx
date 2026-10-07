@@ -202,8 +202,8 @@ export function HarnessPage({
             getKey={row => row.surface}
             cursorKey={selected?.surface ?? null}
             onCursorChange={key => setCursor(key)}
-            selectedKeys={rows.filter(row => row.targetEnabled).map(row => row.surface)}
-            multiSelectable
+            // Single-select: the highlight follows the cursor (the row the detail shows) and [x] tells the toggle.
+            // Space toggles; a click only selects, so inspecting a row never flips its target.
             toggleHint="toggle target"
             onToggle={onToggle}
             renderItem={row => {
