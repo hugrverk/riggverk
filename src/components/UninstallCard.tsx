@@ -66,6 +66,8 @@ export function UninstallCard({
 
   if (!workspaceValid) return null;
 
+  const count = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
   return (
     <>
       <div className="lifecycle" role="region" aria-label="Uninstall">
@@ -99,7 +101,7 @@ export function UninstallCard({
               <p className="uninstall-summary">{plan.summary}</p>
               {plan.removable.length > 0 && (
                 <details className="uninstall-detail">
-                  <summary>{plan.removable.length} file(s) to remove</summary>
+                  <summary>{count(plan.removable.length, "file")} to remove</summary>
                   <ul className="uninstall-list">
                     {plan.removable.map((item) => (
                       <li key={item.path}><code>{item.path}</code></li>
@@ -109,7 +111,7 @@ export function UninstallCard({
               )}
               {plan.preserved.length > 0 && (
                 <details className="uninstall-detail">
-                  <summary>{plan.preserved.length} modified file(s) preserved</summary>
+                  <summary>{count(plan.preserved.length, "modified file")} preserved</summary>
                   <ul className="uninstall-list">
                     {plan.preserved.map((item) => (
                       <li key={item.path}><code>{item.path}</code></li>
@@ -119,7 +121,7 @@ export function UninstallCard({
               )}
               {plan.merged.length > 0 && (
                 <details className="uninstall-detail">
-                  <summary>{plan.merged.length} merged config(s) left in place</summary>
+                  <summary>{count(plan.merged.length, "merged config")} left in place</summary>
                   <ul className="uninstall-list">
                     {plan.merged.map((item) => (
                       <li key={item.path}><code>{item.path}</code></li>

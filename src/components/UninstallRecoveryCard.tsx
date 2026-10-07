@@ -15,6 +15,10 @@ function rollbackDryRunReady(result: SetupResult | null): boolean {
   return Boolean(result?.success && result.applied.length > 0);
 }
 
+function count(n: number, noun: string): string {
+  return `${n} ${noun}${n === 1 ? "" : "s"}`;
+}
+
 export function UninstallRecoveryCard({
   transactionId,
   busy,
@@ -139,11 +143,8 @@ export function UninstallRecoveryCard({
           </p>
           {dryRunResult && (
             <p className="uninstall-summary">
-              Preview: {dryRunResult.applied.length} file(s) to restore
-              {dryRunResult.failed.length > 0
-                ? `; ${dryRunResult.failed.length} conflict(s) reported`
-                : ""}
-              .
+              Preview: {count(dryRunResult.applied.length, "file")} to restore
+              {dryRunResult.failed.length > 0 ? `; ${count(dryRunResult.failed.length, "conflict")} reported` : ""}.
             </p>
           )}
         </div>
